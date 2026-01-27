@@ -5,7 +5,6 @@ import { Disc3, ArrowRight, Music, Zap, Layers } from 'lucide-react';
 function LandingPage({ onEnter }) {
   const canvasRef = useRef(null);
   const particlesRef = useRef([]);
-  const mouseRef = useRef({ x: 0, y: 0 });
   const animationRef = useRef(null);
 
   useEffect(() => {
@@ -74,11 +73,6 @@ function LandingPage({ onEnter }) {
     }
 
     const handleMouseMove = (e) => {
-      mouseRef.current = {
-        x: e.clientX,
-        y: e.clientY
-      };
-
       for (let i = 0; i < 5; i++) {
         particlesRef.current.push(
           new Particle(
@@ -91,14 +85,18 @@ function LandingPage({ onEnter }) {
 
     const handleTouchMove = (e) => {
       const touch = e.touches[0];
-      handleMouseMove({
-        clientX: touch.clientX,
-        clientY: touch.clientY
-      });
+      for (let i = 0; i < 5; i++) {
+        particlesRef.current.push(
+          new Particle(
+            touch.clientX + (Math.random() - 0.5) * 20,
+            touch.clientY + (Math.random() - 0.5) * 20
+          )
+        );
+      }
     };
 
-    canvas.addEventListener('mousemove', handleMouseMove);
-    canvas.addEventListener('touchmove', handleTouchMove);
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('touchmove', handleTouchMove);
 
     const animate = () => {
       ctx.fillStyle = 'rgba(10, 10, 15, 0.1)';
@@ -121,8 +119,8 @@ function LandingPage({ onEnter }) {
 
     return () => {
       window.removeEventListener('resize', resizeCanvas);
-      canvas.removeEventListener('mousemove', handleMouseMove);
-      canvas.removeEventListener('touchmove', handleTouchMove);
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('touchmove', handleTouchMove);
       if (animationRef.current) {
         cancelAnimationFrame(animationRef.current);
       }
@@ -135,6 +133,7 @@ function LandingPage({ onEnter }) {
       <canvas
         ref={canvasRef}
         className="absolute inset-0 z-0"
+        style={{ touchAction: 'none' }}
       />
 
       {/* Ambient Waves Background */}
@@ -182,19 +181,19 @@ function LandingPage({ onEnter }) {
           transition={{ duration: 0.8, delay: 0.8 }}
           className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12 max-w-4xl"
         >
-          <div className="bg-white/5 backdrop-blur-3xl rounded-2xl p-6 border border-cyan-400/20 hover:border-cyan-400/40 transition shadow-xl shadow-black/40 hover:shadow-2xl hover:shadow-cyan-500/20">
+          <div className="bg-white/5 backdrop-blur-xl rounded-2xl p-6 border border-cyan-400/20 hover:border-cyan-400/40 transition shadow-xl shadow-black/40 hover:shadow-2xl hover:shadow-cyan-500/20">
             <Music className="w-8 h-8 text-cyan-400 mx-auto mb-3" />
             <h3 className="text-lg font-bold text-white mb-2">Loop Playback</h3>
             <p className="text-sm text-cyan-300">Play and preview samples with effects</p>
           </div>
 
-          <div className="bg-black/40 backdrop-blur-xl rounded-2xl p-6 border border-blue-500/30 hover:border-blue-400/70 transition">
+          <div className="bg-white/5 backdrop-blur-xl rounded-2xl p-6 border border-blue-400/20 hover:border-blue-400/40 transition shadow-xl shadow-black/40 hover:shadow-2xl hover:shadow-blue-500/20">
             <Zap className="w-8 h-8 text-blue-400 mx-auto mb-3" />
             <h3 className="text-lg font-bold text-white mb-2">Real-Time Effects</h3>
             <p className="text-sm text-blue-300">Tape, vinyl, reverb, pitch, and speed</p>
           </div>
 
-          <div className="bg-black/40 backdrop-blur-xl rounded-2xl p-6 border border-green-500/30 hover:border-green-400/70 transition">
+          <div className="bg-white/5 backdrop-blur-xl rounded-2xl p-6 border border-green-400/20 hover:border-green-400/40 transition shadow-xl shadow-black/40 hover:shadow-2xl hover:shadow-green-500/20">
             <Layers className="w-8 h-8 text-green-400 mx-auto mb-3" />
             <h3 className="text-lg font-bold text-white mb-2">Stems + MIDI</h3>
             <p className="text-sm text-green-300">Download individual stems and MIDI files</p>
