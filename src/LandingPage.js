@@ -217,6 +217,7 @@ function LandingPage({ onEnter }) {
           
           <div className="absolute inset-0 rounded-full bg-gradient-to-r from-blue-400 to-cyan-400 opacity-0 group-hover:opacity-30 blur-xl transition-opacity"></div>
         </motion.button>
+      </div>
 
       <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-black to-transparent z-5"></div>
     </div>
