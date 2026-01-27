@@ -1,25 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { createClient } from '@supabase/supabase-js';
+import { supabase } from './supabaseClient';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Play,
-  Download,
-  Heart,
-  Search,
-  Filter,
   Disc3,
-  Radio,
-  Sparkles,
-  Volume2,
-  RotateCcw,
-  Music,
-  Layers,
   Piano as PianoIcon,
-  VolumeX
+  Sparkles,
+  LogIn
 } from 'lucide-react';
-
-// Import Supabase client
-import { supabase } from './supabaseClient';
+import StorefrontGrid from './StorefrontGrid';
+import PackPlayer from './PackPlayer';
 
 // Enhanced Audio Processing Engine with Polyphonic Support
 class AnalogProcessor {
@@ -261,11 +250,6 @@ class AnalogProcessor {
     this.analyser.getByteFrequencyData(dataArray);
     return dataArray;
   }
-  
-  async exportAudio() {
-    alert('Export feature coming soon for polyphonic mode!');
-    return null;
-  }
 }
 
 // Piano Keyboard Component
@@ -295,7 +279,7 @@ const PianoKeyboard = ({ onNoteOn, onNoteOff, activeNotes, octaveShift }) => {
   
   return (
     <div className="relative">
-      <div className="flex justify-center items-end h-40 bg-gradient-to-b from-gray-800 to-gray-900 rounded-xl p-4 border border-purple-500/30">
+      <div className="flex justify-center items-end h-32 bg-gradient-to-b from-gray-800 to-gray-900 rounded-xl p-4 border border-purple-500/30">
         <div className="flex relative">
           {whiteKeys.map((keyData, i) => {
             const midiNote = keyData.midi + (octaveShift * 12);
@@ -310,7 +294,7 @@ const PianoKeyboard = ({ onNoteOn, onNoteOff, activeNotes, octaveShift }) => {
                 onMouseUp={() => onNoteOff(midiNote)}
                 onMouseLeave={() => onNoteOff(midiNote)}
                 className={`
-                  w-12 h-32 mx-0.5 rounded-b-lg cursor-pointer transition-all
+                  w-10 h-24 mx-0.5 rounded-b-lg cursor-pointer transition-all
                   flex flex-col items-center justify-end pb-2
                   ${isActive 
                     ? 'bg-gradient-to-b from-purple-400 to-purple-500 shadow-lg shadow-purple-500/50' 
@@ -329,11 +313,11 @@ const PianoKeyboard = ({ onNoteOn, onNoteOff, activeNotes, octaveShift }) => {
             );
           })}
           
-          <div className="absolute top-0 left-0 w-full h-20 pointer-events-none">
+          <div className="absolute top-0 left-0 w-full h-16 pointer-events-none">
             {blackKeys.map((keyData, i) => {
               const midiNote = keyData.midi + (octaveShift * 12);
               const isActive = activeNotes.has(midiNote);
-              const leftPosition = (keyData.position * 48) + 36;
+              const leftPosition = (keyData.position * 40) + 30;
               
               return (
                 <motion.div
@@ -345,7 +329,7 @@ const PianoKeyboard = ({ onNoteOn, onNoteOff, activeNotes, octaveShift }) => {
                   onMouseLeave={() => onNoteOff(midiNote)}
                   style={{ left: `${leftPosition}px` }}
                   className={`
-                    absolute w-8 h-20 rounded-b-lg cursor-pointer pointer-events-auto
+                    absolute w-7 h-16 rounded-b-lg cursor-pointer pointer-events-auto
                     flex flex-col items-center justify-end pb-1 transition-all
                     ${isActive
                       ? 'bg-gradient-to-b from-purple-600 to-purple-700 shadow-lg shadow-purple-600/50'
@@ -370,200 +354,21 @@ const PianoKeyboard = ({ onNoteOn, onNoteOff, activeNotes, octaveShift }) => {
   );
 };
 
-// Audio Visualizer Component
-const AudioVisualizer = ({ processor, isActive }) => {
-  const canvasRef = useRef(null);
-  const animationRef = useRef(null);
-  
-  useEffect(() => {
-    if (!isActive || !processor) return;
-    
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    
-    const ctx = canvas.getContext('2d');
-    
-    const draw = () => {
-      const dataArray = processor.getAnalyserData();
-      const bufferLength = dataArray.length;
-      
-      ctx.fillStyle = 'rgb(10, 10, 15)';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      
-      const barWidth = (canvas.width / bufferLength) * 2.5;
-      let x = 0;
-      
-      for (let i = 0; i < bufferLength; i++) {
-        const barHeight = (dataArray[i] / 255) * canvas.height * 0.8;
-        
-        const gradient = ctx.createLinearGradient(0, canvas.height - barHeight, 0, canvas.height);
-        gradient.addColorStop(0, '#8b5cf6');
-        gradient.addColorStop(0.5, '#a78bfa');
-        gradient.addColorStop(1, '#c4b5fd');
-        
-        ctx.fillStyle = gradient;
-        ctx.fillRect(x, canvas.height - barHeight, barWidth, barHeight);
-        
-        x += barWidth + 1;
-      }
-      
-      animationRef.current = requestAnimationFrame(draw);
-    };
-    
-    draw();
-    
-    return () => {
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current);
-      }
-    };
-  }, [isActive, processor]);
-  
-  return (
-    <canvas
-      ref={canvasRef}
-      width={800}
-      height={120}
-      className="w-full h-full rounded-lg"
-    />
-  );
-};
-
-// Stem Control Component
-const StemControl = ({ stem, volume, onVolumeChange, onMute, isMuted }) => {
-  return (
-    <div className="bg-purple-950/30 rounded-lg p-3 border border-purple-500/20">
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center space-x-2">
-          <Layers className="w-4 h-4 text-purple-400" />
-          <span className="text-sm font-semibold text-purple-200">{stem.name}</span>
-        </div>
-        <button
-          onClick={onMute}
-          className={`p-1.5 rounded transition ${
-            isMuted ? 'bg-red-500/20 text-red-400' : 'bg-purple-500/20 text-purple-400'
-          }`}
-        >
-          {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
-        </button>
-      </div>
-      <input
-        type="range"
-        min="0"
-        max="1"
-        step="0.01"
-        value={volume}
-        onChange={(e) => onVolumeChange(parseFloat(e.target.value))}
-        disabled={isMuted}
-        className="w-full accent-purple-500"
-      />
-      <div className="text-xs text-purple-400 text-right mt-1">
-        {isMuted ? 'Muted' : `${Math.round(volume * 100)}%`}
-      </div>
-    </div>
-  );
-};
-
 // Main App Component
-function FeelzMachine() {
-  const [samples, setSamples] = useState([]);
-  const [filteredSamples, setFilteredSamples] = useState([]);
-  const [currentSample, setCurrentSample] = useState(null);
-  const [stems, setStems] = useState([]);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [activeTab, setActiveTab] = useState('all');
-  const [filters, setFilters] = useState({ mood: '', genre: '', key: '', bpm: '' });
-  const [showFilters, setShowFilters] = useState(false);
-  
+function FeelzMachine({ user, profile }) {
+  const [selectedPack, setSelectedPack] = useState(null);
   const [pianoMode, setPianoMode] = useState(true);
   const [activeNotes, setActiveNotes] = useState(new Set());
   const [octaveShift, setOctaveShift] = useState(0);
   
-  const [effects, setEffects] = useState({
-    tape: false,
-    vinyl: false,
-    reverb: 0,
-    delay: 0,
-    distortion: 0
-  });
-  
-  const [stemVolumes, setStemVolumes] = useState({});
-  const [mutedStems, setMutedStems] = useState(new Set());
-  
   const processorRef = useRef(new AnalogProcessor());
   
-  const keyToMidi = {
+  const keyToMidi = React.useMemo(() => ({
     'a': 60, 'w': 61, 's': 62, 'e': 63, 'd': 64,
     'f': 65, 't': 66, 'g': 67, 'y': 68, 'h': 69,
     'u': 70, 'j': 71, 'k': 72, 'o': 73, 'l': 74,
     'p': 75, ';': 76
-  };
-  
-  useEffect(() => {
-    fetchSamples();
-  }, []);
-  
-  const fetchSamples = async () => {
-    const { data, error } = await supabase
-      .from('samples')
-      .select('*')
-      .order('created_at', { ascending: false });
-    
-    if (error) {
-      console.error('Error fetching samples:', error);
-      return;
-    }
-    
-    setSamples(data || []);
-    setFilteredSamples(data || []);
-  };
-  
-  const fetchStems = async (sampleId) => {
-    const { data, error } = await supabase
-      .from('sample_stems')
-      .select('*')
-      .eq('sample_id', sampleId)
-      .order('order_index');
-    
-    if (error) {
-      console.error('Error fetching stems:', error);
-      return;
-    }
-    
-    setStems(data || []);
-    
-    const volumes = {};
-    data?.forEach(stem => {
-      volumes[stem.id] = 1.0;
-    });
-    setStemVolumes(volumes);
-    setMutedStems(new Set());
-  };
-  
-  useEffect(() => {
-    let filtered = samples;
-    
-    if (searchTerm) {
-      filtered = filtered.filter(s =>
-        s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (s.artist && s.artist.toLowerCase().includes(searchTerm.toLowerCase()))
-      );
-    }
-    
-    if (activeTab === 'featured') {
-      filtered = filtered.filter(s => s.featured).sort((a, b) => b.likes - a.likes).slice(0, 10);
-    }
-    
-    if (filters.mood) filtered = filtered.filter(s => s.mood === filters.mood);
-    if (filters.genre) filtered = filtered.filter(s => s.genre === filters.genre);
-    if (filters.key) filtered = filtered.filter(s => s.key === filters.key);
-    if (filters.bpm) {
-      const targetBpm = parseInt(filters.bpm);
-      filtered = filtered.filter(s => Math.abs(s.bpm - targetBpm) <= 10);
-    }
-    
-    setFilteredSamples(filtered);
-  }, [searchTerm, activeTab, filters, samples]);
+  }), []);
   
   const handleNoteOn = React.useCallback((midiNote, velocity = 1.0) => {
     const processor = processorRef.current;
@@ -571,9 +376,9 @@ function FeelzMachine() {
     
     const pitchShift = midiNote - 60;
     
-    processor.playNote(midiNote, pitchShift, velocity, effects);
+    processor.playNote(midiNote, pitchShift, velocity, {});
     setActiveNotes(prev => new Set(prev).add(midiNote));
-  }, [effects]);
+  }, []);
   
   const handleNoteOff = React.useCallback((midiNote) => {
     const processor = processorRef.current;
@@ -586,7 +391,7 @@ function FeelzMachine() {
   }, []);
   
   useEffect(() => {
-    if (!pianoMode || !currentSample) return;
+    if (!pianoMode || !selectedPack) return;
     
     const handleKeyDown = (e) => {
       const key = e.key.toLowerCase();
@@ -614,106 +419,24 @@ function FeelzMachine() {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [pianoMode, currentSample, octaveShift, handleNoteOn, handleNoteOff, keyToMidi]);
-  
-  useEffect(() => {
-    if (!pianoMode || !currentSample) return;
-    
-    const setupMIDI = async () => {
-      try {
-        const midiAccess = await navigator.requestMIDIAccess();
-        
-        for (const input of midiAccess.inputs.values()) {
-          input.onmidimessage = (message) => {
-            const [command, note, velocity] = message.data;
-            
-            if (command === 144 && velocity > 0) {
-              handleNoteOn(note, velocity / 127);
-            } else if (command === 128 || (command === 144 && velocity === 0)) {
-              handleNoteOff(note);
-            }
-          };
-        }
-      } catch (e) {
-        console.log('MIDI not available:', e);
-      }
-    };
-    
-    setupMIDI();
-  }, [pianoMode, currentSample, handleNoteOn, handleNoteOff]);
-  
-  const handleSampleSelect = async (sample) => {
-    const processor = processorRef.current;
-    
-    processor.stopAllNotes();
+  }, [pianoMode, selectedPack, octaveShift, handleNoteOn, handleNoteOff, keyToMidi]);
+
+  const handlePackSelect = (pack) => {
+    setSelectedPack(pack);
+    processorRef.current.stopAllNotes();
     setActiveNotes(new Set());
-    
-    setCurrentSample(sample);
-    
-    try {
-      await processor.loadAudio(sample.file_url);
-      
-      if (sample.has_stems) {
-        await fetchStems(sample.id);
-      } else {
-        setStems([]);
-      }
-      
-      await supabase
-        .from('samples')
-        .update({ plays: sample.plays + 1 })
-        .eq('id', sample.id);
-    } catch (error) {
-      console.error('Error loading audio:', error);
-      alert('Failed to load audio file. Please check the file URL.');
-    }
   };
-  
-  const handleEffectChange = (effectName, value) => {
-    const newEffects = { ...effects, [effectName]: value };
-    setEffects(newEffects);
-    
-    const processor = processorRef.current;
-    processor.updateEffect(effectName, value);
-    processor.currentEffects = newEffects;
-    
-    if (effectName === 'vinyl') {
-      if (value) {
-        processor.startVinyl();
-      } else {
-        processor.stopVinyl();
-      }
-    }
+
+  const handlePackClose = () => {
+    setSelectedPack(null);
+    processorRef.current.stopAllNotes();
+    setActiveNotes(new Set());
   };
-  
-  const handleLike = async (sample) => {
-    const { error } = await supabase
-      .from('samples')
-      .update({ likes: sample.likes + 1 })
-      .eq('id', sample.id);
-    
-    if (!error) {
-      fetchSamples();
-    }
-  };
-  
-  const resetEffects = () => {
-    setEffects({
-      tape: false,
-      vinyl: false,
-      reverb: 0,
-      delay: 0,
-      distortion: 0
-    });
-    setOctaveShift(0);
-    processorRef.current.stopVinyl();
-  };
-  
-  const isActive = activeNotes.size > 0;
-  
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-purple-900 to-gray-900 text-white">
-      <header className="border-b border-purple-500/30 backdrop-blur-lg bg-black/30">
+      {/* Header */}
+      <header className="border-b border-purple-500/30 backdrop-blur-lg bg-black/30 sticky top-0 z-40">
         <div className="container mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-3">
@@ -722,422 +445,115 @@ function FeelzMachine() {
                 <h1 className="text-3xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
                   Feelz Machine
                 </h1>
-                <p className="text-sm text-purple-300">Polyphonic Audio Sampler</p>
+                <p className="text-sm text-purple-300">Sample Pack Library</p>
               </div>
             </div>
             
             <div className="flex items-center space-x-4">
-              <button
-                onClick={() => setPianoMode(!pianoMode)}
-                className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition ${
-                  pianoMode
-                    ? 'bg-purple-500 text-white'
-                    : 'bg-purple-900/50 text-purple-300 hover:bg-purple-800/50'
-                }`}
-              >
-                <PianoIcon className="w-5 h-5" />
-                <span>Piano Mode</span>
-              </button>
-              <button className="p-2 hover:bg-purple-500/20 rounded-lg transition">
-                <Sparkles className="w-5 h-5" />
-              </button>
+              {user && profile ? (
+                <div className="flex items-center space-x-3">
+                  <span className="text-sm text-purple-300">Hey, {profile.name}!</span>
+                  <Sparkles className="w-5 h-5 text-purple-400" />
+                </div>
+              ) : (
+                <button className="flex items-center space-x-2 px-4 py-2 bg-purple-500 hover:bg-purple-600 rounded-lg transition">
+                  <LogIn className="w-4 h-4" />
+                  <span>Sign In</span>
+                </button>
+              )}
             </div>
           </div>
         </div>
       </header>
-      
-      <div className="container mx-auto px-6 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <div className="lg:col-span-1 space-y-4">
-            <div className="bg-black/40 backdrop-blur-xl rounded-2xl p-4 border border-purple-500/30">
-              <div className="relative mb-4">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-purple-400" />
-                <input
-                  type="text"
-                  placeholder="Search samples..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 bg-purple-950/50 border border-purple-500/30 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-white"
-                />
-              </div>
-              
-              <div className="flex space-x-2 mb-4">
-                <button
-                  onClick={() => setActiveTab('all')}
-                  className={`flex-1 py-2 rounded-lg transition ${
-                    activeTab === 'all'
-                      ? 'bg-purple-500 text-white'
-                      : 'bg-purple-950/50 text-purple-300 hover:bg-purple-900/50'
-                  }`}
-                >
-                  All
-                </button>
-                <button
-                  onClick={() => setActiveTab('featured')}
-                  className={`flex-1 py-2 rounded-lg transition ${
-                    activeTab === 'featured'
-                      ? 'bg-purple-500 text-white'
-                      : 'bg-purple-950/50 text-purple-300 hover:bg-purple-900/50'
-                  }`}
-                >
-                  Featured
-                </button>
-              </div>
-              
-              <button
-                onClick={() => setShowFilters(!showFilters)}
-                className="w-full flex items-center justify-center space-x-2 py-2 bg-purple-950/50 hover:bg-purple-900/50 rounded-lg transition"
-              >
-                <Filter className="w-4 h-4" />
-                <span>Filters</span>
-              </button>
-              
-              <AnimatePresence>
-                {showFilters && (
-                  <motion.div
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: 'auto', opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
-                    className="mt-4 space-y-2 overflow-hidden"
-                  >
-                    <input
-                      type="text"
-                      placeholder="Mood"
-                      value={filters.mood}
-                      onChange={(e) => setFilters({ ...filters, mood: e.target.value })}
-                      className="w-full px-3 py-2 bg-purple-950/50 border border-purple-500/30 rounded-lg text-sm text-white"
-                    />
-                    <input
-                      type="text"
-                      placeholder="Genre"
-                      value={filters.genre}
-                      onChange={(e) => setFilters({ ...filters, genre: e.target.value })}
-                      className="w-full px-3 py-2 bg-purple-950/50 border border-purple-500/30 rounded-lg text-sm text-white"
-                    />
-                    <input
-                      type="text"
-                      placeholder="Key"
-                      value={filters.key}
-                      onChange={(e) => setFilters({ ...filters, key: e.target.value })}
-                      className="w-full px-3 py-2 bg-purple-950/50 border border-purple-500/30 rounded-lg text-sm text-white"
-                    />
-                    <input
-                      type="number"
-                      placeholder="BPM"
-                      value={filters.bpm}
-                      onChange={(e) => setFilters({ ...filters, bpm: e.target.value })}
-                      className="w-full px-3 py-2 bg-purple-950/50 border border-purple-500/30 rounded-lg text-sm text-white"
-                    />
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-            
-            <div className="bg-black/40 backdrop-blur-xl rounded-2xl p-4 border border-purple-500/30 max-h-[600px] overflow-y-auto custom-scrollbar">
-              {filteredSamples.length === 0 ? (
-                <div className="text-center py-8 text-purple-300">
-                  <p>No samples found.</p>
-                  <p className="text-sm mt-2">Add samples to your Supabase database to get started!</p>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {filteredSamples.map((sample) => (
-                    <motion.div
-                      key={sample.id}
-                      whileHover={{ scale: 1.02 }}
-                      onClick={() => handleSampleSelect(sample)}
-                      className={`p-3 rounded-lg cursor-pointer transition ${
-                        currentSample?.id === sample.id
-                          ? 'bg-purple-500/30 border border-purple-400'
-                          : 'bg-purple-950/30 hover:bg-purple-900/30 border border-transparent'
-                      }`}
-                    >
-                      <div className="flex items-center space-x-3">
-                        {sample.thumbnail_url ? (
-                          <img
-                            src={sample.thumbnail_url}
-                            alt={sample.name}
-                            className="w-12 h-12 rounded-lg object-cover"
-                          />
-                        ) : (
-                          <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
-                            <Radio className="w-6 h-6" />
-                          </div>
-                        )}
-                        
-                        <div className="flex-1 min-w-0">
-                          <p className="font-semibold truncate flex items-center space-x-2">
-                            <span>{sample.name}</span>
-                            {sample.has_stems && (
-                              <Layers className="w-3 h-3 text-purple-400" />
-                            )}
-                          </p>
-                          <p className="text-xs text-purple-300 truncate">
-                            {sample.artist || 'Unknown Artist'}
-                          </p>
-                        </div>
-                        
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleLike(sample);
-                          }}
-                          className="p-2 hover:bg-purple-500/20 rounded-lg transition"
-                        >
-                          <Heart className="w-4 h-4" />
-                        </button>
-                      </div>
-                      
-                      <div className="flex items-center space-x-2 mt-2 text-xs text-purple-300">
-                        <span className="px-2 py-1 bg-purple-900/50 rounded">{sample.bpm} BPM</span>
-                        <span className="px-2 py-1 bg-purple-900/50 rounded">{sample.key}</span>
-                        {sample.genre && (
-                          <span className="px-2 py-1 bg-purple-900/50 rounded">{sample.genre}</span>
-                        )}
-                        <span className="ml-auto">❤️ {sample.likes}</span>
-                      </div>
-                    </motion.div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-          
-          <div className="lg:col-span-2 space-y-6">
-            <div className="bg-black/40 backdrop-blur-xl rounded-2xl p-6 border border-purple-500/30">
-              {currentSample ? (
-                <div className="space-y-6">
-                  <div className="flex items-start space-x-6">
-                    {currentSample.thumbnail_url ? (
-                      <img
-                        src={currentSample.thumbnail_url}
-                        alt={currentSample.name}
-                        className="w-32 h-32 rounded-xl object-cover shadow-2xl"
-                      />
-                    ) : (
-                      <div className="w-32 h-32 rounded-xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center shadow-2xl">
-                        <Radio className="w-16 h-16" />
-                      </div>
-                    )}
-                    
-                    <div className="flex-1">
-                      <h2 className="text-2xl font-bold mb-1 flex items-center space-x-2">
-                        <span>{currentSample.name}</span>
-                        {currentSample.has_stems && (
-                          <span className="text-sm px-2 py-1 bg-purple-500/20 rounded-lg text-purple-300">
-                            Stems
-                          </span>
-                        )}
-                      </h2>
-                      <p className="text-purple-300 mb-4">{currentSample.artist || 'Unknown Artist'}</p>
-                      
-                      <div className="flex items-center space-x-3">
-                        {pianoMode ? (
-                          <div className="flex items-center space-x-2 px-4 py-2 bg-purple-500/20 rounded-lg">
-                            <Music className="w-5 h-5 text-purple-400" />
-                            <span className="text-sm text-purple-300">
-                              Play notes on keyboard or click piano
-                            </span>
-                          </div>
-                        ) : (
-                          <>
-                            <button className="p-4 bg-purple-500 hover:bg-purple-600 rounded-full transition transform hover:scale-105">
-                              <Play className="w-6 h-6 ml-1" />
-                            </button>
-                            <button className="p-3 bg-purple-900/50 hover:bg-purple-800/50 rounded-full transition">
-                              <Download className="w-5 h-5" />
-                            </button>
-                          </>
-                        )}
-                        
-                        <button
-                          onClick={resetEffects}
-                          className="p-3 bg-purple-900/50 hover:bg-purple-800/50 rounded-full transition"
-                        >
-                          <RotateCcw className="w-5 h-5" />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  {pianoMode && (
-                    <div className="space-y-4">
-                      <PianoKeyboard
-                        onNoteOn={handleNoteOn}
-                        onNoteOff={handleNoteOff}
-                        activeNotes={activeNotes}
-                        octaveShift={octaveShift}
-                      />
-                      
-                      <div className="flex items-center justify-center space-x-4">
-                        <button
-                          onClick={() => setOctaveShift(Math.max(-2, octaveShift - 1))}
-                          disabled={octaveShift <= -2}
-                          className="px-4 py-2 bg-purple-900/50 hover:bg-purple-800/50 disabled:opacity-30 rounded-lg transition"
-                        >
-                          Octave -
-                        </button>
-                        <span className="text-purple-300 font-semibold">
-                          Octave: {octaveShift >= 0 ? '+' : ''}{octaveShift}
-                        </span>
-                        <button
-                          onClick={() => setOctaveShift(Math.min(2, octaveShift + 1))}
-                          disabled={octaveShift >= 2}
-                          className="px-4 py-2 bg-purple-900/50 hover:bg-purple-800/50 disabled:opacity-30 rounded-lg transition"
-                        >
-                          Octave +
-                        </button>
-                      </div>
-                      
-                      <p className="text-xs text-center text-purple-400">
-                        Use Z/X keys to change octave • A-; keys for white notes • W-P keys for black notes
-                      </p>
-                    </div>
-                  )}
-                  
-                  <div className="bg-black/60 rounded-xl p-4 border border-purple-500/20">
-                    <AudioVisualizer processor={processorRef.current} isActive={isActive} />
-                  </div>
-                </div>
-              ) : (
-                <div className="text-center py-20">
-                  <PianoIcon className="w-20 h-20 mx-auto mb-4 text-purple-400" />
-                  <p className="text-xl text-purple-300">Select a sample to begin</p>
-                  <p className="text-sm text-purple-400 mt-2">
-                    Piano mode enabled - play samples across the keyboard!
-                  </p>
-                </div>
-              )}
-            </div>
-            
-            {currentSample && stems.length > 0 && (
-              <div className="bg-black/40 backdrop-blur-xl rounded-2xl p-6 border border-purple-500/30">
-                <h3 className="text-xl font-bold mb-4 flex items-center space-x-2">
-                  <Layers className="w-5 h-5" />
-                  <span>Individual Stems</span>
-                </h3>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {stems.map((stem) => (
-                    <StemControl
-                      key={stem.id}
-                      stem={stem}
-                      volume={stemVolumes[stem.id] || 1.0}
-                      onVolumeChange={(vol) => setStemVolumes({ ...stemVolumes, [stem.id]: vol })}
-                      onMute={() => {
-                        const newMuted = new Set(mutedStems);
-                        if (newMuted.has(stem.id)) {
-                          newMuted.delete(stem.id);
-                        } else {
-                          newMuted.add(stem.id);
-                        }
-                        setMutedStems(newMuted);
-                      }}
-                      isMuted={mutedStems.has(stem.id)}
-                    />
-                  ))}
-                </div>
-              </div>
-            )}
-            
-            {currentSample && (
-              <div className="bg-black/40 backdrop-blur-xl rounded-2xl p-6 border border-purple-500/30">
-                <h3 className="text-xl font-bold mb-6 flex items-center space-x-2">
-                  <Volume2 className="w-5 h-5" />
-                  <span>Analog Processing</span>
-                </h3>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <label className="text-sm font-semibold text-purple-300">Tape Emulation</label>
-                      <button
-                        onClick={() => handleEffectChange('tape', !effects.tape ? 0.5 : false)}
-                        className={`px-3 py-1 rounded-lg text-xs transition ${
-                          effects.tape
-                            ? 'bg-purple-500 text-white'
-                            : 'bg-purple-900/50 text-purple-300'
-                        }`}
-                      >
-                        {effects.tape ? 'ON' : 'OFF'}
-                      </button>
-                    </div>
-                    {effects.tape && (
-                      <input
-                        type="range"
-                        min="0"
-                        max="1"
-                        step="0.01"
-                        value={effects.tape}
-                        onChange={(e) => handleEffectChange('tape', parseFloat(e.target.value))}
-                        className="w-full accent-purple-500"
-                      />
-                    )}
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <label className="text-sm font-semibold text-purple-300">Vinyl Crackle</label>
-                      <button
-                        onClick={() => handleEffectChange('vinyl', !effects.vinyl)}
-                        className={`px-3 py-1 rounded-lg text-xs transition ${
-                          effects.vinyl
-                            ? 'bg-purple-500 text-white'
-                            : 'bg-purple-900/50 text-purple-300'
-                        }`}
-                      >
-                        {effects.vinyl ? 'ON' : 'OFF'}
-                      </button>
-                    </div>
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <label className="text-sm font-semibold text-purple-300">Reverb</label>
-                    <input
-                      type="range"
-                      min="0"
-                      max="1"
-                      step="0.01"
-                      value={effects.reverb}
-                      onChange={(e) => handleEffectChange('reverb', parseFloat(e.target.value))}
-                      className="w-full accent-purple-500"
-                    />
-                    <div className="text-xs text-purple-400 text-right">{Math.round(effects.reverb * 100)}%</div>
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <label className="text-sm font-semibold text-purple-300">Delay</label>
-                    <input
-                      type="range"
-                      min="0"
-                      max="1"
-                      step="0.01"
-                      value={effects.delay}
-                      onChange={(e) => handleEffectChange('delay', parseFloat(e.target.value))}
-                      className="w-full accent-purple-500"
-                    />
-                    <div className="text-xs text-purple-400 text-right">{Math.round(effects.delay * 100)}%</div>
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <label className="text-sm font-semibold text-purple-300">Distortion</label>
-                    <input
-                      type="range"
-                      min="0"
-                      max="1"
-                      step="0.01"
-                      value={effects.distortion}
-                      onChange={(e) => handleEffectChange('distortion', parseFloat(e.target.value))}
-                      className="w-full accent-purple-500"
-                    />
-                    <div className="text-xs text-purple-400 text-right">{Math.round(effects.distortion * 100)}%</div>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
+
+      {/* Main Content */}
+      <div className="relative">
+        <div className={`container mx-auto px-6 py-8 transition-all duration-300 ${
+          selectedPack ? 'lg:mr-[40%]' : ''
+        }`}>
+          <StorefrontGrid 
+            onPackSelect={handlePackSelect}
+            selectedPack={selectedPack}
+          />
         </div>
+
+        {/* Side Panel Player */}
+        <AnimatePresence>
+          {selectedPack && (
+            <PackPlayer
+              pack={selectedPack}
+              onClose={handlePackClose}
+              user={user}
+              processor={processorRef.current}
+            />
+          )}
+        </AnimatePresence>
       </div>
+
+      {/* Piano Keyboard (Bottom - only when pack selected) */}
+      <AnimatePresence>
+        {selectedPack && pianoMode && (
+          <motion.div
+            initial={{ y: '100%' }}
+            animate={{ y: 0 }}
+            exit={{ y: '100%' }}
+            transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+            className="fixed bottom-0 left-0 right-0 bg-black/95 backdrop-blur-xl border-t border-purple-500/30 z-40 p-4"
+          >
+            <div className="container mx-auto">
+              <div className="mb-3 flex items-center justify-center space-x-4">
+                <button
+                  onClick={() => setOctaveShift(Math.max(-2, octaveShift - 1))}
+                  disabled={octaveShift <= -2}
+                  className="px-4 py-2 bg-purple-900/50 hover:bg-purple-800/50 disabled:opacity-30 disabled:cursor-not-allowed rounded-lg transition text-sm font-semibold"
+                >
+                  Octave −
+                </button>
+                <span className="text-purple-300 font-semibold min-w-[100px] text-center">
+                  Octave: {octaveShift >= 0 ? '+' : ''}{octaveShift}
+                </span>
+                <button
+                  onClick={() => setOctaveShift(Math.min(2, octaveShift + 1))}
+                  disabled={octaveShift >= 2}
+                  className="px-4 py-2 bg-purple-900/50 hover:bg-purple-800/50 disabled:opacity-30 disabled:cursor-not-allowed rounded-lg transition text-sm font-semibold"
+                >
+                  Octave +
+                </button>
+                <div className="h-6 w-px bg-purple-500/30"></div>
+                <button
+                  onClick={() => setPianoMode(false)}
+                  className="px-4 py-2 bg-red-500/20 hover:bg-red-500/30 rounded-lg transition text-sm font-semibold flex items-center space-x-2"
+                >
+                  <PianoIcon className="w-4 h-4" />
+                  <span>Hide Piano</span>
+                </button>
+              </div>
+              
+              <PianoKeyboard
+                onNoteOn={handleNoteOn}
+                onNoteOff={handleNoteOff}
+                activeNotes={activeNotes}
+                octaveShift={octaveShift}
+              />
+              
+              <p className="text-xs text-center text-purple-400 mt-2">
+                Use Z/X keys to shift octave • A-; for white notes • W-P for black notes • Or click with mouse
+              </p>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Piano Toggle (when hidden) */}
+      {selectedPack && !pianoMode && (
+        <button
+          onClick={() => setPianoMode(true)}
+          className="fixed bottom-6 left-1/2 transform -translate-x-1/2 px-6 py-3 bg-purple-500 hover:bg-purple-600 rounded-full shadow-lg shadow-purple-500/50 transition flex items-center space-x-2 z-40"
+        >
+          <PianoIcon className="w-5 h-5" />
+          <span className="font-semibold">Show Piano Keyboard</span>
+        </button>
+      )}
     </div>
   );
 }

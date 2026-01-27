@@ -9,7 +9,11 @@ import {
   Loader,
   CheckCircle,
   XCircle,
-  Clock
+  Clock,
+  DollarSign,
+  FileMusic,
+  Layers,
+  X
 } from 'lucide-react';
 
 function AdminPanel({ user, onLogout }) {
@@ -27,10 +31,21 @@ function AdminPanel({ user, onLogout }) {
     key: 'C Minor',
     genre: 'Electronic',
     mood: 'Energetic',
-    featured: false
+    featured: false,
+    is_premium: false,
+    price: '0.00'
   });
-  const [audioFile, setAudioFile] = useState(null);
+
+  const [mainLoopFile, setMainLoopFile] = useState(null);
   const [thumbnailFile, setThumbnailFile] = useState(null);
+  const [midiFile, setMidiFile] = useState(null);
+  const [stems, setStems] = useState([
+    { id: 1, name: '', type: 'Melody', file: null },
+    { id: 2, name: '', type: 'Counter Melody', file: null },
+    { id: 3, name: '', type: 'Bass', file: null },
+    { id: 4, name: '', type: 'Synth', file: null },
+    { id: 5, name: '', type: 'Drums', file: null }
+  ]);
 
   // Predefined options
   const keys = [
@@ -43,13 +58,20 @@ function AdminPanel({ user, onLogout }) {
   ];
 
   const genres = [
-    'Hip Hop', 'Trap', 'Electronic', 'House', 'Techno',
-    'Ambient', 'Lo-Fi', 'Jazz', 'Rock', 'Pop', 'R&B', 'Other'
+    'Hip Hop', 'Trap', 'Drill', 'Boom Bap', 'Lo-Fi',
+    'Electronic', 'House', 'Techno', 'Dubstep', 'Drum & Bass',
+    'Ambient', 'Jazz', 'R&B', 'Pop', 'Rock', 'Other'
   ];
 
   const moods = [
     'Energetic', 'Dark', 'Chill', 'Happy', 'Sad',
     'Aggressive', 'Dreamy', 'Uplifting', 'Melancholic'
+  ];
+
+  const stemTypes = [
+    'Melody', 'Counter Melody', 'Bass', 'Sub Bass', 'Synth',
+    'Lead', 'Pad', 'Drums', 'Hi-Hats', 'Percussion', 'FX',
+    'Vocals', 'Custom'
   ];
 
   useEffect(() => {
@@ -82,29 +104,37 @@ function AdminPanel({ user, onLogout }) {
     }
   };
 
-  const handleFileChange = (e, type) => {
-    const file = e.target.files[0];
-    if (type === 'audio') {
-      setAudioFile(file);
-    } else {
-      setThumbnailFile(file);
-    }
+  const handleStemFileChange = (stemId, file) => {
+    setStems(stems.map(stem => 
+      stem.id === stemId ? { ...stem, file } : stem
+    ));
   };
 
-  const uploadFile = async (file, folder) => {
-    const fileExt = file.name.split('.').pop();
-    const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
-    const filePath = `${folder}/${fileName}`;
+  const handleStemNameChange = (stemId, name) => {
+    setStems(stems.map(stem => 
+      stem.id === stemId ? { ...stem, name } : stem
+    ));
+  };
 
-    const { data, error } = await supabase.storage
+  const handleStemTypeChange = (stemId, type) => {
+    setStems(stems.map(stem => 
+      stem.id === stemId ? { ...stem, type } : stem
+    ));
+  };
+
+  const uploadFile = async (file, folder, packName) => {
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${packName}/${folder}/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+
+    const { error } = await supabase.storage
       .from('feelz-samples')
-      .upload(filePath, file);
+      .upload(fileName, file);
 
     if (error) throw error;
 
     const { data: { publicUrl } } = supabase.storage
       .from('feelz-samples')
-      .getPublicUrl(filePath);
+      .getPublicUrl(fileName);
 
     return publicUrl;
   };
@@ -112,8 +142,13 @@ function AdminPanel({ user, onLogout }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    if (!audioFile) {
-      setMessage({ type: 'error', text: 'Please select an audio file' });
+    if (!mainLoopFile) {
+      setMessage({ type: 'error', text: 'Please select a main loop audio file' });
+      return;
+    }
+
+    if (!thumbnailFile) {
+      setMessage({ type: 'error', text: 'Please select a thumbnail image' });
       return;
     }
 
@@ -121,16 +156,27 @@ function AdminPanel({ user, onLogout }) {
     setMessage({ type: '', text: '' });
 
     try {
-      // Upload audio file
-      const audioUrl = await uploadFile(audioFile, 'audio');
+      // Create pack folder name
+      const packFolderName = formData.name.toLowerCase().replace(/[^a-z0-9]/g, '-');
 
-      // Upload thumbnail if provided
-      let thumbnailUrl = null;
-      if (thumbnailFile) {
-        thumbnailUrl = await uploadFile(thumbnailFile, 'thumbnails');
+      // Upload main loop
+      const mainLoopUrl = await uploadFile(mainLoopFile, 'main', packFolderName);
+
+      // Upload thumbnail
+      const thumbnailUrl = await uploadFile(thumbnailFile, 'thumbnails', packFolderName);
+
+      // Upload MIDI if provided
+      let midiUrl = null;
+      if (midiFile) {
+        midiUrl = await uploadFile(midiFile, 'midi', packFolderName);
       }
 
-      // Insert sample into database
+      // Count stems
+      const uploadedStems = stems.filter(s => s.file);
+      const hasStems = uploadedStems.length > 0;
+      const hasMidi = midiFile !== null;
+
+      // Insert sample pack into database
       const { data: sampleData, error: sampleError } = await supabase
         .from('samples')
         .insert([
@@ -141,15 +187,50 @@ function AdminPanel({ user, onLogout }) {
             key: formData.key,
             genre: formData.genre,
             mood: formData.mood,
-            file_url: audioUrl,
+            file_url: mainLoopUrl, // Keep for backward compatibility
+            main_loop_url: mainLoopUrl,
             thumbnail_url: thumbnailUrl,
-            featured: formData.featured
+            featured: formData.featured,
+            is_pack: true,
+            has_stems: hasStems,
+            has_midi: hasMidi,
+            is_premium: formData.is_premium,
+            price: formData.is_premium ? parseFloat(formData.price) : 0
           }
         ])
         .select()
         .single();
 
       if (sampleError) throw sampleError;
+
+      // Upload stems
+      for (const stem of uploadedStems) {
+        const stemUrl = await uploadFile(stem.file, 'stems', packFolderName);
+        
+        await supabase
+          .from('sample_stems')
+          .insert([
+            {
+              sample_id: sampleData.id,
+              name: stem.name || stem.type,
+              stem_type: stem.type,
+              file_url: stemUrl,
+              order_index: stem.id
+            }
+          ]);
+      }
+
+      // Upload MIDI
+      if (midiUrl) {
+        await supabase
+          .from('sample_midi')
+          .insert([
+            {
+              sample_id: sampleData.id,
+              file_url: midiUrl
+            }
+          ]);
+      }
 
       // Log the upload
       const { data: adminData } = await supabase
@@ -165,11 +246,17 @@ function AdminPanel({ user, onLogout }) {
             admin_id: adminData?.id,
             sample_id: sampleData.id,
             action: 'upload',
-            details: { name: formData.name, bpm: formData.bpm }
+            details: { 
+              name: formData.name, 
+              bpm: formData.bpm,
+              stems: uploadedStems.length,
+              has_midi: hasMidi,
+              is_premium: formData.is_premium
+            }
           }
         ]);
 
-      setMessage({ type: 'success', text: 'Sample uploaded successfully!' });
+      setMessage({ type: 'success', text: 'Sample pack uploaded successfully!' });
       
       // Reset form
       setFormData({
@@ -179,18 +266,29 @@ function AdminPanel({ user, onLogout }) {
         key: 'C Minor',
         genre: 'Electronic',
         mood: 'Energetic',
-        featured: false
+        featured: false,
+        is_premium: false,
+        price: '0.00'
       });
-      setAudioFile(null);
+      setMainLoopFile(null);
       setThumbnailFile(null);
+      setMidiFile(null);
+      setStems([
+        { id: 1, name: '', type: 'Melody', file: null },
+        { id: 2, name: '', type: 'Counter Melody', file: null },
+        { id: 3, name: '', type: 'Bass', file: null },
+        { id: 4, name: '', type: 'Synth', file: null },
+        { id: 5, name: '', type: 'Drums', file: null }
+      ]);
       
       // Refresh lists
       fetchSamples();
       fetchUploadLogs();
 
-      // Clear message after 3 seconds
-      setTimeout(() => setMessage({ type: '', text: '' }), 3000);
+      // Clear message after 5 seconds
+      setTimeout(() => setMessage({ type: '', text: '' }), 5000);
     } catch (error) {
+      console.error('Upload error:', error);
       setMessage({ type: 'error', text: error.message });
     } finally {
       setUploading(false);
@@ -203,7 +301,7 @@ function AdminPanel({ user, onLogout }) {
     }
 
     try {
-      // Delete from database
+      // Delete from database (cascades to stems and midi)
       const { error: dbError } = await supabase
         .from('samples')
         .delete()
@@ -211,15 +309,19 @@ function AdminPanel({ user, onLogout }) {
 
       if (dbError) throw dbError;
 
-      // Delete files from storage
-      if (sample.file_url) {
-        const audioPath = sample.file_url.split('/feelz-samples/')[1];
-        await supabase.storage.from('feelz-samples').remove([audioPath]);
-      }
+      // Delete pack folder from storage
+      const packFolderName = sample.name.toLowerCase().replace(/[^a-z0-9]/g, '-');
+      
+      // List all files in pack folder
+      const { data: files } = await supabase.storage
+        .from('feelz-samples')
+        .list(packFolderName, { limit: 100 });
 
-      if (sample.thumbnail_url) {
-        const thumbPath = sample.thumbnail_url.split('/feelz-samples/')[1];
-        await supabase.storage.from('feelz-samples').remove([thumbPath]);
+      if (files && files.length > 0) {
+        const filePaths = files.map(file => `${packFolderName}/${file.name}`);
+        await supabase.storage
+          .from('feelz-samples')
+          .remove(filePaths);
       }
 
       // Log the deletion
@@ -240,12 +342,13 @@ function AdminPanel({ user, onLogout }) {
           }
         ]);
 
-      setMessage({ type: 'success', text: 'Sample deleted successfully!' });
+      setMessage({ type: 'success', text: 'Sample pack deleted successfully!' });
       fetchSamples();
       fetchUploadLogs();
       
       setTimeout(() => setMessage({ type: '', text: '' }), 3000);
     } catch (error) {
+      console.error('Delete error:', error);
       setMessage({ type: 'error', text: error.message });
     }
   };
@@ -258,7 +361,7 @@ function AdminPanel({ user, onLogout }) {
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-2xl font-bold text-purple-400">Admin Panel</h1>
-              <p className="text-sm text-purple-300">Feelz Machine</p>
+              <p className="text-sm text-purple-300">Feelz Machine - Sample Pack Manager</p>
             </div>
             
             <div className="flex items-center space-x-4">
@@ -292,81 +395,79 @@ function AdminPanel({ user, onLogout }) {
           </div>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Upload Form */}
-          <div className="bg-black/40 backdrop-blur-xl rounded-2xl p-6 border border-purple-500/30">
+          <div className="lg:col-span-2 bg-black/40 backdrop-blur-xl rounded-2xl p-6 border border-purple-500/30">
             <h2 className="text-xl font-bold mb-6 flex items-center space-x-2">
               <Upload className="w-5 h-5" />
-              <span>Upload New Sample</span>
+              <span>Upload New Sample Pack</span>
             </h2>
 
-            <form onSubmit={handleSubmit} className="space-y-4">
-              {/* Audio File */}
-              <div>
+            <form onSubmit={handleSubmit} className="space-y-6">
+              {/* Main Loop */}
+              <div className="bg-purple-950/30 rounded-lg p-4 border border-purple-500/20">
                 <label className="block text-sm font-semibold text-purple-300 mb-2">
                   <Music className="w-4 h-4 inline mr-2" />
-                  Audio File *
+                  Main Loop (Full Mix) *
                 </label>
                 <input
                   type="file"
                   accept="audio/*"
-                  onChange={(e) => handleFileChange(e, 'audio')}
+                  onChange={(e) => setMainLoopFile(e.target.files[0])}
                   required
                   className="w-full px-4 py-2 bg-purple-950/50 border border-purple-500/30 rounded-lg text-white file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-purple-500 file:text-white hover:file:bg-purple-600"
                 />
-                {audioFile && (
-                  <p className="text-xs text-purple-400 mt-1">Selected: {audioFile.name}</p>
+                {mainLoopFile && (
+                  <p className="text-xs text-purple-400 mt-1">✓ {mainLoopFile.name}</p>
                 )}
               </div>
 
               {/* Thumbnail */}
-              <div>
+              <div className="bg-purple-950/30 rounded-lg p-4 border border-purple-500/20">
                 <label className="block text-sm font-semibold text-purple-300 mb-2">
                   <ImageIcon className="w-4 h-4 inline mr-2" />
-                  Thumbnail (Optional)
+                  Thumbnail *
                 </label>
                 <input
                   type="file"
                   accept="image/*"
-                  onChange={(e) => handleFileChange(e, 'thumbnail')}
+                  onChange={(e) => setThumbnailFile(e.target.files[0])}
+                  required
                   className="w-full px-4 py-2 bg-purple-950/50 border border-purple-500/30 rounded-lg text-white file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-purple-500 file:text-white hover:file:bg-purple-600"
                 />
                 {thumbnailFile && (
-                  <p className="text-xs text-purple-400 mt-1">Selected: {thumbnailFile.name}</p>
+                  <p className="text-xs text-purple-400 mt-1">✓ {thumbnailFile.name}</p>
                 )}
               </div>
 
-              {/* Name */}
-              <div>
-                <label className="block text-sm font-semibold text-purple-300 mb-2">
-                  Sample Name *
-                </label>
-                <input
-                  type="text"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  required
-                  placeholder="e.g., Dark Trap Drums"
-                  className="w-full px-4 py-2 bg-purple-950/50 border border-purple-500/30 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-white"
-                />
-              </div>
+              {/* Pack Details */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold text-purple-300 mb-2">
+                    Pack Name *
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    required
+                    placeholder="e.g., Dark Trap Bundle"
+                    className="w-full px-4 py-2 bg-purple-950/50 border border-purple-500/30 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-white"
+                  />
+                </div>
 
-              {/* Artist */}
-              <div>
-                <label className="block text-sm font-semibold text-purple-300 mb-2">
-                  Artist
-                </label>
-                <input
-                  type="text"
-                  value={formData.artist}
-                  onChange={(e) => setFormData({ ...formData, artist: e.target.value })}
-                  placeholder="Project Feelz"
-                  className="w-full px-4 py-2 bg-purple-950/50 border border-purple-500/30 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-white"
-                />
-              </div>
+                <div>
+                  <label className="block text-sm font-semibold text-purple-300 mb-2">
+                    Artist
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.artist}
+                    onChange={(e) => setFormData({ ...formData, artist: e.target.value })}
+                    className="w-full px-4 py-2 bg-purple-950/50 border border-purple-500/30 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-white"
+                  />
+                </div>
 
-              {/* BPM and Key */}
-              <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-semibold text-purple-300 mb-2">
                     BPM *
@@ -397,10 +498,7 @@ function AdminPanel({ user, onLogout }) {
                     ))}
                   </select>
                 </div>
-              </div>
 
-              {/* Genre and Mood */}
-              <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-semibold text-purple-300 mb-2">
                     Genre
@@ -432,6 +530,109 @@ function AdminPanel({ user, onLogout }) {
                 </div>
               </div>
 
+              {/* Stems Section */}
+              <div className="bg-purple-950/30 rounded-lg p-4 border border-purple-500/20">
+                <h3 className="text-lg font-bold mb-4 flex items-center space-x-2 text-purple-300">
+                  <Layers className="w-5 h-5" />
+                  <span>Stems (Optional - up to 5)</span>
+                </h3>
+                
+                <div className="space-y-3">
+                  {stems.map((stem) => (
+                    <div key={stem.id} className="grid grid-cols-12 gap-2 items-end">
+                      <div className="col-span-3">
+                        <label className="block text-xs text-purple-400 mb-1">Type</label>
+                        <select
+                          value={stem.type}
+                          onChange={(e) => handleStemTypeChange(stem.id, e.target.value)}
+                          className="w-full px-2 py-1.5 text-sm bg-purple-950/50 border border-purple-500/30 rounded-lg text-white"
+                        >
+                          {stemTypes.map(type => (
+                            <option key={type} value={type}>{type}</option>
+                          ))}
+                        </select>
+                      </div>
+                      
+                      <div className="col-span-3">
+                        <label className="block text-xs text-purple-400 mb-1">Custom Name</label>
+                        <input
+                          type="text"
+                          value={stem.name}
+                          onChange={(e) => handleStemNameChange(stem.id, e.target.value)}
+                          placeholder="Optional"
+                          className="w-full px-2 py-1.5 text-sm bg-purple-950/50 border border-purple-500/30 rounded-lg text-white"
+                        />
+                      </div>
+                      
+                      <div className="col-span-6">
+                        <label className="block text-xs text-purple-400 mb-1">Audio File</label>
+                        <input
+                          type="file"
+                          accept="audio/*"
+                          onChange={(e) => handleStemFileChange(stem.id, e.target.files[0])}
+                          className="w-full text-xs bg-purple-950/50 border border-purple-500/30 rounded-lg text-white file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:bg-purple-500 file:text-white file:text-xs"
+                        />
+                      </div>
+                      
+                      {stem.file && (
+                        <div className="col-span-12">
+                          <p className="text-xs text-green-400">✓ {stem.file.name}</p>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* MIDI File */}
+              <div className="bg-purple-950/30 rounded-lg p-4 border border-purple-500/20">
+                <label className="block text-sm font-semibold text-purple-300 mb-2">
+                  <FileMusic className="w-4 h-4 inline mr-2" />
+                  MIDI File (Optional)
+                </label>
+                <input
+                  type="file"
+                  accept=".mid,.midi"
+                  onChange={(e) => setMidiFile(e.target.files[0])}
+                  className="w-full px-4 py-2 bg-purple-950/50 border border-purple-500/30 rounded-lg text-white file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-purple-500 file:text-white hover:file:bg-purple-600"
+                />
+                {midiFile && (
+                  <p className="text-xs text-purple-400 mt-1">✓ {midiFile.name}</p>
+                )}
+              </div>
+
+              {/* Pricing */}
+              <div className="bg-purple-950/30 rounded-lg p-4 border border-purple-500/20">
+                <div className="flex items-center space-x-3 mb-3">
+                  <input
+                    type="checkbox"
+                    id="is_premium"
+                    checked={formData.is_premium}
+                    onChange={(e) => setFormData({ ...formData, is_premium: e.target.checked })}
+                    className="w-4 h-4 accent-purple-500"
+                  />
+                  <label htmlFor="is_premium" className="text-sm font-semibold text-purple-300 flex items-center space-x-2">
+                    <DollarSign className="w-4 h-4" />
+                    <span>Premium Pack (Requires Payment)</span>
+                  </label>
+                </div>
+                
+                {formData.is_premium && (
+                  <div className="ml-7">
+                    <label className="block text-xs text-purple-400 mb-1">Price (USD)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0.99"
+                      value={formData.price}
+                      onChange={(e) => setFormData({ ...formData, price: e.target.value })}
+                      placeholder="9.99"
+                      className="w-32 px-3 py-1.5 text-sm bg-purple-950/50 border border-purple-500/30 rounded-lg text-white"
+                    />
+                  </div>
+                )}
+              </div>
+
               {/* Featured */}
               <div className="flex items-center space-x-2">
                 <input
@@ -455,12 +656,12 @@ function AdminPanel({ user, onLogout }) {
                 {uploading ? (
                   <>
                     <Loader className="w-5 h-5 animate-spin" />
-                    <span>Uploading...</span>
+                    <span>Uploading Pack...</span>
                   </>
                 ) : (
                   <>
                     <Upload className="w-5 h-5" />
-                    <span>Upload Sample</span>
+                    <span>Upload Sample Pack</span>
                   </>
                 )}
               </button>
@@ -471,14 +672,14 @@ function AdminPanel({ user, onLogout }) {
           <div className="space-y-6">
             {/* Recent Samples */}
             <div className="bg-black/40 backdrop-blur-xl rounded-2xl p-6 border border-purple-500/30">
-              <h2 className="text-xl font-bold mb-4">Recent Uploads ({samples.length})</h2>
+              <h2 className="text-xl font-bold mb-4">Recent Packs ({samples.length})</h2>
               
               {loading ? (
                 <div className="text-center py-8">
                   <Loader className="w-8 h-8 mx-auto animate-spin text-purple-400" />
                 </div>
               ) : samples.length === 0 ? (
-                <p className="text-center text-purple-300 py-8">No samples yet. Upload your first one!</p>
+                <p className="text-center text-purple-300 py-8">No packs yet. Upload your first one!</p>
               ) : (
                 <div className="space-y-2 max-h-96 overflow-y-auto custom-scrollbar">
                   {samples.map((sample) => (
@@ -486,12 +687,31 @@ function AdminPanel({ user, onLogout }) {
                       key={sample.id}
                       className="p-3 bg-purple-950/30 rounded-lg border border-purple-500/20 hover:border-purple-400/50 transition"
                     >
-                      <div className="flex items-center justify-between">
+                      <div className="flex items-start justify-between">
                         <div className="flex-1 min-w-0">
-                          <p className="font-semibold truncate">{sample.name}</p>
+                          <div className="flex items-center space-x-2">
+                            <p className="font-semibold truncate">{sample.name}</p>
+                            {sample.is_premium && (
+                              <span className="px-2 py-0.5 bg-yellow-500/20 text-yellow-300 text-xs rounded">
+                                ${sample.price}
+                              </span>
+                            )}
+                          </div>
                           <p className="text-xs text-purple-300">
                             {sample.bpm} BPM • {sample.key} • {sample.genre}
                           </p>
+                          <div className="flex items-center space-x-2 mt-1">
+                            {sample.has_stems && (
+                              <span className="text-xs px-2 py-0.5 bg-purple-500/20 text-purple-300 rounded">
+                                Stems
+                              </span>
+                            )}
+                            {sample.has_midi && (
+                              <span className="text-xs px-2 py-0.5 bg-blue-500/20 text-blue-300 rounded">
+                                MIDI
+                              </span>
+                            )}
+                          </div>
                         </div>
                         <button
                           onClick={() => handleDelete(sample)}
