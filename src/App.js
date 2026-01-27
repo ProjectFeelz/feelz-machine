@@ -386,9 +386,9 @@ function FeelzMachine({ user, profile }) {
 
       {/* Main Content */}
       <div className="relative">
-        <div className={`max-w-[1800px] mx-auto px-8 py-6 transition-all duration-300 ${
-        selectedPack ? 'lg:mr-[35%]' : ''
-      }`}>
+        <div className={`max-w-[1800px] mx-auto transition-all duration-300 ${
+        selectedPack ? 'lg:mr-[36%] px-4' : 'px-8'
+      } py-6`}>
           <StorefrontGrid 
             onPackSelect={handlePackSelect}
             selectedPack={selectedPack}
