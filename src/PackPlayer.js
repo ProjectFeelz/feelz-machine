@@ -273,18 +273,18 @@ function PackPlayer({ pack, onClose, user, processor }) {
           {/* Visualizer */}
           <div className="relative bg-black/40 backdrop-blur-xl rounded-2xl overflow-hidden border border-cyan-400/20 shadow-xl shadow-cyan-500/10">
             <div className="absolute top-3 left-3 z-10">
-              {pack.thumbnail_url ? (
-                <img
-                  src={pack.thumbnail_url}
-                  alt={pack.name}
-                  className="p-3 bg-gradient-to-br from-blue-500/90 to-cyan-500/90 hover:from-blue-600/90 hover:to-cyan-600/90 rounded-full shadow-2xl shadow-blue-500/50 transition backdrop-blur-xl border border-white/20"
-                />
-              ) : (
-                <div className="w-16 h-16 rounded-lg bg-blue-900 flex items-center justify-center">
-                  <Play className="w-8 h-8 text-cyan-400" />
-                </div>
-              )}
-            </div>
+  {pack.thumbnail_url ? (
+    <img
+      src={pack.thumbnail_url}
+      alt={pack.name}
+      className="w-16 h-16 rounded-lg shadow-2xl border border-cyan-400/40 ring-2 ring-cyan-400/20"
+    />
+  ) : (
+    <div className="w-16 h-16 rounded-lg bg-blue-900 flex items-center justify-center">
+      <Play className="w-8 h-8 text-cyan-400" />
+    </div>
+  )}
+</div>
 
             <canvas
               ref={canvasRef}
