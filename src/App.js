@@ -18,10 +18,8 @@ import {
   VolumeX
 } from 'lucide-react';
 
-// Initialize Supabase
-const supabaseUrl = process.env.REACT_APP_SUPABASE_URL;
-const supabaseKey = process.env.REACT_APP_SUPABASE_ANON_KEY;
-const supabase = createClient(supabaseUrl, supabaseKey);
+// Import Supabase client
+import { supabase } from './supabaseClient';
 
 // Enhanced Audio Processing Engine with Polyphonic Support
 class AnalogProcessor {
