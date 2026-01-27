@@ -219,6 +219,7 @@ class AnalogProcessor {
 }
 
 // Bioluminescent Particles
+// Bioluminescent Particles
 const BioluminescentParticles = () => {
   const canvasRef = useRef(null);
   const particlesRef = useRef([]);
@@ -242,11 +243,11 @@ const BioluminescentParticles = () => {
       constructor(x, y) {
         this.x = x;
         this.y = y;
-        this.vx = (Math.random() - 0.5) * 1;
-        this.vy = (Math.random() - 0.5) * 1;
-        this.life = 60;
-        this.maxLife = 60;
-        this.size = Math.random() * 2 + 0.5;
+        this.vx = (Math.random() - 0.5) * 1.5;
+        this.vy = (Math.random() - 0.5) * 1.5;
+        this.life = 80;
+        this.maxLife = 80;
+        this.size = Math.random() * 2.5 + 1;
         const colors = [
           'rgba(59, 130, 246, ',  // Electric blue
           'rgba(6, 182, 212, ',   // Cyan
@@ -267,14 +268,21 @@ const BioluminescentParticles = () => {
         const opacity = this.life / this.maxLife;
         const gradient = ctx.createRadialGradient(
           this.x, this.y, 0,
-          this.x, this.y, this.size * 3
+          this.x, this.y, this.size * 4
         );
-        gradient.addColorStop(0, this.color + opacity * 0.6 + ')');
+        gradient.addColorStop(0, this.color + (opacity * 0.8) + ')');
+        gradient.addColorStop(0.5, this.color + (opacity * 0.4) + ')');
         gradient.addColorStop(1, this.color + '0)');
         
         ctx.fillStyle = gradient;
         ctx.beginPath();
-        ctx.arc(this.x, this.y, this.size * 3, 0, Math.PI * 2);
+        ctx.arc(this.x, this.y, this.size * 4, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Core
+        ctx.fillStyle = this.color + opacity + ')';
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
         ctx.fill();
       }
 
@@ -284,7 +292,7 @@ const BioluminescentParticles = () => {
     }
 
     const handleMouseMove = (e) => {
-      for (let i = 0; i < 2; i++) {
+      for (let i = 0; i < 3; i++) {
         particlesRef.current.push(
           new Particle(
             e.clientX + (Math.random() - 0.5) * 15,
@@ -294,7 +302,20 @@ const BioluminescentParticles = () => {
       }
     };
 
-    canvas.addEventListener('mousemove', handleMouseMove);
+    const handleTouchMove = (e) => {
+      const touch = e.touches[0];
+      for (let i = 0; i < 3; i++) {
+        particlesRef.current.push(
+          new Particle(
+            touch.clientX + (Math.random() - 0.5) * 15,
+            touch.clientY + (Math.random() - 0.5) * 15
+          )
+        );
+      }
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('touchmove', handleTouchMove);
 
     const animate = () => {
       ctx.fillStyle = 'rgba(0, 0, 0, 0.05)';
@@ -306,8 +327,8 @@ const BioluminescentParticles = () => {
         return !particle.isDead();
       });
 
-      if (particlesRef.current.length > 200) {
-        particlesRef.current = particlesRef.current.slice(-200);
+      if (particlesRef.current.length > 300) {
+        particlesRef.current = particlesRef.current.slice(-300);
       }
 
       animationRef.current = requestAnimationFrame(animate);
@@ -317,7 +338,8 @@ const BioluminescentParticles = () => {
 
     return () => {
       window.removeEventListener('resize', handleResize);
-      canvas.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('touchmove', handleTouchMove);
       if (animationRef.current) {
         cancelAnimationFrame(animationRef.current);
       }
@@ -328,7 +350,7 @@ const BioluminescentParticles = () => {
     <canvas
       ref={canvasRef}
       className="fixed inset-0 pointer-events-none z-0"
-      style={{ opacity: 0.4 }}
+      style={{ opacity: 0.6, touchAction: 'none' }}
     />
   );
 };
