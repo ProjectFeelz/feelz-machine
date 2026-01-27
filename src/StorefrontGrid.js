@@ -230,7 +230,7 @@ function StorefrontGrid({ onPackSelect, selectedPack }) {
           <p className="text-sm text-purple-400 mt-2">Try adjusting your filters</p>
         </div>
       ) : (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
           {filteredPacks.map((pack) => (
             <motion.div
               key={pack.id}

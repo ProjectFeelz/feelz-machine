@@ -5,12 +5,13 @@ import {
   Disc3,
   Piano as PianoIcon,
   Sparkles,
-  LogIn
+  LogIn,
+  X
 } from 'lucide-react';
 import StorefrontGrid from './StorefrontGrid';
 import PackPlayer from './PackPlayer';
 
-// Enhanced Audio Processing Engine with Polyphonic Support
+// Audio Processor (same as before)
 class AnalogProcessor {
   constructor() {
     this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
@@ -18,7 +19,6 @@ class AnalogProcessor {
     this.analyser = this.audioContext.createAnalyser();
     this.analyser.fftSize = 2048;
     
-    // Effects nodes
     this.tapeNode = this.audioContext.createWaveShaper();
     this.reverbNode = this.audioContext.createConvolver();
     this.delayNode = this.audioContext.createDelay();
@@ -26,27 +26,22 @@ class AnalogProcessor {
     this.distortionNode = this.audioContext.createWaveShaper();
     this.filterNode = this.audioContext.createBiquadFilter();
     
-    // Configure defaults
     this.filterNode.type = 'lowpass';
     this.filterNode.frequency.value = 20000;
     this.delayNode.delayTime.value = 0.3;
     this.delayFeedback.gain.value = 0.3;
     
-    // Create curves
     this.distortionNode.curve = this.makeDistortionCurve(0);
     this.tapeNode.curve = this.makeTapeCurve(0);
     
-    // Create effects
     this.createVinylNoise();
     this.createReverbImpulse();
     
-    // Polyphonic voice management
     this.activeVoices = new Map();
     this.currentBuffer = null;
     this.vinylNode = null;
     this.currentEffects = {};
     
-    // Connect master chain
     this.masterGain.connect(this.analyser);
     this.masterGain.connect(this.audioContext.destination);
   }
@@ -103,53 +98,6 @@ class AnalogProcessor {
     return this.currentBuffer;
   }
   
-  buildVoiceChain(gainNode, effects) {
-    let lastNode = gainNode;
-    
-    if (effects.tape) {
-      const tapeNode = this.audioContext.createWaveShaper();
-      tapeNode.curve = this.makeTapeCurve(effects.tape);
-      lastNode.connect(tapeNode);
-      lastNode = tapeNode;
-    }
-    
-    if (effects.distortion > 0) {
-      const distNode = this.audioContext.createWaveShaper();
-      distNode.curve = this.makeDistortionCurve(effects.distortion * 100);
-      lastNode.connect(distNode);
-      lastNode = distNode;
-    }
-    
-    const filter = this.audioContext.createBiquadFilter();
-    filter.type = 'lowpass';
-    filter.frequency.value = effects.tape ? 20000 - (effects.tape * 15000) : 20000;
-    lastNode.connect(filter);
-    lastNode = filter;
-    
-    lastNode.connect(this.masterGain);
-    
-    if (effects.delay > 0) {
-      const delayNode = this.audioContext.createDelay();
-      const feedback = this.audioContext.createGain();
-      delayNode.delayTime.value = 0.3;
-      feedback.gain.value = effects.delay;
-      lastNode.connect(delayNode);
-      delayNode.connect(feedback);
-      feedback.connect(delayNode);
-      delayNode.connect(this.masterGain);
-    }
-    
-    if (effects.reverb > 0) {
-      const reverbGain = this.audioContext.createGain();
-      reverbGain.gain.value = effects.reverb;
-      lastNode.connect(reverbGain);
-      reverbGain.connect(this.reverbNode);
-      this.reverbNode.connect(this.masterGain);
-    }
-    
-    return lastNode;
-  }
-  
   playNote(noteId, pitchShift, velocity = 1.0, effects = {}) {
     if (!this.currentBuffer) return;
     
@@ -165,8 +113,7 @@ class AnalogProcessor {
     gainNode.gain.value = velocity * 0.7;
     
     source.connect(gainNode);
-    
-    this.buildVoiceChain(gainNode, effects);
+    gainNode.connect(this.masterGain);
     
     source.start();
     
@@ -186,9 +133,7 @@ class AnalogProcessor {
     if (voice) {
       try {
         voice.source.stop();
-      } catch (e) {
-        // Already stopped
-      }
+      } catch (e) {}
       voice.source.disconnect();
       voice.gainNode.disconnect();
       this.activeVoices.delete(noteId);
@@ -203,46 +148,6 @@ class AnalogProcessor {
   
   updateEffect(effectName, value) {
     this.currentEffects[effectName] = value;
-    
-    switch (effectName) {
-      case 'tape':
-        this.tapeNode.curve = this.makeTapeCurve(value);
-        this.filterNode.frequency.value = 20000 - (value * 15000);
-        break;
-      case 'distortion':
-        this.distortionNode.curve = this.makeDistortionCurve(value * 100);
-        break;
-      case 'delay':
-        this.delayFeedback.gain.value = value;
-        break;
-      default:
-        break;
-    }
-  }
-  
-  startVinyl() {
-    if (this.vinylBuffer && !this.vinylNode) {
-      const source = this.audioContext.createBufferSource();
-      source.buffer = this.vinylBuffer;
-      source.loop = true;
-      const gain = this.audioContext.createGain();
-      gain.gain.value = 0.05;
-      source.connect(gain);
-      gain.connect(this.masterGain);
-      source.start();
-      this.vinylNode = source;
-    }
-  }
-  
-  stopVinyl() {
-    if (this.vinylNode) {
-      try {
-        this.vinylNode.stop();
-      } catch (e) {
-        // Already stopped
-      }
-      this.vinylNode = null;
-    }
   }
   
   getAnalyserData() {
@@ -252,8 +157,8 @@ class AnalogProcessor {
   }
 }
 
-// Piano Keyboard Component
-const PianoKeyboard = ({ onNoteOn, onNoteOff, activeNotes, octaveShift }) => {
+// Compact Piano Keyboard (Left Side)
+const PianoKeyboard = ({ onNoteOn, onNoteOff, activeNotes, octaveShift, onClose }) => {
   const whiteKeys = [
     { note: 'C', midi: 60, key: 'A' },
     { note: 'D', midi: 62, key: 'S' },
@@ -263,8 +168,6 @@ const PianoKeyboard = ({ onNoteOn, onNoteOff, activeNotes, octaveShift }) => {
     { note: 'A', midi: 69, key: 'H' },
     { note: 'B', midi: 71, key: 'J' },
     { note: 'C', midi: 72, key: 'K' },
-    { note: 'D', midi: 74, key: 'L' },
-    { note: 'E', midi: 76, key: ';' },
   ];
   
   const blackKeys = [
@@ -273,91 +176,209 @@ const PianoKeyboard = ({ onNoteOn, onNoteOff, activeNotes, octaveShift }) => {
     { note: 'F#', midi: 66, key: 'T', position: 3 },
     { note: 'G#', midi: 68, key: 'Y', position: 4 },
     { note: 'A#', midi: 70, key: 'U', position: 5 },
-    { note: 'C#', midi: 73, key: 'O', position: 7 },
-    { note: 'D#', midi: 75, key: 'P', position: 8 },
   ];
   
   return (
-    <div className="relative">
-      <div className="flex justify-center items-end h-32 bg-gradient-to-b from-gray-800 to-gray-900 rounded-xl p-4 border border-purple-500/30">
-        <div className="flex relative">
-          {whiteKeys.map((keyData, i) => {
+    <div className="relative bg-gradient-to-b from-gray-800 to-gray-900 rounded-xl p-3 border border-purple-500/30">
+      <button
+        onClick={onClose}
+        className="absolute -top-2 -right-2 p-1 bg-purple-500 hover:bg-purple-600 rounded-full transition z-10"
+      >
+        <X className="w-3 h-3 text-white" />
+      </button>
+      
+      <div className="flex relative justify-center">
+        {whiteKeys.map((keyData, i) => {
+          const midiNote = keyData.midi + (octaveShift * 12);
+          const isActive = activeNotes.has(midiNote);
+          
+          return (
+            <motion.div
+              key={`white-${i}`}
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onMouseDown={() => onNoteOn(midiNote)}
+              onMouseUp={() => onNoteOff(midiNote)}
+              onMouseLeave={() => onNoteOff(midiNote)}
+              className={`
+                w-8 h-20 mx-0.5 rounded-b-lg cursor-pointer transition-all
+                flex flex-col items-center justify-end pb-1
+                ${isActive 
+                  ? 'bg-gradient-to-b from-purple-400 to-purple-500 shadow-lg shadow-purple-500/50' 
+                  : 'bg-gradient-to-b from-white to-gray-100 hover:from-gray-100 hover:to-gray-200'
+                }
+                border-2 ${isActive ? 'border-purple-300' : 'border-gray-300'}
+              `}
+            >
+              <span className={`text-[10px] font-bold ${isActive ? 'text-white' : 'text-gray-600'}`}>
+                {keyData.note}
+              </span>
+              <span className={`text-[8px] ${isActive ? 'text-purple-100' : 'text-gray-400'}`}>
+                {keyData.key}
+              </span>
+            </motion.div>
+          );
+        })}
+        
+        <div className="absolute top-0 left-0 w-full h-12 pointer-events-none">
+          {blackKeys.map((keyData, i) => {
             const midiNote = keyData.midi + (octaveShift * 12);
             const isActive = activeNotes.has(midiNote);
+            const leftPosition = (keyData.position * 32) + 24;
             
             return (
               <motion.div
-                key={`white-${i}`}
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
+                key={`black-${i}`}
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
                 onMouseDown={() => onNoteOn(midiNote)}
                 onMouseUp={() => onNoteOff(midiNote)}
                 onMouseLeave={() => onNoteOff(midiNote)}
+                style={{ left: `${leftPosition}px` }}
                 className={`
-                  w-10 h-24 mx-0.5 rounded-b-lg cursor-pointer transition-all
-                  flex flex-col items-center justify-end pb-2
-                  ${isActive 
-                    ? 'bg-gradient-to-b from-purple-400 to-purple-500 shadow-lg shadow-purple-500/50' 
-                    : 'bg-gradient-to-b from-white to-gray-100 hover:from-gray-100 hover:to-gray-200'
+                  absolute w-6 h-14 rounded-b-lg cursor-pointer pointer-events-auto
+                  flex flex-col items-center justify-end pb-1 transition-all
+                  ${isActive
+                    ? 'bg-gradient-to-b from-purple-600 to-purple-700 shadow-lg shadow-purple-600/50'
+                    : 'bg-gradient-to-b from-gray-800 to-black hover:from-gray-700 hover:to-gray-900'
                   }
-                  border-2 ${isActive ? 'border-purple-300' : 'border-gray-300'}
+                  border ${isActive ? 'border-purple-400' : 'border-gray-900'}
                 `}
               >
-                <span className={`text-xs font-bold ${isActive ? 'text-white' : 'text-gray-600'}`}>
+                <span className={`text-[9px] font-bold ${isActive ? 'text-white' : 'text-gray-400'}`}>
                   {keyData.note}
                 </span>
-                <span className={`text-[10px] ${isActive ? 'text-purple-100' : 'text-gray-400'}`}>
+                <span className={`text-[7px] ${isActive ? 'text-purple-200' : 'text-gray-600'}`}>
                   {keyData.key}
                 </span>
               </motion.div>
             );
           })}
-          
-          <div className="absolute top-0 left-0 w-full h-16 pointer-events-none">
-            {blackKeys.map((keyData, i) => {
-              const midiNote = keyData.midi + (octaveShift * 12);
-              const isActive = activeNotes.has(midiNote);
-              const leftPosition = (keyData.position * 40) + 30;
-              
-              return (
-                <motion.div
-                  key={`black-${i}`}
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  onMouseDown={() => onNoteOn(midiNote)}
-                  onMouseUp={() => onNoteOff(midiNote)}
-                  onMouseLeave={() => onNoteOff(midiNote)}
-                  style={{ left: `${leftPosition}px` }}
-                  className={`
-                    absolute w-7 h-16 rounded-b-lg cursor-pointer pointer-events-auto
-                    flex flex-col items-center justify-end pb-1 transition-all
-                    ${isActive
-                      ? 'bg-gradient-to-b from-purple-600 to-purple-700 shadow-lg shadow-purple-600/50'
-                      : 'bg-gradient-to-b from-gray-800 to-black hover:from-gray-700 hover:to-gray-900'
-                    }
-                    border ${isActive ? 'border-purple-400' : 'border-gray-900'}
-                  `}
-                >
-                  <span className={`text-[10px] font-bold ${isActive ? 'text-white' : 'text-gray-400'}`}>
-                    {keyData.note}
-                  </span>
-                  <span className={`text-[8px] ${isActive ? 'text-purple-200' : 'text-gray-600'}`}>
-                    {keyData.key}
-                  </span>
-                </motion.div>
-              );
-            })}
-          </div>
         </div>
       </div>
     </div>
   );
 };
 
-// Main App Component
+// Bioluminescent Particles Component
+const BioluminescentParticles = () => {
+  const canvasRef = useRef(null);
+  const particlesRef = useRef([]);
+  const animationRef = useRef(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const ctx = canvas.getContext('2d');
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+
+    const handleResize = () => {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    };
+    window.addEventListener('resize', handleResize);
+
+    class Particle {
+      constructor(x, y) {
+        this.x = x;
+        this.y = y;
+        this.vx = (Math.random() - 0.5) * 1;
+        this.vy = (Math.random() - 0.5) * 1;
+        this.life = 60;
+        this.maxLife = 60;
+        this.size = Math.random() * 2 + 0.5;
+        const colors = [
+          'rgba(59, 130, 246, ',
+          'rgba(139, 92, 246, ',
+          'rgba(236, 72, 153, ',
+        ];
+        this.color = colors[Math.floor(Math.random() * colors.length)];
+      }
+
+      update() {
+        this.x += this.vx;
+        this.y += this.vy;
+        this.vx *= 0.98;
+        this.vy *= 0.98;
+        this.life -= 1;
+      }
+
+      draw(ctx) {
+        const opacity = this.life / this.maxLife;
+        const gradient = ctx.createRadialGradient(
+          this.x, this.y, 0,
+          this.x, this.y, this.size * 3
+        );
+        gradient.addColorStop(0, this.color + opacity * 0.6 + ')');
+        gradient.addColorStop(1, this.color + '0)');
+        
+        ctx.fillStyle = gradient;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.size * 3, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      isDead() {
+        return this.life <= 0;
+      }
+    }
+
+    const handleMouseMove = (e) => {
+      for (let i = 0; i < 2; i++) {
+        particlesRef.current.push(
+          new Particle(
+            e.clientX + (Math.random() - 0.5) * 15,
+            e.clientY + (Math.random() - 0.5) * 15
+          )
+        );
+      }
+    };
+
+    canvas.addEventListener('mousemove', handleMouseMove);
+
+    const animate = () => {
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.05)';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      particlesRef.current = particlesRef.current.filter(particle => {
+        particle.update();
+        particle.draw(ctx);
+        return !particle.isDead();
+      });
+
+      if (particlesRef.current.length > 200) {
+        particlesRef.current = particlesRef.current.slice(-200);
+      }
+
+      animationRef.current = requestAnimationFrame(animate);
+    };
+
+    animate();
+
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      canvas.removeEventListener('mousemove', handleMouseMove);
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+      }
+    };
+  }, []);
+
+  return (
+    <canvas
+      ref={canvasRef}
+      className="fixed inset-0 pointer-events-none z-0"
+      style={{ opacity: 0.4 }}
+    />
+  );
+};
+
+// Main App
 function FeelzMachine({ user, profile }) {
   const [selectedPack, setSelectedPack] = useState(null);
-  const [pianoMode, setPianoMode] = useState(true);
+  const [pianoMode, setPianoMode] = useState(false);
   const [activeNotes, setActiveNotes] = useState(new Set());
   const [octaveShift, setOctaveShift] = useState(0);
   
@@ -366,8 +387,7 @@ function FeelzMachine({ user, profile }) {
   const keyToMidi = React.useMemo(() => ({
     'a': 60, 'w': 61, 's': 62, 'e': 63, 'd': 64,
     'f': 65, 't': 66, 'g': 67, 'y': 68, 'h': 69,
-    'u': 70, 'j': 71, 'k': 72, 'o': 73, 'l': 74,
-    'p': 75, ';': 76
+    'u': 70, 'j': 71, 'k': 72
   }), []);
   
   const handleNoteOn = React.useCallback((midiNote, velocity = 1.0) => {
@@ -375,7 +395,6 @@ function FeelzMachine({ user, profile }) {
     if (!processor.currentBuffer) return;
     
     const pitchShift = midiNote - 60;
-    
     processor.playNote(midiNote, pitchShift, velocity, {});
     setActiveNotes(prev => new Set(prev).add(midiNote));
   }, []);
@@ -423,41 +442,46 @@ function FeelzMachine({ user, profile }) {
 
   const handlePackSelect = (pack) => {
     setSelectedPack(pack);
+    setPianoMode(true); // Auto-show piano
     processorRef.current.stopAllNotes();
     setActiveNotes(new Set());
   };
 
   const handlePackClose = () => {
     setSelectedPack(null);
+    setPianoMode(false);
     processorRef.current.stopAllNotes();
     setActiveNotes(new Set());
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-purple-900 to-gray-900 text-white">
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-purple-900 to-gray-900 text-white relative overflow-hidden">
+      {/* Bioluminescent Background */}
+      <BioluminescentParticles />
+      
       {/* Header */}
       <header className="border-b border-purple-500/30 backdrop-blur-lg bg-black/30 sticky top-0 z-40">
-        <div className="container mx-auto px-6 py-4">
+        <div className="container mx-auto px-4 py-3">
           <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              <Disc3 className="w-10 h-10 text-purple-400 animate-spin-slow" />
+            <div className="flex items-center space-x-2">
+              <Disc3 className="w-8 h-8 text-purple-400 animate-spin-slow" />
               <div>
-                <h1 className="text-3xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+                <h1 className="text-2xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
                   Feelz Machine
                 </h1>
-                <p className="text-sm text-purple-300">Sample Pack Library</p>
+                <p className="text-xs text-purple-300">Sample Pack Library</p>
               </div>
             </div>
             
-            <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-3">
               {user && profile ? (
-                <div className="flex items-center space-x-3">
-                  <span className="text-sm text-purple-300">Hey, {profile.name}!</span>
-                  <Sparkles className="w-5 h-5 text-purple-400" />
+                <div className="flex items-center space-x-2">
+                  <span className="text-xs text-purple-300">Hey, {profile.name}!</span>
+                  <Sparkles className="w-4 h-4 text-purple-400" />
                 </div>
               ) : (
-                <button className="flex items-center space-x-2 px-4 py-2 bg-purple-500 hover:bg-purple-600 rounded-lg transition">
-                  <LogIn className="w-4 h-4" />
+                <button className="flex items-center space-x-1 px-3 py-1.5 text-sm bg-purple-500 hover:bg-purple-600 rounded-lg transition">
+                  <LogIn className="w-3 h-3" />
                   <span>Sign In</span>
                 </button>
               )}
@@ -468,8 +492,8 @@ function FeelzMachine({ user, profile }) {
 
       {/* Main Content */}
       <div className="relative">
-        <div className={`container mx-auto px-6 py-8 transition-all duration-300 ${
-          selectedPack ? 'lg:mr-[40%]' : ''
+        <div className={`container mx-auto px-4 py-6 transition-all duration-300 ${
+          selectedPack ? 'lg:mr-[35%]' : ''
         }`}>
           <StorefrontGrid 
             onPackSelect={handlePackSelect}
@@ -490,56 +514,47 @@ function FeelzMachine({ user, profile }) {
         </AnimatePresence>
       </div>
 
-      {/* Piano Keyboard (Bottom - only when pack selected) */}
+      {/* Compact Piano (Left Bottom Corner) */}
       <AnimatePresence>
         {selectedPack && pianoMode && (
           <motion.div
-            initial={{ y: '100%' }}
-            animate={{ y: 0 }}
-            exit={{ y: '100%' }}
+            initial={{ x: '-100%', opacity: 0 }}
+            animate={{ x: 0, opacity: 1 }}
+            exit={{ x: '-100%', opacity: 0 }}
             transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-            className="fixed bottom-0 left-0 right-0 bg-black/95 backdrop-blur-xl border-t border-purple-500/30 z-40 p-4"
+            className="fixed bottom-4 left-4 z-40 w-72"
           >
-            <div className="container mx-auto">
-              <div className="mb-3 flex items-center justify-center space-x-4">
-                <button
-                  onClick={() => setOctaveShift(Math.max(-2, octaveShift - 1))}
-                  disabled={octaveShift <= -2}
-                  className="px-4 py-2 bg-purple-900/50 hover:bg-purple-800/50 disabled:opacity-30 disabled:cursor-not-allowed rounded-lg transition text-sm font-semibold"
-                >
-                  Octave −
-                </button>
-                <span className="text-purple-300 font-semibold min-w-[100px] text-center">
-                  Octave: {octaveShift >= 0 ? '+' : ''}{octaveShift}
-                </span>
-                <button
-                  onClick={() => setOctaveShift(Math.min(2, octaveShift + 1))}
-                  disabled={octaveShift >= 2}
-                  className="px-4 py-2 bg-purple-900/50 hover:bg-purple-800/50 disabled:opacity-30 disabled:cursor-not-allowed rounded-lg transition text-sm font-semibold"
-                >
-                  Octave +
-                </button>
-                <div className="h-6 w-px bg-purple-500/30"></div>
-                <button
-                  onClick={() => setPianoMode(false)}
-                  className="px-4 py-2 bg-red-500/20 hover:bg-red-500/30 rounded-lg transition text-sm font-semibold flex items-center space-x-2"
-                >
-                  <PianoIcon className="w-4 h-4" />
-                  <span>Hide Piano</span>
-                </button>
-              </div>
-              
-              <PianoKeyboard
-                onNoteOn={handleNoteOn}
-                onNoteOff={handleNoteOff}
-                activeNotes={activeNotes}
-                octaveShift={octaveShift}
-              />
-              
-              <p className="text-xs text-center text-purple-400 mt-2">
-                Use Z/X keys to shift octave • A-; for white notes • W-P for black notes • Or click with mouse
-              </p>
+            <PianoKeyboard
+              onNoteOn={handleNoteOn}
+              onNoteOff={handleNoteOff}
+              activeNotes={activeNotes}
+              octaveShift={octaveShift}
+              onClose={() => setPianoMode(false)}
+            />
+            
+            <div className="mt-2 flex items-center justify-center space-x-2 bg-black/80 backdrop-blur-xl rounded-lg p-2 border border-purple-500/30">
+              <button
+                onClick={() => setOctaveShift(Math.max(-2, octaveShift - 1))}
+                disabled={octaveShift <= -2}
+                className="px-2 py-1 text-xs bg-purple-900/50 hover:bg-purple-800/50 disabled:opacity-30 disabled:cursor-not-allowed rounded transition font-semibold"
+              >
+                −
+              </button>
+              <span className="text-xs text-purple-300 font-semibold min-w-[60px] text-center">
+                Oct: {octaveShift >= 0 ? '+' : ''}{octaveShift}
+              </span>
+              <button
+                onClick={() => setOctaveShift(Math.min(2, octaveShift + 1))}
+                disabled={octaveShift >= 2}
+                className="px-2 py-1 text-xs bg-purple-900/50 hover:bg-purple-800/50 disabled:opacity-30 disabled:cursor-not-allowed rounded transition font-semibold"
+              >
+                +
+              </button>
             </div>
+            
+            <p className="text-[10px] text-center text-purple-400 mt-1">
+              Z/X: Octave • A-K: Notes
+            </p>
           </motion.div>
         )}
       </AnimatePresence>
@@ -548,10 +563,10 @@ function FeelzMachine({ user, profile }) {
       {selectedPack && !pianoMode && (
         <button
           onClick={() => setPianoMode(true)}
-          className="fixed bottom-6 left-1/2 transform -translate-x-1/2 px-6 py-3 bg-purple-500 hover:bg-purple-600 rounded-full shadow-lg shadow-purple-500/50 transition flex items-center space-x-2 z-40"
+          className="fixed bottom-4 left-4 px-4 py-2 text-sm bg-purple-500 hover:bg-purple-600 rounded-full shadow-lg shadow-purple-500/50 transition flex items-center space-x-2 z-40"
         >
-          <PianoIcon className="w-5 h-5" />
-          <span className="font-semibold">Show Piano Keyboard</span>
+          <PianoIcon className="w-4 h-4" />
+          <span className="font-semibold">Show Piano</span>
         </button>
       )}
     </div>

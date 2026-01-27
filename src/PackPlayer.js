@@ -9,7 +9,6 @@ import {
   Volume2, 
   VolumeX,
   Loader,
-  Lock,
   CheckCircle
 } from 'lucide-react';
 import KnobControl from './KnobControl';
@@ -133,8 +132,16 @@ function PackPlayer({ pack, onClose, user, processor }) {
     } else {
       try {
         await processor?.loadAudio(pack.main_loop_url || pack.file_url);
-        // Play at normal pitch
-        processor?.playNote(60, 0, 1.0, effects);
+        // Play at normal pitch (no polyphonic, just play the sample)
+        const source = processor.audioContext.createBufferSource();
+        source.buffer = processor.currentBuffer;
+        source.connect(processor.masterGain);
+        source.start();
+        
+        source.onended = () => {
+          setPlayingMain(false);
+        };
+        
         setPlayingMain(true);
         
         // Track interaction
@@ -168,7 +175,19 @@ function PackPlayer({ pack, onClose, user, processor }) {
     } else {
       try {
         await processor?.loadAudio(stem.file_url);
-        processor?.playNote(stemId, 0, stemVolumes[stemId] || 1.0, effects);
+        
+        const source = processor.audioContext.createBufferSource();
+        source.buffer = processor.currentBuffer;
+        const gainNode = processor.audioContext.createGain();
+        gainNode.gain.value = stemVolumes[stemId] || 1.0;
+        source.connect(gainNode);
+        gainNode.connect(processor.masterGain);
+        source.start();
+        
+        source.onended = () => {
+          setPlayingStems(prev => ({ ...prev, [stemId]: false }));
+        };
+        
         setPlayingStems(prev => ({ ...prev, [stemId]: true }));
         
         // Track stem interaction
@@ -193,23 +212,6 @@ function PackPlayer({ pack, onClose, user, processor }) {
       return;
     }
 
-    // Check if premium and not purchased
-    if (pack.is_premium) {
-      const { data: purchase } = await supabase
-        .from('purchases')
-        .select('*')
-        .eq('user_id', user.id)
-        .eq('sample_id', pack.id)
-        .eq('status', 'completed')
-        .single();
-      
-      if (!purchase) {
-        alert(`This is a premium pack ($${pack.price}). Payment required.`);
-        // TODO: Open PayPal payment modal
-        return;
-      }
-    }
-
     try {
       // Track download
       await supabase.from('user_downloads').insert([{
@@ -222,6 +224,7 @@ function PackPlayer({ pack, onClose, user, processor }) {
       const link = document.createElement('a');
       link.href = url;
       link.download = filename;
+      link.target = '_blank';
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -233,37 +236,11 @@ function PackPlayer({ pack, onClose, user, processor }) {
 
   const handleDownloadAll = () => {
     alert('ZIP download coming soon! For now, download files individually.');
-    // TODO: Implement ZIP generation
   };
 
   const handleEffectChange = (effectName, value) => {
     setEffects(prev => ({ ...prev, [effectName]: value }));
     processor?.updateEffect(effectName, value);
-  };
-
-  const handleStemVolumeChange = (stemId, volume) => {
-    setStemVolumes(prev => ({ ...prev, [stemId]: volume }));
-    // Update playing stem volume if active
-    if (playingStems[stemId]) {
-      // TODO: Update volume in real-time
-    }
-  };
-
-  const toggleStemMute = (stemId) => {
-    setMutedStems(prev => {
-      const newMuted = new Set(prev);
-      if (newMuted.has(stemId)) {
-        newMuted.delete(stemId);
-      } else {
-        newMuted.add(stemId);
-        // Stop if playing
-        if (playingStems[stemId]) {
-          processor?.stopNote(stemId);
-          setPlayingStems(p => ({ ...p, [stemId]: false }));
-        }
-      }
-      return newMuted;
-    });
   };
 
   return (
@@ -272,31 +249,31 @@ function PackPlayer({ pack, onClose, user, processor }) {
         initial={{ x: '100%' }}
         animate={{ x: 0 }}
         exit={{ x: '100%' }}
-        transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-        className="fixed top-0 right-0 h-full w-full lg:w-2/5 bg-black/95 backdrop-blur-xl border-l border-purple-500/30 z-50 overflow-y-auto"
+        transition={{ type: 'spring', damping: 30, stiffness: 300 }}
+        className="fixed top-0 right-0 h-full w-full lg:w-[35%] bg-black/95 backdrop-blur-xl border-l border-purple-500/30 z-50 overflow-y-auto"
       >
         {/* Close Button */}
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 p-2 bg-purple-500/20 hover:bg-purple-500/30 rounded-lg transition z-10"
+          className="absolute top-3 right-3 p-2 bg-purple-500/20 hover:bg-purple-500/30 rounded-lg transition z-10"
         >
-          <X className="w-6 h-6 text-white" />
+          <X className="w-5 h-5 text-white" />
         </button>
 
-        <div className="p-6 space-y-6">
+        <div className="p-4 space-y-4">
           {/* Visualizer with Thumbnail */}
           <div className="relative bg-black rounded-xl overflow-hidden border border-purple-500/30">
             {/* Thumbnail Overlay */}
-            <div className="absolute top-4 left-4 z-10">
+            <div className="absolute top-3 left-3 z-10">
               {pack.thumbnail_url ? (
                 <img
                   src={pack.thumbnail_url}
                   alt={pack.name}
-                  className="w-20 h-20 rounded-lg shadow-2xl border-2 border-purple-400"
+                  className="w-16 h-16 rounded-lg shadow-2xl border-2 border-purple-400"
                 />
               ) : (
-                <div className="w-20 h-20 rounded-lg bg-purple-900 flex items-center justify-center">
-                  <Volume2 className="w-10 h-10 text-purple-400" />
+                <div className="w-16 h-16 rounded-lg bg-purple-900 flex items-center justify-center">
+                  <Volume2 className="w-8 h-8 text-purple-400" />
                 </div>
               )}
             </div>
@@ -304,126 +281,121 @@ function PackPlayer({ pack, onClose, user, processor }) {
             {/* Visualizer Canvas */}
             <canvas
               ref={canvasRef}
-              width={800}
-              height={200}
-              className="w-full h-48 md:h-64"
+              width={600}
+              height={150}
+              className="w-full h-36"
             />
           </div>
 
           {/* Pack Info */}
           <div>
-            <div className="flex items-start justify-between mb-2">
-              <div>
-                <h2 className="text-2xl font-bold text-white">{pack.name}</h2>
-                <p className="text-purple-300">{pack.artist}</p>
-              </div>
-              {pack.is_premium && (
-                <div className="px-3 py-1 bg-yellow-500 text-black font-bold rounded-lg flex items-center space-x-1">
-                  <Lock className="w-4 h-4" />
-                  <span>${pack.price}</span>
-                </div>
-              )}
-            </div>
-            <div className="flex items-center space-x-2 text-sm">
-              <span className="px-3 py-1 bg-purple-900/50 text-purple-300 rounded">
+            <h2 className="text-xl font-bold text-white">{pack.name}</h2>
+            <p className="text-purple-300 text-sm">{pack.artist}</p>
+            <div className="flex items-center flex-wrap gap-2 text-xs mt-2">
+              <span className="px-2 py-1 bg-purple-900/50 text-purple-300 rounded">
                 {pack.bpm} BPM
               </span>
-              <span className="px-3 py-1 bg-purple-900/50 text-purple-300 rounded">
+              <span className="px-2 py-1 bg-purple-900/50 text-purple-300 rounded">
                 {pack.key}
               </span>
-              <span className="px-3 py-1 bg-purple-900/50 text-purple-300 rounded">
+              <span className="px-2 py-1 bg-purple-900/50 text-purple-300 rounded">
                 {pack.genre}
               </span>
-              <span className="px-3 py-1 bg-purple-900/50 text-purple-300 rounded">
+              <span className="px-2 py-1 bg-purple-900/50 text-purple-300 rounded">
                 {pack.mood}
               </span>
             </div>
           </div>
 
           {/* Round Knob Effects */}
-          <div className="bg-purple-950/30 rounded-xl p-6 border border-purple-500/20">
-            <h3 className="text-lg font-bold text-white mb-4">Effects</h3>
-            <div className="grid grid-cols-5 gap-4">
+          <div className="bg-purple-950/30 rounded-xl p-4 border border-purple-500/20">
+            <h3 className="text-base font-bold text-white mb-3">Effects</h3>
+            <div className="grid grid-cols-5 gap-2">
               <KnobControl
                 label="Tape"
                 value={effects.tape}
                 onChange={(v) => handleEffectChange('tape', v)}
                 color="#8b5cf6"
+                size="small"
               />
               <KnobControl
                 label="Vinyl"
                 value={effects.vinyl}
                 onChange={(v) => handleEffectChange('vinyl', v)}
                 color="#a78bfa"
+                size="small"
               />
               <KnobControl
                 label="Reverb"
                 value={effects.reverb}
                 onChange={(v) => handleEffectChange('reverb', v)}
                 color="#c4b5fd"
+                size="small"
               />
               <KnobControl
                 label="Delay"
                 value={effects.delay}
                 onChange={(v) => handleEffectChange('delay', v)}
                 color="#ddd6fe"
+                size="small"
               />
               <KnobControl
-                label="Distortion"
+                label="Dist"
                 value={effects.distortion}
                 onChange={(v) => handleEffectChange('distortion', v)}
                 color="#ede9fe"
+                size="small"
               />
             </div>
           </div>
 
           {/* Download List */}
-          <div className="bg-purple-950/30 rounded-xl p-6 border border-purple-500/20">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold text-white">Downloads</h3>
+          <div className="bg-purple-950/30 rounded-xl p-4 border border-purple-500/20">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-base font-bold text-white">Downloads</h3>
               <button
                 onClick={handleDownloadAll}
-                className="px-4 py-2 bg-purple-500 hover:bg-purple-600 rounded-lg text-sm font-semibold transition flex items-center space-x-2"
+                className="px-3 py-1.5 bg-purple-500 hover:bg-purple-600 rounded-lg text-xs font-semibold transition flex items-center space-x-1"
               >
-                <Download className="w-4 h-4" />
-                <span>Download All</span>
+                <Download className="w-3 h-3" />
+                <span>All</span>
               </button>
             </div>
 
             {loading ? (
-              <div className="text-center py-8">
-                <Loader className="w-8 h-8 mx-auto animate-spin text-purple-400" />
+              <div className="text-center py-6">
+                <Loader className="w-6 h-6 mx-auto animate-spin text-purple-400" />
               </div>
             ) : (
               <div className="space-y-2">
                 {/* Main Loop */}
-                <div className="p-3 bg-black/40 rounded-lg border border-purple-500/20">
+                <div className="p-2 bg-black/40 rounded-lg border border-purple-500/20">
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-3 flex-1">
+                    <div className="flex items-center space-x-2 flex-1">
                       <button
                         onClick={toggleMainLoop}
-                        className="p-2 bg-purple-500 hover:bg-purple-600 rounded-lg transition"
+                        className="p-1.5 bg-purple-500 hover:bg-purple-600 rounded transition"
                       >
                         {playingMain ? (
-                          <Pause className="w-4 h-4" />
+                          <Pause className="w-3 h-3" />
                         ) : (
-                          <Play className="w-4 h-4 ml-0.5" />
+                          <Play className="w-3 h-3 ml-0.5" />
                         )}
                       </button>
                       <div>
-                        <p className="font-semibold text-white">Main Loop (Full Mix)</p>
-                        <p className="text-xs text-purple-400">Complete pack audio</p>
+                        <p className="font-semibold text-white text-sm">Main Loop</p>
+                        <p className="text-xs text-purple-400">Full mix</p>
                       </div>
                     </div>
                     <button
                       onClick={() => handleDownload(
                         pack.main_loop_url || pack.file_url,
-                        `${pack.name}-main-loop.wav`,
+                        `${pack.name}-main.wav`,
                         'main'
                       )}
-                      className="p-2 bg-purple-900/50 hover:bg-purple-800/50 rounded-lg transition"
+                      className="p-1.5 bg-purple-900/50 hover:bg-purple-800/50 rounded transition"
                     >
-                      <Download className="w-4 h-4 text-purple-300" />
+                      <Download className="w-3 h-3 text-purple-300" />
                     </button>
                   </div>
                 </div>
@@ -432,74 +404,49 @@ function PackPlayer({ pack, onClose, user, processor }) {
                 {stems.map((stem) => (
                   <div
                     key={stem.id}
-                    className="p-3 bg-black/40 rounded-lg border border-purple-500/20"
+                    className="p-2 bg-black/40 rounded-lg border border-purple-500/20"
                   >
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center space-x-3 flex-1">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-2 flex-1 min-w-0">
                         <button
                           onClick={() => toggleStem(stem)}
                           disabled={mutedStems.has(stem.id)}
-                          className="p-2 bg-purple-500 hover:bg-purple-600 disabled:bg-gray-600 rounded-lg transition"
+                          className="p-1.5 bg-purple-500 hover:bg-purple-600 disabled:bg-gray-600 rounded transition flex-shrink-0"
                         >
                           {playingStems[stem.id] ? (
-                            <Pause className="w-4 h-4" />
+                            <Pause className="w-3 h-3" />
                           ) : (
-                            <Play className="w-4 h-4 ml-0.5" />
+                            <Play className="w-3 h-3 ml-0.5" />
                           )}
                         </button>
-                        <div className="flex-1">
-                          <p className="font-semibold text-white text-sm">
+                        <div className="flex-1 min-w-0">
+                          <p className="font-semibold text-white text-sm truncate">
                             {stem.name}
                           </p>
                           <p className="text-xs text-purple-400">{stem.stem_type}</p>
                         </div>
                       </div>
-                      <div className="flex items-center space-x-2">
-                        <button
-                          onClick={() => toggleStemMute(stem.id)}
-                          className="p-1.5 bg-purple-900/50 hover:bg-purple-800/50 rounded transition"
-                        >
-                          {mutedStems.has(stem.id) ? (
-                            <VolumeX className="w-3 h-3 text-red-400" />
-                          ) : (
-                            <Volume2 className="w-3 h-3 text-purple-300" />
-                          )}
-                        </button>
-                        <button
-                          onClick={() => handleDownload(
-                            stem.file_url,
-                            `${pack.name}-${stem.name}.wav`,
-                            'stem'
-                          )}
-                          className="p-1.5 bg-purple-900/50 hover:bg-purple-800/50 rounded transition"
-                        >
-                          <Download className="w-3 h-3 text-purple-300" />
-                        </button>
-                      </div>
+                      <button
+                        onClick={() => handleDownload(
+                          stem.file_url,
+                          `${pack.name}-${stem.name}.wav`,
+                          'stem'
+                        )}
+                        className="p-1.5 bg-purple-900/50 hover:bg-purple-800/50 rounded transition ml-2 flex-shrink-0"
+                      >
+                        <Download className="w-3 h-3 text-purple-300" />
+                      </button>
                     </div>
-                    
-                    {/* Volume Slider */}
-                    {!mutedStems.has(stem.id) && (
-                      <input
-                        type="range"
-                        min="0"
-                        max="1"
-                        step="0.01"
-                        value={stemVolumes[stem.id] || 1.0}
-                        onChange={(e) => handleStemVolumeChange(stem.id, parseFloat(e.target.value))}
-                        className="w-full accent-purple-500"
-                      />
-                    )}
                   </div>
                 ))}
 
                 {/* MIDI */}
                 {midi && (
-                  <div className="p-3 bg-black/40 rounded-lg border border-purple-500/20">
+                  <div className="p-2 bg-black/40 rounded-lg border border-purple-500/20">
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-3">
-                        <div className="p-2 bg-blue-500/20 rounded-lg">
-                          <CheckCircle className="w-4 h-4 text-blue-400" />
+                      <div className="flex items-center space-x-2">
+                        <div className="p-1.5 bg-blue-500/20 rounded">
+                          <CheckCircle className="w-3 h-3 text-blue-400" />
                         </div>
                         <div>
                           <p className="font-semibold text-white text-sm">MIDI File</p>
@@ -512,9 +459,9 @@ function PackPlayer({ pack, onClose, user, processor }) {
                           `${pack.name}.mid`,
                           'midi'
                         )}
-                        className="p-2 bg-purple-900/50 hover:bg-purple-800/50 rounded-lg transition"
+                        className="p-1.5 bg-purple-900/50 hover:bg-purple-800/50 rounded transition"
                       >
-                        <Download className="w-4 h-4 text-purple-300" />
+                        <Download className="w-3 h-3 text-purple-300" />
                       </button>
                     </div>
                   </div>
