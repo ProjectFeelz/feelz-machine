@@ -355,7 +355,7 @@ function FeelzMachine({ user, profile }) {
       
       {/* Header */}
       <header className="border-b border-cyan-500/30 backdrop-blur-lg bg-black/30 sticky top-0 z-40">
-        <div className="container mx-auto px-4 py-3">
+        <div className="max-w-[1800px] mx-auto px-8 py-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2">
               <Disc3 className="w-8 h-8 text-cyan-400 animate-spin-slow" />
@@ -386,9 +386,9 @@ function FeelzMachine({ user, profile }) {
 
       {/* Main Content */}
       <div className="relative">
-        <div className={`container mx-auto px-4 py-6 transition-all duration-300 ${
-          selectedPack ? 'lg:mr-[35%]' : ''
-        }`}>
+        <div className={`max-w-[1800px] mx-auto px-8 py-6 transition-all duration-300 ${
+        selectedPack ? 'lg:mr-[35%]' : ''
+      }`}>
           <StorefrontGrid 
             onPackSelect={handlePackSelect}
             selectedPack={selectedPack}
