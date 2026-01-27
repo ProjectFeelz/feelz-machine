@@ -3,7 +3,6 @@ import { createClient } from '@supabase/supabase-js';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Play,
-  Pause,
   Download,
   Heart,
   Search,
@@ -55,7 +54,7 @@ class AnalogProcessor {
     this.createReverbImpulse();
     
     // Polyphonic voice management
-    this.activeVoices = new Map(); // noteId -> voice object
+    this.activeVoices = new Map();
     this.currentBuffer = null;
     this.vinylNode = null;
     this.currentEffects = {};
@@ -117,11 +116,9 @@ class AnalogProcessor {
     return this.currentBuffer;
   }
   
-  // Build effects chain for a voice
   buildVoiceChain(gainNode, effects) {
     let lastNode = gainNode;
     
-    // Tape emulation
     if (effects.tape) {
       const tapeNode = this.audioContext.createWaveShaper();
       tapeNode.curve = this.makeTapeCurve(effects.tape);
@@ -129,7 +126,6 @@ class AnalogProcessor {
       lastNode = tapeNode;
     }
     
-    // Distortion
     if (effects.distortion > 0) {
       const distNode = this.audioContext.createWaveShaper();
       distNode.curve = this.makeDistortionCurve(effects.distortion * 100);
@@ -137,17 +133,14 @@ class AnalogProcessor {
       lastNode = distNode;
     }
     
-    // Filter
     const filter = this.audioContext.createBiquadFilter();
     filter.type = 'lowpass';
     filter.frequency.value = effects.tape ? 20000 - (effects.tape * 15000) : 20000;
     lastNode.connect(filter);
     lastNode = filter;
     
-    // Connect to master
     lastNode.connect(this.masterGain);
     
-    // Delay (master level)
     if (effects.delay > 0) {
       const delayNode = this.audioContext.createDelay();
       const feedback = this.audioContext.createGain();
@@ -159,7 +152,6 @@ class AnalogProcessor {
       delayNode.connect(this.masterGain);
     }
     
-    // Reverb (master level)
     if (effects.reverb > 0) {
       const reverbGain = this.audioContext.createGain();
       reverbGain.gain.value = effects.reverb;
@@ -171,42 +163,32 @@ class AnalogProcessor {
     return lastNode;
   }
   
-  // Play a note with polyphonic support
   playNote(noteId, pitchShift, velocity = 1.0, effects = {}) {
     if (!this.currentBuffer) return;
     
-    // Stop existing note if playing
     this.stopNote(noteId);
     
-    // Create voice
     const source = this.audioContext.createBufferSource();
     source.buffer = this.currentBuffer;
     
-    // Calculate playback rate for pitch shift
     const rate = Math.pow(2, pitchShift / 12);
     source.playbackRate.value = rate;
     
-    // Create gain for this voice
     const gainNode = this.audioContext.createGain();
-    gainNode.gain.value = velocity * 0.7; // Scale down to prevent clipping
+    gainNode.gain.value = velocity * 0.7;
     
-    // Connect source to gain
     source.connect(gainNode);
     
-    // Build effects chain
     this.buildVoiceChain(gainNode, effects);
     
-    // Start playback
     source.start();
     
-    // Store voice
     this.activeVoices.set(noteId, {
       source,
       gainNode,
       startTime: this.audioContext.currentTime
     });
     
-    // Auto-cleanup when finished
     source.onended = () => {
       this.stopNote(noteId);
     };
@@ -283,7 +265,6 @@ class AnalogProcessor {
   }
   
   async exportAudio() {
-    // Export not available in polyphonic mode
     alert('Export feature coming soon for polyphonic mode!');
     return null;
   }
@@ -291,7 +272,6 @@ class AnalogProcessor {
 
 // Piano Keyboard Component
 const PianoKeyboard = ({ onNoteOn, onNoteOff, activeNotes, octaveShift }) => {
-  // Piano keys configuration (2 octaves starting from C3)
   const whiteKeys = [
     { note: 'C', midi: 60, key: 'A' },
     { note: 'D', midi: 62, key: 'S' },
@@ -318,7 +298,6 @@ const PianoKeyboard = ({ onNoteOn, onNoteOff, activeNotes, octaveShift }) => {
   return (
     <div className="relative">
       <div className="flex justify-center items-end h-40 bg-gradient-to-b from-gray-800 to-gray-900 rounded-xl p-4 border border-purple-500/30">
-        {/* White keys */}
         <div className="flex relative">
           {whiteKeys.map((keyData, i) => {
             const midiNote = keyData.midi + (octaveShift * 12);
@@ -352,12 +331,11 @@ const PianoKeyboard = ({ onNoteOn, onNoteOff, activeNotes, octaveShift }) => {
             );
           })}
           
-          {/* Black keys overlay */}
           <div className="absolute top-0 left-0 w-full h-20 pointer-events-none">
             {blackKeys.map((keyData, i) => {
               const midiNote = keyData.midi + (octaveShift * 12);
               const isActive = activeNotes.has(midiNote);
-              const leftPosition = (keyData.position * 48) + 36; // 48px per white key, offset by 36px
+              const leftPosition = (keyData.position * 48) + 36;
               
               return (
                 <motion.div
@@ -499,12 +477,10 @@ function FeelzMachine() {
   const [filters, setFilters] = useState({ mood: '', genre: '', key: '', bpm: '' });
   const [showFilters, setShowFilters] = useState(false);
   
-  // Piano mode state
   const [pianoMode, setPianoMode] = useState(true);
   const [activeNotes, setActiveNotes] = useState(new Set());
   const [octaveShift, setOctaveShift] = useState(0);
   
-  // Effects state
   const [effects, setEffects] = useState({
     tape: false,
     vinyl: false,
@@ -513,13 +489,11 @@ function FeelzMachine() {
     distortion: 0
   });
   
-  // Stem state
   const [stemVolumes, setStemVolumes] = useState({});
   const [mutedStems, setMutedStems] = useState(new Set());
   
   const processorRef = useRef(new AnalogProcessor());
   
-  // Keyboard mapping
   const keyToMidi = {
     'a': 60, 'w': 61, 's': 62, 'e': 63, 'd': 64,
     'f': 65, 't': 66, 'g': 67, 'y': 68, 'h': 69,
@@ -527,7 +501,6 @@ function FeelzMachine() {
     'p': 75, ';': 76
   };
   
-  // Fetch samples from Supabase
   useEffect(() => {
     fetchSamples();
   }, []);
@@ -561,7 +534,6 @@ function FeelzMachine() {
     
     setStems(data || []);
     
-    // Initialize stem volumes
     const volumes = {};
     data?.forEach(stem => {
       volumes[stem.id] = 1.0;
@@ -570,7 +542,6 @@ function FeelzMachine() {
     setMutedStems(new Set());
   };
   
-  // Apply filters
   useEffect(() => {
     let filtered = samples;
     
@@ -596,7 +567,26 @@ function FeelzMachine() {
     setFilteredSamples(filtered);
   }, [searchTerm, activeTab, filters, samples]);
   
-  // Keyboard input handler
+  const handleNoteOn = React.useCallback((midiNote, velocity = 1.0) => {
+    const processor = processorRef.current;
+    if (!processor.currentBuffer) return;
+    
+    const pitchShift = midiNote - 60;
+    
+    processor.playNote(midiNote, pitchShift, velocity, effects);
+    setActiveNotes(prev => new Set(prev).add(midiNote));
+  }, [effects]);
+  
+  const handleNoteOff = React.useCallback((midiNote) => {
+    const processor = processorRef.current;
+    processor.stopNote(midiNote);
+    setActiveNotes(prev => {
+      const next = new Set(prev);
+      next.delete(midiNote);
+      return next;
+    });
+  }, []);
+  
   useEffect(() => {
     if (!pianoMode || !currentSample) return;
     
@@ -607,7 +597,6 @@ function FeelzMachine() {
         handleNoteOn(midiNote);
       }
       
-      // Octave controls
       if (e.key === 'z' && octaveShift > -2) setOctaveShift(octaveShift - 1);
       if (e.key === 'x' && octaveShift < 2) setOctaveShift(octaveShift + 1);
     };
@@ -627,9 +616,8 @@ function FeelzMachine() {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [pianoMode, currentSample, octaveShift]);
+  }, [pianoMode, currentSample, octaveShift, handleNoteOn, handleNoteOff, keyToMidi]);
   
-  // MIDI input support
   useEffect(() => {
     if (!pianoMode || !currentSample) return;
     
@@ -642,10 +630,8 @@ function FeelzMachine() {
             const [command, note, velocity] = message.data;
             
             if (command === 144 && velocity > 0) {
-              // Note on
               handleNoteOn(note, velocity / 127);
             } else if (command === 128 || (command === 144 && velocity === 0)) {
-              // Note off
               handleNoteOff(note);
             }
           };
@@ -656,29 +642,25 @@ function FeelzMachine() {
     };
     
     setupMIDI();
-  }, [pianoMode, currentSample]);
+  }, [pianoMode, currentSample, handleNoteOn, handleNoteOff]);
   
   const handleSampleSelect = async (sample) => {
     const processor = processorRef.current;
     
-    // Stop all notes
     processor.stopAllNotes();
     setActiveNotes(new Set());
     
     setCurrentSample(sample);
     
-    // Load main audio
     try {
       await processor.loadAudio(sample.file_url);
       
-      // Fetch stems if available
       if (sample.has_stems) {
         await fetchStems(sample.id);
       } else {
         setStems([]);
       }
       
-      // Update plays count
       await supabase
         .from('samples')
         .update({ plays: sample.plays + 1 })
@@ -689,27 +671,6 @@ function FeelzMachine() {
     }
   };
   
-  const handleNoteOn = (midiNote, velocity = 1.0) => {
-    const processor = processorRef.current;
-    if (!processor.currentBuffer) return;
-    
-    // Calculate pitch shift from middle C (60)
-    const pitchShift = midiNote - 60;
-    
-    processor.playNote(midiNote, pitchShift, velocity, effects);
-    setActiveNotes(prev => new Set(prev).add(midiNote));
-  };
-  
-  const handleNoteOff = (midiNote) => {
-    const processor = processorRef.current;
-    processor.stopNote(midiNote);
-    setActiveNotes(prev => {
-      const next = new Set(prev);
-      next.delete(midiNote);
-      return next;
-    });
-  };
-  
   const handleEffectChange = (effectName, value) => {
     const newEffects = { ...effects, [effectName]: value };
     setEffects(newEffects);
@@ -718,7 +679,6 @@ function FeelzMachine() {
     processor.updateEffect(effectName, value);
     processor.currentEffects = newEffects;
     
-    // Handle vinyl
     if (effectName === 'vinyl') {
       if (value) {
         processor.startVinyl();
@@ -755,7 +715,6 @@ function FeelzMachine() {
   
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-purple-900 to-gray-900 text-white">
-      {/* Header */}
       <header className="border-b border-purple-500/30 backdrop-blur-lg bg-black/30">
         <div className="container mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
@@ -791,9 +750,7 @@ function FeelzMachine() {
       
       <div className="container mx-auto px-6 py-8">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Left: Sample Browser */}
           <div className="lg:col-span-1 space-y-4">
-            {/* Search & Filter */}
             <div className="bg-black/40 backdrop-blur-xl rounded-2xl p-4 border border-purple-500/30">
               <div className="relative mb-4">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-purple-400" />
@@ -806,7 +763,6 @@ function FeelzMachine() {
                 />
               </div>
               
-              {/* Tabs */}
               <div className="flex space-x-2 mb-4">
                 <button
                   onClick={() => setActiveTab('all')}
@@ -830,7 +786,6 @@ function FeelzMachine() {
                 </button>
               </div>
               
-              {/* Filter Toggle */}
               <button
                 onClick={() => setShowFilters(!showFilters)}
                 className="w-full flex items-center justify-center space-x-2 py-2 bg-purple-950/50 hover:bg-purple-900/50 rounded-lg transition"
@@ -839,7 +794,6 @@ function FeelzMachine() {
                 <span>Filters</span>
               </button>
               
-              {/* Advanced Filters */}
               <AnimatePresence>
                 {showFilters && (
                   <motion.div
@@ -881,7 +835,6 @@ function FeelzMachine() {
               </AnimatePresence>
             </div>
             
-            {/* Sample List */}
             <div className="bg-black/40 backdrop-blur-xl rounded-2xl p-4 border border-purple-500/30 max-h-[600px] overflow-y-auto custom-scrollbar">
               {filteredSamples.length === 0 ? (
                 <div className="text-center py-8 text-purple-300">
@@ -952,13 +905,10 @@ function FeelzMachine() {
             </div>
           </div>
           
-          {/* Right: Player & Piano */}
           <div className="lg:col-span-2 space-y-6">
-            {/* Main Player */}
             <div className="bg-black/40 backdrop-blur-xl rounded-2xl p-6 border border-purple-500/30">
               {currentSample ? (
                 <div className="space-y-6">
-                  {/* Album Art & Info */}
                   <div className="flex items-start space-x-6">
                     {currentSample.thumbnail_url ? (
                       <img
@@ -1012,7 +962,6 @@ function FeelzMachine() {
                     </div>
                   </div>
                   
-                  {/* Piano Keyboard */}
                   {pianoMode && (
                     <div className="space-y-4">
                       <PianoKeyboard
@@ -1022,7 +971,6 @@ function FeelzMachine() {
                         octaveShift={octaveShift}
                       />
                       
-                      {/* Octave Control */}
                       <div className="flex items-center justify-center space-x-4">
                         <button
                           onClick={() => setOctaveShift(Math.max(-2, octaveShift - 1))}
@@ -1049,7 +997,6 @@ function FeelzMachine() {
                     </div>
                   )}
                   
-                  {/* Visualizer */}
                   <div className="bg-black/60 rounded-xl p-4 border border-purple-500/20">
                     <AudioVisualizer processor={processorRef.current} isActive={isActive} />
                   </div>
@@ -1065,7 +1012,6 @@ function FeelzMachine() {
               )}
             </div>
             
-            {/* Stems Panel */}
             {currentSample && stems.length > 0 && (
               <div className="bg-black/40 backdrop-blur-xl rounded-2xl p-6 border border-purple-500/30">
                 <h3 className="text-xl font-bold mb-4 flex items-center space-x-2">
@@ -1096,7 +1042,6 @@ function FeelzMachine() {
               </div>
             )}
             
-            {/* Effects Panel */}
             {currentSample && (
               <div className="bg-black/40 backdrop-blur-xl rounded-2xl p-6 border border-purple-500/30">
                 <h3 className="text-xl font-bold mb-6 flex items-center space-x-2">
@@ -1105,7 +1050,6 @@ function FeelzMachine() {
                 </h3>
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {/* Tape Emulation */}
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <label className="text-sm font-semibold text-purple-300">Tape Emulation</label>
@@ -1133,7 +1077,6 @@ function FeelzMachine() {
                     )}
                   </div>
                   
-                  {/* Vinyl Crackle */}
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <label className="text-sm font-semibold text-purple-300">Vinyl Crackle</label>
@@ -1150,7 +1093,6 @@ function FeelzMachine() {
                     </div>
                   </div>
                   
-                  {/* Reverb */}
                   <div className="space-y-2">
                     <label className="text-sm font-semibold text-purple-300">Reverb</label>
                     <input
@@ -1165,7 +1107,6 @@ function FeelzMachine() {
                     <div className="text-xs text-purple-400 text-right">{Math.round(effects.reverb * 100)}%</div>
                   </div>
                   
-                  {/* Delay */}
                   <div className="space-y-2">
                     <label className="text-sm font-semibold text-purple-300">Delay</label>
                     <input
@@ -1180,7 +1121,6 @@ function FeelzMachine() {
                     <div className="text-xs text-purple-400 text-right">{Math.round(effects.delay * 100)}%</div>
                   </div>
                   
-                  {/* Distortion */}
                   <div className="space-y-2">
                     <label className="text-sm font-semibold text-purple-300">Distortion</label>
                     <input
