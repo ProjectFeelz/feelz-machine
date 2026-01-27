@@ -248,9 +248,9 @@ const BioluminescentParticles = () => {
         this.maxLife = 60;
         this.size = Math.random() * 2 + 0.5;
         const colors = [
-          'rgba(59, 130, 246, ',
-          'rgba(139, 92, 246, ',
-          'rgba(236, 72, 153, ',
+          'rgba(59, 130, 246, ',  // Electric blue
+          'rgba(6, 182, 212, ',   // Cyan
+          'rgba(16, 185, 129, ',  // Neon green
         ];
         this.color = colors[Math.floor(Math.random() * colors.length)];
       }
@@ -349,32 +349,32 @@ function FeelzMachine({ user, profile }) {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-purple-900 to-gray-900 text-white relative overflow-hidden">
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-gray-900 text-white relative overflow-hidden">
       {/* Bioluminescent Background */}
       <BioluminescentParticles />
       
       {/* Header */}
-      <header className="border-b border-purple-500/30 backdrop-blur-lg bg-black/30 sticky top-0 z-40">
+      <header className="border-b border-cyan-500/30 backdrop-blur-lg bg-black/30 sticky top-0 z-40">
         <div className="container mx-auto px-4 py-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2">
-              <Disc3 className="w-8 h-8 text-purple-400 animate-spin-slow" />
+              <Disc3 className="w-8 h-8 text-cyan-400 animate-spin-slow" />
               <div>
-                <h1 className="text-2xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+                <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">
                   Feelz Machine
                 </h1>
-                <p className="text-xs text-purple-300">Sample Pack Library</p>
+                <p className="text-xs text-cyan-300">Sample Pack Library</p>
               </div>
             </div>
             
             <div className="flex items-center space-x-3">
               {user && profile ? (
                 <div className="flex items-center space-x-2">
-                  <span className="text-xs text-purple-300">Hey, {profile.name}!</span>
-                  <Sparkles className="w-4 h-4 text-purple-400" />
+                  <span className="text-xs text-cyan-300">Hey, {profile.name}!</span>
+                  <Sparkles className="w-4 h-4 text-cyan-400" />
                 </div>
               ) : (
-                <button className="flex items-center space-x-1 px-3 py-1.5 text-sm bg-purple-500 hover:bg-purple-600 rounded-lg transition">
+                <button className="flex items-center space-x-1 px-3 py-1.5 text-sm bg-blue-500 hover:bg-blue-600 rounded-lg transition">
                   <LogIn className="w-3 h-3" />
                   <span>Sign In</span>
                 </button>
