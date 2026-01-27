@@ -1,4 +1,3 @@
-import LandingPage from './LandingPage';
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { supabase } from './supabaseClient';
@@ -6,11 +5,13 @@ import FeelzMachine from './App';
 import Login from './Login';
 import AdminPanel from './AdminPanel';
 import ProfileSetup from './ProfileSetup';
+import LandingPage from './LandingPage';
 
 function AppRouter() {
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [showLanding, setShowLanding] = useState(true);
   const [checkingProfile, setCheckingProfile] = useState(false);
 
   useEffect(() => {
@@ -79,6 +80,9 @@ function AppRouter() {
     setUser(null);
     setProfile(null);
   };
+    const handleEnterApp = () => {
+    setShowLanding(false);
+  };
 
   if (loading || checkingProfile) {
     return (
@@ -90,6 +94,9 @@ function AppRouter() {
       </div>
     );
   }
+  if (showLanding) {
+  return <LandingPage onEnter={handleEnterApp} />;
+ }
 
   return (
     <Router>

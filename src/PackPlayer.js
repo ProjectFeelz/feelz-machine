@@ -6,8 +6,6 @@ import {
   Play, 
   Pause, 
   Download, 
-  Volume2, 
-  VolumeX,
   Loader,
   CheckCircle
 } from 'lucide-react';
@@ -17,17 +15,17 @@ function PackPlayer({ pack, onClose, user, processor }) {
   const [stems, setStems] = useState([]);
   const [midi, setMidi] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [playingMain, setPlayingMain] = useState(false);
-  const [playingStems, setPlayingStems] = useState({});
-  const [stemVolumes, setStemVolumes] = useState({});
-  const [mutedStems, setMutedStems] = useState(new Set());
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentAudio, setCurrentAudio] = useState('main'); // 'main' or stem id
   
   const [effects, setEffects] = useState({
     tape: 0,
     vinyl: 0,
     reverb: 0,
     delay: 0,
-    distortion: 0
+    distortion: 0,
+    pitch: 0, // -12 to +12 semitones
+    speed: 1.0 // 0.5 to 2.0
   });
 
   const canvasRef = useRef(null);
@@ -36,9 +34,11 @@ function PackPlayer({ pack, onClose, user, processor }) {
   useEffect(() => {
     if (pack) {
       fetchPackDetails();
+      loadMainAudio();
     }
     
     return () => {
+      processor?.stop();
       if (animationRef.current) {
         cancelAnimationFrame(animationRef.current);
       }
@@ -46,10 +46,10 @@ function PackPlayer({ pack, onClose, user, processor }) {
   }, [pack]);
 
   useEffect(() => {
-    if (playingMain || Object.values(playingStems).some(v => v)) {
+    if (isPlaying) {
       startVisualization();
     }
-  }, [playingMain, playingStems]);
+  }, [isPlaying]);
 
   const fetchPackDetails = async () => {
     setLoading(true);
@@ -63,13 +63,6 @@ function PackPlayer({ pack, onClose, user, processor }) {
     
     setStems(stemsData || []);
     
-    // Initialize stem volumes
-    const volumes = {};
-    stemsData?.forEach(stem => {
-      volumes[stem.id] = 1.0;
-    });
-    setStemVolumes(volumes);
-    
     // Fetch MIDI
     if (pack.has_midi) {
       const { data: midiData } = await supabase
@@ -82,6 +75,26 @@ function PackPlayer({ pack, onClose, user, processor }) {
     }
     
     setLoading(false);
+  };
+
+  const loadMainAudio = async () => {
+    try {
+      await processor?.loadAudio(pack.main_loop_url || pack.file_url);
+      setCurrentAudio('main');
+    } catch (error) {
+      console.error('Error loading audio:', error);
+      alert('Failed to load audio');
+    }
+  };
+
+  const loadStemAudio = async (stem) => {
+    try {
+      await processor?.loadAudio(stem.file_url);
+      setCurrentAudio(stem.id);
+    } catch (error) {
+      console.error('Error loading stem:', error);
+      alert('Failed to load stem');
+    }
   };
 
   const startVisualization = () => {
@@ -114,35 +127,27 @@ function PackPlayer({ pack, onClose, user, processor }) {
         x += barWidth + 1;
       }
       
-      animationRef.current = requestAnimationFrame(draw);
+      if (isPlaying) {
+        animationRef.current = requestAnimationFrame(draw);
+      }
     };
     
     draw();
   };
 
-  const toggleMainLoop = async () => {
+  const togglePlayPause = async () => {
     if (!user) {
       alert('Please sign in to play samples');
       return;
     }
 
-    if (playingMain) {
-      processor?.stopAllNotes();
-      setPlayingMain(false);
+    if (isPlaying) {
+      processor?.stop();
+      setIsPlaying(false);
     } else {
       try {
-        await processor?.loadAudio(pack.main_loop_url || pack.file_url);
-        // Play at normal pitch (no polyphonic, just play the sample)
-        const source = processor.audioContext.createBufferSource();
-        source.buffer = processor.currentBuffer;
-        source.connect(processor.masterGain);
-        source.start();
-        
-        source.onended = () => {
-          setPlayingMain(false);
-        };
-        
-        setPlayingMain(true);
+        processor?.play(effects, effects.pitch, effects.speed);
+        setIsPlaying(true);
         
         // Track interaction
         await supabase.from('sample_interactions').insert([{
@@ -156,54 +161,55 @@ function PackPlayer({ pack, onClose, user, processor }) {
         }]);
       } catch (error) {
         console.error('Error playing:', error);
-        alert('Failed to load audio');
+        alert('Failed to play audio');
       }
     }
   };
 
-  const toggleStem = async (stem) => {
+  const handleStemSelect = async (stem) => {
     if (!user) {
       alert('Please sign in to play samples');
       return;
     }
 
-    const stemId = stem.id;
-    
-    if (playingStems[stemId]) {
-      processor?.stopNote(stemId);
-      setPlayingStems(prev => ({ ...prev, [stemId]: false }));
-    } else {
-      try {
-        await processor?.loadAudio(stem.file_url);
-        
-        const source = processor.audioContext.createBufferSource();
-        source.buffer = processor.currentBuffer;
-        const gainNode = processor.audioContext.createGain();
-        gainNode.gain.value = stemVolumes[stemId] || 1.0;
-        source.connect(gainNode);
-        gainNode.connect(processor.masterGain);
-        source.start();
-        
-        source.onended = () => {
-          setPlayingStems(prev => ({ ...prev, [stemId]: false }));
-        };
-        
-        setPlayingStems(prev => ({ ...prev, [stemId]: true }));
-        
-        // Track stem interaction
-        await supabase.from('sample_interactions').insert([{
-          user_id: user.id,
-          sample_id: pack.id,
-          stem_id: stem.id,
-          interaction_type: 'play',
-          bpm: pack.bpm,
-          key: pack.key,
-          genre: pack.genre
-        }]);
-      } catch (error) {
-        console.error('Error playing stem:', error);
-      }
+    // Stop current playback
+    if (isPlaying) {
+      processor?.stop();
+      setIsPlaying(false);
     }
+
+    // Load and play the stem
+    await loadStemAudio(stem);
+    
+    try {
+      processor?.play(effects, effects.pitch, effects.speed);
+      setIsPlaying(true);
+      
+      // Track stem interaction
+      await supabase.from('sample_interactions').insert([{
+        user_id: user.id,
+        sample_id: pack.id,
+        stem_id: stem.id,
+        interaction_type: 'play',
+        bpm: pack.bpm,
+        key: pack.key,
+        genre: pack.genre
+      }]);
+    } catch (error) {
+      console.error('Error playing stem:', error);
+    }
+  };
+
+  const handleMainSelect = async () => {
+    if (currentAudio === 'main') return;
+    
+    // Stop current playback
+    if (isPlaying) {
+      processor?.stop();
+      setIsPlaying(false);
+    }
+
+    await loadMainAudio();
   };
 
   const handleDownload = async (url, filename, itemType = 'main') => {
@@ -234,13 +240,43 @@ function PackPlayer({ pack, onClose, user, processor }) {
     }
   };
 
+  const handleDownloadEffected = async () => {
+    alert('Download with effects coming soon! Currently downloading original file.');
+    // For now, just download the original
+    handleDownload(
+      currentAudio === 'main' 
+        ? (pack.main_loop_url || pack.file_url)
+        : stems.find(s => s.id === currentAudio)?.file_url,
+      `${pack.name}-effected.wav`,
+      'effected'
+    );
+  };
+
   const handleDownloadAll = () => {
     alert('ZIP download coming soon! For now, download files individually.');
   };
 
   const handleEffectChange = (effectName, value) => {
-    setEffects(prev => ({ ...prev, [effectName]: value }));
-    processor?.updateEffect(effectName, value);
+    const newEffects = { ...effects, [effectName]: value };
+    setEffects(newEffects);
+    
+    // If playing, restart with new effects
+    if (isPlaying) {
+      processor?.stop();
+      processor?.play(newEffects, newEffects.pitch, newEffects.speed);
+    }
+  };
+
+  // Convert knob value (0-1) to pitch (-12 to +12 semitones)
+  const handlePitchChange = (value) => {
+    const pitch = (value - 0.5) * 24; // -12 to +12
+    handleEffectChange('pitch', pitch);
+  };
+
+  // Convert knob value (0-1) to speed (0.5 to 2.0)
+  const handleSpeedChange = (value) => {
+    const speed = 0.5 + (value * 1.5); // 0.5 to 2.0
+    handleEffectChange('speed', speed);
   };
 
   return (
@@ -273,7 +309,7 @@ function PackPlayer({ pack, onClose, user, processor }) {
                 />
               ) : (
                 <div className="w-16 h-16 rounded-lg bg-purple-900 flex items-center justify-center">
-                  <Volume2 className="w-8 h-8 text-purple-400" />
+                  <Play className="w-8 h-8 text-purple-400" />
                 </div>
               )}
             </div>
@@ -285,6 +321,20 @@ function PackPlayer({ pack, onClose, user, processor }) {
               height={150}
               className="w-full h-36"
             />
+
+            {/* Play/Pause Button Overlay */}
+            <div className="absolute top-3 right-3">
+              <button
+                onClick={togglePlayPause}
+                className="p-3 bg-purple-500 hover:bg-purple-600 rounded-full shadow-lg transition"
+              >
+                {isPlaying ? (
+                  <Pause className="w-6 h-6" />
+                ) : (
+                  <Play className="w-6 h-6 ml-0.5" />
+                )}
+              </button>
+            </div>
           </div>
 
           {/* Pack Info */}
@@ -310,7 +360,7 @@ function PackPlayer({ pack, onClose, user, processor }) {
           {/* Round Knob Effects */}
           <div className="bg-purple-950/30 rounded-xl p-4 border border-purple-500/20">
             <h3 className="text-base font-bold text-white mb-3">Effects</h3>
-            <div className="grid grid-cols-5 gap-2">
+            <div className="grid grid-cols-4 gap-3 mb-3">
               <KnobControl
                 label="Tape"
                 value={effects.tape}
@@ -339,6 +389,8 @@ function PackPlayer({ pack, onClose, user, processor }) {
                 color="#ddd6fe"
                 size="small"
               />
+            </div>
+            <div className="grid grid-cols-3 gap-3">
               <KnobControl
                 label="Dist"
                 value={effects.distortion}
@@ -346,13 +398,40 @@ function PackPlayer({ pack, onClose, user, processor }) {
                 color="#ede9fe"
                 size="small"
               />
+              <KnobControl
+                label="Pitch"
+                value={(effects.pitch + 12) / 24} // Convert -12/+12 to 0-1
+                onChange={handlePitchChange}
+                color="#f9a8d4"
+                size="small"
+              />
+              <KnobControl
+                label="Speed"
+                value={(effects.speed - 0.5) / 1.5} // Convert 0.5-2.0 to 0-1
+                onChange={handleSpeedChange}
+                color="#fbcfe8"
+                size="small"
+              />
+            </div>
+            <div className="mt-2 text-xs text-purple-400 text-center">
+              Pitch: {effects.pitch > 0 ? '+' : ''}{Math.round(effects.pitch)} semitones • 
+              Speed: {effects.speed.toFixed(2)}x
             </div>
           </div>
+
+          {/* Download with Effects Button */}
+          <button
+            onClick={handleDownloadEffected}
+            className="w-full py-2.5 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 rounded-lg font-semibold transition flex items-center justify-center space-x-2"
+          >
+            <Download className="w-4 h-4" />
+            <span>Download with Effects</span>
+          </button>
 
           {/* Download List */}
           <div className="bg-purple-950/30 rounded-xl p-4 border border-purple-500/20">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-base font-bold text-white">Downloads</h3>
+              <h3 className="text-base font-bold text-white">Original Files</h3>
               <button
                 onClick={handleDownloadAll}
                 className="px-3 py-1.5 bg-purple-500 hover:bg-purple-600 rounded-lg text-xs font-semibold transition flex items-center space-x-1"
@@ -369,30 +448,35 @@ function PackPlayer({ pack, onClose, user, processor }) {
             ) : (
               <div className="space-y-2">
                 {/* Main Loop */}
-                <div className="p-2 bg-black/40 rounded-lg border border-purple-500/20">
+                <div 
+                  className={`p-2 bg-black/40 rounded-lg border transition cursor-pointer ${
+                    currentAudio === 'main' 
+                      ? 'border-purple-400 bg-purple-900/20' 
+                      : 'border-purple-500/20 hover:border-purple-400/50'
+                  }`}
+                  onClick={handleMainSelect}
+                >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-2 flex-1">
-                      <button
-                        onClick={toggleMainLoop}
-                        className="p-1.5 bg-purple-500 hover:bg-purple-600 rounded transition"
-                      >
-                        {playingMain ? (
-                          <Pause className="w-3 h-3" />
-                        ) : (
-                          <Play className="w-3 h-3 ml-0.5" />
-                        )}
-                      </button>
+                      <div className={`p-1.5 rounded transition ${
+                        currentAudio === 'main' ? 'bg-purple-500' : 'bg-purple-900/50'
+                      }`}>
+                        <Play className="w-3 h-3" />
+                      </div>
                       <div>
                         <p className="font-semibold text-white text-sm">Main Loop</p>
                         <p className="text-xs text-purple-400">Full mix</p>
                       </div>
                     </div>
                     <button
-                      onClick={() => handleDownload(
-                        pack.main_loop_url || pack.file_url,
-                        `${pack.name}-main.wav`,
-                        'main'
-                      )}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDownload(
+                          pack.main_loop_url || pack.file_url,
+                          `${pack.name}-main.wav`,
+                          'main'
+                        );
+                      }}
                       className="p-1.5 bg-purple-900/50 hover:bg-purple-800/50 rounded transition"
                     >
                       <Download className="w-3 h-3 text-purple-300" />
@@ -404,21 +488,20 @@ function PackPlayer({ pack, onClose, user, processor }) {
                 {stems.map((stem) => (
                   <div
                     key={stem.id}
-                    className="p-2 bg-black/40 rounded-lg border border-purple-500/20"
+                    className={`p-2 bg-black/40 rounded-lg border transition cursor-pointer ${
+                      currentAudio === stem.id 
+                        ? 'border-purple-400 bg-purple-900/20' 
+                        : 'border-purple-500/20 hover:border-purple-400/50'
+                    }`}
+                    onClick={() => handleStemSelect(stem)}
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center space-x-2 flex-1 min-w-0">
-                        <button
-                          onClick={() => toggleStem(stem)}
-                          disabled={mutedStems.has(stem.id)}
-                          className="p-1.5 bg-purple-500 hover:bg-purple-600 disabled:bg-gray-600 rounded transition flex-shrink-0"
-                        >
-                          {playingStems[stem.id] ? (
-                            <Pause className="w-3 h-3" />
-                          ) : (
-                            <Play className="w-3 h-3 ml-0.5" />
-                          )}
-                        </button>
+                        <div className={`p-1.5 rounded transition ${
+                          currentAudio === stem.id ? 'bg-purple-500' : 'bg-purple-900/50'
+                        }`}>
+                          <Play className="w-3 h-3" />
+                        </div>
                         <div className="flex-1 min-w-0">
                           <p className="font-semibold text-white text-sm truncate">
                             {stem.name}
@@ -427,11 +510,14 @@ function PackPlayer({ pack, onClose, user, processor }) {
                         </div>
                       </div>
                       <button
-                        onClick={() => handleDownload(
-                          stem.file_url,
-                          `${pack.name}-${stem.name}.wav`,
-                          'stem'
-                        )}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDownload(
+                            stem.file_url,
+                            `${pack.name}-${stem.name}.wav`,
+                            'stem'
+                          );
+                        }}
                         className="p-1.5 bg-purple-900/50 hover:bg-purple-800/50 rounded transition ml-2 flex-shrink-0"
                       >
                         <Download className="w-3 h-3 text-purple-300" />

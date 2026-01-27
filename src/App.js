@@ -3,15 +3,13 @@ import { supabase } from './supabaseClient';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Disc3,
-  Piano as PianoIcon,
   Sparkles,
-  LogIn,
-  X
+  LogIn
 } from 'lucide-react';
 import StorefrontGrid from './StorefrontGrid';
 import PackPlayer from './PackPlayer';
 
-// Audio Processor (same as before)
+// Audio Processor with Effects
 class AnalogProcessor {
   constructor() {
     this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
@@ -37,10 +35,9 @@ class AnalogProcessor {
     this.createVinylNoise();
     this.createReverbImpulse();
     
-    this.activeVoices = new Map();
     this.currentBuffer = null;
+    this.currentSource = null;
     this.vinylNode = null;
-    this.currentEffects = {};
     
     this.masterGain.connect(this.analyser);
     this.masterGain.connect(this.audioContext.destination);
@@ -98,56 +95,116 @@ class AnalogProcessor {
     return this.currentBuffer;
   }
   
-  playNote(noteId, pitchShift, velocity = 1.0, effects = {}) {
+  buildEffectChain(source, effects) {
+    let currentNode = source;
+    
+    // Tape
+    if (effects.tape > 0) {
+      const tape = this.audioContext.createWaveShaper();
+      tape.curve = this.makeTapeCurve(effects.tape);
+      currentNode.connect(tape);
+      currentNode = tape;
+    }
+    
+    // Distortion
+    if (effects.distortion > 0) {
+      const dist = this.audioContext.createWaveShaper();
+      dist.curve = this.makeDistortionCurve(effects.distortion * 100);
+      currentNode.connect(dist);
+      currentNode = dist;
+    }
+    
+    // Filter
+    const filter = this.audioContext.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.value = effects.tape ? 20000 - (effects.tape * 15000) : 20000;
+    currentNode.connect(filter);
+    currentNode = filter;
+    
+    // Main output
+    currentNode.connect(this.masterGain);
+    
+    // Delay (parallel)
+    if (effects.delay > 0) {
+      const delay = this.audioContext.createDelay();
+      const feedback = this.audioContext.createGain();
+      delay.delayTime.value = 0.3;
+      feedback.gain.value = effects.delay * 0.7;
+      
+      currentNode.connect(delay);
+      delay.connect(feedback);
+      feedback.connect(delay);
+      delay.connect(this.masterGain);
+    }
+    
+    // Reverb (parallel)
+    if (effects.reverb > 0) {
+      const reverbGain = this.audioContext.createGain();
+      reverbGain.gain.value = effects.reverb;
+      currentNode.connect(reverbGain);
+      reverbGain.connect(this.reverbNode);
+      this.reverbNode.connect(this.masterGain);
+    }
+  }
+  
+  play(effects = {}, pitch = 0, speed = 1.0) {
     if (!this.currentBuffer) return;
     
-    this.stopNote(noteId);
+    this.stop();
     
     const source = this.audioContext.createBufferSource();
     source.buffer = this.currentBuffer;
+    source.loop = true;
     
-    const rate = Math.pow(2, pitchShift / 12);
-    source.playbackRate.value = rate;
+    // Pitch shift (semitones)
+    // Speed control (0.5 = half speed, 2.0 = double speed)
+    const pitchRate = Math.pow(2, pitch / 12);
+    source.playbackRate.value = pitchRate * speed;
     
-    const gainNode = this.audioContext.createGain();
-    gainNode.gain.value = velocity * 0.7;
-    
-    source.connect(gainNode);
-    gainNode.connect(this.masterGain);
+    this.buildEffectChain(source, effects);
     
     source.start();
+    this.currentSource = source;
     
-    this.activeVoices.set(noteId, {
-      source,
-      gainNode,
-      startTime: this.audioContext.currentTime
-    });
-    
-    source.onended = () => {
-      this.stopNote(noteId);
-    };
+    // Vinyl if enabled
+    if (effects.vinyl > 0 && !this.vinylNode) {
+      this.startVinyl();
+    } else if (effects.vinyl === 0 && this.vinylNode) {
+      this.stopVinyl();
+    }
   }
   
-  stopNote(noteId) {
-    const voice = this.activeVoices.get(noteId);
-    if (voice) {
+  stop() {
+    if (this.currentSource) {
       try {
-        voice.source.stop();
+        this.currentSource.stop();
       } catch (e) {}
-      voice.source.disconnect();
-      voice.gainNode.disconnect();
-      this.activeVoices.delete(noteId);
+      this.currentSource.disconnect();
+      this.currentSource = null;
     }
   }
   
-  stopAllNotes() {
-    for (const noteId of this.activeVoices.keys()) {
-      this.stopNote(noteId);
+  startVinyl() {
+    if (this.vinylBuffer && !this.vinylNode) {
+      const source = this.audioContext.createBufferSource();
+      source.buffer = this.vinylBuffer;
+      source.loop = true;
+      const gain = this.audioContext.createGain();
+      gain.gain.value = 0.05;
+      source.connect(gain);
+      gain.connect(this.masterGain);
+      source.start();
+      this.vinylNode = source;
     }
   }
   
-  updateEffect(effectName, value) {
-    this.currentEffects[effectName] = value;
+  stopVinyl() {
+    if (this.vinylNode) {
+      try {
+        this.vinylNode.stop();
+      } catch (e) {}
+      this.vinylNode = null;
+    }
   }
   
   getAnalyserData() {
@@ -155,112 +212,13 @@ class AnalogProcessor {
     this.analyser.getByteFrequencyData(dataArray);
     return dataArray;
   }
+  
+  isPlaying() {
+    return this.currentSource !== null;
+  }
 }
 
-// Compact Piano Keyboard (Left Side)
-const PianoKeyboard = ({ onNoteOn, onNoteOff, activeNotes, octaveShift, onClose }) => {
-  const whiteKeys = [
-    { note: 'C', midi: 60, key: 'A' },
-    { note: 'D', midi: 62, key: 'S' },
-    { note: 'E', midi: 64, key: 'D' },
-    { note: 'F', midi: 65, key: 'F' },
-    { note: 'G', midi: 67, key: 'G' },
-    { note: 'A', midi: 69, key: 'H' },
-    { note: 'B', midi: 71, key: 'J' },
-    { note: 'C', midi: 72, key: 'K' },
-  ];
-  
-  const blackKeys = [
-    { note: 'C#', midi: 61, key: 'W', position: 0 },
-    { note: 'D#', midi: 63, key: 'E', position: 1 },
-    { note: 'F#', midi: 66, key: 'T', position: 3 },
-    { note: 'G#', midi: 68, key: 'Y', position: 4 },
-    { note: 'A#', midi: 70, key: 'U', position: 5 },
-  ];
-  
-  return (
-    <div className="relative bg-gradient-to-b from-gray-800 to-gray-900 rounded-xl p-3 border border-purple-500/30">
-      <button
-        onClick={onClose}
-        className="absolute -top-2 -right-2 p-1 bg-purple-500 hover:bg-purple-600 rounded-full transition z-10"
-      >
-        <X className="w-3 h-3 text-white" />
-      </button>
-      
-      <div className="flex relative justify-center">
-        {whiteKeys.map((keyData, i) => {
-          const midiNote = keyData.midi + (octaveShift * 12);
-          const isActive = activeNotes.has(midiNote);
-          
-          return (
-            <motion.div
-              key={`white-${i}`}
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              onMouseDown={() => onNoteOn(midiNote)}
-              onMouseUp={() => onNoteOff(midiNote)}
-              onMouseLeave={() => onNoteOff(midiNote)}
-              className={`
-                w-8 h-20 mx-0.5 rounded-b-lg cursor-pointer transition-all
-                flex flex-col items-center justify-end pb-1
-                ${isActive 
-                  ? 'bg-gradient-to-b from-purple-400 to-purple-500 shadow-lg shadow-purple-500/50' 
-                  : 'bg-gradient-to-b from-white to-gray-100 hover:from-gray-100 hover:to-gray-200'
-                }
-                border-2 ${isActive ? 'border-purple-300' : 'border-gray-300'}
-              `}
-            >
-              <span className={`text-[10px] font-bold ${isActive ? 'text-white' : 'text-gray-600'}`}>
-                {keyData.note}
-              </span>
-              <span className={`text-[8px] ${isActive ? 'text-purple-100' : 'text-gray-400'}`}>
-                {keyData.key}
-              </span>
-            </motion.div>
-          );
-        })}
-        
-        <div className="absolute top-0 left-0 w-full h-12 pointer-events-none">
-          {blackKeys.map((keyData, i) => {
-            const midiNote = keyData.midi + (octaveShift * 12);
-            const isActive = activeNotes.has(midiNote);
-            const leftPosition = (keyData.position * 32) + 24;
-            
-            return (
-              <motion.div
-                key={`black-${i}`}
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onMouseDown={() => onNoteOn(midiNote)}
-                onMouseUp={() => onNoteOff(midiNote)}
-                onMouseLeave={() => onNoteOff(midiNote)}
-                style={{ left: `${leftPosition}px` }}
-                className={`
-                  absolute w-6 h-14 rounded-b-lg cursor-pointer pointer-events-auto
-                  flex flex-col items-center justify-end pb-1 transition-all
-                  ${isActive
-                    ? 'bg-gradient-to-b from-purple-600 to-purple-700 shadow-lg shadow-purple-600/50'
-                    : 'bg-gradient-to-b from-gray-800 to-black hover:from-gray-700 hover:to-gray-900'
-                  }
-                  border ${isActive ? 'border-purple-400' : 'border-gray-900'}
-                `}
-              >
-                <span className={`text-[9px] font-bold ${isActive ? 'text-white' : 'text-gray-400'}`}>
-                  {keyData.note}
-                </span>
-                <span className={`text-[7px] ${isActive ? 'text-purple-200' : 'text-gray-600'}`}>
-                  {keyData.key}
-                </span>
-              </motion.div>
-            );
-          })}
-        </div>
-      </div>
-    </div>
-  );
-};
-
-// Bioluminescent Particles Component
+// Bioluminescent Particles
 const BioluminescentParticles = () => {
   const canvasRef = useRef(null);
   const particlesRef = useRef([]);
@@ -378,80 +336,16 @@ const BioluminescentParticles = () => {
 // Main App
 function FeelzMachine({ user, profile }) {
   const [selectedPack, setSelectedPack] = useState(null);
-  const [pianoMode, setPianoMode] = useState(false);
-  const [activeNotes, setActiveNotes] = useState(new Set());
-  const [octaveShift, setOctaveShift] = useState(0);
-  
   const processorRef = useRef(new AnalogProcessor());
-  
-  const keyToMidi = React.useMemo(() => ({
-    'a': 60, 'w': 61, 's': 62, 'e': 63, 'd': 64,
-    'f': 65, 't': 66, 'g': 67, 'y': 68, 'h': 69,
-    'u': 70, 'j': 71, 'k': 72
-  }), []);
-  
-  const handleNoteOn = React.useCallback((midiNote, velocity = 1.0) => {
-    const processor = processorRef.current;
-    if (!processor.currentBuffer) return;
-    
-    const pitchShift = midiNote - 60;
-    processor.playNote(midiNote, pitchShift, velocity, {});
-    setActiveNotes(prev => new Set(prev).add(midiNote));
-  }, []);
-  
-  const handleNoteOff = React.useCallback((midiNote) => {
-    const processor = processorRef.current;
-    processor.stopNote(midiNote);
-    setActiveNotes(prev => {
-      const next = new Set(prev);
-      next.delete(midiNote);
-      return next;
-    });
-  }, []);
-  
-  useEffect(() => {
-    if (!pianoMode || !selectedPack) return;
-    
-    const handleKeyDown = (e) => {
-      const key = e.key.toLowerCase();
-      if (keyToMidi[key] && !e.repeat) {
-        const midiNote = keyToMidi[key] + (octaveShift * 12);
-        handleNoteOn(midiNote);
-      }
-      
-      if (e.key === 'z' && octaveShift > -2) setOctaveShift(octaveShift - 1);
-      if (e.key === 'x' && octaveShift < 2) setOctaveShift(octaveShift + 1);
-    };
-    
-    const handleKeyUp = (e) => {
-      const key = e.key.toLowerCase();
-      if (keyToMidi[key]) {
-        const midiNote = keyToMidi[key] + (octaveShift * 12);
-        handleNoteOff(midiNote);
-      }
-    };
-    
-    window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('keyup', handleKeyUp);
-    
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('keyup', handleKeyUp);
-    };
-  }, [pianoMode, selectedPack, octaveShift, handleNoteOn, handleNoteOff, keyToMidi]);
 
   const handlePackSelect = (pack) => {
     setSelectedPack(pack);
-    setPianoMode(true); // Auto-show piano
-    processorRef.current.stopAllNotes();
-    setActiveNotes(new Set());
+    processorRef.current.stop();
   };
 
   const handlePackClose = () => {
     setSelectedPack(null);
-    setPianoMode(false);
-    processorRef.current.stopAllNotes();
-    setActiveNotes(new Set());
+    processorRef.current.stop();
   };
 
   return (
@@ -513,62 +407,6 @@ function FeelzMachine({ user, profile }) {
           )}
         </AnimatePresence>
       </div>
-
-      {/* Compact Piano (Left Bottom Corner) */}
-      <AnimatePresence>
-        {selectedPack && pianoMode && (
-          <motion.div
-            initial={{ x: '-100%', opacity: 0 }}
-            animate={{ x: 0, opacity: 1 }}
-            exit={{ x: '-100%', opacity: 0 }}
-            transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-            className="fixed bottom-4 left-4 z-40 w-72"
-          >
-            <PianoKeyboard
-              onNoteOn={handleNoteOn}
-              onNoteOff={handleNoteOff}
-              activeNotes={activeNotes}
-              octaveShift={octaveShift}
-              onClose={() => setPianoMode(false)}
-            />
-            
-            <div className="mt-2 flex items-center justify-center space-x-2 bg-black/80 backdrop-blur-xl rounded-lg p-2 border border-purple-500/30">
-              <button
-                onClick={() => setOctaveShift(Math.max(-2, octaveShift - 1))}
-                disabled={octaveShift <= -2}
-                className="px-2 py-1 text-xs bg-purple-900/50 hover:bg-purple-800/50 disabled:opacity-30 disabled:cursor-not-allowed rounded transition font-semibold"
-              >
-                −
-              </button>
-              <span className="text-xs text-purple-300 font-semibold min-w-[60px] text-center">
-                Oct: {octaveShift >= 0 ? '+' : ''}{octaveShift}
-              </span>
-              <button
-                onClick={() => setOctaveShift(Math.min(2, octaveShift + 1))}
-                disabled={octaveShift >= 2}
-                className="px-2 py-1 text-xs bg-purple-900/50 hover:bg-purple-800/50 disabled:opacity-30 disabled:cursor-not-allowed rounded transition font-semibold"
-              >
-                +
-              </button>
-            </div>
-            
-            <p className="text-[10px] text-center text-purple-400 mt-1">
-              Z/X: Octave • A-K: Notes
-            </p>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Piano Toggle (when hidden) */}
-      {selectedPack && !pianoMode && (
-        <button
-          onClick={() => setPianoMode(true)}
-          className="fixed bottom-4 left-4 px-4 py-2 text-sm bg-purple-500 hover:bg-purple-600 rounded-full shadow-lg shadow-purple-500/50 transition flex items-center space-x-2 z-40"
-        >
-          <PianoIcon className="w-4 h-4" />
-          <span className="font-semibold">Show Piano</span>
-        </button>
-      )}
     </div>
   );
 }
