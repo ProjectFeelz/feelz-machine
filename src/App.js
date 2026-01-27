@@ -354,7 +354,7 @@ function FeelzMachine({ user, profile }) {
       <BioluminescentParticles />
       
       {/* Header */}
-      <header className="border-b border-cyan-500/30 backdrop-blur-lg bg-black/30 sticky top-0 z-40">
+      <header className="border-b border-cyan-500/20 backdrop-blur-xl bg-white/5 sticky top-0 z-40 shadow-lg shadow-black/20">
         <div className="max-w-[1800px] mx-auto px-8 py-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2">

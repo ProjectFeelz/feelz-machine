@@ -260,7 +260,7 @@ function PackPlayer({ pack, onClose, user, processor }) {
         animate={{ x: 0 }}
         exit={{ x: '100%' }}
         transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-        className="fixed top-0 right-0 h-full w-full lg:w-[35%] bg-black/95 backdrop-blur-xl border-l border-cyan-500/30 z-50 overflow-y-auto"
+        className="fixed top-0 right-0 h-full w-full lg:w-[35%] bg-black/30 backdrop-blur-3xl border-l border-cyan-400/20 z-50 overflow-y-auto shadow-2xl shadow-black/60"
       >
         <button
           onClick={onClose}
@@ -271,13 +271,13 @@ function PackPlayer({ pack, onClose, user, processor }) {
 
         <div className="p-4 space-y-4">
           {/* Visualizer */}
-          <div className="relative bg-black rounded-xl overflow-hidden border border-cyan-500/30">
+          <div className="relative bg-black/40 backdrop-blur-xl rounded-2xl overflow-hidden border border-cyan-400/20 shadow-xl shadow-cyan-500/10">
             <div className="absolute top-3 left-3 z-10">
               {pack.thumbnail_url ? (
                 <img
                   src={pack.thumbnail_url}
                   alt={pack.name}
-                  className="w-16 h-16 rounded-lg shadow-2xl border-2 border-cyan-400"
+                  className="p-3 bg-gradient-to-br from-blue-500/90 to-cyan-500/90 hover:from-blue-600/90 hover:to-cyan-600/90 rounded-full shadow-2xl shadow-blue-500/50 transition backdrop-blur-xl border border-white/20"
                 />
               ) : (
                 <div className="w-16 h-16 rounded-lg bg-blue-900 flex items-center justify-center">
@@ -328,7 +328,7 @@ function PackPlayer({ pack, onClose, user, processor }) {
           </div>
 
           {/* Effects */}
-          <div className="bg-blue-950/30 rounded-xl p-4 border border-cyan-500/20">
+          <div className="bg-white/5 backdrop-blur-3xl rounded-2xl p-4 border border-cyan-400/20 shadow-xl shadow-black/30">
             <h3 className="text-base font-bold text-white mb-3">Effects</h3>
             <div className="grid grid-cols-4 gap-3 mb-3">
               <KnobControl
@@ -392,7 +392,7 @@ function PackPlayer({ pack, onClose, user, processor }) {
           {/* Download with Effects */}
           <button
             onClick={handleDownloadEffected}
-            className="w-full py-2.5 bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 rounded-lg font-semibold transition flex items-center justify-center space-x-2"
+            className="w-full py-2.5 bg-gradient-to-r from-blue-500/90 to-cyan-500/90 hover:from-blue-600/90 hover:to-cyan-600/90 rounded-xl font-semibold transition flex items-center justify-center space-x-2 shadow-xl shadow-cyan-500/30 backdrop-blur-xl border border-white/20"
           >
             <Download className="w-4 h-4" />
             <span>Download with Effects</span>
@@ -419,18 +419,18 @@ function PackPlayer({ pack, onClose, user, processor }) {
               <div className="space-y-2">
                 {/* Main Loop */}
                 <div 
-                  className={`p-2 bg-black/40 rounded-lg border transition cursor-pointer ${
-                    currentAudio === 'main' 
-                      ? 'border-cyan-400 bg-blue-900/20' 
-                      : 'border-cyan-500/20 hover:border-cyan-400/50'
-                  }`}
+                  className={`p-2 bg-white/5 backdrop-blur-xl rounded-lg border transition cursor-pointer ${
+                currentAudio === 'main' 
+        ? 'border-cyan-400/60 bg-cyan-500/10 shadow-lg shadow-cyan-500/20' 
+        : 'border-white/10 hover:border-cyan-400/40 hover:bg-white/10'
+        }`}
                   onClick={handleMainSelect}
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-2 flex-1">
-                      <div className={`p-1.5 rounded transition ${
-                        currentAudio === 'main' ? 'bg-blue-500' : 'bg-blue-900/50'
-                      }`}>
+                      <div className={`p-1.5 rounded transition backdrop-blur-xl ${
+                    currentAudio === 'main' ? 'bg-gradient-to-br from-blue-500/90 to-cyan-500/90 shadow-md shadow-blue-500/50' : 'bg-white/10 border border-white/10'
+        }`}>
                         <Play className="w-3 h-3" />
                       </div>
                       <div>

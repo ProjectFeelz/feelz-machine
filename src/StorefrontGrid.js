@@ -90,7 +90,7 @@ function StorefrontGrid({ onPackSelect, selectedPack }) {
   return (
     <div className="space-y-6">
       {/* Search & Filter Bar */}
-      <div className="bg-black/40 backdrop-blur-xl rounded-2xl p-4 border border-cyan-500/30">
+      <div className="bg-white/5 backdrop-blur-3xl rounded-2xl p-4 border border-cyan-400/20 shadow-2xl shadow-black/40">
         <div className="flex flex-col lg:flex-row gap-4">
           {/* Search */}
           <div className="flex-1 relative">
@@ -107,10 +107,10 @@ function StorefrontGrid({ onPackSelect, selectedPack }) {
           {/* Filter Button */}
           <button
             onClick={() => setShowFilters(!showFilters)}
-            className={`flex items-center space-x-2 px-6 py-3 rounded-lg transition ${
-              showFilters
-                ? 'bg-blue-500 text-white'
-                : 'bg-blue-950/50 text-cyan-300 hover:bg-blue-900/50'
+            className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition ${
+            activeTab === 'all'
+            ? 'bg-gradient-to-r from-blue-500/90 to-cyan-500/90 text-white shadow-lg shadow-blue-500/50 backdrop-blur-xl'
+            : 'bg-white/5 text-cyan-300 hover:bg-white/10 backdrop-blur-xl border border-cyan-500/20'
             }`}
           >
             <Filter className="w-5 h-5" />
@@ -240,11 +240,11 @@ function StorefrontGrid({ onPackSelect, selectedPack }) {
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               onClick={() => onPackSelect(pack)}
-              className={`cursor-pointer rounded-xl overflow-hidden border-2 transition-all ${
-                selectedPack?.id === pack.id
-                  ? 'border-cyan-400 shadow-lg shadow-cyan-500/50'
-                  : 'border-cyan-500/30 hover:border-cyan-400/70'
-              }`}
+              className={`cursor-pointer rounded-xl overflow-hidden border transition-all ${
+  selectedPack?.id === pack.id
+    ? 'border-cyan-400/60 shadow-2xl shadow-cyan-500/50 ring-2 ring-cyan-400/30'
+    : 'border-cyan-500/20 hover:border-cyan-400/40 hover:shadow-xl hover:shadow-cyan-500/20'
+}`}
             >
               {/* Thumbnail */}
               <div className="aspect-square relative bg-gradient-to-br from-blue-900 to-black">
@@ -284,14 +284,14 @@ function StorefrontGrid({ onPackSelect, selectedPack }) {
               </div>
 
               {/* Info */}
-              <div className="p-3 bg-black/60 backdrop-blur-sm">
+              <div className="p-3 bg-black/20 backdrop-blur-xl border-t border-white/10">
                 <h3 className="font-bold text-white text-sm truncate mb-1">{pack.name}</h3>
                 <p className="text-xs text-cyan-300 truncate mb-2">{pack.artist}</p>
                 <div className="flex items-center justify-between text-xs">
-                  <span className="px-2 py-0.5 bg-blue-900/50 text-cyan-300 rounded">
+                  <span className="px-2 py-0.5 bg-white/10 text-cyan-300 rounded backdrop-blur-md border border-white/10">
                     {pack.bpm} BPM
                   </span>
-                  <span className="px-2 py-0.5 bg-blue-900/50 text-cyan-300 rounded">
+                  <span className="px-2 py-0.5 bg-white/10 text-cyan-300 rounded backdrop-blur-md border border-white/10">
                     {pack.key}
                   </span>
                 </div>

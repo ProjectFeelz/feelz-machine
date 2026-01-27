@@ -182,7 +182,7 @@ function LandingPage({ onEnter }) {
           transition={{ duration: 0.8, delay: 0.8 }}
           className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12 max-w-4xl"
         >
-          <div className="bg-black/40 backdrop-blur-xl rounded-2xl p-6 border border-cyan-500/30 hover:border-cyan-400/70 transition">
+          <div className="bg-white/5 backdrop-blur-3xl rounded-2xl p-6 border border-cyan-400/20 hover:border-cyan-400/40 transition shadow-xl shadow-black/40 hover:shadow-2xl hover:shadow-cyan-500/20">
             <Music className="w-8 h-8 text-cyan-400 mx-auto mb-3" />
             <h3 className="text-lg font-bold text-white mb-2">Loop Playback</h3>
             <p className="text-sm text-cyan-300">Play and preview samples with effects</p>
@@ -208,7 +208,7 @@ function LandingPage({ onEnter }) {
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
           onClick={onEnter}
-          className="group relative px-12 py-5 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-full text-white text-xl font-bold shadow-2xl shadow-blue-500/50 hover:shadow-cyan-500/70 transition-all"
+          className="group relative px-12 py-5 bg-gradient-to-r from-blue-500/90 to-cyan-500/90 rounded-full text-white text-xl font-bold shadow-2xl shadow-blue-500/50 hover:shadow-cyan-500/70 transition-all backdrop-blur-xl border border-white/20 hover:border-white/30"
         >
           <span className="flex items-center space-x-3">
             <span>Enter Feelz Machine</span>
