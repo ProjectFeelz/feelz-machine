@@ -123,13 +123,16 @@ function PackPlayer({ pack, onClose, user, processor }) {
       ctx.fillStyle = 'rgba(10, 10, 15, 0.25)';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       
-      frameCount += 0.08;
-      
       let avgAmplitude = 0;
       for (let i = 0; i < bufferLength; i++) {
         avgAmplitude += dataArray[i];
       }
       avgAmplitude = avgAmplitude / bufferLength / 255;
+      
+      // Only animate when audio is playing
+      if (avgAmplitude > 0.02) {
+        frameCount += 0.08;
+      }
       
       particles.forEach((particle, i) => {
         const lowIndex = Math.floor((i / numParticles) * bufferLength * 0.3);
@@ -146,7 +149,10 @@ function PackPlayer({ pack, onClose, user, processor }) {
         
         const boostedAmplitude = Math.pow(particle.smoothAmplitude, 0.5) * 1.5;
         
-        const wave = Math.sin(particle.offset + frameCount) * (20 + avgAmplitude * 30);
+        // Only wave when audio is present
+        const wave = avgAmplitude > 0.02 
+          ? Math.sin(particle.offset + frameCount) * (20 + avgAmplitude * 30)
+          : 0;
         const audioInfluence = boostedAmplitude * 120;
         
         particle.y = particle.baseY + wave - audioInfluence;
