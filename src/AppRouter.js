@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { supabase } from './supabaseClient';
 import FeelzMachine from './App';
 import Login from './Login';
@@ -12,96 +12,83 @@ function AppRouter() {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showLanding, setShowLanding] = useState(true);
-  const [checkingProfile, setCheckingProfile] = useState(false);
 
   useEffect(() => {
-    // Check active session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        checkUserProfile(session.user.id);
-      } else {
-        setLoading(false);
-      }
-    });
+    checkUser();
 
-    // Listen for auth changes
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
+    const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
+      setUser(session?.user || null);
       if (session?.user) {
-        checkUserProfile(session.user.id);
+        fetchProfile(session.user.id);
       } else {
         setProfile(null);
-        setLoading(false);
       }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      authListener?.subscription?.unsubscribe();
+    };
   }, []);
 
-  const checkUserProfile = async (userId) => {
-    setCheckingProfile(true);
-    try {
-      const { data, error } = await supabase
-        .from('user_profiles')
-        .select('*')
-        .eq('user_id', userId)
-        .single();
+  const checkUser = async () => {
+    setLoading(true);
+    const { data: { session } } = await supabase.auth.getSession();
+    setUser(session?.user || null);
+    
+    if (session?.user) {
+      await fetchProfile(session.user.id);
+    }
+    
+    setLoading(false);
+  };
 
-      if (error && error.code !== 'PGRST116') {
-        console.error('Profile check error:', error);
-      }
+  const fetchProfile = async (userId) => {
+    const { data, error } = await supabase
+      .from('user_profiles')
+      .select('*')
+      .eq('user_id', userId)
+      .single();
 
-      setProfile(data || null);
-    } catch (error) {
-      console.error('Profile check error:', error);
+    if (!error && data) {
+      setProfile(data);
+    } else {
       setProfile(null);
-    } finally {
-      setCheckingProfile(false);
-      setLoading(false);
     }
   };
 
-  const handleProfileComplete = () => {
+  const handleProfileComplete = async () => {
     if (user) {
-      checkUserProfile(user.id);
+      await fetchProfile(user.id);
     }
-  };
-
-  const handleLogin = (userData) => {
-    setUser(userData);
-    checkUserProfile(userData.id);
   };
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
     setUser(null);
     setProfile(null);
+    window.location.href = '/';
   };
-    const handleEnterApp = () => {
+
+  const handleEnterApp = () => {
     setShowLanding(false);
   };
 
-  if (loading || checkingProfile) {
+  if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-purple-900 to-gray-900 flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-16 h-16 border-4 border-purple-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-white text-xl">Loading...</p>
-        </div>
+      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-gray-900 flex items-center justify-center">
+        <div className="text-cyan-400 text-xl">Loading...</div>
       </div>
     );
   }
+
   if (showLanding) {
-  return <LandingPage onEnter={handleEnterApp} />;
- }
+    return <LandingPage onEnter={handleEnterApp} />;
+  }
 
   return (
     <Router>
       <Routes>
-        {/* Public route - Main app */}
+        {/* Main App Route */}
         <Route 
           path="/" 
           element={
@@ -113,24 +100,29 @@ function AppRouter() {
           } 
         />
 
-        {/* Admin routes */}
-        <Route
-          path="/feelzadmin"
+        {/* Admin Route - No Profile Check */}
+        <Route 
+          path="/feelzadmin" 
           element={
             user ? (
-              profile ? (
-                <AdminPanel user={user} onLogout={handleLogout} />
-              ) : (
-                <ProfileSetup user={user} onComplete={handleProfileComplete} />
-              )
+              <AdminPanel user={user} onLogout={handleLogout} />
             ) : (
-              <Login onLogin={handleLogin} />
+              <Navigate to="/" replace />
             )
-          }
+          } 
+        />
+
+        {/* Login Route */}
+        <Route 
+          path="/login" 
+          element={<Login />} 
         />
 
         {/* Catch all - redirect to home */}
-        <Route path="*" element={<Navigate to="/" replace />} />
+        <Route 
+          path="*" 
+          element={<Navigate to="/" replace />} 
+        />
       </Routes>
     </Router>
   );
