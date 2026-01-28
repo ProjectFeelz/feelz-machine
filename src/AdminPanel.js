@@ -10,15 +10,14 @@ import {
   CheckCircle,
   XCircle,
   Clock,
-  DollarSign,
-  FileMusic,
-  Layers,
   Mail
 } from 'lucide-react';
 import EmailCampaigns from './EmailCampaigns';
 
 function AdminPanel({ user, onLogout }) {
-  const [activeTab, setActiveTab] = useState('upload'); // upload, email
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [checkingAdmin, setCheckingAdmin] = useState(true);
+  const [activeTab, setActiveTab] = useState('upload');
   const [samples, setSamples] = useState([]);
   const [uploadLogs, setUploadLogs] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -72,11 +71,50 @@ function AdminPanel({ user, onLogout }) {
   ];
 
   useEffect(() => {
-    if (activeTab === 'upload') {
+    checkAdminStatus();
+  }, [user]);
+
+  useEffect(() => {
+    if (activeTab === 'upload' && isAdmin) {
       fetchSamples();
       fetchUploadLogs();
     }
-  }, [activeTab]);
+  }, [activeTab, isAdmin]);
+
+  const checkAdminStatus = async () => {
+    if (!user) {
+      setIsAdmin(false);
+      setCheckingAdmin(false);
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('admins')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('level', 3)
+        .single();
+
+      if (error || !data) {
+        setIsAdmin(false);
+        alert('Access denied. You are not an admin.');
+        setTimeout(() => {
+          window.location.href = '/';
+        }, 1000);
+      } else {
+        setIsAdmin(true);
+      }
+    } catch (error) {
+      setIsAdmin(false);
+      alert('Access denied.');
+      setTimeout(() => {
+        window.location.href = '/';
+      }, 1000);
+    } finally {
+      setCheckingAdmin(false);
+    }
+  };
 
   const fetchSamples = async () => {
     setLoading(true);
@@ -311,6 +349,37 @@ function AdminPanel({ user, onLogout }) {
     }
   };
 
+  // Show loading while checking admin status
+  if (checkingAdmin) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-gray-900 flex items-center justify-center">
+        <div className="text-center">
+          <Loader className="w-12 h-12 mx-auto mb-4 animate-spin text-cyan-400" />
+          <p className="text-cyan-300">Verifying admin access...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show access denied if not admin
+  if (!isAdmin) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-gray-900 flex items-center justify-center text-white">
+        <div className="text-center">
+          <XCircle className="w-16 h-16 mx-auto mb-4 text-red-400" />
+          <h1 className="text-2xl font-bold mb-2">Access Denied</h1>
+          <p className="text-cyan-300 mb-4">You don't have admin permissions</p>
+          <button
+            onClick={() => window.location.href = '/'}
+            className="px-6 py-2 bg-blue-500 hover:bg-blue-600 rounded-lg transition"
+          >
+            Go Home
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-gray-900 text-white">
       {/* Header */}
@@ -520,7 +589,7 @@ function AdminPanel({ user, onLogout }) {
                 {/* Stems Section */}
                 <div className="bg-blue-950/30 rounded-lg p-4 border border-cyan-500/20">
                   <h3 className="text-lg font-bold mb-4 flex items-center space-x-2 text-cyan-300">
-                    <Layers className="w-5 h-5" />
+                    <Music className="w-5 h-5" />
                     <span>Stems (Optional - up to 5)</span>
                   </h3>
                   
@@ -637,6 +706,11 @@ function AdminPanel({ user, onLogout }) {
                               {sample.has_stems && (
                                 <span className="text-xs px-2 py-0.5 bg-cyan-500/20 text-cyan-300 rounded">
                                   Stems
+                                </span>
+                              )}
+                              {sample.featured && (
+                                <span className="text-xs px-2 py-0.5 bg-yellow-500/20 text-yellow-300 rounded">
+                                  Featured
                                 </span>
                               )}
                             </div>
