@@ -129,7 +129,7 @@ function PackPlayer({ pack, onClose, user, processor }) {
     
     // Only animate when audio is playing
     if (avgAmplitude > 0.02) {
-      waveOffset += 0.1;
+      waveOffset += 0.05;
     }
     
     particles.forEach((particle, i) => {
@@ -138,31 +138,32 @@ function PackPlayer({ pack, onClose, user, processor }) {
       const amplitude = dataArray[freqIndex] / 255;
       
       // Smooth amplitude transitions
-      particle.smoothAmplitude += (amplitude - particle.smoothAmplitude) * 0.2;
+      particle.smoothAmplitude += (amplitude - particle.smoothAmplitude) * 0.25;
       
       // Boost for visibility
       const boostedAmplitude = Math.pow(particle.smoothAmplitude, 0.6) * 1.2;
       
-      // Create smooth continuous wave
-      const wavePhase = (i / numParticles) * Math.PI * 2;
-      const baseWave = Math.sin(wavePhase + waveOffset) * 15;
-      const audioWave = boostedAmplitude * 80;
+      // Create smooth continuous wave - FIX: Better wave calculation
+      const wavePhase = (i / numParticles) * Math.PI * 4; // 2 full waves across screen
+      const baseWave = Math.sin(wavePhase + waveOffset) * 20;
+      const audioWave = boostedAmplitude * 70;
       
       // Only wave when audio is present
       if (avgAmplitude > 0.02) {
         particle.y = particle.baseY + baseWave - audioWave;
       } else {
-        particle.y = particle.baseY;
+        // Smoothly return to baseline
+        particle.y += (particle.baseY - particle.y) * 0.1;
       }
       
       // Draw particle glow
-      const glowSize = 12 + boostedAmplitude * 15;
+      const glowSize = 10 + boostedAmplitude * 12;
       const gradient = ctx.createRadialGradient(
         particle.x, particle.y, 0,
         particle.x, particle.y, glowSize
       );
-      gradient.addColorStop(0, particle.color + (0.8 + boostedAmplitude * 0.2) + ')');
-      gradient.addColorStop(0.4, particle.color + (boostedAmplitude * 0.6) + ')');
+      gradient.addColorStop(0, particle.color + (0.9 + boostedAmplitude * 0.1) + ')');
+      gradient.addColorStop(0.5, particle.color + (boostedAmplitude * 0.5) + ')');
       gradient.addColorStop(1, particle.color + '0)');
       
       ctx.fillStyle = gradient;
@@ -171,30 +172,34 @@ function PackPlayer({ pack, onClose, user, processor }) {
       ctx.fill();
       
       // Draw core
-      ctx.fillStyle = particle.color + (0.9 + boostedAmplitude * 0.1) + ')';
+      const coreSize = particle.size + boostedAmplitude * 2;
+      ctx.fillStyle = particle.color + (0.95 + boostedAmplitude * 0.05) + ')';
       ctx.beginPath();
-      ctx.arc(particle.x, particle.y, particle.size + boostedAmplitude * 2, 0, Math.PI * 2);
+      ctx.arc(particle.x, particle.y, coreSize, 0, Math.PI * 2);
       ctx.fill();
     });
     
     // Draw smooth connecting line through all particles
-    ctx.beginPath();
-    ctx.moveTo(particles[0].x, particles[0].y);
-    
-    for (let i = 0; i < particles.length - 1; i++) {
-      const current = particles[i];
-      const next = particles[i + 1];
-      const xMid = (current.x + next.x) / 2;
-      const yMid = (current.y + next.y) / 2;
-      ctx.quadraticCurveTo(current.x, current.y, xMid, yMid);
+    if (particles.length > 1) {
+      ctx.beginPath();
+      ctx.moveTo(particles[0].x, particles[0].y);
+      
+      for (let i = 0; i < particles.length - 1; i++) {
+        const current = particles[i];
+        const next = particles[i + 1];
+        const xMid = (current.x + next.x) / 2;
+        const yMid = (current.y + next.y) / 2;
+        ctx.quadraticCurveTo(current.x, current.y, xMid, yMid);
+      }
+      
+      const lastParticle = particles[particles.length - 1];
+      ctx.lineTo(lastParticle.x, lastParticle.y);
+      
+      const lineOpacity = avgAmplitude > 0.02 ? 0.5 + avgAmplitude * 0.5 : 0.3;
+      ctx.strokeStyle = `rgba(6, 182, 212, ${lineOpacity})`;
+      ctx.lineWidth = 2 + avgAmplitude * 3;
+      ctx.stroke();
     }
-    
-    const lastParticle = particles[particles.length - 1];
-    ctx.lineTo(lastParticle.x, lastParticle.y);
-    
-    ctx.strokeStyle = `rgba(6, 182, 212, ${0.4 + avgAmplitude * 0.6})`;
-    ctx.lineWidth = 2 + avgAmplitude * 4;
-    ctx.stroke();
     
     // Bass flash effect
     if (avgAmplitude > 0.6) {
