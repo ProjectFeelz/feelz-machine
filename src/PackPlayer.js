@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import KnobControl from './KnobControl';
 import audioBufferToWav from 'audiobuffer-to-wav';
+import JSZip from 'jszip';
 
 function PackPlayer({ pack, onClose, user, processor }) {
   const [stems, setStems] = useState([]);
@@ -55,11 +56,15 @@ function PackPlayer({ pack, onClose, user, processor }) {
   const fetchPackDetails = async () => {
     setLoading(true);
     
-    const { data: stemsData } = await supabase
+    const { data: stemsData, error } = await supabase
       .from('sample_stems')
       .select('*')
       .eq('sample_id', pack.id)
       .order('order_index');
+    
+    console.log('Fetching stems for pack:', pack.id);
+    console.log('Stems data:', stemsData);
+    console.log('Stems error:', error);
     
     setStems(stemsData || []);
     setLoading(false);
@@ -236,7 +241,6 @@ function PackPlayer({ pack, onClose, user, processor }) {
       return;
     }
 
-    // Check if any effects are active
     const hasEffects = effects.tape > 0 || 
                        effects.vinyl > 0 || 
                        effects.reverb > 0 || 
@@ -254,7 +258,6 @@ function PackPlayer({ pack, onClose, user, processor }) {
     setMessage({ type: 'info', text: 'Processing audio with effects... This may take 5-10 seconds.' });
 
     try {
-      // Render audio with effects offline
       const renderedBuffer = await processor.renderWithEffects(
         effects,
         effects.pitch,
@@ -265,11 +268,9 @@ function PackPlayer({ pack, onClose, user, processor }) {
         throw new Error('Failed to render audio');
       }
 
-      // Convert AudioBuffer to WAV
       const wav = audioBufferToWav(renderedBuffer);
       const blob = new Blob([wav], { type: 'audio/wav' });
       
-      // Create download
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
@@ -279,7 +280,6 @@ function PackPlayer({ pack, onClose, user, processor }) {
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
 
-      // Track download
       await supabase.from('user_downloads').insert([{
         user_id: user.id,
         sample_id: pack.id,
@@ -297,8 +297,64 @@ function PackPlayer({ pack, onClose, user, processor }) {
     }
   };
 
-  const handleDownloadAll = () => {
-    alert('ZIP download coming soon! For now, download files individually.');
+  const handleDownloadAll = async () => {
+    if (!user) {
+      alert('Please sign in to download');
+      return;
+    }
+
+    setMessage({ type: 'info', text: 'Creating ZIP file... This may take a moment.' });
+
+    try {
+      const zip = new JSZip();
+      const folder = zip.folder(cleanFilename(pack.name));
+
+      console.log('Downloading main loop...');
+      const mainResponse = await fetch(pack.main_loop_url || pack.file_url);
+      const mainBlob = await mainResponse.blob();
+      folder.file(`${cleanFilename(pack.name)}-main.wav`, mainBlob);
+
+      for (let i = 0; i < stems.length; i++) {
+        const stem = stems[i];
+        console.log(`Downloading stem ${i + 1}/${stems.length}: ${stem.name}`);
+        
+        const stemResponse = await fetch(stem.file_url);
+        const stemBlob = await stemResponse.blob();
+        folder.file(`${cleanFilename(pack.name)}-${cleanFilename(stem.name)}.wav`, stemBlob);
+      }
+
+      console.log('Generating ZIP file...');
+      setMessage({ type: 'info', text: 'Finalizing ZIP file...' });
+      
+      const zipBlob = await zip.generateAsync({ 
+        type: 'blob',
+        compression: 'DEFLATE',
+        compressionOptions: { level: 6 }
+      });
+
+      const url = URL.createObjectURL(zipBlob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${cleanFilename(pack.name)}.zip`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      await supabase.from('user_downloads').insert([{
+        user_id: user.id,
+        sample_id: pack.id,
+        download_type: 'zip'
+      }]);
+
+      setMessage({ type: 'success', text: 'ZIP downloaded successfully! ✓' });
+      setTimeout(() => setMessage({ type: '', text: '' }), 3000);
+
+    } catch (error) {
+      console.error('ZIP download error:', error);
+      setMessage({ type: 'error', text: 'Failed to create ZIP file' });
+      setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+    }
   };
 
   const handleEffectChange = (effectName, value) => {
@@ -338,7 +394,6 @@ function PackPlayer({ pack, onClose, user, processor }) {
         </button>
 
         <div className="p-4 space-y-4">
-          {/* Message Banner */}
           {message.text && (
             <div className={`p-3 rounded-lg text-sm ${
               message.type === 'success' 
@@ -351,7 +406,6 @@ function PackPlayer({ pack, onClose, user, processor }) {
             </div>
           )}
 
-          {/* Visualizer */}
           <div className="relative bg-black/40 backdrop-blur-xl rounded-2xl overflow-hidden border border-cyan-400/20 shadow-xl shadow-cyan-500/10">
             <canvas
               ref={canvasRef}
@@ -374,7 +428,6 @@ function PackPlayer({ pack, onClose, user, processor }) {
             </div>
           </div>
 
-          {/* Pack Info */}
           <div>
             <h2 className="text-xl font-bold text-white">{pack.name}</h2>
             <p className="text-cyan-300 text-sm">{pack.artist}</p>
@@ -394,7 +447,6 @@ function PackPlayer({ pack, onClose, user, processor }) {
             </div>
           </div>
 
-          {/* Effects */}
           <div className="bg-white/5 backdrop-blur-2xl rounded-2xl p-4 border border-cyan-400/20 shadow-xl shadow-black/30">
             <h3 className="text-base font-bold text-white mb-3">Effects</h3>
             <div className="grid grid-cols-4 gap-3 mb-3">
@@ -456,7 +508,6 @@ function PackPlayer({ pack, onClose, user, processor }) {
             </div>
           </div>
 
-          {/* Download with Effects */}
           <button
             onClick={handleDownloadEffected}
             disabled={processingEffect}
@@ -475,7 +526,6 @@ function PackPlayer({ pack, onClose, user, processor }) {
             )}
           </button>
 
-          {/* Download List */}
           <div className="bg-white/5 backdrop-blur-2xl rounded-2xl p-4 border border-cyan-400/20 shadow-xl shadow-black/30">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-base font-bold text-white">Original Files</h3>
@@ -494,7 +544,6 @@ function PackPlayer({ pack, onClose, user, processor }) {
               </div>
             ) : (
               <div className="space-y-2">
-                {/* Main Loop */}
                 <div 
                   className={`p-2 bg-white/5 backdrop-blur-xl rounded-lg border transition cursor-pointer ${
                     currentAudio === 'main' 
@@ -531,7 +580,6 @@ function PackPlayer({ pack, onClose, user, processor }) {
                   </div>
                 </div>
 
-                {/* Stems */}
                 {stems.map((stem) => (
                   <div
                     key={stem.id}
