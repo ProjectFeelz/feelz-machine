@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { Disc3, ArrowRight, Music, Zap, Layers } from 'lucide-react';
+import { ArrowRight, Music, Zap, Layers } from 'lucide-react';
 
 function LandingPage({ onEnter }) {
   const canvasRef = useRef(null);
@@ -30,9 +30,9 @@ function LandingPage({ onEnter }) {
         this.maxLife = 100;
         this.size = Math.random() * 3 + 1;
         const colors = [
-          'rgba(59, 130, 246, ',  // Electric blue
-          'rgba(6, 182, 212, ',   // Cyan
-          'rgba(16, 185, 129, ',  // Neon green
+          'rgba(59, 130, 246, ',
+          'rgba(6, 182, 212, ',
+          'rgba(16, 185, 129, ',
         ];
         this.color = colors[Math.floor(Math.random() * colors.length)];
       }
@@ -129,28 +129,29 @@ function LandingPage({ onEnter }) {
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-gradient-to-br from-gray-900 via-blue-900 to-black">
-      {/* Bioluminescent Canvas */}
       <canvas
         ref={canvasRef}
         className="absolute inset-0 z-0"
         style={{ touchAction: 'none' }}
       />
 
-      {/* Ambient Waves Background */}
       <div className="absolute inset-0 z-0 opacity-30">
         <div className="absolute inset-0 bg-gradient-to-t from-blue-500/20 via-cyan-500/20 to-transparent animate-pulse"></div>
         <div className="absolute inset-0 bg-gradient-to-b from-green-500/10 via-blue-500/10 to-transparent animate-pulse" style={{ animationDelay: '1s' }}></div>
       </div>
 
-      {/* Content */}
       <div className="relative z-10 min-h-screen flex flex-col items-center justify-center px-6 text-center">
         <motion.div
-          initial={{ scale: 0, rotate: -180 }}
-          animate={{ scale: 1, rotate: 0 }}
+          initial={{ scale: 0, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
           transition={{ type: 'spring', duration: 1, delay: 0.2 }}
           className="mb-8"
         >
-          <Disc3 className="w-24 h-24 text-cyan-400 mx-auto animate-spin-slow" />
+          <img 
+            src="/logo.png" 
+            alt="Feelz Machine" 
+            className="w-32 h-32 object-contain mx-auto"
+          />
         </motion.div>
 
         <motion.h1
@@ -181,19 +182,19 @@ function LandingPage({ onEnter }) {
           transition={{ duration: 0.8, delay: 0.8 }}
           className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12 max-w-4xl"
         >
-          <div className="bg-white/5 backdrop-blur-xl rounded-2xl p-6 border border-cyan-400/20 hover:border-cyan-400/40 transition shadow-xl shadow-black/40 hover:shadow-2xl hover:shadow-cyan-500/20">
+          <div className="bg-white/5 backdrop-blur-2xl rounded-2xl p-6 border border-cyan-400/20 hover:border-cyan-400/40 transition shadow-xl shadow-black/40 hover:shadow-2xl hover:shadow-cyan-500/20">
             <Music className="w-8 h-8 text-cyan-400 mx-auto mb-3" />
             <h3 className="text-lg font-bold text-white mb-2">Loop Playback</h3>
             <p className="text-sm text-cyan-300">Play and preview samples with effects</p>
           </div>
 
-          <div className="bg-white/5 backdrop-blur-xl rounded-2xl p-6 border border-blue-400/20 hover:border-blue-400/40 transition shadow-xl shadow-black/40 hover:shadow-2xl hover:shadow-blue-500/20">
+          <div className="bg-white/5 backdrop-blur-2xl rounded-2xl p-6 border border-blue-400/20 hover:border-blue-400/40 transition shadow-xl shadow-black/40 hover:shadow-2xl hover:shadow-blue-500/20">
             <Zap className="w-8 h-8 text-blue-400 mx-auto mb-3" />
             <h3 className="text-lg font-bold text-white mb-2">Real-Time Effects</h3>
             <p className="text-sm text-blue-300">Tape, vinyl, reverb, pitch, and speed</p>
           </div>
 
-          <div className="bg-white/5 backdrop-blur-xl rounded-2xl p-6 border border-green-400/20 hover:border-green-400/40 transition shadow-xl shadow-black/40 hover:shadow-2xl hover:shadow-green-500/20">
+          <div className="bg-white/5 backdrop-blur-2xl rounded-2xl p-6 border border-green-400/20 hover:border-green-400/40 transition shadow-xl shadow-black/40 hover:shadow-2xl hover:shadow-green-500/20">
             <Layers className="w-8 h-8 text-green-400 mx-auto mb-3" />
             <h3 className="text-lg font-bold text-white mb-2">Stems + MIDI</h3>
             <p className="text-sm text-green-300">Download individual stems and MIDI files</p>

@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from './supabaseClient';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Disc3,
   Sparkles,
   LogIn,
   Loader
@@ -99,7 +98,6 @@ class AnalogProcessor {
   buildEffectChain(source, effects, ctx) {
     let currentNode = source;
     
-    // Tape
     if (effects.tape > 0) {
       const tape = ctx.createWaveShaper();
       tape.curve = this.makeTapeCurve(effects.tape);
@@ -107,7 +105,6 @@ class AnalogProcessor {
       currentNode = tape;
     }
     
-    // Distortion
     if (effects.distortion > 0) {
       const dist = ctx.createWaveShaper();
       dist.curve = this.makeDistortionCurve(effects.distortion * 100);
@@ -115,7 +112,6 @@ class AnalogProcessor {
       currentNode = dist;
     }
     
-    // Filter
     const filter = ctx.createBiquadFilter();
     filter.type = 'lowpass';
     filter.frequency.value = effects.tape ? 20000 - (effects.tape * 15000) : 20000;
@@ -139,10 +135,8 @@ class AnalogProcessor {
     
     let currentNode = this.buildEffectChain(source, effects, this.audioContext);
     
-    // Main output
     currentNode.connect(this.masterGain);
     
-    // Delay (parallel)
     if (effects.delay > 0) {
       const delay = this.audioContext.createDelay();
       const feedback = this.audioContext.createGain();
@@ -155,7 +149,6 @@ class AnalogProcessor {
       delay.connect(this.masterGain);
     }
     
-    // Reverb (parallel)
     if (effects.reverb > 0) {
       const reverbGain = this.audioContext.createGain();
       reverbGain.gain.value = effects.reverb;
@@ -167,7 +160,6 @@ class AnalogProcessor {
     source.start();
     this.currentSource = source;
     
-    // Vinyl if enabled
     if (effects.vinyl > 0 && !this.vinylNode) {
       this.startVinyl();
     } else if (effects.vinyl === 0 && this.vinylNode) {
@@ -175,33 +167,27 @@ class AnalogProcessor {
     }
   }
 
-  // NEW: Offline rendering with effects
   async renderWithEffects(effects, pitch, speed) {
     if (!this.currentBuffer) {
       throw new Error('No audio loaded');
     }
 
-    // Calculate new duration based on speed
     const pitchRate = Math.pow(2, pitch / 12);
     const totalRate = pitchRate * speed;
     const newLength = Math.floor(this.currentBuffer.length / totalRate);
     
-    // Create offline audio context
     const offlineCtx = new OfflineAudioContext(
       this.currentBuffer.numberOfChannels,
       newLength,
       this.currentBuffer.sampleRate
     );
 
-    // Create source
     const source = offlineCtx.createBufferSource();
     source.buffer = this.currentBuffer;
     source.playbackRate.value = totalRate;
 
-    // Build effect chain
     let currentNode = this.buildEffectChain(source, effects, offlineCtx);
 
-    // Create reverb for offline context if needed
     if (effects.reverb > 0) {
       const offlineReverb = offlineCtx.createConvolver();
       const length = offlineCtx.sampleRate * 2;
@@ -222,7 +208,6 @@ class AnalogProcessor {
       offlineReverb.connect(offlineCtx.destination);
     }
 
-    // Delay effect (parallel)
     if (effects.delay > 0) {
       const delay = offlineCtx.createDelay();
       const feedback = offlineCtx.createGain();
@@ -235,10 +220,8 @@ class AnalogProcessor {
       delay.connect(offlineCtx.destination);
     }
 
-    // Main connection
     currentNode.connect(offlineCtx.destination);
 
-    // Vinyl noise (if enabled)
     if (effects.vinyl > 0) {
       const vinylSource = offlineCtx.createBufferSource();
       const vinylBuffer = offlineCtx.createBuffer(1, newLength, offlineCtx.sampleRate);
@@ -256,7 +239,6 @@ class AnalogProcessor {
 
     source.start();
 
-    // Render to buffer
     const renderedBuffer = await offlineCtx.startRendering();
     return renderedBuffer;
   }
@@ -490,8 +472,12 @@ function FeelzMachine({ user, profile }) {
       <header className="border-b border-cyan-500/20 backdrop-blur-xl bg-white/5 sticky top-0 z-40 shadow-lg shadow-black/20">
         <div className="max-w-[1800px] mx-auto px-8 py-3">
           <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-2">
-              <Disc3 className="w-8 h-8 text-cyan-400 animate-spin-slow" />
+            <div className="flex items-center space-x-3">
+              <img 
+                src="/logo.png" 
+                alt="Feelz Machine" 
+                className="w-10 h-10 object-contain"
+              />
               <div>
                 <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">
                   Feelz Machine
