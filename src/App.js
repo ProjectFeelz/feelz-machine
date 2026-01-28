@@ -426,6 +426,8 @@ const BioluminescentParticles = () => {
 function FeelzMachine({ user, profile }) {
   const [selectedPack, setSelectedPack] = useState(null);
   const [signingIn, setSigningIn] = useState(false);
+  const [showSignInModal, setShowSignInModal] = useState(false);
+  const [emailInput, setEmailInput] = useState('');
   const processorRef = useRef(new AnalogProcessor());
 
   const handlePackSelect = (pack) => {
@@ -439,10 +441,7 @@ function FeelzMachine({ user, profile }) {
   };
 
   const handleSignIn = async () => {
-    const email = prompt('Enter your email for magic link:');
-    if (!email) return;
-    
-    if (!email.includes('@')) {
+    if (!emailInput.includes('@')) {
       alert('Please enter a valid email address');
       return;
     }
@@ -450,13 +449,15 @@ function FeelzMachine({ user, profile }) {
     setSigningIn(true);
     
     const { error } = await supabase.auth.signInWithOtp({
-      email: email.trim(),
+      email: emailInput.trim(),
       options: {
         emailRedirectTo: window.location.origin
       }
     });
     
     setSigningIn(false);
+    setShowSignInModal(false);
+    setEmailInput('');
     
     if (error) {
       alert('Error: ' + error.message);
@@ -494,27 +495,71 @@ function FeelzMachine({ user, profile }) {
                 </div>
               ) : (
                 <button 
-                  onClick={handleSignIn}
-                  disabled={signingIn}
-                  className="flex items-center space-x-1 px-3 py-1.5 text-sm bg-blue-500 hover:bg-blue-600 disabled:bg-blue-700 disabled:cursor-not-allowed rounded-lg transition"
+                  onClick={() => setShowSignInModal(true)}
+                  className="flex items-center space-x-1 px-3 py-1.5 text-sm bg-blue-500 hover:bg-blue-600 rounded-lg transition"
                 >
-                  {signingIn ? (
-                    <>
-                      <Loader className="w-3 h-3 animate-spin" />
-                      <span>Sending...</span>
-                    </>
-                  ) : (
-                    <>
-                      <LogIn className="w-3 h-3" />
-                      <span>Sign In</span>
-                    </>
-                  )}
+                  <LogIn className="w-3 h-3" />
+                  <span>Sign In</span>
                 </button>
               )}
             </div>
           </div>
         </div>
       </header>
+
+      {/* Sign In Modal */}
+      <AnimatePresence>
+        {showSignInModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-gradient-to-br from-gray-900 to-blue-900 rounded-2xl p-6 border border-cyan-400/30 shadow-2xl max-w-md w-full mx-4"
+            >
+              <h2 className="text-2xl font-bold text-white mb-2">Sign In</h2>
+              <p className="text-cyan-300 text-sm mb-4">Enter your email to receive a magic link</p>
+              
+              <input
+                type="email"
+                value={emailInput}
+                onChange={(e) => setEmailInput(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && handleSignIn()}
+                placeholder="your@email.com"
+                className="w-full px-4 py-3 bg-blue-950/50 border border-cyan-500/30 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500 text-white mb-4"
+                autoFocus
+              />
+              
+              <div className="flex space-x-3">
+                <button
+                  onClick={handleSignIn}
+                  disabled={signingIn}
+                  className="flex-1 py-2.5 bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 disabled:from-gray-600 disabled:to-gray-700 disabled:cursor-not-allowed rounded-lg font-semibold transition flex items-center justify-center space-x-2"
+                >
+                  {signingIn ? (
+                    <>
+                      <Loader className="w-4 h-4 animate-spin" />
+                      <span>Sending...</span>
+                    </>
+                  ) : (
+                    <span>Send Magic Link</span>
+                  )}
+                </button>
+                
+                <button
+                  onClick={() => {
+                    setShowSignInModal(false);
+                    setEmailInput('');
+                  }}
+                  className="px-4 py-2.5 bg-white/10 hover:bg-white/20 rounded-lg transition"
+                >
+                  Cancel
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       <div className="relative">
         <div className={`max-w-[1800px] mx-auto transition-all duration-300 ${
