@@ -192,6 +192,10 @@ function PackPlayer({ pack, onClose, user, processor }) {
     await loadMainAudio();
   };
 
+  const cleanFilename = (name) => {
+    return name.replace(/[^a-z0-9]/gi, '-').toLowerCase();
+  };
+
   const handleDownload = async (url, filename, itemType = 'main') => {
     if (!user) {
       alert('Please sign in to download');
@@ -205,13 +209,20 @@ function PackPlayer({ pack, onClose, user, processor }) {
         download_type: itemType
       }]);
 
+      // Fetch the file and trigger download with proper filename
+      const response = await fetch(url);
+      const blob = await response.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+      
       const link = document.createElement('a');
-      link.href = url;
+      link.href = blobUrl;
       link.download = filename;
-      link.target = '_blank';
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
+      
+      // Clean up blob URL
+      window.URL.revokeObjectURL(blobUrl);
     } catch (error) {
       console.error('Download error:', error);
       alert('Download failed');
@@ -224,7 +235,7 @@ function PackPlayer({ pack, onClose, user, processor }) {
       currentAudio === 'main' 
         ? (pack.main_loop_url || pack.file_url)
         : stems.find(s => s.id === currentAudio)?.file_url,
-      `${pack.name}-effected.wav`,
+      `${cleanFilename(pack.name)}-effected.wav`,
       'effected'
     );
   };
@@ -260,7 +271,7 @@ function PackPlayer({ pack, onClose, user, processor }) {
         animate={{ x: 0 }}
         exit={{ x: '100%' }}
         transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-        className="fixed top-0 right-0 h-full w-full lg:w-[35%] bg-black/30 backdrop-blur-3xl border-l border-cyan-400/20 z-50 overflow-y-auto shadow-2xl shadow-black/60"
+        className="fixed top-0 right-0 h-full w-full lg:w-[35%] bg-black/30 backdrop-blur-2xl border-l border-cyan-400/20 z-50 overflow-y-auto shadow-2xl shadow-black/60"
       >
         <button
           onClick={onClose}
@@ -272,20 +283,6 @@ function PackPlayer({ pack, onClose, user, processor }) {
         <div className="p-4 space-y-4">
           {/* Visualizer */}
           <div className="relative bg-black/40 backdrop-blur-xl rounded-2xl overflow-hidden border border-cyan-400/20 shadow-xl shadow-cyan-500/10">
-            <div className="absolute top-3 left-3 z-10">
-  {pack.thumbnail_url ? (
-    <img
-      src={pack.thumbnail_url}
-      alt={pack.name}
-      className="w-16 h-16 rounded-lg shadow-2xl border border-cyan-400/40 ring-2 ring-cyan-400/20"
-    />
-  ) : (
-    <div className="w-16 h-16 rounded-lg bg-blue-900 flex items-center justify-center">
-      <Play className="w-8 h-8 text-cyan-400" />
-    </div>
-  )}
-</div>
-
             <canvas
               ref={canvasRef}
               width={600}
@@ -296,7 +293,7 @@ function PackPlayer({ pack, onClose, user, processor }) {
             <div className="absolute top-3 right-3">
               <button
                 onClick={togglePlayPause}
-                className="p-3 bg-blue-500 hover:bg-blue-600 rounded-full shadow-lg transition"
+                className="p-3 bg-gradient-to-br from-blue-500/90 to-cyan-500/90 hover:from-blue-600/90 hover:to-cyan-600/90 rounded-full shadow-2xl shadow-blue-500/50 transition backdrop-blur-xl border border-white/20"
               >
                 {isPlaying ? (
                   <Pause className="w-6 h-6" />
@@ -312,23 +309,23 @@ function PackPlayer({ pack, onClose, user, processor }) {
             <h2 className="text-xl font-bold text-white">{pack.name}</h2>
             <p className="text-cyan-300 text-sm">{pack.artist}</p>
             <div className="flex items-center flex-wrap gap-2 text-xs mt-2">
-              <span className="px-2 py-1 bg-blue-900/50 text-cyan-300 rounded">
+              <span className="px-2 py-1 bg-white/10 text-cyan-300 rounded backdrop-blur-md border border-white/10">
                 {pack.bpm} BPM
               </span>
-              <span className="px-2 py-1 bg-blue-900/50 text-cyan-300 rounded">
+              <span className="px-2 py-1 bg-white/10 text-cyan-300 rounded backdrop-blur-md border border-white/10">
                 {pack.key}
               </span>
-              <span className="px-2 py-1 bg-blue-900/50 text-cyan-300 rounded">
+              <span className="px-2 py-1 bg-white/10 text-cyan-300 rounded backdrop-blur-md border border-white/10">
                 {pack.genre}
               </span>
-              <span className="px-2 py-1 bg-blue-900/50 text-cyan-300 rounded">
+              <span className="px-2 py-1 bg-white/10 text-cyan-300 rounded backdrop-blur-md border border-white/10">
                 {pack.mood}
               </span>
             </div>
           </div>
 
           {/* Effects */}
-          <div className="bg-white/5 backdrop-blur-3xl rounded-2xl p-4 border border-cyan-400/20 shadow-xl shadow-black/30">
+          <div className="bg-white/5 backdrop-blur-2xl rounded-2xl p-4 border border-cyan-400/20 shadow-xl shadow-black/30">
             <h3 className="text-base font-bold text-white mb-3">Effects</h3>
             <div className="grid grid-cols-4 gap-3 mb-3">
               <KnobControl
@@ -399,7 +396,7 @@ function PackPlayer({ pack, onClose, user, processor }) {
           </button>
 
           {/* Download List */}
-          <div className="bg-blue-950/30 rounded-xl p-4 border border-cyan-500/20">
+          <div className="bg-white/5 backdrop-blur-2xl rounded-2xl p-4 border border-cyan-400/20 shadow-xl shadow-black/30">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-base font-bold text-white">Original Files</h3>
               <button
@@ -420,17 +417,17 @@ function PackPlayer({ pack, onClose, user, processor }) {
                 {/* Main Loop */}
                 <div 
                   className={`p-2 bg-white/5 backdrop-blur-xl rounded-lg border transition cursor-pointer ${
-                currentAudio === 'main' 
-        ? 'border-cyan-400/60 bg-cyan-500/10 shadow-lg shadow-cyan-500/20' 
-        : 'border-white/10 hover:border-cyan-400/40 hover:bg-white/10'
-        }`}
+                    currentAudio === 'main' 
+                      ? 'border-cyan-400/60 bg-cyan-500/10 shadow-lg shadow-cyan-500/20' 
+                      : 'border-white/10 hover:border-cyan-400/40 hover:bg-white/10'
+                  }`}
                   onClick={handleMainSelect}
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-2 flex-1">
                       <div className={`p-1.5 rounded transition backdrop-blur-xl ${
-                    currentAudio === 'main' ? 'bg-gradient-to-br from-blue-500/90 to-cyan-500/90 shadow-md shadow-blue-500/50' : 'bg-white/10 border border-white/10'
-        }`}>
+                        currentAudio === 'main' ? 'bg-gradient-to-br from-blue-500/90 to-cyan-500/90 shadow-md shadow-blue-500/50' : 'bg-white/10 border border-white/10'
+                      }`}>
                         <Play className="w-3 h-3" />
                       </div>
                       <div>
@@ -443,7 +440,7 @@ function PackPlayer({ pack, onClose, user, processor }) {
                         e.stopPropagation();
                         handleDownload(
                           pack.main_loop_url || pack.file_url,
-                          `${pack.name}-main.wav`,
+                          `${cleanFilename(pack.name)}-main.wav`,
                           'main'
                         );
                       }}
@@ -458,17 +455,17 @@ function PackPlayer({ pack, onClose, user, processor }) {
                 {stems.map((stem) => (
                   <div
                     key={stem.id}
-                    className={`p-2 bg-black/40 rounded-lg border transition cursor-pointer ${
+                    className={`p-2 bg-white/5 backdrop-blur-xl rounded-lg border transition cursor-pointer ${
                       currentAudio === stem.id 
-                        ? 'border-cyan-400 bg-blue-900/20' 
-                        : 'border-cyan-500/20 hover:border-cyan-400/50'
+                        ? 'border-cyan-400/60 bg-cyan-500/10 shadow-lg shadow-cyan-500/20' 
+                        : 'border-white/10 hover:border-cyan-400/40 hover:bg-white/10'
                     }`}
                     onClick={() => handleStemSelect(stem)}
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center space-x-2 flex-1 min-w-0">
-                        <div className={`p-1.5 rounded transition ${
-                          currentAudio === stem.id ? 'bg-blue-500' : 'bg-blue-900/50'
+                        <div className={`p-1.5 rounded transition backdrop-blur-xl ${
+                          currentAudio === stem.id ? 'bg-gradient-to-br from-blue-500/90 to-cyan-500/90 shadow-md shadow-blue-500/50' : 'bg-white/10 border border-white/10'
                         }`}>
                           <Play className="w-3 h-3" />
                         </div>
@@ -484,7 +481,7 @@ function PackPlayer({ pack, onClose, user, processor }) {
                           e.stopPropagation();
                           handleDownload(
                             stem.file_url,
-                            `${pack.name}-${stem.name}.wav`,
+                            `${cleanFilename(pack.name)}-${cleanFilename(stem.name)}.wav`,
                             'stem'
                           );
                         }}
