@@ -90,7 +90,7 @@ function StorefrontGrid({ onPackSelect, selectedPack }) {
   return (
     <div className="space-y-6">
       {/* Search & Filter Bar */}
-      <div className="bg-white/5 backdrop-blur-3xl rounded-2xl p-4 border border-cyan-400/20 shadow-2xl shadow-black/40">
+      <div className="bg-white/5 backdrop-blur-2xl rounded-2xl p-4 border border-cyan-400/20 shadow-2xl shadow-black/40">
         <div className="flex flex-col lg:flex-row gap-4">
           {/* Search */}
           <div className="flex-1 relative">
@@ -107,10 +107,10 @@ function StorefrontGrid({ onPackSelect, selectedPack }) {
           {/* Filter Button */}
           <button
             onClick={() => setShowFilters(!showFilters)}
-            className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition ${
-            activeTab === 'all'
-            ? 'bg-gradient-to-r from-blue-500/90 to-cyan-500/90 text-white shadow-lg shadow-blue-500/50 backdrop-blur-xl'
-            : 'bg-white/5 text-cyan-300 hover:bg-white/10 backdrop-blur-xl border border-cyan-500/20'
+            className={`flex items-center space-x-2 px-6 py-3 rounded-lg transition ${
+              showFilters
+                ? 'bg-blue-500 text-white'
+                : 'bg-blue-950/50 text-cyan-300 hover:bg-blue-900/50'
             }`}
           >
             <Filter className="w-5 h-5" />
@@ -118,54 +118,54 @@ function StorefrontGrid({ onPackSelect, selectedPack }) {
           </button>
         </div>
 
-        {/* Tabs */}
-        <div className="flex space-x-2 mt-4">
+        {/* Tabs - Mobile Friendly with Wrapping */}
+        <div className="flex flex-wrap gap-2 mt-4">
           <button
             onClick={() => setActiveTab('all')}
             className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition ${
               activeTab === 'all'
-                ? 'bg-blue-500 text-white'
-                : 'bg-blue-950/50 text-cyan-300 hover:bg-blue-900/50'
+                ? 'bg-gradient-to-r from-blue-500/90 to-cyan-500/90 text-white shadow-lg shadow-blue-500/50 backdrop-blur-xl'
+                : 'bg-white/5 text-cyan-300 hover:bg-white/10 backdrop-blur-xl border border-cyan-500/20'
             }`}
           >
             <Music className="w-4 h-4" />
-            <span>All Packs</span>
+            <span className="text-sm">All Packs</span>
           </button>
 
           <button
             onClick={() => setActiveTab('featured')}
             className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition ${
               activeTab === 'featured'
-                ? 'bg-blue-500 text-white'
-                : 'bg-blue-950/50 text-cyan-300 hover:bg-blue-900/50'
+                ? 'bg-gradient-to-r from-blue-500/90 to-cyan-500/90 text-white shadow-lg shadow-blue-500/50 backdrop-blur-xl'
+                : 'bg-white/5 text-cyan-300 hover:bg-white/10 backdrop-blur-xl border border-cyan-500/20'
             }`}
           >
             <Star className="w-4 h-4" />
-            <span>Featured</span>
+            <span className="text-sm">Featured</span>
           </button>
 
           <button
             onClick={() => setActiveTab('trending')}
             className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition ${
               activeTab === 'trending'
-                ? 'bg-blue-500 text-white'
-                : 'bg-blue-950/50 text-cyan-300 hover:bg-blue-900/50'
+                ? 'bg-gradient-to-r from-blue-500/90 to-cyan-500/90 text-white shadow-lg shadow-blue-500/50 backdrop-blur-xl'
+                : 'bg-white/5 text-cyan-300 hover:bg-white/10 backdrop-blur-xl border border-cyan-500/20'
             }`}
           >
             <TrendingUp className="w-4 h-4" />
-            <span>Trending</span>
+            <span className="text-sm">Trending</span>
           </button>
 
           <button
             onClick={() => setActiveTab('new')}
             className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition ${
               activeTab === 'new'
-                ? 'bg-blue-500 text-white'
-                : 'bg-blue-950/50 text-cyan-300 hover:bg-blue-900/50'
+                ? 'bg-gradient-to-r from-blue-500/90 to-cyan-500/90 text-white shadow-lg shadow-blue-500/50 backdrop-blur-xl'
+                : 'bg-white/5 text-cyan-300 hover:bg-white/10 backdrop-blur-xl border border-cyan-500/20'
             }`}
           >
             <Clock className="w-4 h-4" />
-            <span>New</span>
+            <span className="text-sm">New</span>
           </button>
         </div>
 
@@ -230,10 +230,10 @@ function StorefrontGrid({ onPackSelect, selectedPack }) {
         </div>
       ) : (
         <div className={`grid gap-3 ${
-      selectedPack 
-    ? 'grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5'
-    : 'grid-cols-2 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-7 2xl:grid-cols-8'
-}`}>
+          selectedPack 
+            ? 'grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5'
+            : 'grid-cols-2 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-7 2xl:grid-cols-8'
+        }`}>
           {filteredPacks.map((pack) => (
             <motion.div
               key={pack.id}
@@ -241,10 +241,10 @@ function StorefrontGrid({ onPackSelect, selectedPack }) {
               whileTap={{ scale: 0.95 }}
               onClick={() => onPackSelect(pack)}
               className={`cursor-pointer rounded-xl overflow-hidden border transition-all ${
-  selectedPack?.id === pack.id
-    ? 'border-cyan-400/60 shadow-2xl shadow-cyan-500/50 ring-2 ring-cyan-400/30'
-    : 'border-cyan-500/20 hover:border-cyan-400/40 hover:shadow-xl hover:shadow-cyan-500/20'
-}`}
+                selectedPack?.id === pack.id
+                  ? 'border-cyan-400/60 shadow-2xl shadow-cyan-500/50 ring-2 ring-cyan-400/30'
+                  : 'border-cyan-500/20 hover:border-cyan-400/40 hover:shadow-xl hover:shadow-cyan-500/20'
+              }`}
             >
               {/* Thumbnail */}
               <div className="aspect-square relative bg-gradient-to-br from-blue-900 to-black">
