@@ -124,92 +124,87 @@ class AnalogProcessor {
   }
   
   play(effects = {}, pitch = 0, speed = 1.0) {
-    if (!this.currentBuffer) return;
+  if (!this.currentBuffer) return;
+  
+  this.stop();
+  
+  const source = this.audioContext.createBufferSource();
+  source.buffer = this.currentBuffer;
+  source.loop = true;
+  
+  const pitchRate = Math.pow(2, pitch / 12);
+  source.playbackRate.value = pitchRate * speed;
+  
+  // Start with the source
+  let currentNode = source;
+  
+  // Apply tape saturation if enabled (serial processing)
+  if (effects.tape > 0) {
+    this.tapeNode.curve = this.makeTapeCurve(effects.tape);
+    currentNode.connect(this.tapeNode);
+    currentNode = this.tapeNode;
+  }
+  
+  // Apply distortion if enabled (serial processing)
+  if (effects.distortion > 0) {
+    this.distortionNode.curve = this.makeDistortionCurve(effects.distortion * 100);
+    currentNode.connect(this.distortionNode);
+    currentNode = this.distortionNode;
+  }
+  
+  // Always apply filter (for tape effect freq cutoff)
+  const targetFreq = effects.tape > 0 ? 20000 - (effects.tape * 15000) : 20000;
+  this.filterNode.frequency.value = targetFreq;
+  currentNode.connect(this.filterNode);
+  currentNode = this.filterNode;
+  
+  // Now split into parallel paths: dry signal, reverb, and delay
+  
+  // 1. DRY PATH - always connect main signal
+  const mainGain = this.audioContext.createGain();
+  mainGain.gain.value = 0.7; // Keep main signal present
+  currentNode.connect(mainGain);
+  mainGain.connect(this.masterGain);
+  
+  // 2. REVERB PATH - if enabled
+  if (effects.reverb > 0) {
+    const reverbGain = this.audioContext.createGain();
+    reverbGain.gain.value = effects.reverb * 0.6; // Scale reverb amount
     
-    this.stop();
+    currentNode.connect(reverbGain);
+    reverbGain.connect(this.reverbNode);
+    this.reverbNode.connect(this.masterGain);
+  }
+  
+  // 3. DELAY PATH - if enabled
+  if (effects.delay > 0) {
+    const delayGain = this.audioContext.createGain();
+    delayGain.gain.value = effects.delay * 0.5; // Scale delay amount
     
-    const source = this.audioContext.createBufferSource();
-    source.buffer = this.currentBuffer;
-    source.loop = true;
+    this.delayFeedback.gain.value = effects.delay * 0.5; // Feedback amount
     
-    const pitchRate = Math.pow(2, pitch / 12);
-    source.playbackRate.value = pitchRate * speed;
-    
-    // Start with the source
-    let currentNode = source;
-    
-    // Apply tape saturation if enabled
-    if (effects.tape > 0) {
-      this.tapeNode.curve = this.makeTapeCurve(effects.tape);
-      currentNode.connect(this.tapeNode);
-      currentNode = this.tapeNode;
-    }
-    
-    // Apply distortion if enabled
-    if (effects.distortion > 0) {
-      this.distortionNode.curve = this.makeDistortionCurve(effects.distortion * 100);
-      currentNode.connect(this.distortionNode);
-      currentNode = this.distortionNode;
-    }
-    
-    // Always apply filter (for tape effect freq cutoff)
-    const targetFreq = effects.tape > 0 ? 20000 - (effects.tape * 15000) : 20000;
-    this.filterNode.frequency.value = targetFreq;
-    currentNode.connect(this.filterNode);
-    currentNode = this.filterNode;
-    
-    // Create dry/wet mixer for reverb
-    const dryGain = this.audioContext.createGain();
-    const wetGain = this.audioContext.createGain();
-    
-    // Setup gain values based on reverb amount
-    if (effects.reverb > 0) {
-      dryGain.gain.value = 1 - effects.reverb * 0.5; // Reduce dry signal when reverb is on
-      wetGain.gain.value = effects.reverb * 0.8;
-      
-      // Connect dry path
-      currentNode.connect(dryGain);
-      dryGain.connect(this.masterGain);
-      
-      // Connect wet path (reverb)
-      currentNode.connect(wetGain);
-      wetGain.connect(this.reverbNode);
-      this.reverbNode.connect(this.masterGain);
-    } else {
-      // No reverb, just connect dry
-      dryGain.gain.value = 1;
-      currentNode.connect(dryGain);
-      dryGain.connect(this.masterGain);
-    }
-    
-    // Setup delay if enabled (parallel to main signal)
-    if (effects.delay > 0) {
-      this.delayFeedback.gain.value = effects.delay * 0.6;
-      const delayGain = this.audioContext.createGain();
-      delayGain.gain.value = effects.delay * 0.4;
-      
-      currentNode.connect(delayGain);
-      delayGain.connect(this.delayNode);
-      this.delayNode.connect(this.delayFeedback);
-      this.delayFeedback.connect(this.delayNode);
-      this.delayNode.connect(this.masterGain);
-    }
-    
-    source.start();
-    this.currentSource = source;
-    this.lastEffects = { ...effects };
-    
-    // Handle vinyl noise
-    if (effects.vinyl > 0 && !this.vinylNode) {
-      this.startVinyl(effects.vinyl);
-    } else if (effects.vinyl === 0 && this.vinylNode) {
-      this.stopVinyl();
-    } else if (this.vinylNode && effects.vinyl > 0) {
-      if (this.vinylNode.gainNode) {
-        this.vinylNode.gainNode.gain.value = effects.vinyl * 0.05;
-      }
+    currentNode.connect(delayGain);
+    delayGain.connect(this.delayNode);
+    this.delayNode.connect(this.delayFeedback);
+    this.delayFeedback.connect(this.delayNode);
+    this.delayNode.connect(this.masterGain);
+  }
+  
+  source.start();
+  this.currentSource = source;
+  this.lastEffects = { ...effects };
+  
+  // Handle vinyl noise
+  if (effects.vinyl > 0 && !this.vinylNode) {
+    this.startVinyl(effects.vinyl);
+  } else if (effects.vinyl === 0 && this.vinylNode) {
+    this.stopVinyl();
+  } else if (this.vinylNode && effects.vinyl > 0) {
+    if (this.vinylNode.gainNode) {
+      this.vinylNode.gainNode.gain.value = effects.vinyl * 0.05;
     }
   }
+}
 
   updateEffects(effects, pitch, speed) {
     if (!this.currentSource) return;
