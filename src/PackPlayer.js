@@ -93,23 +93,22 @@ function PackPlayer({ pack, onClose, user, processor }) {
     
     const ctx = canvas.getContext('2d');
     
-    // Set canvas size properly
     canvas.width = canvas.offsetWidth;
     canvas.height = canvas.offsetHeight;
     
     const particles = [];
-    const numParticles = 80;
+    const numParticles = 60;
     
-    // Initialize particles
     for (let i = 0; i < numParticles; i++) {
       particles.push({
         x: (canvas.width / numParticles) * i,
         baseY: canvas.height / 2,
         y: canvas.height / 2,
-        size: Math.random() * 3 + 2,
-        speed: Math.random() * 0.02 + 0.01,
+        size: Math.random() * 4 + 2,
+        speed: Math.random() * 0.03 + 0.01,
         offset: Math.random() * Math.PI * 2,
         color: `rgba(${Math.random() > 0.5 ? '59, 130, 246' : '6, 182, 212'}, `,
+        smoothAmplitude: 0,
       });
     }
     
@@ -121,38 +120,45 @@ function PackPlayer({ pack, onClose, user, processor }) {
       const dataArray = processor.getAnalyserData();
       const bufferLength = dataArray.length;
       
-      // Fade trail effect
-      ctx.fillStyle = 'rgba(10, 10, 15, 0.2)';
+      ctx.fillStyle = 'rgba(10, 10, 15, 0.25)';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       
-      frameCount += 0.05;
+      frameCount += 0.08;
       
-      // Update and draw particles
+      let avgAmplitude = 0;
+      for (let i = 0; i < bufferLength; i++) {
+        avgAmplitude += dataArray[i];
+      }
+      avgAmplitude = avgAmplitude / bufferLength / 255;
+      
       particles.forEach((particle, i) => {
-        // Get audio data for this particle
-        const dataIndex = Math.floor((i / numParticles) * bufferLength);
-        const amplitude = dataArray[dataIndex] / 255;
+        const lowIndex = Math.floor((i / numParticles) * bufferLength * 0.3);
+        const midIndex = Math.floor((i / numParticles) * bufferLength * 0.6);
+        const highIndex = Math.floor((i / numParticles) * bufferLength);
         
-        // Boost amplitude for more visibility
-        const boostedAmplitude = Math.pow(amplitude, 0.7);
+        const lowAmp = dataArray[lowIndex] / 255;
+        const midAmp = dataArray[midIndex] / 255;
+        const highAmp = dataArray[highIndex] / 255;
         
-        // Calculate wave motion
-        const wave = Math.sin(particle.offset + frameCount) * 15;
-        const audioInfluence = boostedAmplitude * 80;
+        const rawAmplitude = (lowAmp * 1.5 + midAmp * 1.0 + highAmp * 0.5) / 3;
         
-        // Update position
+        particle.smoothAmplitude += (rawAmplitude - particle.smoothAmplitude) * 0.3;
+        
+        const boostedAmplitude = Math.pow(particle.smoothAmplitude, 0.5) * 1.5;
+        
+        const wave = Math.sin(particle.offset + frameCount) * (20 + avgAmplitude * 30);
+        const audioInfluence = boostedAmplitude * 120;
+        
         particle.y = particle.baseY + wave - audioInfluence;
         
-        // Draw particle with glow
-        const glowSize = particle.size * (3 + boostedAmplitude * 5);
+        const glowSize = particle.size * (4 + boostedAmplitude * 8);
         
-        // Outer glow
         const gradient = ctx.createRadialGradient(
           particle.x, particle.y, 0,
           particle.x, particle.y, glowSize
         );
-        gradient.addColorStop(0, particle.color + (0.9 * boostedAmplitude) + ')');
-        gradient.addColorStop(0.4, particle.color + (0.6 * boostedAmplitude) + ')');
+        gradient.addColorStop(0, particle.color + Math.min(boostedAmplitude * 1.2, 1) + ')');
+        gradient.addColorStop(0.3, particle.color + (boostedAmplitude * 0.8) + ')');
         gradient.addColorStop(1, particle.color + '0)');
         
         ctx.fillStyle = gradient;
@@ -160,23 +166,27 @@ function PackPlayer({ pack, onClose, user, processor }) {
         ctx.arc(particle.x, particle.y, glowSize, 0, Math.PI * 2);
         ctx.fill();
         
-        // Core particle
-        ctx.fillStyle = particle.color + (0.95 + boostedAmplitude * 0.05) + ')';
+        const coreSize = particle.size * (1 + boostedAmplitude * 1.5);
+        ctx.fillStyle = particle.color + Math.min(0.95 + boostedAmplitude * 0.1, 1) + ')';
         ctx.beginPath();
-        ctx.arc(particle.x, particle.y, particle.size * (1 + boostedAmplitude * 0.5), 0, Math.PI * 2);
+        ctx.arc(particle.x, particle.y, coreSize, 0, Math.PI * 2);
         ctx.fill();
         
-        // Connect particles with lines
         if (i < particles.length - 1) {
           const nextParticle = particles[i + 1];
-          ctx.strokeStyle = particle.color + (0.5 * boostedAmplitude) + ')';
-          ctx.lineWidth = 1 + boostedAmplitude * 3;
+          ctx.strokeStyle = particle.color + (0.4 + boostedAmplitude * 0.6) + ')';
+          ctx.lineWidth = 2 + boostedAmplitude * 5;
           ctx.beginPath();
           ctx.moveTo(particle.x, particle.y);
           ctx.lineTo(nextParticle.x, nextParticle.y);
           ctx.stroke();
         }
       });
+      
+      if (avgAmplitude > 0.6) {
+        ctx.fillStyle = `rgba(6, 182, 212, ${(avgAmplitude - 0.6) * 0.2})`;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+      }
       
       animationRef.current = requestAnimationFrame(draw);
     };
