@@ -10,7 +10,7 @@ import {
 import StorefrontGrid from './StorefrontGrid';
 import PackPlayer from './PackPlayer';
 
-// Audio Processor with Effects
+// Audio Processor with Effects + Offline Rendering
 class AnalogProcessor {
   constructor() {
     this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
@@ -96,12 +96,12 @@ class AnalogProcessor {
     return this.currentBuffer;
   }
   
-  buildEffectChain(source, effects) {
+  buildEffectChain(source, effects, ctx) {
     let currentNode = source;
     
     // Tape
     if (effects.tape > 0) {
-      const tape = this.audioContext.createWaveShaper();
+      const tape = ctx.createWaveShaper();
       tape.curve = this.makeTapeCurve(effects.tape);
       currentNode.connect(tape);
       currentNode = tape;
@@ -109,18 +109,35 @@ class AnalogProcessor {
     
     // Distortion
     if (effects.distortion > 0) {
-      const dist = this.audioContext.createWaveShaper();
+      const dist = ctx.createWaveShaper();
       dist.curve = this.makeDistortionCurve(effects.distortion * 100);
       currentNode.connect(dist);
       currentNode = dist;
     }
     
     // Filter
-    const filter = this.audioContext.createBiquadFilter();
+    const filter = ctx.createBiquadFilter();
     filter.type = 'lowpass';
     filter.frequency.value = effects.tape ? 20000 - (effects.tape * 15000) : 20000;
     currentNode.connect(filter);
     currentNode = filter;
+    
+    return currentNode;
+  }
+  
+  play(effects = {}, pitch = 0, speed = 1.0) {
+    if (!this.currentBuffer) return;
+    
+    this.stop();
+    
+    const source = this.audioContext.createBufferSource();
+    source.buffer = this.currentBuffer;
+    source.loop = true;
+    
+    const pitchRate = Math.pow(2, pitch / 12);
+    source.playbackRate.value = pitchRate * speed;
+    
+    let currentNode = this.buildEffectChain(source, effects, this.audioContext);
     
     // Main output
     currentNode.connect(this.masterGain);
@@ -146,23 +163,6 @@ class AnalogProcessor {
       reverbGain.connect(this.reverbNode);
       this.reverbNode.connect(this.masterGain);
     }
-  }
-  
-  play(effects = {}, pitch = 0, speed = 1.0) {
-    if (!this.currentBuffer) return;
-    
-    this.stop();
-    
-    const source = this.audioContext.createBufferSource();
-    source.buffer = this.currentBuffer;
-    source.loop = true;
-    
-    // Pitch shift (semitones)
-    // Speed control (0.5 = half speed, 2.0 = double speed)
-    const pitchRate = Math.pow(2, pitch / 12);
-    source.playbackRate.value = pitchRate * speed;
-    
-    this.buildEffectChain(source, effects);
     
     source.start();
     this.currentSource = source;
@@ -173,6 +173,92 @@ class AnalogProcessor {
     } else if (effects.vinyl === 0 && this.vinylNode) {
       this.stopVinyl();
     }
+  }
+
+  // NEW: Offline rendering with effects
+  async renderWithEffects(effects, pitch, speed) {
+    if (!this.currentBuffer) {
+      throw new Error('No audio loaded');
+    }
+
+    // Calculate new duration based on speed
+    const pitchRate = Math.pow(2, pitch / 12);
+    const totalRate = pitchRate * speed;
+    const newLength = Math.floor(this.currentBuffer.length / totalRate);
+    
+    // Create offline audio context
+    const offlineCtx = new OfflineAudioContext(
+      this.currentBuffer.numberOfChannels,
+      newLength,
+      this.currentBuffer.sampleRate
+    );
+
+    // Create source
+    const source = offlineCtx.createBufferSource();
+    source.buffer = this.currentBuffer;
+    source.playbackRate.value = totalRate;
+
+    // Build effect chain
+    let currentNode = this.buildEffectChain(source, effects, offlineCtx);
+
+    // Create reverb for offline context if needed
+    if (effects.reverb > 0) {
+      const offlineReverb = offlineCtx.createConvolver();
+      const length = offlineCtx.sampleRate * 2;
+      const impulse = offlineCtx.createBuffer(2, length, offlineCtx.sampleRate);
+      const left = impulse.getChannelData(0);
+      const right = impulse.getChannelData(1);
+      for (let i = 0; i < length; i++) {
+        const decay = Math.exp(-i / (offlineCtx.sampleRate * 0.5));
+        left[i] = (Math.random() * 2 - 1) * decay;
+        right[i] = (Math.random() * 2 - 1) * decay;
+      }
+      offlineReverb.buffer = impulse;
+
+      const reverbGain = offlineCtx.createGain();
+      reverbGain.gain.value = effects.reverb;
+      currentNode.connect(reverbGain);
+      reverbGain.connect(offlineReverb);
+      offlineReverb.connect(offlineCtx.destination);
+    }
+
+    // Delay effect (parallel)
+    if (effects.delay > 0) {
+      const delay = offlineCtx.createDelay();
+      const feedback = offlineCtx.createGain();
+      delay.delayTime.value = 0.3;
+      feedback.gain.value = effects.delay * 0.7;
+      
+      currentNode.connect(delay);
+      delay.connect(feedback);
+      feedback.connect(delay);
+      delay.connect(offlineCtx.destination);
+    }
+
+    // Main connection
+    currentNode.connect(offlineCtx.destination);
+
+    // Vinyl noise (if enabled)
+    if (effects.vinyl > 0) {
+      const vinylSource = offlineCtx.createBufferSource();
+      const vinylBuffer = offlineCtx.createBuffer(1, newLength, offlineCtx.sampleRate);
+      const vinylData = vinylBuffer.getChannelData(0);
+      for (let i = 0; i < newLength; i++) {
+        vinylData[i] = (Math.random() * 2 - 1) * 0.02 * effects.vinyl;
+      }
+      vinylSource.buffer = vinylBuffer;
+      const vinylGain = offlineCtx.createGain();
+      vinylGain.gain.value = 0.05;
+      vinylSource.connect(vinylGain);
+      vinylGain.connect(offlineCtx.destination);
+      vinylSource.start();
+    }
+
+    source.start();
+
+    // Render to buffer
+    const renderedBuffer = await offlineCtx.startRendering();
+    return renderedBuffer;
   }
   
   stop() {
@@ -249,9 +335,9 @@ const BioluminescentParticles = () => {
         this.maxLife = 80;
         this.size = Math.random() * 2.5 + 1;
         const colors = [
-          'rgba(59, 130, 246, ',  // Electric blue
-          'rgba(6, 182, 212, ',   // Cyan
-          'rgba(16, 185, 129, ',  // Neon green
+          'rgba(59, 130, 246, ',
+          'rgba(6, 182, 212, ',
+          'rgba(16, 185, 129, ',
         ];
         this.color = colors[Math.floor(Math.random() * colors.length)];
       }
@@ -279,7 +365,6 @@ const BioluminescentParticles = () => {
         ctx.arc(this.x, this.y, this.size * 4, 0, Math.PI * 2);
         ctx.fill();
 
-        // Core
         ctx.fillStyle = this.color + opacity + ')';
         ctx.beginPath();
         ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
@@ -400,10 +485,8 @@ function FeelzMachine({ user, profile }) {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-gray-900 text-white relative overflow-hidden">
-      {/* Bioluminescent Background */}
       <BioluminescentParticles />
       
-      {/* Header */}
       <header className="border-b border-cyan-500/20 backdrop-blur-xl bg-white/5 sticky top-0 z-40 shadow-lg shadow-black/20">
         <div className="max-w-[1800px] mx-auto px-8 py-3">
           <div className="flex items-center justify-between">
@@ -447,7 +530,6 @@ function FeelzMachine({ user, profile }) {
         </div>
       </header>
 
-      {/* Main Content */}
       <div className="relative">
         <div className={`max-w-[1800px] mx-auto transition-all duration-300 ${
           selectedPack ? 'lg:mr-[36%] px-4' : 'px-8'
@@ -458,7 +540,6 @@ function FeelzMachine({ user, profile }) {
           />
         </div>
 
-        {/* Side Panel Player */}
         <AnimatePresence>
           {selectedPack && (
             <PackPlayer

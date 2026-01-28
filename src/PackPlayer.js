@@ -9,12 +9,15 @@ import {
   Loader
 } from 'lucide-react';
 import KnobControl from './KnobControl';
+import audioBufferToWav from 'audiobuffer-to-wav';
 
 function PackPlayer({ pack, onClose, user, processor }) {
   const [stems, setStems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentAudio, setCurrentAudio] = useState('main');
+  const [processingEffect, setProcessingEffect] = useState(false);
+  const [message, setMessage] = useState({ type: '', text: '' });
   
   const [effects, setEffects] = useState({
     tape: 0,
@@ -209,7 +212,6 @@ function PackPlayer({ pack, onClose, user, processor }) {
         download_type: itemType
       }]);
 
-      // Fetch the file and trigger download with proper filename
       const response = await fetch(url);
       const blob = await response.blob();
       const blobUrl = window.URL.createObjectURL(blob);
@@ -221,7 +223,6 @@ function PackPlayer({ pack, onClose, user, processor }) {
       link.click();
       document.body.removeChild(link);
       
-      // Clean up blob URL
       window.URL.revokeObjectURL(blobUrl);
     } catch (error) {
       console.error('Download error:', error);
@@ -230,14 +231,70 @@ function PackPlayer({ pack, onClose, user, processor }) {
   };
 
   const handleDownloadEffected = async () => {
-    alert('Download with effects coming soon! Currently downloading original file.');
-    handleDownload(
-      currentAudio === 'main' 
-        ? (pack.main_loop_url || pack.file_url)
-        : stems.find(s => s.id === currentAudio)?.file_url,
-      `${cleanFilename(pack.name)}-effected.wav`,
-      'effected'
-    );
+    if (!user) {
+      alert('Please sign in to download');
+      return;
+    }
+
+    // Check if any effects are active
+    const hasEffects = effects.tape > 0 || 
+                       effects.vinyl > 0 || 
+                       effects.reverb > 0 || 
+                       effects.delay > 0 || 
+                       effects.distortion > 0 || 
+                       effects.pitch !== 0 || 
+                       effects.speed !== 1.0;
+
+    if (!hasEffects) {
+      alert('No effects applied! Adjust the knobs to add effects, then download.');
+      return;
+    }
+
+    setProcessingEffect(true);
+    setMessage({ type: 'info', text: 'Processing audio with effects... This may take 5-10 seconds.' });
+
+    try {
+      // Render audio with effects offline
+      const renderedBuffer = await processor.renderWithEffects(
+        effects,
+        effects.pitch,
+        effects.speed
+      );
+
+      if (!renderedBuffer) {
+        throw new Error('Failed to render audio');
+      }
+
+      // Convert AudioBuffer to WAV
+      const wav = audioBufferToWav(renderedBuffer);
+      const blob = new Blob([wav], { type: 'audio/wav' });
+      
+      // Create download
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${cleanFilename(pack.name)}-effected.wav`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      // Track download
+      await supabase.from('user_downloads').insert([{
+        user_id: user.id,
+        sample_id: pack.id,
+        download_type: 'effected'
+      }]);
+
+      setMessage({ type: 'success', text: 'Download complete! ✓' });
+      setTimeout(() => setMessage({ type: '', text: '' }), 3000);
+    } catch (error) {
+      console.error('Effect download error:', error);
+      setMessage({ type: 'error', text: 'Failed to process audio: ' + error.message });
+      setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+    } finally {
+      setProcessingEffect(false);
+    }
   };
 
   const handleDownloadAll = () => {
@@ -281,6 +338,19 @@ function PackPlayer({ pack, onClose, user, processor }) {
         </button>
 
         <div className="p-4 space-y-4">
+          {/* Message Banner */}
+          {message.text && (
+            <div className={`p-3 rounded-lg text-sm ${
+              message.type === 'success' 
+                ? 'bg-green-500/20 border border-green-500/50 text-green-300'
+                : message.type === 'error'
+                ? 'bg-red-500/20 border border-red-500/50 text-red-300'
+                : 'bg-blue-500/20 border border-blue-500/50 text-blue-300'
+            }`}>
+              {message.text}
+            </div>
+          )}
+
           {/* Visualizer */}
           <div className="relative bg-black/40 backdrop-blur-xl rounded-2xl overflow-hidden border border-cyan-400/20 shadow-xl shadow-cyan-500/10">
             <canvas
@@ -389,10 +459,20 @@ function PackPlayer({ pack, onClose, user, processor }) {
           {/* Download with Effects */}
           <button
             onClick={handleDownloadEffected}
-            className="w-full py-2.5 bg-gradient-to-r from-blue-500/90 to-cyan-500/90 hover:from-blue-600/90 hover:to-cyan-600/90 rounded-xl font-semibold transition flex items-center justify-center space-x-2 shadow-xl shadow-cyan-500/30 backdrop-blur-xl border border-white/20"
+            disabled={processingEffect}
+            className="w-full py-2.5 bg-gradient-to-r from-blue-500/90 to-cyan-500/90 hover:from-blue-600/90 hover:to-cyan-600/90 disabled:from-gray-600/90 disabled:to-gray-700/90 disabled:cursor-not-allowed rounded-xl font-semibold transition flex items-center justify-center space-x-2 shadow-xl shadow-cyan-500/30 backdrop-blur-xl border border-white/20"
           >
-            <Download className="w-4 h-4" />
-            <span>Download with Effects</span>
+            {processingEffect ? (
+              <>
+                <Loader className="w-4 h-4 animate-spin" />
+                <span>Processing...</span>
+              </>
+            ) : (
+              <>
+                <Download className="w-4 h-4" />
+                <span>Download with Effects</span>
+              </>
+            )}
           </button>
 
           {/* Download List */}
