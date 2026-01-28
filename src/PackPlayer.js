@@ -22,7 +22,6 @@ function PackPlayer({ pack, onClose, user, processor }) {
   const [message, setMessage] = useState({ type: '', text: '' });
   const [targetBpm, setTargetBpm] = useState(pack.bpm);
   const [pitch, setPitch] = useState(0);
-  const [speed, setSpeed] = useState(1.0);
 
   const canvasRef = useRef(null);
   const animationRef = useRef(null);
@@ -128,8 +127,8 @@ function PackPlayer({ pack, onClose, user, processor }) {
   };
 
   const calculateFinalSpeed = () => {
-    if (!targetBpm || targetBpm <= 0) return speed;
-    return (targetBpm / pack.bpm) * speed;
+    if (!targetBpm || targetBpm <= 0) return 1.0;
+    return targetBpm / pack.bpm;
   };
 
   const togglePlayPause = async () => {
@@ -262,10 +261,10 @@ function PackPlayer({ pack, onClose, user, processor }) {
       return;
     }
 
-    const hasChanges = pitch !== 0 || speed !== 1.0 || targetBpm !== pack.bpm;
+    const hasChanges = pitch !== 0 || targetBpm !== pack.bpm;
 
     if (!hasChanges) {
-      alert('No pitch, speed, or tempo changes applied! Adjust settings, then download.');
+      alert('No pitch or tempo changes applied! Adjust settings, then download.');
       return;
     }
 
@@ -376,21 +375,12 @@ function PackPlayer({ pack, onClose, user, processor }) {
     }
   };
 
-  const handleSpeedChange = (value) => {
-    const newSpeed = 0.5 + (value * 1.5);
-    setSpeed(newSpeed);
-    
-    if (isPlaying && processor) {
-      processor.updatePlayback(pitch, (targetBpm / pack.bpm) * newSpeed);
-    }
-  };
-
   const handleTempoChange = (e) => {
     const newBpm = parseInt(e.target.value) || pack.bpm;
     setTargetBpm(newBpm);
     
     if (isPlaying && processor) {
-      const finalSpeed = (newBpm / pack.bpm) * speed;
+      const finalSpeed = newBpm / pack.bpm;
       processor.updatePlayback(pitch, finalSpeed);
     }
   };
@@ -398,7 +388,7 @@ function PackPlayer({ pack, onClose, user, processor }) {
   const resetTempo = () => {
     setTargetBpm(pack.bpm);
     if (isPlaying && processor) {
-      processor.updatePlayback(pitch, speed);
+      processor.updatePlayback(pitch, 1.0);
     }
   };
 
@@ -524,26 +514,18 @@ function PackPlayer({ pack, onClose, user, processor }) {
           </div>
 
           <div className="bg-white/5 backdrop-blur-2xl rounded-2xl p-4 border border-cyan-400/20 shadow-xl shadow-black/30">
-            <h3 className="text-base font-bold text-white mb-3">Pitch & Speed</h3>
-            <div className="grid grid-cols-2 gap-4">
+            <h3 className="text-base font-bold text-white mb-3">Pitch Control</h3>
+            <div className="flex justify-center">
               <KnobControl
                 label="Pitch"
                 value={(pitch + 12) / 24}
                 onChange={handlePitchChange}
                 color="#14b8a6"
-                size="medium"
-              />
-              <KnobControl
-                label="Speed"
-                value={(speed - 0.5) / 1.5}
-                onChange={handleSpeedChange}
-                color="#22d3ee"
-                size="medium"
+                size="large"
               />
             </div>
             <div className="mt-3 text-xs text-cyan-400 text-center">
-              Pitch: {pitch > 0 ? '+' : ''}{Math.round(pitch)} semitones • 
-              Speed: {speed.toFixed(2)}x
+              Pitch: {pitch > 0 ? '+' : ''}{Math.round(pitch)} semitones
             </div>
           </div>
 
