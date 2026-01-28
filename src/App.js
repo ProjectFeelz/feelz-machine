@@ -9,7 +9,7 @@ import {
 import StorefrontGrid from './StorefrontGrid';
 import PackPlayer from './PackPlayer';
 
-// Simplified Audio Processor - Pitch/Tempo/Speed Only
+// Simplified Audio Processor - Pitch/Tempo Only
 class AnalogProcessor {
   constructor() {
     this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
@@ -337,7 +337,7 @@ function FeelzMachine({ user, profile }) {
             </div>
             
             <div className="flex items-center space-x-3">
-              
+              <a
                 href="https://discord.gg/jwZU6YSKnf"
                 target="_blank"
                 rel="noopener noreferrer"
@@ -448,7 +448,6 @@ function FeelzMachine({ user, profile }) {
         </AnimatePresence>
       </div>
 
-      {/* Footer */}
       <footer className="border-t border-cyan-500/20 bg-black/40 backdrop-blur-xl mt-auto">
         <div className="max-w-[1800px] mx-auto px-8 py-6">
           <div className="flex flex-col md:flex-row items-center justify-between space-y-4 md:space-y-0">
@@ -476,7 +475,7 @@ function FeelzMachine({ user, profile }) {
             </div>
             
             <div className="flex items-center space-x-3">
-              
+              <a
                 href="https://discord.gg/jwZU6YSKnf"
                 target="_blank"
                 rel="noopener noreferrer"
