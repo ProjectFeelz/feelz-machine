@@ -193,14 +193,28 @@ function AdminPanel({ user, onLogout }) {
     setMessage({ type: '', text: '' });
 
     try {
+      console.log('=== UPLOAD PROCESS STARTING ===');
+      
       const packFolderName = formData.name.toLowerCase().replace(/[^a-z0-9]/g, '-');
+      console.log('Pack folder name:', packFolderName);
 
+      // Upload main loop
+      console.log('Uploading main loop...');
       const mainLoopUrl = await uploadFile(mainLoopFile, 'main', packFolderName);
+      console.log('Main loop URL:', mainLoopUrl);
+
+      // Upload thumbnail
+      console.log('Uploading thumbnail...');
       const thumbnailUrl = await uploadFile(thumbnailFile, 'thumbnails', packFolderName);
+      console.log('Thumbnail URL:', thumbnailUrl);
 
       const uploadedStems = stems.filter(s => s.file);
       const hasStems = uploadedStems.length > 0;
+      console.log('Uploaded stems count:', uploadedStems.length);
+      console.log('Stems with files:', uploadedStems);
 
+      // Insert sample
+      console.log('Inserting sample to database...');
       const { data: sampleData, error: sampleError } = await supabase
         .from('samples')
         .insert([
@@ -223,24 +237,62 @@ function AdminPanel({ user, onLogout }) {
         .select()
         .single();
 
-      if (sampleError) throw sampleError;
-
-      for (const stem of uploadedStems) {
-        const stemUrl = await uploadFile(stem.file, 'stems', packFolderName);
-        
-        await supabase
-          .from('sample_stems')
-          .insert([
-            {
-              sample_id: sampleData.id,
-              name: stem.name || stem.type,
-              stem_type: stem.type,
-              file_url: stemUrl,
-              order_index: stem.id
-            }
-          ]);
+      if (sampleError) {
+        console.error('Sample insert error:', sampleError);
+        throw sampleError;
       }
 
+      console.log('Sample created with ID:', sampleData.id);
+      console.log('Full sample data:', sampleData);
+
+      // Upload and insert stems
+      if (uploadedStems.length > 0) {
+        console.log('=== STARTING STEM UPLOADS ===');
+        
+        for (let i = 0; i < uploadedStems.length; i++) {
+          const stem = uploadedStems[i];
+          console.log(`\n--- Processing stem ${i + 1}/${uploadedStems.length} ---`);
+          console.log('Stem name:', stem.name || stem.type);
+          console.log('Stem type:', stem.type);
+          console.log('Stem file:', stem.file?.name);
+          
+          // Upload stem file
+          console.log('Uploading stem file to storage...');
+          const stemUrl = await uploadFile(stem.file, 'stems', packFolderName);
+          console.log('Stem uploaded to URL:', stemUrl);
+          
+          // Prepare stem data
+          const stemInsert = {
+            sample_id: sampleData.id,
+            name: stem.name || stem.type,
+            stem_type: stem.type,
+            file_url: stemUrl,
+            order_index: stem.id
+          };
+          
+          console.log('Inserting stem to database:', stemInsert);
+          
+          // Insert stem to database
+          const { data: stemData, error: stemError } = await supabase
+            .from('sample_stems')
+            .insert([stemInsert])
+            .select();
+          
+          if (stemError) {
+            console.error('❌ STEM INSERT FAILED:', stemError);
+            console.error('Error details:', JSON.stringify(stemError, null, 2));
+            throw new Error(`Failed to insert stem "${stem.name || stem.type}": ${stemError.message}`);
+          }
+          
+          console.log('✅ Stem inserted successfully:', stemData);
+        }
+        
+        console.log('=== ALL STEMS UPLOADED SUCCESSFULLY ===');
+      } else {
+        console.log('No stems to upload');
+      }
+
+      // Log the upload
       const { data: adminData } = await supabase
         .from('admins')
         .select('id')
@@ -262,8 +314,11 @@ function AdminPanel({ user, onLogout }) {
           }
         ]);
 
-      setMessage({ type: 'success', text: 'Sample pack uploaded successfully!' });
+      console.log('=== UPLOAD COMPLETE ===');
       
+      setMessage({ type: 'success', text: `Sample pack uploaded successfully with ${uploadedStems.length} stems!` });
+      
+      // Reset form
       setFormData({
         name: '',
         artist: 'Project Feelz',
@@ -288,8 +343,11 @@ function AdminPanel({ user, onLogout }) {
 
       setTimeout(() => setMessage({ type: '', text: '' }), 5000);
     } catch (error) {
-      console.error('Upload error:', error);
-      setMessage({ type: 'error', text: error.message });
+      console.error('=== UPLOAD ERROR ===');
+      console.error('Error:', error);
+      console.error('Error message:', error.message);
+      console.error('Full error object:', JSON.stringify(error, null, 2));
+      setMessage({ type: 'error', text: error.message || 'Upload failed' });
     } finally {
       setUploading(false);
     }
@@ -349,7 +407,6 @@ function AdminPanel({ user, onLogout }) {
     }
   };
 
-  // Show loading while checking admin status
   if (checkingAdmin) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-gray-900 flex items-center justify-center">
@@ -361,7 +418,6 @@ function AdminPanel({ user, onLogout }) {
     );
   }
 
-  // Show access denied if not admin
   if (!isAdmin) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-gray-900 flex items-center justify-center text-white">
@@ -382,7 +438,6 @@ function AdminPanel({ user, onLogout }) {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-gray-900 text-white">
-      {/* Header */}
       <header className="border-b border-cyan-500/30 backdrop-blur-lg bg-black/30">
         <div className="container mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
@@ -406,7 +461,6 @@ function AdminPanel({ user, onLogout }) {
       </header>
 
       <div className="container mx-auto px-6 py-8">
-        {/* Message Banner */}
         {message.text && (
           <div className={`mb-6 p-4 rounded-lg flex items-center space-x-3 ${
             message.type === 'success' 
@@ -422,7 +476,6 @@ function AdminPanel({ user, onLogout }) {
           </div>
         )}
 
-        {/* Navigation Tabs */}
         <div className="flex space-x-2 mb-8">
           <button
             onClick={() => setActiveTab('upload')}
@@ -449,10 +502,8 @@ function AdminPanel({ user, onLogout }) {
           </button>
         </div>
 
-        {/* Upload Tab */}
         {activeTab === 'upload' && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {/* Upload Form */}
             <div className="lg:col-span-2 bg-black/40 backdrop-blur-xl rounded-2xl p-6 border border-cyan-500/30">
               <h2 className="text-xl font-bold mb-6 flex items-center space-x-2">
                 <Upload className="w-5 h-5" />
@@ -460,7 +511,6 @@ function AdminPanel({ user, onLogout }) {
               </h2>
 
               <form onSubmit={handleSubmit} className="space-y-6">
-                {/* Main Loop */}
                 <div className="bg-blue-950/30 rounded-lg p-4 border border-cyan-500/20">
                   <label className="block text-sm font-semibold text-cyan-300 mb-2">
                     <Music className="w-4 h-4 inline mr-2" />
@@ -478,7 +528,6 @@ function AdminPanel({ user, onLogout }) {
                   )}
                 </div>
 
-                {/* Thumbnail */}
                 <div className="bg-blue-950/30 rounded-lg p-4 border border-cyan-500/20">
                   <label className="block text-sm font-semibold text-cyan-300 mb-2">
                     <ImageIcon className="w-4 h-4 inline mr-2" />
@@ -496,7 +545,6 @@ function AdminPanel({ user, onLogout }) {
                   )}
                 </div>
 
-                {/* Pack Details */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-semibold text-cyan-300 mb-2">
@@ -586,7 +634,6 @@ function AdminPanel({ user, onLogout }) {
                   </div>
                 </div>
 
-                {/* Stems Section */}
                 <div className="bg-blue-950/30 rounded-lg p-4 border border-cyan-500/20">
                   <h3 className="text-lg font-bold mb-4 flex items-center space-x-2 text-cyan-300">
                     <Music className="w-5 h-5" />
@@ -640,7 +687,6 @@ function AdminPanel({ user, onLogout }) {
                   </div>
                 </div>
 
-                {/* Featured */}
                 <div className="flex items-center space-x-2">
                   <input
                     type="checkbox"
@@ -654,7 +700,6 @@ function AdminPanel({ user, onLogout }) {
                   </label>
                 </div>
 
-                {/* Submit Button */}
                 <button
                   type="submit"
                   disabled={uploading}
@@ -675,9 +720,7 @@ function AdminPanel({ user, onLogout }) {
               </form>
             </div>
 
-            {/* Sample List & Logs */}
             <div className="space-y-6">
-              {/* Recent Samples */}
               <div className="bg-black/40 backdrop-blur-xl rounded-2xl p-6 border border-cyan-500/30">
                 <h2 className="text-xl font-bold mb-4">Recent Packs ({samples.length})</h2>
                 
@@ -728,7 +771,6 @@ function AdminPanel({ user, onLogout }) {
                 )}
               </div>
 
-              {/* Upload Logs */}
               <div className="bg-black/40 backdrop-blur-xl rounded-2xl p-6 border border-cyan-500/30">
                 <h2 className="text-xl font-bold mb-4 flex items-center space-x-2">
                   <Clock className="w-5 h-5" />
@@ -764,7 +806,6 @@ function AdminPanel({ user, onLogout }) {
           </div>
         )}
 
-        {/* Email Tab */}
         {activeTab === 'email' && (
           <EmailCampaigns user={user} />
         )}
