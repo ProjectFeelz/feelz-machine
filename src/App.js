@@ -9,76 +9,20 @@ import {
 import StorefrontGrid from './StorefrontGrid';
 import PackPlayer from './PackPlayer';
 
-// Audio Processor with Effects + Offline Rendering - WORKING VERSION
+// Simplified Audio Processor - Pitch/Tempo/Speed Only
 class AnalogProcessor {
   constructor() {
     this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
     this.masterGain = this.audioContext.createGain();
-    this.masterGain.gain.value = 0.8;
+    this.masterGain.gain.value = 1.0;
     this.analyser = this.audioContext.createAnalyser();
     this.analyser.fftSize = 2048;
     
-    this.createVinylNoise();
-    this.createReverbImpulse();
-    
     this.currentBuffer = null;
     this.currentSource = null;
-    this.vinylNode = null;
-    this.lastEffects = {};
-    
-    this.reverbNode = this.audioContext.createConvolver();
-    this.delayNode = this.audioContext.createDelay(1.0);
-    this.delayNode.delayTime.value = 0.3;
-    this.delayFeedback = this.audioContext.createGain();
-    this.delayFeedback.gain.value = 0;
     
     this.masterGain.connect(this.analyser);
     this.masterGain.connect(this.audioContext.destination);
-  }
-  
-  makeDistortionCurve(amount) {
-    const samples = 44100;
-    const curve = new Float32Array(samples);
-    const deg = Math.PI / 180;
-    for (let i = 0; i < samples; i++) {
-      const x = (i * 2) / samples - 1;
-      curve[i] = ((3 + amount) * x * 20 * deg) / (Math.PI + amount * Math.abs(x));
-    }
-    return curve;
-  }
-  
-  makeTapeCurve(amount) {
-    const samples = 44100;
-    const curve = new Float32Array(samples);
-    for (let i = 0; i < samples; i++) {
-      const x = (i * 2) / samples - 1;
-      const saturation = (1 + amount) * x / (1 + amount * Math.abs(x));
-      curve[i] = saturation;
-    }
-    return curve;
-  }
-  
-  createVinylNoise() {
-    const bufferSize = this.audioContext.sampleRate * 2;
-    const buffer = this.audioContext.createBuffer(1, bufferSize, this.audioContext.sampleRate);
-    const data = buffer.getChannelData(0);
-    for (let i = 0; i < bufferSize; i++) {
-      data[i] = (Math.random() * 2 - 1) * 0.02;
-    }
-    this.vinylBuffer = buffer;
-  }
-  
-  async createReverbImpulse() {
-    const length = this.audioContext.sampleRate * 3;
-    const impulse = this.audioContext.createBuffer(2, length, this.audioContext.sampleRate);
-    const left = impulse.getChannelData(0);
-    const right = impulse.getChannelData(1);
-    for (let i = 0; i < length; i++) {
-      const decay = Math.exp(-i / (this.audioContext.sampleRate * 1.0));
-      left[i] = (Math.random() * 2 - 1) * decay;
-      right[i] = (Math.random() * 2 - 1) * decay;
-    }
-    this.reverbNode.buffer = impulse;
   }
   
   async loadAudio(url) {
@@ -88,7 +32,7 @@ class AnalogProcessor {
     return this.currentBuffer;
   }
   
-  play(effects, pitch, speed) {
+  play(pitch, speed) {
     if (!this.currentBuffer) return;
     
     this.stop();
@@ -100,95 +44,24 @@ class AnalogProcessor {
     const pitchRate = Math.pow(2, pitch / 12);
     source.playbackRate.value = pitchRate * speed;
     
-    let node = source;
-    
-    if (effects.tape > 0) {
-      const tapeFilter = this.audioContext.createBiquadFilter();
-      tapeFilter.type = 'lowpass';
-      tapeFilter.frequency.value = 20000 - (effects.tape * 15000);
-      
-      const tapeDistortion = this.audioContext.createWaveShaper();
-      tapeDistortion.curve = this.makeTapeCurve(effects.tape);
-      tapeDistortion.oversample = '4x';
-      
-      node.connect(tapeDistortion);
-      tapeDistortion.connect(tapeFilter);
-      node = tapeFilter;
-    }
-    
-    if (effects.distortion > 0) {
-      const distortion = this.audioContext.createWaveShaper();
-      distortion.curve = this.makeDistortionCurve(effects.distortion * 100);
-      distortion.oversample = '4x';
-      
-      node.connect(distortion);
-      node = distortion;
-    }
-    
-    const dryGain = this.audioContext.createGain();
-    dryGain.gain.value = 1.0;
-    node.connect(dryGain);
-    dryGain.connect(this.masterGain);
-    
-    if (effects.reverb > 0) {
-      const reverbSend = this.audioContext.createGain();
-      reverbSend.gain.value = effects.reverb * 0.7;
-      
-      node.connect(reverbSend);
-      reverbSend.connect(this.reverbNode);
-      this.reverbNode.connect(this.masterGain);
-      
-      console.log('Reverb connected:', effects.reverb);
-    }
-    
-    if (effects.delay > 0) {
-      const delaySend = this.audioContext.createGain();
-      delaySend.gain.value = effects.delay * 0.6;
-      
-      this.delayFeedback.gain.value = effects.delay * 0.5;
-      
-      node.connect(delaySend);
-      delaySend.connect(this.delayNode);
-      
-      this.delayNode.connect(this.delayFeedback);
-      this.delayFeedback.connect(this.delayNode);
-      
-      const delayOutput = this.audioContext.createGain();
-      delayOutput.gain.value = 1.0;
-      this.delayNode.connect(delayOutput);
-      delayOutput.connect(this.masterGain);
-      
-      console.log('Delay connected:', effects.delay);
-    }
-    
+    source.connect(this.masterGain);
     source.start();
-    this.currentSource = source;
-    this.currentNode = node;
-    this.lastEffects = Object.assign({}, effects);
     
-    if (effects.vinyl > 0 && !this.vinylNode) {
-      this.startVinyl(effects.vinyl);
-    } else if (effects.vinyl === 0 && this.vinylNode) {
-      this.stopVinyl();
-    } else if (this.vinylNode && effects.vinyl > 0) {
-      if (this.vinylNode.gainNode) {
-        this.vinylNode.gainNode.gain.value = effects.vinyl * 0.08;
-      }
+    this.currentSource = source;
+  }
+
+  updatePlayback(pitch, speed) {
+    if (!this.currentSource) return;
+    
+    try {
+      const pitchRate = Math.pow(2, pitch / 12);
+      this.currentSource.playbackRate.value = pitchRate * speed;
+    } catch (error) {
+      console.error('Error updating playback:', error);
     }
   }
 
-  updateEffects(effects, pitch, speed) {
-  if (!this.currentSource) return;
-  
-  try {
-    // Just restart playback with new effects - simple and reliable
-    this.play(effects, pitch, speed);
-  } catch (error) {
-    console.error('Error updating effects:', error);
-  }
-}
-
-  async renderWithEffects(effects, pitch, speed) {
+  async renderWithEffects(pitch, speed) {
     if (!this.currentBuffer) {
       throw new Error('No audio loaded');
     }
@@ -206,84 +79,8 @@ class AnalogProcessor {
     const source = offlineCtx.createBufferSource();
     source.buffer = this.currentBuffer;
     source.playbackRate.value = totalRate;
-
-    let node = source;
     
-    if (effects.tape > 0) {
-      const tapeFilter = offlineCtx.createBiquadFilter();
-      tapeFilter.type = 'lowpass';
-      tapeFilter.frequency.value = 20000 - (effects.tape * 15000);
-      
-      const tapeDistortion = offlineCtx.createWaveShaper();
-      tapeDistortion.curve = this.makeTapeCurve(effects.tape);
-      
-      node.connect(tapeDistortion);
-      tapeDistortion.connect(tapeFilter);
-      node = tapeFilter;
-    }
-    
-    if (effects.distortion > 0) {
-      const distortion = offlineCtx.createWaveShaper();
-      distortion.curve = this.makeDistortionCurve(effects.distortion * 100);
-      
-      node.connect(distortion);
-      node = distortion;
-    }
-
-    node.connect(offlineCtx.destination);
-
-    if (effects.reverb > 0) {
-      const offlineReverb = offlineCtx.createConvolver();
-      const length = offlineCtx.sampleRate * 3;
-      const impulse = offlineCtx.createBuffer(2, length, offlineCtx.sampleRate);
-      const left = impulse.getChannelData(0);
-      const right = impulse.getChannelData(1);
-      for (let i = 0; i < length; i++) {
-        const decay = Math.exp(-i / (offlineCtx.sampleRate * 1.0));
-        left[i] = (Math.random() * 2 - 1) * decay;
-        right[i] = (Math.random() * 2 - 1) * decay;
-      }
-      offlineReverb.buffer = impulse;
-
-      const reverbGain = offlineCtx.createGain();
-      reverbGain.gain.value = effects.reverb * 0.7;
-      
-      node.connect(reverbGain);
-      reverbGain.connect(offlineReverb);
-      offlineReverb.connect(offlineCtx.destination);
-    }
-
-    if (effects.delay > 0) {
-      const delay = offlineCtx.createDelay(1.0);
-      const feedback = offlineCtx.createGain();
-      const delayGain = offlineCtx.createGain();
-      
-      delay.delayTime.value = 0.3;
-      feedback.gain.value = effects.delay * 0.5;
-      delayGain.gain.value = effects.delay * 0.6;
-      
-      node.connect(delayGain);
-      delayGain.connect(delay);
-      delay.connect(feedback);
-      feedback.connect(delay);
-      delay.connect(offlineCtx.destination);
-    }
-
-    if (effects.vinyl > 0) {
-      const vinylSource = offlineCtx.createBufferSource();
-      const vinylBuffer = offlineCtx.createBuffer(1, newLength, offlineCtx.sampleRate);
-      const vinylData = vinylBuffer.getChannelData(0);
-      for (let i = 0; i < newLength; i++) {
-        vinylData[i] = (Math.random() * 2 - 1) * 0.02 * effects.vinyl;
-      }
-      vinylSource.buffer = vinylBuffer;
-      const vinylGain = offlineCtx.createGain();
-      vinylGain.gain.value = 0.08;
-      vinylSource.connect(vinylGain);
-      vinylGain.connect(offlineCtx.destination);
-      vinylSource.start();
-    }
-
+    source.connect(offlineCtx.destination);
     source.start();
 
     const renderedBuffer = await offlineCtx.startRendering();
@@ -299,32 +96,6 @@ class AnalogProcessor {
       }
       this.currentSource.disconnect();
       this.currentSource = null;
-    }
-  }
-  
-  startVinyl(amount) {
-    if (this.vinylBuffer && !this.vinylNode) {
-      const source = this.audioContext.createBufferSource();
-      source.buffer = this.vinylBuffer;
-      source.loop = true;
-      const gain = this.audioContext.createGain();
-      gain.gain.value = amount * 0.08;
-      source.connect(gain);
-      gain.connect(this.masterGain);
-      source.start();
-      source.gainNode = gain;
-      this.vinylNode = source;
-    }
-  }
-  
-  stopVinyl() {
-    if (this.vinylNode) {
-      try {
-        this.vinylNode.stop();
-      } catch (e) {
-        // Ignore
-      }
-      this.vinylNode = null;
     }
   }
   

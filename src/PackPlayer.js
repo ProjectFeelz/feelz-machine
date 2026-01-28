@@ -21,16 +21,8 @@ function PackPlayer({ pack, onClose, user, processor }) {
   const [processingEffect, setProcessingEffect] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
   const [targetBpm, setTargetBpm] = useState(pack.bpm);
-  
-  const [effects, setEffects] = useState({
-    tape: 0,
-    vinyl: 0,
-    reverb: 0,
-    delay: 0,
-    distortion: 0,
-    pitch: 0,
-    speed: 1.0
-  });
+  const [pitch, setPitch] = useState(0);
+  const [speed, setSpeed] = useState(1.0);
 
   const canvasRef = useRef(null);
   const animationRef = useRef(null);
@@ -135,9 +127,9 @@ function PackPlayer({ pack, onClose, user, processor }) {
     draw();
   };
 
-  const calculateTempoSpeed = () => {
-    if (!targetBpm || targetBpm <= 0) return effects.speed;
-    return (targetBpm / pack.bpm) * effects.speed;
+  const calculateFinalSpeed = () => {
+    if (!targetBpm || targetBpm <= 0) return speed;
+    return (targetBpm / pack.bpm) * speed;
   };
 
   const togglePlayPause = async () => {
@@ -156,8 +148,8 @@ function PackPlayer({ pack, onClose, user, processor }) {
       setIsPlaying(false);
     } else {
       try {
-        const finalSpeed = calculateTempoSpeed();
-        processor.play(effects, effects.pitch, finalSpeed);
+        const finalSpeed = calculateFinalSpeed();
+        processor.play(pitch, finalSpeed);
         setIsPlaying(true);
         
         await supabase.from('sample_interactions').insert([{
@@ -195,8 +187,8 @@ function PackPlayer({ pack, onClose, user, processor }) {
     await loadStemAudio(stem);
     
     try {
-      const finalSpeed = calculateTempoSpeed();
-      processor.play(effects, effects.pitch, finalSpeed);
+      const finalSpeed = calculateFinalSpeed();
+      processor.play(pitch, finalSpeed);
       setIsPlaying(true);
       
       await supabase.from('sample_interactions').insert([{
@@ -270,30 +262,19 @@ function PackPlayer({ pack, onClose, user, processor }) {
       return;
     }
 
-    const hasEffects = effects.tape > 0 || 
-                       effects.vinyl > 0 || 
-                       effects.reverb > 0 || 
-                       effects.delay > 0 || 
-                       effects.distortion > 0 || 
-                       effects.pitch !== 0 || 
-                       effects.speed !== 1.0 ||
-                       targetBpm !== pack.bpm;
+    const hasChanges = pitch !== 0 || speed !== 1.0 || targetBpm !== pack.bpm;
 
-    if (!hasEffects) {
-      alert('No effects or tempo changes applied! Adjust settings, then download.');
+    if (!hasChanges) {
+      alert('No pitch, speed, or tempo changes applied! Adjust settings, then download.');
       return;
     }
 
     setProcessingEffect(true);
-    setMessage({ type: 'info', text: 'Processing audio with effects... This may take 5-10 seconds.' });
+    setMessage({ type: 'info', text: 'Processing audio... This may take 5-10 seconds.' });
 
     try {
-      const finalSpeed = calculateTempoSpeed();
-      const renderedBuffer = await processor.renderWithEffects(
-        effects,
-        effects.pitch,
-        finalSpeed
-      );
+      const finalSpeed = calculateFinalSpeed();
+      const renderedBuffer = await processor.renderWithEffects(pitch, finalSpeed);
 
       if (!renderedBuffer) {
         throw new Error('Failed to render audio');
@@ -306,7 +287,8 @@ function PackPlayer({ pack, onClose, user, processor }) {
       const link = document.createElement('a');
       link.href = url;
       const bpmSuffix = targetBpm !== pack.bpm ? `-${targetBpm}bpm` : '';
-      link.download = `${cleanFilename(pack.name)}${bpmSuffix}-effected.wav`;
+      const pitchSuffix = pitch !== 0 ? `${pitch > 0 ? '+' : ''}${Math.round(pitch)}st` : '';
+      link.download = `${cleanFilename(pack.name)}${bpmSuffix}${pitchSuffix}.wav`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -315,13 +297,13 @@ function PackPlayer({ pack, onClose, user, processor }) {
       await supabase.from('user_downloads').insert([{
         user_id: user.id,
         sample_id: pack.id,
-        download_type: 'effected'
+        download_type: 'processed'
       }]);
 
       setMessage({ type: 'success', text: 'Download complete! ✓' });
       setTimeout(() => setMessage({ type: '', text: '' }), 3000);
     } catch (error) {
-      console.error('Effect download error:', error);
+      console.error('Processing error:', error);
       setMessage({ type: 'error', text: 'Failed to process audio: ' + error.message });
       setTimeout(() => setMessage({ type: '', text: '' }), 5000);
     } finally {
@@ -385,24 +367,22 @@ function PackPlayer({ pack, onClose, user, processor }) {
     }
   };
 
-  const handleEffectChange = (effectName, value) => {
-    const newEffects = { ...effects, [effectName]: value };
-    setEffects(newEffects);
+  const handlePitchChange = (value) => {
+    const newPitch = (value - 0.5) * 24;
+    setPitch(newPitch);
     
     if (isPlaying && processor) {
-      // Use updateEffects instead of restarting playback - prevents crackling
-      processor.updateEffects(newEffects, newEffects.pitch, calculateTempoSpeed());
+      processor.updatePlayback(newPitch, calculateFinalSpeed());
     }
   };
 
-  const handlePitchChange = (value) => {
-    const pitch = (value - 0.5) * 24;
-    handleEffectChange('pitch', pitch);
-  };
-
   const handleSpeedChange = (value) => {
-    const speed = 0.5 + (value * 1.5);
-    handleEffectChange('speed', speed);
+    const newSpeed = 0.5 + (value * 1.5);
+    setSpeed(newSpeed);
+    
+    if (isPlaying && processor) {
+      processor.updatePlayback(pitch, (targetBpm / pack.bpm) * newSpeed);
+    }
   };
 
   const handleTempoChange = (e) => {
@@ -410,21 +390,18 @@ function PackPlayer({ pack, onClose, user, processor }) {
     setTargetBpm(newBpm);
     
     if (isPlaying && processor) {
-      // Update in real-time without stopping
-      const finalSpeed = (newBpm / pack.bpm) * effects.speed;
-      processor.updateEffects(effects, effects.pitch, finalSpeed);
+      const finalSpeed = (newBpm / pack.bpm) * speed;
+      processor.updatePlayback(pitch, finalSpeed);
     }
   };
 
   const resetTempo = () => {
     setTargetBpm(pack.bpm);
     if (isPlaying && processor) {
-      const finalSpeed = (pack.bpm / pack.bpm) * effects.speed;
-      processor.updateEffects(effects, effects.pitch, finalSpeed);
+      processor.updatePlayback(pitch, speed);
     }
   };
 
-  // Show warning if processor is null
   if (!processor) {
     return (
       <motion.div
@@ -547,63 +524,26 @@ function PackPlayer({ pack, onClose, user, processor }) {
           </div>
 
           <div className="bg-white/5 backdrop-blur-2xl rounded-2xl p-4 border border-cyan-400/20 shadow-xl shadow-black/30">
-            <h3 className="text-base font-bold text-white mb-3">Effects</h3>
-            <div className="grid grid-cols-4 gap-3 mb-3">
-              <KnobControl
-                label="Tape"
-                value={effects.tape}
-                onChange={(v) => handleEffectChange('tape', v)}
-                color="#3b82f6"
-                size="small"
-              />
-              <KnobControl
-                label="Vinyl"
-                value={effects.vinyl}
-                onChange={(v) => handleEffectChange('vinyl', v)}
-                color="#06b6d4"
-                size="small"
-              />
-              <KnobControl
-                label="Reverb"
-                value={effects.reverb}
-                onChange={(v) => handleEffectChange('reverb', v)}
-                color="#10b981"
-                size="small"
-              />
-              <KnobControl
-                label="Delay"
-                value={effects.delay}
-                onChange={(v) => handleEffectChange('delay', v)}
-                color="#0ea5e9"
-                size="small"
-              />
-            </div>
-            <div className="grid grid-cols-3 gap-3">
-              <KnobControl
-                label="Dist"
-                value={effects.distortion}
-                onChange={(v) => handleEffectChange('distortion', v)}
-                color="#60a5fa"
-                size="small"
-              />
+            <h3 className="text-base font-bold text-white mb-3">Pitch & Speed</h3>
+            <div className="grid grid-cols-2 gap-4">
               <KnobControl
                 label="Pitch"
-                value={(effects.pitch + 12) / 24}
+                value={(pitch + 12) / 24}
                 onChange={handlePitchChange}
                 color="#14b8a6"
-                size="small"
+                size="medium"
               />
               <KnobControl
                 label="Speed"
-                value={(effects.speed - 0.5) / 1.5}
+                value={(speed - 0.5) / 1.5}
                 onChange={handleSpeedChange}
                 color="#22d3ee"
-                size="small"
+                size="medium"
               />
             </div>
-            <div className="mt-2 text-xs text-cyan-400 text-center">
-              Pitch: {effects.pitch > 0 ? '+' : ''}{Math.round(effects.pitch)} semitones • 
-              Speed: {effects.speed.toFixed(2)}x
+            <div className="mt-3 text-xs text-cyan-400 text-center">
+              Pitch: {pitch > 0 ? '+' : ''}{Math.round(pitch)} semitones • 
+              Speed: {speed.toFixed(2)}x
             </div>
           </div>
 
@@ -620,7 +560,7 @@ function PackPlayer({ pack, onClose, user, processor }) {
             ) : (
               <>
                 <Download className="w-4 h-4" />
-                <span>Download with Effects</span>
+                <span>Download Processed</span>
               </>
             )}
           </button>
