@@ -187,10 +187,10 @@ class AnalogProcessor {
       const lastEffects = this.lastEffects || {};
       
       const hasSignificantChange = 
-        Math.abs(effects.tape - (lastEffects.tape || 0)) > 0.1 ||
-        Math.abs(effects.distortion - (lastEffects.distortion || 0)) > 0.1 ||
-        Math.abs(effects.reverb - (lastEffects.reverb || 0)) > 0.1 ||
-        Math.abs(effects.delay - (lastEffects.delay || 0)) > 0.1;
+      Math.abs(effects.tape - (lastEffects.tape || 0)) > 0.05 ||
+      Math.abs(effects.distortion - (lastEffects.distortion || 0)) > 0.05 ||
+      Math.abs(effects.reverb - (lastEffects.reverb || 0)) > 0.05 ||
+      Math.abs(effects.delay - (lastEffects.delay || 0)) > 0.05;
       
       if (hasSignificantChange) {
         this.play(effects, pitch, speed);
