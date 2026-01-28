@@ -7,11 +7,12 @@ import AdminPanel from './AdminPanel';
 import ProfileSetup from './ProfileSetup';
 import LandingPage from './LandingPage';
 
-function AppRouter() {
+function AppContent() {
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showLanding, setShowLanding] = useState(true);
+  const location = useLocation();
 
   useEffect(() => {
     checkUser();
@@ -29,6 +30,13 @@ function AppRouter() {
       authListener?.subscription?.unsubscribe();
     };
   }, []);
+
+  // Skip landing page if on admin route
+  useEffect(() => {
+    if (location.pathname === '/feelzadmin') {
+      setShowLanding(false);
+    }
+  }, [location.pathname]);
 
   const checkUser = async () => {
     setLoading(true);
@@ -81,49 +89,56 @@ function AppRouter() {
     );
   }
 
-  if (showLanding) {
+  // Show landing page only on root path
+  if (showLanding && location.pathname === '/') {
     return <LandingPage onEnter={handleEnterApp} />;
   }
 
   return (
+    <Routes>
+      {/* Main App Route */}
+      <Route 
+        path="/" 
+        element={
+          user && !profile ? (
+            <ProfileSetup user={user} onComplete={handleProfileComplete} />
+          ) : (
+            <FeelzMachine user={user} profile={profile} />
+          )
+        } 
+      />
+
+      {/* Admin Route - No Profile Check */}
+      <Route 
+        path="/feelzadmin" 
+        element={
+          user ? (
+            <AdminPanel user={user} onLogout={handleLogout} />
+          ) : (
+            <Navigate to="/" replace />
+          )
+        } 
+      />
+
+      {/* Login Route */}
+      <Route 
+        path="/login" 
+        element={<Login />} 
+      />
+
+      {/* Catch all - redirect to home */}
+      <Route 
+        path="*" 
+        element={<Navigate to="/" replace />} 
+      />
+    </Routes>
+  );
+}
+
+function AppRouter() {
+  return (
     <Router>
-      <Routes>
-        {/* Main App Route */}
-        <Route 
-          path="/" 
-          element={
-            user && !profile ? (
-              <ProfileSetup user={user} onComplete={handleProfileComplete} />
-            ) : (
-              <FeelzMachine user={user} profile={profile} />
-            )
-          } 
-        />
-
-        {/* Admin Route - No Profile Check */}
-        <Route 
-          path="/feelzadmin" 
-          element={
-            user ? (
-              <AdminPanel user={user} onLogout={handleLogout} />
-            ) : (
-              <Navigate to="/" replace />
-            )
-          } 
-        />
-
-        {/* Login Route */}
-        <Route 
-          path="/login" 
-          element={<Login />} 
-        />
-
-        {/* Catch all - redirect to home */}
-        <Route 
-          path="*" 
-          element={<Navigate to="/" replace />} 
-        />
-      </Routes>
+      <AppContent />
     </Router>
   );
 }
