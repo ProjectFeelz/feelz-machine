@@ -38,28 +38,32 @@ function PackPlayer({ pack, onClose, user, processor }) {
   useEffect(() => {
     if (pack) {
       fetchPackDetails();
-      loadMainAudio();
+      if (processor) {
+        loadMainAudio();
+      }
       setTargetBpm(pack.bpm);
     }
     
     return () => {
-      processor?.stop();
+      if (processor) {
+        processor.stop();
+      }
       if (animationRef.current) {
         cancelAnimationFrame(animationRef.current);
       }
     };
-  }, [pack]);
+  }, [pack, processor]);
 
   useEffect(() => {
-    if (isPlaying) {
+    if (isPlaying && processor) {
       startVisualization();
     }
-  }, [isPlaying]);
+  }, [isPlaying, processor]);
 
   const fetchPackDetails = async () => {
     setLoading(true);
     
-    const { data: stemsData, error } = await supabase
+    const { data: stemsData } = await supabase
       .from('sample_stems')
       .select('*')
       .eq('sample_id', pack.id)
@@ -70,8 +74,10 @@ function PackPlayer({ pack, onClose, user, processor }) {
   };
 
   const loadMainAudio = async () => {
+    if (!processor) return;
+    
     try {
-      await processor?.loadAudio(pack.main_loop_url || pack.file_url);
+      await processor.loadAudio(pack.main_loop_url || pack.file_url);
       setCurrentAudio('main');
     } catch (error) {
       console.error('Error loading audio:', error);
@@ -80,8 +86,10 @@ function PackPlayer({ pack, onClose, user, processor }) {
   };
 
   const loadStemAudio = async (stem) => {
+    if (!processor) return;
+    
     try {
-      await processor?.loadAudio(stem.file_url);
+      await processor.loadAudio(stem.file_url);
       setCurrentAudio(stem.id);
     } catch (error) {
       console.error('Error loading stem:', error);
@@ -138,13 +146,18 @@ function PackPlayer({ pack, onClose, user, processor }) {
       return;
     }
 
+    if (!processor) {
+      alert('Audio system not initialized. Please click anywhere on the page first.');
+      return;
+    }
+
     if (isPlaying) {
-      processor?.stop();
+      processor.stop();
       setIsPlaying(false);
     } else {
       try {
         const finalSpeed = calculateTempoSpeed();
-        processor?.play(effects, effects.pitch, finalSpeed);
+        processor.play(effects, effects.pitch, finalSpeed);
         setIsPlaying(true);
         
         await supabase.from('sample_interactions').insert([{
@@ -158,7 +171,7 @@ function PackPlayer({ pack, onClose, user, processor }) {
         }]);
       } catch (error) {
         console.error('Error playing:', error);
-        alert('Failed to play audio');
+        alert('Failed to play audio: ' + error.message);
       }
     }
   };
@@ -169,8 +182,13 @@ function PackPlayer({ pack, onClose, user, processor }) {
       return;
     }
 
+    if (!processor) {
+      alert('Audio system not initialized. Please click anywhere on the page first.');
+      return;
+    }
+
     if (isPlaying) {
-      processor?.stop();
+      processor.stop();
       setIsPlaying(false);
     }
 
@@ -178,7 +196,7 @@ function PackPlayer({ pack, onClose, user, processor }) {
     
     try {
       const finalSpeed = calculateTempoSpeed();
-      processor?.play(effects, effects.pitch, finalSpeed);
+      processor.play(effects, effects.pitch, finalSpeed);
       setIsPlaying(true);
       
       await supabase.from('sample_interactions').insert([{
@@ -198,8 +216,8 @@ function PackPlayer({ pack, onClose, user, processor }) {
   const handleMainSelect = async () => {
     if (currentAudio === 'main') return;
     
-    if (isPlaying) {
-      processor?.stop();
+    if (isPlaying && processor) {
+      processor.stop();
       setIsPlaying(false);
     }
 
@@ -244,6 +262,11 @@ function PackPlayer({ pack, onClose, user, processor }) {
   const handleDownloadEffected = async () => {
     if (!user) {
       alert('Please sign in to download');
+      return;
+    }
+
+    if (!processor) {
+      alert('Audio system not initialized. Please refresh the app.');
       return;
     }
 
@@ -318,21 +341,17 @@ function PackPlayer({ pack, onClose, user, processor }) {
       const zip = new JSZip();
       const folder = zip.folder(cleanFilename(pack.name));
 
-      console.log('Downloading main loop...');
       const mainResponse = await fetch(pack.main_loop_url || pack.file_url);
       const mainBlob = await mainResponse.blob();
       folder.file(`${cleanFilename(pack.name)}-main.wav`, mainBlob);
 
       for (let i = 0; i < stems.length; i++) {
         const stem = stems[i];
-        console.log(`Downloading stem ${i + 1}/${stems.length}: ${stem.name}`);
-        
         const stemResponse = await fetch(stem.file_url);
         const stemBlob = await stemResponse.blob();
         folder.file(`${cleanFilename(pack.name)}-${cleanFilename(stem.name)}.wav`, stemBlob);
       }
 
-      console.log('Generating ZIP file...');
       setMessage({ type: 'info', text: 'Finalizing ZIP file...' });
       
       const zipBlob = await zip.generateAsync({ 
@@ -370,10 +389,9 @@ function PackPlayer({ pack, onClose, user, processor }) {
     const newEffects = { ...effects, [effectName]: value };
     setEffects(newEffects);
     
-    if (isPlaying) {
-      processor?.stop();
-      const finalSpeed = effectName === 'speed' ? calculateTempoSpeed() : (targetBpm / pack.bpm) * value;
-      processor?.play(newEffects, newEffects.pitch, finalSpeed);
+    if (isPlaying && processor) {
+      // Use updateEffects instead of restarting playback - prevents crackling
+      processor.updateEffects(newEffects, newEffects.pitch, calculateTempoSpeed());
     }
   };
 
@@ -391,20 +409,40 @@ function PackPlayer({ pack, onClose, user, processor }) {
     const newBpm = parseInt(e.target.value) || pack.bpm;
     setTargetBpm(newBpm);
     
-    if (isPlaying) {
-      processor?.stop();
+    if (isPlaying && processor) {
+      // Update in real-time without stopping
       const finalSpeed = (newBpm / pack.bpm) * effects.speed;
-      processor?.play(effects, effects.pitch, finalSpeed);
+      processor.updateEffects(effects, effects.pitch, finalSpeed);
     }
   };
 
   const resetTempo = () => {
     setTargetBpm(pack.bpm);
-    if (isPlaying) {
-      processor?.stop();
-      processor?.play(effects, effects.pitch, effects.speed);
+    if (isPlaying && processor) {
+      const finalSpeed = (pack.bpm / pack.bpm) * effects.speed;
+      processor.updateEffects(effects, effects.pitch, finalSpeed);
     }
   };
+
+  // Show warning if processor is null
+  if (!processor) {
+    return (
+      <motion.div
+        initial={{ x: '100%' }}
+        animate={{ x: 0 }}
+        exit={{ x: '100%' }}
+        className="fixed top-0 right-0 h-full w-full lg:w-[35%] bg-black/30 backdrop-blur-2xl border-l border-cyan-400/20 z-50 overflow-y-auto"
+      >
+        <button onClick={onClose} className="absolute top-3 right-3 p-2 bg-cyan-500/20 rounded-lg">
+          <X className="w-5 h-5 text-white" />
+        </button>
+        <div className="p-8 text-center">
+          <p className="text-cyan-300 mb-4">Audio system initializing...</p>
+          <p className="text-sm text-cyan-500">Please click anywhere on the page first, then try again.</p>
+        </div>
+      </motion.div>
+    );
+  }
 
   return (
     <AnimatePresence>
@@ -476,7 +514,6 @@ function PackPlayer({ pack, onClose, user, processor }) {
             </div>
           </div>
 
-          {/* TEMPO STRETCH FEATURE */}
           <div className="bg-white/5 backdrop-blur-2xl rounded-2xl p-4 border border-cyan-400/20 shadow-xl shadow-black/30">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-base font-bold text-white flex items-center space-x-2">

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { BrowserRouter, HashRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { supabase } from './supabaseClient';
 import FeelzMachine from './App';
 import Login from './Login';
@@ -74,7 +74,13 @@ function AppContent() {
     await supabase.auth.signOut();
     setUser(null);
     setProfile(null);
-    window.location.href = '/';
+    
+    // Use hash routing for navigation in Electron
+    if (window.electron?.isElectron) {
+      window.location.hash = '/';
+    } else {
+      window.location.href = '/';
+    }
   };
 
   const handleEnterApp = () => {
@@ -136,6 +142,10 @@ function AppContent() {
 }
 
 function AppRouter() {
+  // Use HashRouter for Electron, BrowserRouter for web
+  const isElectron = window.electron?.isElectron || false;
+  const Router = isElectron ? HashRouter : BrowserRouter;
+
   return (
     <Router>
       <AppContent />

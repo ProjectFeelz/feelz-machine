@@ -9,7 +9,7 @@ import {
 import StorefrontGrid from './StorefrontGrid';
 import PackPlayer from './PackPlayer';
 
-// Audio Processor with Effects + Offline Rendering
+// Audio Processor with Effects + Offline Rendering - FIXED VERSION
 class AnalogProcessor {
   constructor() {
     this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
@@ -17,17 +17,21 @@ class AnalogProcessor {
     this.analyser = this.audioContext.createAnalyser();
     this.analyser.fftSize = 2048;
     
+    // Effect nodes that persist
     this.tapeNode = this.audioContext.createWaveShaper();
     this.reverbNode = this.audioContext.createConvolver();
+    this.reverbGain = this.audioContext.createGain();
+    this.reverbGain.gain.value = 0;
+    
     this.delayNode = this.audioContext.createDelay();
     this.delayFeedback = this.audioContext.createGain();
+    this.delayNode.delayTime.value = 0.3;
+    this.delayFeedback.gain.value = 0;
+    
     this.distortionNode = this.audioContext.createWaveShaper();
     this.filterNode = this.audioContext.createBiquadFilter();
-    
     this.filterNode.type = 'lowpass';
     this.filterNode.frequency.value = 20000;
-    this.delayNode.delayTime.value = 0.3;
-    this.delayFeedback.gain.value = 0.3;
     
     this.distortionNode.curve = this.makeDistortionCurve(0);
     this.tapeNode.curve = this.makeTapeCurve(0);
@@ -133,37 +137,75 @@ class AnalogProcessor {
     const pitchRate = Math.pow(2, pitch / 12);
     source.playbackRate.value = pitchRate * speed;
     
+    // Build main chain
     let currentNode = this.buildEffectChain(source, effects, this.audioContext);
     
+    // Always connect to master (this prevents volume loss)
     currentNode.connect(this.masterGain);
     
+    // Add delay as parallel path if enabled
     if (effects.delay > 0) {
-      const delay = this.audioContext.createDelay();
-      const feedback = this.audioContext.createGain();
-      delay.delayTime.value = 0.3;
-      feedback.gain.value = effects.delay * 0.7;
-      
-      currentNode.connect(delay);
-      delay.connect(feedback);
-      feedback.connect(delay);
-      delay.connect(this.masterGain);
+      this.delayFeedback.gain.value = effects.delay * 0.7;
+      currentNode.connect(this.delayNode);
+      this.delayNode.connect(this.delayFeedback);
+      this.delayFeedback.connect(this.delayNode);
+      this.delayNode.connect(this.masterGain);
     }
     
+    // Add reverb as parallel path if enabled
     if (effects.reverb > 0) {
-      const reverbGain = this.audioContext.createGain();
-      reverbGain.gain.value = effects.reverb;
-      currentNode.connect(reverbGain);
-      reverbGain.connect(this.reverbNode);
+      this.reverbGain.gain.value = effects.reverb;
+      currentNode.connect(this.reverbGain);
+      this.reverbGain.connect(this.reverbNode);
       this.reverbNode.connect(this.masterGain);
     }
     
     source.start();
     this.currentSource = source;
     
+    // Handle vinyl noise
     if (effects.vinyl > 0 && !this.vinylNode) {
-      this.startVinyl();
+      this.startVinyl(effects.vinyl);
     } else if (effects.vinyl === 0 && this.vinylNode) {
       this.stopVinyl();
+    } else if (this.vinylNode && effects.vinyl > 0) {
+      if (this.vinylNode.gainNode) {
+        this.vinylNode.gainNode.gain.value = effects.vinyl * 0.05;
+      }
+    }
+  }
+
+  // NEW METHOD: Update effects in real-time without stopping playback
+  updateEffects(effects, pitch, speed) {
+    if (!this.currentSource) return;
+    
+    try {
+      const pitchRate = Math.pow(2, pitch / 12);
+      this.currentSource.playbackRate.value = pitchRate * speed;
+      
+      // Update filter smoothly
+      const rampTime = this.audioContext.currentTime + 0.01;
+      const targetFreq = effects.tape ? 20000 - (effects.tape * 15000) : 20000;
+      this.filterNode.frequency.linearRampToValueAtTime(targetFreq, rampTime);
+      
+      // Update effect curves (these don't cause clicks)
+      this.tapeNode.curve = this.makeTapeCurve(effects.tape);
+      this.distortionNode.curve = this.makeDistortionCurve(effects.distortion * 100);
+      
+      // Update gains smoothly to avoid clicks
+      this.reverbGain.gain.linearRampToValueAtTime(effects.reverb, rampTime);
+      this.delayFeedback.gain.linearRampToValueAtTime(effects.delay * 0.7, rampTime);
+      
+      // Update vinyl volume smoothly
+      if (effects.vinyl > 0 && !this.vinylNode) {
+        this.startVinyl(effects.vinyl);
+      } else if (effects.vinyl === 0 && this.vinylNode) {
+        this.stopVinyl();
+      } else if (this.vinylNode && this.vinylNode.gainNode) {
+        this.vinylNode.gainNode.gain.linearRampToValueAtTime(effects.vinyl * 0.05, rampTime);
+      }
+    } catch (error) {
+      console.error('Error updating effects:', error);
     }
   }
 
@@ -253,16 +295,17 @@ class AnalogProcessor {
     }
   }
   
-  startVinyl() {
+  startVinyl(amount = 1.0) {
     if (this.vinylBuffer && !this.vinylNode) {
       const source = this.audioContext.createBufferSource();
       source.buffer = this.vinylBuffer;
       source.loop = true;
       const gain = this.audioContext.createGain();
-      gain.gain.value = 0.05;
+      gain.gain.value = amount * 0.05;
       source.connect(gain);
       gain.connect(this.masterGain);
       source.start();
+      source.gainNode = gain; // Store reference for later updates
       this.vinylNode = source;
     }
   }
@@ -428,16 +471,43 @@ function FeelzMachine({ user, profile }) {
   const [signingIn, setSigningIn] = useState(false);
   const [showSignInModal, setShowSignInModal] = useState(false);
   const [emailInput, setEmailInput] = useState('');
-  const processorRef = useRef(new AnalogProcessor());
+  const processorRef = useRef(null);
+
+  // Initialize audio processor on first user interaction
+  useEffect(() => {
+    const initAudio = () => {
+      if (!processorRef.current) {
+        try {
+          processorRef.current = new AnalogProcessor();
+          document.removeEventListener('click', initAudio);
+        } catch (error) {
+          console.error('Failed to initialize audio:', error);
+        }
+      }
+    };
+    
+    document.addEventListener('click', initAudio);
+    
+    return () => {
+      document.removeEventListener('click', initAudio);
+      if (processorRef.current) {
+        processorRef.current.stop();
+      }
+    };
+  }, []);
 
   const handlePackSelect = (pack) => {
     setSelectedPack(pack);
-    processorRef.current.stop();
+    if (processorRef.current) {
+      processorRef.current.stop();
+    }
   };
 
   const handlePackClose = () => {
     setSelectedPack(null);
-    processorRef.current.stop();
+    if (processorRef.current) {
+      processorRef.current.stop();
+    }
   };
 
   const handleSignIn = async () => {
@@ -475,7 +545,7 @@ function FeelzMachine({ user, profile }) {
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-3">
               <img 
-                src="/logo.png" 
+                src={`${process.env.PUBLIC_URL}/logo.png`}
                 alt="Feelz Machine" 
                 className="w-10 h-10 object-contain"
               />

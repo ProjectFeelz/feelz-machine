@@ -148,7 +148,7 @@ function LandingPage({ onEnter }) {
           className="mb-8"
         >
           <img 
-            src="/logo.png" 
+            src={`${process.env.PUBLIC_URL}/logo.png`}
             alt="Feelz Machine" 
             className="w-32 h-32 object-contain mx-auto"
           />
