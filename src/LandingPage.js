@@ -171,9 +171,9 @@ function LandingPage({ onEnter }) {
           transition={{ duration: 0.8, delay: 0.6 }}
           className="text-xl md:text-2xl text-cyan-300 mb-12 max-w-2xl"
         >
-          Discover, play, and download premium sample packs.
+          Premium sample packs. Instant playback. Real-time pitch & tempo control.
           <br />
-          <span className="text-blue-400">Interactive. Professional. Tech-Forward.</span>
+          <span className="text-blue-400">Your next hit starts here.</span>
         </motion.p>
 
         <motion.div
@@ -184,20 +184,20 @@ function LandingPage({ onEnter }) {
         >
           <div className="bg-white/5 backdrop-blur-2xl rounded-2xl p-6 border border-cyan-400/20 hover:border-cyan-400/40 transition shadow-xl shadow-black/40 hover:shadow-2xl hover:shadow-cyan-500/20">
             <Music className="w-8 h-8 text-cyan-400 mx-auto mb-3" />
-            <h3 className="text-lg font-bold text-white mb-2">Loop Playback</h3>
-            <p className="text-sm text-cyan-300">Play and preview samples with effects</p>
+            <h3 className="text-lg font-bold text-white mb-2">Instant Preview</h3>
+            <p className="text-sm text-cyan-300">Stream and audition samples before downloading</p>
           </div>
 
           <div className="bg-white/5 backdrop-blur-2xl rounded-2xl p-6 border border-blue-400/20 hover:border-blue-400/40 transition shadow-xl shadow-black/40 hover:shadow-2xl hover:shadow-blue-500/20">
             <Zap className="w-8 h-8 text-blue-400 mx-auto mb-3" />
-            <h3 className="text-lg font-bold text-white mb-2">Real-Time Effects</h3>
-            <p className="text-sm text-blue-300">Tape, vinyl, reverb, pitch, and speed</p>
+            <h3 className="text-lg font-bold text-white mb-2">Pitch & Tempo</h3>
+            <p className="text-sm text-blue-300">Adjust key and BPM in real-time before download</p>
           </div>
 
           <div className="bg-white/5 backdrop-blur-2xl rounded-2xl p-6 border border-green-400/20 hover:border-green-400/40 transition shadow-xl shadow-black/40 hover:shadow-2xl hover:shadow-green-500/20">
             <Layers className="w-8 h-8 text-green-400 mx-auto mb-3" />
-            <h3 className="text-lg font-bold text-white mb-2">Stems + MIDI</h3>
-            <p className="text-sm text-green-300">Download individual stems and MIDI files</p>
+            <h3 className="text-lg font-bold text-white mb-2">Multi-Track Stems</h3>
+            <p className="text-sm text-green-300">Download full mixes or individual instrument stems</p>
           </div>
         </motion.div>
 
