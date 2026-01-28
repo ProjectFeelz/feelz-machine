@@ -4,7 +4,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Disc3,
   Sparkles,
-  LogIn
+  LogIn,
+  Loader
 } from 'lucide-react';
 import StorefrontGrid from './StorefrontGrid';
 import PackPlayer from './PackPlayer';
@@ -219,7 +220,6 @@ class AnalogProcessor {
 }
 
 // Bioluminescent Particles
-// Bioluminescent Particles
 const BioluminescentParticles = () => {
   const canvasRef = useRef(null);
   const particlesRef = useRef([]);
@@ -358,6 +358,7 @@ const BioluminescentParticles = () => {
 // Main App
 function FeelzMachine({ user, profile }) {
   const [selectedPack, setSelectedPack] = useState(null);
+  const [signingIn, setSigningIn] = useState(false);
   const processorRef = useRef(new AnalogProcessor());
 
   const handlePackSelect = (pack) => {
@@ -368,6 +369,33 @@ function FeelzMachine({ user, profile }) {
   const handlePackClose = () => {
     setSelectedPack(null);
     processorRef.current.stop();
+  };
+
+  const handleSignIn = async () => {
+    const email = prompt('Enter your email for magic link:');
+    if (!email) return;
+    
+    if (!email.includes('@')) {
+      alert('Please enter a valid email address');
+      return;
+    }
+    
+    setSigningIn(true);
+    
+    const { error } = await supabase.auth.signInWithOtp({
+      email: email.trim(),
+      options: {
+        emailRedirectTo: window.location.origin
+      }
+    });
+    
+    setSigningIn(false);
+    
+    if (error) {
+      alert('Error: ' + error.message);
+    } else {
+      alert('✓ Check your email for the magic link!');
+    }
   };
 
   return (
@@ -396,9 +424,22 @@ function FeelzMachine({ user, profile }) {
                   <Sparkles className="w-4 h-4 text-cyan-400" />
                 </div>
               ) : (
-                <button className="flex items-center space-x-1 px-3 py-1.5 text-sm bg-blue-500 hover:bg-blue-600 rounded-lg transition">
-                  <LogIn className="w-3 h-3" />
-                  <span>Sign In</span>
+                <button 
+                  onClick={handleSignIn}
+                  disabled={signingIn}
+                  className="flex items-center space-x-1 px-3 py-1.5 text-sm bg-blue-500 hover:bg-blue-600 disabled:bg-blue-700 disabled:cursor-not-allowed rounded-lg transition"
+                >
+                  {signingIn ? (
+                    <>
+                      <Loader className="w-3 h-3 animate-spin" />
+                      <span>Sending...</span>
+                    </>
+                  ) : (
+                    <>
+                      <LogIn className="w-3 h-3" />
+                      <span>Sign In</span>
+                    </>
+                  )}
                 </button>
               )}
             </div>
@@ -409,8 +450,8 @@ function FeelzMachine({ user, profile }) {
       {/* Main Content */}
       <div className="relative">
         <div className={`max-w-[1800px] mx-auto transition-all duration-300 ${
-        selectedPack ? 'lg:mr-[36%] px-4' : 'px-8'
-      } py-6`}>
+          selectedPack ? 'lg:mr-[36%] px-4' : 'px-8'
+        } py-6`}>
           <StorefrontGrid 
             onPackSelect={handlePackSelect}
             selectedPack={selectedPack}
