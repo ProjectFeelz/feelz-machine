@@ -178,39 +178,15 @@ class AnalogProcessor {
   }
 
   updateEffects(effects, pitch, speed) {
-    if (!this.currentSource) return;
-    
-    try {
-      const pitchRate = Math.pow(2, pitch / 12);
-      this.currentSource.playbackRate.value = pitchRate * speed;
-      
-      const lastEffects = this.lastEffects || {};
-      
-      const hasSignificantChange = 
-      Math.abs(effects.tape - (lastEffects.tape || 0)) > 0.05 ||
-      Math.abs(effects.distortion - (lastEffects.distortion || 0)) > 0.05 ||
-      Math.abs(effects.reverb - (lastEffects.reverb || 0)) > 0.05 ||
-      Math.abs(effects.delay - (lastEffects.delay || 0)) > 0.05;
-      
-      if (hasSignificantChange) {
-        this.play(effects, pitch, speed);
-        return;
-      }
-      
-      if (effects.vinyl > 0 && !this.vinylNode) {
-        this.startVinyl(effects.vinyl);
-      } else if (effects.vinyl === 0 && this.vinylNode) {
-        this.stopVinyl();
-      } else if (this.vinylNode && this.vinylNode.gainNode) {
-        const rampTime = this.audioContext.currentTime + 0.015;
-        this.vinylNode.gainNode.gain.linearRampToValueAtTime(effects.vinyl * 0.08, rampTime);
-      }
-      
-      this.lastEffects = Object.assign({}, effects);
-    } catch (error) {
-      console.error('Error updating effects:', error);
-    }
+  if (!this.currentSource) return;
+  
+  try {
+    // Just restart playback with new effects - simple and reliable
+    this.play(effects, pitch, speed);
+  } catch (error) {
+    console.error('Error updating effects:', error);
   }
+}
 
   async renderWithEffects(effects, pitch, speed) {
     if (!this.currentBuffer) {
