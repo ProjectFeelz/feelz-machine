@@ -88,90 +88,98 @@ function PackPlayer({ pack, onClose, user, processor }) {
   };
 
   const startVisualization = () => {
-    const canvas = canvasRef.current;
-    if (!canvas || !processor) return;
+  const canvas = canvasRef.current;
+  if (!canvas || !processor) return;
+  
+  const ctx = canvas.getContext('2d');
+  
+  // Set canvas size properly
+  canvas.width = canvas.offsetWidth;
+  canvas.height = canvas.offsetHeight;
+  
+  const particles = [];
+  const numParticles = 80;
+  
+  // Initialize particles
+  for (let i = 0; i < numParticles; i++) {
+    particles.push({
+      x: (canvas.width / numParticles) * i,
+      baseY: canvas.height / 2,
+      y: canvas.height / 2,
+      size: Math.random() * 3 + 2,
+      speed: Math.random() * 0.02 + 0.01,
+      offset: Math.random() * Math.PI * 2,
+      color: `rgba(${Math.random() > 0.5 ? '59, 130, 246' : '6, 182, 212'}, `,
+    });
+  }
+  
+  let frameCount = 0;
+  
+  const draw = () => {
+    if (!isPlaying) return;
     
-    const ctx = canvas.getContext('2d');
-    const particles = [];
-    const numParticles = 80;
+    const dataArray = processor.getAnalyserData();
+    const bufferLength = dataArray.length;
     
-    // Initialize particles
-    for (let i = 0; i < numParticles; i++) {
-      particles.push({
-        x: (canvas.width / numParticles) * i,
-        baseY: canvas.height / 2,
-        y: canvas.height / 2,
-        size: Math.random() * 3 + 2,
-        speed: Math.random() * 0.02 + 0.01,
-        offset: Math.random() * Math.PI * 2,
-        color: `rgba(${Math.random() > 0.5 ? '59, 130, 246' : '6, 182, 212'}, `,
-      });
-    }
+    // Fade trail effect
+    ctx.fillStyle = 'rgba(10, 10, 15, 0.15)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
     
-    const draw = () => {
-      const dataArray = processor.getAnalyserData();
-      const bufferLength = dataArray.length;
+    frameCount += 0.05;
+    
+    // Update and draw particles
+    particles.forEach((particle, i) => {
+      // Get audio data for this particle
+      const dataIndex = Math.floor((i / numParticles) * bufferLength);
+      const amplitude = dataArray[dataIndex] / 255;
       
-      // Fade trail effect
-      ctx.fillStyle = 'rgba(10, 10, 15, 0.15)';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      // Calculate wave motion
+      const wave = Math.sin(particle.offset + frameCount) * 20;
+      const audioInfluence = amplitude * 60;
       
-      // Update and draw particles
-      particles.forEach((particle, i) => {
-        // Get audio data for this particle
-        const dataIndex = Math.floor((i / numParticles) * bufferLength);
-        const amplitude = dataArray[dataIndex] / 255;
-        
-        // Calculate wave motion
-        const wave = Math.sin(particle.offset + Date.now() * particle.speed) * 20;
-        const audioInfluence = amplitude * 60;
-        
-        // Update position
-        particle.y = particle.baseY + wave - audioInfluence;
-        particle.offset += 0.02;
-        
-        // Draw particle with glow
-        const glowSize = particle.size * (2 + amplitude * 3);
-        
-        // Outer glow
-        const gradient = ctx.createRadialGradient(
-          particle.x, particle.y, 0,
-          particle.x, particle.y, glowSize
-        );
-        gradient.addColorStop(0, particle.color + (0.8 * amplitude) + ')');
-        gradient.addColorStop(0.5, particle.color + (0.4 * amplitude) + ')');
-        gradient.addColorStop(1, particle.color + '0)');
-        
-        ctx.fillStyle = gradient;
+      // Update position
+      particle.y = particle.baseY + wave - audioInfluence;
+      
+      // Draw particle with glow
+      const glowSize = particle.size * (2 + amplitude * 3);
+      
+      // Outer glow
+      const gradient = ctx.createRadialGradient(
+        particle.x, particle.y, 0,
+        particle.x, particle.y, glowSize
+      );
+      gradient.addColorStop(0, particle.color + (0.8 * amplitude) + ')');
+      gradient.addColorStop(0.5, particle.color + (0.4 * amplitude) + ')');
+      gradient.addColorStop(1, particle.color + '0)');
+      
+      ctx.fillStyle = gradient;
+      ctx.beginPath();
+      ctx.arc(particle.x, particle.y, glowSize, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Core particle
+      ctx.fillStyle = particle.color + (0.9 + amplitude * 0.1) + ')';
+      ctx.beginPath();
+      ctx.arc(particle.x, particle.y, particle.size, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Connect particles with lines for wave effect
+      if (i < particles.length - 1) {
+        const nextParticle = particles[i + 1];
+        ctx.strokeStyle = particle.color + (0.3 * amplitude) + ')';
+        ctx.lineWidth = 1 + amplitude * 2;
         ctx.beginPath();
-        ctx.arc(particle.x, particle.y, glowSize, 0, Math.PI * 2);
-        ctx.fill();
-        
-        // Core particle
-        ctx.fillStyle = particle.color + (0.9 + amplitude * 0.1) + ')';
-        ctx.beginPath();
-        ctx.arc(particle.x, particle.y, particle.size, 0, Math.PI * 2);
-        ctx.fill();
-        
-        // Connect particles with lines for wave effect
-        if (i < particles.length - 1) {
-          const nextParticle = particles[i + 1];
-          ctx.strokeStyle = particle.color + (0.3 * amplitude) + ')';
-          ctx.lineWidth = 1 + amplitude * 2;
-          ctx.beginPath();
-          ctx.moveTo(particle.x, particle.y);
-          ctx.lineTo(nextParticle.x, nextParticle.y);
-          ctx.stroke();
-        }
-      });
-      
-      if (isPlaying) {
-        animationRef.current = requestAnimationFrame(draw);
+        ctx.moveTo(particle.x, particle.y);
+        ctx.lineTo(nextParticle.x, nextParticle.y);
+        ctx.stroke();
       }
-    };
+    });
     
-    draw();
+    animationRef.current = requestAnimationFrame(draw);
   };
+  
+  draw();
+};
 
   const calculateFinalSpeed = () => {
     if (!targetBpm || targetBpm <= 0) return 1.0;
