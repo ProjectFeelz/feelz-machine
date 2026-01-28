@@ -1,0 +1,15 @@
+{
+  "short_name": "Feelz Machine",
+  "name": "Feelz Machine - Sample Pack Library",
+  "icons": [
+    {
+      "src": "logo.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#0a0a0f",
+  "background_color": "#0a0a0f"
+}
