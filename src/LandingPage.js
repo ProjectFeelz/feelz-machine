@@ -171,7 +171,7 @@ function LandingPage({ onEnter }) {
   transition={{ duration: 0.8, delay: 0.6 }}
   className="text-xl md:text-2xl text-cyan-300 mb-12 max-w-2xl"
 >
-  Premium samples. Instant playback. Real-time effects.
+  Royalty-Free samples. Instant playback.
 </motion.p>
 
         <motion.div
