@@ -103,15 +103,3 @@
     }
   }
 }
-```
-
----
-
-## Step 5: Create App Icon (Optional but Recommended)
-
-Create a 512x512 PNG icon and save it as **`public/icon.png`**
-
-You can use this prompt for an AI image generator or create one yourself:
-```
-"Minimalist tech logo, electric blue and cyan colors, audio waveform, 
-geometric shapes, dark background, professional music production aesthetic"

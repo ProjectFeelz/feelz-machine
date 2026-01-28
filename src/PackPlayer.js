@@ -6,7 +6,8 @@ import {
   Play, 
   Pause, 
   Download, 
-  Loader
+  Loader,
+  Gauge
 } from 'lucide-react';
 import KnobControl from './KnobControl';
 import audioBufferToWav from 'audiobuffer-to-wav';
@@ -19,6 +20,7 @@ function PackPlayer({ pack, onClose, user, processor }) {
   const [currentAudio, setCurrentAudio] = useState('main');
   const [processingEffect, setProcessingEffect] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
+  const [targetBpm, setTargetBpm] = useState(pack.bpm);
   
   const [effects, setEffects] = useState({
     tape: 0,
@@ -37,6 +39,7 @@ function PackPlayer({ pack, onClose, user, processor }) {
     if (pack) {
       fetchPackDetails();
       loadMainAudio();
+      setTargetBpm(pack.bpm);
     }
     
     return () => {
@@ -61,10 +64,6 @@ function PackPlayer({ pack, onClose, user, processor }) {
       .select('*')
       .eq('sample_id', pack.id)
       .order('order_index');
-    
-    console.log('Fetching stems for pack:', pack.id);
-    console.log('Stems data:', stemsData);
-    console.log('Stems error:', error);
     
     setStems(stemsData || []);
     setLoading(false);
@@ -128,6 +127,11 @@ function PackPlayer({ pack, onClose, user, processor }) {
     draw();
   };
 
+  const calculateTempoSpeed = () => {
+    if (!targetBpm || targetBpm <= 0) return effects.speed;
+    return (targetBpm / pack.bpm) * effects.speed;
+  };
+
   const togglePlayPause = async () => {
     if (!user) {
       alert('Please sign in to play samples');
@@ -139,7 +143,8 @@ function PackPlayer({ pack, onClose, user, processor }) {
       setIsPlaying(false);
     } else {
       try {
-        processor?.play(effects, effects.pitch, effects.speed);
+        const finalSpeed = calculateTempoSpeed();
+        processor?.play(effects, effects.pitch, finalSpeed);
         setIsPlaying(true);
         
         await supabase.from('sample_interactions').insert([{
@@ -172,7 +177,8 @@ function PackPlayer({ pack, onClose, user, processor }) {
     await loadStemAudio(stem);
     
     try {
-      processor?.play(effects, effects.pitch, effects.speed);
+      const finalSpeed = calculateTempoSpeed();
+      processor?.play(effects, effects.pitch, finalSpeed);
       setIsPlaying(true);
       
       await supabase.from('sample_interactions').insert([{
@@ -247,10 +253,11 @@ function PackPlayer({ pack, onClose, user, processor }) {
                        effects.delay > 0 || 
                        effects.distortion > 0 || 
                        effects.pitch !== 0 || 
-                       effects.speed !== 1.0;
+                       effects.speed !== 1.0 ||
+                       targetBpm !== pack.bpm;
 
     if (!hasEffects) {
-      alert('No effects applied! Adjust the knobs to add effects, then download.');
+      alert('No effects or tempo changes applied! Adjust settings, then download.');
       return;
     }
 
@@ -258,10 +265,11 @@ function PackPlayer({ pack, onClose, user, processor }) {
     setMessage({ type: 'info', text: 'Processing audio with effects... This may take 5-10 seconds.' });
 
     try {
+      const finalSpeed = calculateTempoSpeed();
       const renderedBuffer = await processor.renderWithEffects(
         effects,
         effects.pitch,
-        effects.speed
+        finalSpeed
       );
 
       if (!renderedBuffer) {
@@ -274,7 +282,8 @@ function PackPlayer({ pack, onClose, user, processor }) {
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `${cleanFilename(pack.name)}-effected.wav`;
+      const bpmSuffix = targetBpm !== pack.bpm ? `-${targetBpm}bpm` : '';
+      link.download = `${cleanFilename(pack.name)}${bpmSuffix}-effected.wav`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -363,7 +372,8 @@ function PackPlayer({ pack, onClose, user, processor }) {
     
     if (isPlaying) {
       processor?.stop();
-      processor?.play(newEffects, newEffects.pitch, newEffects.speed);
+      const finalSpeed = effectName === 'speed' ? calculateTempoSpeed() : (targetBpm / pack.bpm) * value;
+      processor?.play(newEffects, newEffects.pitch, finalSpeed);
     }
   };
 
@@ -375,6 +385,25 @@ function PackPlayer({ pack, onClose, user, processor }) {
   const handleSpeedChange = (value) => {
     const speed = 0.5 + (value * 1.5);
     handleEffectChange('speed', speed);
+  };
+
+  const handleTempoChange = (e) => {
+    const newBpm = parseInt(e.target.value) || pack.bpm;
+    setTargetBpm(newBpm);
+    
+    if (isPlaying) {
+      processor?.stop();
+      const finalSpeed = (newBpm / pack.bpm) * effects.speed;
+      processor?.play(effects, effects.pitch, finalSpeed);
+    }
+  };
+
+  const resetTempo = () => {
+    setTargetBpm(pack.bpm);
+    if (isPlaying) {
+      processor?.stop();
+      processor?.play(effects, effects.pitch, effects.speed);
+    }
   };
 
   return (
@@ -445,6 +474,39 @@ function PackPlayer({ pack, onClose, user, processor }) {
                 {pack.mood}
               </span>
             </div>
+          </div>
+
+          {/* TEMPO STRETCH FEATURE */}
+          <div className="bg-white/5 backdrop-blur-2xl rounded-2xl p-4 border border-cyan-400/20 shadow-xl shadow-black/30">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-base font-bold text-white flex items-center space-x-2">
+                <Gauge className="w-5 h-5 text-cyan-400" />
+                <span>Tempo Stretch</span>
+              </h3>
+              <button
+                onClick={resetTempo}
+                className="px-3 py-1 text-xs bg-blue-500/20 hover:bg-blue-500/30 rounded-lg transition text-cyan-300"
+              >
+                Reset
+              </button>
+            </div>
+            <div className="flex items-center space-x-3">
+              <span className="text-sm text-cyan-400 whitespace-nowrap">Target BPM:</span>
+              <input
+                type="number"
+                value={targetBpm}
+                onChange={handleTempoChange}
+                min="40"
+                max="200"
+                className="flex-1 px-3 py-2 bg-blue-950/50 border border-cyan-500/30 rounded-lg text-white text-center focus:outline-none focus:ring-2 focus:ring-cyan-500"
+              />
+              <span className="text-xs text-cyan-400">
+                {targetBpm !== pack.bpm && `(${((targetBpm / pack.bpm) * 100).toFixed(0)}%)`}
+              </span>
+            </div>
+            <p className="text-xs text-cyan-500 mt-2 text-center">
+              Original: {pack.bpm} BPM → Stretched: {targetBpm} BPM
+            </p>
           </div>
 
           <div className="bg-white/5 backdrop-blur-2xl rounded-2xl p-4 border border-cyan-400/20 shadow-xl shadow-black/30">

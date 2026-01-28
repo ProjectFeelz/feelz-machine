@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from './supabaseClient';
 import { motion } from 'framer-motion';
-import { Search, Filter, TrendingUp, Clock, Star, Loader, Music, Layers, FileMusic } from 'lucide-react';
+import { Search, Filter, TrendingUp, Clock, Star, Loader, Music, Layers, FileText } from 'lucide-react';
 
 function StorefrontGrid({ onPackSelect, selectedPack }) {
   const [packs, setPacks] = useState([]);
@@ -37,7 +37,6 @@ function StorefrontGrid({ onPackSelect, selectedPack }) {
   const applyFilters = () => {
     let filtered = packs;
 
-    // Search filter
     if (searchTerm) {
       filtered = filtered.filter(p =>
         p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -46,7 +45,6 @@ function StorefrontGrid({ onPackSelect, selectedPack }) {
       );
     }
 
-    // Tab filter
     if (activeTab === 'featured') {
       filtered = filtered.filter(p => p.featured);
     } else if (activeTab === 'trending') {
@@ -57,7 +55,6 @@ function StorefrontGrid({ onPackSelect, selectedPack }) {
       ).slice(0, 20);
     }
 
-    // Advanced filters
     if (filters.genre) {
       filtered = filtered.filter(p => p.genre === filters.genre);
     }
@@ -89,10 +86,8 @@ function StorefrontGrid({ onPackSelect, selectedPack }) {
 
   return (
     <div className="space-y-6">
-      {/* Search & Filter Bar */}
       <div className="bg-white/5 backdrop-blur-2xl rounded-2xl p-4 border border-cyan-400/20 shadow-2xl shadow-black/40">
         <div className="flex flex-col lg:flex-row gap-4">
-          {/* Search */}
           <div className="flex-1 relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-cyan-400" />
             <input
@@ -104,7 +99,6 @@ function StorefrontGrid({ onPackSelect, selectedPack }) {
             />
           </div>
 
-          {/* Filter Button */}
           <button
             onClick={() => setShowFilters(!showFilters)}
             className={`flex items-center space-x-2 px-6 py-3 rounded-lg transition ${
@@ -118,7 +112,6 @@ function StorefrontGrid({ onPackSelect, selectedPack }) {
           </button>
         </div>
 
-        {/* Tabs - Mobile Friendly with Wrapping */}
         <div className="flex flex-wrap gap-2 mt-4">
           <button
             onClick={() => setActiveTab('all')}
@@ -169,7 +162,6 @@ function StorefrontGrid({ onPackSelect, selectedPack }) {
           </button>
         </div>
 
-        {/* Advanced Filters */}
         {showFilters && (
           <motion.div
             initial={{ height: 0, opacity: 0 }}
@@ -221,7 +213,6 @@ function StorefrontGrid({ onPackSelect, selectedPack }) {
         )}
       </div>
 
-      {/* Grid */}
       {filteredPacks.length === 0 ? (
         <div className="text-center py-20">
           <Music className="w-16 h-16 mx-auto mb-4 text-cyan-400 opacity-50" />
@@ -246,7 +237,6 @@ function StorefrontGrid({ onPackSelect, selectedPack }) {
                   : 'border-cyan-500/20 hover:border-cyan-400/40 hover:shadow-xl hover:shadow-cyan-500/20'
               }`}
             >
-              {/* Thumbnail */}
               <div className="aspect-square relative bg-gradient-to-br from-blue-900 to-black">
                 {pack.thumbnail_url ? (
                   <img
@@ -260,7 +250,6 @@ function StorefrontGrid({ onPackSelect, selectedPack }) {
                   </div>
                 )}
 
-                {/* Featured Badge */}
                 {pack.featured && (
                   <div className="absolute top-2 left-2 px-2 py-1 bg-cyan-500 text-black text-xs font-bold rounded flex items-center space-x-1">
                     <Star className="w-3 h-3" />
@@ -268,7 +257,6 @@ function StorefrontGrid({ onPackSelect, selectedPack }) {
                   </div>
                 )}
 
-                {/* Badges */}
                 <div className="absolute bottom-2 left-2 flex space-x-1">
                   {pack.has_stems && (
                     <div className="px-2 py-0.5 bg-black/70 backdrop-blur-sm text-white text-xs rounded flex items-center space-x-1">
@@ -277,13 +265,12 @@ function StorefrontGrid({ onPackSelect, selectedPack }) {
                   )}
                   {pack.has_midi && (
                     <div className="px-2 py-0.5 bg-black/70 backdrop-blur-sm text-white text-xs rounded flex items-center space-x-1">
-                      <FileMusic className="w-3 h-3" />
+                      <FileText className="w-3 h-3" />
                     </div>
                   )}
                 </div>
               </div>
 
-              {/* Info */}
               <div className="p-3 bg-black/20 backdrop-blur-xl border-t border-white/10">
                 <h3 className="font-bold text-white text-sm truncate mb-1">{pack.name}</h3>
                 <p className="text-xs text-cyan-300 truncate mb-2">{pack.artist}</p>
