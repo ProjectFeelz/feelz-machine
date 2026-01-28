@@ -10,28 +10,14 @@ import StorefrontGrid from './StorefrontGrid';
 import PackPlayer from './PackPlayer';
 
 // Audio Processor with Effects + Offline Rendering - COMPLETE FIXED VERSION
+// Audio Processor with Effects + Offline Rendering - WORKING VERSION
 class AnalogProcessor {
   constructor() {
     this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
     this.masterGain = this.audioContext.createGain();
+    this.masterGain.gain.value = 0.8; // Slightly lower to prevent clipping
     this.analyser = this.audioContext.createAnalyser();
     this.analyser.fftSize = 2048;
-    
-    // Persistent effect nodes
-    this.tapeNode = this.audioContext.createWaveShaper();
-    this.reverbNode = this.audioContext.createConvolver();
-    this.delayNode = this.audioContext.createDelay();
-    this.delayFeedback = this.audioContext.createGain();
-    this.distortionNode = this.audioContext.createWaveShaper();
-    this.filterNode = this.audioContext.createBiquadFilter();
-    
-    this.filterNode.type = 'lowpass';
-    this.filterNode.frequency.value = 20000;
-    this.delayNode.delayTime.value = 0.3;
-    this.delayFeedback.gain.value = 0;
-    
-    this.distortionNode.curve = this.makeDistortionCurve(0);
-    this.tapeNode.curve = this.makeTapeCurve(0);
     
     this.createVinylNoise();
     this.createReverbImpulse();
@@ -40,6 +26,15 @@ class AnalogProcessor {
     this.currentSource = null;
     this.vinylNode = null;
     this.lastEffects = {};
+    
+    // Reverb setup
+    this.reverbNode = this.audioContext.createConvolver();
+    
+    // Delay setup
+    this.delayNode = this.audioContext.createDelay(1.0);
+    this.delayNode.delayTime.value = 0.3;
+    this.delayFeedback = this.audioContext.createGain();
+    this.delayFeedback.gain.value = 0;
     
     this.masterGain.connect(this.analyser);
     this.masterGain.connect(this.audioContext.destination);
@@ -78,12 +73,12 @@ class AnalogProcessor {
   }
   
   async createReverbImpulse() {
-    const length = this.audioContext.sampleRate * 2;
+    const length = this.audioContext.sampleRate * 3; // 3 seconds
     const impulse = this.audioContext.createBuffer(2, length, this.audioContext.sampleRate);
     const left = impulse.getChannelData(0);
     const right = impulse.getChannelData(1);
     for (let i = 0; i < length; i++) {
-      const decay = Math.exp(-i / (this.audioContext.sampleRate * 0.5));
+      const decay = Math.exp(-i / (this.audioContext.sampleRate * 1.0));
       left[i] = (Math.random() * 2 - 1) * decay;
       right[i] = (Math.random() * 2 - 1) * decay;
     }
@@ -97,112 +92,288 @@ class AnalogProcessor {
     return this.currentBuffer;
   }
   
-  buildEffectChain(source, effects, ctx) {
-    let currentNode = source;
-    
-    if (effects.tape > 0) {
-      const tape = ctx.createWaveShaper();
-      tape.curve = this.makeTapeCurve(effects.tape);
-      currentNode.connect(tape);
-      currentNode = tape;
-    }
-    
-    if (effects.distortion > 0) {
-      const dist = ctx.createWaveShaper();
-      dist.curve = this.makeDistortionCurve(effects.distortion * 100);
-      currentNode.connect(dist);
-      currentNode = dist;
-    }
-    
-    const filter = ctx.createBiquadFilter();
-    filter.type = 'lowpass';
-    filter.frequency.value = effects.tape ? 20000 - (effects.tape * 15000) : 20000;
-    currentNode.connect(filter);
-    currentNode = filter;
-    
-    return currentNode;
-  }
-  
   play(effects = {}, pitch = 0, speed = 1.0) {
-  if (!this.currentBuffer) return;
-  
-  this.stop();
-  
-  const source = this.audioContext.createBufferSource();
-  source.buffer = this.currentBuffer;
-  source.loop = true;
-  
-  const pitchRate = Math.pow(2, pitch / 12);
-  source.playbackRate.value = pitchRate * speed;
-  
-  // Start with the source
-  let currentNode = source;
-  
-  // Apply tape saturation if enabled (serial processing)
-  if (effects.tape > 0) {
-    this.tapeNode.curve = this.makeTapeCurve(effects.tape);
-    currentNode.connect(this.tapeNode);
-    currentNode = this.tapeNode;
-  }
-  
-  // Apply distortion if enabled (serial processing)
-  if (effects.distortion > 0) {
-    this.distortionNode.curve = this.makeDistortionCurve(effects.distortion * 100);
-    currentNode.connect(this.distortionNode);
-    currentNode = this.distortionNode;
-  }
-  
-  // Always apply filter (for tape effect freq cutoff)
-  const targetFreq = effects.tape > 0 ? 20000 - (effects.tape * 15000) : 20000;
-  this.filterNode.frequency.value = targetFreq;
-  currentNode.connect(this.filterNode);
-  currentNode = this.filterNode;
-  
-  // Now split into parallel paths: dry signal, reverb, and delay
-  
-  // 1. DRY PATH - always connect main signal
-  const mainGain = this.audioContext.createGain();
-  mainGain.gain.value = 0.7; // Keep main signal present
-  currentNode.connect(mainGain);
-  mainGain.connect(this.masterGain);
-  
-  // 2. REVERB PATH - if enabled
-  if (effects.reverb > 0) {
-    const reverbGain = this.audioContext.createGain();
-    reverbGain.gain.value = effects.reverb * 0.6; // Scale reverb amount
+    if (!this.currentBuffer) return;
     
-    currentNode.connect(reverbGain);
-    reverbGain.connect(this.reverbNode);
-    this.reverbNode.connect(this.masterGain);
-  }
-  
-  // 3. DELAY PATH - if enabled
-  if (effects.delay > 0) {
-    const delayGain = this.audioContext.createGain();
-    delayGain.gain.value = effects.delay * 0.5; // Scale delay amount
+    this.stop();
     
-    this.delayFeedback.gain.value = effects.delay * 0.5; // Feedback amount
+    const source = this.audioContext.createBufferSource();
+    source.buffer = this.currentBuffer;
+    source.loop = true;
     
-    currentNode.connect(delayGain);
-    delayGain.connect(this.delayNode);
-    this.delayNode.connect(this.delayFeedback);
-    this.delayFeedback.connect(this.delayNode);
-    this.delayNode.connect(this.masterGain);
-  }
-  
-  source.start();
-  this.currentSource = source;
-  this.lastEffects = { ...effects };
-  
-  // Handle vinyl noise
-  if (effects.vinyl > 0 && !this.vinylNode) {
-    this.startVinyl(effects.vinyl);
-  } else if (effects.vinyl === 0 && this.vinylNode) {
-    this.stopVinyl();
-  } else if (this.vinylNode && effects.vinyl > 0) {
-    if (this.vinylNode.gainNode) {
-      this.vinylNode.gainNode.gain.value = effects.vinyl * 0.05;
+    const pitchRate = Math.pow(2, pitch / 12);
+    source.playbackRate.value = pitchRate * speed;
+    
+    let node = source;
+    
+    // TAPE EFFECT - reduces high frequencies
+    if (effects.tape > 0) {
+      const tapeFilter = this.audioContext.createBiquadFilter();
+      tapeFilter.type = 'lowpass';
+      tapeFilter.frequency.value = 20000 - (effects.tape * 15000);
+      
+      const tapeDistortion = this.audioContext.createWaveShaper();
+      tapeDistortion.curve = this.makeTapeCurve(effects.tape);
+      tapeDistortion.oversample = '4x';
+      
+      node.connect(tapeDistortion);
+      tapeDistortion.connect(tapeFilter);
+      node = tapeFilter;
     }
+    
+    // DISTORTION EFFECT
+    if (effects.distortion > 0) {
+      const distortion = this.audioContext.createWaveShaper();
+      distortion.curve = this.makeDistortionCurve(effects.distortion * 100);
+      distortion.oversample = '4x';
+      
+      node.connect(distortion);
+      node = distortion;
+    }
+    
+    // Connect main signal to master
+    const dryGain = this.audioContext.createGain();
+    dryGain.gain.value = 1.0;
+    node.connect(dryGain);
+    dryGain.connect(this.masterGain);
+    
+    // REVERB EFFECT - parallel
+    if (effects.reverb > 0) {
+      const reverbSend = this.audioContext.createGain();
+      reverbSend.gain.value = effects.reverb * 0.7;
+      
+      node.connect(reverbSend);
+      reverbSend.connect(this.reverbNode);
+      this.reverbNode.connect(this.masterGain);
+      
+      console.log('Reverb connected:', effects.reverb);
+    }
+    
+    // DELAY EFFECT - parallel with feedback
+    if (effects.delay > 0) {
+      const delaySend = this.audioContext.createGain();
+      delaySend.gain.value = effects.delay * 0.6;
+      
+      this.delayFeedback.gain.value = effects.delay * 0.5;
+      
+      node.connect(delaySend);
+      delaySend.connect(this.delayNode);
+      
+      // Create feedback loop
+      this.delayNode.connect(this.delayFeedback);
+      this.delayFeedback.connect(this.delayNode);
+      
+      // Send delay output to master
+      const delayOutput = this.audioContext.createGain();
+      delayOutput.gain.value = 1.0;
+      this.delayNode.connect(delayOutput);
+      delayOutput.connect(this.masterGain);
+      
+      console.log('Delay connected:', effects.delay);
+    }
+    
+    source.start();
+    this.currentSource = source;
+    this.currentNode = node;
+    this.lastEffects = { ...effects };
+    
+    // VINYL NOISE
+    if (effects.vinyl > 0 && !this.vinylNode) {
+      this.startVinyl(effects.vinyl);
+    } else if (effects.vinyl === 0 && this.vinylNode) {
+      this.stopVinyl();
+    } else if (this.vinylNode && effects.vinyl > 0) {
+      if (this.vinylNode.gainNode) {
+        this.vinylNode.gainNode.gain.value = effects.vinyl * 0.08;
+      }
+    }
+  }
+
+  updateEffects(effects, pitch, speed) {
+    if (!this.currentSource) return;
+    
+    try {
+      const pitchRate = Math.pow(2, pitch / 12);
+      this.currentSource.playbackRate.value = pitchRate * speed;
+      
+      // For significant changes in any effect, restart playback
+      const hasSignificantChange = 
+        Math.abs(effects.tape - (this.lastEffects?.tape || 0)) > 0.1 ||
+        Math.abs(effects.distortion - (this.lastEffects?.distortion || 0)) > 0.1 ||
+        Math.abs(effects.reverb - (this.lastEffects?.reverb || 0)) > 0.1 ||
+        Math.abs(effects.delay - (this.lastEffects?.delay || 0)) > 0.1;
+      
+      if (hasSignificantChange) {
+        this.play(effects, pitch, speed);
+        return;
+      }
+      
+      // Update vinyl smoothly
+      if (effects.vinyl > 0 && !this.vinylNode) {
+        this.startVinyl(effects.vinyl);
+      } else if (effects.vinyl === 0 && this.vinylNode) {
+        this.stopVinyl();
+      } else if (this.vinylNode && this.vinylNode.gainNode) {
+        const rampTime = this.audioContext.currentTime + 0.015;
+        this.vinylNode.gainNode.gain.linearRampToValueAtTime(effects.vinyl * 0.08, rampTime);
+      }
+      
+      this.lastEffects = { ...effects };
+    } catch (error) {
+      console.error('Error updating effects:', error);
+    }
+  }
+
+  async renderWithEffects(effects, pitch, speed) {
+    if (!this.currentBuffer) {
+      throw new Error('No audio loaded');
+    }
+
+    const pitchRate = Math.pow(2, pitch / 12);
+    const totalRate = pitchRate * speed;
+    const newLength = Math.floor(this.currentBuffer.length / totalRate);
+    
+    const offlineCtx = new OfflineAudioContext(
+      this.currentBuffer.numberOfChannels,
+      newLength,
+      this.currentBuffer.sampleRate
+    );
+
+    const source = offlineCtx.createBufferSource();
+    source.buffer = this.currentBuffer;
+    source.playbackRate.value = totalRate;
+
+    let node = source;
+    
+    // Apply tape
+    if (effects.tape > 0) {
+      const tapeFilter = offlineCtx.createBiquadFilter();
+      tapeFilter.type = 'lowpass';
+      tapeFilter.frequency.value = 20000 - (effects.tape * 15000);
+      
+      const tapeDistortion = offlineCtx.createWaveShaper();
+      tapeDistortion.curve = this.makeTapeCurve(effects.tape);
+      
+      node.connect(tapeDistortion);
+      tapeDistortion.connect(tapeFilter);
+      node = tapeFilter;
+    }
+    
+    // Apply distortion
+    if (effects.distortion > 0) {
+      const distortion = offlineCtx.createWaveShaper();
+      distortion.curve = this.makeDistortionCurve(effects.distortion * 100);
+      
+      node.connect(distortion);
+      node = distortion;
+    }
+
+    // Connect dry to output
+    node.connect(offlineCtx.destination);
+
+    // Add reverb if enabled
+    if (effects.reverb > 0) {
+      const offlineReverb = offlineCtx.createConvolver();
+      const length = offlineCtx.sampleRate * 3;
+      const impulse = offlineCtx.createBuffer(2, length, offlineCtx.sampleRate);
+      const left = impulse.getChannelData(0);
+      const right = impulse.getChannelData(1);
+      for (let i = 0; i < length; i++) {
+        const decay = Math.exp(-i / (offlineCtx.sampleRate * 1.0));
+        left[i] = (Math.random() * 2 - 1) * decay;
+        right[i] = (Math.random() * 2 - 1) * decay;
+      }
+      offlineReverb.buffer = impulse;
+
+      const reverbGain = offlineCtx.createGain();
+      reverbGain.gain.value = effects.reverb * 0.7;
+      
+      node.connect(reverbGain);
+      reverbGain.connect(offlineReverb);
+      offlineReverb.connect(offlineCtx.destination);
+    }
+
+    // Add delay if enabled
+    if (effects.delay > 0) {
+      const delay = offlineCtx.createDelay(1.0);
+      const feedback = offlineCtx.createGain();
+      const delayGain = offlineCtx.createGain();
+      
+      delay.delayTime.value = 0.3;
+      feedback.gain.value = effects.delay * 0.5;
+      delayGain.gain.value = effects.delay * 0.6;
+      
+      node.connect(delayGain);
+      delayGain.connect(delay);
+      delay.connect(feedback);
+      feedback.connect(delay);
+      delay.connect(offlineCtx.destination);
+    }
+
+    // Add vinyl if enabled
+    if (effects.vinyl > 0) {
+      const vinylSource = offlineCtx.createBufferSource();
+      const vinylBuffer = offlineCtx.createBuffer(1, newLength, offlineCtx.sampleRate);
+      const vinylData = vinylBuffer.getChannelData(0);
+      for (let i = 0; i < newLength; i++) {
+        vinylData[i] = (Math.random() * 2 - 1) * 0.02 * effects.vinyl;
+      }
+      vinylSource.buffer = vinylBuffer;
+      const vinylGain = offlineCtx.createGain();
+      vinylGain.gain.value = 0.08;
+      vinylSource.connect(vinylGain);
+      vinylGain.connect(offlineCtx.destination);
+      vinylSource.start();
+    }
+
+    source.start();
+
+    const renderedBuffer = await offlineCtx.startRendering();
+    return renderedBuffer;
+  }
+  
+  stop() {
+    if (this.currentSource) {
+      try {
+        this.currentSource.stop();
+      } catch (e) {}
+      this.currentSource.disconnect();
+      this.currentSource = null;
+    }
+  }
+  
+  startVinyl(amount = 1.0) {
+    if (this.vinylBuffer && !this.vinylNode) {
+      const source = this.audioContext.createBufferSource();
+      source.buffer = this.vinylBuffer;
+      source.loop = true;
+      const gain = this.audioContext.createGain();
+      gain.gain.value = amount * 0.08;
+      source.connect(gain);
+      gain.connect(this.masterGain);
+      source.start();
+      source.gainNode = gain;
+      this.vinylNode = source;
+    }
+  }
+  
+  stopVinyl() {
+    if (this.vinylNode) {
+      try {
+        this.vinylNode.stop();
+      } catch (e) {}
+      this.vinylNode = null;
+    }
+  }
+  
+  getAnalyserData() {
+    const dataArray = new Uint8Array(this.analyser.frequencyBinCount);
+    this.analyser.getByteFrequencyData(dataArray);
+    return dataArray;
+  }
+  
+  isPlaying() {
+    return this.currentSource !== null;
   }
 }
 
