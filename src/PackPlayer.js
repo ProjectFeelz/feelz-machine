@@ -9,7 +9,6 @@ import {
   Loader,
   Gauge
 } from 'lucide-react';
-import KnobControl from './KnobControl';
 import audioBufferToWav from 'audiobuffer-to-wav';
 import JSZip from 'jszip';
 
@@ -514,18 +513,33 @@ function PackPlayer({ pack, onClose, user, processor }) {
           </div>
 
           <div className="bg-white/5 backdrop-blur-2xl rounded-2xl p-4 border border-cyan-400/20 shadow-xl shadow-black/30">
-            <h3 className="text-base font-bold text-white mb-3">Pitch Control</h3>
-            <div className="flex justify-center">
-              <KnobControl
-                label="Pitch"
-                value={(pitch + 12) / 24}
-                onChange={handlePitchChange}
-                color="#14b8a6"
-                size="large"
-              />
-            </div>
-            <div className="mt-3 text-xs text-cyan-400 text-center">
-              Pitch: {pitch > 0 ? '+' : ''}{Math.round(pitch)} semitones
+            <h3 className="text-base font-bold text-white mb-4">Pitch Control</h3>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-cyan-400">-12 st</span>
+                <span className="text-white font-semibold">
+                  {pitch > 0 ? '+' : ''}{Math.round(pitch)} semitones
+                </span>
+                <span className="text-cyan-400">+12 st</span>
+              </div>
+              <div className="relative">
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.01"
+                  value={(pitch + 12) / 24}
+                  onChange={(e) => handlePitchChange(parseFloat(e.target.value))}
+                  className="w-full h-2 rounded-lg appearance-none cursor-pointer pitch-slider"
+                  style={{
+                    background: `linear-gradient(to right, 
+                      #14b8a6 0%, 
+                      #14b8a6 ${((pitch + 12) / 24) * 100}%, 
+                      rgba(59, 130, 246, 0.2) ${((pitch + 12) / 24) * 100}%, 
+                      rgba(59, 130, 246, 0.2) 100%)`
+                  }}
+                />
+              </div>
             </div>
           </div>
 
@@ -645,6 +659,38 @@ function PackPlayer({ pack, onClose, user, processor }) {
             )}
           </div>
         </div>
+
+        <style jsx>{`
+          .pitch-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #14b8a6, #06b6d4);
+            cursor: pointer;
+            box-shadow: 0 0 10px rgba(20, 184, 166, 0.5);
+            border: 2px solid rgba(255, 255, 255, 0.2);
+          }
+          
+          .pitch-slider::-webkit-slider-thumb:hover {
+            box-shadow: 0 0 15px rgba(20, 184, 166, 0.8);
+          }
+          
+          .pitch-slider::-moz-range-thumb {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #14b8a6, #06b6d4);
+            cursor: pointer;
+            box-shadow: 0 0 10px rgba(20, 184, 166, 0.5);
+            border: 2px solid rgba(255, 255, 255, 0.2);
+          }
+          
+          .pitch-slider::-moz-range-thumb:hover {
+            box-shadow: 0 0 15px rgba(20, 184, 166, 0.8);
+          }
+        `}</style>
       </motion.div>
     </AnimatePresence>
   );
