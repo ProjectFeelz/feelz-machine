@@ -93,92 +93,33 @@ function PackPlayer({ pack, onClose, user, processor }) {
     
     const ctx = canvas.getContext('2d');
     
-    // Set canvas size properly
-    canvas.width = canvas.offsetWidth;
-    canvas.height = canvas.offsetHeight;
-    
-    const particles = [];
-    const numParticles = 80;
-    
-    // Initialize particles
-    for (let i = 0; i < numParticles; i++) {
-      particles.push({
-        x: (canvas.width / numParticles) * i,
-        baseY: canvas.height / 2,
-        y: canvas.height / 2,
-        size: Math.random() * 3 + 2,
-        speed: Math.random() * 0.02 + 0.01,
-        offset: Math.random() * Math.PI * 2,
-        color: `rgba(${Math.random() > 0.5 ? '59, 130, 246' : '6, 182, 212'}, `,
-      });
-    }
-    
-    let frameCount = 0;
-    
     const draw = () => {
-      if (!isPlaying) return;
-      
       const dataArray = processor.getAnalyserData();
       const bufferLength = dataArray.length;
       
-      // Fade trail effect
-      ctx.fillStyle = 'rgba(10, 10, 15, 0.2)';
+      ctx.fillStyle = 'rgba(10, 10, 15, 0.3)';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       
-      frameCount += 0.05;
+      const barWidth = (canvas.width / bufferLength) * 2.5;
+      let x = 0;
       
-      // Update and draw particles
-      particles.forEach((particle, i) => {
-        // Get audio data for this particle
-        const dataIndex = Math.floor((i / numParticles) * bufferLength);
-        const amplitude = dataArray[dataIndex] / 255;
+      for (let i = 0; i < bufferLength; i++) {
+        const barHeight = (dataArray[i] / 255) * canvas.height * 0.8;
         
-        // Boost amplitude for more visibility
-        const boostedAmplitude = Math.pow(amplitude, 0.7);
-        
-        // Calculate wave motion
-        const wave = Math.sin(particle.offset + frameCount) * 15;
-        const audioInfluence = boostedAmplitude * 80;
-        
-        // Update position
-        particle.y = particle.baseY + wave - audioInfluence;
-        
-        // Draw particle with glow
-        const glowSize = particle.size * (3 + boostedAmplitude * 5);
-        
-        // Outer glow
-        const gradient = ctx.createRadialGradient(
-          particle.x, particle.y, 0,
-          particle.x, particle.y, glowSize
-        );
-        gradient.addColorStop(0, particle.color + (0.9 * boostedAmplitude) + ')');
-        gradient.addColorStop(0.4, particle.color + (0.6 * boostedAmplitude) + ')');
-        gradient.addColorStop(1, particle.color + '0)');
+        const gradient = ctx.createLinearGradient(0, canvas.height - barHeight, 0, canvas.height);
+        gradient.addColorStop(0, '#3b82f6');
+        gradient.addColorStop(0.5, '#06b6d4');
+        gradient.addColorStop(1, '#10b981');
         
         ctx.fillStyle = gradient;
-        ctx.beginPath();
-        ctx.arc(particle.x, particle.y, glowSize, 0, Math.PI * 2);
-        ctx.fill();
+        ctx.fillRect(x, canvas.height - barHeight, barWidth, barHeight);
         
-        // Core particle
-        ctx.fillStyle = particle.color + (0.95 + boostedAmplitude * 0.05) + ')';
-        ctx.beginPath();
-        ctx.arc(particle.x, particle.y, particle.size * (1 + boostedAmplitude * 0.5), 0, Math.PI * 2);
-        ctx.fill();
-        
-        // Connect particles with lines
-        if (i < particles.length - 1) {
-          const nextParticle = particles[i + 1];
-          ctx.strokeStyle = particle.color + (0.5 * boostedAmplitude) + ')';
-          ctx.lineWidth = 1 + boostedAmplitude * 3;
-          ctx.beginPath();
-          ctx.moveTo(particle.x, particle.y);
-          ctx.lineTo(nextParticle.x, nextParticle.y);
-          ctx.stroke();
-        }
-      });
+        x += barWidth + 1;
+      }
       
-      animationRef.current = requestAnimationFrame(draw);
+      if (isPlaying) {
+        animationRef.current = requestAnimationFrame(draw);
+      }
     };
     
     draw();
