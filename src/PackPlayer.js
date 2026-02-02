@@ -93,33 +93,92 @@ function PackPlayer({ pack, onClose, user, processor }) {
     
     const ctx = canvas.getContext('2d');
     
+    // Set canvas size properly
+    canvas.width = canvas.offsetWidth;
+    canvas.height = canvas.offsetHeight;
+    
+    const particles = [];
+    const numParticles = 80;
+    
+    // Initialize particles
+    for (let i = 0; i < numParticles; i++) {
+      particles.push({
+        x: (canvas.width / numParticles) * i,
+        baseY: canvas.height / 2,
+        y: canvas.height / 2,
+        size: Math.random() * 3 + 2,
+        speed: Math.random() * 0.02 + 0.01,
+        offset: Math.random() * Math.PI * 2,
+        color: `rgba(${Math.random() > 0.5 ? '59, 130, 246' : '6, 182, 212'}, `,
+      });
+    }
+    
+    let frameCount = 0;
+    
     const draw = () => {
+      if (!isPlaying) return;
+      
       const dataArray = processor.getAnalyserData();
       const bufferLength = dataArray.length;
       
-      ctx.fillStyle = 'rgba(10, 10, 15, 0.3)';
+      // Fade trail effect
+      ctx.fillStyle = 'rgba(10, 10, 15, 0.2)';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       
-      const barWidth = (canvas.width / bufferLength) * 2.5;
-      let x = 0;
+      frameCount += 0.05;
       
-      for (let i = 0; i < bufferLength; i++) {
-        const barHeight = (dataArray[i] / 255) * canvas.height * 0.8;
+      // Update and draw particles
+      particles.forEach((particle, i) => {
+        // Get audio data for this particle
+        const dataIndex = Math.floor((i / numParticles) * bufferLength);
+        const amplitude = dataArray[dataIndex] / 255;
         
-        const gradient = ctx.createLinearGradient(0, canvas.height - barHeight, 0, canvas.height);
-        gradient.addColorStop(0, '#3b82f6');
-        gradient.addColorStop(0.5, '#06b6d4');
-        gradient.addColorStop(1, '#10b981');
+        // Boost amplitude for more visibility
+        const boostedAmplitude = Math.pow(amplitude, 0.7);
+        
+        // Calculate wave motion
+        const wave = Math.sin(particle.offset + frameCount) * 15;
+        const audioInfluence = boostedAmplitude * 80;
+        
+        // Update position
+        particle.y = particle.baseY + wave - audioInfluence;
+        
+        // Draw particle with glow
+        const glowSize = particle.size * (3 + boostedAmplitude * 5);
+        
+        // Outer glow
+        const gradient = ctx.createRadialGradient(
+          particle.x, particle.y, 0,
+          particle.x, particle.y, glowSize
+        );
+        gradient.addColorStop(0, particle.color + (0.9 * boostedAmplitude) + ')');
+        gradient.addColorStop(0.4, particle.color + (0.6 * boostedAmplitude) + ')');
+        gradient.addColorStop(1, particle.color + '0)');
         
         ctx.fillStyle = gradient;
-        ctx.fillRect(x, canvas.height - barHeight, barWidth, barHeight);
+        ctx.beginPath();
+        ctx.arc(particle.x, particle.y, glowSize, 0, Math.PI * 2);
+        ctx.fill();
         
-        x += barWidth + 1;
-      }
+        // Core particle
+        ctx.fillStyle = particle.color + (0.95 + boostedAmplitude * 0.05) + ')';
+        ctx.beginPath();
+        ctx.arc(particle.x, particle.y, particle.size * (1 + boostedAmplitude * 0.5), 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Connect particles with lines
+        if (i < particles.length - 1) {
+          const nextParticle = particles[i + 1];
+          ctx.strokeStyle = particle.color + (0.5 * boostedAmplitude) + ')';
+          ctx.lineWidth = 1 + boostedAmplitude * 3;
+          ctx.beginPath();
+          ctx.moveTo(particle.x, particle.y);
+          ctx.lineTo(nextParticle.x, nextParticle.y);
+          ctx.stroke();
+        }
+      });
       
-      if (isPlaying) {
-        animationRef.current = requestAnimationFrame(draw);
-      }
+      animationRef.current = requestAnimationFrame(draw);
     };
     
     draw();
@@ -150,15 +209,21 @@ function PackPlayer({ pack, onClose, user, processor }) {
         processor.play(pitch, finalSpeed);
         setIsPlaying(true);
         
-        await supabase.from('sample_interactions').insert([{
-          user_id: user.id,
-          sample_id: pack.id,
-          interaction_type: 'play',
-          bpm: pack.bpm,
-          key: pack.key,
-          genre: pack.genre,
-          mood: pack.mood
-        }]);
+        // Try to track play (silently fail if permissions issue)
+        try {
+          await supabase.from('sample_interactions').insert([{
+            user_id: user.id,
+            sample_id: pack.id,
+            interaction_type: 'play',
+            bpm: pack.bpm,
+            key: pack.key,
+            genre: pack.genre,
+            mood: pack.mood
+          }]);
+        } catch (trackError) {
+          // Silently ignore tracking errors - audio still plays fine
+          console.log('Play tracking skipped');
+        }
       } catch (error) {
         console.error('Error playing:', error);
         alert('Failed to play audio: ' + error.message);
@@ -189,15 +254,21 @@ function PackPlayer({ pack, onClose, user, processor }) {
       processor.play(pitch, finalSpeed);
       setIsPlaying(true);
       
-      await supabase.from('sample_interactions').insert([{
-        user_id: user.id,
-        sample_id: pack.id,
-        stem_id: stem.id,
-        interaction_type: 'play',
-        bpm: pack.bpm,
-        key: pack.key,
-        genre: pack.genre
-      }]);
+      // Try to track play (silently fail if permissions issue)
+      try {
+        await supabase.from('sample_interactions').insert([{
+          user_id: user.id,
+          sample_id: pack.id,
+          stem_id: stem.id,
+          interaction_type: 'play',
+          bpm: pack.bpm,
+          key: pack.key,
+          genre: pack.genre
+        }]);
+      } catch (trackError) {
+        // Silently ignore tracking errors
+        console.log('Stem play tracking skipped');
+      }
     } catch (error) {
       console.error('Error playing stem:', error);
     }
@@ -225,11 +296,17 @@ function PackPlayer({ pack, onClose, user, processor }) {
     }
 
     try {
-      await supabase.from('user_downloads').insert([{
-        user_id: user.id,
-        sample_id: pack.id,
-        download_type: itemType
-      }]);
+      // Try to track download (silently fail if permissions issue)
+      try {
+        await supabase.from('user_downloads').insert([{
+          user_id: user.id,
+          sample_id: pack.id,
+          download_type: itemType
+        }]);
+      } catch (trackError) {
+        // Silently ignore tracking errors
+        console.log('Download tracking skipped');
+      }
 
       const response = await fetch(url);
       const blob = await response.blob();
