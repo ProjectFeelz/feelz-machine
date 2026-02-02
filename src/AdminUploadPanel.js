@@ -132,7 +132,7 @@ function AdminUploadPanel({ user }) {
       showMessage('info', 'Uploading audio file...');
       const mainLoopUrl = await uploadFileToStorage(
         packForm.main_loop_file, 
-        'sample-packs',
+        'feelz-samples',
         'loops/'
       );
 
@@ -142,7 +142,7 @@ function AdminUploadPanel({ user }) {
         showMessage('info', 'Uploading cover image...');
         coverImageUrl = await uploadFileToStorage(
           packForm.cover_image_file,
-          'sample-packs',
+          'feelz-samples',
           'covers/'
         );
       }
@@ -201,7 +201,7 @@ function AdminUploadPanel({ user }) {
             
             const stemUrl = await uploadFileToStorage(
               stem.file,
-              'sample-packs',
+              'feelz-samples',
               'stems/'
             );
 
@@ -285,7 +285,7 @@ function AdminUploadPanel({ user }) {
         // Upload main loop
         const mainLoopUrl = await uploadFileToStorage(
           pack.main_loop_file,
-          'sample-packs',
+          'feelz-samples',
           'loops/'
         );
 
@@ -294,7 +294,7 @@ function AdminUploadPanel({ user }) {
         if (pack.cover_image_file) {
           coverImageUrl = await uploadFileToStorage(
             pack.cover_image_file,
-            'sample-packs',
+            'feelz-samples',
             'covers/'
           );
         }
@@ -422,7 +422,7 @@ function AdminUploadPanel({ user }) {
         showMessage('info', 'Uploading collection cover...');
         coverImageUrl = await uploadFileToStorage(
           collectionForm.cover_image_file,
-          'sample-packs',
+          'feelz-samples',
           'collection-covers/'
         );
       }
