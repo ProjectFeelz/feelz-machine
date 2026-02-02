@@ -25,7 +25,7 @@ function AdminPanel({ user, profile }) {
   const [recentActivity, setRecentActivity] = useState([]);
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
-  const [activeTab, setActiveTab] = useState('analytics'); // analytics, upload
+  const [activeTab, setActiveTab] = useState('analytics');
 
   useEffect(() => {
     if (profile?.is_admin) {
@@ -106,14 +106,13 @@ function AdminPanel({ user, profile }) {
         .slice(0, 5);
       setTopGenres(sortedGenres);
 
-      // Recent activity - FIXED: Fetch samples and user data separately
+      // Recent activity
       const { data: activity } = await supabase
         .from('sample_interactions')
         .select('*, samples(name)')
         .order('created_at', { ascending: false })
         .limit(10);
 
-      // Get user profiles separately
       if (activity && activity.length > 0) {
         const userIds = [...new Set(activity.map(a => a.user_id))];
         const { data: profiles } = await supabase
@@ -121,7 +120,6 @@ function AdminPanel({ user, profile }) {
           .select('user_id, name')
           .in('user_id', userIds);
 
-        // Map profiles to activity
         const profileMap = {};
         profiles?.forEach(p => {
           profileMap[p.user_id] = p;
@@ -159,21 +157,12 @@ function AdminPanel({ user, profile }) {
         return;
       }
 
-      // Get emails from auth.users (admin only)
-      const { data: authData } = await supabase.auth.admin.listUsers();
-      
-      const emailMap = {};
-      authData?.users?.forEach(u => {
-        emailMap[u.id] = u.email;
-      });
-
-      // Create CSV content
-      const headers = ['Name', 'Email', 'Joined Date', 'User ID'];
+      // Create CSV (without emails - can't access from browser securely)
+      const headers = ['Name', 'User ID', 'Joined Date'];
       const rows = subscribers.map(sub => [
         sub.name || 'N/A',
-        emailMap[sub.user_id] || 'N/A',
-        new Date(sub.created_at).toLocaleDateString(),
-        sub.user_id
+        sub.user_id,
+        new Date(sub.created_at).toLocaleDateString()
       ]);
 
       const csv = [
@@ -210,16 +199,30 @@ function AdminPanel({ user, profile }) {
         .select('*, samples(name, artist, genre)')
         .order('created_at', { ascending: false });
 
-      // Get all downloads
+      // Get all downloads (without join - fetch separately)
       const { data: downloads } = await supabase
         .from('user_downloads')
-        .select('*, samples(name, artist)')
+        .select('*')
         .order('created_at', { ascending: false });
 
       if ((!interactions || interactions.length === 0) && (!downloads || downloads.length === 0)) {
         alert('No usage data to export');
         setExporting(false);
         return;
+      }
+
+      // Get sample info for downloads
+      let downloadSampleMap = {};
+      if (downloads && downloads.length > 0) {
+        const sampleIds = [...new Set(downloads.map(d => d.sample_id))];
+        const { data: samples } = await supabase
+          .from('samples')
+          .select('id, name, artist')
+          .in('id', sampleIds);
+        
+        samples?.forEach(s => {
+          downloadSampleMap[s.id] = s;
+        });
       }
 
       // Get user profiles
@@ -234,16 +237,7 @@ function AdminPanel({ user, profile }) {
         .select('user_id, name')
         .in('user_id', uniqueUserIds);
 
-      // Get emails (admin only)
-      const { data: authData } = await supabase.auth.admin.listUsers();
-      
-      const emailMap = {};
       const nameMap = {};
-      
-      authData?.users?.forEach(u => {
-        emailMap[u.id] = u.email;
-      });
-      
       profiles?.forEach(p => {
         nameMap[p.user_id] = p.name;
       });
@@ -253,8 +247,8 @@ function AdminPanel({ user, profile }) {
 
       interactions?.forEach(item => {
         usageData.push({
-          user_name: nameMap[item.user_id] || 'N/A',
-          user_email: emailMap[item.user_id] || 'N/A',
+          user_name: nameMap[item.user_id] || 'Unknown',
+          user_id: item.user_id,
           action: 'Play',
           sample_name: item.samples?.name || 'N/A',
           artist: item.samples?.artist || 'N/A',
@@ -267,12 +261,13 @@ function AdminPanel({ user, profile }) {
       });
 
       downloads?.forEach(item => {
+        const sample = downloadSampleMap[item.sample_id];
         usageData.push({
-          user_name: nameMap[item.user_id] || 'N/A',
-          user_email: emailMap[item.user_id] || 'N/A',
+          user_name: nameMap[item.user_id] || 'Unknown',
+          user_id: item.user_id,
           action: `Download (${item.download_type})`,
-          sample_name: item.samples?.name || 'N/A',
-          artist: item.samples?.artist || 'N/A',
+          sample_name: sample?.name || 'N/A',
+          artist: sample?.artist || 'N/A',
           genre: 'N/A',
           bpm: 'N/A',
           key: 'N/A',
@@ -285,10 +280,10 @@ function AdminPanel({ user, profile }) {
       usageData.sort((a, b) => new Date(b.date) - new Date(a.date));
 
       // Create CSV
-      const headers = ['User Name', 'User Email', 'Action', 'Sample Pack', 'Artist', 'Genre', 'BPM', 'Key', 'Mood', 'Date'];
+      const headers = ['User Name', 'User ID', 'Action', 'Sample Pack', 'Artist', 'Genre', 'BPM', 'Key', 'Mood', 'Date'];
       const rows = usageData.map(item => [
         item.user_name,
-        item.user_email,
+        item.user_id,
         item.action,
         item.sample_name,
         item.artist,
@@ -376,7 +371,7 @@ function AdminPanel({ user, profile }) {
             </button>
           </div>
 
-          {/* Export Buttons - Only show on Analytics tab */}
+          {/* Export Buttons */}
           {activeTab === 'analytics' && (
             <div className="flex flex-col sm:flex-row gap-3">
               <button
@@ -408,7 +403,7 @@ function AdminPanel({ user, profile }) {
           )}
         </div>
 
-        {/* Analytics Tab Content */}
+        {/* Analytics Tab */}
         {activeTab === 'analytics' && (
           <>
             {/* Stats Cards */}
@@ -534,7 +529,7 @@ function AdminPanel({ user, profile }) {
           </>
         )}
 
-        {/* Upload Tab Content */}
+        {/* Upload Tab */}
         {activeTab === 'upload' && (
           <AdminUploadPanel user={user} />
         )}
