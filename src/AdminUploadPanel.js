@@ -21,7 +21,7 @@ import {
   Search
 } from 'lucide-react';
 
-function AdminUploadPanel({ user }) {
+function AdminUploadPanel({ user, adminLevel = 3 }) {
   const [activeTab, setActiveTab] = useState('upload'); // upload, collections, templates, manage
   const [collections, setCollections] = useState([]);
   const [templates, setTemplates] = useState([]);
@@ -30,6 +30,7 @@ function AdminUploadPanel({ user }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({});
+  const [editThumbnailFile, setEditThumbnailFile] = useState(null);
   const [uploadQueue, setUploadQueue] = useState([]);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -83,8 +84,10 @@ function AdminUploadPanel({ user }) {
   });
 
   useEffect(() => {
-    fetchData();
-  }, []);
+    if (adminLevel === 3) {
+      fetchData();
+    }
+  }, [adminLevel]);
 
   useEffect(() => {
     if (activeTab === 'manage') {
@@ -526,20 +529,46 @@ function AdminUploadPanel({ user }) {
       key: sample.key,
       genre: sample.genre,
       mood: sample.mood,
-      featured: sample.featured
+      featured: sample.featured,
+      current_thumbnail: sample.thumbnail_url
     });
+    setEditThumbnailFile(null);
   };
 
   const cancelEdit = () => {
     setEditingId(null);
     setEditForm({});
+    setEditThumbnailFile(null);
   };
 
   const saveEdit = async (id) => {
     try {
+      let updateData = { ...editForm };
+      delete updateData.current_thumbnail; // Remove this from update
+
+      // If new thumbnail uploaded, upload it first
+      if (editThumbnailFile) {
+        showMessage('info', 'Uploading new thumbnail...');
+        
+        const fileExt = editThumbnailFile.name.split('.').pop();
+        const fileName = `covers/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+        
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from('feelz-samples')
+          .upload(fileName, editThumbnailFile);
+
+        if (uploadError) throw uploadError;
+
+        const { data: { publicUrl } } = supabase.storage
+          .from('feelz-samples')
+          .getPublicUrl(fileName);
+
+        updateData.thumbnail_url = publicUrl;
+      }
+
       const { error } = await supabase
         .from('samples')
-        .update(editForm)
+        .update(updateData)
         .eq('id', id);
 
       if (error) throw error;
@@ -547,6 +576,7 @@ function AdminUploadPanel({ user }) {
       showMessage('success', '✓ Pack updated!');
       setEditingId(null);
       setEditForm({});
+      setEditThumbnailFile(null);
       fetchSamples();
     } catch (error) {
       showMessage('error', 'Failed to update: ' + error.message);
@@ -640,28 +670,32 @@ function AdminUploadPanel({ user }) {
           <Edit className="w-4 h-4 inline mr-2" />
           Manage Packs
         </button>
-        <button
-          onClick={() => setActiveTab('collections')}
-          className={`px-4 py-2 rounded-t-lg transition ${
-            activeTab === 'collections'
-              ? 'bg-cyan-500/20 text-cyan-300 border-b-2 border-cyan-500'
-              : 'text-gray-400 hover:text-cyan-300'
-          }`}
-        >
-          <Folder className="w-4 h-4 inline mr-2" />
-          Collections
-        </button>
-        <button
-          onClick={() => setActiveTab('templates')}
-          className={`px-4 py-2 rounded-t-lg transition ${
-            activeTab === 'templates'
-              ? 'bg-cyan-500/20 text-cyan-300 border-b-2 border-cyan-500'
-              : 'text-gray-400 hover:text-cyan-300'
-          }`}
-        >
-          <Save className="w-4 h-4 inline mr-2" />
-          Templates
-        </button>
+        {adminLevel === 3 && (
+          <>
+            <button
+              onClick={() => setActiveTab('collections')}
+              className={`px-4 py-2 rounded-t-lg transition ${
+                activeTab === 'collections'
+                  ? 'bg-cyan-500/20 text-cyan-300 border-b-2 border-cyan-500'
+                  : 'text-gray-400 hover:text-cyan-300'
+              }`}
+            >
+              <Folder className="w-4 h-4 inline mr-2" />
+              Collections
+            </button>
+            <button
+              onClick={() => setActiveTab('templates')}
+              className={`px-4 py-2 rounded-t-lg transition ${
+                activeTab === 'templates'
+                  ? 'bg-cyan-500/20 text-cyan-300 border-b-2 border-cyan-500'
+                  : 'text-gray-400 hover:text-cyan-300'
+              }`}
+            >
+              <Save className="w-4 h-4 inline mr-2" />
+              Templates
+            </button>
+          </>
+        )}
       </div>
 
       {/* UPLOAD TAB */}
@@ -694,39 +728,41 @@ function AdminUploadPanel({ user }) {
           </div>
 
           {/* Collection & Template Selectors */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-cyan-300 text-sm mb-2">Collection (Optional)</label>
-              <select
-                value={selectedCollection}
-                onChange={(e) => setSelectedCollection(e.target.value)}
-                className="w-full px-4 py-2 bg-blue-950/50 border border-cyan-500/30 rounded-lg text-white"
-              >
-                <option value="">No Collection</option>
-                {collections.map(c => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
-            </div>
+          {adminLevel === 3 && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-cyan-300 text-sm mb-2">Collection (Optional)</label>
+                <select
+                  value={selectedCollection}
+                  onChange={(e) => setSelectedCollection(e.target.value)}
+                  className="w-full px-4 py-2 bg-blue-950/50 border border-cyan-500/30 rounded-lg text-white"
+                >
+                  <option value="">No Collection</option>
+                  {collections.map(c => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
 
-            <div>
-              <label className="block text-cyan-300 text-sm mb-2">Apply Template (Optional)</label>
-              <select
-                value={selectedTemplate}
-                onChange={(e) => {
-                  setSelectedTemplate(e.target.value);
-                  const template = templates.find(t => t.id === e.target.value);
-                  if (template) applyTemplate(template);
-                }}
-                className="w-full px-4 py-2 bg-blue-950/50 border border-cyan-500/30 rounded-lg text-white"
-              >
-                <option value="">No Template</option>
-                {templates.map(t => (
-                  <option key={t.id} value={t.id}>{t.name}</option>
-                ))}
-              </select>
+              <div>
+                <label className="block text-cyan-300 text-sm mb-2">Apply Template (Optional)</label>
+                <select
+                  value={selectedTemplate}
+                  onChange={(e) => {
+                    setSelectedTemplate(e.target.value);
+                    const template = templates.find(t => t.id === e.target.value);
+                    if (template) applyTemplate(template);
+                  }}
+                  className="w-full px-4 py-2 bg-blue-950/50 border border-cyan-500/30 rounded-lg text-white"
+                >
+                  <option value="">No Template</option>
+                  {templates.map(t => (
+                    <option key={t.id} value={t.id}>{t.name}</option>
+                  ))}
+                </select>
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Pack Form */}
           <form onSubmit={uploadMode === 'single' ? handleSinglePackSubmit : (e) => { e.preventDefault(); addPackToBatch(); }}>
@@ -1018,8 +1054,215 @@ function AdminUploadPanel({ user }) {
         </div>
       )}
 
-      {/* COLLECTIONS TAB */}
-      {activeTab === 'collections' && (
+      {/* MANAGE TAB */}
+      {activeTab === 'manage' && (
+        <div className="space-y-4">
+          {/* Search */}
+          <div className="bg-white/5 backdrop-blur-xl rounded-lg p-4 border border-cyan-400/20">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-cyan-400" />
+              <input
+                type="text"
+                placeholder="Search packs by name, artist, or genre..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 bg-blue-950/50 border border-cyan-500/30 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+              />
+            </div>
+          </div>
+
+          {/* Sample List */}
+          {loading ? (
+            <div className="text-center py-12">
+              <Loader className="w-8 h-8 mx-auto animate-spin text-cyan-400" />
+            </div>
+          ) : filteredSamples.length === 0 ? (
+            <div className="text-center py-12 text-cyan-400">
+              <Music className="w-16 h-16 mx-auto mb-4 opacity-50" />
+              <p className="text-xl">No packs found</p>
+              {searchTerm && <p className="text-sm mt-2">Try a different search term</p>}
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {filteredSamples.map((sample) => (
+                <div
+                  key={sample.id}
+                  className="bg-white/5 backdrop-blur-xl rounded-lg p-4 border border-cyan-400/20"
+                >
+                  {editingId === sample.id ? (
+                    // EDIT MODE
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                        <div>
+                          <label className="block text-xs text-cyan-400 mb-1">Name</label>
+                          <input
+                            type="text"
+                            value={editForm.name}
+                            onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                            className="w-full px-3 py-2 bg-blue-950/50 border border-cyan-500/30 rounded text-white text-sm"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-cyan-400 mb-1">Artist</label>
+                          <input
+                            type="text"
+                            value={editForm.artist}
+                            onChange={(e) => setEditForm({ ...editForm, artist: e.target.value })}
+                            className="w-full px-3 py-2 bg-blue-950/50 border border-cyan-500/30 rounded text-white text-sm"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-cyan-400 mb-1">BPM</label>
+                          <input
+                            type="number"
+                            value={editForm.bpm}
+                            onChange={(e) => setEditForm({ ...editForm, bpm: e.target.value })}
+                            className="w-full px-3 py-2 bg-blue-950/50 border border-cyan-500/30 rounded text-white text-sm"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-cyan-400 mb-1">Key</label>
+                          <input
+                            type="text"
+                            value={editForm.key}
+                            onChange={(e) => setEditForm({ ...editForm, key: e.target.value })}
+                            className="w-full px-3 py-2 bg-blue-950/50 border border-cyan-500/30 rounded text-white text-sm"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-cyan-400 mb-1">Genre</label>
+                          <input
+                            type="text"
+                            value={editForm.genre}
+                            onChange={(e) => setEditForm({ ...editForm, genre: e.target.value })}
+                            className="w-full px-3 py-2 bg-blue-950/50 border border-cyan-500/30 rounded text-white text-sm"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-cyan-400 mb-1">Mood</label>
+                          <input
+                            type="text"
+                            value={editForm.mood}
+                            onChange={(e) => setEditForm({ ...editForm, mood: e.target.value })}
+                            className="w-full px-3 py-2 bg-blue-950/50 border border-cyan-500/30 rounded text-white text-sm"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Thumbnail Upload Field */}
+                      <div>
+                        <label className="block text-xs text-cyan-400 mb-1">New Thumbnail (optional)</label>
+                        <div className="space-y-2">
+                          {editForm.current_thumbnail && !editThumbnailFile && (
+                            <div className="flex items-center space-x-2">
+                              <img 
+                                src={editForm.current_thumbnail} 
+                                alt="Current" 
+                                className="w-16 h-16 rounded object-cover"
+                              />
+                              <span className="text-xs text-cyan-500">Current thumbnail</span>
+                            </div>
+                          )}
+                          <input
+                            type="file"
+                            accept=".jpg,.jpeg,.png,.webp"
+                            onChange={(e) => setEditThumbnailFile(e.target.files[0])}
+                            className="w-full text-xs px-2 py-1.5 bg-blue-950/50 border border-cyan-500/30 rounded text-white file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:bg-cyan-500/20 file:text-cyan-300"
+                          />
+                          {editThumbnailFile && (
+                            <p className="text-xs text-green-400">✓ New thumbnail: {editThumbnailFile.name}</p>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center space-x-2">
+                        <label className="flex items-center space-x-2 text-cyan-300 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={editForm.featured}
+                            onChange={(e) => setEditForm({ ...editForm, featured: e.target.checked })}
+                            className="rounded"
+                          />
+                          <span>Featured</span>
+                        </label>
+                      </div>
+                      <div className="flex space-x-2">
+                        <button
+                          onClick={() => saveEdit(sample.id)}
+                          className="px-4 py-2 bg-green-500 hover:bg-green-600 rounded-lg text-sm font-semibold transition flex items-center space-x-2"
+                        >
+                          <Save className="w-4 h-4" />
+                          <span>Save Changes</span>
+                        </button>
+                        <button
+                          onClick={cancelEdit}
+                          className="px-4 py-2 bg-gray-500 hover:bg-gray-600 rounded-lg text-sm font-semibold transition flex items-center space-x-2"
+                        >
+                          <X className="w-4 h-4" />
+                          <span>Cancel</span>
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    // VIEW MODE
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1 flex items-center space-x-3">
+                        {sample.thumbnail_url && (
+                          <img
+                            src={sample.thumbnail_url}
+                            alt={sample.name}
+                            className="w-16 h-16 rounded object-cover"
+                          />
+                        )}
+                        <div>
+                          <h3 className="font-bold text-white text-lg">{sample.name}</h3>
+                          <p className="text-sm text-cyan-400">
+                            {sample.artist} • {sample.bpm} BPM • {sample.key} • {sample.genre}
+                          </p>
+                          {sample.mood && (
+                            <p className="text-xs text-cyan-500 mt-1">Mood: {sample.mood}</p>
+                          )}
+                          <div className="flex items-center space-x-2 mt-2">
+                            {sample.has_stems && (
+                              <span className="text-xs px-2 py-1 bg-cyan-500/20 text-cyan-300 rounded">
+                                Has Stems
+                              </span>
+                            )}
+                            {sample.featured && (
+                              <span className="text-xs px-2 py-1 bg-yellow-500/20 text-yellow-300 rounded">
+                                Featured
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <button
+                          onClick={() => startEdit(sample)}
+                          className="p-3 bg-blue-500/20 hover:bg-blue-500/30 rounded-lg transition"
+                          title="Edit Pack"
+                        >
+                          <Edit className="w-5 h-5 text-blue-400" />
+                        </button>
+                        <button
+                          onClick={() => deletePack(sample.id, sample.name)}
+                          className="p-3 bg-red-500/20 hover:bg-red-500/30 rounded-lg transition"
+                          title="Delete Pack"
+                        >
+                          <Trash2 className="w-5 h-5 text-red-400" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* COLLECTIONS TAB - Only for Level 3 */}
+      {activeTab === 'collections' && adminLevel === 3 && (
         <div className="space-y-6">
           {/* Create Collection Form */}
           <form onSubmit={handleSaveCollection}>
@@ -1110,8 +1353,8 @@ function AdminUploadPanel({ user }) {
         </div>
       )}
 
-      {/* TEMPLATES TAB */}
-      {activeTab === 'templates' && (
+      {/* TEMPLATES TAB - Only for Level 3 */}
+      {activeTab === 'templates' && adminLevel === 3 && (
         <div className="space-y-6">
           {/* Create Template Form */}
           <form onSubmit={handleSaveTemplate}>
@@ -1218,186 +1461,6 @@ function AdminUploadPanel({ user }) {
               )}
             </div>
           </div>
-        </div>
-      )}
-
-      {/* MANAGE TAB */}
-      {activeTab === 'manage' && (
-        <div className="space-y-4">
-          {/* Search */}
-          <div className="bg-white/5 backdrop-blur-xl rounded-lg p-4 border border-cyan-400/20">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-cyan-400" />
-              <input
-                type="text"
-                placeholder="Search packs by name, artist, or genre..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 bg-blue-950/50 border border-cyan-500/30 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
-              />
-            </div>
-          </div>
-
-          {/* Sample List */}
-          {loading ? (
-            <div className="text-center py-12">
-              <Loader className="w-8 h-8 mx-auto animate-spin text-cyan-400" />
-            </div>
-          ) : filteredSamples.length === 0 ? (
-            <div className="text-center py-12 text-cyan-400">
-              <Music className="w-16 h-16 mx-auto mb-4 opacity-50" />
-              <p className="text-xl">No packs found</p>
-              {searchTerm && <p className="text-sm mt-2">Try a different search term</p>}
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {filteredSamples.map((sample) => (
-                <div
-                  key={sample.id}
-                  className="bg-white/5 backdrop-blur-xl rounded-lg p-4 border border-cyan-400/20"
-                >
-                  {editingId === sample.id ? (
-                    // EDIT MODE
-                    <div className="space-y-3">
-                      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                        <div>
-                          <label className="block text-xs text-cyan-400 mb-1">Name</label>
-                          <input
-                            type="text"
-                            value={editForm.name}
-                            onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                            className="w-full px-3 py-2 bg-blue-950/50 border border-cyan-500/30 rounded text-white text-sm"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs text-cyan-400 mb-1">Artist</label>
-                          <input
-                            type="text"
-                            value={editForm.artist}
-                            onChange={(e) => setEditForm({ ...editForm, artist: e.target.value })}
-                            className="w-full px-3 py-2 bg-blue-950/50 border border-cyan-500/30 rounded text-white text-sm"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs text-cyan-400 mb-1">BPM</label>
-                          <input
-                            type="number"
-                            value={editForm.bpm}
-                            onChange={(e) => setEditForm({ ...editForm, bpm: e.target.value })}
-                            className="w-full px-3 py-2 bg-blue-950/50 border border-cyan-500/30 rounded text-white text-sm"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs text-cyan-400 mb-1">Key</label>
-                          <input
-                            type="text"
-                            value={editForm.key}
-                            onChange={(e) => setEditForm({ ...editForm, key: e.target.value })}
-                            className="w-full px-3 py-2 bg-blue-950/50 border border-cyan-500/30 rounded text-white text-sm"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs text-cyan-400 mb-1">Genre</label>
-                          <input
-                            type="text"
-                            value={editForm.genre}
-                            onChange={(e) => setEditForm({ ...editForm, genre: e.target.value })}
-                            className="w-full px-3 py-2 bg-blue-950/50 border border-cyan-500/30 rounded text-white text-sm"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs text-cyan-400 mb-1">Mood</label>
-                          <input
-                            type="text"
-                            value={editForm.mood}
-                            onChange={(e) => setEditForm({ ...editForm, mood: e.target.value })}
-                            className="w-full px-3 py-2 bg-blue-950/50 border border-cyan-500/30 rounded text-white text-sm"
-                          />
-                        </div>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <label className="flex items-center space-x-2 text-cyan-300 text-sm">
-                          <input
-                            type="checkbox"
-                            checked={editForm.featured}
-                            onChange={(e) => setEditForm({ ...editForm, featured: e.target.checked })}
-                            className="rounded"
-                          />
-                          <span>Featured</span>
-                        </label>
-                      </div>
-                      <div className="flex space-x-2">
-                        <button
-                          onClick={() => saveEdit(sample.id)}
-                          className="px-4 py-2 bg-green-500 hover:bg-green-600 rounded-lg text-sm font-semibold transition flex items-center space-x-2"
-                        >
-                          <Save className="w-4 h-4" />
-                          <span>Save Changes</span>
-                        </button>
-                        <button
-                          onClick={cancelEdit}
-                          className="px-4 py-2 bg-gray-500 hover:bg-gray-600 rounded-lg text-sm font-semibold transition flex items-center space-x-2"
-                        >
-                          <X className="w-4 h-4" />
-                          <span>Cancel</span>
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    // VIEW MODE
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1 flex items-center space-x-3">
-                        {sample.thumbnail_url && (
-                          <img
-                            src={sample.thumbnail_url}
-                            alt={sample.name}
-                            className="w-16 h-16 rounded object-cover"
-                          />
-                        )}
-                        <div>
-                          <h3 className="font-bold text-white text-lg">{sample.name}</h3>
-                          <p className="text-sm text-cyan-400">
-                            {sample.artist} • {sample.bpm} BPM • {sample.key} • {sample.genre}
-                          </p>
-                          {sample.mood && (
-                            <p className="text-xs text-cyan-500 mt-1">Mood: {sample.mood}</p>
-                          )}
-                          <div className="flex items-center space-x-2 mt-2">
-                            {sample.has_stems && (
-                              <span className="text-xs px-2 py-1 bg-cyan-500/20 text-cyan-300 rounded">
-                                Has Stems
-                              </span>
-                            )}
-                            {sample.featured && (
-                              <span className="text-xs px-2 py-1 bg-yellow-500/20 text-yellow-300 rounded">
-                                Featured
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <button
-                          onClick={() => startEdit(sample)}
-                          className="p-3 bg-blue-500/20 hover:bg-blue-500/30 rounded-lg transition"
-                          title="Edit Pack"
-                        >
-                          <Edit className="w-5 h-5 text-blue-400" />
-                        </button>
-                        <button
-                          onClick={() => deletePack(sample.id, sample.name)}
-                          className="p-3 bg-red-500/20 hover:bg-red-500/30 rounded-lg transition"
-                          title="Delete Pack"
-                        >
-                          <Trash2 className="w-5 h-5 text-red-400" />
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
         </div>
       )}
     </div>

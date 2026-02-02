@@ -25,13 +25,44 @@ function AdminPanel({ user, profile }) {
   const [recentActivity, setRecentActivity] = useState([]);
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
-  const [activeTab, setActiveTab] = useState('analytics');
+  const [activeTab, setActiveTab] = useState('upload'); // Default to upload for editors
+  const [adminLevel, setAdminLevel] = useState(3); // 2 = editor, 3 = full admin
 
   useEffect(() => {
     if (profile?.is_admin) {
-      fetchAnalytics();
+      checkAdminLevel();
     }
   }, [profile]);
+
+  const checkAdminLevel = async () => {
+    try {
+      const { data, error} = await supabase
+        .from('admins')
+        .select('level')
+        .eq('user_id', user.id)
+        .single();
+
+      if (!error && data) {
+        setAdminLevel(data.level || 3);
+        if (data.level === 3) {
+          setActiveTab('analytics');
+          fetchAnalytics();
+        } else {
+          // Editor - skip analytics, go to upload
+          setActiveTab('upload');
+          setLoading(false);
+        }
+      } else {
+        // Default to full admin if not in admins table
+        setActiveTab('analytics');
+        fetchAnalytics();
+      }
+    } catch (error) {
+      console.error('Error checking admin level:', error);
+      setActiveTab('analytics');
+      fetchAnalytics();
+    }
+  };
 
   const fetchAnalytics = async () => {
     setLoading(true);
@@ -341,23 +372,28 @@ function AdminPanel({ user, profile }) {
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-gray-900 text-white p-4 md:p-8">
       <div className="max-w-7xl mx-auto">
         <div className="mb-8">
-          <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent mb-6">
-            Admin Panel
+          <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent mb-2">
+            {adminLevel === 3 ? 'Admin Panel' : 'Editor Dashboard'}
           </h1>
+          <p className="text-cyan-300 text-sm mb-6">
+            {adminLevel === 3 ? 'Full Admin Access' : 'Upload & Edit Access'}
+          </p>
 
           {/* Tab Buttons */}
           <div className="flex space-x-2 mb-6">
-            <button
-              onClick={() => setActiveTab('analytics')}
-              className={`px-6 py-3 rounded-lg transition font-semibold flex items-center space-x-2 ${
-                activeTab === 'analytics'
-                  ? 'bg-gradient-to-r from-blue-500 to-cyan-500 text-white'
-                  : 'bg-white/5 text-cyan-300 hover:bg-white/10'
-              }`}
-            >
-              <BarChart3 className="w-5 h-5" />
-              <span>Analytics</span>
-            </button>
+            {adminLevel === 3 && (
+              <button
+                onClick={() => setActiveTab('analytics')}
+                className={`px-6 py-3 rounded-lg transition font-semibold flex items-center space-x-2 ${
+                  activeTab === 'analytics'
+                    ? 'bg-gradient-to-r from-blue-500 to-cyan-500 text-white'
+                    : 'bg-white/5 text-cyan-300 hover:bg-white/10'
+                }`}
+              >
+                <BarChart3 className="w-5 h-5" />
+                <span>Analytics</span>
+              </button>
+            )}
             <button
               onClick={() => setActiveTab('upload')}
               className={`px-6 py-3 rounded-lg transition font-semibold flex items-center space-x-2 ${
@@ -367,12 +403,12 @@ function AdminPanel({ user, profile }) {
               }`}
             >
               <Upload className="w-5 h-5" />
-              <span>Upload Packs</span>
+              <span>Upload & Manage</span>
             </button>
           </div>
 
-          {/* Export Buttons */}
-          {activeTab === 'analytics' && (
+          {/* Export Buttons - Only for Admin */}
+          {activeTab === 'analytics' && adminLevel === 3 && (
             <div className="flex flex-col sm:flex-row gap-3">
               <button
                 onClick={exportSubscribersCSV}
@@ -403,8 +439,8 @@ function AdminPanel({ user, profile }) {
           )}
         </div>
 
-        {/* Analytics Tab */}
-        {activeTab === 'analytics' && (
+        {/* Analytics Tab - Only for Level 3 */}
+        {activeTab === 'analytics' && adminLevel === 3 && (
           <>
             {/* Stats Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 mb-8">
@@ -529,9 +565,9 @@ function AdminPanel({ user, profile }) {
           </>
         )}
 
-        {/* Upload Tab */}
+        {/* Upload Tab - For All Admins */}
         {activeTab === 'upload' && (
-          <AdminUploadPanel user={user} />
+          <AdminUploadPanel user={user} adminLevel={adminLevel} />
         )}
       </div>
     </div>
