@@ -48,6 +48,15 @@ function AdminUploadPanel({ user }) {
     featured: false
   });
 
+  // Stem files state
+  const [stemFiles, setStemFiles] = useState({
+    drums: null,
+    bass: null,
+    melody: null,
+    vocals: null,
+    other: null
+  });
+
   // Collection form
   const [collectionForm, setCollectionForm] = useState({
     name: '',
@@ -171,6 +180,47 @@ function AdminUploadPanel({ user }) {
         .select();
 
       if (error) throw error;
+
+      const sampleId = data[0].id;
+
+      // Upload stems if has_stems is checked
+      if (packForm.has_stems) {
+        const stemTypes = [
+          { key: 'drums', name: 'Drums', file: stemFiles.drums },
+          { key: 'bass', name: 'Bass', file: stemFiles.bass },
+          { key: 'melody', name: 'Melody', file: stemFiles.melody },
+          { key: 'vocals', name: 'Vocals', file: stemFiles.vocals },
+          { key: 'other', name: 'Other', file: stemFiles.other }
+        ];
+
+        let stemCount = 0;
+        for (const stem of stemTypes) {
+          if (stem.file) {
+            stemCount++;
+            showMessage('info', `Uploading ${stem.name} stem...`);
+            
+            const stemUrl = await uploadFileToStorage(
+              stem.file,
+              'sample-packs',
+              'stems/'
+            );
+
+            await supabase
+              .from('sample_stems')
+              .insert([{
+                sample_id: sampleId,
+                name: stem.name,
+                stem_type: stem.name,
+                file_url: stemUrl,
+                order_index: stemCount
+              }]);
+          }
+        }
+
+        if (stemCount > 0) {
+          showMessage('success', `✓ Uploaded ${stemCount} stems!`);
+        }
+      }
 
       showMessage('success', '✓ Sample pack uploaded successfully!');
       resetPackForm();
@@ -439,6 +489,13 @@ function AdminUploadPanel({ user }) {
       has_stems: false,
       featured: false
     });
+    setStemFiles({
+      drums: null,
+      bass: null,
+      melody: null,
+      vocals: null,
+      other: null
+    });
   };
 
   const showMessage = (type, text) => {
@@ -685,6 +742,83 @@ function AdminUploadPanel({ user }) {
                   <span>Featured</span>
                 </label>
               </div>
+
+              {/* Stem Uploads - Show when has_stems is checked */}
+              {packForm.has_stems && (
+                <div className="bg-blue-950/20 border border-cyan-500/20 rounded-lg p-4 space-y-3">
+                  <h4 className="text-cyan-300 font-semibold mb-3 flex items-center space-x-2">
+                    <Music className="w-4 h-4" />
+                    <span>Upload Stems (Optional)</span>
+                  </h4>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-cyan-400 text-xs mb-1">🥁 Drums Stem</label>
+                      <input
+                        type="file"
+                        accept=".wav,.mp3,.ogg"
+                        onChange={(e) => setStemFiles({ ...stemFiles, drums: e.target.files[0] })}
+                        className="w-full text-xs px-2 py-1.5 bg-blue-950/50 border border-cyan-500/30 rounded text-white file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:bg-cyan-500/20 file:text-cyan-300 hover:file:bg-cyan-500/30"
+                      />
+                      {stemFiles.drums && (
+                        <p className="text-xs text-green-400 mt-1">✓ {stemFiles.drums.name}</p>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="block text-cyan-400 text-xs mb-1">🎸 Bass Stem</label>
+                      <input
+                        type="file"
+                        accept=".wav,.mp3,.ogg"
+                        onChange={(e) => setStemFiles({ ...stemFiles, bass: e.target.files[0] })}
+                        className="w-full text-xs px-2 py-1.5 bg-blue-950/50 border border-cyan-500/30 rounded text-white file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:bg-cyan-500/20 file:text-cyan-300 hover:file:bg-cyan-500/30"
+                      />
+                      {stemFiles.bass && (
+                        <p className="text-xs text-green-400 mt-1">✓ {stemFiles.bass.name}</p>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="block text-cyan-400 text-xs mb-1">🎹 Melody Stem</label>
+                      <input
+                        type="file"
+                        accept=".wav,.mp3,.ogg"
+                        onChange={(e) => setStemFiles({ ...stemFiles, melody: e.target.files[0] })}
+                        className="w-full text-xs px-2 py-1.5 bg-blue-950/50 border border-cyan-500/30 rounded text-white file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:bg-cyan-500/20 file:text-cyan-300 hover:file:bg-cyan-500/30"
+                      />
+                      {stemFiles.melody && (
+                        <p className="text-xs text-green-400 mt-1">✓ {stemFiles.melody.name}</p>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="block text-cyan-400 text-xs mb-1">🎤 Vocals Stem</label>
+                      <input
+                        type="file"
+                        accept=".wav,.mp3,.ogg"
+                        onChange={(e) => setStemFiles({ ...stemFiles, vocals: e.target.files[0] })}
+                        className="w-full text-xs px-2 py-1.5 bg-blue-950/50 border border-cyan-500/30 rounded text-white file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:bg-cyan-500/20 file:text-cyan-300 hover:file:bg-cyan-500/30"
+                      />
+                      {stemFiles.vocals && (
+                        <p className="text-xs text-green-400 mt-1">✓ {stemFiles.vocals.name}</p>
+                      )}
+                    </div>
+
+                    <div className="md:col-span-2">
+                      <label className="block text-cyan-400 text-xs mb-1">🎧 Other Stem</label>
+                      <input
+                        type="file"
+                        accept=".wav,.mp3,.ogg"
+                        onChange={(e) => setStemFiles({ ...stemFiles, other: e.target.files[0] })}
+                        className="w-full text-xs px-2 py-1.5 bg-blue-950/50 border border-cyan-500/30 rounded text-white file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:bg-cyan-500/20 file:text-cyan-300 hover:file:bg-cyan-500/30"
+                      />
+                      {stemFiles.other && (
+                        <p className="text-xs text-green-400 mt-1">✓ {stemFiles.other.name}</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
 
               <div className="flex space-x-3 pt-4">
                 {uploadMode === 'single' ? (
