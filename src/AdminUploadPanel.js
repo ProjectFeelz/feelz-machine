@@ -16,13 +16,20 @@ import {
   Image as ImageIcon,
   AlertCircle,
   ChevronDown,
-  ChevronRight
+  ChevronRight,
+  Edit,
+  Search
 } from 'lucide-react';
 
 function AdminUploadPanel({ user }) {
-  const [activeTab, setActiveTab] = useState('upload'); // upload, collections, templates
+  const [activeTab, setActiveTab] = useState('upload'); // upload, collections, templates, manage
   const [collections, setCollections] = useState([]);
   const [templates, setTemplates] = useState([]);
+  const [samples, setSamples] = useState([]);
+  const [filteredSamples, setFilteredSamples] = useState([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [editingId, setEditingId] = useState(null);
+  const [editForm, setEditForm] = useState({});
   const [uploadQueue, setUploadQueue] = useState([]);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -79,6 +86,26 @@ function AdminUploadPanel({ user }) {
     fetchData();
   }, []);
 
+  useEffect(() => {
+    if (activeTab === 'manage') {
+      fetchSamples();
+    }
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (searchTerm) {
+      setFilteredSamples(
+        samples.filter(s => 
+          s.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          s.artist?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          s.genre?.toLowerCase().includes(searchTerm.toLowerCase())
+        )
+      );
+    } else {
+      setFilteredSamples(samples);
+    }
+  }, [searchTerm, samples]);
+
   const fetchData = async () => {
     // Fetch collections
     const { data: collectionsData } = await supabase
@@ -93,6 +120,20 @@ function AdminUploadPanel({ user }) {
       .select('*')
       .order('created_at', { ascending: false });
     setTemplates(templatesData || []);
+  };
+
+  const fetchSamples = async () => {
+    setLoading(true);
+    const { data, error } = await supabase
+      .from('samples')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (!error) {
+      setSamples(data || []);
+      setFilteredSamples(data || []);
+    }
+    setLoading(false);
   };
 
   // ============================================
@@ -476,6 +517,60 @@ function AdminUploadPanel({ user }) {
   // ============================================
   // HELPERS
   // ============================================
+  const startEdit = (sample) => {
+    setEditingId(sample.id);
+    setEditForm({
+      name: sample.name,
+      artist: sample.artist,
+      bpm: sample.bpm,
+      key: sample.key,
+      genre: sample.genre,
+      mood: sample.mood,
+      featured: sample.featured
+    });
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditForm({});
+  };
+
+  const saveEdit = async (id) => {
+    try {
+      const { error } = await supabase
+        .from('samples')
+        .update(editForm)
+        .eq('id', id);
+
+      if (error) throw error;
+
+      showMessage('success', '✓ Pack updated!');
+      setEditingId(null);
+      setEditForm({});
+      fetchSamples();
+    } catch (error) {
+      showMessage('error', 'Failed to update: ' + error.message);
+    }
+  };
+
+  const deletePack = async (id, name) => {
+    if (!window.confirm(`Delete "${name}"? This cannot be undone.`)) return;
+
+    try {
+      const { error } = await supabase
+        .from('samples')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+
+      showMessage('success', 'Pack deleted');
+      fetchSamples();
+    } catch (error) {
+      showMessage('error', 'Failed to delete: ' + error.message);
+    }
+  };
+
   const resetPackForm = () => {
     setPackForm({
       name: '',
@@ -533,6 +628,17 @@ function AdminUploadPanel({ user }) {
         >
           <Upload className="w-4 h-4 inline mr-2" />
           Upload Packs
+        </button>
+        <button
+          onClick={() => setActiveTab('manage')}
+          className={`px-4 py-2 rounded-t-lg transition ${
+            activeTab === 'manage'
+              ? 'bg-cyan-500/20 text-cyan-300 border-b-2 border-cyan-500'
+              : 'text-gray-400 hover:text-cyan-300'
+          }`}
+        >
+          <Edit className="w-4 h-4 inline mr-2" />
+          Manage Packs
         </button>
         <button
           onClick={() => setActiveTab('collections')}
@@ -699,12 +805,24 @@ function AdminUploadPanel({ user }) {
                 <input
                   type="file"
                   accept=".wav,.mp3,.ogg"
-                  onChange={(e) => setPackForm({ ...packForm, main_loop_file: e.target.files[0] })}
+                  onChange={(e) => {
+                    const file = e.target.files[0];
+                    if (file) {
+                      const sizeMB = (file.size / (1024 * 1024)).toFixed(2);
+                      if (file.size > 50 * 1024 * 1024) {
+                        showMessage('error', `File too large (${sizeMB}MB)! Supabase free tier limit is 50MB. Please compress to MP3 or upgrade plan.`);
+                        return;
+                      }
+                      setPackForm({ ...packForm, main_loop_file: file });
+                    }
+                  }}
                   className="w-full px-4 py-2 bg-blue-950/50 border border-cyan-500/30 rounded-lg text-white file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-cyan-500/20 file:text-cyan-300 hover:file:bg-cyan-500/30"
                   required
                 />
                 {packForm.main_loop_file && (
-                  <p className="text-cyan-400 text-sm mt-2">Selected: {packForm.main_loop_file.name}</p>
+                  <p className="text-cyan-400 text-sm mt-2">
+                    Selected: {packForm.main_loop_file.name} ({(packForm.main_loop_file.size / (1024 * 1024)).toFixed(2)}MB)
+                  </p>
                 )}
               </div>
 
@@ -757,7 +875,14 @@ function AdminUploadPanel({ user }) {
                       <input
                         type="file"
                         accept=".wav,.mp3,.ogg"
-                        onChange={(e) => setStemFiles({ ...stemFiles, drums: e.target.files[0] })}
+                        onChange={(e) => {
+                          const file = e.target.files[0];
+                          if (file && file.size > 50 * 1024 * 1024) {
+                            showMessage('error', `File too large! Max 50MB on free tier.`);
+                            return;
+                          }
+                          setStemFiles({ ...stemFiles, drums: file });
+                        }}
                         className="w-full text-xs px-2 py-1.5 bg-blue-950/50 border border-cyan-500/30 rounded text-white file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:bg-cyan-500/20 file:text-cyan-300 hover:file:bg-cyan-500/30"
                       />
                       {stemFiles.drums && (
@@ -1093,6 +1218,186 @@ function AdminUploadPanel({ user }) {
               )}
             </div>
           </div>
+        </div>
+      )}
+
+      {/* MANAGE TAB */}
+      {activeTab === 'manage' && (
+        <div className="space-y-4">
+          {/* Search */}
+          <div className="bg-white/5 backdrop-blur-xl rounded-lg p-4 border border-cyan-400/20">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-cyan-400" />
+              <input
+                type="text"
+                placeholder="Search packs by name, artist, or genre..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 bg-blue-950/50 border border-cyan-500/30 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+              />
+            </div>
+          </div>
+
+          {/* Sample List */}
+          {loading ? (
+            <div className="text-center py-12">
+              <Loader className="w-8 h-8 mx-auto animate-spin text-cyan-400" />
+            </div>
+          ) : filteredSamples.length === 0 ? (
+            <div className="text-center py-12 text-cyan-400">
+              <Music className="w-16 h-16 mx-auto mb-4 opacity-50" />
+              <p className="text-xl">No packs found</p>
+              {searchTerm && <p className="text-sm mt-2">Try a different search term</p>}
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {filteredSamples.map((sample) => (
+                <div
+                  key={sample.id}
+                  className="bg-white/5 backdrop-blur-xl rounded-lg p-4 border border-cyan-400/20"
+                >
+                  {editingId === sample.id ? (
+                    // EDIT MODE
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                        <div>
+                          <label className="block text-xs text-cyan-400 mb-1">Name</label>
+                          <input
+                            type="text"
+                            value={editForm.name}
+                            onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                            className="w-full px-3 py-2 bg-blue-950/50 border border-cyan-500/30 rounded text-white text-sm"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-cyan-400 mb-1">Artist</label>
+                          <input
+                            type="text"
+                            value={editForm.artist}
+                            onChange={(e) => setEditForm({ ...editForm, artist: e.target.value })}
+                            className="w-full px-3 py-2 bg-blue-950/50 border border-cyan-500/30 rounded text-white text-sm"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-cyan-400 mb-1">BPM</label>
+                          <input
+                            type="number"
+                            value={editForm.bpm}
+                            onChange={(e) => setEditForm({ ...editForm, bpm: e.target.value })}
+                            className="w-full px-3 py-2 bg-blue-950/50 border border-cyan-500/30 rounded text-white text-sm"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-cyan-400 mb-1">Key</label>
+                          <input
+                            type="text"
+                            value={editForm.key}
+                            onChange={(e) => setEditForm({ ...editForm, key: e.target.value })}
+                            className="w-full px-3 py-2 bg-blue-950/50 border border-cyan-500/30 rounded text-white text-sm"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-cyan-400 mb-1">Genre</label>
+                          <input
+                            type="text"
+                            value={editForm.genre}
+                            onChange={(e) => setEditForm({ ...editForm, genre: e.target.value })}
+                            className="w-full px-3 py-2 bg-blue-950/50 border border-cyan-500/30 rounded text-white text-sm"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-cyan-400 mb-1">Mood</label>
+                          <input
+                            type="text"
+                            value={editForm.mood}
+                            onChange={(e) => setEditForm({ ...editForm, mood: e.target.value })}
+                            className="w-full px-3 py-2 bg-blue-950/50 border border-cyan-500/30 rounded text-white text-sm"
+                          />
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <label className="flex items-center space-x-2 text-cyan-300 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={editForm.featured}
+                            onChange={(e) => setEditForm({ ...editForm, featured: e.target.checked })}
+                            className="rounded"
+                          />
+                          <span>Featured</span>
+                        </label>
+                      </div>
+                      <div className="flex space-x-2">
+                        <button
+                          onClick={() => saveEdit(sample.id)}
+                          className="px-4 py-2 bg-green-500 hover:bg-green-600 rounded-lg text-sm font-semibold transition flex items-center space-x-2"
+                        >
+                          <Save className="w-4 h-4" />
+                          <span>Save Changes</span>
+                        </button>
+                        <button
+                          onClick={cancelEdit}
+                          className="px-4 py-2 bg-gray-500 hover:bg-gray-600 rounded-lg text-sm font-semibold transition flex items-center space-x-2"
+                        >
+                          <X className="w-4 h-4" />
+                          <span>Cancel</span>
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    // VIEW MODE
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1 flex items-center space-x-3">
+                        {sample.thumbnail_url && (
+                          <img
+                            src={sample.thumbnail_url}
+                            alt={sample.name}
+                            className="w-16 h-16 rounded object-cover"
+                          />
+                        )}
+                        <div>
+                          <h3 className="font-bold text-white text-lg">{sample.name}</h3>
+                          <p className="text-sm text-cyan-400">
+                            {sample.artist} • {sample.bpm} BPM • {sample.key} • {sample.genre}
+                          </p>
+                          {sample.mood && (
+                            <p className="text-xs text-cyan-500 mt-1">Mood: {sample.mood}</p>
+                          )}
+                          <div className="flex items-center space-x-2 mt-2">
+                            {sample.has_stems && (
+                              <span className="text-xs px-2 py-1 bg-cyan-500/20 text-cyan-300 rounded">
+                                Has Stems
+                              </span>
+                            )}
+                            {sample.featured && (
+                              <span className="text-xs px-2 py-1 bg-yellow-500/20 text-yellow-300 rounded">
+                                Featured
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <button
+                          onClick={() => startEdit(sample)}
+                          className="p-3 bg-blue-500/20 hover:bg-blue-500/30 rounded-lg transition"
+                          title="Edit Pack"
+                        >
+                          <Edit className="w-5 h-5 text-blue-400" />
+                        </button>
+                        <button
+                          onClick={() => deletePack(sample.id, sample.name)}
+                          className="p-3 bg-red-500/20 hover:bg-red-500/30 rounded-lg transition"
+                          title="Delete Pack"
+                        >
+                          <Trash2 className="w-5 h-5 text-red-400" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>
