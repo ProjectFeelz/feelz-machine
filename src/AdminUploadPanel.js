@@ -25,6 +25,7 @@ function AdminUploadPanel({ user }) {
   const [templates, setTemplates] = useState([]);
   const [uploadQueue, setUploadQueue] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
 
   // Upload form state
@@ -41,8 +42,8 @@ function AdminUploadPanel({ user }) {
     key: '',
     genre: '',
     mood: '',
-    main_loop_url: '',
-    cover_image_url: '',
+    main_loop_file: null,
+    cover_image_file: null,
     has_stems: false,
     featured: false
   });
@@ -51,7 +52,7 @@ function AdminUploadPanel({ user }) {
   const [collectionForm, setCollectionForm] = useState({
     name: '',
     description: '',
-    cover_image_url: '',
+    cover_image_file: null,
     is_public: true
   });
 
@@ -86,17 +87,80 @@ function AdminUploadPanel({ user }) {
   };
 
   // ============================================
+  // FILE UPLOAD HELPERS
+  // ============================================
+  const uploadFileToStorage = async (file, bucket, folder = '') => {
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${folder}${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+    
+    const { data, error } = await supabase.storage
+      .from(bucket)
+      .upload(fileName, file);
+
+    if (error) throw error;
+
+    const { data: { publicUrl } } = supabase.storage
+      .from(bucket)
+      .getPublicUrl(fileName);
+
+    return publicUrl;
+  };
+
+  // ============================================
   // SINGLE PACK UPLOAD
   // ============================================
   const handleSinglePackSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
+    setUploading(true);
 
     try {
+      // Upload main loop file
+      if (!packForm.main_loop_file) {
+        throw new Error('Main loop file is required');
+      }
+
+      showMessage('info', 'Uploading audio file...');
+      const mainLoopUrl = await uploadFileToStorage(
+        packForm.main_loop_file, 
+        'sample-packs',
+        'loops/'
+      );
+
+      // Upload cover image if provided
+      let coverImageUrl = null;
+      if (packForm.cover_image_file) {
+        showMessage('info', 'Uploading cover image...');
+        coverImageUrl = await uploadFileToStorage(
+          packForm.cover_image_file,
+          'sample-packs',
+          'covers/'
+        );
+      }
+
+      // Auto-detect BPM from filename if not provided
+      let detectedBpm = packForm.bpm;
+      if (!detectedBpm) {
+        const bpmMatch = packForm.main_loop_file.name.match(/(\d{2,3})[\-_\s]?bpm|bpm[\-_\s]?(\d{2,3})/i);
+        if (bpmMatch) {
+          detectedBpm = bpmMatch[1] || bpmMatch[2];
+          showMessage('success', `Auto-detected BPM: ${detectedBpm}`);
+        }
+      }
+
+      showMessage('info', 'Saving to database...');
       const packData = {
-        ...packForm,
-        bpm: parseInt(packForm.bpm) || null,
+        name: packForm.name,
+        artist: packForm.artist,
+        bpm: parseInt(detectedBpm) || null,
+        key: packForm.key,
+        genre: packForm.genre,
+        mood: packForm.mood,
+        main_loop_url: mainLoopUrl,
+        thumbnail_url: coverImageUrl,
         collection_id: selectedCollection || null,
+        has_stems: packForm.has_stems,
+        featured: packForm.featured,
         is_pack: true,
         plays: 0
       };
@@ -116,12 +180,18 @@ function AdminUploadPanel({ user }) {
     }
 
     setLoading(false);
+    setUploading(false);
   };
 
   // ============================================
   // BATCH UPLOAD
   // ============================================
   const addPackToBatch = () => {
+    if (!packForm.main_loop_file) {
+      showMessage('error', 'Main loop file is required');
+      return;
+    }
+
     const newPack = {
       id: Date.now(),
       ...packForm,
@@ -153,27 +223,62 @@ function AdminUploadPanel({ user }) {
     }
 
     setLoading(true);
+    setUploading(true);
 
     try {
-      const packsData = batchPacks.map(p => ({
-        name: p.name,
-        artist: p.artist,
-        bpm: parseInt(p.bpm) || null,
-        key: p.key,
-        genre: p.genre,
-        mood: p.mood,
-        main_loop_url: p.main_loop_url,
-        cover_image_url: p.cover_image_url,
-        collection_id: p.collection_id,
-        has_stems: p.has_stems,
-        featured: p.featured,
-        is_pack: true,
-        plays: 0
-      }));
+      const uploadedPacks = [];
 
+      for (let i = 0; i < batchPacks.length; i++) {
+        const pack = batchPacks[i];
+        showMessage('info', `Uploading pack ${i + 1} of ${batchPacks.length}...`);
+
+        // Upload main loop
+        const mainLoopUrl = await uploadFileToStorage(
+          pack.main_loop_file,
+          'sample-packs',
+          'loops/'
+        );
+
+        // Upload cover if provided
+        let coverImageUrl = null;
+        if (pack.cover_image_file) {
+          coverImageUrl = await uploadFileToStorage(
+            pack.cover_image_file,
+            'sample-packs',
+            'covers/'
+          );
+        }
+
+        // Auto-detect BPM
+        let bpm = pack.bpm;
+        if (!bpm) {
+          const bpmMatch = pack.main_loop_file.name.match(/(\d{2,3})[\-_\s]?bpm|bpm[\-_\s]?(\d{2,3})/i);
+          if (bpmMatch) {
+            bpm = bpmMatch[1] || bpmMatch[2];
+          }
+        }
+
+        uploadedPacks.push({
+          name: pack.name,
+          artist: pack.artist,
+          bpm: parseInt(bpm) || null,
+          key: pack.key,
+          genre: pack.genre,
+          mood: pack.mood,
+          main_loop_url: mainLoopUrl,
+          thumbnail_url: coverImageUrl,
+          collection_id: pack.collection_id,
+          has_stems: pack.has_stems,
+          featured: pack.featured,
+          is_pack: true,
+          plays: 0
+        });
+      }
+
+      showMessage('info', 'Saving to database...');
       const { error } = await supabase
         .from('samples')
-        .insert(packsData);
+        .insert(uploadedPacks);
 
       if (error) throw error;
 
@@ -185,6 +290,7 @@ function AdminUploadPanel({ user }) {
     }
 
     setLoading(false);
+    setUploading(false);
   };
 
   // ============================================
@@ -258,12 +364,26 @@ function AdminUploadPanel({ user }) {
   const handleSaveCollection = async (e) => {
     e.preventDefault();
     setLoading(true);
+    setUploading(true);
 
     try {
+      let coverImageUrl = null;
+      if (collectionForm.cover_image_file) {
+        showMessage('info', 'Uploading collection cover...');
+        coverImageUrl = await uploadFileToStorage(
+          collectionForm.cover_image_file,
+          'sample-packs',
+          'collection-covers/'
+        );
+      }
+
       const { error } = await supabase
         .from('collections')
         .insert([{
-          ...collectionForm,
+          name: collectionForm.name,
+          description: collectionForm.description,
+          cover_image_url: coverImageUrl,
+          is_public: collectionForm.is_public,
           created_by: user.id
         }]);
 
@@ -273,7 +393,7 @@ function AdminUploadPanel({ user }) {
       setCollectionForm({
         name: '',
         description: '',
-        cover_image_url: '',
+        cover_image_file: null,
         is_public: true
       });
       fetchData();
@@ -282,6 +402,7 @@ function AdminUploadPanel({ user }) {
     }
 
     setLoading(false);
+    setUploading(false);
   };
 
   const deleteCollection = async (id) => {
@@ -303,35 +424,6 @@ function AdminUploadPanel({ user }) {
   };
 
   // ============================================
-  // AUTO-DETECTION HELPERS
-  // ============================================
-  const autoFillFromFilename = (url, field) => {
-    if (!url) return;
-
-    const filename = url.split('/').pop().toLowerCase();
-
-    // Auto-detect BPM
-    const bpmMatch = filename.match(/(\d{2,3})[\-_\s]?bpm|bpm[\-_\s]?(\d{2,3})/i);
-    if (bpmMatch && !packForm.bpm) {
-      const bpm = bpmMatch[1] || bpmMatch[2];
-      setPackForm({ ...packForm, bpm, [field]: url });
-      showMessage('success', `Auto-detected BPM: ${bpm}`);
-      return;
-    }
-
-    // Auto-detect Key
-    const keyMatch = filename.match(/([A-G][\#b]?)[\-_\s]?(maj|major|min|minor)/i);
-    if (keyMatch && !packForm.key) {
-      const key = keyMatch[0].replace(/[\-_\s]/g, ' ');
-      setPackForm({ ...packForm, key, [field]: url });
-      showMessage('success', `Auto-detected Key: ${key}`);
-      return;
-    }
-
-    setPackForm({ ...packForm, [field]: url });
-  };
-
-  // ============================================
   // HELPERS
   // ============================================
   const resetPackForm = () => {
@@ -342,8 +434,8 @@ function AdminUploadPanel({ user }) {
       key: '',
       genre: '',
       mood: '',
-      main_loop_url: '',
-      cover_image_url: '',
+      main_loop_file: null,
+      cover_image_file: null,
       has_stems: false,
       featured: false
     });
@@ -364,6 +456,8 @@ function AdminUploadPanel({ user }) {
         <div className={`p-4 rounded-lg ${
           message.type === 'success' 
             ? 'bg-green-500/20 border border-green-500/50 text-green-300'
+            : message.type === 'info'
+            ? 'bg-blue-500/20 border border-blue-500/50 text-blue-300'
             : 'bg-red-500/20 border border-red-500/50 text-red-300'
         }`}>
           {message.text}
@@ -500,13 +594,12 @@ function AdminUploadPanel({ user }) {
                 </div>
 
                 <div>
-                  <label className="block text-cyan-300 text-sm mb-2">BPM *</label>
+                  <label className="block text-cyan-300 text-sm mb-2">BPM (optional - auto-detects)</label>
                   <input
                     type="number"
                     value={packForm.bpm}
                     onChange={(e) => setPackForm({ ...packForm, bpm: e.target.value })}
                     className="w-full px-4 py-2 bg-blue-950/50 border border-cyan-500/30 rounded-lg text-white"
-                    required
                   />
                 </div>
 
@@ -545,26 +638,30 @@ function AdminUploadPanel({ user }) {
               </div>
 
               <div>
-                <label className="block text-cyan-300 text-sm mb-2">Main Loop URL * (Auto-detects BPM/Key)</label>
+                <label className="block text-cyan-300 text-sm mb-2">Main Loop Audio File * (.wav, .mp3)</label>
                 <input
-                  type="url"
-                  value={packForm.main_loop_url}
-                  onChange={(e) => autoFillFromFilename(e.target.value, 'main_loop_url')}
-                  placeholder="https://..."
-                  className="w-full px-4 py-2 bg-blue-950/50 border border-cyan-500/30 rounded-lg text-white"
+                  type="file"
+                  accept=".wav,.mp3,.ogg"
+                  onChange={(e) => setPackForm({ ...packForm, main_loop_file: e.target.files[0] })}
+                  className="w-full px-4 py-2 bg-blue-950/50 border border-cyan-500/30 rounded-lg text-white file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-cyan-500/20 file:text-cyan-300 hover:file:bg-cyan-500/30"
                   required
                 />
+                {packForm.main_loop_file && (
+                  <p className="text-cyan-400 text-sm mt-2">Selected: {packForm.main_loop_file.name}</p>
+                )}
               </div>
 
               <div>
-                <label className="block text-cyan-300 text-sm mb-2">Cover Image URL</label>
+                <label className="block text-cyan-300 text-sm mb-2">Cover Image (optional - .jpg, .png)</label>
                 <input
-                  type="url"
-                  value={packForm.cover_image_url}
-                  onChange={(e) => setPackForm({ ...packForm, cover_image_url: e.target.value })}
-                  placeholder="https://..."
-                  className="w-full px-4 py-2 bg-blue-950/50 border border-cyan-500/30 rounded-lg text-white"
+                  type="file"
+                  accept=".jpg,.jpeg,.png,.webp"
+                  onChange={(e) => setPackForm({ ...packForm, cover_image_file: e.target.files[0] })}
+                  className="w-full px-4 py-2 bg-blue-950/50 border border-cyan-500/30 rounded-lg text-white file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-cyan-500/20 file:text-cyan-300 hover:file:bg-cyan-500/30"
                 />
+                {packForm.cover_image_file && (
+                  <p className="text-cyan-400 text-sm mt-2">Selected: {packForm.cover_image_file.name}</p>
+                )}
               </div>
 
               <div className="flex space-x-4">
@@ -593,16 +690,17 @@ function AdminUploadPanel({ user }) {
                 {uploadMode === 'single' ? (
                   <button
                     type="submit"
-                    disabled={loading}
-                    className="flex-1 py-3 bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 disabled:from-gray-600 disabled:to-gray-700 rounded-lg font-semibold transition flex items-center justify-center space-x-2"
+                    disabled={loading || uploading}
+                    className="flex-1 py-3 bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 disabled:from-gray-600 disabled:to-gray-700 disabled:cursor-not-allowed rounded-lg font-semibold transition flex items-center justify-center space-x-2"
                   >
-                    {loading ? <Loader className="w-5 h-5 animate-spin" /> : <Upload className="w-5 h-5" />}
-                    <span>{loading ? 'Uploading...' : 'Upload Pack'}</span>
+                    {uploading ? <Loader className="w-5 h-5 animate-spin" /> : <Upload className="w-5 h-5" />}
+                    <span>{uploading ? 'Uploading...' : 'Upload Pack'}</span>
                   </button>
                 ) : (
                   <button
                     type="submit"
-                    className="flex-1 py-3 bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 rounded-lg font-semibold transition flex items-center justify-center space-x-2"
+                    disabled={uploading}
+                    className="flex-1 py-3 bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 disabled:from-gray-600 disabled:to-gray-700 rounded-lg font-semibold transition flex items-center justify-center space-x-2"
                   >
                     <Plus className="w-5 h-5" />
                     <span>Add to Batch ({batchPacks.length})</span>
@@ -619,11 +717,11 @@ function AdminUploadPanel({ user }) {
                 <h3 className="text-lg font-bold text-white">Batch Queue ({batchPacks.length} packs)</h3>
                 <button
                   onClick={handleBatchSubmit}
-                  disabled={loading}
+                  disabled={loading || uploading}
                   className="px-6 py-2 bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 disabled:from-gray-600 disabled:to-gray-700 rounded-lg font-semibold transition flex items-center space-x-2"
                 >
-                  {loading ? <Loader className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-                  <span>{loading ? 'Uploading...' : 'Upload All'}</span>
+                  {uploading ? <Loader className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                  <span>{uploading ? 'Uploading...' : 'Upload All'}</span>
                 </button>
               </div>
 
@@ -632,13 +730,15 @@ function AdminUploadPanel({ user }) {
                   <div key={pack.id} className="flex items-center justify-between p-3 bg-white/5 rounded-lg">
                     <div className="flex-1">
                       <p className="font-semibold text-white">{pack.name}</p>
-                      <p className="text-sm text-cyan-400">{pack.artist} • {pack.bpm} BPM • {pack.key}</p>
+                      <p className="text-sm text-cyan-400">{pack.artist} • {pack.bpm || 'Auto'} BPM • {pack.key}</p>
+                      <p className="text-xs text-gray-400">{pack.main_loop_file?.name}</p>
                     </div>
                     <div className="flex space-x-2">
                       <button
                         onClick={() => duplicatePack(pack)}
                         className="p-2 bg-blue-500/20 hover:bg-blue-500/30 rounded transition"
                         title="Duplicate"
+                        disabled={uploading}
                       >
                         <Copy className="w-4 h-4 text-blue-400" />
                       </button>
@@ -646,6 +746,7 @@ function AdminUploadPanel({ user }) {
                         onClick={() => removeFromBatch(pack.id)}
                         className="p-2 bg-red-500/20 hover:bg-red-500/30 rounded transition"
                         title="Remove"
+                        disabled={uploading}
                       >
                         <Trash2 className="w-4 h-4 text-red-400" />
                       </button>
@@ -680,13 +781,12 @@ function AdminUploadPanel({ user }) {
                 </div>
 
                 <div>
-                  <label className="block text-cyan-300 text-sm mb-2">Cover Image URL</label>
+                  <label className="block text-cyan-300 text-sm mb-2">Cover Image (optional)</label>
                   <input
-                    type="url"
-                    value={collectionForm.cover_image_url}
-                    onChange={(e) => setCollectionForm({ ...collectionForm, cover_image_url: e.target.value })}
-                    placeholder="https://..."
-                    className="w-full px-4 py-2 bg-blue-950/50 border border-cyan-500/30 rounded-lg text-white"
+                    type="file"
+                    accept=".jpg,.jpeg,.png,.webp"
+                    onChange={(e) => setCollectionForm({ ...collectionForm, cover_image_file: e.target.files[0] })}
+                    className="w-full px-4 py-2 bg-blue-950/50 border border-cyan-500/30 rounded-lg text-white file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-cyan-500/20 file:text-cyan-300 hover:file:bg-cyan-500/30"
                   />
                 </div>
               </div>
@@ -713,11 +813,11 @@ function AdminUploadPanel({ user }) {
 
               <button
                 type="submit"
-                disabled={loading}
+                disabled={loading || uploading}
                 className="w-full py-3 bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 disabled:from-gray-600 disabled:to-gray-700 rounded-lg font-semibold transition flex items-center justify-center space-x-2"
               >
-                {loading ? <Loader className="w-5 h-5 animate-spin" /> : <FolderPlus className="w-5 h-5" />}
-                <span>{loading ? 'Creating...' : 'Create Collection'}</span>
+                {uploading ? <Loader className="w-5 h-5 animate-spin" /> : <FolderPlus className="w-5 h-5" />}
+                <span>{uploading ? 'Creating...' : 'Create Collection'}</span>
               </button>
             </div>
           </form>
