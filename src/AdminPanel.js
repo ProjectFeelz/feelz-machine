@@ -106,13 +106,36 @@ function AdminPanel({ user, profile }) {
         .slice(0, 5);
       setTopGenres(sortedGenres);
 
-      // Recent activity (last 10)
+      // Recent activity - FIXED: Fetch samples and user data separately
       const { data: activity } = await supabase
         .from('sample_interactions')
-        .select('*, samples(name), user_profiles(name)')
+        .select('*, samples(name)')
         .order('created_at', { ascending: false })
         .limit(10);
-      setRecentActivity(activity || []);
+
+      // Get user profiles separately
+      if (activity && activity.length > 0) {
+        const userIds = [...new Set(activity.map(a => a.user_id))];
+        const { data: profiles } = await supabase
+          .from('user_profiles')
+          .select('user_id, name')
+          .in('user_id', userIds);
+
+        // Map profiles to activity
+        const profileMap = {};
+        profiles?.forEach(p => {
+          profileMap[p.user_id] = p;
+        });
+
+        const enrichedActivity = activity.map(a => ({
+          ...a,
+          user_profiles: profileMap[a.user_id] || { name: 'Unknown User' }
+        }));
+
+        setRecentActivity(enrichedActivity);
+      } else {
+        setRecentActivity([]);
+      }
 
     } catch (error) {
       console.error('Error fetching analytics:', error);
@@ -136,12 +159,11 @@ function AdminPanel({ user, profile }) {
         return;
       }
 
-      // Get emails from auth.users
-      const userIds = subscribers.map(s => s.user_id);
-      const { data: authUsers } = await supabase.auth.admin.listUsers();
+      // Get emails from auth.users (admin only)
+      const { data: authData } = await supabase.auth.admin.listUsers();
       
       const emailMap = {};
-      authUsers?.users?.forEach(u => {
+      authData?.users?.forEach(u => {
         emailMap[u.id] = u.email;
       });
 
@@ -172,7 +194,7 @@ function AdminPanel({ user, profile }) {
 
     } catch (error) {
       console.error('Error exporting subscribers:', error);
-      alert('Failed to export subscribers');
+      alert('Failed to export subscribers: ' + error.message);
     }
 
     setExporting(false);
@@ -182,24 +204,16 @@ function AdminPanel({ user, profile }) {
     setExporting(true);
 
     try {
-      // Get all interactions with user and sample details
+      // Get all interactions with sample details
       const { data: interactions } = await supabase
         .from('sample_interactions')
-        .select(`
-          *,
-          user_profiles(name),
-          samples(name, artist, genre)
-        `)
+        .select('*, samples(name, artist, genre)')
         .order('created_at', { ascending: false });
 
       // Get all downloads
       const { data: downloads } = await supabase
         .from('user_downloads')
-        .select(`
-          *,
-          user_profiles(name),
-          samples(name, artist)
-        `)
+        .select('*, samples(name, artist)')
         .order('created_at', { ascending: false });
 
       if ((!interactions || interactions.length === 0) && (!downloads || downloads.length === 0)) {
@@ -208,11 +222,30 @@ function AdminPanel({ user, profile }) {
         return;
       }
 
-      // Get emails
-      const { data: authUsers } = await supabase.auth.admin.listUsers();
+      // Get user profiles
+      const allUserIds = [
+        ...(interactions?.map(i => i.user_id) || []),
+        ...(downloads?.map(d => d.user_id) || [])
+      ];
+      const uniqueUserIds = [...new Set(allUserIds)];
+
+      const { data: profiles } = await supabase
+        .from('user_profiles')
+        .select('user_id, name')
+        .in('user_id', uniqueUserIds);
+
+      // Get emails (admin only)
+      const { data: authData } = await supabase.auth.admin.listUsers();
+      
       const emailMap = {};
-      authUsers?.users?.forEach(u => {
+      const nameMap = {};
+      
+      authData?.users?.forEach(u => {
         emailMap[u.id] = u.email;
+      });
+      
+      profiles?.forEach(p => {
+        nameMap[p.user_id] = p.name;
       });
 
       // Combine interactions and downloads
@@ -220,7 +253,7 @@ function AdminPanel({ user, profile }) {
 
       interactions?.forEach(item => {
         usageData.push({
-          user_name: item.user_profiles?.name || 'N/A',
+          user_name: nameMap[item.user_id] || 'N/A',
           user_email: emailMap[item.user_id] || 'N/A',
           action: 'Play',
           sample_name: item.samples?.name || 'N/A',
@@ -235,7 +268,7 @@ function AdminPanel({ user, profile }) {
 
       downloads?.forEach(item => {
         usageData.push({
-          user_name: item.user_profiles?.name || 'N/A',
+          user_name: nameMap[item.user_id] || 'N/A',
           user_email: emailMap[item.user_id] || 'N/A',
           action: `Download (${item.download_type})`,
           sample_name: item.samples?.name || 'N/A',
@@ -284,7 +317,7 @@ function AdminPanel({ user, profile }) {
 
     } catch (error) {
       console.error('Error exporting usage data:', error);
-      alert('Failed to export usage data');
+      alert('Failed to export usage data: ' + error.message);
     }
 
     setExporting(false);
@@ -436,6 +469,9 @@ function AdminPanel({ user, profile }) {
                       <span className="text-cyan-300 font-semibold">{pack.count} plays</span>
                     </div>
                   ))}
+                  {topPacks.length === 0 && (
+                    <p className="text-center text-cyan-400 py-4">No data yet</p>
+                  )}
                 </div>
               </div>
 
@@ -460,6 +496,9 @@ function AdminPanel({ user, profile }) {
                       </div>
                     </div>
                   ))}
+                  {topGenres.length === 0 && (
+                    <p className="text-center text-cyan-400 py-4">No data yet</p>
+                  )}
                 </div>
               </div>
             </div>
@@ -487,6 +526,9 @@ function AdminPanel({ user, profile }) {
                     </span>
                   </div>
                 ))}
+                {recentActivity.length === 0 && (
+                  <p className="text-center text-cyan-400 py-4">No activity yet</p>
+                )}
               </div>
             </div>
           </>
