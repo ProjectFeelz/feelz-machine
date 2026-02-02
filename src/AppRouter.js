@@ -5,6 +5,9 @@ import FeelzMachine from './App';
 import Login from './Login';
 import AdminPanel from './AdminPanel';
 import ProfileSetup from './ProfileSetup';
+import ProfileEditPage from './ProfileEditPage';
+import PrivacyPolicy from './PrivacyPolicy';
+import TermsOfUse from './TermsOfUse';
 import LandingPage from './LandingPage';
 
 function AppContent() {
@@ -31,9 +34,9 @@ function AppContent() {
     };
   }, []);
 
-  // Skip landing page if on admin route
+  // Skip landing page if on specific routes
   useEffect(() => {
-    if (location.pathname === '/feelzadmin') {
+    if (['/feelzadmin', '/privacy-policy', '/terms-of-use', '/profile'].includes(location.pathname)) {
       setShowLanding(false);
     }
   }, [location.pathname]);
@@ -114,17 +117,42 @@ function AppContent() {
         } 
       />
 
-      {/* Admin Route - No Profile Check */}
+      {/* Profile Edit Route */}
       <Route 
-        path="/feelzadmin" 
+        path="/profile" 
         element={
-          user ? (
-            <AdminPanel user={user} onLogout={handleLogout} />
+          user && profile ? (
+            <ProfileEditPage 
+              user={user} 
+              profile={profile} 
+              onUpdate={async () => {
+                // Refresh profile after update
+                if (user) {
+                  await fetchProfile(user.id);
+                }
+              }}
+            />
           ) : (
             <Navigate to="/" replace />
           )
         } 
       />
+
+      {/* Admin Route - FIXED: Now passes profile */}
+      <Route 
+        path="/feelzadmin" 
+        element={
+          user && profile ? (
+            <AdminPanel user={user} profile={profile} onLogout={handleLogout} />
+          ) : (
+            <Navigate to="/" replace />
+          )
+        } 
+      />
+
+      {/* Legal Pages */}
+      <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+      <Route path="/terms-of-use" element={<TermsOfUse />} />
 
       {/* Login Route */}
       <Route 
