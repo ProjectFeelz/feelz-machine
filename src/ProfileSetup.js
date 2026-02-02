@@ -33,6 +33,7 @@ const DAWS = [
 function ProfileSetup({ user, onComplete }) {
   const [formData, setFormData] = useState({
     name: '',
+    email: user?.email || '',
     age: '',
     country: '',
     city: '',
@@ -60,6 +61,11 @@ function ProfileSetup({ user, onComplete }) {
       return;
     }
 
+    if (!formData.email.trim() || !formData.email.includes('@')) {
+      setError('Valid email is required');
+      return;
+    }
+
     if (formData.favorite_genres.length === 0) {
       setError('Please select at least one favorite genre');
       return;
@@ -74,6 +80,7 @@ function ProfileSetup({ user, onComplete }) {
         .insert([{
           user_id: user.id,
           name: formData.name.trim(),
+          email: formData.email.trim(),
           age: formData.age ? parseInt(formData.age) : null,
           country: formData.country || null,
           city: formData.city.trim() || null,
@@ -117,6 +124,22 @@ function ProfileSetup({ user, onComplete }) {
               className="w-full px-4 py-3 bg-purple-950/50 border border-purple-500/30 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-white"
               placeholder="Your name"
             />
+          </div>
+
+          {/* Email */}
+          <div>
+            <label className="block text-sm font-semibold text-purple-300 mb-2">
+              Email *
+            </label>
+            <input
+              type="email"
+              value={formData.email}
+              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+              required
+              className="w-full px-4 py-3 bg-purple-950/50 border border-purple-500/30 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-white"
+              placeholder="your@email.com"
+            />
+            <p className="text-xs text-purple-400 mt-1">We'll use this for updates and your account</p>
           </div>
 
           {/* Age and Country */}
