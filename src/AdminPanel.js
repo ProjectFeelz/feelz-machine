@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from './supabaseClient';
 import { 
@@ -31,41 +31,8 @@ function AdminPanel({ user, profile }) {
   const [activeTab, setActiveTab] = useState('upload');
   const [adminLevel, setAdminLevel] = useState(3);
 
-  useEffect(() => {
-    if (profile?.is_admin) {
-      checkAdminLevel();
-    }
-  }, [profile]); // Only depends on profile
-
-  const checkAdminLevel = async () => {
-    try {
-      const { data, error} = await supabase
-        .from('admins')
-        .select('level')
-        .eq('user_id', user.id)
-        .single();
-
-      if (!error && data) {
-        setAdminLevel(data.level || 3);
-        if (data.level === 3) {
-          setActiveTab('analytics');
-          fetchAnalytics();
-        } else {
-          setActiveTab('upload');
-          setLoading(false);
-        }
-      } else {
-        setActiveTab('analytics');
-        fetchAnalytics();
-      }
-    } catch (error) {
-      console.error('Error checking admin level:', error);
-      setActiveTab('analytics');
-      fetchAnalytics();
-    }
-  };
-
-  const fetchAnalytics = async () => {
+  // ✅ FIX: Wrap fetchAnalytics in useCallback to prevent recreation
+  const fetchAnalytics = useCallback(async () => {
     setLoading(true);
 
     try {
@@ -78,7 +45,6 @@ function AdminPanel({ user, profile }) {
         .from('user_downloads')
         .select('*', { count: 'exact', head: true });
 
-      // Count users from user_profiles (now includes all auth users via trigger)
       const { data: profilesData, count: usersCount, error: usersError } = await supabase
         .from('user_profiles')
         .select('id', { count: 'exact', head: true });
@@ -182,7 +148,46 @@ function AdminPanel({ user, profile }) {
     }
 
     setLoading(false);
-  };
+  }, []); // Empty deps - never recreated
+
+  // ✅ FIX: Move checkAdminLevel INSIDE useEffect
+  useEffect(() => {
+    const checkAdminLevel = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('admins')
+          .select('level')
+          .eq('user_id', user.id)
+          .single();
+
+        if (!error && data) {
+          setAdminLevel(data.level || 3);
+          if (data.level === 3) {
+            setActiveTab('analytics');
+          } else {
+            setActiveTab('upload');
+            setLoading(false);
+          }
+        } else {
+          setActiveTab('analytics');
+        }
+      } catch (error) {
+        console.error('Error checking admin level:', error);
+        setActiveTab('analytics');
+      }
+    };
+
+    if (profile?.is_admin) {
+      checkAdminLevel();
+    }
+  }, [profile, user.id]); // Only when profile or user changes
+
+  // ✅ FIX: Fetch analytics only when tab changes to analytics
+  useEffect(() => {
+    if (activeTab === 'analytics' && adminLevel === 3) {
+      fetchAnalytics();
+    }
+  }, [activeTab, adminLevel, fetchAnalytics]);
 
   const exportSubscribersCSV = async () => {
     setExporting(true);
