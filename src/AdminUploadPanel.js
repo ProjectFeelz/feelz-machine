@@ -21,8 +21,44 @@ import {
   Search
 } from 'lucide-react';
 
+// ============================================
+// DROPDOWN CONSTANTS - NEW!
+// ============================================
+const KEYS = [
+  'C', 'C#/Db', 'D', 'D#/Eb', 'E', 'F', 'F#/Gb', 'G', 'G#/Ab', 'A', 'A#/Bb', 'B',
+  'Cm', 'C#m/Dbm', 'Dm', 'D#m/Ebm', 'Em', 'Fm', 'F#m/Gbm', 'Gm', 'G#m/Abm', 'Am', 'A#m/Bbm', 'Bm',
+  'Other'
+];
+
+const GENRES = [
+  'Hip Hop', 'Trap', 'Drill', 'Boom Bap', 'Lo-Fi', 'R&B', 'Neo Soul', 'Pop',
+  'Electronic', 'House', 'Deep House', 'Tech House', 'Techno', 'Dubstep',
+  'Drum & Bass', 'Ambient', 'Downtempo', 'Future Bass', 'Jersey Club',
+  'Jazz', 'Funk', 'Soul', 'Rock', 'Metal', 'Indie', 'Alternative',
+  'Afrobeat', 'Amapiano', 'Reggae', 'Dancehall', 'Latin', 'Reggaeton',
+  'Country', 'EDM', 'Trance', 'Hardstyle', 'UK Garage', 'Grime',
+  'Experimental', 'Vaporwave', 'Synthwave', 'Other'
+];
+
+const MOODS = [
+  'Dark', 'Happy', 'Sad', 'Aggressive', 'Chill', 'Energetic', 'Melancholic',
+  'Uplifting', 'Mysterious', 'Peaceful', 'Intense', 'Dreamy', 'Romantic',
+  'Angry', 'Hopeful', 'Nostalgic', 'Epic', 'Smooth', 'Bouncy', 'Atmospheric',
+  'Moody', 'Vibey', 'Hard', 'Soft', 'Ethereal', 'Groovy', 'Other'
+];
+
+const STEM_TYPES = [
+  'Drums', 'Drum Loop', 'Kick', 'Snare', 'Hi-Hats', 'Percussion',
+  'Bass', '808', 'Sub Bass', 'Bassline',
+  'Melody', 'Lead', 'Chords', 'Piano', 'Guitar', 'Keys',
+  'Synth', 'Pad', 'Arp', 'Pluck',
+  'Vocals', 'Vocal Chops', 'Ad-Libs',
+  'Strings', 'Brass', 'FX', 'Ambient', 'Texture',
+  'Other'
+];
+
 function AdminUploadPanel({ user, adminLevel = 3 }) {
-  const [activeTab, setActiveTab] = useState('upload'); // upload, collections, templates, manage
+  const [activeTab, setActiveTab] = useState('upload');
   const [collections, setCollections] = useState([]);
   const [templates, setTemplates] = useState([]);
   const [samples, setSamples] = useState([]);
@@ -31,13 +67,12 @@ function AdminUploadPanel({ user, adminLevel = 3 }) {
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({});
   const [editThumbnailFile, setEditThumbnailFile] = useState(null);
-  const [uploadQueue, setUploadQueue] = useState([]);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
 
   // Upload form state
-  const [uploadMode, setUploadMode] = useState('single'); // single, batch
+  const [uploadMode, setUploadMode] = useState('single');
   const [selectedCollection, setSelectedCollection] = useState('');
   const [selectedTemplate, setSelectedTemplate] = useState('');
   const [batchPacks, setBatchPacks] = useState([]);
@@ -56,14 +91,13 @@ function AdminUploadPanel({ user, adminLevel = 3 }) {
     featured: false
   });
 
-  // Stem files state
-  const [stemFiles, setStemFiles] = useState({
-    drums: null,
-    bass: null,
-    melody: null,
-    vocals: null,
-    other: null
-  });
+  // Custom inputs for "Other" options - NEW!
+  const [customKey, setCustomKey] = useState('');
+  const [customGenre, setCustomGenre] = useState('');
+  const [customMood, setCustomMood] = useState('');
+
+  // Flexible stem files - NEW! (not hardcoded to 5 types)
+  const [stemFiles, setStemFiles] = useState([]);
 
   // Collection form
   const [collectionForm, setCollectionForm] = useState({
@@ -110,14 +144,12 @@ function AdminUploadPanel({ user, adminLevel = 3 }) {
   }, [searchTerm, samples]);
 
   const fetchData = async () => {
-    // Fetch collections
     const { data: collectionsData } = await supabase
       .from('collections')
       .select('*')
       .order('created_at', { ascending: false });
     setCollections(collectionsData || []);
 
-    // Fetch templates
     const { data: templatesData } = await supabase
       .from('upload_templates')
       .select('*')
@@ -139,9 +171,6 @@ function AdminUploadPanel({ user, adminLevel = 3 }) {
     setLoading(false);
   };
 
-  // ============================================
-  // FILE UPLOAD HELPERS
-  // ============================================
   const uploadFileToStorage = async (file, bucket, folder = '') => {
     const fileExt = file.name.split('.').pop();
     const fileName = `${folder}${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
@@ -159,16 +188,12 @@ function AdminUploadPanel({ user, adminLevel = 3 }) {
     return publicUrl;
   };
 
-  // ============================================
-  // SINGLE PACK UPLOAD
-  // ============================================
   const handleSinglePackSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     setUploading(true);
 
     try {
-      // Upload main loop file
       if (!packForm.main_loop_file) {
         throw new Error('Main loop file is required');
       }
@@ -180,7 +205,6 @@ function AdminUploadPanel({ user, adminLevel = 3 }) {
         'loops/'
       );
 
-      // Upload cover image if provided
       let coverImageUrl = null;
       if (packForm.cover_image_file) {
         showMessage('info', 'Uploading cover image...');
@@ -191,7 +215,6 @@ function AdminUploadPanel({ user, adminLevel = 3 }) {
         );
       }
 
-      // Auto-detect BPM from filename if not provided
       let detectedBpm = packForm.bpm;
       if (!detectedBpm) {
         const bpmMatch = packForm.main_loop_file.name.match(/(\d{2,3})[\-_\s]?bpm|bpm[\-_\s]?(\d{2,3})/i);
@@ -210,6 +233,7 @@ function AdminUploadPanel({ user, adminLevel = 3 }) {
         genre: packForm.genre,
         mood: packForm.mood,
         main_loop_url: mainLoopUrl,
+        file_url: mainLoopUrl,
         thumbnail_url: coverImageUrl,
         collection_id: selectedCollection || null,
         has_stems: packForm.has_stems,
@@ -227,18 +251,10 @@ function AdminUploadPanel({ user, adminLevel = 3 }) {
 
       const sampleId = data[0].id;
 
-      // Upload stems if has_stems is checked
-      if (packForm.has_stems) {
-        const stemTypes = [
-          { key: 'drums', name: 'Drums', file: stemFiles.drums },
-          { key: 'bass', name: 'Bass', file: stemFiles.bass },
-          { key: 'melody', name: 'Melody', file: stemFiles.melody },
-          { key: 'vocals', name: 'Vocals', file: stemFiles.vocals },
-          { key: 'other', name: 'Other', file: stemFiles.other }
-        ];
-
+      // Upload stems if any - NEW flexible system!
+      if (packForm.has_stems && stemFiles.length > 0) {
         let stemCount = 0;
-        for (const stem of stemTypes) {
+        for (const stem of stemFiles) {
           if (stem.file) {
             stemCount++;
             showMessage('info', `Uploading ${stem.name} stem...`);
@@ -254,7 +270,7 @@ function AdminUploadPanel({ user, adminLevel = 3 }) {
               .insert([{
                 sample_id: sampleId,
                 name: stem.name,
-                stem_type: stem.name,
+                stem_type: stem.stem_type,
                 file_url: stemUrl,
                 order_index: stemCount
               }]);
@@ -277,9 +293,6 @@ function AdminUploadPanel({ user, adminLevel = 3 }) {
     setUploading(false);
   };
 
-  // ============================================
-  // BATCH UPLOAD
-  // ============================================
   const addPackToBatch = () => {
     if (!packForm.main_loop_file) {
       showMessage('error', 'Main loop file is required');
@@ -289,6 +302,7 @@ function AdminUploadPanel({ user, adminLevel = 3 }) {
     const newPack = {
       id: Date.now(),
       ...packForm,
+      stems: [...stemFiles],
       collection_id: selectedCollection || null
     };
     setBatchPacks([...batchPacks, newPack]);
@@ -320,20 +334,16 @@ function AdminUploadPanel({ user, adminLevel = 3 }) {
     setUploading(true);
 
     try {
-      const uploadedPacks = [];
-
       for (let i = 0; i < batchPacks.length; i++) {
         const pack = batchPacks[i];
         showMessage('info', `Uploading pack ${i + 1} of ${batchPacks.length}...`);
 
-        // Upload main loop
         const mainLoopUrl = await uploadFileToStorage(
           pack.main_loop_file,
           'feelz-samples',
           'loops/'
         );
 
-        // Upload cover if provided
         let coverImageUrl = null;
         if (pack.cover_image_file) {
           coverImageUrl = await uploadFileToStorage(
@@ -343,7 +353,6 @@ function AdminUploadPanel({ user, adminLevel = 3 }) {
           );
         }
 
-        // Auto-detect BPM
         let bpm = pack.bpm;
         if (!bpm) {
           const bpmMatch = pack.main_loop_file.name.match(/(\d{2,3})[\-_\s]?bpm|bpm[\-_\s]?(\d{2,3})/i);
@@ -352,29 +361,52 @@ function AdminUploadPanel({ user, adminLevel = 3 }) {
           }
         }
 
-        uploadedPacks.push({
-          name: pack.name,
-          artist: pack.artist,
-          bpm: parseInt(bpm) || null,
-          key: pack.key,
-          genre: pack.genre,
-          mood: pack.mood,
-          main_loop_url: mainLoopUrl,
-          thumbnail_url: coverImageUrl,
-          collection_id: pack.collection_id,
-          has_stems: pack.has_stems,
-          featured: pack.featured,
-          is_pack: true,
-          plays: 0
-        });
+        const { data: sampleData, error: sampleError } = await supabase
+          .from('samples')
+          .insert([{
+            name: pack.name,
+            artist: pack.artist,
+            bpm: parseInt(bpm) || null,
+            key: pack.key,
+            genre: pack.genre,
+            mood: pack.mood,
+            main_loop_url: mainLoopUrl,
+            file_url: mainLoopUrl,
+            thumbnail_url: coverImageUrl,
+            collection_id: pack.collection_id,
+            has_stems: pack.has_stems,
+            featured: pack.featured,
+            is_pack: true,
+            plays: 0
+          }])
+          .select();
+
+        if (sampleError) throw sampleError;
+
+        // Upload stems for this pack
+        if (pack.has_stems && pack.stems && pack.stems.length > 0) {
+          const sampleId = sampleData[0].id;
+          for (const stem of pack.stems) {
+            if (stem.file) {
+              const stemUrl = await uploadFileToStorage(
+                stem.file,
+                'feelz-samples',
+                'stems/'
+              );
+
+              await supabase
+                .from('sample_stems')
+                .insert([{
+                  sample_id: sampleId,
+                  name: stem.name,
+                  stem_type: stem.stem_type,
+                  file_url: stemUrl,
+                  order_index: pack.stems.indexOf(stem)
+                }]);
+            }
+          }
+        }
       }
-
-      showMessage('info', 'Saving to database...');
-      const { error } = await supabase
-        .from('samples')
-        .insert(uploadedPacks);
-
-      if (error) throw error;
 
       showMessage('success', `✓ ${batchPacks.length} packs uploaded successfully!`);
       setBatchPacks([]);
@@ -387,9 +419,6 @@ function AdminUploadPanel({ user, adminLevel = 3 }) {
     setUploading(false);
   };
 
-  // ============================================
-  // TEMPLATE OPERATIONS
-  // ============================================
   const applyTemplate = (template) => {
     setPackForm({
       ...packForm,
@@ -452,9 +481,6 @@ function AdminUploadPanel({ user, adminLevel = 3 }) {
     }
   };
 
-  // ============================================
-  // COLLECTION OPERATIONS
-  // ============================================
   const handleSaveCollection = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -517,9 +543,6 @@ function AdminUploadPanel({ user, adminLevel = 3 }) {
     }
   };
 
-  // ============================================
-  // HELPERS
-  // ============================================
   const startEdit = (sample) => {
     setEditingId(sample.id);
     setEditForm({
@@ -544,9 +567,8 @@ function AdminUploadPanel({ user, adminLevel = 3 }) {
   const saveEdit = async (id) => {
     try {
       let updateData = { ...editForm };
-      delete updateData.current_thumbnail; // Remove this from update
+      delete updateData.current_thumbnail;
 
-      // If new thumbnail uploaded, upload it first
       if (editThumbnailFile) {
         showMessage('info', 'Uploading new thumbnail...');
         
@@ -614,13 +636,10 @@ function AdminUploadPanel({ user, adminLevel = 3 }) {
       has_stems: false,
       featured: false
     });
-    setStemFiles({
-      drums: null,
-      bass: null,
-      melody: null,
-      vocals: null,
-      other: null
-    });
+    setStemFiles([]);
+    setCustomKey('');
+    setCustomGenre('');
+    setCustomMood('');
   };
 
   const showMessage = (type, text) => {
@@ -628,12 +647,23 @@ function AdminUploadPanel({ user, adminLevel = 3 }) {
     setTimeout(() => setMessage({ type: '', text: '' }), 3000);
   };
 
-  // ============================================
-  // RENDER
-  // ============================================
+  // NEW! Add stem to flexible list
+  const addStem = () => {
+    setStemFiles([...stemFiles, { name: '', stem_type: '', file: null }]);
+  };
+
+  const removeStem = (index) => {
+    setStemFiles(stemFiles.filter((_, i) => i !== index));
+  };
+
+  const updateStem = (index, field, value) => {
+    const newStems = [...stemFiles];
+    newStems[index][field] = value;
+    setStemFiles(newStems);
+  };
+
   return (
     <div className="space-y-6">
-      {/* Message Banner */}
       {message.text && (
         <div className={`p-4 rounded-lg ${
           message.type === 'success' 
@@ -802,37 +832,111 @@ function AdminUploadPanel({ user, adminLevel = 3 }) {
                   />
                 </div>
 
+                {/* KEY DROPDOWN WITH OTHER - NEW! */}
                 <div>
                   <label className="block text-cyan-300 text-sm mb-2">Key *</label>
-                  <input
-                    type="text"
-                    value={packForm.key}
-                    onChange={(e) => setPackForm({ ...packForm, key: e.target.value })}
-                    placeholder="C Major"
-                    className="w-full px-4 py-2 bg-blue-950/50 border border-cyan-500/30 rounded-lg text-white"
+                  <select
+                    value={KEYS.includes(packForm.key) ? packForm.key : 'Other'}
+                    onChange={(e) => {
+                      if (e.target.value === 'Other') {
+                        setCustomKey('');
+                        setPackForm({ ...packForm, key: '' });
+                      } else {
+                        setPackForm({ ...packForm, key: e.target.value });
+                        setCustomKey('');
+                      }
+                    }}
                     required
-                  />
+                    className="w-full px-4 py-2 bg-blue-950/50 border border-cyan-500/30 rounded-lg text-white"
+                  >
+                    <option value="">Select key...</option>
+                    {KEYS.map(key => (
+                      <option key={key} value={key}>{key}</option>
+                    ))}
+                  </select>
+                  {(!KEYS.includes(packForm.key) || packForm.key === '') && (
+                    <input
+                      type="text"
+                      value={customKey || packForm.key}
+                      onChange={(e) => {
+                        setCustomKey(e.target.value);
+                        setPackForm({ ...packForm, key: e.target.value });
+                      }}
+                      placeholder="Enter custom key..."
+                      className="mt-2 w-full px-4 py-2 bg-blue-950/50 border border-cyan-500/30 rounded-lg text-white"
+                    />
+                  )}
                 </div>
 
+                {/* GENRE DROPDOWN WITH OTHER - NEW! */}
                 <div>
                   <label className="block text-cyan-300 text-sm mb-2">Genre *</label>
-                  <input
-                    type="text"
-                    value={packForm.genre}
-                    onChange={(e) => setPackForm({ ...packForm, genre: e.target.value })}
-                    className="w-full px-4 py-2 bg-blue-950/50 border border-cyan-500/30 rounded-lg text-white"
+                  <select
+                    value={GENRES.includes(packForm.genre) ? packForm.genre : 'Other'}
+                    onChange={(e) => {
+                      if (e.target.value === 'Other') {
+                        setCustomGenre('');
+                        setPackForm({ ...packForm, genre: '' });
+                      } else {
+                        setPackForm({ ...packForm, genre: e.target.value });
+                        setCustomGenre('');
+                      }
+                    }}
                     required
-                  />
+                    className="w-full px-4 py-2 bg-blue-950/50 border border-cyan-500/30 rounded-lg text-white"
+                  >
+                    <option value="">Select genre...</option>
+                    {GENRES.map(genre => (
+                      <option key={genre} value={genre}>{genre}</option>
+                    ))}
+                  </select>
+                  {(!GENRES.includes(packForm.genre) || packForm.genre === '') && (
+                    <input
+                      type="text"
+                      value={customGenre || packForm.genre}
+                      onChange={(e) => {
+                        setCustomGenre(e.target.value);
+                        setPackForm({ ...packForm, genre: e.target.value });
+                      }}
+                      placeholder="Enter custom genre..."
+                      className="mt-2 w-full px-4 py-2 bg-blue-950/50 border border-cyan-500/30 rounded-lg text-white"
+                    />
+                  )}
                 </div>
 
+                {/* MOOD DROPDOWN WITH OTHER - NEW! */}
                 <div>
                   <label className="block text-cyan-300 text-sm mb-2">Mood</label>
-                  <input
-                    type="text"
-                    value={packForm.mood}
-                    onChange={(e) => setPackForm({ ...packForm, mood: e.target.value })}
+                  <select
+                    value={MOODS.includes(packForm.mood) ? packForm.mood : 'Other'}
+                    onChange={(e) => {
+                      if (e.target.value === 'Other') {
+                        setCustomMood('');
+                        setPackForm({ ...packForm, mood: '' });
+                      } else {
+                        setPackForm({ ...packForm, mood: e.target.value });
+                        setCustomMood('');
+                      }
+                    }}
                     className="w-full px-4 py-2 bg-blue-950/50 border border-cyan-500/30 rounded-lg text-white"
-                  />
+                  >
+                    <option value="">Select mood...</option>
+                    {MOODS.map(mood => (
+                      <option key={mood} value={mood}>{mood}</option>
+                    ))}
+                  </select>
+                  {(!MOODS.includes(packForm.mood) || packForm.mood === '') && (
+                    <input
+                      type="text"
+                      value={customMood || packForm.mood}
+                      onChange={(e) => {
+                        setCustomMood(e.target.value);
+                        setPackForm({ ...packForm, mood: e.target.value });
+                      }}
+                      placeholder="Enter custom mood..."
+                      className="mt-2 w-full px-4 py-2 bg-blue-950/50 border border-cyan-500/30 rounded-lg text-white"
+                    />
+                  )}
                 </div>
               </div>
 
@@ -897,87 +1001,105 @@ function AdminUploadPanel({ user, adminLevel = 3 }) {
                 </label>
               </div>
 
-              {/* Stem Uploads - Show when has_stems is checked */}
+              {/* FLEXIBLE STEM SYSTEM - NEW! */}
               {packForm.has_stems && (
                 <div className="bg-blue-950/20 border border-cyan-500/20 rounded-lg p-4 space-y-3">
-                  <h4 className="text-cyan-300 font-semibold mb-3 flex items-center space-x-2">
-                    <Music className="w-4 h-4" />
-                    <span>Upload Stems (Optional)</span>
-                  </h4>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-cyan-400 text-xs mb-1">🥁 Drums Stem</label>
-                      <input
-                        type="file"
-                        accept=".wav,.mp3,.ogg"
-                        onChange={(e) => {
-                          const file = e.target.files[0];
-                          if (file && file.size > 50 * 1024 * 1024) {
-                            showMessage('error', `File too large! Max 50MB on free tier.`);
-                            return;
-                          }
-                          setStemFiles({ ...stemFiles, drums: file });
-                        }}
-                        className="w-full text-xs px-2 py-1.5 bg-blue-950/50 border border-cyan-500/30 rounded text-white file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:bg-cyan-500/20 file:text-cyan-300 hover:file:bg-cyan-500/30"
-                      />
-                      {stemFiles.drums && (
-                        <p className="text-xs text-green-400 mt-1">✓ {stemFiles.drums.name}</p>
-                      )}
-                    </div>
-
-                    <div>
-                      <label className="block text-cyan-400 text-xs mb-1">🎸 Bass Stem</label>
-                      <input
-                        type="file"
-                        accept=".wav,.mp3,.ogg"
-                        onChange={(e) => setStemFiles({ ...stemFiles, bass: e.target.files[0] })}
-                        className="w-full text-xs px-2 py-1.5 bg-blue-950/50 border border-cyan-500/30 rounded text-white file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:bg-cyan-500/20 file:text-cyan-300 hover:file:bg-cyan-500/30"
-                      />
-                      {stemFiles.bass && (
-                        <p className="text-xs text-green-400 mt-1">✓ {stemFiles.bass.name}</p>
-                      )}
-                    </div>
-
-                    <div>
-                      <label className="block text-cyan-400 text-xs mb-1">🎹 Melody Stem</label>
-                      <input
-                        type="file"
-                        accept=".wav,.mp3,.ogg"
-                        onChange={(e) => setStemFiles({ ...stemFiles, melody: e.target.files[0] })}
-                        className="w-full text-xs px-2 py-1.5 bg-blue-950/50 border border-cyan-500/30 rounded text-white file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:bg-cyan-500/20 file:text-cyan-300 hover:file:bg-cyan-500/30"
-                      />
-                      {stemFiles.melody && (
-                        <p className="text-xs text-green-400 mt-1">✓ {stemFiles.melody.name}</p>
-                      )}
-                    </div>
-
-                    <div>
-                      <label className="block text-cyan-400 text-xs mb-1">🎤 Vocals Stem</label>
-                      <input
-                        type="file"
-                        accept=".wav,.mp3,.ogg"
-                        onChange={(e) => setStemFiles({ ...stemFiles, vocals: e.target.files[0] })}
-                        className="w-full text-xs px-2 py-1.5 bg-blue-950/50 border border-cyan-500/30 rounded text-white file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:bg-cyan-500/20 file:text-cyan-300 hover:file:bg-cyan-500/30"
-                      />
-                      {stemFiles.vocals && (
-                        <p className="text-xs text-green-400 mt-1">✓ {stemFiles.vocals.name}</p>
-                      )}
-                    </div>
-
-                    <div className="md:col-span-2">
-                      <label className="block text-cyan-400 text-xs mb-1">🎧 Other Stem</label>
-                      <input
-                        type="file"
-                        accept=".wav,.mp3,.ogg"
-                        onChange={(e) => setStemFiles({ ...stemFiles, other: e.target.files[0] })}
-                        className="w-full text-xs px-2 py-1.5 bg-blue-950/50 border border-cyan-500/30 rounded text-white file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:bg-cyan-500/20 file:text-cyan-300 hover:file:bg-cyan-500/30"
-                      />
-                      {stemFiles.other && (
-                        <p className="text-xs text-green-400 mt-1">✓ {stemFiles.other.name}</p>
-                      )}
-                    </div>
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="text-cyan-300 font-semibold flex items-center space-x-2">
+                      <Music className="w-4 h-4" />
+                      <span>Upload Stems</span>
+                    </h4>
+                    <button
+                      type="button"
+                      onClick={addStem}
+                      className="px-3 py-1.5 bg-cyan-500/20 hover:bg-cyan-500/30 rounded-lg text-sm transition flex items-center space-x-1"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>Add Stem</span>
+                    </button>
                   </div>
+
+                  {stemFiles.map((stem, index) => (
+                    <div key={index} className="p-3 bg-blue-950/30 rounded-lg border border-cyan-500/10 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <h5 className="text-cyan-400 text-sm font-semibold">Stem {index + 1}</h5>
+                        <button
+                          type="button"
+                          onClick={() => removeStem(index)}
+                          className="p-1 bg-red-500/20 hover:bg-red-500/30 rounded transition"
+                        >
+                          <Trash2 className="w-4 h-4 text-red-400" />
+                        </button>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-cyan-400 text-xs mb-1">Stem Name</label>
+                          <input
+                            type="text"
+                            value={stem.name}
+                            onChange={(e) => updateStem(index, 'name', e.target.value)}
+                            placeholder="e.g., Drums, Bass"
+                            className="w-full px-2 py-1.5 bg-blue-950/50 border border-cyan-500/30 rounded text-white text-sm"
+                          />
+                        </div>
+
+                        {/* STEM TYPE DROPDOWN - NEW! */}
+                        <div>
+                          <label className="block text-cyan-400 text-xs mb-1">Stem Type</label>
+                          <select
+                            value={STEM_TYPES.includes(stem.stem_type) ? stem.stem_type : 'Other'}
+                            onChange={(e) => {
+                              if (e.target.value === 'Other') {
+                                updateStem(index, 'stem_type', '');
+                              } else {
+                                updateStem(index, 'stem_type', e.target.value);
+                              }
+                            }}
+                            className="w-full px-2 py-1.5 bg-blue-950/50 border border-cyan-500/30 rounded text-white text-sm"
+                          >
+                            <option value="">Select type...</option>
+                            {STEM_TYPES.map(type => (
+                              <option key={type} value={type}>{type}</option>
+                            ))}
+                          </select>
+                          {(!STEM_TYPES.includes(stem.stem_type) || stem.stem_type === '') && (
+                            <input
+                              type="text"
+                              value={stem.stem_type}
+                              onChange={(e) => updateStem(index, 'stem_type', e.target.value)}
+                              placeholder="Custom stem type..."
+                              className="mt-1 w-full px-2 py-1.5 bg-blue-950/50 border border-cyan-500/30 rounded text-white text-sm"
+                            />
+                          )}
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-cyan-400 text-xs mb-1">Audio File</label>
+                        <input
+                          type="file"
+                          accept=".wav,.mp3,.ogg"
+                          onChange={(e) => {
+                            const file = e.target.files[0];
+                            if (file && file.size > 50 * 1024 * 1024) {
+                              showMessage('error', 'File too large! Max 50MB.');
+                              return;
+                            }
+                            updateStem(index, 'file', file);
+                          }}
+                          className="w-full text-xs px-2 py-1 bg-blue-950/50 border border-cyan-500/30 rounded text-white file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:bg-cyan-500/20 file:text-cyan-300"
+                        />
+                        {stem.file && (
+                          <p className="text-xs text-green-400 mt-1">✓ {stem.file.name}</p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+
+                  {stemFiles.length === 0 && (
+                    <p className="text-center text-cyan-400 text-sm py-4">No stems added yet. Click "Add Stem" to start.</p>
+                  )}
                 </div>
               )}
 
@@ -1027,6 +1149,9 @@ function AdminUploadPanel({ user, adminLevel = 3 }) {
                       <p className="font-semibold text-white">{pack.name}</p>
                       <p className="text-sm text-cyan-400">{pack.artist} • {pack.bpm || 'Auto'} BPM • {pack.key}</p>
                       <p className="text-xs text-gray-400">{pack.main_loop_file?.name}</p>
+                      {pack.stems && pack.stems.length > 0 && (
+                        <p className="text-xs text-cyan-500">{pack.stems.length} stems</p>
+                      )}
                     </div>
                     <div className="flex space-x-2">
                       <button
@@ -1057,7 +1182,6 @@ function AdminUploadPanel({ user, adminLevel = 3 }) {
       {/* MANAGE TAB */}
       {activeTab === 'manage' && (
         <div className="space-y-4">
-          {/* Search */}
           <div className="bg-white/5 backdrop-blur-xl rounded-lg p-4 border border-cyan-400/20">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-cyan-400" />
@@ -1071,7 +1195,6 @@ function AdminUploadPanel({ user, adminLevel = 3 }) {
             </div>
           </div>
 
-          {/* Sample List */}
           {loading ? (
             <div className="text-center py-12">
               <Loader className="w-8 h-8 mx-auto animate-spin text-cyan-400" />
@@ -1090,7 +1213,6 @@ function AdminUploadPanel({ user, adminLevel = 3 }) {
                   className="bg-white/5 backdrop-blur-xl rounded-lg p-4 border border-cyan-400/20"
                 >
                   {editingId === sample.id ? (
-                    // EDIT MODE
                     <div className="space-y-3">
                       <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                         <div>
@@ -1149,7 +1271,6 @@ function AdminUploadPanel({ user, adminLevel = 3 }) {
                         </div>
                       </div>
 
-                      {/* Thumbnail Upload Field */}
                       <div>
                         <label className="block text-xs text-cyan-400 mb-1">New Thumbnail (optional)</label>
                         <div className="space-y-2">
@@ -1204,7 +1325,6 @@ function AdminUploadPanel({ user, adminLevel = 3 }) {
                       </div>
                     </div>
                   ) : (
-                    // VIEW MODE
                     <div className="flex items-center justify-between">
                       <div className="flex-1 flex items-center space-x-3">
                         {sample.thumbnail_url && (
@@ -1261,10 +1381,9 @@ function AdminUploadPanel({ user, adminLevel = 3 }) {
         </div>
       )}
 
-      {/* COLLECTIONS TAB - Only for Level 3 */}
+      {/* COLLECTIONS TAB */}
       {activeTab === 'collections' && adminLevel === 3 && (
         <div className="space-y-6">
-          {/* Create Collection Form */}
           <form onSubmit={handleSaveCollection}>
             <div className="bg-white/5 backdrop-blur-xl rounded-2xl p-6 border border-cyan-400/20 space-y-4">
               <h3 className="text-lg font-bold text-white mb-4">Create New Collection</h3>
@@ -1324,7 +1443,6 @@ function AdminUploadPanel({ user, adminLevel = 3 }) {
             </div>
           </form>
 
-          {/* Collections List */}
           <div className="bg-white/5 backdrop-blur-xl rounded-2xl p-6 border border-cyan-400/20">
             <h3 className="text-lg font-bold text-white mb-4">Your Collections ({collections.length})</h3>
             <div className="space-y-2">
@@ -1353,10 +1471,9 @@ function AdminUploadPanel({ user, adminLevel = 3 }) {
         </div>
       )}
 
-      {/* TEMPLATES TAB - Only for Level 3 */}
+      {/* TEMPLATES TAB */}
       {activeTab === 'templates' && adminLevel === 3 && (
         <div className="space-y-6">
-          {/* Create Template Form */}
           <form onSubmit={handleSaveTemplate}>
             <div className="bg-white/5 backdrop-blur-xl rounded-2xl p-6 border border-cyan-400/20 space-y-4">
               <h3 className="text-lg font-bold text-white mb-4">Create New Template</h3>
@@ -1436,7 +1553,6 @@ function AdminUploadPanel({ user, adminLevel = 3 }) {
             </div>
           </form>
 
-          {/* Templates List */}
           <div className="bg-white/5 backdrop-blur-xl rounded-2xl p-6 border border-cyan-400/20">
             <h3 className="text-lg font-bold text-white mb-4">Your Templates ({templates.length})</h3>
             <div className="space-y-2">

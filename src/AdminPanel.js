@@ -78,9 +78,16 @@ function AdminPanel({ user, profile }) {
         .from('user_downloads')
         .select('*', { count: 'exact', head: true });
 
-      const { count: usersCount } = await supabase
+      // Count users from user_profiles (now includes all auth users via trigger)
+      const { data: profilesData, count: usersCount, error: usersError } = await supabase
         .from('user_profiles')
-        .select('*', { count: 'exact', head: true });
+        .select('id', { count: 'exact', head: true });
+      
+      if (usersError) {
+        console.error('❌ User count error:', usersError);
+      } else {
+        console.log('✅ User count loaded:', usersCount);
+      }
 
       const { count: samplesCount } = await supabase
         .from('samples')
@@ -91,6 +98,13 @@ function AdminPanel({ user, profile }) {
         totalDownloads: downloadsCount || 0,
         totalUsers: usersCount || 0,
         totalSamples: samplesCount || 0
+      });
+
+      console.log('📊 Stats updated:', {
+        plays: playsCount || 0,
+        downloads: downloadsCount || 0,
+        users: usersCount || 0,
+        samples: samplesCount || 0
       });
 
       const { data: plays } = await supabase
