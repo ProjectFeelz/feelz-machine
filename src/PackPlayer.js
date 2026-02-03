@@ -150,12 +150,31 @@ function PackPlayer({ pack, onClose, user, processor }) {
         processor.play(pitch, finalSpeed);
         setIsPlaying(true);
         
+        // DEBUG: Check pack.id before tracking
+        console.log('🎵 Track play debug:', {
+          pack_id: pack?.id,
+          pack_exists: !!pack,
+          user_id: user?.id,
+          pack_name: pack?.name
+        });
+        
         // Track play via RPC (bypasses RLS)
         try {
-          await supabase.rpc('track_play', {
+          if (!pack?.id) {
+            console.error('❌ Cannot track play: pack.id is missing!');
+            return;
+          }
+          
+          const { data, error } = await supabase.rpc('track_play', {
             p_sample_id: pack.id,
             p_user_id: user?.id || null
           });
+          
+          if (error) {
+            console.error('❌ Track play error:', error);
+          } else {
+            console.log('✅ Play tracked successfully!');
+          }
         } catch (trackError) {
           console.log('Play tracking skipped:', trackError);
         }
@@ -191,10 +210,21 @@ function PackPlayer({ pack, onClose, user, processor }) {
       
       // Track stem play via RPC
       try {
-        await supabase.rpc('track_play', {
+        if (!pack?.id) {
+          console.error('❌ Cannot track stem play: pack.id is missing!');
+          return;
+        }
+        
+        const { data, error } = await supabase.rpc('track_play', {
           p_sample_id: pack.id,
           p_user_id: user?.id || null
         });
+        
+        if (error) {
+          console.error('❌ Track stem play error:', error);
+        } else {
+          console.log('✅ Stem play tracked successfully!');
+        }
       } catch (trackError) {
         console.log('Stem play tracking skipped:', trackError);
       }
