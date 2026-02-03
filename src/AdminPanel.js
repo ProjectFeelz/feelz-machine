@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from './supabaseClient';
 import { 
   TrendingUp, 
@@ -9,11 +10,13 @@ import {
   BarChart3,
   Loader,
   FileDown,
-  Upload
+  Upload,
+  ChevronLeft
 } from 'lucide-react';
 import AdminUploadPanel from './AdminUploadPanel';
 
 function AdminPanel({ user, profile }) {
+  const navigate = useNavigate();
   const [stats, setStats] = useState({
     totalPlays: 0,
     totalDownloads: 0,
@@ -25,14 +28,14 @@ function AdminPanel({ user, profile }) {
   const [recentActivity, setRecentActivity] = useState([]);
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
-  const [activeTab, setActiveTab] = useState('upload'); // Default to upload for editors
-  const [adminLevel, setAdminLevel] = useState(3); // 2 = editor, 3 = full admin
+  const [activeTab, setActiveTab] = useState('upload');
+  const [adminLevel, setAdminLevel] = useState(3);
 
   useEffect(() => {
     if (profile?.is_admin) {
       checkAdminLevel();
     }
-  }, [profile]);
+  }, [profile]); // Only depends on profile
 
   const checkAdminLevel = async () => {
     try {
@@ -48,12 +51,10 @@ function AdminPanel({ user, profile }) {
           setActiveTab('analytics');
           fetchAnalytics();
         } else {
-          // Editor - skip analytics, go to upload
           setActiveTab('upload');
           setLoading(false);
         }
       } else {
-        // Default to full admin if not in admins table
         setActiveTab('analytics');
         fetchAnalytics();
       }
@@ -68,7 +69,6 @@ function AdminPanel({ user, profile }) {
     setLoading(true);
 
     try {
-      // Total stats
       const { count: playsCount } = await supabase
         .from('sample_interactions')
         .select('*', { count: 'exact', head: true })
@@ -93,7 +93,6 @@ function AdminPanel({ user, profile }) {
         totalSamples: samplesCount || 0
       });
 
-      // Top 5 most played packs
       const { data: plays } = await supabase
         .from('sample_interactions')
         .select('sample_id, samples(name, artist, thumbnail_url)')
@@ -119,7 +118,6 @@ function AdminPanel({ user, profile }) {
         .slice(0, 5);
       setTopPacks(sortedPacks);
 
-      // Top genres
       const { data: genreData } = await supabase
         .from('sample_interactions')
         .select('genre');
@@ -137,7 +135,6 @@ function AdminPanel({ user, profile }) {
         .slice(0, 5);
       setTopGenres(sortedGenres);
 
-      // Recent activity
       const { data: activity } = await supabase
         .from('sample_interactions')
         .select('*, samples(name)')
@@ -179,7 +176,7 @@ function AdminPanel({ user, profile }) {
     try {
       const { data: subscribers } = await supabase
         .from('user_profiles')
-        .select('user_id, name, created_at')
+        .select('user_id, name, email, created_at')
         .order('created_at', { ascending: false });
 
       if (!subscribers || subscribers.length === 0) {
@@ -188,10 +185,10 @@ function AdminPanel({ user, profile }) {
         return;
       }
 
-      // Create CSV (without emails - can't access from browser securely)
-      const headers = ['Name', 'User ID', 'Joined Date'];
+      const headers = ['Name', 'Email', 'User ID', 'Joined Date'];
       const rows = subscribers.map(sub => [
         sub.name || 'N/A',
+        sub.email || 'N/A',
         sub.user_id,
         new Date(sub.created_at).toLocaleDateString()
       ]);
@@ -201,7 +198,6 @@ function AdminPanel({ user, profile }) {
         ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
       ].join('\n');
 
-      // Download CSV
       const blob = new Blob([csv], { type: 'text/csv' });
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -224,13 +220,11 @@ function AdminPanel({ user, profile }) {
     setExporting(true);
 
     try {
-      // Get all interactions with sample details
       const { data: interactions } = await supabase
         .from('sample_interactions')
         .select('*, samples(name, artist, genre)')
         .order('created_at', { ascending: false });
 
-      // Get all downloads (without join - fetch separately)
       const { data: downloads } = await supabase
         .from('user_downloads')
         .select('*')
@@ -242,7 +236,6 @@ function AdminPanel({ user, profile }) {
         return;
       }
 
-      // Get sample info for downloads
       let downloadSampleMap = {};
       if (downloads && downloads.length > 0) {
         const sampleIds = [...new Set(downloads.map(d => d.sample_id))];
@@ -256,7 +249,6 @@ function AdminPanel({ user, profile }) {
         });
       }
 
-      // Get user profiles
       const allUserIds = [
         ...(interactions?.map(i => i.user_id) || []),
         ...(downloads?.map(d => d.user_id) || [])
@@ -273,7 +265,6 @@ function AdminPanel({ user, profile }) {
         nameMap[p.user_id] = p.name;
       });
 
-      // Combine interactions and downloads
       const usageData = [];
 
       interactions?.forEach(item => {
@@ -307,10 +298,8 @@ function AdminPanel({ user, profile }) {
         });
       });
 
-      // Sort by date
       usageData.sort((a, b) => new Date(b.date) - new Date(a.date));
 
-      // Create CSV
       const headers = ['User Name', 'User ID', 'Action', 'Sample Pack', 'Artist', 'Genre', 'BPM', 'Key', 'Mood', 'Date'];
       const rows = usageData.map(item => [
         item.user_name,
@@ -330,7 +319,6 @@ function AdminPanel({ user, profile }) {
         ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
       ].join('\n');
 
-      // Download CSV
       const blob = new Blob([csv], { type: 'text/csv' });
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -371,6 +359,15 @@ function AdminPanel({ user, profile }) {
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-gray-900 text-white p-4 md:p-8">
       <div className="max-w-7xl mx-auto">
+        {/* Back Button */}
+        <button
+          onClick={() => navigate('/')}
+          className="flex items-center space-x-2 text-cyan-300 hover:text-cyan-200 mb-6 transition"
+        >
+          <ChevronLeft className="w-5 h-5" />
+          <span>Back to Home</span>
+        </button>
+
         <div className="mb-8">
           <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent mb-2">
             {adminLevel === 3 ? 'Admin Panel' : 'Editor Dashboard'}
@@ -379,7 +376,6 @@ function AdminPanel({ user, profile }) {
             {adminLevel === 3 ? 'Full Admin Access' : 'Upload & Edit Access'}
           </p>
 
-          {/* Tab Buttons */}
           <div className="flex space-x-2 mb-6">
             {adminLevel === 3 && (
               <button
@@ -407,7 +403,6 @@ function AdminPanel({ user, profile }) {
             </button>
           </div>
 
-          {/* Export Buttons - Only for Admin */}
           {activeTab === 'analytics' && adminLevel === 3 && (
             <div className="flex flex-col sm:flex-row gap-3">
               <button
@@ -439,10 +434,8 @@ function AdminPanel({ user, profile }) {
           )}
         </div>
 
-        {/* Analytics Tab - Only for Level 3 */}
         {activeTab === 'analytics' && adminLevel === 3 && (
           <>
-            {/* Stats Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 mb-8">
               <div className="bg-white/5 backdrop-blur-xl rounded-2xl p-6 border border-cyan-400/20">
                 <div className="flex items-center justify-between mb-4">
@@ -478,7 +471,6 @@ function AdminPanel({ user, profile }) {
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-              {/* Top Packs */}
               <div className="bg-white/5 backdrop-blur-xl rounded-2xl p-6 border border-cyan-400/20">
                 <div className="flex items-center space-x-2 mb-4">
                   <TrendingUp className="w-6 h-6 text-cyan-400" />
@@ -506,7 +498,6 @@ function AdminPanel({ user, profile }) {
                 </div>
               </div>
 
-              {/* Top Genres */}
               <div className="bg-white/5 backdrop-blur-xl rounded-2xl p-6 border border-cyan-400/20">
                 <div className="flex items-center space-x-2 mb-4">
                   <BarChart3 className="w-6 h-6 text-cyan-400" />
@@ -534,7 +525,6 @@ function AdminPanel({ user, profile }) {
               </div>
             </div>
 
-            {/* Recent Activity */}
             <div className="bg-white/5 backdrop-blur-xl rounded-2xl p-6 border border-cyan-400/20">
               <h2 className="text-xl font-bold mb-4">Recent Activity</h2>
               <div className="space-y-2">
@@ -565,7 +555,6 @@ function AdminPanel({ user, profile }) {
           </>
         )}
 
-        {/* Upload Tab - For All Admins */}
         {activeTab === 'upload' && (
           <AdminUploadPanel user={user} adminLevel={adminLevel} />
         )}

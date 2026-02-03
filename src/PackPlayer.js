@@ -150,30 +150,13 @@ function PackPlayer({ pack, onClose, user, processor }) {
         processor.play(pitch, finalSpeed);
         setIsPlaying(true);
         
-        // Track play via Edge Function
+        // Track play via RPC (bypasses RLS)
         try {
-          const { data: { session } } = await supabase.auth.getSession();
-          
-          const response = await fetch(
-            `${supabase.supabaseUrl}/functions/v1/track-play`,
-            {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${session?.access_token || ''}`
-              },
-              body: JSON.stringify({
-                sampleId: pack.id,
-                userId: user?.id || null
-              })
-            }
-          );
-
-          if (!response.ok) {
-            console.error('Track play failed:', await response.text());
-          }
+          await supabase.rpc('track_play', {
+            p_sample_id: pack.id,
+            p_user_id: user?.id || null
+          });
         } catch (trackError) {
-          // Silently ignore tracking errors - audio still plays fine
           console.log('Play tracking skipped:', trackError);
         }
       } catch (error) {
@@ -206,31 +189,13 @@ function PackPlayer({ pack, onClose, user, processor }) {
       processor.play(pitch, finalSpeed);
       setIsPlaying(true);
       
-      // Track stem play via Edge Function
+      // Track stem play via RPC
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        
-        const response = await fetch(
-          `${supabase.supabaseUrl}/functions/v1/track-play`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${session?.access_token || ''}`
-            },
-            body: JSON.stringify({
-              sampleId: pack.id,
-              userId: user?.id || null,
-              stemId: stem.id
-            })
-          }
-        );
-
-        if (!response.ok) {
-          console.error('Track stem play failed:', await response.text());
-        }
+        await supabase.rpc('track_play', {
+          p_sample_id: pack.id,
+          p_user_id: user?.id || null
+        });
       } catch (trackError) {
-        // Silently ignore tracking errors
         console.log('Stem play tracking skipped:', trackError);
       }
     } catch (error) {
@@ -260,7 +225,7 @@ function PackPlayer({ pack, onClose, user, processor }) {
     }
 
     try {
-      // Try to track download (silently fail if permissions issue)
+      // Track download
       try {
         await supabase.from('user_downloads').insert([{
           user_id: user.id,
@@ -268,7 +233,6 @@ function PackPlayer({ pack, onClose, user, processor }) {
           download_type: itemType
         }]);
       } catch (trackError) {
-        // Silently ignore tracking errors
         console.log('Download tracking skipped');
       }
 
