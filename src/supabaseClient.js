@@ -54,4 +54,4 @@ export async function ensureFreshSession() {
   }
 
   return session;
-}s
+}
