@@ -9,6 +9,8 @@ import {
 } from 'lucide-react';
 import StorefrontGrid from './StorefrontGrid';
 import PackPlayer from './PackPlayer';
+import { useSessionRefresh } from './useSessionRefresh';
+import { useActivityPing } from './useActivityPing';
 
 // Simplified Audio Processor - Pitch/Tempo Only
 class AnalogProcessor {
@@ -252,6 +254,10 @@ function FeelzMachine({ user, profile }) {
   const [showSignInModal, setShowSignInModal] = useState(false);
   const processorRef = useRef(null);
   const navigate = useNavigate();
+
+  // ✅ SESSION MANAGEMENT - Prevents timeouts during uploads/downloads/previews
+  useSessionRefresh();  // Auto-refresh every 30 minutes
+  useActivityPing();    // Keep session alive when user is active
 
   useEffect(() => {
     const initAudio = () => {

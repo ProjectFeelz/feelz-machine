@@ -25,6 +25,17 @@ function PackPlayer({ pack, onClose, user, processor }) {
   const canvasRef = useRef(null);
   const animationRef = useRef(null);
 
+  // ✅ SESSION REFRESH FUNCTION - Prevents timeout during downloads
+  const refreshSession = async () => {
+    const { error } = await supabase.auth.refreshSession();
+    if (error) {
+      console.error('❌ Failed to refresh session:', error);
+      return false;
+    }
+    console.log('✅ Session refreshed for download');
+    return true;
+  };
+
   useEffect(() => {
     if (pack) {
       fetchPackDetails();
@@ -150,7 +161,6 @@ function PackPlayer({ pack, onClose, user, processor }) {
         processor.play(pitch, finalSpeed);
         setIsPlaying(true);
         
-        // DEBUG: Check pack.id before tracking
         console.log('🎵 Track play debug:', {
           pack_id: pack?.id,
           pack_exists: !!pack,
@@ -158,7 +168,6 @@ function PackPlayer({ pack, onClose, user, processor }) {
           pack_name: pack?.name
         });
         
-        // Track play via RPC (bypasses RLS)
         try {
           if (!pack?.id) {
             console.error('❌ Cannot track play: pack.id is missing!');
@@ -208,7 +217,6 @@ function PackPlayer({ pack, onClose, user, processor }) {
       processor.play(pitch, finalSpeed);
       setIsPlaying(true);
       
-      // Track stem play via RPC
       try {
         if (!pack?.id) {
           console.error('❌ Cannot track stem play: pack.id is missing!');
@@ -254,6 +262,13 @@ function PackPlayer({ pack, onClose, user, processor }) {
       return;
     }
 
+    // ✅ REFRESH SESSION BEFORE DOWNLOAD
+    const sessionRefreshed = await refreshSession();
+    if (!sessionRefreshed) {
+      alert('Your session expired. Please refresh the page and try again.');
+      return;
+    }
+
     try {
       // Track download
       try {
@@ -280,7 +295,7 @@ function PackPlayer({ pack, onClose, user, processor }) {
       window.URL.revokeObjectURL(blobUrl);
     } catch (error) {
       console.error('Download error:', error);
-      alert('Download failed');
+      alert('Download failed. Please try again.');
     }
   };
 
@@ -299,6 +314,15 @@ function PackPlayer({ pack, onClose, user, processor }) {
 
     if (!hasChanges) {
       alert('No pitch or tempo changes applied! Adjust settings, then download.');
+      return;
+    }
+
+    // ✅ REFRESH SESSION BEFORE PROCESSING
+    setMessage({ type: 'info', text: 'Checking session...' });
+    const sessionRefreshed = await refreshSession();
+    if (!sessionRefreshed) {
+      setMessage({ type: 'error', text: 'Session expired. Please refresh the page.' });
+      setTimeout(() => setMessage({ type: '', text: '' }), 5000);
       return;
     }
 
@@ -347,6 +371,15 @@ function PackPlayer({ pack, onClose, user, processor }) {
   const handleDownloadAll = async () => {
     if (!user) {
       alert('Please sign in to download');
+      return;
+    }
+
+    // ✅ REFRESH SESSION BEFORE ZIP CREATION
+    setMessage({ type: 'info', text: 'Checking session...' });
+    const sessionRefreshed = await refreshSession();
+    if (!sessionRefreshed) {
+      setMessage({ type: 'error', text: 'Session expired. Please refresh the page.' });
+      setTimeout(() => setMessage({ type: '', text: '' }), 5000);
       return;
     }
 
