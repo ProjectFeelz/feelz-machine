@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from './supabaseClient';
-import ReactPlayer from 'react-player/youtube';
+import ReactPlayer from 'react-player';
 import PackPlayer from './PackPlayer';
 import { ChevronLeft, Loader, Music, Play } from 'lucide-react';
 
