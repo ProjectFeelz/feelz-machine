@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from './supabaseClient';
 import { motion } from 'framer-motion';
-import { User, Save, Loader, Mail, MapPin, Music, Heart, ChevronLeft } from 'lucide-react';
+import { User, Save, Loader, Mail, MapPin, Music, Heart, ChevronLeft, Download } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 function ProfileEditPage({ user, profile, onUpdate }) {
@@ -149,7 +149,16 @@ function ProfileEditPage({ user, profile, onUpdate }) {
           <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent mb-2">
             Edit Profile
           </h1>
-          <p className="text-cyan-300">Update your producer profile and preferences</p>
+          <p className="text-cyan-300 mb-4">Update your producer profile and preferences</p>
+
+          {/* ✅ NEW: View Downloads Button */}
+          <button
+            onClick={() => navigate('/profile/downloads')}
+            className="px-6 py-3 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 rounded-lg font-semibold transition flex items-center space-x-2"
+          >
+            <Download className="w-5 h-5" />
+            <span>View Download History</span>
+          </button>
         </div>
 
         {/* Message Banner */}
