@@ -14,7 +14,11 @@ function AppContent() {
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [showLanding, setShowLanding] = useState(true);
+  const [showLanding, setShowLanding] = useState(() => {
+    // ✅ FIX: Check sessionStorage to persist landing state
+    const hasSeenLanding = sessionStorage.getItem('hasSeenLanding');
+    return !hasSeenLanding;
+  });
   const location = useLocation();
 
   useEffect(() => {
@@ -32,24 +36,25 @@ function AppContent() {
     return () => {
       authListener?.subscription?.unsubscribe();
     };
-  }, []);
+  }, []); // ✅ Empty dependency array - only run once
 
-  // Skip landing page if on specific routes
+  // ✅ FIX: Only skip landing on initial load for specific routes
   useEffect(() => {
-    if (['/feelzadmin', '/privacy-policy', '/terms-of-use', '/profile'].includes(location.pathname)) {
+    const skipLandingRoutes = ['/feelzadmin', '/privacy-policy', '/terms-of-use', '/profile'];
+    if (skipLandingRoutes.includes(location.pathname)) {
       setShowLanding(false);
+      sessionStorage.setItem('hasSeenLanding', 'true');
     }
-  }, [location.pathname]);
+  }, []); // ✅ Only run once on mount, not on every pathname change
 
   const checkUser = async () => {
     setLoading(true);
     const { data: { session } } = await supabase.auth.getSession();
     setUser(session?.user || null);
-    
+
     if (session?.user) {
       await fetchProfile(session.user.id);
     }
-    
     setLoading(false);
   };
 
@@ -77,35 +82,32 @@ function AppContent() {
     await supabase.auth.signOut();
     setUser(null);
     setProfile(null);
-    
-    // Use hash routing for navigation in Electron
-    if (window.electron?.isElectron) {
-      window.location.hash = '/';
-    } else {
-      window.location.href = '/';
-    }
+    // ✅ FIX: Clear landing state on logout
+    sessionStorage.removeItem('hasSeenLanding');
+    setShowLanding(true);
   };
 
   const handleEnterApp = () => {
     setShowLanding(false);
+    // ✅ FIX: Remember that user has seen landing
+    sessionStorage.setItem('hasSeenLanding', 'true');
   };
 
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-gray-900 flex items-center justify-center">
-        <div className="text-cyan-400 text-xl">Loading...</div>
+        <Loader className="w-12 h-12 text-cyan-400 animate-spin" />
       </div>
     );
   }
 
-  // Show landing page only on root path
+  // Show landing page only on first visit
   if (showLanding && location.pathname === '/') {
     return <LandingPage onEnter={handleEnterApp} />;
   }
 
   return (
     <Routes>
-      {/* Main App Route */}
       <Route 
         path="/" 
         element={
@@ -116,8 +118,7 @@ function AppContent() {
           )
         } 
       />
-
-      {/* Profile Edit Route */}
+      
       <Route 
         path="/profile" 
         element={
@@ -126,54 +127,38 @@ function AppContent() {
               user={user} 
               profile={profile} 
               onUpdate={async () => {
-                // Refresh profile after update
                 if (user) {
                   await fetchProfile(user.id);
                 }
-              }}
+              }} 
             />
           ) : (
-            <Navigate to="/" replace />
+            <Navigate to="/" />
           )
         } 
       />
 
-      {/* Admin Route - FIXED: Now passes profile */}
       <Route 
         path="/feelzadmin" 
         element={
           user && profile ? (
             <AdminPanel user={user} profile={profile} onLogout={handleLogout} />
           ) : (
-            <Navigate to="/" replace />
+            <Navigate to="/" />
           )
         } 
       />
 
-      {/* Legal Pages */}
       <Route path="/privacy-policy" element={<PrivacyPolicy />} />
       <Route path="/terms-of-use" element={<TermsOfUse />} />
-
-      {/* Login Route */}
-      <Route 
-        path="/login" 
-        element={<Login />} 
-      />
-
-      {/* Catch all - redirect to home */}
-      <Route 
-        path="*" 
-        element={<Navigate to="/" replace />} 
-      />
     </Routes>
   );
 }
 
 function AppRouter() {
-  // Use HashRouter for Electron, BrowserRouter for web
-  const isElectron = window.electron?.isElectron || false;
+  const isElectron = window.navigator.userAgent.includes('Electron');
   const Router = isElectron ? HashRouter : BrowserRouter;
-
+  
   return (
     <Router>
       <AppContent />
