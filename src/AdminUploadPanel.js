@@ -294,21 +294,31 @@ function AdminUploadPanel({ user, adminLevel = 3 }) {
   };
 
   const addPackToBatch = () => {
-    if (!packForm.main_loop_file) {
-      showMessage('error', 'Main loop file is required');
-      return;
-    }
+  if (!packForm.main_loop_file) {
+    showMessage('error', 'Main loop file is required');
+    return;
+  }
 
-    const newPack = {
-      id: Date.now(),
-      ...packForm,
-      stems: [...stemFiles],
-      collection_id: selectedCollection || null
-    };
-    setBatchPacks([...batchPacks, newPack]);
-    resetPackForm();
-    showMessage('success', 'Pack added to batch!');
+  // ✅ FIX: Explicitly create new object to avoid shared file references
+  const newPack = {
+    id: Date.now(),
+    name: packForm.name,
+    artist: packForm.artist,
+    bpm: packForm.bpm,
+    key: packForm.key,
+    genre: packForm.genre,
+    mood: packForm.mood,
+    main_loop_file: packForm.main_loop_file,
+    cover_image_file: packForm.cover_image_file, // Creates NEW reference per pack
+    has_stems: packForm.has_stems,
+    featured: packForm.featured,
+    stems: [...stemFiles],
+    collection_id: selectedCollection || null
   };
+  setBatchPacks([...batchPacks, newPack]);
+  resetPackForm();
+  showMessage('success', 'Pack added to batch!');
+};
 
   const removeFromBatch = (id) => {
     setBatchPacks(batchPacks.filter(p => p.id !== id));
@@ -565,33 +575,37 @@ function AdminUploadPanel({ user, adminLevel = 3 }) {
   };
 
   const saveEdit = async (id) => {
-    try {
-      let updateData = { ...editForm };
-      delete updateData.current_thumbnail;
+  try {
+    let updateData = { ...editForm };
+    delete updateData.current_thumbnail;
 
-      if (editThumbnailFile) {
-        showMessage('info', 'Uploading new thumbnail...');
-        
-        const fileExt = editThumbnailFile.name.split('.').pop();
-        const fileName = `covers/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
-        
-        const { data: uploadData, error: uploadError } = await supabase.storage
-          .from('feelz-samples')
-          .upload(fileName, editThumbnailFile);
+    // Only update thumbnail_url if a new file was uploaded
+    if (editThumbnailFile) {
+      showMessage('info', 'Uploading new thumbnail...');
+      
+      const fileExt = editThumbnailFile.name.split('.').pop();
+      const fileName = `covers/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+      
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('feelz-samples')
+        .upload(fileName, editThumbnailFile);
 
-        if (uploadError) throw uploadError;
+      if (uploadError) throw uploadError;
 
-        const { data: { publicUrl } } = supabase.storage
-          .from('feelz-samples')
-          .getPublicUrl(fileName);
+      const { data: { publicUrl } } = supabase.storage
+        .from('feelz-samples')
+        .getPublicUrl(fileName);
 
-        updateData.thumbnail_url = publicUrl;
-      }
+      updateData.thumbnail_url = publicUrl;
+    } else {
+      // ✅ FIX: Preserve existing thumbnail - don't include in update
+      delete updateData.thumbnail_url;
+    }
 
-      const { error } = await supabase
-        .from('samples')
-        .update(updateData)
-        .eq('id', id);
+    const { error } = await supabase
+      .from('samples')
+      .update(updateData)
+      .eq('id', id);
 
       if (error) throw error;
 
