@@ -442,39 +442,37 @@ function AdminUploadPanel({ user, adminLevel = 3 }) {
   };
 
   const handleSaveTemplate = async (e) => {
-    e.preventDefault();
-    setLoading(true);
+  e.preventDefault();
+  setLoading(true);
 
-    try {
-      const { error } = await supabase
-  .from('collections')
-  .insert([{
-    name: collectionForm.name,
-    description: collectionForm.description,
-    cover_image_url: coverImageUrl,
-    youtube_url: collectionForm.youtube_url,  // ✅ ADD THIS LINE
-    is_public: collectionForm.is_public,
-    created_by: user.id
-  }]);
+  try {
+    const { error } = await supabase
+      .from('upload_templates')  // ✅ CORRECT TABLE
+      .insert([{
+        ...templateForm,
+        bpm_min: parseInt(templateForm.bpm_min) || null,
+        bpm_max: parseInt(templateForm.bpm_max) || null,
+        created_by: user.id
+      }]);
 
-      if (error) throw error;
+    if (error) throw error;
 
-      showMessage('success', '✓ Template saved!');
-      setTemplateForm({
-        name: '',
-        artist: '',
-        genre: '',
-        mood: '',
-        bpm_min: '',
-        bpm_max: ''
-      });
-      fetchData();
-    } catch (error) {
-      showMessage('error', 'Failed to save template: ' + error.message);
-    }
+    showMessage('success', '✓ Template saved!');
+    setTemplateForm({
+      name: '',
+      artist: '',
+      genre: '',
+      mood: '',
+      bpm_min: '',
+      bpm_max: ''
+    });
+    fetchData();
+  } catch (error) {
+    showMessage('error', 'Failed to save template: ' + error.message);
+  }
 
-    setLoading(false);
-  };
+  setLoading(false);
+};
 
   const deleteTemplate = async (id) => {
     if (!window.confirm('Delete this template?')) return;
