@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter, HashRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { supabase } from './supabaseClient';
+import { Loader } from 'lucide-react';
 import FeelzMachine from './App';
 import Login from './Login';
 import AdminPanel from './AdminPanel';
