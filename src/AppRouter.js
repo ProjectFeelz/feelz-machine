@@ -7,6 +7,9 @@ import Login from './Login';
 import AdminPanel from './AdminPanel';
 import ProfileSetup from './ProfileSetup';
 import ProfileEditPage from './ProfileEditPage';
+import DownloadsHistory from './DownloadsHistory';
+import CollectionsGrid from './CollectionsGrid';
+import CollectionPage from './CollectionPage';
 import PrivacyPolicy from './PrivacyPolicy';
 import TermsOfUse from './TermsOfUse';
 import LandingPage from './LandingPage';
@@ -41,8 +44,8 @@ function AppContent() {
 
   // ✅ FIX: Only skip landing on initial load for specific routes
   useEffect(() => {
-    const skipLandingRoutes = ['/feelzadmin', '/privacy-policy', '/terms-of-use', '/profile'];
-    if (skipLandingRoutes.includes(location.pathname)) {
+    const skipLandingRoutes = ['/feelzadmin', '/privacy-policy', '/terms-of-use', '/profile', '/profile/downloads', '/collections'];
+    if (skipLandingRoutes.includes(location.pathname) || location.pathname.startsWith('/collection/')) {
       setShowLanding(false);
       sessionStorage.setItem('hasSeenLanding', 'true');
     }
@@ -140,10 +143,37 @@ function AppContent() {
       />
 
       <Route 
+        path="/profile/downloads" 
+        element={
+          user && profile ? (
+            <DownloadsHistory user={user} />
+          ) : (
+            <Navigate to="/" />
+          )
+        } 
+      />
+
+      <Route 
         path="/feelzadmin" 
         element={
           user && profile ? (
             <AdminPanel user={user} profile={profile} onLogout={handleLogout} />
+          ) : (
+            <Navigate to="/" />
+          )
+        } 
+      />
+
+      <Route 
+        path="/collections" 
+        element={<CollectionsGrid />} 
+      />
+
+      <Route 
+        path="/collection/:id" 
+        element={
+          user && profile ? (
+            <CollectionPage user={user} profile={profile} />
           ) : (
             <Navigate to="/" />
           )
