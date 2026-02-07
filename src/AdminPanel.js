@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from './supabaseClient';
 import { 
@@ -30,6 +30,7 @@ function AdminPanel({ user, profile }) {
   const [exporting, setExporting] = useState(false);
   const [activeTab, setActiveTab] = useState('upload');
   const [adminLevel, setAdminLevel] = useState(3);
+  const hasInitializedTab = useRef(false); // ✅ Prevent tab reset on refresh
 
   // ✅ FIX: Wrap fetchAnalytics in useCallback to prevent recreation
   const fetchAnalytics = useCallback(async () => {
@@ -150,7 +151,7 @@ function AdminPanel({ user, profile }) {
     setLoading(false);
   }, []); // Empty deps - never recreated
 
-  // ✅ FIX: Move checkAdminLevel INSIDE useEffect
+  // ✅ FIX: Only set activeTab on initial load, not on every profile change
   useEffect(() => {
     const checkAdminLevel = async () => {
       try {
@@ -162,25 +163,37 @@ function AdminPanel({ user, profile }) {
 
         if (!error && data) {
           setAdminLevel(data.level || 3);
-          if (data.level === 3) {
-            setActiveTab('analytics');
-          } else {
-            setActiveTab('upload');
-            setLoading(false);
+          
+          // ✅ Only set tab on first load
+          if (!hasInitializedTab.current) {
+            if (data.level === 3) {
+              setActiveTab('analytics');
+            } else {
+              setActiveTab('upload');
+            }
+            hasInitializedTab.current = true;
           }
+          
+          setLoading(false);
         } else {
-          setActiveTab('analytics');
+          if (!hasInitializedTab.current) {
+            setActiveTab('analytics');
+            hasInitializedTab.current = true;
+          }
         }
       } catch (error) {
         console.error('Error checking admin level:', error);
-        setActiveTab('analytics');
+        if (!hasInitializedTab.current) {
+          setActiveTab('analytics');
+          hasInitializedTab.current = true;
+        }
       }
     };
 
     if (profile?.is_admin) {
       checkAdminLevel();
     }
-  }, [profile, user.id]); // Only when profile or user changes
+  }, [profile, user.id]);
 
   // ✅ FIX: Fetch analytics only when tab changes to analytics
   useEffect(() => {
