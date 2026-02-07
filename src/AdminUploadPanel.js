@@ -104,7 +104,8 @@ function AdminUploadPanel({ user, adminLevel = 3 }) {
     name: '',
     description: '',
     cover_image_file: null,
-    is_public: true
+    is_public: true,
+    youtube_url: ''  // ✅ ADD THIS LINE
   });
 
   // Template form
@@ -446,13 +447,15 @@ function AdminUploadPanel({ user, adminLevel = 3 }) {
 
     try {
       const { error } = await supabase
-        .from('upload_templates')
-        .insert([{
-          ...templateForm,
-          bpm_min: parseInt(templateForm.bpm_min) || null,
-          bpm_max: parseInt(templateForm.bpm_max) || null,
-          created_by: user.id
-        }]);
+  .from('collections')
+  .insert([{
+    name: collectionForm.name,
+    description: collectionForm.description,
+    cover_image_url: coverImageUrl,
+    youtube_url: collectionForm.youtube_url,  // ✅ ADD THIS LINE
+    is_public: collectionForm.is_public,
+    created_by: user.id
+  }]);
 
       if (error) throw error;
 
@@ -521,11 +524,12 @@ function AdminUploadPanel({ user, adminLevel = 3 }) {
 
       showMessage('success', '✓ Collection created!');
       setCollectionForm({
-        name: '',
-        description: '',
-        cover_image_file: null,
-        is_public: true
-      });
+  name: '',
+  description: '',
+  cover_image_file: null,
+  is_public: true,
+  youtube_url: ''  // ✅ ADD THIS LINE
+});
       fetchData();
     } catch (error) {
       showMessage('error', 'Failed to create collection: ' + error.message);
@@ -787,7 +791,7 @@ function AdminUploadPanel({ user, adminLevel = 3 }) {
                   ))}
                 </select>
               </div>
-
+              
               <div>
                 <label className="block text-cyan-300 text-sm mb-2">Apply Template (Optional)</label>
                 <select
@@ -1435,6 +1439,20 @@ function AdminUploadPanel({ user, adminLevel = 3 }) {
                   className="w-full px-4 py-2 bg-blue-950/50 border border-cyan-500/30 rounded-lg text-white resize-none"
                 />
               </div>
+
+              <div>
+  <label className="block text-cyan-300 text-sm mb-2">YouTube Video URL (optional)</label>
+  <input
+    type="url"
+    value={collectionForm.youtube_url}
+    onChange={(e) => setCollectionForm({ ...collectionForm, youtube_url: e.target.value })}
+    placeholder="https://www.youtube.com/watch?v=..."
+    className="w-full px-4 py-2 bg-blue-950/50 border border-cyan-500/30 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+  />
+  <p className="text-xs text-cyan-600 mt-1">
+    Add a YouTube video to showcase this collection
+  </p>
+</div>
 
               <label className="flex items-center space-x-2 text-cyan-300">
                 <input
