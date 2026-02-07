@@ -11,14 +11,17 @@ function StorefrontGrid({ onPackSelect, selectedPack }) {
   const [activeTab, setActiveTab] = useState('all');
   const [filters, setFilters] = useState({ genre: '', mood: '', bpm: '', key: '' });
   const [showFilters, setShowFilters] = useState(false);
+  const [collections, setCollections] = useState([]);
+  const [selectedCollection, setSelectedCollection] = useState('');
 
   useEffect(() => {
     fetchPacks();
+    fetchCollections();
   }, []);
 
   useEffect(() => {
     applyFilters();
-  }, [searchTerm, activeTab, filters, packs]);
+  }, [searchTerm, activeTab, filters, packs, selectedCollection]);
 
   const fetchPacks = async () => {
     setLoading(true);
@@ -32,6 +35,18 @@ function StorefrontGrid({ onPackSelect, selectedPack }) {
       setPacks(data || []);
     }
     setLoading(false);
+  };
+
+  const fetchCollections = async () => {
+    const { data, error } = await supabase
+      .from('collections')
+      .select('id, name')
+      .eq('is_public', true)
+      .order('name');
+    
+    if (!error) {
+      setCollections(data || []);
+    }
   };
 
   const applyFilters = () => {
@@ -67,6 +82,9 @@ function StorefrontGrid({ onPackSelect, selectedPack }) {
     if (filters.bpm) {
       const targetBpm = parseInt(filters.bpm);
       filtered = filtered.filter(p => Math.abs(p.bpm - targetBpm) <= 10);
+    }
+    if (selectedCollection) {
+      filtered = filtered.filter(p => p.collection_id === selectedCollection);
     }
 
     setFilteredPacks(filtered);
@@ -160,6 +178,14 @@ function StorefrontGrid({ onPackSelect, selectedPack }) {
             <Clock className="w-4 h-4" />
             <span className="text-sm">New</span>
           </button>
+
+          <button
+            onClick={() => window.location.href = '/collections'}
+            className="flex items-center space-x-2 px-4 py-2 rounded-lg transition bg-purple-500/20 text-purple-300 hover:bg-purple-500/30 backdrop-blur-xl border border-purple-500/30"
+          >
+            <Layers className="w-4 h-4" />
+            <span className="text-sm">Browse Collections</span>
+          </button>
         </div>
 
         {showFilters && (
@@ -167,8 +193,19 @@ function StorefrontGrid({ onPackSelect, selectedPack }) {
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            className="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-4 pt-4 border-t border-cyan-500/20"
+            className="grid grid-cols-2 lg:grid-cols-5 gap-3 mt-4 pt-4 border-t border-cyan-500/20"
           >
+            <select
+              value={selectedCollection}
+              onChange={(e) => setSelectedCollection(e.target.value)}
+              className="px-3 py-2 bg-blue-950/50 border border-cyan-500/30 rounded-lg text-white text-sm"
+            >
+              <option value="">All Collections</option>
+              {collections.map(c => (
+                <option key={c.id} value={c.id}>📁 {c.name}</option>
+              ))}
+            </select>
+
             <select
               value={filters.genre}
               onChange={(e) => setFilters({ ...filters, genre: e.target.value })}
