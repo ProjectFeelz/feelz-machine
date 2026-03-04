@@ -30,6 +30,7 @@ export default function FeedPage() {
       const { data, error } = await supabase
         .from('posts')
         .select('*, artists(id, artist_name, slug, profile_image_url, is_verified)')
+        .not('artist_id', 'is', null)
         .order('created_at', { ascending: false })
         .range(from, to);
 
@@ -164,7 +165,7 @@ export default function FeedPage() {
       )}
 
       {/* Post composer */}
-      {user && <PostComposer onPostCreated={handlePostCreated} />}
+      {user && artist && <PostComposer onPostCreated={handlePostCreated} />}
 
       {/* Posts */}
       {loading ? (

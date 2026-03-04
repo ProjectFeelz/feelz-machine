@@ -273,6 +273,34 @@ export default function PostCard({ post, onDelete, onUpdate }) {
         </p>
       </div>
 
+      {/* YouTube embed */}
+      {post.youtube_id && (
+        <div className="px-4 pb-3">
+          <div className="rounded-xl overflow-hidden aspect-video bg-black">
+            <iframe
+              src={`https://www.youtube.com/embed/${post.youtube_id}`}
+              className="w-full h-full"
+              allowFullScreen
+              title="YouTube video"
+            />
+          </div>
+        </div>
+      )}
+
+      {/* YouTube embed */}
+      {post.youtube_id && (
+        <div className="px-4 pb-3">
+          <div className="rounded-xl overflow-hidden bg-black" style={{ aspectRatio: '16/9' }}>
+            <iframe
+              src={`https://www.youtube.com/embed/${post.youtube_id}`}
+              className="w-full h-full"
+              allowFullScreen
+              title="YouTube video"
+            />
+          </div>
+        </div>
+      )}
+
       {/* Tagged artists bar */}
       {taggedArtistData.length > 0 && (
         <div className="px-4 pb-3">
