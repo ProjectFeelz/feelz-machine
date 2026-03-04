@@ -11,6 +11,7 @@ import LikedSongsPage from './pages/LikedSongsPage';
 import DownloadsPage from './pages/DownloadsPage';
 import FollowingPage from './pages/FollowingPage';
 import PlaylistsPage from './pages/PlaylistsPage';
+import PlaylistDetailPage from './pages/PlaylistDetailPage';
 import ProfilePage from './pages/ProfilePage';
 import FeedPage from './pages/FeedPage';
 import ArtistDashboard from './pages/ArtistDashboard';
@@ -50,6 +51,7 @@ export default function AppRouter() {
               <Route path="/library/downloads" element={<DownloadsPage />} />
               <Route path="/library/following" element={<FollowingPage />} />
               <Route path="/library/playlists" element={<PlaylistsPage />} />
+              <Route path="/library/playlists/:id" element={<PlaylistDetailPage />} />
               <Route path="/community" element={<FeedPage />} />
               <Route path="/chat" element={<ChatRoomsPage />} />
               <Route path="/profile" element={<ProfilePage />} />

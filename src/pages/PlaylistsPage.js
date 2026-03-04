@@ -97,7 +97,8 @@ export default function PlaylistsPage() {
         <div className="space-y-2">
           {playlists.map(playlist => (
             <div key={playlist.id}
-              className="flex items-center space-x-3 p-3 rounded-xl hover:bg-white/[0.04] transition group">
+              onClick={() => navigate(`/library/playlists/${playlist.id}`)}
+              className="flex items-center space-x-3 p-3 rounded-xl hover:bg-white/[0.04] transition group cursor-pointer">
               <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-purple-600/30 to-blue-600/20 flex items-center justify-center flex-shrink-0">
                 <Music className="w-5 h-5 text-white/30" />
               </div>
