@@ -44,7 +44,7 @@ export default function AppLayout() {
         style={{ paddingBottom: currentTrack ? '140px' : '90px' }}
       >
         {/* Desktop content wrapper — constrained width, centered */}
-        <div className="md:max-w-2xl md:mx-auto md:px-4">
+        <div className="md:px-8">
           <Outlet />
         </div>
       </main>
