@@ -6,7 +6,7 @@ import { usePlayer } from '../contexts/PlayerContext';
 import {
   ArrowLeft, Play, Pause, Share2, UserPlus, UserCheck,
   Instagram, Twitter, Youtube, MessageCircle, Globe, Music,
-  Loader, ChevronRight, ExternalLink, Verified, Heart
+  Loader, ChevronRight, ExternalLink, Verified, Heart, Download
 } from 'lucide-react';
 
 const SOCIAL_ICONS = {
@@ -56,6 +56,7 @@ export default function ArtistProfilePage() {
   const [loading, setLoading] = useState(true);
   const [showAllTracks, setShowAllTracks] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [downloading, setDownloading] = useState(null);
 
   useEffect(() => {
     if (slug) fetchArtist();
@@ -137,6 +138,32 @@ export default function ArtistProfilePage() {
     } catch (err) {
       console.error('Follow error:', err);
     }
+  };
+
+  const handleDownload = async (track, e) => {
+    e.stopPropagation();
+    if (!user) { navigate('/login'); return; }
+    if (downloading === track.id) return;
+    setDownloading(track.id);
+    try {
+      // Log download
+      await supabase.from('downloads').insert({
+        user_id: user.id,
+        track_id: track.id,
+        artist_id: artist.id,
+      });
+      // Trigger file download
+      const a = document.createElement('a');
+      a.href = track.file_url;
+      a.download = `${track.title}.mp3`;
+      a.target = '_blank';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    } catch (err) {
+      console.error('Download error:', err);
+    }
+    setDownloading(null);
   };
 
   const handleShare = async () => {
@@ -471,6 +498,25 @@ export default function ArtistProfilePage() {
                     <span className="text-xs flex-shrink-0" style={{ color: `${textColor}30` }}>
                       {formatDuration(track.duration)}
                     </span>
+                  )}
+                  {/* Download / Buy button */}
+                  {track.is_downloadable && (
+                    <button
+                      onClick={(e) => handleDownload(track, e)}
+                      disabled={downloading === track.id}
+                      className="flex-shrink-0 flex items-center space-x-1 px-2.5 py-1.5 rounded-lg transition-all active:scale-95 disabled:opacity-50"
+                      style={{
+                        backgroundColor: `${secondaryColor}20`,
+                        color: secondaryColor,
+                      }}>
+                      {downloading === track.id
+                        ? <Loader className="w-3.5 h-3.5 animate-spin" />
+                        : <Download className="w-3.5 h-3.5" />
+                      }
+                      {track.download_price > 0 && (
+                        <span className="text-[11px] font-semibold">${track.download_price}</span>
+                      )}
+                    </button>
                   )}
                 </button>
               );

@@ -54,13 +54,24 @@ export default function BrowsePage() {
 
   const fetchAll = async () => {
     try {
-      // Trending top 10 by engagement score
-      const { data: trendingData } = await supabase
+      // Trending — fetch top 20, then boost Premium/Pro artists client-side
+      const { data: trendingRaw } = await supabase
         .from('tracks')
-        .select('*, artists(id, artist_name, slug, profile_image_url, is_verified)')
+        .select('*, artists(id, artist_name, slug, profile_image_url, is_verified, tier)')
         .eq('is_published', true)
         .order('engagement_score', { ascending: false })
-        .limit(10);
+        .limit(20);
+
+      const trendingData = (trendingRaw || [])
+        .map(t => ({
+          ...t,
+          _boosted: (t.engagement_score || 0) * (
+            t.artists?.tier === 'premium' ? 1.5 :
+            t.artists?.tier === 'pro' ? 1.2 : 1
+          ),
+        }))
+        .sort((a, b) => b._boosted - a._boosted)
+        .slice(0, 10);
 
       // All tracks for browse
       const { data: tracksData } = await supabase
