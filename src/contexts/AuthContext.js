@@ -11,8 +11,6 @@ export function AuthProvider({ children }) {
   const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
-    checkUser();
-
     const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (session?.user) {
         setUser(session.user);
@@ -25,30 +23,13 @@ export function AuthProvider({ children }) {
         setArtist(null);
         setIsAdmin(false);
       }
+      setLoading(false);
     });
 
     return () => {
       authListener?.subscription?.unsubscribe();
     };
   }, []);
-
-  const checkUser = async () => {
-    try {
-      setLoading(true);
-      const { data: { session } } = await supabase.auth.getSession();
-
-      if (session?.user) {
-        setUser(session.user);
-        await fetchProfile(session.user.id);
-        await fetchArtist(session.user.id);
-        await checkAdmin(session.user.id);
-      }
-    } catch (err) {
-      console.error('Auth check failed:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const fetchProfile = async (userId) => {
     let { data, error } = await supabase
