@@ -4,7 +4,7 @@ import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import {
   Bell, Users, Heart, MessageCircle, TrendingUp, UserPlus,
-  Check, X, ChevronLeft, Loader, CheckCheck, Trash2, Music
+  Check, X, ChevronLeft, Loader, CheckCheck, Trash2, Music, Download
 } from 'lucide-react';
 import useNotifications from '../contexts/useNotifications';
 
@@ -19,6 +19,7 @@ const TYPE_CONFIG = {
   milestone_500:    { icon: TrendingUp,     color: 'text-yellow-400', bg: 'bg-yellow-500/10', label: 'Milestone' },
   milestone_1k:     { icon: TrendingUp,     color: 'text-orange-400', bg: 'bg-orange-500/10', label: 'Milestone' },
   milestone_10k:    { icon: TrendingUp,     color: 'text-orange-400', bg: 'bg-orange-500/10', label: 'Milestone' },
+  download:         { icon: Download,        color: 'text-green-400',  bg: 'bg-green-500/10',  label: 'Download' },
 };
 
 const FILTERS = [

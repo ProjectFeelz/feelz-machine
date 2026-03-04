@@ -236,6 +236,15 @@ export default function ArtistProfilePage() {
         await supabase.from('follows').insert({ artist_id: artist.id, follower_id: user.id });
         setIsFollowing(true);
         setFollowerCount(prev => prev + 1);
+        // Notify artist
+        const { data: myProfile } = await supabase
+          .from('artists').select('id, artist_name').eq('user_id', user.id).maybeSingle();
+        await supabase.from('notifications').insert({
+          artist_id: artist.id,
+          type: 'new_follower',
+          title: `${myProfile?.artist_name || 'Someone'} followed you`,
+          from_artist_id: myProfile?.id || null,
+        }).catch(() => {});
       }
     } catch (err) {
       console.error('Follow error:', err);
@@ -250,6 +259,17 @@ export default function ArtistProfilePage() {
         track_id: track.id,
         artist_id: artist.id,
       });
+      // Notify artist
+      const { data: myProfile } = await supabase
+        .from('artists').select('id, artist_name').eq('user_id', user.id).maybeSingle();
+      await supabase.from('notifications').insert({
+        artist_id: artist.id,
+        type: 'track_liked',
+        title: `${myProfile?.artist_name || 'Someone'} downloaded ${track.title}`,
+        track_id: track.id,
+        from_artist_id: myProfile?.id || null,
+        metadata: { download: true, purchase_price: track.download_price || 0 },
+      }).catch(() => {});
       const a = document.createElement('a');
       a.href = track.file_url;
       a.download = `${track.title}.mp3`;

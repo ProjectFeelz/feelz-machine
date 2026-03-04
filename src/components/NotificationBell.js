@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Bell, Users, Heart, MessageCircle, TrendingUp, UserPlus,
-  Check, CheckCheck, ChevronRight, Music, X
+  Check, CheckCheck, ChevronRight, Music, X, Download
 } from 'lucide-react';
 import useNotifications from '../contexts/useNotifications';
 
@@ -17,6 +17,7 @@ const TYPE_CONFIG = {
   milestone_500:    { icon: TrendingUp,     color: 'text-yellow-400', bg: 'bg-yellow-500/10' },
   milestone_1k:     { icon: TrendingUp,     color: 'text-orange-400', bg: 'bg-orange-500/10' },
   milestone_10k:    { icon: TrendingUp,     color: 'text-orange-400', bg: 'bg-orange-500/10' },
+  download:         { icon: Download,        color: 'text-green-400',  bg: 'bg-green-500/10' },
 };
 
 function timeAgo(date) {

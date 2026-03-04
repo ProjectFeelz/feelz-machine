@@ -150,6 +150,16 @@ export default function PostCard({ post, onDelete, onUpdate }) {
         await supabase.from('post_likes').insert({ post_id: post.id, user_id: user.id });
         setLiked(true);
         setLikeCount(prev => prev + 1);
+        // Notify post owner
+        if (postArtist?.id && myArtist?.id !== postArtist.id) {
+          await supabase.from('notifications').insert({
+            artist_id: postArtist.id,
+            type: 'track_liked',
+            title: `${myArtist?.artist_name || 'Someone'} liked your post`,
+            message: post.content?.substring(0, 80),
+            from_artist_id: myArtist?.id || null,
+          }).catch(() => {});
+        }
       }
     } catch (err) {
       console.error('Like error:', err);
@@ -184,6 +194,16 @@ export default function PostCard({ post, onDelete, onUpdate }) {
       if (error) throw error;
       setCommentText('');
       fetchComments();
+      // Notify post owner
+      if (postArtist?.id && myArtist?.id !== postArtist.id) {
+        await supabase.from('notifications').insert({
+          artist_id: postArtist.id,
+          type: 'track_commented',
+          title: `${myArtist?.artist_name || 'Someone'} commented on your post`,
+          message: commentText.trim().substring(0, 80),
+          from_artist_id: myArtist?.id || null,
+        }).catch(() => {});
+      }
     } catch (err) {
       console.error('Comment error:', err);
     }
