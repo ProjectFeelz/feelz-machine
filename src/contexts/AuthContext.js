@@ -71,12 +71,15 @@ export function AuthProvider({ children }) {
 
     // Step 2: Listen for future auth changes (sign in, sign out)
     const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
-      // Skip until initial hydration is done to prevent double-fetch on load
+      // Skip until initial hydration is done
       if (!initializedRef.current) return;
 
-      if (session?.user) {
+      // Only act on real auth changes, not token refreshes
+      if (event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION') return;
+
+      if (event === 'SIGNED_IN' && session?.user) {
         await loadUser(session.user);
-      } else {
+      } else if (event === 'SIGNED_OUT') {
         setUser(null);
         setProfile(null);
         setArtist(null);
