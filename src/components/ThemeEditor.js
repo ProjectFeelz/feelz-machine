@@ -51,7 +51,7 @@ export default function ThemeEditor() {
       .from('artist_themes')
       .select('*')
       .eq('artist_id', artist.id)
-      .single();
+      .maybeSingle();
     if (data) {
       setTheme({
         primary_color: data.primary_color || '#FFFFFF',
@@ -246,26 +246,67 @@ export default function ThemeEditor() {
         </div>
       </div>
 
-      {/* Color preview */}
-      <div className="rounded-xl overflow-hidden border border-white/[0.06]"
-        style={{ backgroundColor: theme.background_color }}>
-        <div className="h-16" style={{ background: `linear-gradient(135deg, ${theme.secondary_color}40, ${theme.accent_color}30)` }} />
-        <div className="p-4">
-          <p className="text-base font-bold mb-1" style={{ color: theme.text_color, fontFamily: theme.heading_font }}>
-            Preview — {artist.artist_name}
-          </p>
-          <p className="text-xs mb-3" style={{ color: `${theme.text_color}70`, fontFamily: theme.body_font }}>
-            This is how your profile text will look.
-          </p>
-          <div className="flex space-x-2">
-            <div className="px-3 py-1.5 rounded-full text-xs font-medium"
-              style={{ backgroundColor: theme.primary_color, color: theme.background_color }}>
-              Follow
+      {/* Live Profile Preview */}
+      <div>
+        <h4 className="text-xs font-medium text-white/50 mb-3">Live Preview</h4>
+        <div className="rounded-xl overflow-hidden border border-white/[0.06] shadow-2xl"
+          style={{ backgroundColor: theme.background_color, color: theme.text_color, fontFamily: `"${theme.body_font}", sans-serif` }}>
+          <div className="relative h-24"
+            style={{ background: `linear-gradient(135deg, ${theme.secondary_color}50, ${theme.accent_color}30, ${theme.background_color})` }}>
+            <div className="absolute -bottom-8 left-1/2 -translate-x-1/2">
+              <div className="w-16 h-16 rounded-xl overflow-hidden border-2 shadow-lg"
+                style={{ borderColor: theme.background_color, backgroundColor: `${theme.secondary_color}30` }}>
+                {artist.profile_image_url
+                  ? <img src={artist.profile_image_url} alt="" className="w-full h-full object-cover" />
+                  : <div className="w-full h-full flex items-center justify-center"
+                      style={{ background: `linear-gradient(135deg, ${theme.secondary_color}, ${theme.accent_color})` }}>
+                      <span className="text-xl font-bold" style={{ color: theme.text_color }}>
+                        {artist.artist_name?.[0]?.toUpperCase()}
+                      </span>
+                    </div>
+                }
+              </div>
             </div>
-            <div className="px-3 py-1.5 rounded-full text-xs font-medium"
-              style={{ backgroundColor: theme.secondary_color, color: theme.text_color }}>
-              Play
+          </div>
+          <div className="pt-12 pb-4 px-4 flex flex-col items-center text-center">
+            <p className="text-sm font-bold mb-0.5"
+              style={{ color: theme.text_color, fontFamily: `"${theme.heading_font}", sans-serif` }}>
+              {artist.artist_name}
+            </p>
+            <p className="text-[10px] mb-3" style={{ color: `${theme.text_color}50` }}>
+              0 followers · 0 tracks
+            </p>
+            <div className="flex space-x-2 mb-3">
+              <div className="px-3 py-1 rounded-full text-[10px] font-semibold border-2"
+                style={{ borderColor: theme.primary_color, color: theme.primary_color }}>
+                Follow
+              </div>
+              <div className="px-3 py-1 rounded-full text-[10px] font-semibold"
+                style={{ backgroundColor: theme.secondary_color, color: theme.text_color }}>
+                Play
+              </div>
             </div>
+            {artist.bio && (
+              <p className="text-[10px] leading-relaxed mb-3 max-w-xs"
+                style={{ color: `${theme.text_color}70` }}>
+                {artist.bio.slice(0, 80)}{artist.bio.length > 80 ? '...' : ''}
+              </p>
+            )}
+            <div className="w-full rounded-lg p-2 flex items-center space-x-2 text-left"
+              style={{ backgroundColor: `${theme.secondary_color}15` }}>
+              <div className="w-7 h-7 rounded-md flex-shrink-0"
+                style={{ background: `linear-gradient(135deg, ${theme.secondary_color}40, ${theme.accent_color}20)` }} />
+              <div className="flex-1 min-w-0">
+                <p className="text-[10px] font-medium truncate" style={{ color: theme.secondary_color }}>Sample Track</p>
+                <p className="text-[9px]" style={{ color: `${theme.text_color}40` }}>Now Playing</p>
+              </div>
+              <div className="text-[9px]" style={{ color: `${theme.text_color}30` }}>2:34</div>
+            </div>
+          </div>
+          <div className="px-4 pb-3 text-center">
+            <p className="text-[9px]" style={{ color: `${theme.text_color}20` }}>
+              Powered by <span style={{ color: `${theme.text_color}35` }}>Feelz Machine</span>
+            </p>
           </div>
         </div>
       </div>
