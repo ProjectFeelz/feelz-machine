@@ -67,7 +67,7 @@ export default function useNotifications() {
         .from('notifications')
         .select(`
           *,
-          from_artist:artists!notifications_from_artist_id_fkey(id, artist_name, avatar_url, slug),
+          from_artist:artists!notifications_from_artist_id_fkey(id, artist_name, profile_image_url, slug)
           track:tracks!notifications_track_id_fkey(id, title, cover_artwork_url)
         `)
         .eq('artist_id', artist.id)
