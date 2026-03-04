@@ -61,6 +61,53 @@ export default function AdminArtists() {
     fetchArtists();
   }, [isAdmin, navigate, fetchArtists]);
 
+  const grantTier = async (artistId, tierSlug) => {
+    try {
+      const { data: tier } = await supabase
+        .from('platform_tiers')
+        .select('id')
+        .eq('slug', tierSlug)
+        .single();
+      if (!tier) return;
+
+      await supabase
+        .from('artist_tier_subscriptions')
+        .update({ status: 'cancelled', updated_at: new Date().toISOString() })
+        .eq('artist_id', artistId)
+        .eq('status', 'active');
+
+      if (tierSlug !== 'free') {
+        await supabase.from('artist_tier_subscriptions').insert({
+          artist_id: artistId,
+          tier_id: tier.id,
+          status: 'active',
+          paypal_subscription_id: `admin_grant_${Date.now()}`,
+          started_at: new Date().toISOString(),
+          expires_at: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
+        });
+      }
+
+      await supabase
+        .from('artists')
+        .update({ tier: tierSlug, current_tier_id: tierSlug !== 'free' ? tier.id : null })
+        .eq('id', artistId);
+
+      await supabase.from('notifications').insert({
+        artist_id: artistId,
+        type: 'tier_granted',
+        title: tierSlug === 'free' ? 'Plan updated' : `${tierSlug.charAt(0).toUpperCase() + tierSlug.slice(1)} granted`,
+        message: tierSlug === 'free'
+          ? 'Your plan has been updated to Free.'
+          : `An admin has granted you ${tierSlug.charAt(0).toUpperCase() + tierSlug.slice(1)} tier access. Enjoy your features!`,
+        metadata: { tier_slug: tierSlug },
+      });
+
+      setArtists(prev => prev.map(a => a.id === artistId ? { ...a, tier: tierSlug } : a));
+    } catch (err) {
+      console.error('Grant tier error:', err);
+    }
+  };
+
   const filtered = artists
     .filter(a =>
       (a.artist_name || '').toLowerCase().includes(searchQuery.toLowerCase())
@@ -158,7 +205,22 @@ export default function AdminArtists() {
                     </div>
                   </div>
                 </div>
-                <ChevronRight className="w-4 h-4 text-white/10 group-hover:text-white/30 transition flex-shrink-0" />
+                <div className="flex items-center space-x-2 flex-shrink-0" onClick={e => e.stopPropagation()}>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                    artist.tier === 'premium' ? 'bg-yellow-500/20 text-yellow-400' :
+                    artist.tier === 'pro' ? 'bg-purple-500/20 text-purple-400' :
+                    'bg-white/10 text-white/30'
+                  }`}>{artist.tier || 'free'}</span>
+                  <select
+                    value={artist.tier || 'free'}
+                    onChange={(e) => grantTier(artist.id, e.target.value)}
+                    className="text-[10px] bg-white/[0.06] text-white/50 rounded-lg px-2 py-1 border border-white/[0.08] focus:outline-none cursor-pointer"
+                    title="Grant tier">
+                    <option value="free">Free</option>
+                    <option value="pro">Pro</option>
+                    <option value="premium">Premium</option>
+                  </select>
+                </div>
               </div>
             </button>
           ))}
