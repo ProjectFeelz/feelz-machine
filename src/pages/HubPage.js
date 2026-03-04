@@ -65,7 +65,7 @@ export default function HubPage() {
           <LayoutDashboard className="w-6 h-6 text-white/60" />
           <h1 className="text-2xl font-bold text-white">Hub</h1>
         </div>
-        <p className="text-sm text-white/40 ml-9">Your control center</p><p className="text-xs text-red-400 ml-9 mt-1">DEBUG: user={user ? 'yes' : 'no'} artist={artist ? 'yes' : 'no'} isAdmin={isAdmin ? 'yes' : 'no'} isArtist={isArtist ? 'yes' : 'no'}</p>
+        <p className="text-sm text-white/40 ml-9">Your control center</p>
       </div>
 
       {/* Admin Section */}
