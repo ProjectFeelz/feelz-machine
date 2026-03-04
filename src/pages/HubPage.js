@@ -1,10 +1,12 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { useTier } from '../contexts/useTier';
 import {
-  Shield, Users, BarChart3, AlertTriangle, Music, Upload,
-  HeartHandshake, Bell, Palette, MessageCircle, ChevronRight,
-  Crown, Mic2, LayoutDashboard, User
+  Shield, Users, BarChart3, AlertTriangle, Music,
+  Upload, HeartHandshake, Bell, Palette, MessageCircle,
+  ChevronRight, Crown, Zap, Star, Mic2, LayoutDashboard,
+  User, LogOut, DollarSign
 } from 'lucide-react';
 
 function LinkCard({ icon: Icon, label, description, path, color, onClick }) {
@@ -28,7 +30,7 @@ function LinkCard({ icon: Icon, label, description, path, color, onClick }) {
 
 function Section({ title, icon: Icon, children }) {
   return (
-    <div className="mb-8">
+    <div className="mb-6">
       <div className="flex items-center space-x-2 mb-3 px-1">
         <Icon className="w-4 h-4 text-white/30" />
         <h2 className="text-xs uppercase tracking-wider text-white/30 font-semibold">{title}</h2>
@@ -42,7 +44,16 @@ function Section({ title, icon: Icon, children }) {
 
 export default function HubPage() {
   const navigate = useNavigate();
-  const { user, artist, isAdmin, isArtist } = useAuth();
+  const { user, artist, isAdmin, isArtist, signOut } = useAuth();
+  const { tierSlug } = useTier();
+
+  const tierConfig = {
+    premium: { label: 'Premium', color: 'text-yellow-400', bg: 'bg-yellow-500/10', icon: Crown },
+    pro: { label: 'Pro', color: 'text-purple-400', bg: 'bg-purple-500/10', icon: Zap },
+    free: { label: 'Free', color: 'text-white/30', bg: 'bg-white/[0.04]', icon: Star },
+  };
+  const tier = tierConfig[tierSlug] || tierConfig.free;
+  const TierIcon = tier.icon;
 
   if (!user) {
     return (
@@ -59,8 +70,9 @@ export default function HubPage() {
 
   return (
     <div className="pt-14 pb-32 px-4 max-w-2xl mx-auto">
+
       {/* Header */}
-      <div className="mb-8">
+      <div className="mb-6">
         <div className="flex items-center space-x-3 mb-1">
           <LayoutDashboard className="w-6 h-6 text-white/60" />
           <h1 className="text-2xl font-bold text-white">Hub</h1>
@@ -68,115 +80,62 @@ export default function HubPage() {
         <p className="text-sm text-white/40 ml-9">Your control center</p>
       </div>
 
+      {/* Tier card — only for artists */}
+      {isArtist && (
+        <button
+          onClick={() => navigate('/upgrade')}
+          className={`w-full flex items-center justify-between p-4 rounded-xl border border-white/[0.06] ${tier.bg} mb-6 transition hover:brightness-110`}
+        >
+          <div className="flex items-center space-x-3">
+            <TierIcon className={`w-5 h-5 ${tier.color}`} />
+            <div className="text-left">
+              <p className={`text-sm font-semibold ${tier.color}`}>{tier.label} Plan</p>
+              <p className="text-[11px] text-white/30">
+                {tierSlug === 'free' ? 'Upgrade to unlock more features' : 'Manage your subscription'}
+              </p>
+            </div>
+          </div>
+          <ChevronRight className="w-4 h-4 text-white/20" />
+        </button>
+      )}
+
       {/* Admin Section */}
       {isAdmin && (
         <Section title="Admin" icon={Shield}>
-          <LinkCard
-            icon={Users}
-            label="User Management"
-            description="Manage artists, roles, and permissions"
-            path="/admin"
-            color="bg-yellow-500/20"
-          />
-          <LinkCard
-            icon={Mic2}
-            label="All Artists Overview"
-            description="Browse and manage all artist dashboards"
-            path="/admin/artists"
-            color="bg-purple-500/20"
-          />
-          <LinkCard
-            icon={BarChart3}
-            label="Platform Analytics"
-            description="Streams, signups, engagement metrics"
-            path="/admin/analytics"
-            color="bg-blue-500/20"
-          />
-          <LinkCard
-            icon={AlertTriangle}
-            label="Content Moderation"
-            description="Flagged tracks, reports, and reviews"
-            path="/admin/moderation"
-            color="bg-red-500/20"
-          />
+          <LinkCard icon={Users} label="User Management" description="Manage artists, roles, and permissions" path="/admin" color="bg-yellow-500/20" />
+          <LinkCard icon={Mic2} label="All Artists" description="Browse and manage all artist profiles" path="/admin/artists" color="bg-purple-500/20" />
+          <LinkCard icon={BarChart3} label="Platform Analytics" description="Streams, signups, engagement metrics" path="/admin/analytics" color="bg-blue-500/20" />
+          <LinkCard icon={AlertTriangle} label="Content Moderation" description="Flagged tracks, reports, and reviews" path="/admin/moderation" color="bg-red-500/20" />
         </Section>
       )}
 
-      {/* Artist Section */}
+      {/* Artist Tools */}
       {isArtist && (
         <Section title="Artist Tools" icon={Music}>
-          <LinkCard
-            icon={Upload}
-            label="Upload Track"
-            description="Upload and publish new music"
-            path="/dashboard"
-            color="bg-green-500/20"
-          />
-          <LinkCard
-            icon={HeartHandshake}
-            label="Collaborations"
-            description="Manage collab requests and credits"
-            path="/dashboard"
-            color="bg-cyan-500/20"
-          />
-          <LinkCard
-            icon={BarChart3}
-            label="My Analytics"
-            description="Track performance and stream data"
-            path="/dashboard"
-            color="bg-indigo-500/20"
-          />
-          <LinkCard
-            icon={Palette}
-            label="Profile & Theme"
-            description="Edit bio, socials, and appearance"
-            path="/profile"
-            color="bg-pink-500/20"
-          />
-          <LinkCard
-            icon={Bell}
-            label="Notifications"
-            description="Collabs, followers, milestones"
-            path="/notifications"
-            color="bg-orange-500/20"
-          />
-          <LinkCard
-            icon={MessageCircle}
-            label="Chat Rooms"
-            description="Community conversations"
-            path="/community"
-            color="bg-violet-500/20"
-          />
+          <LinkCard icon={Upload} label="Upload Track" description="Upload and publish new music" path="/dashboard" color="bg-green-500/20" />
+          <LinkCard icon={HeartHandshake} label="Collaborations" description="Manage collab requests and credits" path="/dashboard" color="bg-cyan-500/20" />
+          <LinkCard icon={BarChart3} label="Analytics" description="Track performance and stream data" path="/dashboard" color="bg-indigo-500/20" />
+          <LinkCard icon={MessageCircle} label="Chat Rooms" description="Community conversations" path="/chat" color="bg-violet-500/20" />
         </Section>
       )}
 
-      {/* General - always visible for logged in users */}
+      {/* Account */}
       <Section title="Account" icon={User}>
-        <LinkCard
-          icon={User}
-          label="Profile Settings"
-          description="Name, email, social links"
-          path="/profile"
-          color="bg-white/[0.08]"
-        />
-        <LinkCard
-          icon={Bell}
-          label="Notifications"
-          description="View all notifications"
-          path="/notifications"
-          color="bg-white/[0.08]"
-        />
+        <LinkCard icon={Palette} label="Profile & Appearance" description="Edit bio, socials, and theme" path="/profile" color="bg-pink-500/20" />
+        <LinkCard icon={Bell} label="Notifications" description="Collabs, followers, milestones" path="/notifications" color="bg-orange-500/20" />
+        {isArtist && (
+          <LinkCard icon={DollarSign} label="Payments" description="PayPal settings and earnings" path="/profile" color="bg-emerald-500/20" />
+        )}
       </Section>
 
-      {/* Tier badge */}
-      {artist && (
-        <div className="mt-4 flex items-center justify-center space-x-2 py-3 px-4 bg-white/[0.02] rounded-xl border border-white/[0.04]">
-          <Crown className="w-4 h-4 text-yellow-400/60" />
-          <span className="text-xs text-white/30">
-            {artist.tier === 'premium' ? 'Premium' : artist.tier === 'pro' ? 'Pro' : 'Free'} Plan
-          </span>
-        </div>
-      )}
+      {/* Sign out */}
+      <button
+        onClick={async () => { await signOut(); navigate('/'); }}
+        className="w-full flex items-center justify-center space-x-2 py-3 rounded-xl bg-red-500/10 text-red-400 text-sm font-medium hover:bg-red-500/15 transition mt-2"
+      >
+        <LogOut className="w-4 h-4" />
+        <span>Sign Out</span>
+      </button>
     </div>
   );
 }

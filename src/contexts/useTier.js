@@ -60,13 +60,18 @@ const FEATURE_LABELS = {
 };
 
 export function useTier() {
-  const { artist } = useAuth();
+  const { artist, isAdmin } = useAuth();
   const [tierSlug, setTierSlug] = useState('free');
   const [tierData, setTierData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [trackCount, setTrackCount] = useState(0);
 
   useEffect(() => {
+    if (isAdmin) {
+      setTierSlug('premium');
+      setLoading(false);
+      return;
+    }
     if (artist) {
       fetchTier();
       fetchTrackCount();
@@ -75,7 +80,7 @@ export function useTier() {
       setLoading(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [artist?.id]);
+  }, [artist?.id, isAdmin]);
 
   const fetchTier = async () => {
     try {

@@ -1,34 +1,15 @@
-// PayPal Configuration
-// Replace with your actual PayPal credentials
-// Get these from https://developer.paypal.com/dashboard/applications
-
 const PAYPAL_CONFIG = {
-  // Set to 'sandbox' for testing, 'live' for production
-  mode: 'sandbox',
-
-  // Your PayPal Client ID (from PayPal Developer Dashboard)
-  clientId: process.env.REACT_APP_PAYPAL_CLIENT_ID || 'YOUR_PAYPAL_CLIENT_ID_HERE',
-
-  // PayPal Plan IDs for each tier (create these in PayPal Dashboard → Subscriptions)
-  // Each plan should be set up as a recurring yearly subscription
+  clientId: 'AXhUqyXxTmBJ8Q6bqt0yiOEuLxqbbhnP93YONXL5Oiy3btUntKK8M7F2WfOeUzoVPxjHEalbRRRU52yY',
   planIds: {
-    pro: process.env.REACT_APP_PAYPAL_PRO_PLAN_ID || 'YOUR_PRO_PLAN_ID',
-    premium: process.env.REACT_APP_PAYPAL_PREMIUM_PLAN_ID || 'YOUR_PREMIUM_PLAN_ID',
+    pro: 'P-23B04242GD219860SNGUF3XQ',
+    premium: 'P-9ED159925B232625WNGUF53Q',
   },
-
-  // Platform PayPal email (receives tier subscription payments)
-  platformEmail: 'steve@projectfeelz.com',
+  currency: 'USD',
+  environment: 'production',
 };
 
-// PayPal SDK script URL
 export const getPayPalScriptUrl = () => {
-  const base = 'https://www.paypal.com/sdk/js';
-  const params = new URLSearchParams({
-    'client-id': PAYPAL_CONFIG.clientId,
-    vault: 'true',
-    intent: 'subscription',
-  });
-  return `${base}?${params.toString()}`;
+  return `https://www.paypal.com/sdk/js?client-id=${PAYPAL_CONFIG.clientId}&vault=true&intent=subscription`;
 };
 
 export default PAYPAL_CONFIG;

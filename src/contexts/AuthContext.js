@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
 
 const AuthContext = createContext({});
@@ -9,38 +9,7 @@ export function AuthProvider({ children }) {
   const [artist, setArtist] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
-
-  useEffect(() => {
-    // Hydrate immediately on mount before listener fires
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (session?.user) {
-        setUser(session.user);
-        await fetchProfile(session.user.id);
-        await fetchArtist(session.user.id);
-        await checkAdmin(session.user.id);
-      }
-      setLoading(false);
-    });
-
-    const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === 'INITIAL_SESSION') return; // already handled above
-      if (session?.user) {
-        setUser(session.user);
-        await fetchProfile(session.user.id);
-        await fetchArtist(session.user.id);
-        await checkAdmin(session.user.id);
-      } else {
-        setUser(null);
-        setProfile(null);
-        setArtist(null);
-        setIsAdmin(false);
-      }
-    });
-
-    return () => {
-      authListener?.subscription?.unsubscribe();
-    };
-  }, []);
+  const initializedRef = useRef(false);
 
   const fetchProfile = async (userId) => {
     let { data, error } = await supabase
@@ -58,9 +27,7 @@ export function AuthProvider({ children }) {
       data = res.data;
     }
 
-    if (data) {
-      setProfile(data);
-    }
+    if (data) setProfile(data);
   };
 
   const fetchArtist = async (userId) => {
@@ -70,9 +37,7 @@ export function AuthProvider({ children }) {
       .eq('user_id', userId)
       .single();
 
-    if (data) {
-      setArtist(data);
-    }
+    if (data) setArtist(data);
   };
 
   const checkAdmin = async (userId) => {
@@ -85,21 +50,55 @@ export function AuthProvider({ children }) {
     setIsAdmin(!!data);
   };
 
+  const loadUser = async (sessionUser) => {
+    setUser(sessionUser);
+    await Promise.all([
+      fetchProfile(sessionUser.id),
+      fetchArtist(sessionUser.id),
+      checkAdmin(sessionUser.id),
+    ]);
+  };
+
+  useEffect(() => {
+    // Step 1: Hydrate from existing session immediately
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (session?.user) {
+        await loadUser(session.user);
+      }
+      setLoading(false);
+      initializedRef.current = true;
+    });
+
+    // Step 2: Listen for future auth changes (sign in, sign out)
+    const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
+      // Skip until initial hydration is done to prevent double-fetch on load
+      if (!initializedRef.current) return;
+
+      if (session?.user) {
+        await loadUser(session.user);
+      } else {
+        setUser(null);
+        setProfile(null);
+        setArtist(null);
+        setIsAdmin(false);
+      }
+    });
+
+    return () => {
+      authListener?.subscription?.unsubscribe();
+    };
+  }, []);
+
   const signInWithGoogle = async () => {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: {
-        redirectTo: window.location.origin,
-      },
+      options: { redirectTo: window.location.origin },
     });
     if (error) throw error;
   };
 
   const signInWithEmail = async (email, password) => {
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) throw error;
     return data;
   };
@@ -108,9 +107,7 @@ export function AuthProvider({ children }) {
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
-      options: {
-        emailRedirectTo: window.location.origin,
-      },
+      options: { emailRedirectTo: window.location.origin },
     });
     if (error) throw error;
     return data;
