@@ -38,7 +38,7 @@ export default function CollaboratorSearch({ collaborators, setCollaborators, cu
       try {
         const { data } = await supabase
           .from('artists')
-          .select('id, artist_name, avatar_url, slug')
+          .select('id, artist_name, profile_image_url, slug')
           .ilike('artist_name', `%${query}%`)
           .neq('id', currentArtistId) // exclude self
           .limit(8);
@@ -75,7 +75,7 @@ export default function CollaboratorSearch({ collaborators, setCollaborators, cu
       {
         artist_id: artist.id,
         artist_name: artist.artist_name,
-        avatar_url: artist.avatar_url,
+        profile_image_url: artist.profile_image_url,
         role: 'featured',
         split_percent: 0,
         message: '',
@@ -142,8 +142,8 @@ export default function CollaboratorSearch({ collaborators, setCollaborators, cu
                 onClick={() => addCollaborator(artist)}
                 className="w-full flex items-center space-x-3 px-4 py-3 hover:bg-white/[0.06] transition text-left"
               >
-                {artist.avatar_url ? (
-                  <img src={artist.avatar_url} alt="" className="w-8 h-8 rounded-full object-cover" />
+                {artist.profile_image_url ? (
+                  <img src={artist.profile_image_url} alt="" className="w-8 h-8 rounded-full object-cover" />
                 ) : (
                   <div className="w-8 h-8 rounded-full bg-white/[0.1] flex items-center justify-center">
                     <span className="text-xs font-bold text-white/40">
@@ -169,8 +169,8 @@ export default function CollaboratorSearch({ collaborators, setCollaborators, cu
               {/* Artist Info Row */}
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-3">
-                  {collab.avatar_url ? (
-                    <img src={collab.avatar_url} alt="" className="w-9 h-9 rounded-full object-cover" />
+                  {collab.profile_image_url ? (
+                    <img src={collab.profile_image_url} alt="" className="w-9 h-9 rounded-full object-cover" />
                   ) : (
                     <div className="w-9 h-9 rounded-full bg-white/[0.1] flex items-center justify-center">
                       <span className="text-xs font-bold text-white/40">
