@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import MobileNav from './MobileNav';
+import DesktopSidebar from './DesktopSidebar';
 import MiniPlayer from './MiniPlayer';
 import FullPlayer from './FullPlayer';
 import { usePlayer } from '../../contexts/PlayerContext';
@@ -15,8 +16,6 @@ export default function AppLayout() {
 
   useEffect(() => {
     if (loading) return;
-    // Logged in but no artist profile → send to setup
-    // Skip if already on setup or public pages
     const publicPaths = ['/login', '/setup', '/privacy-policy', '/terms-of-use'];
     if (user && !artist && !publicPaths.includes(location.pathname)) {
       navigate('/setup');
@@ -25,25 +24,40 @@ export default function AppLayout() {
 
   return (
     <div className="min-h-screen bg-black text-white">
-      {/* Centered container with breathing room on all sides */}
+
+      {/* Desktop sidebar — hidden on mobile */}
+      <DesktopSidebar />
+
+      {/* Mobile top bar notification bell — hidden on desktop */}
+      <div className="md:hidden fixed top-0 left-0 right-0 z-40 h-14 flex items-center justify-end px-4 pt-3">
+        <NotificationBell />
+      </div>
+
+      {/* Main content area */}
       <main
-        className="w-full max-w-5xl mx-auto"
+        className="
+          w-full
+          md:ml-56
+          md:max-w-none
+          transition-all
+        "
         style={{ paddingBottom: currentTrack ? '140px' : '90px' }}
       >
-        <div className="fixed top-0 left-0 right-0 z-40 h-14 flex items-center justify-end px-4 pt-3">
-  <NotificationBell />
-</div>
-<Outlet />
-
+        {/* Desktop content wrapper — constrained width, centered */}
+        <div className="md:max-w-4xl md:mx-auto">
+          <Outlet />
+        </div>
       </main>
 
       {/* Full screen player overlay */}
       <FullPlayer />
 
-      {/* Mini player (above nav) */}
-      <MiniPlayer />
+      {/* Mini player — offset on desktop to account for sidebar */}
+      <div className="md:ml-56">
+        <MiniPlayer />
+      </div>
 
-      {/* Bottom navigation */}
+      {/* Bottom nav — mobile only */}
       <MobileNav />
     </div>
   );

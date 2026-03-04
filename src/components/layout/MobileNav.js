@@ -29,12 +29,12 @@ export default function MobileNav() {
   }
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-white/[0.06] bg-black/95 backdrop-blur-xl">
+    // md:hidden — completely gone on desktop, sidebar takes over
+    <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 border-t border-white/[0.06] bg-black/95 backdrop-blur-xl">
       <div className="flex items-center justify-around h-14 max-w-sm mx-auto px-2">
         {navItems.map(({ path, icon: Icon, label }) => {
-          const isActive = location.pathname === path || 
+          const isActive = location.pathname === path ||
             (path !== '/' && location.pathname.startsWith(path));
-          
           return (
             <button
               key={path}
