@@ -1,15 +1,19 @@
 {
   "short_name": "Feelz Machine",
-  "name": "Feelz Machine - Sample Pack Library",
+  "name": "Feelz Machine",
+  "description": "Independent music streaming platform for artists and fans",
   "icons": [
     {
       "src": "logo.png",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any maskable"
     }
   ],
-  "start_url": ".",
+  "start_url": "/player",
+  "scope": "/player",
   "display": "standalone",
-  "theme_color": "#0a0a0f",
-  "background_color": "#0a0a0f"
+  "orientation": "portrait",
+  "theme_color": "#000000",
+  "background_color": "#000000"
 }
