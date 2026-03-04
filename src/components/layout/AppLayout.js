@@ -10,17 +10,18 @@ import NotificationBell from '../NotificationBell';
 
 export default function AppLayout() {
   const { currentTrack } = usePlayer();
-  const { user, artist, loading } = useAuth();
+  const { user, hasProfile, loading } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
   useEffect(() => {
     if (loading) return;
     const publicPaths = ['/login', '/setup', '/privacy-policy', '/terms-of-use'];
-    if (user && !artist && !publicPaths.includes(location.pathname)) {
+    // Redirect to setup only if logged in but has no profile at all (no artist, no listener)
+    if (user && !hasProfile && !publicPaths.includes(location.pathname)) {
       navigate('/setup');
     }
-  }, [user, artist, loading, location.pathname]);
+  }, [user, hasProfile, loading, location.pathname]);
 
   return (
     <div className="min-h-screen bg-black text-white">

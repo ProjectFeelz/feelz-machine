@@ -44,7 +44,7 @@ function Section({ title, icon: Icon, children }) {
 
 export default function HubPage() {
   const navigate = useNavigate();
-  const { user, artist, isAdmin, isArtist, signOut } = useAuth();
+  const { user, artist, isAdmin, isArtist, isListener, signOut } = useAuth();
   const { tierSlug } = useTier();
 
   const tierConfig = {
@@ -111,7 +111,7 @@ export default function HubPage() {
 
       {/* Artist Tools */}
       {isArtist && (
-        <Section title="Artist Tools" icon={Music}>
+        {isArtist && <Section title="Artist Tools" icon={Music}>
           <LinkCard icon={Upload} label="Upload Track" description="Upload and publish new music" path="/dashboard" color="bg-green-500/20" />
           <LinkCard icon={HeartHandshake} label="Collaborations" description="Manage collab requests and credits" path="/dashboard" color="bg-cyan-500/20" />
           <LinkCard icon={BarChart3} label="Analytics" description="Track performance and stream data" path="/dashboard" color="bg-indigo-500/20" />

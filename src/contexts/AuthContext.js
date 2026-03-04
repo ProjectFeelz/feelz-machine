@@ -7,6 +7,7 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
   const [artist, setArtist] = useState(null);
+  const [listener, setListener] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
 
@@ -16,7 +17,6 @@ export function AuthProvider({ children }) {
       .select('*')
       .eq('user_id', userId)
       .single();
-
     if (error || !data) {
       const res = await supabase
         .from('profiles')
@@ -25,7 +25,6 @@ export function AuthProvider({ children }) {
         .single();
       data = res.data;
     }
-
     if (data) setProfile(data);
   };
 
@@ -35,8 +34,16 @@ export function AuthProvider({ children }) {
       .select('*')
       .eq('user_id', userId)
       .single();
-
     if (data) setArtist(data);
+  };
+
+  const fetchListener = async (userId) => {
+    const { data } = await supabase
+      .from('listeners')
+      .select('*')
+      .eq('user_id', userId)
+      .maybeSingle();
+    if (data) setListener(data);
   };
 
   const checkAdmin = async (userId) => {
@@ -45,7 +52,6 @@ export function AuthProvider({ children }) {
       .select('id')
       .eq('user_id', userId)
       .single();
-
     setIsAdmin(!!data);
   };
 
@@ -55,27 +61,26 @@ export function AuthProvider({ children }) {
     await Promise.all([
       fetchProfile(sessionUser.id),
       fetchArtist(sessionUser.id),
+      fetchListener(sessionUser.id),
       checkAdmin(sessionUser.id),
     ]);
   };
 
   useEffect(() => {
-    // Hydrate from existing session on mount only
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (session?.user) await loadUser(session.user);
       setLoading(false);
     });
 
-    // Listener ONLY handles sign out — nothing else touches state
     const { data: authListener } = supabase.auth.onAuthStateChange((event) => {
       if (event === 'SIGNED_OUT') {
         setUser(null);
         setProfile(null);
         setArtist(null);
+        setListener(null);
         setIsAdmin(false);
       }
     });
-
     return () => authListener?.subscription?.unsubscribe();
   }, []);
 
@@ -85,7 +90,6 @@ export function AuthProvider({ children }) {
       options: { redirectTo: window.location.origin },
     });
     if (error) throw error;
-    // Google redirects back to app — getSession() on mount handles the rest
   };
 
   const signInWithEmail = async (email, password) => {
@@ -111,6 +115,7 @@ export function AuthProvider({ children }) {
     setUser(null);
     setProfile(null);
     setArtist(null);
+    setListener(null);
     setIsAdmin(false);
   };
 
@@ -118,6 +123,7 @@ export function AuthProvider({ children }) {
     if (user) {
       await fetchProfile(user.id);
       await fetchArtist(user.id);
+      await fetchListener(user.id);
     }
   };
 
@@ -125,9 +131,12 @@ export function AuthProvider({ children }) {
     user,
     profile,
     artist,
+    listener,
     loading,
     isAdmin,
     isArtist: !!artist,
+    isListener: !!listener,
+    hasProfile: !!artist || !!listener,
     isMaster: artist?.is_master || false,
     signInWithGoogle,
     signInWithEmail,
