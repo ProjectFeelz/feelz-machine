@@ -30,7 +30,7 @@ export default function CollabRequests() {
         .select(`
           *,
           collaboration:collaborations(role, split_percent),
-          from_artist:artists!collab_requests_from_artist_id_fkey(id, artist_name, avatar_url),
+          from_artist:artists!collab_requests_from_artist_id_fkey(id, artist_name, profile_image_url),
           track:tracks!collab_requests_track_id_fkey(id, title, cover_artwork_url)
         `)
         .eq('to_artist_id', artist.id)
@@ -88,7 +88,7 @@ export default function CollabRequests() {
 
       // Refresh list
       fetchRequests();
-      
+
     } catch (err) {
       console.error('Respond error:', err);
     }
@@ -135,8 +135,8 @@ export default function CollabRequests() {
             >
               <div className="flex items-start space-x-3">
                 {/* From Artist Avatar */}
-                {req.from_artist?.avatar_url ? (
-                  <img src={req.from_artist.avatar_url} alt="" className="w-10 h-10 rounded-full object-cover flex-shrink-0" />
+                {req.from_artist?.profile_image_url ? (
+                  <img src={req.from_artist.profile_image_url} alt="" className="w-10 h-10 rounded-full object-cover flex-shrink-0" />
                 ) : (
                   <div className="w-10 h-10 rounded-full bg-white/[0.08] flex items-center justify-center flex-shrink-0">
                     <span className="text-sm font-bold text-white/30">

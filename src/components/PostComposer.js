@@ -100,7 +100,6 @@ export default function PostComposer({ onPostCreated }) {
       const taggedIds = taggedArtists.map(a => a.id);
 
       const { data, error } = await supabase.from('posts').insert({
-        user_id: user.id,
         artist_id: artist?.id || null,
         content: content.trim(),
         tagged_artist_ids: taggedIds,

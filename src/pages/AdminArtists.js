@@ -36,11 +36,11 @@ export default function AdminArtists() {
       // Fetch follower counts
       const { data: followerCounts } = await supabase
         .from('follows')
-        .select('following_id');
+        .select('artist_id');
 
       const followerMap = {};
       (followerCounts || []).forEach(f => {
-        followerMap[f.following_id] = (followerMap[f.following_id] || 0) + 1;
+        followerMap[f.artist_id] = (followerMap[f.artist_id] || 0) + 1;
       });
 
       const enriched = (artistData || []).map(a => ({
