@@ -7,6 +7,10 @@ import HomePage from './pages/HomePage';
 import BrowsePage from './pages/BrowsePage';
 import LoginPage from './pages/LoginPage';
 import LibraryPage from './pages/LibraryPage';
+import LikedSongsPage from './pages/LikedSongsPage';
+import DownloadsPage from './pages/DownloadsPage';
+import FollowingPage from './pages/FollowingPage';
+import PlaylistsPage from './pages/PlaylistsPage';
 import ProfilePage from './pages/ProfilePage';
 import FeedPage from './pages/FeedPage';
 import ArtistDashboard from './pages/ArtistDashboard';
@@ -42,6 +46,10 @@ export default function AppRouter() {
               <Route path="/" element={<HomePage />} />
               <Route path="/browse" element={<BrowsePage />} />
               <Route path="/library" element={<LibraryPage />} />
+              <Route path="/library/likes" element={<LikedSongsPage />} />
+              <Route path="/library/downloads" element={<DownloadsPage />} />
+              <Route path="/library/following" element={<FollowingPage />} />
+              <Route path="/library/playlists" element={<PlaylistsPage />} />
               <Route path="/community" element={<FeedPage />} />
               <Route path="/chat" element={<ChatRoomsPage />} />
               <Route path="/profile" element={<ProfilePage />} />
