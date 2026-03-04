@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import CollaboratorSearch from '../components/CollaboratorSearch';
 import { notifyCollabRequest } from '../components/notificationTriggers';
+import TierGate from '../components/TierGate';
 
 const GENRES = [
   'Hip Hop', 'Trap', 'Drill', 'Boom Bap', 'Lo-Fi', 'R&B', 'Neo Soul', 'Pop',
@@ -432,22 +433,26 @@ export default function TrackUploadPanel() {
                   className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none" />
               </div>
 
-              <div>
-                <label className="block text-xs text-white/40 mb-1.5">Download Price (USD)</label>
-                <input type="number" min="0" step="0.01" value={trackForm.download_price}
-                  onChange={(e) => setTrackForm({ ...trackForm, download_price: e.target.value })}
-                  className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none" />
-              </div>
+              <TierGate feature="download_sales" inline>
+                <div>
+                  <label className="block text-xs text-white/40 mb-1.5">Download Price (USD)</label>
+                  <input type="number" min="0" step="0.01" value={trackForm.download_price}
+                    onChange={(e) => setTrackForm({ ...trackForm, download_price: e.target.value })}
+                    className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none" />
+                </div>
+              </TierGate>
             </div>
 
             {/* Lyrics */}
-            <div>
-              <label className="block text-xs text-white/40 mb-1.5">Lyrics (optional)</label>
-              <textarea rows={3} value={trackForm.lyrics}
-                onChange={(e) => setTrackForm({ ...trackForm, lyrics: e.target.value })}
-                placeholder="Paste lyrics here..."
-                className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none resize-none" />
-            </div>
+            <TierGate feature="lyrics" inline>
+              <div>
+                <label className="block text-xs text-white/40 mb-1.5">Lyrics (optional)</label>
+                <textarea rows={3} value={trackForm.lyrics}
+                  onChange={(e) => setTrackForm({ ...trackForm, lyrics: e.target.value })}
+                  placeholder="Paste lyrics here..."
+                  className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none resize-none" />
+              </div>
+            </TierGate>
 
             {/* Files */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -480,28 +485,32 @@ export default function TrackUploadPanel() {
                 { key: 'featured', label: 'Featured' },
                 { key: 'is_explicit', label: 'Explicit' },
                 { key: 'is_downloadable', label: 'Downloadable' },
-                { key: 'is_premium', label: 'Premium' },
+                { key: 'is_premium', label: 'Premium', premiumOnly: true },
                 { key: 'has_versions', label: 'Has Versions' },
-              ].map(({ key, label }) => (
-                <label key={key} className="flex items-center space-x-2 cursor-pointer">
-                  <div className={`w-8 h-5 rounded-full transition-colors flex items-center px-0.5 ${
-                    trackForm[key] ? 'bg-white' : 'bg-white/10'
-                  }`} onClick={() => setTrackForm({ ...trackForm, [key]: !trackForm[key] })}>
-                    <div className={`w-4 h-4 rounded-full transition-transform ${
-                      trackForm[key] ? 'translate-x-3 bg-black' : 'translate-x-0 bg-white/30'
-                    }`} />
-                  </div>
+              ].map(({ key, label, premiumOnly }) => (
+                <label key={key} className="flex items-center space-x-2 cursor-pointer opacity-100">
+                  <TierGate feature={premiumOnly ? "download_sales" : null} inline={!!premiumOnly}>
+                    <div className={`w-8 h-5 rounded-full transition-colors flex items-center px-0.5 ${
+                      trackForm[key] ? 'bg-white' : 'bg-white/10'
+                    }`} onClick={() => setTrackForm({ ...trackForm, [key]: !trackForm[key] })}>
+                      <div className={`w-4 h-4 rounded-full transition-transform ${
+                        trackForm[key] ? 'translate-x-3 bg-black' : 'translate-x-0 bg-white/30'
+                      }`} />
+                    </div>
+                  </TierGate>
                   <span className="text-xs text-white/50">{label}</span>
                 </label>
               ))}
             </div>
 
             {/* Collaborators */}
-            <CollaboratorSearch
-              collaborators={collaborators}
-              setCollaborators={setCollaborators}
-              currentArtistId={artist.id}
-            />
+            <TierGate feature="collaborations" inline>
+              <CollaboratorSearch
+                collaborators={collaborators}
+                setCollaborators={setCollaborators}
+                currentArtistId={artist.id}
+              />
+            </TierGate>
 
             {/* Alternate Versions */}
             {trackForm.has_versions && (
