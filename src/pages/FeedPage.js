@@ -10,7 +10,7 @@ import PostCard from '../components/PostCard';
 
 export default function FeedPage() {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, artist } = useAuth();
   const [posts, setPosts] = useState([]);
   const [trending, setTrending] = useState([]);
   const [loading, setLoading] = useState(true);

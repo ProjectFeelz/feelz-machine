@@ -30,9 +30,6 @@ export default function PostComposer({ onPostCreated }) {
   const editorRef = useRef(null);
   const tagTimeoutRef = useRef(null);
 
-  // Only artists can post
-  if (!user || !artist) return null;
-
   const youtubeId = extractYouTubeId(content);
   const blocked = hasBlockedLinks(content);
 
@@ -140,6 +137,9 @@ export default function PostComposer({ onPostCreated }) {
     }
     setPosting(false);
   };
+
+  // Only artists can post
+  if (!user || !artist) return null;
 
   return (
     <TierGate feature="community_post">
