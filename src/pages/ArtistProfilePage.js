@@ -183,12 +183,24 @@ export default function ArtistProfilePage() {
       // const orderId = await createPayPalOrder(purchaseTrack.download_price);
       // await capturePayPalOrder(orderId);
 
-      // Log purchase (placeholder — real flow logs after PayPal capture)
+      // Log purchase
       await supabase.from('downloads').insert({
         user_id: user.id,
         track_id: purchaseTrack.id,
         artist_id: artist.id,
         purchase_price: purchaseTrack.download_price,
+      });
+
+      // Trigger royalty split payout calculation
+      await fetch('/.netlify/functions/process-split-payout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          track_id: purchaseTrack.id,
+          transaction_id: `placeholder_${Date.now()}`, // TODO: replace with real PayPal order ID
+          total_amount: purchaseTrack.download_price,
+          buyer_user_id: user.id,
+        }),
       });
 
       setPurchaseSuccess(true);
