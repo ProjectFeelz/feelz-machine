@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
+import React, { createContext, useContext, useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 
 const AuthContext = createContext({});
@@ -9,7 +9,6 @@ export function AuthProvider({ children }) {
   const [artist, setArtist] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
-  const initializedRef = useRef(false);
 
   const fetchProfile = async (userId) => {
     let { data, error } = await supabase
@@ -51,6 +50,7 @@ export function AuthProvider({ children }) {
   };
 
   const loadUser = async (sessionUser) => {
+    if (!sessionUser) return;
     setUser(sessionUser);
     await Promise.all([
       fetchProfile(sessionUser.id),
@@ -60,26 +60,15 @@ export function AuthProvider({ children }) {
   };
 
   useEffect(() => {
-    // Step 1: Hydrate from existing session immediately
+    // Hydrate from existing session on mount only
     supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (session?.user) {
-        await loadUser(session.user);
-      }
+      if (session?.user) await loadUser(session.user);
       setLoading(false);
-      initializedRef.current = true;
     });
 
-    // Step 2: Listen for future auth changes (sign in, sign out)
-    const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
-      // Skip until initial hydration is done
-      if (!initializedRef.current) return;
-
-      // Only act on real auth changes, not token refreshes
-      if (event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION') return;
-
-      if (event === 'SIGNED_IN' && session?.user) {
-        await loadUser(session.user);
-      } else if (event === 'SIGNED_OUT') {
+    // Listener ONLY handles sign out — nothing else touches state
+    const { data: authListener } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'SIGNED_OUT') {
         setUser(null);
         setProfile(null);
         setArtist(null);
@@ -87,9 +76,7 @@ export function AuthProvider({ children }) {
       }
     });
 
-    return () => {
-      authListener?.subscription?.unsubscribe();
-    };
+    return () => authListener?.subscription?.unsubscribe();
   }, []);
 
   const signInWithGoogle = async () => {
@@ -98,11 +85,13 @@ export function AuthProvider({ children }) {
       options: { redirectTo: window.location.origin },
     });
     if (error) throw error;
+    // Google redirects back to app — getSession() on mount handles the rest
   };
 
   const signInWithEmail = async (email, password) => {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) throw error;
+    if (data.user) await loadUser(data.user);
     return data;
   };
 
@@ -113,6 +102,7 @@ export function AuthProvider({ children }) {
       options: { emailRedirectTo: window.location.origin },
     });
     if (error) throw error;
+    if (data.user) await loadUser(data.user);
     return data;
   };
 
