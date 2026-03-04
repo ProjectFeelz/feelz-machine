@@ -18,6 +18,7 @@ import PrivacyPolicy from './PrivacyPolicy';
 import TermsOfUse from './TermsOfUse';
 import NotificationsPage from './pages/NotificationsPage';
 import HubPage from './pages/HubPage';
+import ProfileSetup from './pages/ProfileSetup';
 import AdminDashboard from './pages/AdminDashboard';
 import AdminArtists from './pages/AdminArtists';
 import AdminAnalytics from './pages/AdminAnalytics';
@@ -30,6 +31,7 @@ export default function AppRouter() {
         <PlayerProvider>
           <Routes>
             <Route path="/login" element={<LoginPage />} />
+            <Route path="/setup" element={<ProfileSetup />} />
             <Route path="/dashboard" element={<ArtistDashboard />} />
             <Route path="/artist/:slug" element={<ArtistProfilePage />} />
             <Route path="/upgrade" element={<TierUpgradePage />} />

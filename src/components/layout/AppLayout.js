@@ -1,13 +1,27 @@
-import React from 'react';
-import { Outlet } from 'react-router-dom';
+import React, { useEffect } from 'react';
+import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import MobileNav from './MobileNav';
 import MiniPlayer from './MiniPlayer';
 import FullPlayer from './FullPlayer';
 import { usePlayer } from '../../contexts/PlayerContext';
+import { useAuth } from '../../contexts/AuthContext';
 import NotificationBell from '../NotificationBell';
 
 export default function AppLayout() {
   const { currentTrack } = usePlayer();
+  const { user, artist, loading } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  useEffect(() => {
+    if (loading) return;
+    // Logged in but no artist profile → send to setup
+    // Skip if already on setup or public pages
+    const publicPaths = ['/login', '/setup', '/privacy-policy', '/terms-of-use'];
+    if (user && !artist && !publicPaths.includes(location.pathname)) {
+      navigate('/setup');
+    }
+  }, [user, artist, loading, location.pathname]);
 
   return (
     <div className="min-h-screen bg-black text-white">
