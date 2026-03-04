@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import { PlayerProvider } from './contexts/PlayerContext';
 import AppLayout from './components/layout/AppLayout';
+import LandingPage from './pages/LandingPage';
 import HomePage from './pages/HomePage';
 import BrowsePage from './pages/BrowsePage';
 import LoginPage from './pages/LoginPage';
@@ -29,9 +30,18 @@ import AdminArtists from './pages/AdminArtists';
 import AdminAnalytics from './pages/AdminAnalytics';
 import AdminModeration from './pages/AdminModeration';
 
+// If we're at the root "/" serve the landing page standalone
+const isLanding = window.location.pathname === '/' || window.location.pathname === '';
+
 export default function AppRouter() {
+  if (isLanding) {
+    return <LandingPage />;
+  }
+
+  // All app routes live under /player via basename
+  // This means every navigate('/hub') etc stays unchanged — router handles the prefix
   return (
-    <BrowserRouter>
+    <BrowserRouter basename="/player">
       <AuthProvider>
         <PlayerProvider>
           <Routes>
@@ -61,7 +71,6 @@ export default function AppRouter() {
               <Route path="/admin/artists" element={<AdminArtists />} />
               <Route path="/admin/analytics" element={<AdminAnalytics />} />
               <Route path="/admin/moderation" element={<AdminModeration />} />
-
             </Route>
           </Routes>
         </PlayerProvider>

@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Home, Search, Library, LayoutDashboard, User, Music2, Settings } from 'lucide-react';
+import { Home, Search, Library, LayoutDashboard, User } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import NotificationBell from '../NotificationBell';
 
@@ -11,6 +11,16 @@ const navItems = [
   { path: '/hub', icon: LayoutDashboard, label: 'Hub' },
   { path: '/profile', icon: User, label: 'Profile' },
 ];
+
+function Logo() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="#000" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" width="16" height="16">
+      <path d="M9 18V5l12-2v13"/>
+      <circle cx="6" cy="18" r="3"/>
+      <circle cx="18" cy="16" r="3"/>
+    </svg>
+  );
+}
 
 export default function DesktopSidebar() {
   const navigate = useNavigate();
@@ -29,8 +39,8 @@ export default function DesktopSidebar() {
     <aside className="hidden md:flex flex-col w-56 fixed left-0 top-0 bottom-0 z-40 border-r border-white/[0.06] bg-black">
       {/* Logo */}
       <div className="flex items-center space-x-2.5 px-5 py-6">
-        <div className="w-8 h-8 rounded-lg bg-white flex items-center justify-center flex-shrink-0">
-          <Music2 className="w-4 h-4 text-black" />
+        <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ backgroundColor: '#8CAB2E' }}>
+          <Logo />
         </div>
         <span className="text-sm font-bold text-white tracking-tight">Feelz Machine</span>
       </div>
@@ -56,15 +66,12 @@ export default function DesktopSidebar() {
         })}
       </nav>
 
-      {/* Bottom: artist card + notification */}
+      {/* Bottom: notifications + artist card */}
       <div className="px-3 pb-6 space-y-2">
-        {/* Notifications */}
         <div className="flex items-center justify-between px-3 py-2">
           <span className="text-xs text-white/30">Notifications</span>
           <NotificationBell />
         </div>
-
-        {/* Artist quick link */}
         {artist && (
           <button
             onClick={() => navigate(`/artist/${artist.slug}`)}
@@ -78,19 +85,16 @@ export default function DesktopSidebar() {
               }
             </div>
             <div className="flex-1 min-w-0 text-left">
-              <p className="text-xs font-medium text-white/60 group-hover:text-white/80 truncate transition-colors">
-                {artist.artist_name}
-              </p>
+              <p className="text-xs font-medium text-white/60 group-hover:text-white/80 truncate transition-colors">{artist.artist_name}</p>
               <p className="text-[10px] text-white/25">View profile</p>
             </div>
           </button>
         )}
-
         {!user && (
           <button
             onClick={() => navigate('/login')}
-            className="w-full px-3 py-2.5 rounded-lg bg-white text-black text-sm font-semibold hover:bg-white/90 transition-all">
-            Sign In
+            className="w-full px-3 py-2.5 rounded-lg border border-white/[0.08] text-xs text-white/40 hover:text-white/60 hover:border-white/[0.15] transition-all">
+            Sign in
           </button>
         )}
       </div>

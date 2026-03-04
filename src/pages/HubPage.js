@@ -110,15 +110,13 @@ export default function HubPage() {
       )}
 
       {/* Artist Tools */}
-      {isArtist && (
-        {isArtist && <Section title="Artist Tools" icon={Music}>
+      {isArtist && <Section title="Artist Tools" icon={Music}>
           <LinkCard icon={Upload} label="Upload Track" description="Upload and publish new music" path="/dashboard" color="bg-green-500/20" />
           <LinkCard icon={HeartHandshake} label="Collaborations" description="Manage collab requests and credits" path="/dashboard" color="bg-cyan-500/20" />
           <LinkCard icon={BarChart3} label="Analytics" description="Track performance and stream data" path="/dashboard" color="bg-indigo-500/20" />
           <LinkCard icon={MessageCircle} label="Chat Rooms" description="Community conversations" path="/chat" color="bg-violet-500/20" />
           <LinkCard icon={Users} label="Community Feed" description="Posts, updates and activity" path="/community" color="bg-teal-500/20" />
-        </Section>
-      )}
+        </Section>}
 
       {/* Account */}
       <Section title="Account" icon={User}>
