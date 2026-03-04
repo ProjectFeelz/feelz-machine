@@ -4,7 +4,7 @@
   "description": "Sample Pack Library with Interactive Audio",
   "author": "Project Feelz",
   "main": "public/electron.js",
-  "homepage": "./",
+  "homepage": "https://www.feelzmachine.com",
   "private": true,
   "dependencies": {
     "@supabase/supabase-js": "^2.39.0",
