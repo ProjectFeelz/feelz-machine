@@ -81,7 +81,7 @@ export default function ArtistProfilePage() {
         .from('artist_themes')
         .select('*')
         .eq('artist_id', artistData.id)
-        .single();
+        .maybeSingle();
       if (themeData) setTheme(themeData);
 
       // Fetch published tracks
@@ -297,7 +297,7 @@ export default function ArtistProfilePage() {
         </div>
 
         {/* Profile image */}
-        <div className="absolute -bottom-12 left-6 z-10">
+        <div className="absolute -bottom-12 left-1/2 -translate-x-1/2 z-10">
           <div className="w-24 h-24 rounded-2xl overflow-hidden border-4 shadow-2xl"
             style={{ borderColor: bgColor, backgroundColor: `${secondaryColor}30` }}>
             {artist.profile_image_url ? (
@@ -316,7 +316,7 @@ export default function ArtistProfilePage() {
       </div>
 
       {/* ========== ARTIST INFO ========== */}
-      <div className="px-6 pt-16">
+      <div className="px-6 pt-16 flex flex-col items-center text-center">
         {/* Name + badges */}
         <div className="flex items-center space-x-2 mb-1">
           <h1 className="text-2xl font-bold" style={{ fontFamily: `"${headingFont}", sans-serif`, color: textColor }}>
@@ -343,7 +343,7 @@ export default function ArtistProfilePage() {
         </div>
 
         {/* Action buttons */}
-        <div className="flex items-center space-x-3 mb-6">
+        <div className="flex items-center justify-center space-x-3 mb-6">
           <button onClick={handleFollow}
             className="flex items-center space-x-2 px-5 py-2.5 rounded-full text-sm font-semibold transition-all active:scale-95"
             style={{
@@ -367,7 +367,7 @@ export default function ArtistProfilePage() {
 
         {/* Bio */}
         {artist.bio && (
-          <p className="text-sm leading-relaxed mb-6" style={{ color: `${textColor}90`, fontFamily: `"${bodyFont}", sans-serif` }}>
+          <p className="text-sm leading-relaxed mb-6 max-w-sm" style={{ color: `${textColor}90`, fontFamily: `"${bodyFont}", sans-serif` }}>
             {artist.bio}
           </p>
         )}
