@@ -98,6 +98,7 @@ export default function PostCard({ post, onDelete, onUpdate }) {
   const [posting, setPosting] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [taggedArtistData, setTaggedArtistData] = useState([]);
+  const [copied, setCopied] = useState(false);
 
   const postArtist = post.artists || post.artist || null;
   const isOwner = user && (post.user_id === user.id);
@@ -222,11 +223,14 @@ export default function PostCard({ post, onDelete, onUpdate }) {
   };
 
   const handleShare = async () => {
-    const url = `${window.location.origin}/feed`;
+    const url = `${window.location.origin}/community?post=${post.id}`;
+    const text = `${postArtist?.artist_name || 'An artist'} on Feelz Machine: ${post.content?.substring(0, 80)}`;
     if (navigator.share) {
-      try { await navigator.share({ title: 'Feelz Machine', text: post.content?.substring(0, 100), url }); } catch (e) {}
+      try { await navigator.share({ title: 'Feelz Machine', text, url }); } catch (e) {}
     } else {
       await navigator.clipboard.writeText(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
     }
   };
 
@@ -358,6 +362,7 @@ export default function PostCard({ post, onDelete, onUpdate }) {
         <button onClick={handleShare}
           className="flex items-center space-x-1.5 transition active:scale-90">
           <Share2 className="w-4 h-4 text-white/30" />
+          {copied && <span className="text-[10px] text-white/40">Copied!</span>}
         </button>
       </div>
 

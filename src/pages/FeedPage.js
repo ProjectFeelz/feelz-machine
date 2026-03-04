@@ -71,6 +71,23 @@ export default function FeedPage() {
     fetchTrending();
   }, [fetchPosts]);
 
+  // Scroll to shared post if ?post= param present
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const postId = params.get('post');
+    if (!postId) return;
+    const interval = setInterval(() => {
+      const el = document.getElementById(`post-${postId}`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el.style.outline = '1px solid rgba(255,255,255,0.15)';
+        setTimeout(() => { el.style.outline = ''; }, 2000);
+        clearInterval(interval);
+      }
+    }, 300);
+    return () => clearInterval(interval);
+  }, []);
+
   // Real-time subscription for new posts
   useEffect(() => {
     const channel = supabase
@@ -181,7 +198,9 @@ export default function FeedPage() {
       ) : (
         <div className="space-y-4">
           {posts.map(post => (
-            <PostCard key={post.id} post={post} onDelete={handlePostDeleted} />
+            <div key={post.id} id={`post-${post.id}`}>
+              <PostCard post={post} onDelete={handlePostDeleted} />
+            </div>
           ))}
 
           {/* Load more */}
