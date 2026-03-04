@@ -68,9 +68,9 @@ export default function LandingPage() {
     },
     // hero
     hero: {
-      minHeight: '100vh', display: 'flex', flexDirection: 'column',
+      minHeight: '85vh', display: 'flex', flexDirection: 'column',
       alignItems: 'center', justifyContent: 'center',
-      textAlign: 'center', padding: '120px 24px 100px',
+      textAlign: 'center', padding: '90px 24px 60px',
       position: 'relative', overflow: 'hidden',
     },
     glow: {
@@ -100,7 +100,7 @@ export default function LandingPage() {
     },
     h1: {
       fontFamily: "'Syne', sans-serif", fontWeight: 800,
-      fontSize: 'clamp(48px, 10vw, 108px)',
+      fontSize: 'clamp(36px, 6vw, 72px)',
       lineHeight: 0.93, letterSpacing: '-0.04em',
       marginBottom: 28, position: 'relative',
     },
@@ -198,9 +198,9 @@ export default function LandingPage() {
       </section>
 
       {/* FEATURES */}
-      <div style={{ padding: '90px 24px', maxWidth: 1040, margin: '0 auto' }} id="features">
+      <div style={{ padding: '70px 24px', maxWidth: 1100, margin: '0 auto' }} id="features">
         <p style={{ fontSize: 11, fontWeight: 500, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#8CAB2E', marginBottom: 14 }}>What's inside</p>
-        <h2 style={{ fontFamily: "'Syne', sans-serif", fontWeight: 800, fontSize: 'clamp(28px,4vw,46px)', letterSpacing: '-0.03em', lineHeight: 1.08, marginBottom: 56 }}>
+        <h2 style={{ fontFamily: "'Syne', sans-serif", fontWeight: 800, fontSize: 'clamp(32px,4vw,52px)', letterSpacing: '-0.03em', lineHeight: 1.08, marginBottom: 56 }}>
           Everything you need.<br/><span style={{ color: 'rgba(255,255,255,0.3)' }}>Nothing you don't.</span>
         </h2>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(290px, 1fr))', gap: 1, background: 'rgba(255,255,255,0.06)', borderRadius: 16, overflow: 'hidden' }}>
@@ -212,9 +212,9 @@ export default function LandingPage() {
             ['🎨', 'Custom Profile', 'Build a branded artist page with your own colors, fonts, and themes.'],
             ['📣', 'Community Feed', 'Post updates, embed YouTube videos, connect directly with your fanbase.'],
           ].map(([icon, title, desc]) => (
-            <div key={title} className="fcard" style={{ background: '#000', padding: 32, transition: 'background 0.2s' }}>
-              <span style={{ fontSize: 22, marginBottom: 16, display: 'block' }}>{icon}</span>
-              <div style={{ fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 16, marginBottom: 8 }}>{title}</div>
+            <div key={title} className="fcard" style={{ background: '#000', padding: 36, transition: 'background 0.2s' }}>
+              <span style={{ fontSize: 28, marginBottom: 16, display: 'block' }}>{icon}</span>
+              <div style={{ fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 18, marginBottom: 8 }}>{title}</div>
               <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.35)', lineHeight: 1.65 }}>{desc}</p>
             </div>
           ))}
@@ -235,12 +235,12 @@ export default function LandingPage() {
               border: `1px solid ${accent ? 'rgba(140,171,46,0.2)' : 'rgba(255,255,255,0.06)'}`,
               background: accent ? 'linear-gradient(140deg, rgba(140,171,46,0.06) 0%, #000 60%)' : 'rgba(255,255,255,0.03)',
             }}>
-              <span style={{ fontSize: 36, marginBottom: 18, display: 'block' }}>{emoji}</span>
-              <div style={{ fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 22, letterSpacing: '-0.03em', marginBottom: 10 }}>{title}</div>
-              <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.35)', lineHeight: 1.65, marginBottom: 20 }}>{desc}</p>
+              <span style={{ fontSize: 44, marginBottom: 18, display: 'block' }}>{emoji}</span>
+              <div style={{ fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 26, letterSpacing: '-0.03em', marginBottom: 10 }}>{title}</div>
+              <p style={{ fontSize: 15, color: 'rgba(255,255,255,0.35)', lineHeight: 1.65, marginBottom: 20 }}>{desc}</p>
               <ul style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 7 }}>
                 {items.map(item => (
-                  <li key={item} style={{ fontSize: 13, color: 'rgba(255,255,255,0.45)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <li key={item} style={{ fontSize: 14, color: 'rgba(255,255,255,0.45)', display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span style={{ color: '#8CAB2E', fontSize: 11, flexShrink: 0 }}>—</span>{item}
                   </li>
                 ))}
