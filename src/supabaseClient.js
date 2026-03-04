@@ -16,16 +16,6 @@ export const supabase = (() => {
     },
   });
 
-  // Log auth state changes for debugging
-  client.auth.onAuthStateChange((event, session) => {
-    if (event === 'TOKEN_REFRESHED') {
-      console.log('Session token refreshed');
-    }
-    if (event === 'SIGNED_OUT') {
-      console.log('User signed out');
-    }
-  });
-
   return client;
 })();
 
