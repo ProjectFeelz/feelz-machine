@@ -18,6 +18,10 @@ import PrivacyPolicy from './PrivacyPolicy';
 import TermsOfUse from './TermsOfUse';
 import NotificationsPage from './pages/NotificationsPage';
 import HubPage from './pages/HubPage';
+import AdminDashboard from './pages/AdminDashboard';
+import AdminArtists from './pages/AdminArtists';
+import AdminAnalytics from './pages/AdminAnalytics';
+import AdminModeration from './pages/AdminModeration';
 
 export default function AppRouter() {
   return (
@@ -41,6 +45,10 @@ export default function AppRouter() {
               <Route path="/profile" element={<ProfilePage />} />
               <Route path="/notifications" element={<NotificationsPage />} />
               <Route path="/hub" element={<HubPage />} />
+              <Route path="/admin" element={<AdminDashboard />} />
+              <Route path="/admin/artists" element={<AdminArtists />} />
+              <Route path="/admin/analytics" element={<AdminAnalytics />} />
+              <Route path="/admin/moderation" element={<AdminModeration />} />
 
             </Route>
           </Routes>
