@@ -57,6 +57,9 @@ export default function ArtistProfilePage() {
   const [showAllTracks, setShowAllTracks] = useState(false);
   const [copied, setCopied] = useState(false);
   const [downloading, setDownloading] = useState(null);
+  const [purchaseTrack, setPurchaseTrack] = useState(null);
+  const [purchasing, setPurchasing] = useState(false);
+  const [purchaseSuccess, setPurchaseSuccess] = useState(false);
 
   useEffect(() => {
     if (slug) fetchArtist();
@@ -140,19 +143,14 @@ export default function ArtistProfilePage() {
     }
   };
 
-  const handleDownload = async (track, e) => {
-    e.stopPropagation();
-    if (!user) { navigate('/login'); return; }
-    if (downloading === track.id) return;
+  const triggerDownload = async (track) => {
     setDownloading(track.id);
     try {
-      // Log download
       await supabase.from('downloads').insert({
         user_id: user.id,
         track_id: track.id,
         artist_id: artist.id,
       });
-      // Trigger file download
       const a = document.createElement('a');
       a.href = track.file_url;
       a.download = `${track.title}.mp3`;
@@ -164,6 +162,45 @@ export default function ArtistProfilePage() {
       console.error('Download error:', err);
     }
     setDownloading(null);
+  };
+
+  const handleDownload = (track, e) => {
+    e.stopPropagation();
+    if (!user) { navigate('/login'); return; }
+    if (downloading === track.id) return;
+    if (track.download_price > 0) {
+      setPurchaseTrack(track);
+    } else {
+      triggerDownload(track);
+    }
+  };
+
+  const handlePurchaseConfirm = async () => {
+    if (!purchaseTrack) return;
+    setPurchasing(true);
+    try {
+      // TODO: Replace with real PayPal Order API call
+      // const orderId = await createPayPalOrder(purchaseTrack.download_price);
+      // await capturePayPalOrder(orderId);
+
+      // Log purchase (placeholder — real flow logs after PayPal capture)
+      await supabase.from('downloads').insert({
+        user_id: user.id,
+        track_id: purchaseTrack.id,
+        artist_id: artist.id,
+        purchase_price: purchaseTrack.download_price,
+      });
+
+      setPurchaseSuccess(true);
+      setTimeout(async () => {
+        await triggerDownload(purchaseTrack);
+        setPurchaseTrack(null);
+        setPurchaseSuccess(false);
+      }, 1500);
+    } catch (err) {
+      console.error('Purchase error:', err);
+    }
+    setPurchasing(false);
   };
 
   const handleShare = async () => {
@@ -540,6 +577,81 @@ export default function ArtistProfilePage() {
           <p className="text-sm" style={{ color: `${textColor}40` }}>
             No music published yet. Stay tuned!
           </p>
+        </div>
+      )}
+
+      {/* ========== PURCHASE MODAL ========== */}
+      {purchaseTrack && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center p-4"
+          style={{ backgroundColor: 'rgba(0,0,0,0.8)' }}
+          onClick={() => !purchasing && setPurchaseTrack(null)}>
+          <div className="w-full max-w-sm rounded-2xl p-6 space-y-4"
+            style={{ backgroundColor: bgColor, border: `1px solid ${primaryColor}20` }}
+            onClick={(e) => e.stopPropagation()}>
+
+            {purchaseSuccess ? (
+              <div className="text-center py-4">
+                <div className="w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-3"
+                  style={{ backgroundColor: `${secondaryColor}20` }}>
+                  <span className="text-2xl">✓</span>
+                </div>
+                <p className="font-semibold" style={{ color: textColor }}>Purchase Complete!</p>
+                <p className="text-sm mt-1" style={{ color: `${textColor}50` }}>Starting download...</p>
+              </div>
+            ) : (
+              <>
+                {/* Track info */}
+                <div className="flex items-center space-x-3">
+                  <div className="w-12 h-12 rounded-lg overflow-hidden flex-shrink-0"
+                    style={{ backgroundColor: `${secondaryColor}20` }}>
+                    {purchaseTrack.cover_artwork_url
+                      ? <img src={purchaseTrack.cover_artwork_url} alt="" className="w-full h-full object-cover" />
+                      : <div className="w-full h-full flex items-center justify-center">
+                          <Music className="w-5 h-5" style={{ color: `${textColor}30` }} />
+                        </div>
+                    }
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold truncate" style={{ color: textColor }}>{purchaseTrack.title}</p>
+                    <p className="text-sm" style={{ color: `${textColor}50` }}>{artist.artist_name}</p>
+                  </div>
+                  <p className="text-xl font-bold flex-shrink-0" style={{ color: secondaryColor }}>
+                    ${purchaseTrack.download_price}
+                  </p>
+                </div>
+
+                <div className="rounded-xl p-3 text-center"
+                  style={{ backgroundColor: `${textColor}05`, border: `1px solid ${textColor}10` }}>
+                  <p className="text-xs" style={{ color: `${textColor}40` }}>
+                    You'll receive a high-quality MP3 download instantly after payment
+                  </p>
+                </div>
+
+                {/* PayPal placeholder button */}
+                <button
+                  onClick={handlePurchaseConfirm}
+                  disabled={purchasing}
+                  className="w-full py-3.5 rounded-xl font-semibold text-sm flex items-center justify-center space-x-2 transition active:scale-[0.98] disabled:opacity-50"
+                  style={{ backgroundColor: '#FFC439', color: '#003087' }}>
+                  {purchasing
+                    ? <Loader className="w-5 h-5 animate-spin" />
+                    : <>
+                        <span style={{ fontSize: '18px', lineHeight: 1 }}>P</span>
+                        <span>Pay ${purchaseTrack.download_price} with PayPal</span>
+                      </>
+                  }
+                </button>
+
+                <button
+                  onClick={() => setPurchaseTrack(null)}
+                  disabled={purchasing}
+                  className="w-full py-2.5 rounded-xl text-sm transition"
+                  style={{ color: `${textColor}40` }}>
+                  Cancel
+                </button>
+              </>
+            )}
+          </div>
         </div>
       )}
 
