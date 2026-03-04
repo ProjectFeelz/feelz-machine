@@ -11,7 +11,19 @@ export function AuthProvider({ children }) {
   const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
+    // Hydrate immediately on mount before listener fires
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (session?.user) {
+        setUser(session.user);
+        await fetchProfile(session.user.id);
+        await fetchArtist(session.user.id);
+        await checkAdmin(session.user.id);
+      }
+      setLoading(false);
+    });
+
     const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'INITIAL_SESSION') return; // already handled above
       if (session?.user) {
         setUser(session.user);
         await fetchProfile(session.user.id);
@@ -23,7 +35,6 @@ export function AuthProvider({ children }) {
         setArtist(null);
         setIsAdmin(false);
       }
-      setLoading(false);
     });
 
     return () => {

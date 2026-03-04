@@ -74,7 +74,8 @@ export function useTier() {
       setTierSlug('free');
       setLoading(false);
     }
-  }, [artist]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [artist?.id]);
 
   const fetchTier = async () => {
     try {
