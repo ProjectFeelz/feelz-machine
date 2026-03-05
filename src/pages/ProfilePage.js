@@ -76,7 +76,7 @@ export default function ProfilePage() {
 
   if (!user) {
     return (
-      <div className="pt-16 pb-4 px-4 text-center">
+      <div className="pt-16 md:pt-4 pb-4 px-4 text-center">
         <User className="w-16 h-16 mx-auto text-white/10 mb-4" />
         <h2 className="text-lg font-semibold text-white mb-2">Not signed in</h2>
         <button onClick={() => nav('/login')} className="px-6 py-2.5 bg-white text-black rounded-lg font-medium text-sm">Sign In</button>
@@ -249,3 +249,4 @@ export default function ProfilePage() {
     </div>
   );
 }
+

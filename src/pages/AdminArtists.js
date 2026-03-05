@@ -123,7 +123,7 @@ export default function AdminArtists() {
   if (!isAdmin) return null;
 
   return (
-    <div className="pt-14 pb-32 px-4 max-w-3xl mx-auto">
+    <div className="pt-14 md:pt-0 pb-32 px-4 max-w-3xl md:max-w-5xl mx-auto">
       {/* Header */}
       <div className="flex items-center space-x-3 mb-6">
         <button onClick={() => navigate('/hub')} className="p-2 -ml-2 hover:bg-white/[0.05] rounded-lg transition">
@@ -229,3 +229,4 @@ export default function AdminArtists() {
     </div>
   );
 }
+
