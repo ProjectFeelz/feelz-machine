@@ -166,10 +166,10 @@ export default function TrackCard({ track, trackList = [], showArtwork = true, i
 
       {/* Track info */}
       <div className="flex-1 min-w-0">
-        <p className={`text-sm font-medium truncate ${isCurrentTrack ? 'text-white' : 'text-white/90'}`}>
+        <p className={`text-base font-medium truncate ${isCurrentTrack ? 'text-white' : 'text-white/90'}`}>
           {track.title}
         </p>
-        <p className="text-xs text-white/40 truncate">
+        <p className="text-sm text-white/40 truncate">
           {track.artist_name || 'Unknown Artist'}
           {track.is_explicit && (
             <span className="inline-block ml-1.5 px-1 py-0.5 text-[9px] bg-white/10 rounded text-white/50 font-medium leading-none">E</span>
@@ -264,3 +264,5 @@ export default function TrackCard({ track, trackList = [], showArtwork = true, i
     </div>
   );
 }
+
+

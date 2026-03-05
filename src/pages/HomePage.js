@@ -55,9 +55,9 @@ function QuickPlayRow({ track, onPlay, currentTrack, isPlaying }) {
       </div>
       <div className="flex-1 min-w-0 text-left">
         <p className={`text-sm font-medium truncate ${isActive ? 'text-green-400' : 'text-white'}`}>{track.title}</p>
-        <p className="text-xs text-white/30 truncate">{track.artist_name}</p>
+        <p className="text-sm text-white/30 truncate">{track.artist_name}</p>
       </div>
-      <p className="text-xs text-white/20 flex-shrink-0">{formatNumber(track.stream_count || 0)}</p>
+      <p className="text-sm text-white/20 flex-shrink-0">{formatNumber(track.stream_count || 0)}</p>
     </button>
   );
 }
@@ -202,7 +202,7 @@ export default function HomePage() {
                   </div>
                 </div>
                 <p className="text-sm font-medium text-white truncate">{track.title}</p>
-                <p className="text-xs text-white/40 truncate">{track.artist_name}</p>
+                <p className="text-sm text-white/40 truncate">{track.artist_name}</p>
               </div>
             ))}
           </div>
@@ -301,3 +301,4 @@ export default function HomePage() {
     </div>
   );
 }
+
