@@ -9,6 +9,11 @@
   force = true
 
 [[redirects]]
+  from = "/player"
+  to = "/index.html"
+  status = 200
+
+[[redirects]]
   from = "/player/*"
   to = "/index.html"
   status = 200

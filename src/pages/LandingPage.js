@@ -154,7 +154,7 @@ export default function LandingPage() {
           <span style={s.logoName}>Feelz Machine</span>
         </a>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <a href="https://www.feelzmachine.com/player" className="nav-btn" style={{
+          <a href="https://www.feelzmachine.com/player/" className="nav-btn" style={{
             ...s.navBtn,
             background: 'transparent',
             border: '1px solid rgba(140,171,46,0.4)',
@@ -382,3 +382,4 @@ export default function LandingPage() {
     </>
   );
 }
+
