@@ -221,7 +221,7 @@ export default function BrowsePage() {
           {searchResults.albums.length > 0 && (
             <div className="mb-4">
               <p className="text-xs font-medium text-white/50 mb-2">Albums</p>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 {searchResults.albums.slice(0, 4).map(album => (
                   <AlbumTile key={album.id} album={album} navigate={navigate} />
                 ))}
@@ -336,7 +336,7 @@ export default function BrowsePage() {
       {activeTab === 'artists' && (
         <div>
           {artists.length > 0 ? (
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-3 md:grid-cols-5 gap-4">
               {artists.map(a => (
                 <button key={a.id} onClick={() => navigate(`/artist/${a.slug}`)}
                   className="text-center group">
@@ -367,7 +367,7 @@ export default function BrowsePage() {
       {activeTab === 'albums' && (
         <div>
           {albums.length > 0 ? (
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               {albums.map(album => (
                 <AlbumTile key={album.id} album={album} navigate={navigate} />
               ))}
@@ -536,5 +536,6 @@ function AlbumTile({ album, navigate }) {
     </button>
   );
 }
+
 
 

@@ -134,7 +134,7 @@ export default function FeedPage() {
   };
 
   return (
-    <div className="pt-10 md:pt-0 pb-4 px-6 md:px-0">
+    <div className="pt-10 md:pt-0 pb-4 px-6 md:px-0 md:max-w-2xl">
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-2xl font-bold text-white">Feed</h1>
@@ -215,6 +215,7 @@ export default function FeedPage() {
     </div>
   );
 }
+
 
 
 
