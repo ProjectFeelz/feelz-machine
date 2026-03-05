@@ -6,7 +6,7 @@ import { usePlayer } from '../contexts/PlayerContext';
 import {
   ArrowLeft, Play, Pause, Share2, UserPlus, UserCheck,
   Instagram, Twitter, Youtube, MessageCircle, Globe, Music,
-  Loader, Verified, Download, Heart
+  Loader, Verified, Download, Heart, ListMusic, Check
 } from 'lucide-react';
 
 const PAYPAL_CLIENT_ID = 'AXhUqyXxTmBJ8Q6bqt0yiOEuLxqbbhnP93YONXL5Oiy3btUntKK8M7F2WfOeUzoVPxjHEalbRRRU52yY';
@@ -65,6 +65,10 @@ export default function ArtistProfilePage() {
   const [paypalReady, setPaypalReady] = useState(false);
   const [purchaseError, setPurchaseError] = useState('');
   const [likedTracks, setLikedTracks] = useState({});
+  const [showAddToPlaylist, setShowAddToPlaylist] = useState(null);
+  const [playlists, setPlaylists] = useState([]);
+  const [addingTo, setAddingTo] = useState(null);
+  const [addedTo, setAddedTo] = useState({});
 
   useEffect(() => {
     if (slug) fetchArtist();
@@ -334,6 +338,30 @@ export default function ArtistProfilePage() {
 };
 
 
+
+  useEffect(() => {
+    if (user && showAddToPlaylist) fetchPlaylists();
+  }, [showAddToPlaylist, user]);
+
+  const fetchPlaylists = async () => {
+    if (!user) return;
+    const { data } = await supabase.from('playlists').select('id, name').eq('user_id', user.id).order('name');
+    setPlaylists(data || []);
+  };
+
+  const handleAddToPlaylist = async (playlistId, trackId) => {
+    setAddingTo(playlistId);
+    const { data: existing } = await supabase
+      .from('playlist_tracks').select('id').eq('playlist_id', playlistId).eq('track_id', trackId).maybeSingle();
+    if (!existing) {
+      const { data: last } = await supabase
+        .from('playlist_tracks').select('position').eq('playlist_id', playlistId).order('position', { ascending: false }).limit(1).maybeSingle();
+      await supabase.from('playlist_tracks').insert({ playlist_id: playlistId, track_id: trackId, position: (last?.position ?? -1) + 1 });
+    }
+    setAddedTo(prev => ({ ...prev, [`${playlistId}-${trackId}`]: true }));
+    setAddingTo(null);
+    setTimeout(() => setAddedTo(prev => { const n = { ...prev }; delete n[`${playlistId}-${trackId}`]; return n; }), 2000);
+  };
 
   const handlePlayTrack = (track) => {
     if (currentTrack?.id === track.id) {
@@ -623,6 +651,38 @@ export default function ArtistProfilePage() {
                     style={{ color: likedTracks[track.id] ? '#ef4444' : `${textColor}30` }}>
                     <Heart className="w-4 h-4" fill={likedTracks[track.id] ? '#ef4444' : 'none'} />
                   </button>
+                  <div className="relative flex-shrink-0">
+                    <button onClick={(e) => { e.stopPropagation(); setShowAddToPlaylist(showAddToPlaylist === track.id ? null : track.id); }}
+                      className="p-1.5 rounded-lg transition-all active:scale-95"
+                      style={{ color: `${textColor}30` }}>
+                      <ListMusic className="w-4 h-4" />
+                    </button>
+                    {showAddToPlaylist === track.id && (
+                      <div className="absolute right-0 bottom-8 z-50 w-52 rounded-xl shadow-2xl overflow-hidden"
+                        style={{ backgroundColor: '#111', border: '1px solid rgba(255,255,255,0.08)' }}>
+                        <div className="flex items-center justify-between px-4 py-2.5 border-b border-white/[0.06]">
+                          <p className="text-xs font-semibold text-white/50">Add to Playlist</p>
+                          <button onClick={(e) => { e.stopPropagation(); setShowAddToPlaylist(null); }} className="text-white/30 text-lg leading-none">×</button>
+                        </div>
+                        {playlists.length === 0 ? (
+                          <div className="px-4 py-3">
+                            <p className="text-xs text-white/30">No playlists yet</p>
+                          </div>
+                        ) : playlists.map(pl => {
+                          const key = `${pl.id}-${track.id}`;
+                          const done = addedTo[key];
+                          return (
+                            <button key={pl.id} onClick={(e) => { e.stopPropagation(); handleAddToPlaylist(pl.id, track.id); }}
+                              disabled={addingTo === pl.id}
+                              className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-white/[0.04] transition text-left">
+                              <span className="text-sm text-white/70 truncate">{pl.name}</span>
+                              {done ? <Check className="w-3.5 h-3.5 text-green-400 flex-shrink-0" /> : null}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                   {track.is_downloadable && (
                     <button onClick={(e) => handleDownload(track, e)} disabled={downloading === track.id}
                       className="flex-shrink-0 flex items-center space-x-1 px-2.5 py-1.5 rounded-lg transition-all active:scale-95 disabled:opacity-50"

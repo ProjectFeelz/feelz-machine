@@ -30,6 +30,7 @@ import AdminArtists from './pages/AdminArtists';
 import AdminAnalytics from './pages/AdminAnalytics';
 import AdminModeration from './pages/AdminModeration';
 import AdminBroadcast from './pages/AdminBroadcast';
+import AlbumDetailPage from './pages/AlbumDetailPage';
 
 // If we're at the root "/" serve the landing page standalone
 const isStandalone = window.matchMedia('(display-mode: standalone)').matches;

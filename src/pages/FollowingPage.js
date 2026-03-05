@@ -11,15 +11,15 @@ export default function FollowingPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (artist) fetchFollowing();
+    if (user) fetchFollowing();
     else setLoading(false);
-  }, [artist]);
+  }, [user]);
 
   const fetchFollowing = async () => {
     const { data } = await supabase
       .from('follows')
       .select('*, artist:artists(id, artist_name, slug, profile_image_url, is_verified)')
-      .eq('follower_id', artist.id)
+      .eq('follower_id', user.id)
       .order('created_at', { ascending: false });
     setFollowing((data || []).filter(f => f.artist));
     setLoading(false);
