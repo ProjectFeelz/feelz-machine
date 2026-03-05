@@ -29,6 +29,7 @@ import AdminDashboard from './pages/AdminDashboard';
 import AdminArtists from './pages/AdminArtists';
 import AdminAnalytics from './pages/AdminAnalytics';
 import AdminModeration from './pages/AdminModeration';
+import AdminBroadcast from './pages/AdminBroadcast';
 
 // If we're at the root "/" serve the landing page standalone
 const isLanding = window.location.pathname === '/' || window.location.pathname === '';
@@ -71,6 +72,7 @@ export default function AppRouter() {
               <Route path="/admin/artists" element={<AdminArtists />} />
               <Route path="/admin/analytics" element={<AdminAnalytics />} />
               <Route path="/admin/moderation" element={<AdminModeration />} />
+              <Route path="/admin/broadcast" element={<AdminBroadcast />} />
             </Route>
           </Routes>
         </PlayerProvider>
