@@ -29,6 +29,7 @@ const TIER_ACCESS = {
     download_sales: false,
     custom_branding: true,
     advanced_analytics: false,
+    community_post: true,
   },
   premium: {
     max_singles: Infinity,
@@ -42,6 +43,7 @@ const TIER_ACCESS = {
     download_sales: true,
     custom_branding: true,
     advanced_analytics: true,
+    community_post: true,
   },
 };
 
