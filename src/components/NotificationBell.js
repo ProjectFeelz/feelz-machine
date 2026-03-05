@@ -19,6 +19,8 @@ const TYPE_CONFIG = {
   milestone_10k:    { icon: TrendingUp,     color: 'text-orange-400', bg: 'bg-orange-500/10' },
   download:         { icon: Download,        color: 'text-green-400',  bg: 'bg-green-500/10' },
   announcement:     { icon: Megaphone,       color: 'text-yellow-400', bg: 'bg-yellow-500/10' },
+  new_post:         { icon: Music,           color: 'text-green-400',  bg: 'bg-green-500/10' },
+  mention:          { icon: MessageCircle,   color: 'text-purple-400', bg: 'bg-purple-500/10' },
 };
 
 function timeAgo(date) {

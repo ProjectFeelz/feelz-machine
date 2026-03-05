@@ -21,6 +21,8 @@ const TYPE_CONFIG = {
   milestone_10k:    { icon: TrendingUp,     color: 'text-orange-400', bg: 'bg-orange-500/10', label: 'Milestone' },
   download:         { icon: Download,        color: 'text-green-400',  bg: 'bg-green-500/10',  label: 'Download' },
   announcement:     { icon: Megaphone,       color: 'text-yellow-400', bg: 'bg-yellow-500/10', label: 'Announcement' },
+  new_post:         { icon: Music,           color: 'text-green-400',  bg: 'bg-green-500/10',  label: 'New Post' },
+  mention:          { icon: MessageCircle,   color: 'text-purple-400', bg: 'bg-purple-500/10', label: 'Mention' },
 };
 
 const FILTERS = [

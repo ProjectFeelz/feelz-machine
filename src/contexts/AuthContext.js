@@ -12,17 +12,17 @@ export function AuthProvider({ children }) {
   const [isAdmin, setIsAdmin] = useState(false);
 
   const fetchProfile = async (userId) => {
-    let { data, error } = await supabase
+    let { data } = await supabase
       .from('user_profiles')
       .select('*')
       .eq('user_id', userId)
-      .single();
-    if (error || !data) {
+      .maybeSingle();
+    if (!data) {
       const res = await supabase
         .from('profiles')
         .select('*')
         .eq('id', userId)
-        .single();
+        .maybeSingle();
       data = res.data;
     }
     if (data) setProfile(data);
@@ -33,7 +33,7 @@ export function AuthProvider({ children }) {
       .from('artists')
       .select('*')
       .eq('user_id', userId)
-      .single();
+      .maybeSingle();
     if (data) setArtist(data);
   };
 
@@ -51,7 +51,7 @@ export function AuthProvider({ children }) {
       .from('admins')
       .select('id')
       .eq('user_id', userId)
-      .single();
+      .maybeSingle();
     setIsAdmin(!!data);
   };
 

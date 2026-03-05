@@ -105,6 +105,21 @@ export default function PostComposer({ onPostCreated }) {
     setPosting(true);
     setError('');
     try {
+      // Check daily post limit (1/day for non-admins)
+      const { data: adminCheck } = await supabase.from('admins').select('id').eq('user_id', user.id).maybeSingle();
+      if (!adminCheck) {
+        const startOfDay = new Date();
+        startOfDay.setHours(0, 0, 0, 0);
+        const { count } = await supabase.from('posts')
+          .select('*', { count: 'exact', head: true })
+          .eq('artist_id', artist.id)
+          .gte('created_at', startOfDay.toISOString());
+        if (count >= 1) {
+          setError('You can only post once per day. Come back tomorrow!');
+          setPosting(false);
+          return;
+        }
+      }
       const taggedIds = taggedArtists.map(a => a.id);
       const { data, error: postError } = await supabase.from('posts').insert({
         artist_id: artist.id,
@@ -117,7 +132,24 @@ export default function PostComposer({ onPostCreated }) {
       }).select().single();
 
       if (postError) throw postError;
-
+      
+      // Notify all followers of new post
+      const { data: followers } = await supabase
+        .from('follows')
+        .select('follower_id')
+        .eq('artist_id', artist.id);
+      if (followers && followers.length > 0) {
+        const notifs = followers.map(f => ({
+          artist_id: null,
+          user_id: f.follower_id,
+          type: 'new_post',
+          title: `${artist.artist_name} posted something new`,
+          message: content.substring(0, 100),
+          metadata: { post_id: data.id, artist_id: artist.id, artist_name: artist.artist_name },
+        }));
+        await supabase.from('notifications').insert(notifs).catch(() => {});
+      }
+      
       for (const ta of taggedArtists) {
         await supabase.from('notifications').insert({
           artist_id: ta.id,

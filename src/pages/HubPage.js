@@ -110,6 +110,16 @@ export default function HubPage() {
         </Section>
       )}
 
+      {/* Listener Section */}
+      {!isArtist && (
+        <Section title="Discover" icon={Music}>
+          <LinkCard icon={Music} label="Browse Music" description="Find new tracks and artists" path="/browse" color="bg-purple-500/20" />
+          <LinkCard icon={Users} label="Following" description="Artists you follow" path="/library/following" color="bg-cyan-500/20" />
+          <LinkCard icon={MessageCircle} label="Community" description="Feed and chat rooms" path="/community" color="bg-teal-500/20" />
+          <LinkCard icon={Star} label="Liked Songs" description="Your saved tracks" path="/library/likes" color="bg-pink-500/20" />
+        </Section>
+      )}
+
       {/* Artist Tools */}
       {isArtist && <Section title="Artist Tools" icon={Music}>
           <LinkCard icon={Upload} label="Upload Track" description="Upload and publish new music" path="/dashboard?tab=upload" color="bg-green-500/20" />

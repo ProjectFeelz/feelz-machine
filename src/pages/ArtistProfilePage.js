@@ -103,7 +103,7 @@ export default function ArtistProfilePage() {
       setTracks(trackData || []);
       if (user) {
         const { data: likes } = await supabase.from('track_likes')
-          .select('track_id').eq('user_id', user.id).eq('artist_id', artistData.id);
+          .select('track_id').eq('user_id', user.id);
         const likeMap = {};
         (likes || []).forEach(l => { likeMap[l.track_id] = true; });
         setLikedTracks(likeMap);

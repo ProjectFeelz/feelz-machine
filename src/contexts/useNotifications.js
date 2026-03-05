@@ -54,26 +54,32 @@ export async function checkStreamMilestone(trackId, trackTitle, artistId, curren
 }
 
 export default function useNotifications() {
-  const { artist } = useAuth();
+  const { artist, user } = useAuth();
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const pollRef = useRef(null);
 
   const fetchNotifications = useCallback(async (limit = 20) => {
-    if (!artist) return;
+    if (!artist && !user) return;
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('notifications')
         .select(`
           *,
           from_artist:artists!notifications_from_artist_id_fkey(id, artist_name, profile_image_url, slug),
           track:tracks!notifications_track_id_fkey(id, title, cover_artwork_url)
         `)
-        .eq('artist_id', artist.id)
         .order('created_at', { ascending: false })
         .limit(limit);
 
+      if (artist) {
+        query = query.or(`artist_id.eq.${artist.id},user_id.eq.${user.id}`);
+      } else {
+        query = query.eq('user_id', user.id);
+      }
+
+      const { data, error } = await query;
       if (error) throw error;
       setNotifications(data || []);
       setUnreadCount((data || []).filter(n => !n.read).length);
@@ -81,17 +87,22 @@ export default function useNotifications() {
       console.error('Fetch notifications error:', err);
     }
     setLoading(false);
-  }, [artist]);
+  }, [artist, user]);
 
   const fetchUnreadCount = useCallback(async () => {
-    if (!artist) return;
-    const { count } = await supabase
+    if (!artist && !user) return;
+    let query = supabase
       .from('notifications')
       .select('*', { count: 'exact', head: true })
-      .eq('artist_id', artist.id)
       .eq('read', false);
+    if (artist) {
+      query = query.or(`artist_id.eq.${artist.id},user_id.eq.${user.id}`);
+    } else {
+      query = query.eq('user_id', user.id);
+    }
+    const { count } = await query;
     setUnreadCount(count || 0);
-  }, [artist]);
+  }, [artist, user]);
 
   const markAsRead = useCallback(async (notificationId) => {
     await supabase
@@ -103,29 +114,34 @@ export default function useNotifications() {
   }, []);
 
   const markAllRead = useCallback(async () => {
-    if (!artist) return;
-    await supabase
-      .from('notifications')
-      .update({ read: true })
-      .eq('artist_id', artist.id)
-      .eq('read', false);
+    if (!artist && !user) return;
+    let query = supabase.from('notifications').update({ read: true }).eq('read', false);
+    if (artist) {
+      query = query.or(`artist_id.eq.${artist.id},user_id.eq.${user.id}`);
+    } else {
+      query = query.eq('user_id', user.id);
+    }
+    await query;
     setNotifications(prev => prev.map(n => ({ ...n, read: true })));
     setUnreadCount(0);
   }, [artist]);
 
   const clearAll = useCallback(async () => {
-    if (!artist) return;
-    await supabase
-      .from('notifications')
-      .delete()
-      .eq('artist_id', artist.id);
+    if (!artist && !user) return;
+    let query = supabase.from('notifications').delete();
+    if (artist) {
+      query = query.or(`artist_id.eq.${artist.id},user_id.eq.${user.id}`);
+    } else {
+      query = query.eq('user_id', user.id);
+    }
+    await query;
     setNotifications([]);
     setUnreadCount(0);
   }, [artist]);
 
   // Initial fetch + poll every 20s for unread count
   useEffect(() => {
-    if (!artist) return;
+    if (!artist && !user) return;
     fetchNotifications();
     pollRef.current = setInterval(fetchUnreadCount, 20000);
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
