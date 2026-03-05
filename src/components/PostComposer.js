@@ -149,7 +149,7 @@ export default function PostComposer({ onPostCreated }) {
         }));
         await supabase.from('notifications').insert(notifs).catch(() => {});
       }
-      
+
       for (const ta of taggedArtists) {
         await supabase.from('notifications').insert({
           artist_id: ta.id,
@@ -165,7 +165,7 @@ export default function PostComposer({ onPostCreated }) {
       if (onPostCreated) onPostCreated(data);
     } catch (err) {
       console.error('Post error:', err);
-      setError('Failed to post. Please try again.');
+      setError(`Failed to post: ${err?.message || JSON.stringify(err)}`);
     }
     setPosting(false);
   };
