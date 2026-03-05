@@ -50,13 +50,13 @@ export default function AppRouter() {
             <Route path="/login" element={<LoginPage />} />
             <Route path="/setup" element={<ProfileSetup />} />
             <Route path="/dashboard" element={<ArtistDashboard />} />
-            <Route path="/artist/:slug" element={<ArtistProfilePage />} />
             <Route path="/upgrade" element={<TierUpgradePage />} />
             <Route path="/chat/:roomId" element={<ChatRoomView />} />
             <Route path="/privacy-policy" element={<PrivacyPolicy />} />
             <Route path="/terms-of-use" element={<TermsOfUse />} />
             <Route element={<AppLayout />}>
               <Route path="/" element={<HomePage />} />
+              <Route path="/artist/:slug" element={<ArtistProfilePage />} />
               <Route path="/browse" element={<BrowsePage />} />
               <Route path="/library" element={<LibraryPage />} />
               <Route path="/library/likes" element={<LikedSongsPage />} />

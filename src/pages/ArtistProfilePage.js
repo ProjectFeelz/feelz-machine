@@ -6,7 +6,7 @@ import { usePlayer } from '../contexts/PlayerContext';
 import {
   ArrowLeft, Play, Pause, Share2, UserPlus, UserCheck,
   Instagram, Twitter, Youtube, MessageCircle, Globe, Music,
-  Loader, Verified, Download
+  Loader, Verified, Download, Heart
 } from 'lucide-react';
 
 const PAYPAL_CLIENT_ID = 'AXhUqyXxTmBJ8Q6bqt0yiOEuLxqbbhnP93YONXL5Oiy3btUntKK8M7F2WfOeUzoVPxjHEalbRRRU52yY';
@@ -64,6 +64,7 @@ export default function ArtistProfilePage() {
   const [purchaseSuccess, setPurchaseSuccess] = useState(false);
   const [paypalReady, setPaypalReady] = useState(false);
   const [purchaseError, setPurchaseError] = useState('');
+  const [likedTracks, setLikedTracks] = useState({});
 
   useEffect(() => {
     if (slug) fetchArtist();
@@ -96,7 +97,13 @@ export default function ArtistProfilePage() {
         .eq('is_published', true)
         .order('engagement_score', { ascending: false });
       setTracks(trackData || []);
-
+      if (user) {
+        const { data: likes } = await supabase.from('track_likes')
+          .select('track_id').eq('user_id', user.id).eq('artist_id', artistData.id);
+        const likeMap = {};
+        (likes || []).forEach(l => { likeMap[l.track_id] = true; });
+        setLikedTracks(likeMap);
+      }
       const { data: albumData } = await supabase
         .from('albums')
         .select('*')
@@ -306,6 +313,27 @@ export default function ArtistProfilePage() {
       setTimeout(() => setCopied(false), 2000);
     }
   };
+
+  const handleLike = async (track, e) => {
+  e.stopPropagation();
+  if (!user) { navigate('/login'); return; }
+  const isLiked = likedTracks[track.id];
+  setLikedTracks(prev => ({ ...prev, [track.id]: !isLiked }));
+  if (isLiked) {
+    await supabase.from('track_likes').delete()
+      .eq('track_id', track.id).eq('user_id', user.id);
+  } else {
+    await supabase.from('track_likes').insert({ track_id: track.id, user_id: user.id, artist_id: artist.id });
+    const { data: myProfile } = await supabase.from('artists').select('id, artist_name').eq('user_id', user.id).maybeSingle();
+    await supabase.from('notifications').insert({
+      artist_id: artist.id, type: 'track_liked',
+      title: `${myProfile?.artist_name || 'Someone'} liked ${track.title}`,
+      track_id: track.id, from_artist_id: myProfile?.id || null,
+    }).catch(() => {});
+  }
+};
+
+
 
   const handlePlayTrack = (track) => {
     if (currentTrack?.id === track.id) {
@@ -590,6 +618,11 @@ export default function ArtistProfilePage() {
                       {formatDuration(track.duration)}
                     </span>
                   )}
+                  <button onClick={(e) => handleLike(track, e)}
+                    className="flex-shrink-0 p-1.5 rounded-lg transition-all active:scale-95"
+                    style={{ color: likedTracks[track.id] ? '#ef4444' : `${textColor}30` }}>
+                    <Heart className="w-4 h-4" fill={likedTracks[track.id] ? '#ef4444' : 'none'} />
+                  </button>
                   {track.is_downloadable && (
                     <button onClick={(e) => handleDownload(track, e)} disabled={downloading === track.id}
                       className="flex-shrink-0 flex items-center space-x-1 px-2.5 py-1.5 rounded-lg transition-all active:scale-95 disabled:opacity-50"
