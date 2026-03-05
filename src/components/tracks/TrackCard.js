@@ -6,7 +6,7 @@ import { supabase } from '../../supabaseClient';
 import { useNavigate } from 'react-router-dom';
 
 export default function TrackCard({ track, trackList = [], showArtwork = true, index }) {
-  const { currentTrack, isPlaying, playTrack } = usePlayer();
+  const { currentTrack, isPlaying, playTrack, addToQueue, playNextInQueue } = usePlayer();
   const { user } = useAuth();
   const navigate = useNavigate();
   const isCurrentTrack = currentTrack?.id === track.id;
@@ -234,6 +234,16 @@ export default function TrackCard({ track, trackList = [], showArtwork = true, i
             </>
           ) : (
             <>
+              <button onClick={(e) => { e.stopPropagation(); playNextInQueue(track); setShowMenu(false); }}
+                className="w-full flex items-center space-x-3 px-4 py-3 hover:bg-white/[0.04] transition text-left">
+                <Play className="w-4 h-4 text-white/50" />
+                <span className="text-sm text-white/70">Play Next</span>
+              </button>
+              <button onClick={(e) => { e.stopPropagation(); addToQueue(track); setShowMenu(false); }}
+                className="w-full flex items-center space-x-3 px-4 py-3 hover:bg-white/[0.04] transition text-left">
+                <ListMusic className="w-4 h-4 text-white/50" />
+                <span className="text-sm text-white/70">Add to Queue</span>
+              </button>
               <button onClick={handleShare}
                 className="w-full flex items-center space-x-3 px-4 py-3 hover:bg-white/[0.04] transition text-left">
                 {shared ? <Check className="w-4 h-4 text-green-400" /> : <Share2 className="w-4 h-4 text-white/50" />}

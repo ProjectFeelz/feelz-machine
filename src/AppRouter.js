@@ -31,6 +31,7 @@ import AdminAnalytics from './pages/AdminAnalytics';
 import AdminModeration from './pages/AdminModeration';
 import AdminBroadcast from './pages/AdminBroadcast';
 import AlbumDetailPage from './pages/AlbumDetailPage';
+import RecentlyPlayedPage from './pages/RecentlyPlayedPage';
 
 // If we're at the root "/" serve the landing page standalone
 const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
@@ -61,6 +62,7 @@ export default function AppRouter() {
               <Route path="/browse" element={<BrowsePage />} />
               <Route path="/library" element={<LibraryPage />} />
               <Route path="/library/likes" element={<LikedSongsPage />} />
+              <Route path="/library/recent" element={<RecentlyPlayedPage />} />
               <Route path="/library/downloads" element={<DownloadsPage />} />
               <Route path="/library/following" element={<FollowingPage />} />
               <Route path="/library/playlists" element={<PlaylistsPage />} />

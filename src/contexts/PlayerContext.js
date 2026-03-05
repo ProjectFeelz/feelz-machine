@@ -154,6 +154,14 @@ export function PlayerProvider({ children }) {
   }, [repeat, playNext]);
 
   const addToQueue = useCallback((track) => { setQueue(prev => [...prev, track]); }, []);
+  const playNextInQueue = useCallback((track) => {
+    setQueue(prev => {
+      const next = [...prev];
+      const insertAt = queueIndex + 1;
+      next.splice(insertAt, 0, track);
+      return next;
+    });
+  }, [queueIndex]);
   const clearQueue = useCallback(() => { setQueue([]); setQueueIndex(-1); }, []);
   const toggleShuffle = useCallback(() => setShuffle(prev => !prev), []);
   const toggleRepeat = useCallback(() => {
@@ -163,7 +171,7 @@ export function PlayerProvider({ children }) {
   const value = {
     currentTrack, isPlaying, duration, currentTime, volume, queue, queueIndex,
     shuffle, repeat, isMinimized, setIsMinimized, playTrack, togglePlay, seek,
-    setVolume: setVolumeLevel, playNext, playPrev, addToQueue, clearQueue, toggleShuffle, toggleRepeat,
+    setVolume: setVolumeLevel, playNext, playPrev, addToQueue, playNextInQueue, clearQueue, toggleShuffle, toggleRepeat,
   };
 
   return <PlayerContext.Provider value={value}>{children}</PlayerContext.Provider>;
