@@ -81,7 +81,7 @@ export default function TrackCard({ track, trackList = [], showArtwork = true, i
       await supabase.from('downloads').insert({ user_id: user.id, track_id: track.id, artist_id: track.artist_id || null });
       const a = document.createElement('a');
       a.href = track.file_url;
-      a.download = `${track.title}.mp3`;
+      a.download = `${track.title.replace(/[^a-z0-9\s-]/gi, '').trim() || 'track'}.mp3`;
       a.target = '_blank';
       document.body.appendChild(a);
       a.click();
