@@ -16,7 +16,7 @@ export default function LibraryPage() {
   ];
 
   return (
-    <div className="pt-12 md:pt-0 pb-4 px-6 md:px-0 md:max-w-3xl">
+    <div className="pt-12 md:pt-0 pb-4 px-6 md:px-0">
       <h1 className="text-2xl font-bold text-white mb-6">Your Library</h1>
       <div className="space-y-2">
         {items.map(({ icon: Icon, label, path, color }) => (
@@ -32,4 +32,5 @@ export default function LibraryPage() {
     </div>
   );
 }
+
 

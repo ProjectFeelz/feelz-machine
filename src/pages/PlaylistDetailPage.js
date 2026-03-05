@@ -146,7 +146,7 @@ export default function PlaylistDetailPage() {
   }
 
   return (
-    <div className="pt-14 md:pt-0 pb-32 px-4 max-w-2xl md:max-w-4xl">
+    <div className="pt-14 md:pt-0 pb-32 px-4 max-w-2xl">
       {/* Header */}
       <div className="flex items-center space-x-3 mb-6">
         <button onClick={() => navigate('/library/playlists')}
@@ -325,5 +325,6 @@ export default function PlaylistDetailPage() {
     </div>
   );
 }
+
 
 

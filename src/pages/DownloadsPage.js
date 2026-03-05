@@ -32,7 +32,7 @@ export default function DownloadsPage() {
   };
 
   return (
-    <div className="pt-14 md:pt-0 pb-32 px-4 max-w-2xl md:max-w-4xl">
+    <div className="pt-14 md:pt-0 pb-32 px-4 max-w-2xl">
       <div className="flex items-center space-x-3 mb-6">
         <button onClick={() => navigate('/library')} className="w-9 h-9 flex items-center justify-center rounded-full bg-white/[0.06] hover:bg-white/[0.1] transition">
           <ArrowLeft className="w-5 h-5 text-white" />
@@ -82,5 +82,6 @@ export default function DownloadsPage() {
     </div>
   );
 }
+
 
 

@@ -200,7 +200,7 @@ export default function AdminBroadcast() {
   };
 
   return (
-    <div className="pt-10 md:pt-0 pb-8 px-5 max-w-2xl md:max-w-3xl mx-auto">
+    <div className="pt-10 md:pt-0 pb-8 px-5 max-w-2xl mx-auto">
       <div className="flex items-center space-x-3 mb-8">
         <button onClick={() => navigate('/hub')}
           className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/[0.06] transition">
@@ -355,4 +355,5 @@ export default function AdminBroadcast() {
     </div>
   );
 }
+
 
