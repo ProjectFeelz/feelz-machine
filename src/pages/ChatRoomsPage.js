@@ -6,10 +6,12 @@ import {
   MessageCircle, Plus, Loader, Lock, Users, Search, Crown, Zap, X
 } from 'lucide-react';
 import TierGate from '../components/TierGate';
+import { useTier } from '../contexts/useTier';
 
 export default function ChatRoomsPage() {
   const navigate = useNavigate();
   const { user, artist } = useAuth();
+  const { isPro, isPremium, tierSlug } = useTier();
   const [rooms, setRooms] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
@@ -44,23 +46,14 @@ export default function ChatRoomsPage() {
     setError('');
 
     try {
-      // Check tier - need Pro or Premium
-      const { data: sub } = await supabase
-        .from('artist_tier_subscriptions')
-        .select('*, platform_tiers(*)')
-        .eq('artist_id', artist.id)
-        .eq('status', 'active')
-        .single();
-
-      const tier = sub?.platform_tiers?.slug;
-      if (!tier || tier === 'free') {
+      if (!isPro && !isPremium) {
         setError('Chat rooms require a Pro or Premium plan');
         setCreating(false);
         return;
       }
 
       // Check room limit (Pro = 1, Premium = unlimited)
-      if (tier === 'pro') {
+      if (tierSlug === 'pro') {
         const { count } = await supabase
           .from('chat_rooms')
           .select('*', { count: 'exact', head: true })
@@ -78,7 +71,7 @@ export default function ChatRoomsPage() {
           artist_id: artist.id,
           name: newName.trim(),
           is_subscribers_only: subOnly,
-          max_members: tier === 'premium' ? 500 : 100,
+          max_members: isPremium ? 500 : 100,
           member_count: 1,
         })
         .select()

@@ -6,7 +6,7 @@ import { supabase } from '../../supabaseClient';
 import { useNavigate } from 'react-router-dom';
 
 export default function TrackCard({ track, trackList = [], showArtwork = true, index }) {
-  const { currentTrack, isPlaying, playTrack, addToQueue, playNextInQueue } = usePlayer();
+  const { currentTrack, isPlaying, playTrack } = usePlayer();
   const { user } = useAuth();
   const navigate = useNavigate();
   const isCurrentTrack = currentTrack?.id === track.id;
@@ -197,8 +197,8 @@ export default function TrackCard({ track, trackList = [], showArtwork = true, i
       {showMenu && (
         <div ref={menuRef}
           onClick={(e) => e.stopPropagation()}
-          className="absolute right-2 top-12 z-50 w-52 rounded-xl shadow-2xl overflow-hidden"
-          style={{ backgroundColor: '#1a1a1a', border: '1px solid rgba(255,255,255,0.08)' }}>
+          className="absolute right-2 z-50 w-52 rounded-xl shadow-2xl overflow-hidden"
+          style={{ backgroundColor: '#1a1a1a', border: '1px solid rgba(255,255,255,0.08)', bottom: '110%' }}>
 
           {showPlaylists ? (
             <>
@@ -234,16 +234,6 @@ export default function TrackCard({ track, trackList = [], showArtwork = true, i
             </>
           ) : (
             <>
-              <button onClick={(e) => { e.stopPropagation(); playNextInQueue(track); setShowMenu(false); }}
-                className="w-full flex items-center space-x-3 px-4 py-3 hover:bg-white/[0.04] transition text-left">
-                <Play className="w-4 h-4 text-white/50" />
-                <span className="text-sm text-white/70">Play Next</span>
-              </button>
-              <button onClick={(e) => { e.stopPropagation(); addToQueue(track); setShowMenu(false); }}
-                className="w-full flex items-center space-x-3 px-4 py-3 hover:bg-white/[0.04] transition text-left">
-                <ListMusic className="w-4 h-4 text-white/50" />
-                <span className="text-sm text-white/70">Add to Queue</span>
-              </button>
               <button onClick={handleShare}
                 className="w-full flex items-center space-x-3 px-4 py-3 hover:bg-white/[0.04] transition text-left">
                 {shared ? <Check className="w-4 h-4 text-green-400" /> : <Share2 className="w-4 h-4 text-white/50" />}

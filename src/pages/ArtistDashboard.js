@@ -122,9 +122,10 @@ export default function ArtistDashboard() {
         {/* Collabs Tab — request inbox */}
         {activeTab === 'collabs' && <CollabRequests />}
 
-        {/* Analytics Tab — locked behind Pro tier */}
+        {/* Analytics Tab â€" locked behind Pro tier */}
         {activeTab === 'analytics' && (
           <TierGate feature="analytics">
+            <style>{`.recharts-wrapper { overflow: visible !important; } .recharts-surface { overflow: visible !important; }`}</style>
             <div className="space-y-6">
               {loading ? (
                 <div className="flex justify-center py-16"><Loader className="w-6 h-6 animate-spin text-white/30" /></div>
