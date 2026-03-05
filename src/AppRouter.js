@@ -32,7 +32,8 @@ import AdminModeration from './pages/AdminModeration';
 import AdminBroadcast from './pages/AdminBroadcast';
 
 // If we're at the root "/" serve the landing page standalone
-const isLanding = window.location.pathname === '/' || window.location.pathname === '';
+const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
+const isLanding = !isStandalone && (window.location.pathname === '/' || window.location.pathname === '');
 
 export default function AppRouter() {
   if (isLanding) {
