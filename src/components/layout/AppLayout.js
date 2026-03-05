@@ -45,7 +45,7 @@ export default function AppLayout() {
             main { padding-bottom: ${currentTrack ? '100px' : '0px'} !important; }
           }
         `}</style>
-        <div className="md:px-8 md:pt-8 w-full" style={{ maxWidth: '960px' }}>
+        <div className="md:px-8 md:pt-8 w-full">
           <Outlet />
         </div>
       </main>
