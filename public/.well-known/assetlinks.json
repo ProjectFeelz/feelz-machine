@@ -1,0 +1,8 @@
+[{
+      "relation": ["delegate_permission/common.handle_all_urls"],
+      "target": {
+        "namespace": "android_app",
+        "package_name": "com.feelzmachine.www.twa",
+        "sha256_cert_fingerprints": ["C8:DD:08:E4:3E:67:15:75:CC:61:51:27:04:5D:07:8C:B8:48:83:35:C9:0E:42:35:B7:3E:60:58:9D:35:BB:DC"]
+      }
+    }]
