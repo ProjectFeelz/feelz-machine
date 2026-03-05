@@ -85,7 +85,7 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="pt-12 md:pt-0 pb-4 px-6 md:px-0">
+    <div className="pt-12 md:pt-0 pb-4 px-6 md:px-0 md:max-w-3xl">
       <h1 className="text-2xl font-bold text-white mb-4">Profile</h1>
       {msg && <div className={`mb-4 p-3 rounded-lg text-sm ${msg.startsWith('Error') ? 'bg-red-500/10 text-red-400' : 'bg-green-500/10 text-green-400'}`}>{msg}</div>}
 
@@ -249,4 +249,5 @@ export default function ProfilePage() {
     </div>
   );
 }
+
 

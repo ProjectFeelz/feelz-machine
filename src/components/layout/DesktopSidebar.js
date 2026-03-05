@@ -15,10 +15,11 @@ const navItems = [
 
 function Logo() {
   return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="#000" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" width="16" height="16">
-      <path d="M9 18V5l12-2v13"/>
-      <circle cx="6" cy="18" r="3"/>
-      <circle cx="18" cy="16" r="3"/>
+    <svg width="36" height="36" viewBox="0 0 64 64" fill="none">
+      <rect width="64" height="64" rx="14" fill="#0d0d0d"/>
+      <rect x="1" y="1" width="62" height="62" rx="13" stroke="#8CAB2E" strokeWidth="2.5"/>
+      <text x="32" y="40" fontFamily="Arial Black, Impact, sans-serif" fontSize="26" fontWeight="900" fill="#8CAB2E" textAnchor="middle" letterSpacing="-2">FM</text>
+      <rect x="16" y="44" width="32" height="2.5" rx="1.25" fill="#8CAB2E" opacity="0.4"/>
     </svg>
   );
 }
@@ -47,10 +48,7 @@ export default function DesktopSidebar() {
 
       {/* Logo */}
       <div className="flex items-center space-x-3 px-6 py-6 flex-shrink-0">
-        <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 shadow-lg"
-          style={{ backgroundColor: '#8CAB2E' }}>
-          <Logo />
-        </div>
+        <Logo />
         <div>
           <span className="text-sm font-bold text-white tracking-tight">Feelz Machine</span>
           <p className="text-[10px] text-white/30">Music Platform</p>

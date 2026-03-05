@@ -156,7 +156,7 @@ export default function BrowsePage() {
   }
 
   return (
-    <div className="pt-12 md:pt-0 pb-4 px-6 md:px-0">
+    <div className="pt-12 md:pt-0 pb-4 px-6 md:px-0 md:max-w-4xl">
       {/* Search */}
       <div className="mb-4">
         <div className="relative">
@@ -536,3 +536,4 @@ function AlbumTile({ album, navigate }) {
     </button>
   );
 }
+

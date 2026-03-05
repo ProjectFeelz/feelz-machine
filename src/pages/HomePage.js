@@ -260,7 +260,7 @@ export default function HomePage() {
       {/* New Releases */}
       {newReleases.length > 0 && (
         <Section title="New Releases" onSeeAll={() => navigate('/browse')}>
-          <div className="grid grid-cols-2 gap-3 px-6">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 px-6">
             {newReleases.slice(0, 4).map((album) => (
               <AlbumCard key={album.id} album={album} />
             ))}
