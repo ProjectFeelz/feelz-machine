@@ -58,6 +58,13 @@ export function PlayerProvider({ children }) {
         platform: 'web',
         device_type: /Mobi|Android/i.test(navigator.userAgent) ? 'mobile' : 'desktop',
       });
+      // Update denormalized counts
+      const { data: track } = await supabase.from('tracks').select('stream_count, artist_id').eq('id', trackId).single();
+      if (track) {
+        await supabase.from('tracks').update({ stream_count: (track.stream_count || 0) + 1 }).eq('id', trackId);
+        const { data: art } = await supabase.from('artists').select('total_streams').eq('id', track.artist_id).single();
+        if (art) await supabase.from('artists').update({ total_streams: (art.total_streams || 0) + 1 }).eq('id', track.artist_id);
+      }
     } catch (err) {
       console.error('Failed to log stream:', err);
     }

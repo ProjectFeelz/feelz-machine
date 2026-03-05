@@ -316,7 +316,7 @@ export default function ChatRoomView() {
       {/* Top bar */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.06] bg-black/95 backdrop-blur-xl flex-shrink-0">
         <div className="flex items-center space-x-3">
-          <button onClick={() => navigate('/chat')}
+          <button onClick={() => navigate(-1)}
             className="w-9 h-9 flex items-center justify-center rounded-full bg-white/[0.06]">
             <ArrowLeft className="w-5 h-5 text-white" />
           </button>

@@ -368,8 +368,8 @@ export default function ArtistProfilePage() {
       togglePlay();
     } else {
       playTrack(
-        { ...track, artist_name: artist.artist_name },
-        tracks.map(t => ({ ...t, artist_name: artist.artist_name }))
+        { ...track, artist_name: artist.artist_name, artist_slug: artist.slug },
+        tracks.map(t => ({ ...t, artist_name: artist.artist_name, artist_slug: artist.slug }))
       );
     }
   };

@@ -34,8 +34,12 @@ export default function ArtistDashboard() {
       }
 
       const { count: followCount } = await supabase.from('follows').select('*', { count: 'exact', head: true }).eq('artist_id', artist.id);
-
-      setStats({ streams: streamCount, downloads: dlCount, followers: followCount || 0, tracks: trackIds.length });
+      let likeCount = 0;
+      if (trackIds.length > 0) {
+        const { count: lc } = await supabase.from('track_likes').select('*', { count: 'exact', head: true }).in('track_id', trackIds);
+        likeCount = lc || 0;
+      }
+      setStats({ streams: streamCount, downloads: dlCount, followers: followCount || 0, tracks: trackIds.length, likes: likeCount });
 
       const { data: tracks } = await supabase.from('tracks')
         .select('id, title, cover_artwork_url, stream_count, download_count')
@@ -64,8 +68,9 @@ export default function ArtistDashboard() {
   const statCards = [
     { icon: Headphones, label: 'Total Streams', value: stats.streams, color: 'text-purple-400' },
     { icon: Download, label: 'Downloads', value: stats.downloads, color: 'text-blue-400' },
-    { icon: Heart, label: 'Followers', value: stats.followers, color: 'text-pink-400' },
+    { icon: Users, label: 'Followers', value: stats.followers, color: 'text-pink-400' },
     { icon: Music, label: 'Tracks', value: stats.tracks, color: 'text-green-400' },
+    { icon: Heart, label: 'Likes', value: stats.likes, color: 'text-red-400' },
   ];
 
   const tabs = [
