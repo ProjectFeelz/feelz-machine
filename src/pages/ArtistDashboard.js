@@ -14,7 +14,7 @@ export default function ArtistDashboard() {
   const navigate = useNavigate();
   const { artist, isMaster } = useAuth();
   const [activeTab, setActiveTab] = useState(new URLSearchParams(window.location.search).get('tab') || 'upload');
-  const [stats, setStats] = useState({ streams: 0, downloads: 0, followers: 0, tracks: 0 });
+  const [stats, setStats] = useState({ streams: 0, downloads: 0, followers: 0, tracks: 0, likes: 0 });
   const [topTracks, setTopTracks] = useState([]);
   const [loading, setLoading] = useState(false);
 

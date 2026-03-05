@@ -275,12 +275,12 @@ export default function ArtistProfilePage() {
         .from('artists').select('id, artist_name').eq('user_id', user.id).maybeSingle();
       await supabase.from('notifications').insert({
         artist_id: artist.id,
-        type: 'track_liked',
+        type: 'download',
         title: `${myProfile?.artist_name || 'Someone'} downloaded ${track.title}`,
         track_id: track.id,
         from_artist_id: myProfile?.id || null,
         metadata: { download: true, purchase_price: track.download_price || 0 },
-      }).catch(() => {});
+      }).then(() => {}).catch?.(() => {});
       const a = document.createElement('a');
       a.href = track.file_url;
       a.download = `${track.title}.mp3`;
