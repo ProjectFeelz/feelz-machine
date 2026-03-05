@@ -184,7 +184,7 @@ export default function HomePage() {
             {featuredTracks.map((track) => (
               <div key={track.id}
                 onClick={() => handlePlay(track, featuredTracks)}
-                className="flex-shrink-0 w-40 md:w-48 cursor-pointer group">
+                className="flex-shrink-0 w-40 cursor-pointer group">
                 <div className="aspect-square rounded-xl overflow-hidden bg-white/[0.06] mb-2 relative">
                   {track.cover_artwork_url
                     ? <img src={track.cover_artwork_url} alt={track.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
@@ -301,5 +301,6 @@ export default function HomePage() {
     </div>
   );
 }
+
 
 
