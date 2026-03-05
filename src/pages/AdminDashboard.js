@@ -80,6 +80,24 @@ export default function AdminDashboard() {
     setSelectedUser(null);
   };
 
+  const handleSetTier = async (artist, tierSlug) => {
+    setActionLoading(true);
+    try {
+      const { data: tier } = await supabase
+        .from('platform_tiers').select('id').eq('slug', tierSlug).single();
+      if (!tier) throw new Error('Tier not found');
+      await supabase.from('artist_tier_subscriptions').delete().eq('artist_id', artist.id);
+      if (tierSlug !== 'free') {
+        await supabase.from('artist_tier_subscriptions').insert({
+          artist_id: artist.id, tier_id: tier.id, status: 'active'
+        });
+      }
+      await fetchData();
+    } catch (err) { console.error('Set tier error:', err); }
+    setActionLoading(false);
+    setSelectedUser(null);
+  };
+
   const handleToggleMaster = async (artist) => {
     setActionLoading(true);
     try {
@@ -227,6 +245,20 @@ export default function AdminDashboard() {
                     <Crown className="w-4 h-4 text-purple-400" />
                     <span className="text-xs text-white/60">{artist.is_master ? 'Remove Master' : 'Make Master'}</span>
                   </button>
+                  <div className="flex items-center space-x-2 px-3 py-2">
+                    <span className="text-xs text-white/30 mr-1">Tier:</span>
+                    {['free', 'pro', 'premium'].map(t => (
+                      <button key={t} onClick={() => handleSetTier(artist, t)}
+                        disabled={actionLoading}
+                        className={`flex-1 py-1.5 rounded-lg text-[11px] font-semibold transition ${
+                          t === 'free' ? 'bg-white/[0.06] text-white/50 hover:bg-white/[0.1]'
+                          : t === 'pro' ? 'bg-purple-500/20 text-purple-300 hover:bg-purple-500/30'
+                          : 'bg-yellow-500/20 text-yellow-300 hover:bg-yellow-500/30'
+                        }`}>
+                        {t.charAt(0).toUpperCase() + t.slice(1)}
+                      </button>
+                    ))}
+                  </div>
                   <button
                     onClick={() => navigate(`/profile/${artist.slug || artist.id}`)}
                     className="w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg hover:bg-white/[0.05] transition text-left"
