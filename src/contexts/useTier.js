@@ -58,7 +58,7 @@ const FEATURE_LABELS = {
   download_sales: { name: 'Download Sales', description: 'Sell track downloads directly to fans', minTier: 'premium' },
   custom_branding: { name: 'Custom Branding', description: 'Full branding control on your profile', minTier: 'pro' },
   advanced_analytics: { name: 'Advanced Analytics', description: 'Deep audience insights and export tools', minTier: 'premium' },
-  community_post: { name: 'Community Posts', description: 'Share updates and music with your fans', minTier: 'premium' },
+  community_post: { name: 'Community Posts', description: 'Share updates and music with your fans', minTier: 'pro' },
   unlimited_uploads: { name: 'Unlimited Uploads', description: 'Upload unlimited tracks and albums', minTier: 'pro' },
 };
 
@@ -175,3 +175,4 @@ export function useTier() {
 }
 
 export { TIER_ACCESS, FEATURE_LABELS };
+

@@ -153,13 +153,26 @@ export default function LandingPage() {
           <LogoIcon size={32} />
           <span style={s.logoName}>Feelz Machine</span>
         </a>
-        <a href={apkUrl || '#download'} className="nav-btn" style={s.navBtn}
-          onClick={!apkUrl ? (e) => { e.preventDefault(); document.getElementById('download').scrollIntoView({ behavior: 'smooth' }); } : undefined}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
-          </svg>
-          Download APK
-        </a>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <a href="https://feelzmachine.netlify.app/player" className="nav-btn" style={{
+            ...s.navBtn,
+            background: 'transparent',
+            border: '1px solid rgba(140,171,46,0.4)',
+            color: '#8CAB2E',
+          }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8" fill="currentColor" stroke="none"/>
+            </svg>
+            Listen on Web
+          </a>
+          <a href={apkUrl || '#download'} className="nav-btn" style={s.navBtn}
+            onClick={!apkUrl ? (e) => { e.preventDefault(); document.getElementById('download').scrollIntoView({ behavior: 'smooth' }); } : undefined}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            Download APK
+          </a>
+        </div>
       </nav>
 
       {/* HERO */}

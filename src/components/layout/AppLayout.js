@@ -37,7 +37,7 @@ export default function AppLayout() {
       <main
         className="w-full md:ml-64"
         style={{
-          paddingBottom: currentTrack ? '140px' : '80px',
+          paddingBottom: currentTrack ? '152px' : '80px',
         }}>
         {/* Desktop: add bottom padding for player bar */}
         <style>{`

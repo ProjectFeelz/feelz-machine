@@ -14,7 +14,7 @@ export default function MiniPlayer() {
 
   return (
     // Mobile only — desktop uses DesktopPlayer
-    <div className="md:hidden fixed left-0 right-0 z-50" style={{ bottom: '56px' }}>
+    <div className="md:hidden fixed left-0 right-0 z-50" style={{ bottom: '60px' }}>
       <div className="h-[2px] bg-white/10 w-full">
         <div className="h-full bg-white transition-all duration-200" style={{ width: `${progress}%` }} />
       </div>
