@@ -112,7 +112,7 @@ export default function ChatRoomsPage() {
   }
 
   return (
-    <div className="pt-12 pb-4 px-6">
+    <div className="pt-12 md:pt-0 pb-4 px-6 md:px-0">
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-2xl font-bold text-white">Chat Rooms</h1>

@@ -280,7 +280,9 @@ export default function TrackUploadPanel() {
   };
 
   // ==================== TRACK EDIT ====================
-  const startEdit = (track) => {
+  const [editCollaborators, setEditCollaborators] = useState([]);
+
+  const startEdit = async (track) => {
     setEditingId(track.id);
     setEditForm({
       title: track.title, genre: track.genre || '', mood: track.mood || '',
@@ -290,10 +292,31 @@ export default function TrackUploadPanel() {
       featured: track.featured, album_id: track.album_id || '',
       track_number: track.track_number || 1,
     });
+    // Load existing collaborators
+    const { data } = await supabase.from('collaborations')
+      .select('*, artists(artist_name, profile_image_url)')
+      .eq('track_id', track.id);
+    setEditCollaborators((data || []).map(c => ({
+      artist_id: c.artist_id,
+      artist_name: c.artists?.artist_name,
+      role: c.role,
+      split_percent: c.split_percent,
+    })));
   };
 
   const saveEdit = async (id) => {
     try {
+      // Save new collaborators if any added
+      if (editCollaborators.length > 0) {
+        await supabase.from('collaborations').delete().eq('track_id', id);
+        for (const collab of editCollaborators) {
+          await supabase.from('collaborations').insert({
+            track_id: id, artist_id: collab.artist_id,
+            role: collab.role, split_percent: collab.split_percent,
+            status: 'pending', invited_by: artist.id,
+          });
+        }
+      }
       const { error } = await supabase.from('tracks').update({
         title: editForm.title, slug: slugify(editForm.title),
         genre: editForm.genre, mood: editForm.mood,
@@ -756,6 +779,10 @@ export default function TrackUploadPanel() {
                             <span>{key.replace('is_', '').replace('_', ' ')}</span>
                           </label>
                         ))}
+                      </div>
+                      <div className="mt-3">
+                        <label className="block text-xs text-white/40 mb-2">Collaborators</label>
+                        <CollaboratorSearch collaborators={editCollaborators} onChange={setEditCollaborators} />
                       </div>
                       <div className="flex space-x-2">
                         <button onClick={() => saveEdit(track.id)}

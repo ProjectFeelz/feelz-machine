@@ -566,7 +566,7 @@ export default function ArtistProfilePage() {
             style={{ fontFamily: `"${headingFont}", sans-serif` }}>Releases</h2>
           <div className="flex space-x-3 overflow-x-auto px-6 scrollbar-hide">
             {albums.map(album => (
-              <div key={album.id} className="flex-shrink-0 w-36 cursor-pointer group">
+              <div key={album.id} className="flex-shrink-0 w-36 cursor-pointer group" onClick={() => navigate(`/album/${album.id}`)}>
                 <div className="aspect-square rounded-xl overflow-hidden mb-2"
                   style={{ backgroundColor: `${textColor}08` }}>
                   {album.cover_artwork_url ? (
@@ -583,6 +583,35 @@ export default function ArtistProfilePage() {
                 <p className="text-xs truncate" style={{ color: `${textColor}50` }}>
                   {album.release_type?.toUpperCase()} {album.release_date ? new Date(album.release_date).getFullYear() : ''}
                 </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* SINGLES (tracks without album) */}
+      {tracks.filter(t => !t.album_id).length > 0 && (
+        <div className="mb-8">
+          <h2 className="text-lg font-bold px-6 mb-3"
+            style={{ fontFamily: `"${headingFont}", sans-serif` }}>Singles</h2>
+          <div className="flex space-x-3 overflow-x-auto px-6 scrollbar-hide">
+            {tracks.filter(t => !t.album_id).map(track => (
+              <div key={track.id} className="flex-shrink-0 w-36 cursor-pointer group"
+                onClick={() => handlePlayTrack(track)}>
+                <div className="aspect-square rounded-xl overflow-hidden mb-2"
+                  style={{ backgroundColor: `${textColor}08` }}>
+                  {track.cover_artwork_url ? (
+                    <img src={track.cover_artwork_url} alt={track.title}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center"
+                      style={{ background: `linear-gradient(135deg, ${secondaryColor}40, ${accentColor}20)` }}>
+                      <Music className="w-8 h-8" style={{ color: `${textColor}20` }} />
+                    </div>
+                  )}
+                </div>
+                <p className="text-sm font-medium truncate" style={{ color: textColor }}>{track.title}</p>
+                <p className="text-xs truncate" style={{ color: `${textColor}50` }}>Single</p>
               </div>
             ))}
           </div>

@@ -156,7 +156,7 @@ export default function BrowsePage() {
   }
 
   return (
-    <div className="pt-12 pb-4 px-6">
+    <div className="pt-12 md:pt-0 pb-4 px-6 md:px-0">
       {/* Search */}
       <div className="mb-4">
         <div className="relative">
