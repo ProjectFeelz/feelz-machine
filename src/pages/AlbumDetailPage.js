@@ -1,3 +1,4 @@
+import { downloadTrack } from '../utils/downloadTrack';
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
@@ -129,7 +130,7 @@ export default function AlbumDetailPage() {
       await supabase.from('downloads').insert({ user_id: user.id, track_id: track.id, artist_id: artist?.id });
       const a = document.createElement('a');
       a.href = track.file_url;
-      a.download = `${track.title.replace(/[^a-z0-9\s-]/gi, '').trim() || 'track'}.mp3`;
+      await downloadTrack(track.file_url, track.title);
       a.target = '_blank';
       document.body.appendChild(a);
       a.click();
