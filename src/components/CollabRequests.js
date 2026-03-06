@@ -25,16 +25,12 @@ export default function CollabRequests() {
     if (!artist) return;
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('collab_requests')
-        .select(`
-          *,
-          collaboration:collaborations(role, split_percent),
-          from_artist:artists!collab_requests_from_artist_id_fkey(id, artist_name, profile_image_url),
-          track:tracks!collab_requests_track_id_fkey(id, title, cover_artwork_url)
-        `)
-        .eq('to_artist_id', artist.id)
-        .order('created_at', { ascending: false });
+      const [{ data: incoming }, { data: outgoing }] = await Promise.all([
+        supabase.from('collab_requests').select(`*, collaboration:collaborations(role, split_percent), from_artist:artists!collab_requests_from_artist_id_fkey(id, artist_name, profile_image_url), track:tracks!collab_requests_track_id_fkey(id, title, cover_artwork_url)`).eq('to_artist_id', artist.id).order('created_at', { ascending: false }),
+        supabase.from('collab_requests').select(`*, collaboration:collaborations(role, split_percent), to_artist:artists!collab_requests_to_artist_id_fkey(id, artist_name, profile_image_url), track:tracks!collab_requests_track_id_fkey(id, title, cover_artwork_url)`).eq('from_artist_id', artist.id).order('created_at', { ascending: false }),
+      ]);
+      const data = [...(incoming || []).map(r => ({...r, direction: 'incoming'})), ...(outgoing || []).map(r => ({...r, direction: 'outgoing', from_artist: r.to_artist}))];
+      const error = null;
 
       if (error) throw error;
       setRequests(data || []);
@@ -105,7 +101,7 @@ export default function CollabRequests() {
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-2">
           <Inbox className="w-5 h-5 text-white/40" />
-          <h3 className="text-base font-semibold text-white">Collab Requests</h3>
+          <h3 className="text-base font-semibold text-white">Collaborations</h3>
           {pendingCount > 0 && (
             <span className="px-2 py-0.5 bg-white text-black text-[10px] font-bold rounded-full">
               {pendingCount}
@@ -151,7 +147,7 @@ export default function CollabRequests() {
                     <div>
                       <p className="text-sm text-white">
                         <span className="font-semibold">{req.from_artist?.artist_name || 'Unknown'}</span>
-                        <span className="text-white/40"> invited you as </span>
+                        <span className="text-white/40"> {req.direction === 'outgoing' ? 'invited as' : 'invited you as'} </span>
                         <span className="font-medium text-white/70">
                           {ROLE_LABELS[req.collaboration?.role] || 'Collaborator'}
                         </span>

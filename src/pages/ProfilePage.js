@@ -110,11 +110,17 @@ export default function ProfilePage() {
         </div>
         {/* Public profile link */}
         {isArtist && artist?.slug && (
-          <a href={`/artist/${artist.slug}`} target="_blank" rel="noopener noreferrer"
-            className="mt-3 flex items-center space-x-1.5 text-xs text-white/30 hover:text-white/50 transition">
-            <ExternalLink className="w-3 h-3" />
-            <span>View public profile: /artist/{artist.slug}</span>
-          </a>
+          <div className="mt-3 flex items-center justify-between">
+            <button onClick={() => nav(`/artist/${artist.slug}`)}
+              className="flex items-center space-x-1.5 text-xs text-white/30 hover:text-white/50 transition">
+              <ExternalLink className="w-3 h-3" />
+              <span>View profile</span>
+            </button>
+            <button onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/player/artist/${artist.slug}`); }}
+              className="flex items-center space-x-1.5 text-xs text-white/30 hover:text-white/50 transition">
+              <span>Copy share link</span>
+            </button>
+          </div>
         )}
       </div>
 
@@ -249,6 +255,7 @@ export default function ProfilePage() {
     </div>
   );
 }
+
 
 
 
