@@ -6,7 +6,7 @@ export default function AlbumCard({ album }) {
 
   return (
     <div
-      onClick={() => navigate(`/album/${album.slug || album.id}`)}
+      onClick={() => navigate(`/browse`)}
       className="cursor-pointer group"
     >
       <div className="aspect-square rounded-lg overflow-hidden bg-white/[0.06] mb-2.5">
@@ -29,3 +29,4 @@ export default function AlbumCard({ album }) {
     </div>
   );
 }
+
