@@ -804,7 +804,8 @@ export default function ArtistProfilePage() {
                   </div>
                 )}
 
-                <div id="paypal-checkout-container" />
+                <div id="paypal-checkout-container" 
+                  style={{ backgroundColor: '#fff', borderRadius: '8px', padding: '4px' }} />
 
                 <button onClick={() => setPurchaseTrack(null)} disabled={purchasing}
                   className="w-full py-2.5 rounded-xl text-sm transition"
