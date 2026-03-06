@@ -35,7 +35,7 @@ export default function AppLayout() {
 
       {/* Main content */}
       <main
-        className="w-full md:ml-64 overflow-x-hidden"
+        className="w-full md:w-[calc(100%-256px)] md:ml-64"
         style={{
           paddingBottom: currentTrack ? '152px' : '80px',
         }}>

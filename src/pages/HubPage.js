@@ -69,7 +69,7 @@ export default function HubPage() {
   }
 
   return (
-    <div className="pt-14 md:pt-0 pb-32 px-4 max-w-2xl mx-auto">
+    <div className="pt-14 md:pt-0 pb-32 px-4 max-w-2xl">
 
       {/* Header */}
       <div className="mb-6">
@@ -149,6 +149,7 @@ export default function HubPage() {
     </div>
   );
 }
+
 
 
 

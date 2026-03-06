@@ -92,7 +92,7 @@ export function useTier() {
         .select('*, platform_tiers(*)')
         .eq('artist_id', artist.id)
         .eq('status', 'active')
-        .single();
+        .maybeSingle();
 
       if (sub?.platform_tiers) {
         setTierSlug(sub.platform_tiers.slug);

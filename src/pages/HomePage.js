@@ -163,7 +163,7 @@ export default function HomePage() {
   const isEmpty = allTracks.length === 0 && featuredTracks.length === 0;
 
   return (
-    <div className="pt-12 md:pt-0 pb-4 max-w-2xl mx-auto">
+    <div className="pt-12 md:pt-0 pb-4 max-w-2xl">
 
       {/* Greeting */}
       <div className="px-6 mb-8">
@@ -301,6 +301,7 @@ export default function HomePage() {
     </div>
   );
 }
+
 
 
 
