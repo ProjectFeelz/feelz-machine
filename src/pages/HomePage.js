@@ -90,10 +90,7 @@ export default function HomePage() {
           .eq('is_published', true).eq('featured', true)
           .order('created_at', { ascending: false }).limit(10),
 
-        supabase.from('albums')
-          .select('*, artists(artist_name, slug)')
-          .eq('is_published', true)
-          .order('release_date', { ascending: false }).limit(6),
+        supabase.from('tracks').select('*, artists(artist_name, slug, profile_image_url)').eq('is_published', true).order('created_at', { ascending: false }).limit(8),
 
         supabase.from('tracks')
           .select('*, artists(artist_name, slug, profile_image_url, is_verified, tier)')
@@ -301,6 +298,7 @@ export default function HomePage() {
     </div>
   );
 }
+
 
 
 

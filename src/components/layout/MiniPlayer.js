@@ -1,12 +1,27 @@
 import React from 'react';
-import { Play, Pause, SkipForward } from 'lucide-react';
+import { Play, Pause, SkipForward, MoreHorizontal, Heart, Download, ListMusic } from 'lucide-react';
+import { useAuth } from '../../contexts/AuthContext';
+import { supabase } from '../../supabaseClient';
+import { useNavigate } from 'react-router-dom';
+import { downloadTrack } from '../../utils/downloadTrack';
+import { useState } from 'react';
 import { usePlayer } from '../../contexts/PlayerContext';
 
 export default function MiniPlayer() {
-  const {
-    currentTrack, isPlaying, togglePlay, playNext,
-    duration, currentTime, setIsMinimized,
-  } = usePlayer();
+  const { currentTrack, isPlaying, togglePlay, playNext, duration, currentTime, setIsMinimized, addToQueue } = usePlayer();
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const [showMenu, setShowMenu] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+  const handleDownload = async (e) => {
+    e.stopPropagation();
+    if (!user) { navigate(`/login`); return; }
+    if (!currentTrack?.file_url) return;
+    setDownloading(true);
+    try { await downloadTrack(currentTrack.file_url, currentTrack.title); } catch {}
+    setDownloading(false);
+    setShowMenu(false);
+  };
 
   if (!currentTrack) return null;
 
@@ -46,9 +61,34 @@ export default function MiniPlayer() {
               className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-white/10 transition">
               <SkipForward className="w-4 h-4 text-white" fill="white" />
             </button>
+            <div className="relative">
+              <button onClick={(e) => { e.stopPropagation(); setShowMenu(p => !p); }}
+                className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-white/10 transition">
+                <MoreHorizontal className="w-4 h-4 text-white/60" />
+              </button>
+              {showMenu && (
+                <div onClick={e => e.stopPropagation()}
+                  className="absolute bottom-12 right-0 w-48 rounded-xl shadow-2xl z-50 overflow-hidden"
+                  style={{ backgroundColor: `#1a1a1a`, border: `1px solid rgba(255,255,255,0.08)` }}>
+                  <button onClick={handleDownload}
+                    className="w-full flex items-center space-x-3 px-4 py-3 hover:bg-white/[0.04] transition text-left">
+                    <Download className="w-4 h-4 text-white/50" />
+                    <span className="text-sm text-white/70">{downloading ? `Downloading...` : `Download`}</span>
+                  </button>
+                  <button onClick={(e) => { e.stopPropagation(); addToQueue(currentTrack); setShowMenu(false); }}
+                    className="w-full flex items-center space-x-3 px-4 py-3 hover:bg-white/[0.04] transition text-left">
+                    <ListMusic className="w-4 h-4 text-white/50" />
+                    <span className="text-sm text-white/70">Add to Queue</span>
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
     </div>
   );
 }
+
+
+
