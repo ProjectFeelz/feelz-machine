@@ -750,11 +750,11 @@ export default function ArtistProfilePage() {
 
       {/* PURCHASE MODAL */}
       {purchaseTrack && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center p-4"
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
           style={{ backgroundColor: 'rgba(0,0,0,0.8)' }}
           onClick={() => !purchasing && setPurchaseTrack(null)}>
-          <div className="w-full max-w-sm rounded-2xl p-6 space-y-4"
-            style={{ backgroundColor: bgColor, border: `1px solid ${primaryColor}20` }}
+          <div className="w-full max-w-sm rounded-2xl p-6 space-y-4 overflow-y-auto"
+            style={{ backgroundColor: bgColor, border: `1px solid ${primaryColor}20`, maxHeight: '90vh' }}
             onClick={(e) => e.stopPropagation()}>
 
             {purchaseSuccess ? (
