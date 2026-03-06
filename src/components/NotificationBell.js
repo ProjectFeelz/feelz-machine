@@ -140,7 +140,17 @@ export default function NotificationBell() {
                         <span className="font-semibold">{notif.title}</span>
                       </p>
                       {notif.message && (
-                        <p className="text-[11px] text-white/30 mt-0.5 truncate">{notif.message}</p>
+                        <p className="text-[11px] text-white/30 mt-0.5 whitespace-pre-wrap">{notif.message}</p>
+                      )}
+                      {notif.metadata?.youtube_id && (
+                        <div className="mt-2 rounded-lg overflow-hidden aspect-video bg-black">
+                          <iframe
+                            src={`https://www.youtube.com/embed/${notif.metadata.youtube_id}`}
+                            className="w-full h-full"
+                            allowFullScreen
+                            title="notification video"
+                          />
+                        </div>
                       )}
                       <p className="text-[10px] text-white/20 mt-1">{timeAgo(notif.created_at)}</p>
                     </div>
