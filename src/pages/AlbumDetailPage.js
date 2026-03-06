@@ -50,7 +50,7 @@ export default function AlbumDetailPage() {
       const { data: albumData } = await supabase
         .from('albums')
         .select('*, artists(id, artist_name, slug, profile_image_url, is_verified)')
-        .eq('id', id)
+        .or(`id.eq.${id},slug.eq.${id}`)
         .maybeSingle();
 
       if (!albumData) { navigate('/browse'); return; }
@@ -337,3 +337,4 @@ export default function AlbumDetailPage() {
     </div>
   );
 }
+

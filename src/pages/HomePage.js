@@ -184,7 +184,7 @@ export default function HomePage() {
             {featuredTracks.map((track) => (
               <div key={track.id}
                 onClick={() => handlePlay(track, featuredTracks)}
-                className="flex-shrink-0 w-40 cursor-pointer group">
+                className="flex-shrink-0 w-40 md:w-52 cursor-pointer group">
                 <div className="aspect-square rounded-xl overflow-hidden bg-white/[0.06] mb-2 relative">
                   {track.cover_artwork_url
                     ? <img src={track.cover_artwork_url} alt={track.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
@@ -232,7 +232,7 @@ export default function HomePage() {
           <div className="flex space-x-4 overflow-x-auto px-6 scrollbar-hide">
             {topArtists.map(a => (
               <button key={a.id} onClick={() => navigate(`/artist/${a.slug}`)}
-                className="flex-shrink-0 w-20 text-center group">
+                className="flex-shrink-0 w-20 md:w-28 text-center group">
                 <div className="w-16 h-16 rounded-full mx-auto mb-2 overflow-hidden bg-white/[0.06] relative">
                   {a.profile_image_url
                     ? <img src={a.profile_image_url} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
@@ -301,6 +301,7 @@ export default function HomePage() {
     </div>
   );
 }
+
 
 
 
