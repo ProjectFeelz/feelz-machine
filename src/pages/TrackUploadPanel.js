@@ -38,9 +38,10 @@ const VERSION_TYPES = [
   { value: 'clean', label: 'Clean Version' },
 ];
 
-function slugify(text) {
-  return text.toString().toLowerCase().trim()
+function slugify(text, unique = false) {
+  const base = text.toString().toLowerCase().trim()
     .replace(/\s+/g, '-').replace(/[^\w\-]+/g, '').replace(/\-\-+/g, '-');
+  return unique ? `${base}-${Date.now().toString(36)}` : base;
 }
 
 export default function TrackUploadPanel() {
@@ -152,7 +153,7 @@ export default function TrackUploadPanel() {
         artist_id: artist.id,
         album_id: trackForm.album_id || null,
         title: trackForm.title,
-        slug: slugify(trackForm.title),
+        slug: slugify(trackForm.title, true),
         genre: trackForm.genre,
         mood: trackForm.mood,
         lyrics: trackForm.lyrics || null,
@@ -260,7 +261,7 @@ export default function TrackUploadPanel() {
       const { error } = await supabase.from('albums').insert([{
         artist_id: artist.id,
         title: albumForm.title,
-        slug: slugify(albumForm.title),
+        slug: slugify(albumForm.title, true),
         description: albumForm.description,
         cover_artwork_url: coverUrl,
         release_date: albumForm.release_date || null,
@@ -318,7 +319,7 @@ export default function TrackUploadPanel() {
         }
       }
       const { error } = await supabase.from('tracks').update({
-        title: editForm.title, slug: slugify(editForm.title),
+        title: editForm.title, slug: slugify(editForm.title, true),
         genre: editForm.genre, mood: editForm.mood,
         lyrics: editForm.lyrics, is_explicit: editForm.is_explicit,
         is_downloadable: editForm.is_downloadable, is_published: editForm.is_published,
