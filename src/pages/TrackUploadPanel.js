@@ -60,7 +60,7 @@ export default function TrackUploadPanel() {
   // Track upload form
   const [trackForm, setTrackForm] = useState({
     title: '', genre: '', mood: '', lyrics: '',
-    is_explicit: false, is_downloadable: true, is_published: false,
+    is_explicit: false, is_downloadable: true, is_published: true,
     is_premium: false, download_price: '0', featured: false,
     album_id: '', track_number: '1',
     audio_file: null, cover_file: null,
@@ -236,7 +236,7 @@ export default function TrackUploadPanel() {
   const resetTrackForm = () => {
     setTrackForm({
       title: '', genre: '', mood: '', lyrics: '',
-      is_explicit: false, is_downloadable: true, is_published: false,
+      is_explicit: false, is_downloadable: true, is_published: true,
       is_premium: false, download_price: '0', featured: false,
       album_id: '', track_number: '1',
       audio_file: null, cover_file: null, has_versions: false,
@@ -844,3 +844,4 @@ export default function TrackUploadPanel() {
     </div>
   );
 }
+
