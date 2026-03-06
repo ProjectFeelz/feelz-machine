@@ -47,11 +47,19 @@ export default function AlbumDetailPage() {
   const fetchAlbum = async () => {
     setLoading(true);
     try {
-      const { data: albumData } = await supabase
+      let { data: albumData } = await supabase
         .from('albums')
         .select('*, artists(id, artist_name, slug, profile_image_url, is_verified)')
-        .or(`id.eq.${id},slug.eq.${id}`)
+        .eq('id', id)
         .maybeSingle();
+      if (!albumData) {
+        const { data: bySlug } = await supabase
+          .from('albums')
+          .select('*, artists(id, artist_name, slug, profile_image_url, is_verified)')
+          .eq('slug', id)
+          .maybeSingle();
+        albumData = bySlug;
+      }
 
       if (!albumData) { navigate('/browse'); return; }
       setAlbum(albumData);
@@ -60,7 +68,7 @@ export default function AlbumDetailPage() {
       const { data: trackData } = await supabase
         .from('tracks')
         .select('*')
-        .eq('album_id', id)
+        .eq('album_id', albumData.id)
         .eq('is_published', true)
         .order('track_number', { ascending: true });
       setTracks(trackData || []);
@@ -337,5 +345,6 @@ export default function AlbumDetailPage() {
     </div>
   );
 }
+
 
 

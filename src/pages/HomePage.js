@@ -177,6 +177,34 @@ export default function HomePage() {
         </p>
       </div>
 
+      {/* New Releases */}
+      {newReleases.length > 0 && (
+        <Section title="New Releases" onSeeAll={() => navigate('/browse')}>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 px-6">
+            {newReleases.slice(0, 4).map((album) => (
+              <AlbumCard key={album.id} album={album} />
+            ))}
+          </div>
+        </Section>
+      )}
+
+      {/* Trending */}
+      {trending.length > 0 && (
+        <Section title="Trending" icon={Flame} onSeeAll={() => navigate('/browse')}>
+          <div>
+            {trending.map((track) => (
+              <QuickPlayRow
+                key={track.id}
+                track={track}
+                onPlay={(t) => handlePlay(t, trending)}
+                currentTrack={currentTrack}
+                isPlaying={isPlaying}
+              />
+            ))}
+          </div>
+        </Section>
+      )}
+
       {/* Featured */}
       {featuredTracks.length > 0 && (
         <Section title="Featured">
@@ -209,24 +237,18 @@ export default function HomePage() {
         </Section>
       )}
 
-      {/* Trending */}
-      {trending.length > 0 && (
-        <Section title="Trending" icon={Flame} onSeeAll={() => navigate('/browse')}>
-          <div>
-            {trending.map((track) => (
-              <QuickPlayRow
-                key={track.id}
-                track={track}
-                onPlay={(t) => handlePlay(t, trending)}
-                currentTrack={currentTrack}
-                isPlaying={isPlaying}
-              />
+      {/* Latest Tracks */}
+      {allTracks.length > 0 && (
+        <Section title="Latest Tracks" icon={TrendingUp} onSeeAll={() => navigate('/browse')}>
+          <div className="px-1">
+            {allTracks.slice(0, 10).map((track, i) => (
+              <TrackCard key={track.id} track={track} trackList={allTracks} index={i} />
             ))}
           </div>
         </Section>
       )}
 
-      {/* Top Artists */}
+      {/* Artists to Follow */}
       {topArtists.length > 0 && (
         <Section title="Artists to Follow" onSeeAll={() => navigate('/browse?tab=artists')}>
           <div className="flex space-x-4 overflow-x-auto px-6 scrollbar-hide">
@@ -252,28 +274,6 @@ export default function HomePage() {
                 </div>
                 <p className="text-[10px] text-white/25">{formatNumber(a.follower_count)} followers</p>
               </button>
-            ))}
-          </div>
-        </Section>
-      )}
-
-      {/* New Releases */}
-      {newReleases.length > 0 && (
-        <Section title="New Releases" onSeeAll={() => navigate('/browse')}>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 px-6">
-            {newReleases.slice(0, 4).map((album) => (
-              <AlbumCard key={album.id} album={album} />
-            ))}
-          </div>
-        </Section>
-      )}
-
-      {/* Latest Tracks */}
-      {allTracks.length > 0 && (
-        <Section title="Latest Tracks" icon={TrendingUp} onSeeAll={() => navigate('/browse')}>
-          <div className="px-1">
-            {allTracks.slice(0, 10).map((track, i) => (
-              <TrackCard key={track.id} track={track} trackList={allTracks} index={i} />
             ))}
           </div>
         </Section>
