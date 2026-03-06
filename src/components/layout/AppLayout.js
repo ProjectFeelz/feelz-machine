@@ -35,7 +35,7 @@ export default function AppLayout() {
 
       {/* Main content */}
       <main
-        className="w-full md:ml-64"
+        className="w-full md:ml-64 overflow-x-hidden"
         style={{
           paddingBottom: currentTrack ? '152px' : '80px',
         }}>
@@ -45,7 +45,7 @@ export default function AppLayout() {
             main { padding-bottom: ${currentTrack ? '100px' : '0px'} !important; }
           }
         `}</style>
-        <div className="md:px-8 md:pt-8">
+        <div className="md:px-8 md:pt-8 w-full md:max-w-5xl">
           <Outlet />
         </div>
       </main>
