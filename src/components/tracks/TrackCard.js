@@ -52,7 +52,7 @@ export default function TrackCard({ track, trackList = [], showArtwork = true, i
     if (liked) {
       await supabase.from('track_likes').delete().eq('track_id', track.id).eq('user_id', user.id);
     } else {
-      await supabase.from('track_likes').insert({ track_id: track.id, user_id: user.id, artist_id: track.artist_id || null });
+      await supabase.from('track_likes').insert({ track_id: track.id, user_id: user.id });
     }
   };
 
@@ -265,5 +265,6 @@ export default function TrackCard({ track, trackList = [], showArtwork = true, i
     </div>
   );
 }
+
 
 
