@@ -197,8 +197,7 @@ export default function ArtistProfilePage() {
           await supabase.from('downloads').insert({
             user_id: user.id,
             track_id: purchaseTrack.id,
-            artist_id: artist.id,
-            purchase_price: purchaseTrack.download_price,
+            amount_paid: purchaseTrack.download_price,
           });
 
           await fetch('/.netlify/functions/process-split-payout', {
@@ -269,7 +268,6 @@ export default function ArtistProfilePage() {
       await supabase.from('downloads').insert({
         user_id: user.id,
         track_id: track.id,
-        artist_id: artist.id,
       });
       // Notify artist
       const { data: myProfile } = await supabase
