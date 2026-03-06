@@ -79,7 +79,7 @@ export default function TrackCard({ track, trackList = [], showArtwork = true, i
     if (!track.file_url) return;
     setDownloading(true);
     try {
-      await supabase.from('downloads').insert({ user_id: user.id, track_id: track.id, artist_id: track.artist_id || null });
+      await supabase.from('downloads').insert({ user_id: user.id, track_id: track.id });
       const a = document.createElement('a');
       a.href = track.file_url;
       await downloadTrack(track.file_url, track.title);

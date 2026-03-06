@@ -326,7 +326,7 @@ export default function ArtistProfilePage() {
     await supabase.from('track_likes').delete()
       .eq('track_id', track.id).eq('user_id', user.id);
   } else {
-    await supabase.from('track_likes').insert({ track_id: track.id, user_id: user.id, artist_id: artist.id });
+    await supabase.from('track_likes').insert({ track_id: track.id, user_id: user.id });
     const { data: myProfile } = await supabase.from('artists').select('id, artist_name').eq('user_id', user.id).maybeSingle();
     await supabase.from('notifications').insert({
       artist_id: artist.id, type: 'track_liked',
@@ -562,7 +562,7 @@ export default function ArtistProfilePage() {
       {albums.length > 0 && (
         <div className="mb-8">
           <h2 className="text-lg font-bold px-6 mb-3"
-            style={{ fontFamily: `"${headingFont}", sans-serif` }}>Releases</h2>
+            style={{ fontFamily: `"${headingFont}", sans-serif` }}>Albums</h2>h2>
           <div className="flex space-x-3 overflow-x-auto px-6 scrollbar-hide">
             {albums.map(album => (
               <div key={album.id} className="flex-shrink-0 w-36 cursor-pointer group" onClick={() => navigate(`/album/${album.id}`)}>

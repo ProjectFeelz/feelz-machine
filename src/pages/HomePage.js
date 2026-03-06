@@ -177,9 +177,9 @@ export default function HomePage() {
       {/* New Releases */}
       {newReleases.length > 0 && (
         <Section title="New Releases" onSeeAll={() => navigate('/browse')}>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 px-6">
-            {newReleases.slice(0, 4).map((album) => (
-              <AlbumCard key={album.id} album={album} />
+          <div className="px-1">
+            {newReleases.slice(0, 6).map((track, i) => (
+              <TrackCard key={track.id} track={track} trackList={newReleases} index={i} />
             ))}
           </div>
         </Section>
@@ -188,15 +188,9 @@ export default function HomePage() {
       {/* Trending */}
       {trending.length > 0 && (
         <Section title="Trending" icon={Flame} onSeeAll={() => navigate('/browse')}>
-          <div>
-            {trending.map((track) => (
-              <QuickPlayRow
-                key={track.id}
-                track={track}
-                onPlay={(t) => handlePlay(t, trending)}
-                currentTrack={currentTrack}
-                isPlaying={isPlaying}
-              />
+          <div className="px-1">
+            {trending.map((track, i) => (
+              <TrackCard key={track.id} track={track} trackList={trending} index={i} />
             ))}
           </div>
         </Section>
