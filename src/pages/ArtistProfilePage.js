@@ -54,6 +54,7 @@ export default function ArtistProfilePage() {
   const [theme, setTheme] = useState(null);
   const [tracks, setTracks] = useState([]);
   const [albums, setAlbums] = useState([]);
+  const [collabs, setCollabs] = useState([]);
   const [isFollowing, setIsFollowing] = useState(false);
   const [followerCount, setFollowerCount] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -116,6 +117,12 @@ export default function ArtistProfilePage() {
         .eq('is_published', true)
         .order('release_date', { ascending: false });
       setAlbums(albumData || []);
+      const { data: collabData } = await supabase
+        .from('collaborations')
+        .select('*, tracks(id, title, cover_artwork_url)')
+        .eq('artist_id', artistData.id)
+        .eq('status', 'accepted');
+      setCollabs(collabData || []);
 
       if (user) {
         const { data: followData } = await supabase
@@ -562,7 +569,7 @@ export default function ArtistProfilePage() {
       {albums.length > 0 && (
         <div className="mb-8">
           <h2 className="text-lg font-bold px-6 mb-3"
-            style={{ fontFamily: `"${headingFont}", sans-serif` }}>Albums</h2>h2>
+            style={{ fontFamily: `"${headingFont}", sans-serif` }}>Albums</h2>
           <div className="flex space-x-3 overflow-x-auto px-6 scrollbar-hide">
             {albums.map(album => (
               <div key={album.id} className="flex-shrink-0 w-36 cursor-pointer group" onClick={() => navigate(`/album/${album.id}`)}>
@@ -738,6 +745,29 @@ export default function ArtistProfilePage() {
         </div>
       )}
 
+      {collabs.length > 0 && (
+        <div className="px-6 mb-8">
+          <h2 className="text-lg font-bold mb-3" style={{ fontFamily: `"${headingFont}", sans-serif` }}>Collaborations</h2>
+          <div className="space-y-2">
+            {collabs.map(collab => (
+              <div key={collab.id} className="flex items-center space-x-3 p-3 rounded-xl"
+                style={{ backgroundColor: `${textColor}05`, border: `1px solid ${textColor}08` }}>
+                <div className="w-10 h-10 rounded-lg overflow-hidden flex-shrink-0" style={{ backgroundColor: `${secondaryColor}20` }}>
+                  {collab.tracks?.cover_artwork_url
+                    ? <img src={collab.tracks.cover_artwork_url} alt="" className="w-full h-full object-cover" />
+                    : <div className="w-full h-full flex items-center justify-center"><Music className="w-4 h-4" style={{ color: `${textColor}20` }} /></div>}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate" style={{ color: textColor }}>{collab.tracks?.title || 'Untitled'}</p>
+                  <p className="text-xs" style={{ color: `${textColor}40` }}>{collab.role} · {collab.split_percent}% split</p>
+                </div>
+                <span className="text-[10px] px-2 py-0.5 rounded-full font-medium" style={{ backgroundColor: `${secondaryColor}20`, color: secondaryColor }}>Collab</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      
       {/* EMPTY STATE */}
       {tracks.length === 0 && albums.length === 0 && (
         <div className="px-6 py-12 text-center">
