@@ -102,7 +102,7 @@ export default function ChatRoomView() {
   const fetchMessages = async () => {
     const { data } = await supabase
       .from('chat_messages')
-      .select('*, artists:user_id(artist_name, slug, profile_image_url, is_verified)')
+      .select('*')
       .eq('room_id', roomId)
       .order('created_at', { ascending: true })
       .limit(200);
@@ -500,3 +500,4 @@ export default function ChatRoomView() {
     </div>
   );
 }
+

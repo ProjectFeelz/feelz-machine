@@ -59,9 +59,7 @@ export default function AdminBoost() {
   const [saving, setSaving] = useState({});
   const [toast, setToast] = useState({ message: '', type: '' });
 
-  useEffect(() => {
-    if (!isAdmin) { navigate('/hub'); return; }
-  }, [isAdmin]);
+  useEffect(() => { if (isAdmin === false) { navigate('/hub'); return; } }, [isAdmin]);
 
   const showToast = (message, type = 'success') => {
     setToast({ message, type });

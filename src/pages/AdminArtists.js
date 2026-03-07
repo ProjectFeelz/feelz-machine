@@ -100,7 +100,7 @@ export default function AdminArtists() {
           ? 'Your plan has been updated to Free.'
           : `An admin has granted you ${tierSlug.charAt(0).toUpperCase() + tierSlug.slice(1)} tier access. Enjoy your features!`,
         metadata: { tier_slug: tierSlug },
-      }).catch(() => {}); // non-critical
+      }).then(() => {}); // non-critical
 
       setArtists(prev => prev.map(a => a.id === artistId ? { ...a, tier: tierSlug } : a));
       showToast(`${artistName} → ${tierSlug.toUpperCase()} ✓`, 'success');
@@ -248,3 +248,5 @@ export default function AdminArtists() {
     </div>
   );
 }
+
+
