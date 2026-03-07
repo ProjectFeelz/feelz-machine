@@ -394,7 +394,7 @@ function TrendingRow({ track, rank, currentTrack, isPlaying, onPlay, onArtist })
   };
 
   return (
-    <div className={`flex items-center space-x-3 p-2.5 rounded-xl transition ${isActive ? 'bg-white/[0.04]' : 'hover:bg-white/[0.02]'}`}>
+    <div onClick={onPlay} className={`flex items-center space-x-3 p-2.5 rounded-xl transition cursor-pointer ${isActive ? 'bg-white/[0.04]' : 'hover:bg-white/[0.02]'}`}>
       {/* Rank */}
       <div className="w-8 flex items-center justify-center flex-shrink-0">
         {rank <= 3 ? (
@@ -536,6 +536,7 @@ function AlbumTile({ album, navigate }) {
     </button>
   );
 }
+
 
 
 
