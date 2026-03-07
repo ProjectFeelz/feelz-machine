@@ -228,17 +228,6 @@ export default function HomePage() {
         </Section>
       )}
 
-      {/* Latest Tracks */}
-      {allTracks.length > 0 && (
-        <Section title="Latest Tracks" icon={TrendingUp} onSeeAll={() => navigate('/browse')}>
-          <div className="px-1">
-            {allTracks.slice(0, 10).map((track, i) => (
-              <TrackCard key={track.id} track={track} trackList={allTracks} index={i} />
-            ))}
-          </div>
-        </Section>
-      )}
-
       {/* Artists to Follow */}
       {topArtists.length > 0 && (
         <Section title="Artists to Follow" onSeeAll={() => navigate('/browse?tab=artists')}>
@@ -292,6 +281,10 @@ export default function HomePage() {
     </div>
   );
 }
+
+
+
+
 
 
 

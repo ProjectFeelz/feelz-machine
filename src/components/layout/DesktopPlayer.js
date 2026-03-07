@@ -36,8 +36,7 @@ export default function DesktopPlayer() {
         .eq('track_id', currentTrack.id).eq('user_id', user.id);
     } else {
       await supabase.from('track_likes').insert({
-        track_id: currentTrack.id, user_id: user.id,
-        artist_id: currentTrack.artist_id || null
+        track_id: currentTrack.id, user_id: user.id
       });
     }
   };
@@ -220,3 +219,5 @@ export default function DesktopPlayer() {
     </>
   );
 }
+
+
