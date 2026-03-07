@@ -1,8 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { downloadTrack } from '../utils/downloadTrack';
 import { useParams, useNavigate } from 'react-router-dom';
-import { usePaidPlayLimit } from '../hooks/usePaidPlayLimit';
-import PaidPlayGate from '../components/PaidPlayGate';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import { usePlayer } from '../contexts/PlayerContext';
