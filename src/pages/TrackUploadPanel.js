@@ -772,8 +772,6 @@ export default function TrackUploadPanel() {
               )}
             </div>
           )}
-
-      )}
         </div>
       )}
 
