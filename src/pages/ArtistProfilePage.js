@@ -565,11 +565,19 @@ export default function ArtistProfilePage() {
           <h2 className="text-lg font-bold mb-3" style={{ fontFamily: `"${headingFont}", sans-serif` }}>Collaborations</h2>
           <div className="space-y-2">
             {collabs.map(collab => (
-              <div key={collab.id} className="flex items-center space-x-3 p-3 rounded-xl" style={{ backgroundColor: `${textColor}05`, border: `1px solid ${textColor}08` }}>
-                <div className="w-10 h-10 rounded-lg overflow-hidden flex-shrink-0" style={{ backgroundColor: `${secondaryColor}20` }}>
+              <div
+                key={collab.id}
+                className="flex items-center space-x-3 p-3 rounded-xl cursor-pointer transition-opacity hover:opacity-80 active:opacity-60"
+                style={{ backgroundColor: `${textColor}05`, border: `1px solid ${textColor}08` }}
+                onClick={() => collab.tracks && handlePlayTrack(collab.tracks)}
+              >
+                <div className="w-10 h-10 rounded-lg overflow-hidden flex-shrink-0 relative group" style={{ backgroundColor: `${secondaryColor}20` }}>
                   {collab.tracks?.cover_artwork_url
                     ? <img src={collab.tracks.cover_artwork_url} alt="" className="w-full h-full object-cover" />
                     : <div className="w-full h-full flex items-center justify-center"><Music className="w-4 h-4" style={{ color: `${textColor}20` }} /></div>}
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg">
+                    <Play className="w-4 h-4 text-white" fill="white" />
+                  </div>
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium truncate" style={{ color: textColor }}>{collab.tracks?.title || 'Untitled'}</p>

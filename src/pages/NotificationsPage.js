@@ -57,29 +57,43 @@ function formatDate(date) {
 
 export default function NotificationsPage() {
   const navigate = useNavigate();
-  const { artist } = useAuth();
+  // Support both artists and plain listeners
+  const { artist, user } = useAuth();
   const { notifications, unreadCount, loading, markAsRead, markAllRead, clearAll, refetch } = useNotifications();
   const [filter, setFilter] = useState('all');
   const [allNotifs, setAllNotifs] = useState([]);
   const [pageLoading, setPageLoading] = useState(true);
 
-  // Fetch full history (more than the 20 the hook grabs)
   const fetchAll = useCallback(async () => {
-    if (!artist) return;
+    if (!user) return;
     setPageLoading(true);
-    const { data } = await supabase
-      .from('notifications')
-      .select(`
-        *,
-        from_artist:artists!notifications_from_artist_id_fkey(id, artist_name, profile_image_url, slug),
-        track:tracks!notifications_track_id_fkey(id, title, cover_artwork_url)
-      `)
-      .eq('artist_id', artist.id)
-      .order('created_at', { ascending: false })
-      .limit(100);
-    setAllNotifs(data || []);
+    try {
+      let query = supabase
+        .from('notifications')
+        .select(`
+          *,
+          from_artist:artists!notifications_from_artist_id_fkey(id, artist_name, profile_image_url, slug),
+          track:tracks!notifications_track_id_fkey(id, title, cover_artwork_url)
+        `)
+        .order('created_at', { ascending: false })
+        .limit(100);
+
+      if (artist) {
+        // Artist: fetch by artist_id
+        query = query.eq('artist_id', artist.id);
+      } else {
+        // Listener: fetch by user_id
+        query = query.eq('user_id', user.id);
+      }
+
+      const { data } = await query;
+      setAllNotifs(data || []);
+    } catch (err) {
+      console.error('Notifications fetch error:', err);
+      setAllNotifs([]);
+    }
     setPageLoading(false);
-  }, [artist]);
+  }, [artist, user]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
@@ -106,7 +120,8 @@ export default function NotificationsPage() {
     if (!notif.read) markAsRead(notif.id);
   };
 
-  if (!artist) {
+  // Not logged in at all
+  if (!user) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center">
         <p className="text-white/40 text-sm">Sign in to view notifications</p>
@@ -148,9 +163,9 @@ export default function NotificationsPage() {
           </div>
         </div>
 
-        {/* Filters */}
+        {/* Filters — only show collab filter for artists */}
         <div className="flex space-x-1 bg-white/[0.03] rounded-lg p-1 mb-6">
-          {FILTERS.map(f => (
+          {FILTERS.filter(f => artist || f.key !== 'collabs').map(f => (
             <button key={f.key} onClick={() => setFilter(f.key)}
               className={`flex-1 py-2 rounded-md text-xs font-medium transition ${
                 filter === f.key ? 'bg-white text-black' : 'text-white/40 hover:text-white/60'
@@ -171,6 +186,9 @@ export default function NotificationsPage() {
             <p className="text-white/30 text-sm">
               {filter === 'all' ? 'No notifications yet' : `No ${filter} notifications`}
             </p>
+            {!artist && filter === 'all' && (
+              <p className="text-white/15 text-xs mt-2">Follow artists to get notified when they post new music</p>
+            )}
           </div>
         ) : (
           <div className="space-y-6">
@@ -190,11 +208,10 @@ export default function NotificationsPage() {
                           !notif.read ? 'bg-white/[0.02] border border-white/[0.06]' : ''
                         }`}
                       >
-                        {/* Avatar or Icon */}
                         {notif.from_artist?.profile_image_url ? (
                           <div className="relative flex-shrink-0">
                             <img src={notif.from_artist.profile_image_url} alt="" className="w-10 h-10 rounded-full object-cover" />
-                            <div className={`absolute -bottom-0.5 -right-0.5 w-4.5 h-4.5 rounded-full ${config.bg} flex items-center justify-center border border-black`}>
+                            <div className={`absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full ${config.bg} flex items-center justify-center border border-black`}>
                               <Icon className={`w-2.5 h-2.5 ${config.color}`} />
                             </div>
                           </div>
@@ -204,7 +221,6 @@ export default function NotificationsPage() {
                           </div>
                         )}
 
-                        {/* Content */}
                         <div className="flex-1 min-w-0">
                           <p className={`text-sm leading-relaxed ${!notif.read ? 'text-white' : 'text-white/50'}`}>
                             {notif.title}
@@ -213,7 +229,6 @@ export default function NotificationsPage() {
                             <p className="text-xs text-white/30 mt-0.5 line-clamp-2">{notif.message}</p>
                           )}
 
-                          {/* YouTube embed for announcements */}
                           {notif.type === 'announcement' && notif.metadata?.youtube_id && (
                             <div className="mt-3 rounded-xl overflow-hidden bg-black"
                               style={{ aspectRatio: notif.metadata.is_short ? '9/16' : '16/9', maxHeight: notif.metadata.is_short ? 360 : 220 }}>
@@ -227,7 +242,6 @@ export default function NotificationsPage() {
                             </div>
                           )}
 
-                          {/* Track reference */}
                           {notif.track && (
                             <div className="flex items-center space-x-2 mt-2 p-2 bg-white/[0.03] rounded-lg">
                               {notif.track.cover_artwork_url ? (
@@ -249,7 +263,6 @@ export default function NotificationsPage() {
                           </div>
                         </div>
 
-                        {/* Unread dot */}
                         {!notif.read && (
                           <div className="w-2.5 h-2.5 rounded-full bg-white mt-2 flex-shrink-0" />
                         )}

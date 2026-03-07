@@ -35,6 +35,9 @@ export default function ChatRoomView() {
   const [joining, setJoining] = useState(false);
   const [showMembers, setShowMembers] = useState(false);
   const [modWarning, setModWarning] = useState('');
+  const [joinError, setJoinError] = useState('');
+// In catch: setJoinError('Unable to join — this room may be subscribers-only.')
+// In JSX above button: {joinError && <p className="text-xs text-red-400 mb-2">{joinError}</p>}
 
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);

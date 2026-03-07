@@ -98,10 +98,10 @@ export default function ProfilePage() {
       <div className="bg-white/[0.03] rounded-xl p-4 border border-white/[0.06] mb-4">
         <div className="flex items-center space-x-3">
           <div className="w-14 h-14 rounded-full bg-gradient-to-br from-purple-600 to-blue-600 flex items-center justify-center overflow-hidden">
-            {artist?.profile_image_url ? <img src={artist.profile_image_url} alt="" className="w-14 h-14 rounded-full object-cover" /> : <span className="text-xl font-bold text-white">{(artist?.artist_name || user.email)?.[0]?.toUpperCase()}</span>}
+            {artist?.profile_image_url ? <img src={artist.profile_image_url} alt="" className="w-14 h-14 rounded-full object-cover" /> : <span className="text-xl font-bold text-white">{(artist?.artist_name || profile?.display_name || user.email)?.[0]?.toUpperCase()}</span>}
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-base font-semibold text-white truncate">{artist?.artist_name || profile?.name || user.email}</p>
+            <p className="text-base font-semibold text-white truncate">{artist?.artist_name || profile?.display_name || user.email}</p>
             <p className="text-xs text-white/40 truncate">{user.email}</p>
             {isArtist && (
               <div className="flex items-center space-x-2 mt-1">
@@ -113,7 +113,8 @@ export default function ProfilePage() {
             )}
           </div>
         </div>
-        {/* Public profile link */}
+
+        {/* Artist: public profile link */}
         {isArtist && artist?.slug && (
           <div className="mt-3 flex items-center justify-between">
             <button onClick={() => nav(`/artist/${artist.slug}`)}
@@ -126,6 +127,27 @@ export default function ProfilePage() {
               <span>Copy share link</span>
             </button>
           </div>
+        )}
+
+        {/* Listener: edit profile button */}
+        {!isArtist && (
+        <div className="mt-3">
+          <button
+            onClick={() => navigate("/profile/edit")}
+            className="flex items-center space-x-1.5 text-xs text-white/40 hover:text-white/60 transition border border-white/[0.08] rounded-lg px-3 py-2"
+          >
+            <span>Edit Profile</span>
+          </button>
+        </div>
+      )}
+      {!isArtist && (
+          <button
+            onClick={() => nav('/profile/edit')}
+            className="mt-3 w-full flex items-center justify-between px-2 py-2 rounded-lg hover:bg-white/[0.04] transition"
+          >
+            <span className="text-xs text-white/40">Edit Profile</span>
+            <ChevronRight className="w-3.5 h-3.5 text-white/20" />
+          </button>
         )}
       </div>
 
@@ -260,10 +282,3 @@ export default function ProfilePage() {
     </div>
   );
 }
-
-
-
-
-
-
-

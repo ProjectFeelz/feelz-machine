@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import { PlayerProvider } from './contexts/PlayerContext';
 import AppLayout from './components/layout/AppLayout';
@@ -30,6 +30,7 @@ import AdminArtists from './pages/AdminArtists';
 import AdminAnalytics from './pages/AdminAnalytics';
 import AdminModeration from './pages/AdminModeration';
 import AdminBoost from './pages/AdminBoost';
+import UserProfilePage from './pages/UserProfilePage';
 
 // If we're at the root "/" serve the landing page standalone
 const isLanding = window.location.pathname === '/' || window.location.pathname === '';
@@ -64,8 +65,10 @@ export default function AppRouter() {
               <Route path="/library/playlists" element={<PlaylistsPage />} />
               <Route path="/library/playlists/:id" element={<PlaylistDetailPage />} />
               <Route path="/community" element={<FeedPage />} />
+              <Route path="/feed" element={<Navigate to="/community" replace />} />
               <Route path="/chat" element={<ChatRoomsPage />} />
               <Route path="/profile" element={<ProfilePage />} />
+              <Route path="/profile/edit" element={<UserProfilePage />} />
               <Route path="/notifications" element={<NotificationsPage />} />
               <Route path="/hub" element={<HubPage />} />
               <Route path="/admin" element={<AdminDashboard />} />
