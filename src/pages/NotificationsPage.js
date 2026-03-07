@@ -104,9 +104,6 @@ export default function NotificationsPage() {
 
   const handleClick = (notif) => {
     if (!notif.read) markAsRead(notif.id);
-    if (notif.type.startsWith('collab_')) navigate('/dashboard');
-    else if (notif.track?.id) navigate(`/track/${notif.track.id}`);
-    else if (notif.from_artist?.slug) navigate(`/artist/${notif.from_artist.slug}`);
   };
 
   if (!artist) {

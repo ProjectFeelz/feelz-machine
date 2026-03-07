@@ -7,7 +7,27 @@ import MiniPlayer from './MiniPlayer';
 import FullPlayer from './FullPlayer';
 import { usePlayer } from '../../contexts/PlayerContext';
 import { useAuth } from '../../contexts/AuthContext';
-import NotificationBell from '../NotificationBell';
+import { Bell } from 'lucide-react';
+import useNotifications from '../contexts/useNotifications';
+
+function MobileBellButton() {
+  const { unreadCount } = useNotifications();
+  const navigate = useNavigate();
+  return (
+    <div className="md:hidden fixed top-0 left-0 right-0 z-40 h-14 flex items-center justify-end px-4 pt-3">
+      <button
+        onClick={() => navigate('/notifications')}
+        className="relative w-9 h-9 flex items-center justify-center rounded-full hover:bg-white/[0.06] transition">
+        <Bell className="w-5 h-5 text-white/60" />
+        {unreadCount > 0 && (
+          <span className="absolute top-1 right-1 w-4 h-4 rounded-full bg-red-500 flex items-center justify-center text-[9px] font-bold text-white">
+            {unreadCount > 9 ? '9+' : unreadCount}
+          </span>
+        )}
+      </button>
+    </div>
+  );
+}
 
 export default function AppLayout() {
   const { currentTrack } = usePlayer();
@@ -29,9 +49,7 @@ export default function AppLayout() {
       <DesktopSidebar />
 
       {/* Mobile top bar (notification bell) */}
-      <div className="md:hidden fixed top-0 left-0 right-0 z-40 h-14 flex items-center justify-end px-4 pt-3">
-        <NotificationBell />
-      </div>
+      <MobileBellButton />
 
       {/* Main content */}
       <main

@@ -83,10 +83,10 @@ export default function ArtistProfilePage() {
       if (themeData) setTheme(themeData);
 
       const { data: trackData } = await supabase
-        .from('tracks').select('*, albums(title, cover_artwork_url)')
-        .eq('artist_id', artistData.id).eq('is_published', true)
-        .order('engagement_score', { ascending: false });
-      setTracks(trackData || []);
+  .from('tracks').select('*, albums(title, cover_artwork_url)')
+  .eq('artist_id', artistData.id).eq('is_published', true)
+  .order('engagement_score', { ascending: false }).limit(10);
+setTracks(trackData || []);
 
       if (user) {
         const { data: likes } = await supabase.from('track_likes').select('track_id').eq('user_id', user.id);
@@ -319,7 +319,7 @@ export default function ArtistProfilePage() {
   const socialEntries = Object.entries(socials).filter(([_, v]) => v);
   const headingFont = theme?.heading_font || 'Inter';
   const bodyFont = theme?.body_font || 'Inter';
-  const visibleTracks = showAllTracks ? tracks : tracks.slice(0, 5);
+  const visibleTracks = showAllTracks ? tracks : tracks.slice(0, 6);
 
   return (
     <div className="min-h-screen pb-32" style={{ backgroundColor: bgColor, color: textColor, fontFamily: `"${bodyFont}", sans-serif`, ...themeStyles }}>

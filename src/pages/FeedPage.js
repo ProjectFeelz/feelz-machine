@@ -173,8 +173,8 @@ export default function FeedPage() {
                     <span className="text-[10px] font-bold text-white">{i + 1}</span>
                   </div>
                 </div>
-                <p className="text-xs font-medium text-white truncate">{track.title}</p>
-                <p className="text-[10px] text-white/30 truncate">{track.artists?.artist_name}</p>
+                <p className="text-sm font-medium text-white truncate">{track.title}</p>
+                <p className="text-xs text-white/40 truncate">{track.artists?.artist_name}</p>
               </button>
             ))}
           </div>

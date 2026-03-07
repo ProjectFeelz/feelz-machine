@@ -27,10 +27,9 @@ export default function ArtistDashboard() {
 
       let streamCount = 0, dlCount = 0;
       if (trackIds.length > 0) {
-        const { count: sc } = await supabase.from('streams').select('*', { count: 'exact', head: true }).in('track_id', trackIds);
-        const { count: dc } = await supabase.from('downloads').select('*', { count: 'exact', head: true }).in('track_id', trackIds);
-        streamCount = sc || 0;
-        dlCount = dc || 0;
+        const { data: streamData } = await supabase.from('tracks').select('stream_count, download_count').eq('artist_id', artist.id);
+        streamCount = (streamData || []).reduce((s, t) => s + (t.stream_count || 0), 0);
+        dlCount = (streamData || []).reduce((s, t) => s + (t.download_count || 0), 0);
       }
 
       const { count: followCount } = await supabase.from('follows').select('*', { count: 'exact', head: true }).eq('artist_id', artist.id);
@@ -81,7 +80,7 @@ export default function ArtistDashboard() {
 
   return (
     <div className="min-h-screen bg-black text-white">
-      <div className="max-w-4xl mx-auto px-4 py-6 pb-32">
+      <div className="max-w-4xl mx-auto px-6 py-8 pb-32">
         {/* Header */}
         <div className="flex items-center space-x-3 mb-6">
           <button onClick={() => navigate('/')} className="w-9 h-9 flex items-center justify-center rounded-full bg-white/[0.06] hover:bg-white/[0.1] transition">
@@ -131,14 +130,14 @@ export default function ArtistDashboard() {
                 <div className="flex justify-center py-16"><Loader className="w-6 h-6 animate-spin text-white/30" /></div>
               ) : (
                 <>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                     {statCards.map(({ icon: Icon, label, value, color }) => (
-                      <div key={label} className="bg-white/[0.03] rounded-xl p-4 border border-white/[0.06]">
-                        <div className="flex items-center justify-between mb-2">
-                          <Icon className={`w-5 h-5 ${color}`} />
-                          <span className="text-2xl font-bold text-white">{value.toLocaleString()}</span>
+                      <div key={label} className="bg-white/[0.03] rounded-xl p-5 border border-white/[0.06]">
+                        <div className="flex items-center justify-between mb-3">
+                          <Icon className={`w-6 h-6 ${color}`} />
+                          <span className="text-3xl font-bold text-white">{value.toLocaleString()}</span>
                         </div>
-                        <p className="text-xs text-white/40">{label}</p>
+                        <p className="text-sm text-white/40">{label}</p>
                       </div>
                     ))}
                   </div>

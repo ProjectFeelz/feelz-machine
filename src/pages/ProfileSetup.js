@@ -127,7 +127,7 @@ export default function ProfileSetup() {
   if (step === 0) {
     return (
       <div className="min-h-screen bg-black flex flex-col items-center justify-center px-6 py-12">
-        <div className="w-full max-w-sm">
+        <div className="w-full max-w-md">
           <div className="text-center mb-10">
             <div className="w-14 h-14 rounded-2xl bg-white/[0.06] flex items-center justify-center mx-auto mb-4">
               <Music className="w-7 h-7 text-white/60" />
@@ -164,7 +164,7 @@ export default function ProfileSetup() {
             </button>
           </div>
 
-          <p className="text-center text-xs text-white/20 mt-8">
+          <p className="text-center text-sm text-white/20 mt-8">
             You can always upgrade to an artist account later
           </p>
         </div>
@@ -176,7 +176,7 @@ export default function ProfileSetup() {
   if (step === 1) {
     return (
       <div className="min-h-screen bg-black flex flex-col items-center justify-center px-6 py-12">
-        <div className="w-full max-w-sm">
+        <div className="w-full max-w-md">
           <button onClick={() => setStep(0)}
             className="flex items-center space-x-2 text-white/40 hover:text-white/60 mb-8 transition">
             <ArrowLeft className="w-4 h-4" />
@@ -213,12 +213,12 @@ export default function ProfileSetup() {
                   <input type="file" accept="image/*" onChange={handleImageChange} className="hidden" />
                 </label>
               </div>
-              <p className="text-xs text-white/30">Profile photo (optional)</p>
+              <p className="text-sm text-white/30">Profile photo (optional)</p>
             </div>
 
             {/* Artist name */}
             <div>
-              <label className="block text-xs font-medium text-white/50 mb-2">Artist Name *</label>
+              <label className="block text-sm font-medium text-white/50 mb-2">Artist Name *</label>
               <input
                 type="text"
                 value={artistName}
@@ -231,7 +231,7 @@ export default function ProfileSetup() {
 
             {/* Bio */}
             <div>
-              <label className="block text-xs font-medium text-white/50 mb-2">Bio (optional)</label>
+              <label className="block text-sm font-medium text-white/50 mb-2">Bio (optional)</label>
               <textarea
                 value={bio}
                 onChange={(e) => setBio(e.target.value)}
@@ -258,7 +258,7 @@ export default function ProfileSetup() {
   // Step 2 — Listener setup
   return (
     <div className="min-h-screen bg-black flex flex-col items-center justify-center px-6 py-12">
-      <div className="w-full max-w-sm">
+      <div className="w-full max-w-md">
         <button onClick={() => setStep(0)}
           className="flex items-center space-x-2 text-white/40 hover:text-white/60 mb-8 transition">
           <ArrowLeft className="w-4 h-4" />
@@ -281,7 +281,7 @@ export default function ProfileSetup() {
 
         <div className="space-y-5">
           <div>
-            <label className="block text-xs font-medium text-white/50 mb-2">Display Name (optional)</label>
+            <label className="block text-sm font-medium text-white/50 mb-2">Display Name (optional)</label>
             <input
               type="text"
               value={displayName}
@@ -290,7 +290,7 @@ export default function ProfileSetup() {
               maxLength={40}
               className="w-full px-4 py-3 bg-white/[0.04] border border-white/[0.08] rounded-xl text-white placeholder-white/20 text-sm focus:outline-none focus:border-white/[0.2] transition"
             />
-            <p className="text-xs text-white/25 mt-1.5">Defaults to your email username</p>
+            <p className="text-sm text-white/25 mt-1.5">Defaults to your email username</p>
           </div>
 
           <button
@@ -302,7 +302,7 @@ export default function ProfileSetup() {
           </button>
         </div>
 
-        <p className="text-center text-xs text-white/20 mt-8">
+        <p className="text-center text-sm text-white/20 mt-8">
           Want to share your music?{' '}
           <button onClick={() => setStep(1)} className="text-white/40 hover:text-white/60 underline transition">
             Create an artist profile instead

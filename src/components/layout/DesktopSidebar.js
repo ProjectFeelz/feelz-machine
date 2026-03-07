@@ -2,7 +2,8 @@ import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Home, Search, Library, LayoutDashboard, User, Users, MessageCircle } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import NotificationBell from '../NotificationBell';
+import { Bell } from 'lucide-react';
+import useNotifications from '../../contexts/useNotifications';
 
 const navItems = [
   { path: '/', icon: Home, label: 'Home' },
@@ -21,6 +22,26 @@ function Logo() {
       <text x="32" y="40" fontFamily="Arial Black, Impact, sans-serif" fontSize="26" fontWeight="900" fill="#8CAB2E" textAnchor="middle" letterSpacing="-2">FM</text>
       <rect x="16" y="44" width="32" height="2.5" rx="1.25" fill="#8CAB2E" opacity="0.4"/>
     </svg>
+  );
+}
+
+function DesktopNotifButton() {
+  const { unreadCount } = useNotifications();
+  const navigate = useNavigate();
+  return (
+    <button
+      onClick={() => navigate('/notifications')}
+      className="w-full flex items-center justify-between px-3 py-2 rounded-xl hover:bg-white/[0.04] transition">
+      <span className="text-xs text-white/30 font-medium">Notifications</span>
+      <div className="relative">
+        <Bell className="w-4 h-4 text-white/30" />
+        {unreadCount > 0 && (
+          <span className="absolute -top-1.5 -right-1.5 w-3.5 h-3.5 rounded-full bg-red-500 flex items-center justify-center text-[8px] font-bold text-white">
+            {unreadCount > 9 ? '9+' : unreadCount}
+          </span>
+        )}
+      </div>
+    </button>
   );
 }
 
@@ -96,10 +117,7 @@ export default function DesktopSidebar() {
         <div className="mx-2 mb-3 h-px bg-white/[0.05]" />
 
         {/* Notifications row */}
-        <div className="flex items-center justify-between px-3 py-2 rounded-xl hover:bg-white/[0.03] transition">
-          <span className="text-xs text-white/30 font-medium">Notifications</span>
-          <NotificationBell />
-        </div>
+        <DesktopNotifButton />
 
         {/* Artist card */}
         {artist && (
