@@ -78,6 +78,7 @@ export default function AppRouter() {
               <Route path="/admin/moderation" element={<AdminModeration />} />
               <Route path="/admin/broadcast" element={<AdminBroadcast />} />
               <Route path="/album/:id" element={<AlbumDetailPage />} />
+              <Route path="/terms" element={<TermsPage />} />
             </Route>
           </Routes>
         </PlayerProvider>

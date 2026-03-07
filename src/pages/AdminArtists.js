@@ -3,8 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import {
-  Mic2, ChevronLeft, Loader, Search, Music, Play,
-  Users, BarChart3, ChevronRight, ExternalLink
+  Mic2, ChevronLeft, Loader, Search, Music,
+  Users, Check, AlertCircle
 } from 'lucide-react';
 
 export default function AdminArtists() {
@@ -14,6 +14,13 @@ export default function AdminArtists() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState('newest');
+  const [grantingId, setGrantingId] = useState(null);
+  const [toast, setToast] = useState(null); // { message, type: 'success'|'error' }
+
+  const showToast = (message, type = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3000);
+  };
 
   const fetchArtists = useCallback(async () => {
     setLoading(true);
@@ -23,32 +30,19 @@ export default function AdminArtists() {
         .select('*')
         .order('created_at', { ascending: false });
 
-      // Fetch track counts per artist
-      const { data: trackCounts } = await supabase
-        .from('tracks')
-        .select('artist_id');
-
+      const { data: trackCounts } = await supabase.from('tracks').select('artist_id');
       const countMap = {};
-      (trackCounts || []).forEach(t => {
-        countMap[t.artist_id] = (countMap[t.artist_id] || 0) + 1;
-      });
+      (trackCounts || []).forEach(t => { countMap[t.artist_id] = (countMap[t.artist_id] || 0) + 1; });
 
-      // Fetch follower counts
-      const { data: followerCounts } = await supabase
-        .from('follows')
-        .select('artist_id');
-
+      const { data: followerCounts } = await supabase.from('follows').select('artist_id');
       const followerMap = {};
-      (followerCounts || []).forEach(f => {
-        followerMap[f.artist_id] = (followerMap[f.artist_id] || 0) + 1;
-      });
+      (followerCounts || []).forEach(f => { followerMap[f.artist_id] = (followerMap[f.artist_id] || 0) + 1; });
 
       const enriched = (artistData || []).map(a => ({
         ...a,
         trackCount: countMap[a.id] || 0,
         followerCount: followerMap[a.id] || 0,
       }));
-
       setArtists(enriched);
     } catch (err) {
       console.error('Fetch artists error:', err);
@@ -61,23 +55,27 @@ export default function AdminArtists() {
     fetchArtists();
   }, [isAdmin, navigate, fetchArtists]);
 
-  const grantTier = async (artistId, tierSlug) => {
+  const grantTier = async (artistId, tierSlug, artistName) => {
+    setGrantingId(artistId);
     try {
-      const { data: tier } = await supabase
-        .from('platform_tiers')
-        .select('id')
-        .eq('slug', tierSlug)
-        .single();
-      if (!tier) return;
+      const { data: tier, error: tierErr } = await supabase
+        .from('platform_tiers').select('id').eq('slug', tierSlug).single();
 
-      await supabase
+      if (tierErr || !tier) {
+        showToast(`Could not find tier "${tierSlug}" in database`, 'error');
+        setGrantingId(null);
+        return;
+      }
+
+      const { error: cancelErr } = await supabase
         .from('artist_tier_subscriptions')
         .update({ status: 'cancelled', updated_at: new Date().toISOString() })
-        .eq('artist_id', artistId)
-        .eq('status', 'active');
+        .eq('artist_id', artistId).eq('status', 'active');
+
+      if (cancelErr) console.warn('Cancel existing subs warning:', cancelErr.message);
 
       if (tierSlug !== 'free') {
-        await supabase.from('artist_tier_subscriptions').insert({
+        const { error: insertErr } = await supabase.from('artist_tier_subscriptions').insert({
           artist_id: artistId,
           tier_id: tier.id,
           status: 'active',
@@ -85,12 +83,14 @@ export default function AdminArtists() {
           started_at: new Date().toISOString(),
           expires_at: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
         });
+        if (insertErr) throw new Error(`Subscription insert: ${insertErr.message}`);
       }
 
-      await supabase
+      const { error: updateErr } = await supabase
         .from('artists')
         .update({ tier: tierSlug, current_tier_id: tierSlug !== 'free' ? tier.id : null })
         .eq('id', artistId);
+      if (updateErr) throw new Error(`Artist update: ${updateErr.message}`);
 
       await supabase.from('notifications').insert({
         artist_id: artistId,
@@ -100,18 +100,19 @@ export default function AdminArtists() {
           ? 'Your plan has been updated to Free.'
           : `An admin has granted you ${tierSlug.charAt(0).toUpperCase() + tierSlug.slice(1)} tier access. Enjoy your features!`,
         metadata: { tier_slug: tierSlug },
-      });
+      }).catch(() => {}); // non-critical
 
       setArtists(prev => prev.map(a => a.id === artistId ? { ...a, tier: tierSlug } : a));
+      showToast(`${artistName} → ${tierSlug.toUpperCase()} ✓`, 'success');
     } catch (err) {
       console.error('Grant tier error:', err);
+      showToast(`Failed: ${err.message}`, 'error');
     }
+    setGrantingId(null);
   };
 
   const filtered = artists
-    .filter(a =>
-      (a.artist_name || '').toLowerCase().includes(searchQuery.toLowerCase())
-    )
+    .filter(a => (a.artist_name || '').toLowerCase().includes(searchQuery.toLowerCase()))
     .sort((a, b) => {
       if (sortBy === 'newest') return new Date(b.created_at) - new Date(a.created_at);
       if (sortBy === 'tracks') return b.trackCount - a.trackCount;
@@ -124,6 +125,21 @@ export default function AdminArtists() {
 
   return (
     <div className="pt-14 md:pt-0 pb-32 px-4 max-w-3xl mx-auto">
+      {/* Toast */}
+      {toast && (
+        <div className={`fixed top-6 left-1/2 -translate-x-1/2 z-50 flex items-center space-x-2 px-4 py-3 rounded-xl shadow-2xl text-sm font-medium transition-all ${
+          toast.type === 'success'
+            ? 'bg-white text-black'
+            : 'bg-red-500/90 text-white'
+        }`}>
+          {toast.type === 'success'
+            ? <Check className="w-4 h-4 flex-shrink-0" />
+            : <AlertCircle className="w-4 h-4 flex-shrink-0" />
+          }
+          <span>{toast.message}</span>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center space-x-3 mb-6">
         <button onClick={() => navigate('/hub')} className="p-2 -ml-2 hover:bg-white/[0.05] rounded-lg transition">
@@ -139,18 +155,14 @@ export default function AdminArtists() {
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20" />
           <input
-            type="text"
-            value={searchQuery}
+            type="text" value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search artists..."
             className="w-full pl-10 pr-4 py-3 bg-white/[0.04] rounded-xl text-sm text-white placeholder:text-white/20 border border-white/[0.06] focus:border-white/[0.15] focus:outline-none transition"
           />
         </div>
-        <select
-          value={sortBy}
-          onChange={(e) => setSortBy(e.target.value)}
-          className="px-3 py-3 bg-white/[0.04] rounded-xl text-xs text-white/60 border border-white/[0.06] focus:outline-none appearance-none"
-        >
+        <select value={sortBy} onChange={(e) => setSortBy(e.target.value)}
+          className="px-3 py-3 bg-white/[0.04] rounded-xl text-xs text-white/60 border border-white/[0.06] focus:outline-none appearance-none">
           <option value="newest">Newest</option>
           <option value="tracks">Most Tracks</option>
           <option value="followers">Most Followers</option>
@@ -170,64 +182,69 @@ export default function AdminArtists() {
         </div>
       ) : (
         <div className="space-y-2">
-          {filtered.map(artist => (
-            <button
-              key={artist.id}
-              onClick={() => navigate(`/profile/${artist.slug || artist.id}`)}
-              className="w-full bg-white/[0.03] rounded-xl p-4 border border-white/[0.06] hover:bg-white/[0.06] transition text-left group"
-            >
+          {filtered.map(a => (
+            <div key={a.id}
+              className="w-full bg-white/[0.03] rounded-xl p-4 border border-white/[0.06] hover:bg-white/[0.05] transition">
               <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-3 min-w-0">
-                  <div className="w-12 h-12 rounded-full bg-white/[0.08] flex items-center justify-center flex-shrink-0">
-                    <span className="text-base font-bold text-white/30">
-                      {artist.artist_name?.charAt(0)?.toUpperCase() || '?'}
-                    </span>
+                {/* Artist info — clickable */}
+                <button onClick={() => navigate(`/profile/${a.slug || a.id}`)}
+                  className="flex items-center space-x-3 min-w-0 flex-1 text-left">
+                  <div className="w-12 h-12 rounded-full bg-white/[0.08] flex items-center justify-center flex-shrink-0 overflow-hidden">
+                    {a.profile_image_url
+                      ? <img src={a.profile_image_url} alt="" className="w-full h-full object-cover" />
+                      : <span className="text-base font-bold text-white/30">{a.artist_name?.charAt(0)?.toUpperCase() || '?'}</span>
+                    }
                   </div>
                   <div className="min-w-0">
                     <div className="flex items-center space-x-2">
-                      <p className="text-sm font-medium text-white truncate">{artist.artist_name || 'Unnamed'}</p>
-                      {artist.is_master && (
-                        <span className="px-1.5 py-0.5 bg-purple-500/20 text-purple-300 text-[9px] font-bold rounded">MASTER</span>
+                      <p className="text-sm font-medium text-white truncate">{a.artist_name || 'Unnamed'}</p>
+                      {a.is_master && (
+                        <span className="px-1.5 py-0.5 bg-purple-500/20 text-purple-300 text-[9px] font-bold rounded flex-shrink-0">MASTER</span>
                       )}
                     </div>
                     <div className="flex items-center space-x-4 mt-1">
                       <span className="flex items-center space-x-1 text-[11px] text-white/25">
-                        <Music className="w-3 h-3" />
-                        <span>{artist.trackCount} tracks</span>
+                        <Music className="w-3 h-3" /><span>{a.trackCount} tracks</span>
                       </span>
                       <span className="flex items-center space-x-1 text-[11px] text-white/25">
-                        <Users className="w-3 h-3" />
-                        <span>{artist.followerCount} followers</span>
+                        <Users className="w-3 h-3" /><span>{a.followerCount} followers</span>
                       </span>
                       <span className="text-[11px] text-white/20">
-                        Joined {new Date(artist.created_at).toLocaleDateString()}
+                        {new Date(a.created_at).toLocaleDateString()}
                       </span>
                     </div>
                   </div>
-                </div>
-                <div className="flex items-center space-x-2 flex-shrink-0" onClick={e => e.stopPropagation()}>
+                </button>
+
+                {/* Tier control */}
+                <div className="flex items-center space-x-2 flex-shrink-0 ml-3">
                   <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                    artist.tier === 'premium' ? 'bg-yellow-500/20 text-yellow-400' :
-                    artist.tier === 'pro' ? 'bg-purple-500/20 text-purple-400' :
+                    a.tier === 'premium' || a.tier === 'master' ? 'bg-yellow-500/20 text-yellow-400' :
+                    a.tier === 'pro' ? 'bg-purple-500/20 text-purple-400' :
                     'bg-white/10 text-white/30'
-                  }`}>{artist.tier || 'free'}</span>
-                  <select
-                    value={artist.tier || 'free'}
-                    onChange={(e) => grantTier(artist.id, e.target.value)}
-                    className="text-[10px] bg-white/[0.06] text-white/50 rounded-lg px-2 py-1 border border-white/[0.08] focus:outline-none cursor-pointer"
-                    title="Grant tier">
-                    <option value="free">Free</option>
-                    <option value="pro">Pro</option>
-                    <option value="premium">Premium</option>
-                  </select>
+                  }`}>{a.tier || 'free'}</span>
+
+                  {grantingId === a.id ? (
+                    <div className="w-8 h-8 flex items-center justify-center">
+                      <Loader className="w-4 h-4 animate-spin text-white/30" />
+                    </div>
+                  ) : (
+                    <select
+                      value={a.tier === 'master' ? 'premium' : (a.tier || 'free')}
+                      onChange={(e) => grantTier(a.id, e.target.value, a.artist_name)}
+                      className="text-[10px] bg-white/[0.06] text-white/50 rounded-lg px-2 py-1.5 border border-white/[0.08] focus:outline-none cursor-pointer hover:bg-white/[0.10] transition"
+                      title="Grant tier">
+                      <option value="free">Free</option>
+                      <option value="pro">Pro</option>
+                      <option value="premium">Premium</option>
+                    </select>
+                  )}
                 </div>
               </div>
-            </button>
+            </div>
           ))}
         </div>
       )}
     </div>
   );
 }
-
-

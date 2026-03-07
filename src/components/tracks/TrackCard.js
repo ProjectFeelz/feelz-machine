@@ -22,6 +22,18 @@ export default function TrackCard({ track, trackList = [], showArtwork = true, i
   const [addingTo, setAddingTo] = useState(null);
   const [addedTo, setAddedTo] = useState({});
   const menuRef = useRef(null);
+  const { checkPlayLimit, recordPlay } = usePaidPlayLimit();
+const [limitedTrack, setLimitedTrack] = useState(null);
+
+// In handlePlay:
+const { allowed } = checkPlayLimit(track);
+if (!allowed) { setLimitedTrack(track); return; }
+recordPlay(track.id);
+// ...then play normally
+
+// In JSX:
+<PaidPlayGate track={limitedTrack} artist={track.artists} onClose={() => setLimitedTrack(null)}
+  onPurchaseComplete={(t) => { resetPlayCount(t.id); playTrack(t); setLimitedTrack(null); }} />
 
   useEffect(() => {
     if (!user || !track.id) return;
