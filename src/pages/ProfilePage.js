@@ -133,7 +133,7 @@ export default function ProfilePage() {
         {!isArtist && (
         <div className="mt-3">
           <button
-            onClick={() => navigate("/profile/edit")}
+            onClick={() => nav("/profile/edit")}
             className="flex items-center space-x-1.5 text-xs text-white/40 hover:text-white/60 transition border border-white/[0.08] rounded-lg px-3 py-2"
           >
             <span>Edit Profile</span>
@@ -282,4 +282,6 @@ export default function ProfilePage() {
     </div>
   );
 }
+
+
 
