@@ -17,10 +17,10 @@ const TYPE_CONFIG = {
   milestone_500:    { icon: TrendingUp,     color: 'text-yellow-400', bg: 'bg-yellow-500/10' },
   milestone_1k:     { icon: TrendingUp,     color: 'text-orange-400', bg: 'bg-orange-500/10' },
   milestone_10k:    { icon: TrendingUp,     color: 'text-orange-400', bg: 'bg-orange-500/10' },
-  download:         { icon: Download,        color: 'text-green-400',  bg: 'bg-green-500/10' },
-  announcement:     { icon: Megaphone,       color: 'text-yellow-400', bg: 'bg-yellow-500/10' },
-  new_post:         { icon: Music,           color: 'text-green-400',  bg: 'bg-green-500/10' },
-  mention:          { icon: MessageCircle,   color: 'text-purple-400', bg: 'bg-purple-500/10' },
+  download:         { icon: Download,       color: 'text-green-400',  bg: 'bg-green-500/10' },
+  announcement:     { icon: Megaphone,      color: 'text-yellow-400', bg: 'bg-yellow-500/10' },
+  new_post:         { icon: Music,          color: 'text-green-400',  bg: 'bg-green-500/10' },
+  mention:          { icon: MessageCircle,  color: 'text-purple-400', bg: 'bg-purple-500/10' },
 };
 
 function timeAgo(date) {
@@ -38,12 +38,9 @@ export default function NotificationBell() {
   const dropdownRef = useRef(null);
   const { notifications, unreadCount, markAsRead, markAllRead } = useNotifications();
 
-  // Close on outside click
   useEffect(() => {
     const handleClick = (e) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
-        setOpen(false);
-      }
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) setOpen(false);
     };
     if (open) document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
@@ -51,29 +48,47 @@ export default function NotificationBell() {
 
   const handleNotificationClick = (notif) => {
     if (!notif.read) markAsRead(notif.id);
-
-    // Navigate based on type
-    if (notif.type === 'collab_request' || notif.type === 'collab_accepted' || notif.type === 'collab_declined') {
-      navigate('/dashboard');
-    } else if (notif.track_id && notif.track?.id) {
-      navigate(`/track/${notif.track.id}`);
-    } else if (notif.from_artist?.slug) {
-      navigate(`/artist/${notif.from_artist.slug}`);
-    }
     setOpen(false);
+
+    // Collab types → dashboard
+    if (['collab_request', 'collab_accepted', 'collab_declined'].includes(notif.type)) {
+      navigate('/dashboard');
+      return;
+    }
+    // Has a linked track
+    if (notif.metadata?.track_id) {
+      navigate(`/browse`);
+      return;
+    }
+    // Has a linked post
+    if (notif.metadata?.post_id) {
+      navigate('/community');
+      return;
+    }
+    // Has a from_artist with valid slug
+    if (notif.from_artist?.slug && notif.from_artist.slug !== 'undefined') {
+      navigate(`/artist/${notif.from_artist.slug}`);
+      return;
+    }
+    // Metadata artist slug
+    if (notif.metadata?.artist_slug) {
+      navigate(`/artist/${notif.metadata.artist_slug}`);
+      return;
+    }
+    // Default: go to notifications page
+    navigate('/notifications');
   };
 
-  // Show max 8 in dropdown
   const preview = notifications.slice(0, 8);
 
   return (
     <div ref={dropdownRef} className="relative">
-      {/* Bell Button */}
+      {/* Bell button */}
       <button
         onClick={() => setOpen(!open)}
         className="relative w-9 h-9 flex items-center justify-center rounded-full bg-white/[0.06] hover:bg-white/[0.1] transition"
       >
-        <Bell className="w-4.5 h-4.5 text-white/60" />
+        <Bell className="w-4 h-4 text-white/60" />
         {unreadCount > 0 && (
           <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 bg-white text-black text-[9px] font-bold rounded-full flex items-center justify-center">
             {unreadCount > 99 ? '99+' : unreadCount}
@@ -81,26 +96,33 @@ export default function NotificationBell() {
         )}
       </button>
 
-      {/* Dropdown */}
+      {/* Dropdown — fixed on mobile, anchored below-left on desktop */}
       {open && (
-        <div className="fixed md:absolute left-4 right-4 md:left-auto md:right-0 md:bottom-full md:mb-2 md:w-96 bottom-20 w-auto bg-[#111] border border-white/[0.1] rounded-xl shadow-2xl z-[200] overflow-hidden">
+        <div
+          className="fixed md:absolute z-[200] overflow-hidden rounded-xl shadow-2xl border border-white/[0.1]"
+          style={{
+            backgroundColor: '#111',
+            // Mobile: full width with margin
+            left: typeof window !== 'undefined' && window.innerWidth < 768 ? '1rem' : undefined,
+            right: typeof window !== 'undefined' && window.innerWidth < 768 ? '1rem' : 0,
+            bottom: typeof window !== 'undefined' && window.innerWidth < 768 ? '5rem' : undefined,
+            top: typeof window !== 'undefined' && window.innerWidth < 768 ? undefined : '100%',
+            marginTop: typeof window !== 'undefined' && window.innerWidth < 768 ? undefined : '0.5rem',
+            width: typeof window !== 'undefined' && window.innerWidth < 768 ? undefined : '24rem',
+          }}
+        >
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.06]">
             <h3 className="text-sm font-semibold text-white">Notifications</h3>
-            <div className="flex items-center space-x-2">
-              {unreadCount > 0 && (
-                <button
-                  onClick={markAllRead}
-                  className="text-[10px] text-white/40 hover:text-white/60 flex items-center space-x-1 transition"
-                >
-                  <CheckCheck className="w-3 h-3" />
-                  <span>Mark all read</span>
-                </button>
-              )}
-            </div>
+            {unreadCount > 0 && (
+              <button onClick={markAllRead} className="text-[10px] text-white/40 hover:text-white/60 flex items-center space-x-1 transition">
+                <CheckCheck className="w-3 h-3" />
+                <span>Mark all read</span>
+              </button>
+            )}
           </div>
 
-          {/* Notifications List */}
+          {/* List */}
           <div className="max-h-[400px] overflow-y-auto">
             {preview.length === 0 ? (
               <div className="text-center py-10">
@@ -111,16 +133,12 @@ export default function NotificationBell() {
               preview.map((notif) => {
                 const config = TYPE_CONFIG[notif.type] || TYPE_CONFIG.new_follower;
                 const Icon = config.icon;
-
                 return (
                   <button
                     key={notif.id}
                     onClick={() => handleNotificationClick(notif)}
-                    className={`w-full flex items-start space-x-3 px-4 py-3 hover:bg-white/[0.04] transition text-left ${
-                      !notif.read ? 'bg-white/[0.02]' : ''
-                    }`}
+                    className={`w-full flex items-start space-x-3 px-4 py-3 hover:bg-white/[0.04] transition text-left ${!notif.read ? 'bg-white/[0.02]' : ''}`}
                   >
-                    {/* Icon or Avatar */}
                     {notif.from_artist?.avatar_url ? (
                       <div className="relative flex-shrink-0">
                         <img src={notif.from_artist.avatar_url} alt="" className="w-9 h-9 rounded-full object-cover" />
@@ -133,32 +151,16 @@ export default function NotificationBell() {
                         <Icon className={`w-4 h-4 ${config.color}`} />
                       </div>
                     )}
-
-                    {/* Content */}
                     <div className="flex-1 min-w-0">
                       <p className={`text-xs leading-relaxed ${!notif.read ? 'text-white' : 'text-white/50'}`}>
                         <span className="font-semibold">{notif.title}</span>
                       </p>
                       {notif.message && (
-                        <p className="text-[11px] text-white/30 mt-0.5 whitespace-pre-wrap">{notif.message}</p>
-                      )}
-                      {notif.metadata?.youtube_id && (
-                        <div className="mt-2 rounded-lg overflow-hidden aspect-video bg-black">
-                          <iframe
-                            src={`https://www.youtube.com/embed/${notif.metadata.youtube_id}`}
-                            className="w-full h-full"
-                            allowFullScreen
-                            title="notification video"
-                          />
-                        </div>
+                        <p className="text-[11px] text-white/30 mt-0.5 line-clamp-2">{notif.message}</p>
                       )}
                       <p className="text-[10px] text-white/20 mt-1">{timeAgo(notif.created_at)}</p>
                     </div>
-
-                    {/* Unread dot */}
-                    {!notif.read && (
-                      <div className="w-2 h-2 rounded-full bg-white mt-1.5 flex-shrink-0" />
-                    )}
+                    {!notif.read && <div className="w-2 h-2 rounded-full bg-white mt-1.5 flex-shrink-0" />}
                   </button>
                 );
               })

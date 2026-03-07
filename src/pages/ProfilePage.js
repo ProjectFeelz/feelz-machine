@@ -8,11 +8,21 @@ import PaymentSettings from '../components/PaymentSettings';
 import TierGate from '../components/TierGate';
 import { TierBadge } from '../components/TierGate';
 
+const TikTokIcon = ({ className }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="currentColor">
+    <path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.89-2.89 2.89 2.89 0 012.89-2.89c.28 0 .54.04.79.1V9.01a6.33 6.33 0 00-.79-.05 6.34 6.34 0 00-6.34 6.34 6.34 6.34 0 006.34 6.34 6.34 6.34 0 006.33-6.34V8.75a8.16 8.16 0 004.77 1.52V6.82a4.85 4.85 0 01-1-.13z"/>
+  </svg>
+);
+const TikTokIcon = ({ className }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="currentColor">
+    <path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.89-2.89 2.89 2.89 0 012.89-2.89c.28 0 .54.04.79.1V9.01a6.33 6.33 0 00-.79-.05 6.34 6.34 0 00-6.34 6.34 6.34 6.34 0 006.34 6.34 6.34 6.34 0 006.33-6.34V8.75a8.16 8.16 0 004.77 1.52V6.82a4.85 4.85 0 01-1-.13z"/>
+  </svg>
+);
 const SOCIALS = [
   { key: 'instagram', label: 'Instagram', icon: Instagram, ph: 'https://instagram.com/yourname' },
   { key: 'twitter', label: 'X (Twitter)', icon: Twitter, ph: 'https://x.com/yourname' },
   { key: 'youtube', label: 'YouTube', icon: Youtube, ph: 'https://youtube.com/yourchannel' },
-  { key: 'tiktok', label: 'TikTok', icon: MessageCircle, ph: 'https://tiktok.com/@yourname' },
+  { key: 'tiktok', label: 'TikTok', icon: TikTokIcon, ph: 'https://tiktok.com/@yourname' },
   { key: 'facebook', label: 'Facebook', icon: Globe, ph: 'https://facebook.com/yourpage' },
   { key: 'discord', label: 'Discord', icon: MessageCircle, ph: 'Discord invite link' },
   { key: 'website', label: 'Website', icon: Globe, ph: 'https://yourwebsite.com' },
@@ -255,6 +265,8 @@ export default function ProfilePage() {
     </div>
   );
 }
+
+
 
 
 

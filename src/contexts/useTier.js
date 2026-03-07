@@ -95,7 +95,7 @@ export function useTier() {
         .maybeSingle();
 
       if (sub?.platform_tiers) {
-        setTierSlug(sub.platform_tiers.slug);
+        setTierSlug(['master','premium'].includes(sub.platform_tiers.slug) ? 'premium' : sub.platform_tiers.slug === 'pro' ? 'pro' : 'free');
         setTierData(sub.platform_tiers);
       } else {
         setTierSlug('free');
@@ -175,4 +175,5 @@ export function useTier() {
 }
 
 export { TIER_ACCESS, FEATURE_LABELS };
+
 

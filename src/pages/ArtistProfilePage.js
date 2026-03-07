@@ -10,11 +10,16 @@ import {
   Loader, Verified, Download, Heart, ListMusic, Check
 } from 'lucide-react';
 
+const TikTokIcon = ({ className, style }) => (
+  <svg className={className} style={style} viewBox="0 0 24 24" fill="currentColor">
+    <path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.89-2.89 2.89 2.89 0 012.89-2.89c.28 0 .54.04.79.1V9.01a6.33 6.33 0 00-.79-.05 6.34 6.34 0 00-6.34 6.34 6.34 6.34 0 006.34 6.34 6.34 6.34 0 006.33-6.34V8.75a8.16 8.16 0 004.77 1.52V6.82a4.85 4.85 0 01-1-.13z"/>
+  </svg>
+);
 const PAYPAL_CLIENT_ID = 'AXhUqyXxTmBJ8Q6bqt0yiOEuLxqbbhnP93YONXL5Oiy3btUntKK8M7F2WfOeUzoVPxjHEalbRRRU52yY';
 
 const SOCIAL_ICONS = {
   instagram: Instagram, twitter: Twitter, youtube: Youtube,
-  tiktok: MessageCircle, facebook: Globe, discord: MessageCircle, website: Globe,
+  tiktok: TikTokIcon, facebook: Globe, discord: MessageCircle, website: Globe,
 };
 const SOCIAL_URLS = {
   instagram: 'https://instagram.com/', twitter: 'https://x.com/',
@@ -517,7 +522,7 @@ export default function ArtistProfilePage() {
           <h2 className="text-lg font-bold px-6 mb-3" style={{ fontFamily: `"${headingFont}", sans-serif` }}>Albums</h2>
           <div className="flex space-x-3 overflow-x-auto px-6 scrollbar-hide">
             {albums.map(album => (
-              <div key={album.id} className="flex-shrink-0 w-36 cursor-pointer group" onClick={() => navigate('/browse')}>
+              <div key={album.id} className="flex-shrink-0 w-36 cursor-pointer group" onClick={() => navigate(`/album/${album.id}`)}>
                 <div className="aspect-square rounded-xl overflow-hidden mb-2" style={{ backgroundColor: `${textColor}08` }}>
                   {album.cover_artwork_url ? (
                     <img src={album.cover_artwork_url} alt={album.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
@@ -573,7 +578,7 @@ export default function ArtistProfilePage() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium truncate" style={{ color: textColor }}>{collab.tracks?.title || 'Untitled'}</p>
-                  <p className="text-xs" style={{ color: `${textColor}40` }}>{collab.role} · {collab.split_percent}% split</p>
+                  <p className="text-xs" style={{ color: `${textColor}40` }}>{collab.role}</p>
                 </div>
                 <span className="text-[10px] px-2 py-0.5 rounded-full font-medium" style={{ backgroundColor: `${secondaryColor}20`, color: secondaryColor }}>Collab</span>
               </div>
@@ -644,3 +649,5 @@ export default function ArtistProfilePage() {
     </div>
   );
 }
+
+

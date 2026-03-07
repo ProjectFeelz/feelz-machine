@@ -4,7 +4,7 @@ import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import {
   BarChart3, ChevronLeft, Loader, Music, Users, Mic2,
-  TrendingUp, Play, Heart, MessageCircle, Upload, Calendar
+  TrendingUp, Play, Heart, MessageCircle, Upload, Calendar, Download
 } from 'lucide-react';
 
 function StatCard({ icon: Icon, label, value, subtext, color }) {
@@ -56,12 +56,20 @@ export default function AdminAnalytics() {
         { count: trackCount },
         { count: publishedCount },
         { count: collabCount },
+        { count: downloadCount },
       ] = await Promise.all([
         supabase.from('artists').select('*', { count: 'exact', head: true }),
         supabase.from('tracks').select('*', { count: 'exact', head: true }),
         supabase.from('tracks').select('*', { count: 'exact', head: true }).eq('is_published', true),
         supabase.from('collaborations').select('*', { count: 'exact', head: true }),
+        supabase.from('downloads').select('*', { count: 'exact', head: true }),
       ]);
+      // Sum streams from tracks
+      let totalStreams = 0;
+      try {
+        const { data: streamData } = await supabase.from('tracks').select('stream_count').eq('is_published', true);
+        totalStreams = (streamData || []).reduce((sum, t) => sum + (t.stream_count || 0), 0);
+      } catch {}
 
       // Optional counts (tables might not exist)
       let followCount = 0;
@@ -82,6 +90,8 @@ export default function AdminAnalytics() {
         collabs: collabCount || 0,
         follows: followCount,
         likes: likeCount,
+        downloads: downloadCount || 0,
+        streams: totalStreams,
       });
 
       // Signup timeline (last 7 days)
@@ -241,5 +251,6 @@ export default function AdminAnalytics() {
     </div>
   );
 }
+
 
 

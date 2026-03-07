@@ -16,7 +16,7 @@ export default function DesktopPlayer() {
     currentTrack, isPlaying, togglePlay, playNext, playPrev,
     duration, currentTime, seek, volume, setVolume,
     shuffle, toggleShuffle, repeat, toggleRepeat,
-    queue, queueIndex, setIsMinimized
+    queue, queueIndex, setIsMinimized, addToQueue
   } = usePlayer();
 
   const [liked, setLiked] = useState(false);
