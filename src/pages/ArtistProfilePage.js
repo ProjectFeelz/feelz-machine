@@ -10,16 +10,11 @@ import {
   Loader, Verified, Download, Heart, ListMusic, Check
 } from 'lucide-react';
 
-const TikTokIcon = ({ className, style }) => (
-  <svg className={className} style={style} viewBox="0 0 24 24" fill="currentColor">
-    <path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.89-2.89 2.89 2.89 0 012.89-2.89c.28 0 .54.04.79.1V9.01a6.33 6.33 0 00-.79-.05 6.34 6.34 0 00-6.34 6.34 6.34 6.34 0 006.34 6.34 6.34 6.34 0 006.33-6.34V8.75a8.16 8.16 0 004.77 1.52V6.82a4.85 4.85 0 01-1-.13z"/>
-  </svg>
-);
 const PAYPAL_CLIENT_ID = 'AXhUqyXxTmBJ8Q6bqt0yiOEuLxqbbhnP93YONXL5Oiy3btUntKK8M7F2WfOeUzoVPxjHEalbRRRU52yY';
 
 const SOCIAL_ICONS = {
   instagram: Instagram, twitter: Twitter, youtube: Youtube,
-  tiktok: TikTokIcon, facebook: Globe, discord: MessageCircle, website: Globe,
+  tiktok: MessageCircle, facebook: Globe, discord: MessageCircle, website: Globe,
 };
 const SOCIAL_URLS = {
   instagram: 'https://instagram.com/', twitter: 'https://x.com/',
@@ -83,10 +78,10 @@ export default function ArtistProfilePage() {
       if (themeData) setTheme(themeData);
 
       const { data: trackData } = await supabase
-  .from('tracks').select('*, albums(title, cover_artwork_url)')
-  .eq('artist_id', artistData.id).eq('is_published', true)
-  .order('engagement_score', { ascending: false }).limit(10);
-setTracks(trackData || []);
+        .from('tracks').select('*, albums(title, cover_artwork_url)')
+        .eq('artist_id', artistData.id).eq('is_published', true)
+        .order('engagement_score', { ascending: false });
+      setTracks(trackData || []);
 
       if (user) {
         const { data: likes } = await supabase.from('track_likes').select('track_id').eq('user_id', user.id);
@@ -319,7 +314,7 @@ setTracks(trackData || []);
   const socialEntries = Object.entries(socials).filter(([_, v]) => v);
   const headingFont = theme?.heading_font || 'Inter';
   const bodyFont = theme?.body_font || 'Inter';
-  const visibleTracks = showAllTracks ? tracks : tracks.slice(0, 6);
+  const visibleTracks = showAllTracks ? tracks : tracks.slice(0, 5);
 
   return (
     <div className="min-h-screen pb-32" style={{ backgroundColor: bgColor, color: textColor, fontFamily: `"${bodyFont}", sans-serif`, ...themeStyles }}>
@@ -379,7 +374,7 @@ setTracks(trackData || []);
         <div className="flex items-center space-x-4 mb-4">
           <span className="text-sm" style={{ color: `${textColor}80` }}>{formatNumber(followerCount)} followers</span>
           <span className="text-sm" style={{ color: `${textColor}80` }}>{tracks.length} track{tracks.length !== 1 ? 's' : ''}</span>
-          <span className="text-sm" style={{ color: `${textColor}80` }}>{formatNumber(tracks.reduce((s, t) => s + (t.stream_count || 0), 0))} streams</span>
+          <span className="text-sm" style={{ color: `${textColor}80` }}>{formatNumber(artist.total_streams)} streams</span>
         </div>
         <div className="flex items-center justify-center space-x-3 mb-6">
           <button onClick={handleFollow}
@@ -433,8 +428,8 @@ setTracks(trackData || []);
               const isActive = currentTrack?.id === track.id;
               const isTrackPlaying = isActive && isPlaying;
               return (
-                <button key={track.id} onClick={() => handlePlayTrack(track)}
-                  className="w-full flex items-center space-x-3 p-2.5 rounded-lg transition-all active:scale-[0.98]"
+                <div key={track.id} onClick={() => handlePlayTrack(track)}
+                  className="w-full flex items-center space-x-3 p-2.5 rounded-lg transition-all cursor-pointer"
                   style={{ backgroundColor: isActive ? `${secondaryColor}15` : 'transparent' }}>
                   <div className="w-7 flex items-center justify-center flex-shrink-0">
                     {isActive ? (
@@ -504,7 +499,7 @@ setTracks(trackData || []);
                       {track.download_price > 0 && <span className="text-[11px] font-semibold">${track.download_price}</span>}
                     </button>
                   )}
-                </button>
+                </div>
               );
             })}
           </div>
@@ -522,7 +517,7 @@ setTracks(trackData || []);
           <h2 className="text-lg font-bold px-6 mb-3" style={{ fontFamily: `"${headingFont}", sans-serif` }}>Albums</h2>
           <div className="flex space-x-3 overflow-x-auto px-6 scrollbar-hide">
             {albums.map(album => (
-              <div key={album.id} className="flex-shrink-0 w-36 cursor-pointer group" onClick={() => navigate(`/album/${album.id}`)}>
+              <div key={album.id} className="flex-shrink-0 w-36 cursor-pointer group" onClick={() => navigate('/browse')}>
                 <div className="aspect-square rounded-xl overflow-hidden mb-2" style={{ backgroundColor: `${textColor}08` }}>
                   {album.cover_artwork_url ? (
                     <img src={album.cover_artwork_url} alt={album.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
@@ -578,7 +573,7 @@ setTracks(trackData || []);
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium truncate" style={{ color: textColor }}>{collab.tracks?.title || 'Untitled'}</p>
-                  <p className="text-xs" style={{ color: `${textColor}40` }}>{collab.role}</p>
+                  <p className="text-xs" style={{ color: `${textColor}40` }}>{collab.role} · {collab.split_percent}% split</p>
                 </div>
                 <span className="text-[10px] px-2 py-0.5 rounded-full font-medium" style={{ backgroundColor: `${secondaryColor}20`, color: secondaryColor }}>Collab</span>
               </div>
@@ -649,5 +644,3 @@ setTracks(trackData || []);
     </div>
   );
 }
-
-

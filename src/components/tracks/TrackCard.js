@@ -1,4 +1,3 @@
-import { downloadTrack } from '../../utils/downloadTrack';
 import React, { useState, useEffect, useRef } from 'react';
 import { Play, Pause, MoreHorizontal, Heart, ListMusic, Share2, Download, Check, Loader, X } from 'lucide-react';
 import { usePlayer } from '../../contexts/PlayerContext';
@@ -7,7 +6,7 @@ import { supabase } from '../../supabaseClient';
 import { useNavigate } from 'react-router-dom';
 
 export default function TrackCard({ track, trackList = [], showArtwork = true, index }) {
-  const { currentTrack, isPlaying, playTrack, addToQueue, playNextInQueue } = usePlayer();
+  const { currentTrack, isPlaying, playTrack, addToQueue } = usePlayer();
   const { user } = useAuth();
   const navigate = useNavigate();
   const isCurrentTrack = currentTrack?.id === track.id;
@@ -22,18 +21,6 @@ export default function TrackCard({ track, trackList = [], showArtwork = true, i
   const [addingTo, setAddingTo] = useState(null);
   const [addedTo, setAddedTo] = useState({});
   const menuRef = useRef(null);
-  const { checkPlayLimit, recordPlay } = usePaidPlayLimit();
-const [limitedTrack, setLimitedTrack] = useState(null);
-
-// In handlePlay:
-const { allowed } = checkPlayLimit(track);
-if (!allowed) { setLimitedTrack(track); return; }
-recordPlay(track.id);
-// ...then play normally
-
-// In JSX:
-<PaidPlayGate track={limitedTrack} artist={track.artists} onClose={() => setLimitedTrack(null)}
-  onPurchaseComplete={(t) => { resetPlayCount(t.id); playTrack(t); setLimitedTrack(null); }} />
 
   useEffect(() => {
     if (!user || !track.id) return;
@@ -48,8 +35,14 @@ recordPlay(track.id);
         setShowPlaylists(false);
       }
     };
-    if (showMenu) document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
+    if (showMenu) {
+      document.addEventListener('mousedown', handleClick);
+      document.addEventListener('touchstart', handleClick);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClick);
+      document.removeEventListener('touchstart', handleClick);
+    };
   }, [showMenu]);
 
   const handlePlay = (e) => {
@@ -64,7 +57,7 @@ recordPlay(track.id);
     if (liked) {
       await supabase.from('track_likes').delete().eq('track_id', track.id).eq('user_id', user.id);
     } else {
-      await supabase.from('track_likes').insert({ track_id: track.id, user_id: user.id });
+      await supabase.from('track_likes').insert({ track_id: track.id, user_id: user.id, artist_id: track.artist_id || null });
     }
   };
 
@@ -91,10 +84,10 @@ recordPlay(track.id);
     if (!track.file_url) return;
     setDownloading(true);
     try {
-      await supabase.from('downloads').insert({ user_id: user.id, track_id: track.id });
+      await supabase.from('downloads').insert({ user_id: user.id, track_id: track.id, artist_id: track.artist_id || null });
       const a = document.createElement('a');
       a.href = track.file_url;
-      await downloadTrack(track.file_url, track.title);
+      a.download = `${track.title}.mp3`;
       a.target = '_blank';
       document.body.appendChild(a);
       a.click();
@@ -179,10 +172,10 @@ recordPlay(track.id);
 
       {/* Track info */}
       <div className="flex-1 min-w-0">
-        <p className={`text-base font-medium truncate ${isCurrentTrack ? 'text-white' : 'text-white/90'}`}>
+        <p className={`text-sm font-medium truncate ${isCurrentTrack ? 'text-white' : 'text-white/90'}`}>
           {track.title}
         </p>
-        <p className="text-sm text-white/40 truncate">
+        <p className="text-xs text-white/40 truncate">
           {track.artist_name || 'Unknown Artist'}
           {track.is_explicit && (
             <span className="inline-block ml-1.5 px-1 py-0.5 text-[9px] bg-white/10 rounded text-white/50 font-medium leading-none">E</span>
@@ -282,8 +275,3 @@ recordPlay(track.id);
     </div>
   );
 }
-
-
-
-
-
