@@ -8,7 +8,7 @@ import FullPlayer from './FullPlayer';
 import { usePlayer } from '../../contexts/PlayerContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { Bell } from 'lucide-react';
-import useNotifications from '../contexts/useNotifications';
+import useNotifications from '../../contexts/useNotifications';
 
 function MobileBellButton() {
   const { unreadCount } = useNotifications();
@@ -78,3 +78,4 @@ export default function AppLayout() {
     </div>
   );
 }
+
