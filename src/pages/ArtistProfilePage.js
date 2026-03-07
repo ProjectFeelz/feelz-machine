@@ -379,7 +379,7 @@ export default function ArtistProfilePage() {
         <div className="flex items-center space-x-4 mb-4">
           <span className="text-sm" style={{ color: `${textColor}80` }}>{formatNumber(followerCount)} followers</span>
           <span className="text-sm" style={{ color: `${textColor}80` }}>{tracks.length} track{tracks.length !== 1 ? 's' : ''}</span>
-          <span className="text-sm" style={{ color: `${textColor}80` }}>{formatNumber(artist.total_streams)} streams</span>
+          <span className="text-sm" style={{ color: `${textColor}80` }}>{formatNumber(tracks.reduce((s, t) => s + (t.stream_count || 0), 0))} streams</span>
         </div>
         <div className="flex items-center justify-center space-x-3 mb-6">
           <button onClick={handleFollow}

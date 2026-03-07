@@ -26,6 +26,7 @@ export default function PostComposer({ onPostCreated }) {
   const [showTagDropdown, setShowTagDropdown] = useState(false);
   const [cursorPos, setCursorPos] = useState(0);
   const [error, setError] = useState('');
+  const [scheduledAt, setScheduledAt] = useState('');
 
   // Track tagging
   const [showTrackPicker, setShowTrackPicker] = useState(false);
@@ -139,6 +140,7 @@ export default function PostComposer({ onPostCreated }) {
         post_type: taggedTrack ? 'track_share' : 'standard',
         youtube_id: youtubeId || null,
         track_id: taggedTrack?.id || null,
+        scheduled_at: scheduledAt || null,
         is_auto_generated: false,
       }).select().single();
       if (postError) throw postError;
@@ -306,6 +308,21 @@ export default function PostComposer({ onPostCreated }) {
         {/* Toolbar */}
         <div className="flex items-center justify-between mt-3 pt-3 border-t border-white/[0.05]">
           <div className="flex items-center space-x-1">
+            <div className="flex items-center space-x-1.5">
+              <input
+                type="datetime-local"
+                value={scheduledAt}
+                onChange={(e) => setScheduledAt(e.target.value)}
+                min={new Date().toISOString().slice(0, 16)}
+                className="text-xs bg-white/[0.04] text-white/40 border border-white/[0.08] rounded-lg px-2 py-1.5 outline-none focus:border-white/20 transition"
+                title="Schedule post"
+              />
+              {scheduledAt && (
+                <button onClick={() => setScheduledAt('')} className="text-white/20 hover:text-white/40 transition">
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+            </div>
             <button
               onClick={() => { setShowTrackPicker(p => !p); if (!showTrackPicker) searchTracks(''); }}
               className={`flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg text-xs transition ${taggedTrack ? 'bg-purple-500/20 text-purple-400' : 'text-white/30 hover:text-white/60 hover:bg-white/[0.04]'}`}
@@ -320,7 +337,7 @@ export default function PostComposer({ onPostCreated }) {
             className="flex items-center space-x-1.5 px-4 py-2 rounded-lg text-sm font-medium transition disabled:opacity-40"
             style={{ backgroundColor: 'white', color: 'black' }}>
             {posting ? <Loader className="w-4 h-4 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-            <span>{posting ? 'Posting...' : 'Post'}</span>
+            <span>{posting ? 'Posting...' : scheduledAt ? 'Schedule' : 'Post'}</span>
           </button>
         </div>
       </div>

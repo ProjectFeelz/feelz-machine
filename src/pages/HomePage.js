@@ -262,7 +262,7 @@ export default function HomePage() {
         supabase.from('tracks')
           .select('*, artists(artist_name, slug, profile_image_url, tier)')
           .eq('is_published', true).eq('featured', true)
-          .order('created_at', { ascending: false }).limit(10),
+          .order('created_at', { ascending: false }).limit(8),
         supabase.from('tracks')
           .select('*, artists(artist_name, slug, profile_image_url)')
           .eq('is_published', true)

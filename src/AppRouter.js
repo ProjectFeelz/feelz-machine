@@ -32,6 +32,7 @@ import AdminModeration from './pages/AdminModeration';
 import AdminBroadcast from './pages/AdminBroadcast';
 import AlbumDetailPage from './pages/AlbumDetailPage';
 import RecentlyPlayedPage from './pages/RecentlyPlayedPage';
+import TermsPage from './pages/TermsPage';
 
 // If we're at the root "/" serve the landing page standalone
 const isStandalone = window.matchMedia('(display-mode: standalone)').matches;

@@ -1,9 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { downloadTrack } from '../utils/downloadTrack';
 import { useParams, useNavigate } from 'react-router-dom';
+import { usePaidPlayLimit } from '../hooks/usePaidPlayLimit';
+import PaidPlayGate from '../components/PaidPlayGate';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import { usePlayer } from '../contexts/PlayerContext';
+import { usePaidPlayLimit } from '../hooks/usePaidPlayLimit';
+import PaidPlayGate from '../components/PaidPlayGate';
 import {
   ArrowLeft, Play, Pause, Music, Loader, Download,
   Heart, Share2, Check, ListMusic, ShoppingCart, X
@@ -27,6 +31,8 @@ export default function AlbumDetailPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { playTrack, currentTrack, isPlaying, togglePlay } = usePlayer();
+  const { checkPlayLimit, recordPlay, resetPlayCount } = usePaidPlayLimit();
+  const [limitedTrack, setLimitedTrack] = useState(null);
   const [album, setAlbum] = useState(null);
   const [tracks, setTracks] = useState([]);
   const [artist, setArtist] = useState(null);
@@ -171,6 +177,9 @@ export default function AlbumDetailPage() {
 
   const handlePlay = (track) => {
     if (currentTrack?.id === track.id) { togglePlay(); return; }
+    const { allowed } = checkPlayLimit(track);
+    if (!allowed) { setLimitedTrack(track); return; }
+    recordPlay(track.id);
     playTrack(
       { ...track, artist_name: artist?.artist_name },
       tracks.map(t => ({ ...t, artist_name: artist?.artist_name }))
@@ -443,6 +452,20 @@ export default function AlbumDetailPage() {
           );
         })}
       </div>
+
+      <PaidPlayGate
+        track={limitedTrack}
+        artist={artist}
+        onClose={() => setLimitedTrack(null)}
+        onPurchaseComplete={(t) => {
+          resetPlayCount(t.id);
+          playTrack(
+            { ...t, artist_name: artist?.artist_name },
+            tracks.map(tr => ({ ...tr, artist_name: artist?.artist_name }))
+          );
+          setLimitedTrack(null);
+        }}
+      />
 
       {/* Purchase modal */}
       {purchaseTarget && (
