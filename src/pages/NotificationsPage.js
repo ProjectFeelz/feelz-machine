@@ -71,7 +71,7 @@ export default function NotificationsPage() {
       .from('notifications')
       .select(`
         *,
-        from_artist:artists!notifications_from_artist_id_fkey(id, artist_name, avatar_url, slug),
+        from_artist:artists!notifications_from_artist_id_fkey(id, artist_name, profile_image_url, slug),
         track:tracks!notifications_track_id_fkey(id, title, cover_artwork_url)
       `)
       .eq('artist_id', artist.id)
@@ -191,9 +191,9 @@ export default function NotificationsPage() {
                         }`}
                       >
                         {/* Avatar or Icon */}
-                        {notif.from_artist?.avatar_url ? (
+                        {notif.from_artist?.profile_image_url ? (
                           <div className="relative flex-shrink-0">
-                            <img src={notif.from_artist.avatar_url} alt="" className="w-10 h-10 rounded-full object-cover" />
+                            <img src={notif.from_artist.profile_image_url} alt="" className="w-10 h-10 rounded-full object-cover" />
                             <div className={`absolute -bottom-0.5 -right-0.5 w-4.5 h-4.5 rounded-full ${config.bg} flex items-center justify-center border border-black`}>
                               <Icon className={`w-2.5 h-2.5 ${config.color}`} />
                             </div>
@@ -226,6 +226,7 @@ export default function NotificationsPage() {
                               />
                             </div>
                           )}
+
                           {/* Track reference */}
                           {notif.track && (
                             <div className="flex items-center space-x-2 mt-2 p-2 bg-white/[0.03] rounded-lg">

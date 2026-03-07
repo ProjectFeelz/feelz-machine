@@ -29,15 +29,10 @@ import AdminDashboard from './pages/AdminDashboard';
 import AdminArtists from './pages/AdminArtists';
 import AdminAnalytics from './pages/AdminAnalytics';
 import AdminModeration from './pages/AdminModeration';
-import AdminBroadcast from './pages/AdminBroadcast';
-import AlbumDetailPage from './pages/AlbumDetailPage';
-import RecentlyPlayedPage from './pages/RecentlyPlayedPage';
-import TermsPage from './pages/TermsPage';
 import AdminBoost from './pages/AdminBoost';
 
 // If we're at the root "/" serve the landing page standalone
-const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
-const isLanding = !isStandalone && (window.location.pathname === '/' || window.location.pathname === '');
+const isLanding = window.location.pathname === '/' || window.location.pathname === '';
 
 export default function AppRouter() {
   if (isLanding) {
@@ -54,17 +49,16 @@ export default function AppRouter() {
             <Route path="/login" element={<LoginPage />} />
             <Route path="/setup" element={<ProfileSetup />} />
             <Route path="/dashboard" element={<ArtistDashboard />} />
+            <Route path="/artist/:slug" element={<ArtistProfilePage />} />
             <Route path="/upgrade" element={<TierUpgradePage />} />
             <Route path="/chat/:roomId" element={<ChatRoomView />} />
             <Route path="/privacy-policy" element={<PrivacyPolicy />} />
             <Route path="/terms-of-use" element={<TermsOfUse />} />
             <Route element={<AppLayout />}>
               <Route path="/" element={<HomePage />} />
-              <Route path="/artist/:slug" element={<ArtistProfilePage />} />
               <Route path="/browse" element={<BrowsePage />} />
               <Route path="/library" element={<LibraryPage />} />
               <Route path="/library/likes" element={<LikedSongsPage />} />
-              <Route path="/library/recent" element={<RecentlyPlayedPage />} />
               <Route path="/library/downloads" element={<DownloadsPage />} />
               <Route path="/library/following" element={<FollowingPage />} />
               <Route path="/library/playlists" element={<PlaylistsPage />} />
@@ -78,9 +72,6 @@ export default function AppRouter() {
               <Route path="/admin/artists" element={<AdminArtists />} />
               <Route path="/admin/analytics" element={<AdminAnalytics />} />
               <Route path="/admin/moderation" element={<AdminModeration />} />
-              <Route path="/admin/broadcast" element={<AdminBroadcast />} />
-              <Route path="/album/:id" element={<AlbumDetailPage />} />
-              <Route path="/terms" element={<TermsPage />} />
               <Route path="/admin/boost" element={<AdminBoost />} />
             </Route>
           </Routes>
