@@ -250,6 +250,11 @@ export default function DesktopPlayer() {
               {showMenu && (
                 <div className="absolute bottom-10 right-0 w-48 rounded-xl shadow-2xl overflow-hidden z-50"
                   style={{ backgroundColor: '#1a1a1a', border: '1px solid rgba(255,255,255,0.08)' }}>
+                    <button onClick={() => { if (currentTrack) addToQueue(currentTrack); setShowMenu(false); }}
+                    className="w-full flex items-center space-x-3 px-4 py-3 hover:bg-white/[0.04] transition text-left">
+                    <ListMusic className="w-4 h-4 text-white/50" />
+                    <span className="text-sm text-white/70">Add to Queue</span>
+              </button>
                   <button onClick={handleShare}
                     className="w-full flex items-center space-x-3 px-4 py-3 hover:bg-white/[0.04] transition text-left">
                     {shared ? <Check className="w-4 h-4 text-green-400" /> : <Share2 className="w-4 h-4 text-white/50" />}
