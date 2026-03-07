@@ -33,6 +33,7 @@ import AdminBroadcast from './pages/AdminBroadcast';
 import AlbumDetailPage from './pages/AlbumDetailPage';
 import RecentlyPlayedPage from './pages/RecentlyPlayedPage';
 import TermsPage from './pages/TermsPage';
+import AdminBoost from './pages/AdminBoost';
 
 // If we're at the root "/" serve the landing page standalone
 const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
@@ -80,6 +81,7 @@ export default function AppRouter() {
               <Route path="/admin/broadcast" element={<AdminBroadcast />} />
               <Route path="/album/:id" element={<AlbumDetailPage />} />
               <Route path="/terms" element={<TermsPage />} />
+              <Route path="/admin/boost" element={<AdminBoost />} />
             </Route>
           </Routes>
         </PlayerProvider>
