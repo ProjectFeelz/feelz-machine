@@ -32,8 +32,6 @@ import AdminModeration from './pages/AdminModeration';
 import AdminBoost from './pages/AdminBoost';
 import UserProfilePage from './pages/UserProfilePage';
 import AlbumDetailPage from './pages/AlbumDetailPage';
-import AlbumDetailPage from './pages/AlbumDetailPage';
-import AlbumDetailPage from './pages/AlbumDetailPage';
 
 // If we're at the root "/" serve the landing page standalone
 const isLanding = window.location.pathname === '/' || window.location.pathname === '';
@@ -43,8 +41,6 @@ export default function AppRouter() {
     return <LandingPage />;
   }
 
-  // All app routes live under /player via basename
-  // This means every navigate('/hub') etc stays unchanged — router handles the prefix
   return (
     <BrowserRouter basename="/player">
       <AuthProvider>
@@ -74,12 +70,12 @@ export default function AppRouter() {
               <Route path="/profile/edit" element={<UserProfilePage />} />
               <Route path="/notifications" element={<NotificationsPage />} />
               <Route path="/hub" element={<HubPage />} />
+              <Route path="/album/:id" element={<AlbumDetailPage />} />
               <Route path="/admin" element={<AdminDashboard />} />
               <Route path="/admin/artists" element={<AdminArtists />} />
               <Route path="/admin/analytics" element={<AdminAnalytics />} />
               <Route path="/admin/moderation" element={<AdminModeration />} />
-              <Route path="/admin/boost" element={<AdminBoost />} />`n              <Route path="/album/:id" element={<AlbumDetailPage />} />`n              <Route path="/album/:id" element={<AlbumDetailPage />} />
-              <Route path="/album/:id" element={<AlbumDetailPage />} />
+              <Route path="/admin/boost" element={<AdminBoost />} />
             </Route>
           </Routes>
         </PlayerProvider>
@@ -87,8 +83,3 @@ export default function AppRouter() {
     </BrowserRouter>
   );
 }
-
-
-
-
-
