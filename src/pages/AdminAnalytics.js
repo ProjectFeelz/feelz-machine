@@ -37,7 +37,7 @@ function TimelineItem({ label, count, maxCount }) {
 
 export default function AdminAnalytics() {
   const navigate = useNavigate();
-  const { isAdmin, loading } = useAuth();
+  const { isAdmin, loading: authLoading } = useAuth();
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({});
   const [signupTimeline, setSignupTimeline] = useState([]);
@@ -228,6 +228,8 @@ export default function AdminAnalytics() {
     </div>
   );
 }
+
+
 
 
 

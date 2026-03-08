@@ -38,7 +38,7 @@ function SettingRow({ label, description, value, onChange, placeholder, icon: Ic
 
 export default function AdminBroadcast() {
   const navigate = useNavigate();
-  const { isAdmin, loading } = useAuth();
+  const { isAdmin, loading: authLoading } = useAuth();
   const apkFileRef = useRef(null);
 
   // APK direct upload
@@ -355,6 +355,7 @@ export default function AdminBroadcast() {
     </div>
   );
 }
+
 
 
 
