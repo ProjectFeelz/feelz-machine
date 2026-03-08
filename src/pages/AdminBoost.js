@@ -48,7 +48,7 @@ function ScoreSlider({ value, onChange, disabled }) {
 
 export default function AdminBoost() {
   const navigate = useNavigate();
-  const { isAdmin } = useAuth();
+  const { isAdmin, loading } = useAuth();
 
   const [activeTab, setActiveTab] = useState('tracks');
   const [trackQuery, setTrackQuery] = useState('');
@@ -59,7 +59,7 @@ export default function AdminBoost() {
   const [saving, setSaving] = useState({});
   const [toast, setToast] = useState({ message: '', type: '' });
 
-  useEffect(() => { if (isAdmin === false) { navigate('/hub'); return; } }, [isAdmin]);
+  useEffect(() => { if (!loading && !isAdmin) { navigate('/hub'); return; } }, [isAdmin, loading]);
 
   const showToast = (message, type = 'success') => {
     setToast({ message, type });
@@ -175,7 +175,7 @@ export default function AdminBoost() {
     setSaving(p => ({ ...p, [`${artist.id}-tier`]: false }));
   };
 
-  if (isAdmin === false) return null;
+  if (loading) return null; if (!isAdmin) return null;
 
   return (
     <div className="pt-14 md:pt-0 pb-32 px-4 max-w-3xl mx-auto">
@@ -480,4 +480,6 @@ export default function AdminBoost() {
     </div>
   );
 }
+
+
 

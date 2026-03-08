@@ -38,7 +38,7 @@ function SettingRow({ label, description, value, onChange, placeholder, icon: Ic
 
 export default function AdminBroadcast() {
   const navigate = useNavigate();
-  const { isAdmin } = useAuth();
+  const { isAdmin, loading } = useAuth();
   const apkFileRef = useRef(null);
 
   // APK direct upload
@@ -67,7 +67,7 @@ export default function AdminBroadcast() {
   const [preview, setPreview] = useState(null);
 
   useEffect(() => {
-    if (!isAdmin) { navigate('/hub'); return; }
+    if (!authLoading && !isAdmin) { navigate('/hub'); return; }
     loadSettings();
     countRecipients();
   }, [isAdmin]);
@@ -355,5 +355,9 @@ export default function AdminBroadcast() {
     </div>
   );
 }
+
+
+
+
 
 

@@ -37,7 +37,7 @@ function TimelineItem({ label, count, maxCount }) {
 
 export default function AdminAnalytics() {
   const navigate = useNavigate();
-  const { isAdmin } = useAuth();
+  const { isAdmin, loading } = useAuth();
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({});
   const [signupTimeline, setSignupTimeline] = useState([]);
@@ -146,7 +146,7 @@ export default function AdminAnalytics() {
   }, []);
 
   useEffect(() => {
-    if (!isAdmin) { navigate('/hub'); return; }
+    if (isAdmin === false) { navigate('/hub'); return; }
     fetchAnalytics();
   }, [isAdmin, navigate, fetchAnalytics]);
 
@@ -228,3 +228,7 @@ export default function AdminAnalytics() {
     </div>
   );
 }
+
+
+
+

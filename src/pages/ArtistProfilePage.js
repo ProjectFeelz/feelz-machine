@@ -517,7 +517,7 @@ export default function ArtistProfilePage() {
           <h2 className="text-lg font-bold px-6 mb-3" style={{ fontFamily: `"${headingFont}", sans-serif` }}>Albums</h2>
           <div className="flex space-x-3 overflow-x-auto px-6 scrollbar-hide">
             {albums.map(album => (
-              <div key={album.id} className="flex-shrink-0 w-36 cursor-pointer group" onClick={() => navigate('/browse')}>
+              <div key={album.id} className="flex-shrink-0 w-36 cursor-pointer group" onClick={() => navigate(\/album/\\)}>
                 <div className="aspect-square rounded-xl overflow-hidden mb-2" style={{ backgroundColor: `${textColor}08` }}>
                   {album.cover_artwork_url ? (
                     <img src={album.cover_artwork_url} alt={album.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
@@ -652,3 +652,4 @@ export default function ArtistProfilePage() {
     </div>
   );
 }
+

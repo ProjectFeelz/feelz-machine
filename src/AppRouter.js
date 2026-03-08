@@ -31,6 +31,9 @@ import AdminAnalytics from './pages/AdminAnalytics';
 import AdminModeration from './pages/AdminModeration';
 import AdminBoost from './pages/AdminBoost';
 import UserProfilePage from './pages/UserProfilePage';
+import AlbumDetailPage from './pages/AlbumDetailPage';
+import AlbumDetailPage from './pages/AlbumDetailPage';
+import AlbumDetailPage from './pages/AlbumDetailPage';
 
 // If we're at the root "/" serve the landing page standalone
 const isLanding = window.location.pathname === '/' || window.location.pathname === '';
@@ -75,7 +78,8 @@ export default function AppRouter() {
               <Route path="/admin/artists" element={<AdminArtists />} />
               <Route path="/admin/analytics" element={<AdminAnalytics />} />
               <Route path="/admin/moderation" element={<AdminModeration />} />
-              <Route path="/admin/boost" element={<AdminBoost />} />
+              <Route path="/admin/boost" element={<AdminBoost />} />`n              <Route path="/album/:id" element={<AlbumDetailPage />} />`n              <Route path="/album/:id" element={<AlbumDetailPage />} />
+              <Route path="/album/:id" element={<AlbumDetailPage />} />
             </Route>
           </Routes>
         </PlayerProvider>
@@ -83,3 +87,8 @@ export default function AppRouter() {
     </BrowserRouter>
   );
 }
+
+
+
+
+

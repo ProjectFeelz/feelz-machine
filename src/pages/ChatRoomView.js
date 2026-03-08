@@ -195,7 +195,7 @@ export default function ChatRoomView() {
       setIsMember(true);
       setMyMembership({ role: 'member' });
     } catch (err) {
-      console.error('Join error:', err);
+      console.error('Join error:', err); setJoinError(err.message || 'Unable to join — this room may be subscribers-only.');
     }
     setJoining(false);
   };
@@ -490,7 +490,7 @@ export default function ChatRoomView() {
         </div>
       ) : (
         <div className="px-4 py-3 border-t border-white/[0.06] flex-shrink-0">
-          <button onClick={joinRoom} disabled={joining}
+          {joinError && <p className="text-xs text-red-400 mb-2 text-center">{joinError}</p>}<button onClick={joinRoom} disabled={joining}
             className="w-full py-3 bg-white text-black rounded-xl font-semibold text-sm flex items-center justify-center space-x-2 disabled:opacity-50 transition">
             {joining ? <Loader className="w-4 h-4 animate-spin" /> : <Users className="w-4 h-4" />}
             <span>{joining ? 'Joining...' : 'Join Room to Chat'}</span>
@@ -500,4 +500,6 @@ export default function ChatRoomView() {
     </div>
   );
 }
+
+
 
