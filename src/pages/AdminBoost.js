@@ -175,7 +175,7 @@ export default function AdminBoost() {
     setSaving(p => ({ ...p, [`${artist.id}-tier`]: false }));
   };
 
-  if (!isAdmin) return null;
+  if (isAdmin === false) return null;
 
   return (
     <div className="pt-14 md:pt-0 pb-32 px-4 max-w-3xl mx-auto">
@@ -480,3 +480,4 @@ export default function AdminBoost() {
     </div>
   );
 }
+
