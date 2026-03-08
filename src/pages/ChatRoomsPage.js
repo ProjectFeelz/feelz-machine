@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import {
-  MessageCircle, Plus, Loader, Lock, Users, Search, Zap, X, Pencil
+  MessageCircle, Plus, Loader, Lock, Users, Search, Zap, X, Pencil, Trash2
 } from 'lucide-react';
 import TierGate from '../components/TierGate';
 import { useTier } from '../contexts/useTier';
@@ -28,6 +28,9 @@ export default function ChatRoomsPage() {
   const [editingRoomId, setEditingRoomId] = useState(null);
   const [editName, setEditName] = useState('');
   const [renaming, setRenaming] = useState(false);
+  const [deletingRoomId, setDeletingRoomId] = useState(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState(null);
+
 
   useEffect(() => {
     fetchRooms();
@@ -118,6 +121,25 @@ export default function ChatRoomsPage() {
     }
     setRenaming(false);
     setEditingRoomId(null);
+  };
+
+  const handleDeleteRoom = async (e, roomId) => {
+    e.stopPropagation();
+    if (confirmDeleteId !== roomId) {
+      setConfirmDeleteId(roomId);
+      return;
+    }
+    setDeletingRoomId(roomId);
+    try {
+      await supabase.from('chat_messages').delete().eq('room_id', roomId);
+      await supabase.from('chat_room_members').delete().eq('room_id', roomId);
+      await supabase.from('chat_rooms').delete().eq('id', roomId);
+      setRooms(prev => prev.filter(r => r.id !== roomId));
+    } catch (err) {
+      console.error('Delete room error:', err);
+    }
+    setDeletingRoomId(null);
+    setConfirmDeleteId(null);
   };
 
   const filtered = query.trim()
@@ -266,13 +288,25 @@ export default function ChatRoomsPage() {
                 <Users className="w-3 h-3 text-white/20" />
                 <span className="text-xs text-white/30">{room.member_count || 0}</span>
                 {room.artist_id === artist?.id && editingRoomId !== room.id && (
-                  <button
-                    onClick={e => startRename(e, room)}
-                    className="p-1.5 hover:bg-white/[0.08] rounded-lg transition"
-                    title="Rename room"
-                  >
-                    <Pencil className="w-3 h-3 text-white/30" />
-                  </button>
+                  <>
+                    <button
+                      onClick={e => startRename(e, room)}
+                      className="p-1.5 hover:bg-white/[0.08] rounded-lg transition"
+                      title="Rename room"
+                    >
+                      <Pencil className="w-3 h-3 text-white/30" />
+                    </button>
+                    <button
+                      onClick={e => handleDeleteRoom(e, room.id)}
+                      disabled={deletingRoomId === room.id}
+                      className={p-1.5 rounded-lg transition }
+                      title={confirmDeleteId === room.id ? 'Click again to confirm' : 'Delete room'}
+                    >
+                      {deletingRoomId === room.id
+                        ? <Loader className="w-3 h-3 animate-spin text-red-400" />
+                        : <Trash2 className={w-3 h-3 } />}
+                    </button>
+                  </>
                 )}
                 {editingRoomId === room.id && renaming && (
                   <Loader className="w-3 h-3 animate-spin text-white/30" />
