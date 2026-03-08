@@ -48,18 +48,18 @@ function ScoreSlider({ value, onChange, disabled }) {
 
 export default function AdminBoost() {
   const navigate = useNavigate();
-  const { isAdmin, loading } = useAuth();
+  const { isAdmin, loading: authLoading } = useAuth();
 
   const [activeTab, setActiveTab] = useState('tracks');
   const [trackQuery, setTrackQuery] = useState('');
   const [artistQuery, setArtistQuery] = useState('');
   const [tracks, setTracks] = useState([]);
   const [artists, setArtists] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [saving, setSaving] = useState({});
   const [toast, setToast] = useState({ message: '', type: '' });
 
-  useEffect(() => { if (!loading && !isAdmin) { navigate('/hub'); return; } }, [isAdmin, loading]);
+  useEffect(() => { if (!authLoading && !isAdmin) { navigate('/hub'); return; } }, [isAdmin, authLoading]);
 
   const showToast = (message, type = 'success') => {
     setToast({ message, type });
@@ -68,7 +68,7 @@ export default function AdminBoost() {
 
   // ── TRACKS ──────────────────────────────────────────────
   const searchTracks = useCallback(async () => {
-    setLoading(true);
+    setIsLoading(true);
     const q = supabase
       .from('tracks')
       .select('id, title, cover_artwork_url, featured, engagement_score, stream_count, is_published, artists(artist_name, slug)')
@@ -77,7 +77,7 @@ export default function AdminBoost() {
     if (trackQuery.trim()) q.ilike('title', `%${trackQuery}%`);
     const { data } = await q;
     setTracks((data || []).map(t => ({ ...t, _score: t.engagement_score || 0 })));
-    setLoading(false);
+    setIsLoading(false);
   }, [trackQuery]);
 
   useEffect(() => {
@@ -116,7 +116,7 @@ export default function AdminBoost() {
 
   // ── ARTISTS ─────────────────────────────────────────────
   const searchArtists = useCallback(async () => {
-    setLoading(true);
+    setIsLoading(true);
     const q = supabase
       .from('artists')
       .select('id, artist_name, slug, profile_image_url, is_verified, tier, follower_count, total_streams')
@@ -125,7 +125,7 @@ export default function AdminBoost() {
     if (artistQuery.trim()) q.ilike('artist_name', `%${artistQuery}%`);
     const { data } = await q;
     setArtists(data || []);
-    setLoading(false);
+    setIsLoading(false);
   }, [artistQuery]);
 
   useEffect(() => {
@@ -175,7 +175,7 @@ export default function AdminBoost() {
     setSaving(p => ({ ...p, [`${artist.id}-tier`]: false }));
   };
 
-  if (loading) return null; if (!isAdmin) return null;
+  if (authLoading) return null; if (!isAdmin) return null;
 
   return (
     <div className="pt-14 md:pt-0 pb-32 px-4 max-w-3xl mx-auto">
@@ -247,7 +247,7 @@ export default function AdminBoost() {
             </div>
           </div>
 
-          {loading ? (
+          {isLoading ? (
             <div className="flex justify-center py-12"><Loader className="w-5 h-5 animate-spin text-white/20" /></div>
           ) : tracks.length === 0 ? (
             <p className="text-center text-white/20 text-sm py-12">No tracks found</p>
@@ -362,7 +362,7 @@ export default function AdminBoost() {
             </button>
           </div>
 
-          {loading ? (
+          {isLoading ? (
             <div className="flex justify-center py-12"><Loader className="w-5 h-5 animate-spin text-white/20" /></div>
           ) : artists.length === 0 ? (
             <p className="text-center text-white/20 text-sm py-12">No artists found</p>
@@ -480,6 +480,8 @@ export default function AdminBoost() {
     </div>
   );
 }
+
+
 
 
 
