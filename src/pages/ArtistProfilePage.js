@@ -96,7 +96,7 @@ export default function ArtistProfilePage() {
       setAlbums(albumData || []);
 
       const { data: collabData } = await supabase
-        .from('collaborations').select('*, tracks(id, title, cover_artwork_url)')
+        .from('collaborations').select('*, tracks(id, title, cover_artwork_url, file_url, duration, stream_count, artist_id, is_downloadable, download_price)')
         .eq('artist_id', artistData.id).eq('status', 'accepted');
       setCollabs(collabData || []);
 

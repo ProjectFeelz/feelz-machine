@@ -30,6 +30,8 @@ import AdminArtists from './pages/AdminArtists';
 import AdminAnalytics from './pages/AdminAnalytics';
 import AdminModeration from './pages/AdminModeration';
 import AdminBoost from './pages/AdminBoost';
+import AdminBroadcast from './pages/AdminBroadcast';
+import RecentlyPlayedPage from './pages/RecentlyPlayedPage';
 import UserProfilePage from './pages/UserProfilePage';
 import AlbumDetailPage from './pages/AlbumDetailPage';
 
@@ -60,6 +62,7 @@ export default function AppRouter() {
               <Route path="/library" element={<LibraryPage />} />
               <Route path="/library/likes" element={<LikedSongsPage />} />
               <Route path="/library/downloads" element={<DownloadsPage />} />
+              <Route path="/library/recent" element={<RecentlyPlayedPage />} />
               <Route path="/library/following" element={<FollowingPage />} />
               <Route path="/library/playlists" element={<PlaylistsPage />} />
               <Route path="/library/playlists/:id" element={<PlaylistDetailPage />} />
@@ -76,6 +79,7 @@ export default function AppRouter() {
               <Route path="/admin/analytics" element={<AdminAnalytics />} />
               <Route path="/admin/moderation" element={<AdminModeration />} />
               <Route path="/admin/boost" element={<AdminBoost />} />
+              <Route path="/admin/broadcast" element={<AdminBroadcast />} />
             </Route>
           </Routes>
         </PlayerProvider>
