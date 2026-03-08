@@ -107,6 +107,7 @@ export default function HubPage() {
           <LinkCard icon={BarChart3} label="Platform Analytics" description="Streams, signups, engagement metrics" path="/admin/analytics" color="bg-blue-500/20" />
           <LinkCard icon={AlertTriangle} label="Content Moderation" description="Flagged tracks, reports, and reviews" path="/admin/moderation" color="bg-red-500/20" />
           <LinkCard icon={Megaphone} label="Broadcast & APK" description="Send updates to all users · Manage APK link" path="/admin/broadcast" color="bg-purple-500/20" />
+          <LinkCard icon={Zap} label="Boost Manager" description="Boost and feature artist content" path="/admin/boost" color="bg-amber-500/20" />
         </Section>
       )}
 

@@ -139,10 +139,15 @@ export default function AlbumDetailPage() {
   const fetchAlbum = async () => {
     setLoading(true);
     try {
-      let { data: albumData } = await supabase
-        .from('albums')
-        .select('*, artists(id, artist_name, slug, profile_image_url, is_verified)')
-        .eq('id', id).maybeSingle();
+      const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+      let albumData = null;
+      if (isUUID) {
+        const { data } = await supabase
+          .from('albums')
+          .select('*, artists(id, artist_name, slug, profile_image_url, is_verified)')
+          .eq('id', id).maybeSingle();
+        albumData = data;
+      }
       if (!albumData) {
         const { data: bySlug } = await supabase
           .from('albums')
@@ -223,7 +228,7 @@ export default function AlbumDetailPage() {
   const triggerDownload = async (track) => {
     setDownloading(track.id);
     try {
-      await supabase.from('downloads').insert({ user_id: user.id, track_id: track.id, artist_id: artist?.id }).catch(() => {});
+      await supabase.from('downloads').insert({ user_id: user.id, track_id: track.id }).catch(() => {});
       await downloadTrack(track.file_url, track.title);
     } catch {}
     setDownloading(null);
@@ -234,7 +239,7 @@ export default function AlbumDetailPage() {
     for (const track of tracks) {
       if (track.file_url) {
         try {
-          await supabase.from('downloads').insert({ user_id: user.id, track_id: track.id, artist_id: artist?.id }).catch(() => {});
+          await supabase.from('downloads').insert({ user_id: user.id, track_id: track.id }).catch(() => {});
           await downloadTrack(track.file_url, track.title);
           await new Promise(r => setTimeout(r, 800)); // stagger downloads
         } catch {}
@@ -519,3 +524,4 @@ export default function AlbumDetailPage() {
     </div>
   );
 }
+
