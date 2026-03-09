@@ -183,6 +183,11 @@ export default function FeedPage() {
 
       {/* Post composer */}
       {user && artist && <PostComposer onPostCreated={handlePostCreated} />}
+      {user && !artist && (
+        <div className="bg-white/[0.03] rounded-xl border border-white/[0.06] p-4 mb-4 text-center">
+          <p className="text-sm text-white/40">Sign up as an artist to post in the community</p>
+        </div>
+      )}
 
       {/* Posts */}
       {loading ? (

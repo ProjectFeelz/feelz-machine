@@ -30,7 +30,7 @@ export default function UserProfilePage() {
       if (data) {
         setDisplayName(data.name || '');
         setBio('' || '');
-        setAvatarUrl('' || '');
+        setAvatarUrl(user.user_metadata?.avatar_url || user.user_metadata?.picture || '');
       } else {
         // profiles row might not exist yet — use user metadata
         setDisplayName(user.user_metadata?.display_name || user.email?.split('@')[0] || '');
