@@ -34,7 +34,6 @@ function Section({ title, icon: Icon, onSeeAll, children }) {
         )}
       </div>
       {children}
-      <TrackActionSheet track={actionSheetTrack} artist={actionSheetTrack ? { artist_name: actionSheetTrack.artist_name, slug: actionSheetTrack.artist_slug } : null} onClose={() => setActionSheetTrack(null)} />
     </div>
   );
 }
