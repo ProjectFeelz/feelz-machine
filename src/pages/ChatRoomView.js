@@ -197,12 +197,13 @@ export default function ChatRoomView() {
       if (error) throw error;
 
       // Increment member count
-      await supabase.rpc('increment_chat_member_count', { room_id_input: roomId }).catch(() => {
-        // RPC might not exist, manually update
-        supabase.from('chat_rooms').update({
+      try {
+        await supabase.rpc('increment_chat_member_count', { room_id_input: roomId });
+      } catch {
+        await supabase.from('chat_rooms').update({
           member_count: (room?.member_count || 0) + 1
         }).eq('id', roomId);
-      });
+      }
 
       setIsMember(true);
       setMyMembership({ role: 'member' });
