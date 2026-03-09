@@ -25,7 +25,7 @@ const SOCIALS = [
 
 export default function ProfilePage() {
   const nav = useNavigate();
-  const { user, profile, artist, isAdmin, isArtist, signOut, refreshProfile } = useAuth();
+  const { user, profile, artist, isAdmin, isArtist, signOut, refreshProfile, rawIsAdmin, rawIsArtist, rawIsMaster, viewAs, setViewAs } = useAuth();
   const [activeSection, setActiveSection] = useState('info');
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -265,6 +265,27 @@ export default function ProfilePage() {
           <ChevronRight className="w-4 h-4 text-white/20" />
         </button>
       </div>
+
+      {/* Role Switcher */}
+      {(rawIsAdmin || rawIsMaster) && (
+        <div className="bg-white/[0.03] rounded-xl border border-white/[0.06] p-4 mb-4">
+          <p className="text-xs uppercase tracking-wider text-white/30 font-semibold mb-3">View As</p>
+          <div className="flex flex-wrap gap-2">
+            {[
+              { key: null, label: 'Default' },
+              ...(rawIsAdmin ? [{ key: 'admin', label: 'Admin' }] : []),
+              ...(rawIsArtist ? [{ key: 'artist', label: 'Artist' }] : []),
+              { key: 'listener', label: 'Listener' },
+            ].map(opt => (
+              <button key={opt.key || 'default'} onClick={() => setViewAs(opt.key)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${viewAs === opt.key ? 'bg-white text-black' : 'bg-white/[0.06] text-white/50 hover:bg-white/[0.1]'}`}>
+                {opt.label}
+              </button>
+            ))}
+          </div>
+          {viewAs && <p className="text-[10px] text-yellow-400/60 mt-2">Viewing as {viewAs}</p>}
+        </div>
+      )}
 
       <button onClick={async () => { await signOut(); nav('/'); }}
         className="w-full py-3 bg-red-500/10 text-red-400 rounded-xl font-medium text-sm flex items-center justify-center space-x-2 hover:bg-red-500/15 transition">
