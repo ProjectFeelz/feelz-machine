@@ -174,7 +174,22 @@ export default function PostCard({ post, onDelete, onUpdate }) {
       .eq('post_id', post.id)
       .order('created_at', { ascending: true })
       .limit(50);
-    setComments(data || []);
+    // Enrich with listener names and avatars
+    const enriched = await Promise.all((data || []).map(async (comment) => {
+      if (comment.artists?.artist_name) return comment;
+      try {
+        const { data: profile } = await supabase.from('user_profiles')
+          .select('name, email, avatar_url')
+          .eq('user_id', comment.user_id)
+          .maybeSingle();
+        return {
+          ...comment,
+          listener_name: profile?.name || profile?.email?.split('@')[0] || null,
+          listener_avatar: profile?.avatar_url || null,
+        };
+      } catch { return comment; }
+    }));
+    setComments(enriched);
   };
 
   const toggleComments = () => {
