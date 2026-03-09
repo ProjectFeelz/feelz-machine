@@ -244,6 +244,7 @@ export default function HomePage() {
   const { user, artist } = useAuth();
   const { playTrack, currentTrack, isPlaying, togglePlay } = usePlayer();
   const navigate = useNavigate();
+  const [actionSheetTrack, setActionSheetTrack] = useState(null);
   const [featuredTracks, setFeaturedTracks] = useState([]);
   const [newReleases, setNewReleases] = useState([]);
   const [trending, setTrending] = useState([]);
