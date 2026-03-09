@@ -428,8 +428,8 @@ export default function TrackUploadPanel() {
     { key: 'manage', label: 'Manage Tracks', icon: Edit },
   ];
 
-  // Shared track form fields component
-  const TrackFormFields = ({ form, setForm }) => (
+  // Shared track form fields - called as function, not component, to avoid remount
+  const renderTrackFormFields = (form, setForm) => (
     <div className="space-y-4">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
@@ -562,7 +562,7 @@ export default function TrackUploadPanel() {
         <form onSubmit={(e) => handleTrackUpload(e)} className="space-y-4">
           <div className="bg-white/[0.03] rounded-xl p-5 border border-white/[0.06] space-y-4">
             <h3 className="text-base font-semibold text-white">Track Details</h3>
-            <TrackFormFields form={trackForm} setForm={setTrackForm} />
+            {renderTrackFormFields(trackForm, setTrackForm)}
             <TierGate feature="collaborations" inline>
               <CollaboratorSearch collaborators={collaborators} setCollaborators={setCollaborators} currentArtistId={artist.id} />
             </TierGate>
@@ -689,7 +689,7 @@ export default function TrackUploadPanel() {
                   <form onSubmit={(e) => handleTrackUpload(e, quickTrackForm, quickVersionFiles, quickCollaborators, true)}
                     className="px-5 pb-5 space-y-4 border-t border-white/[0.06]">
                     <div className="pt-4">
-                      <TrackFormFields form={quickTrackForm} setForm={setQuickTrackForm} />
+                      {renderTrackFormFields(quickTrackForm, setQuickTrackForm)}
                     </div>
                     <TierGate feature="collaborations" inline>
                       <CollaboratorSearch collaborators={quickCollaborators} setCollaborators={setQuickCollaborators} currentArtistId={artist.id} />

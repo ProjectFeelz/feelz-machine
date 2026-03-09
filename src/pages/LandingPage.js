@@ -29,9 +29,8 @@ export default function LandingPage() {
     supabase
       .from('platform_settings')
       .select('value')
-      .eq('key', 'apk_url')
-      .maybeSingle()
-      .then(({ data }) => { if (data?.value) setApkUrl(data.value); });
+      .in('key', ['apk_url', 'apk_direct_url'])
+      .then(({ data }) => { const gd = data?.find(r => r.key === 'apk_url' && r.value); const direct = data?.find(r => r.key === 'apk_direct_url' && r.value); setApkUrl(gd?.value || direct?.value || null); });
 
     // Scroll listener for nav
     const onScroll = () => setScrolled(window.scrollY > 40);
