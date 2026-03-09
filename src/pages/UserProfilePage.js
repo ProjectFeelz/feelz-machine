@@ -59,7 +59,7 @@ export default function UserProfilePage() {
         const path = `user-avatars/${user.id}.${ext}`;
         const { error: uploadErr } = await supabase.storage
           .from('feelz-samples')
-          .upload(path, avatarFile, { upsert: true }).eq('user_id', user.id);
+          .upload(path, avatarFile, { contentType: avatarFile.type, upsert: true });
         if (uploadErr) throw uploadErr;
         const { data: urlData } = supabase.storage.from('feelz-samples').getPublicUrl(path);
         newAvatarUrl = urlData.publicUrl;
