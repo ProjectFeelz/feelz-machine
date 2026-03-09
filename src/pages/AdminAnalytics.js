@@ -5,7 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import {
   BarChart3, ChevronLeft, Loader, Music, Users, Mic2,
   TrendingUp, Heart, MessageCircle, Upload, Calendar, Download, Headphones
-} from 'lucide-react';
+, FileDown } from 'lucide-react';
 
 function StatCard({ icon: Icon, label, value, subtext, color }) {
   return (
@@ -145,6 +145,34 @@ export default function AdminAnalytics() {
     setLoading(false);
   }, []);
 
+  const exportCSV = (data, headers, filename) => {
+    const csv = [headers.join(','), ...data.map(row => headers.map(h => {
+      const val = row[h] ?? '';
+      return typeof val === 'string' && val.includes(',') ? '"' + val + '"' : val;
+    }).join(','))].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename; a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const exportArtists = async () => {
+    const { data } = await supabase.from('artists').select('artist_name, slug, tier, follower_count, total_streams, created_at').order('created_at', { ascending: false });
+    if (data) exportCSV(data, ['artist_name', 'slug', 'tier', 'follower_count', 'total_streams', 'created_at'], 'artists_export.csv');
+  };
+
+  const exportTracks = async () => {
+    const { data } = await supabase.from('tracks').select('title, genre, stream_count, download_count, is_published, created_at').order('created_at', { ascending: false });
+    if (data) exportCSV(data, ['title', 'genre', 'stream_count', 'download_count', 'is_published', 'created_at'], 'tracks_export.csv');
+  };
+
+  const exportStreams = async () => {
+    const { data } = await supabase.from('streams').select('track_id, user_id, duration_played, completed, device_type, platform, created_at').order('created_at', { ascending: false }).limit(5000);
+    if (data) exportCSV(data, ['track_id', 'user_id', 'duration_played', 'completed', 'device_type', 'platform', 'created_at'], 'streams_export.csv');
+  };
+
+
   useEffect(() => {
     if (isAdmin === false) { navigate('/hub'); return; }
     fetchAnalytics();
@@ -181,6 +209,25 @@ export default function AdminAnalytics() {
             <StatCard icon={Heart} label="Likes" value={stats.likes} color="bg-red-500/20" />
             <StatCard icon={MessageCircle} label="Collaborations" value={stats.collabs} color="bg-cyan-500/20" />
             <StatCard icon={TrendingUp} label="Engagement" value={stats.follows + stats.likes} subtext="Total interactions" color="bg-orange-500/20" />
+          </div>
+
+          {/* Data Export */}
+          <div className="mb-8">
+            <div className="flex items-center space-x-2 mb-4">
+              <FileDown className="w-4 h-4 text-white/30" />
+              <h2 className="text-xs uppercase tracking-wider text-white/30 font-semibold">Export Data</h2>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button onClick={exportArtists} className="flex items-center space-x-2 px-4 py-2.5 bg-white/[0.04] rounded-xl text-sm text-white/60 hover:bg-white/[0.08] transition border border-white/[0.06]">
+                <FileDown className="w-3.5 h-3.5" /><span>Artists CSV</span>
+              </button>
+              <button onClick={exportTracks} className="flex items-center space-x-2 px-4 py-2.5 bg-white/[0.04] rounded-xl text-sm text-white/60 hover:bg-white/[0.08] transition border border-white/[0.06]">
+                <FileDown className="w-3.5 h-3.5" /><span>Tracks CSV</span>
+              </button>
+              <button onClick={exportStreams} className="flex items-center space-x-2 px-4 py-2.5 bg-white/[0.04] rounded-xl text-sm text-white/60 hover:bg-white/[0.08] transition border border-white/[0.06]">
+                <FileDown className="w-3.5 h-3.5" /><span>Streams CSV</span>
+              </button>
+            </div>
           </div>
 
           {/* New Artists – 7 Days */}

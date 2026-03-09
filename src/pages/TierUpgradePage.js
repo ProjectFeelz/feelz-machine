@@ -43,8 +43,11 @@ const TIER_FEATURES = {
       { text: 'Chat rooms (1 room)', included: true },
       { text: 'Analytics dashboard', included: true },
       { text: 'Collaboration & splits', included: true },
+      { text: 'Community posting (1/day)', included: true },
       { text: 'Priority in browse/trending', included: false },
       { text: 'Download sales', included: false },
+      { text: 'Contact downloads', included: false },
+      { text: 'Advanced analytics & export', included: false },
     ],
   },
   premium: {
