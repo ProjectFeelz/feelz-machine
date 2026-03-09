@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
-import { Send, Loader, X, Music, Search } from 'lucide-react';
+import { Send, Loader, X, Music, Search, Image } from 'lucide-react';
 import TierGate from './TierGate';
 
 const YOUTUBE_REGEX = /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/;
@@ -38,6 +38,10 @@ export default function PostComposer({ onPostCreated }) {
   const editorRef = useRef(null);
   const tagTimeoutRef = useRef(null);
   const trackTimeoutRef = useRef(null);
+  const imageInputRef = useRef(null);
+  const [imageFile, setImageFile] = useState(null);
+  const [imagePreview, setImagePreview] = useState(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
 
   const youtubeId = extractYouTubeId(content);
   const blocked = hasBlockedLinks(content);
@@ -111,6 +115,23 @@ export default function PostComposer({ onPostCreated }) {
 
   const removeTag = (artistId) => setTaggedArtists(taggedArtists.filter(a => a.id !== artistId));
 
+  const handleImageSelect = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) { setError('Please select an image file'); return; }
+    if (file.size > 10 * 1024 * 1024) { setError('Image must be under 10MB'); return; }
+    setImageFile(file);
+    setImagePreview(URL.createObjectURL(file));
+    setError('');
+  };
+
+  const removeImage = () => {
+    setImageFile(null);
+    if (imagePreview) URL.revokeObjectURL(imagePreview);
+    setImagePreview(null);
+    if (imageInputRef.current) imageInputRef.current.value = '';
+  };
+
   const handleSubmit = async () => {
     if (!content.trim() || !user || !artist) return;
     if (blocked) { setError('External links are not allowed. You can share YouTube links only.'); return; }
@@ -131,6 +152,19 @@ export default function PostComposer({ onPostCreated }) {
           return;
         }
       }
+      let imageUrl = null;
+      if (imageFile) {
+        setUploadingImage(true);
+        const ext = imageFile.name.split('.').pop();
+        const filename = `posts/${artist.id}-${Date.now()}.${ext}`;
+        const { error: uploadErr } = await supabase.storage
+          .from('feelz-samples')
+          .upload(filename, imageFile, { contentType: imageFile.type, upsert: true });
+        if (uploadErr) throw uploadErr;
+        const { data: urlData } = supabase.storage.from('feelz-samples').getPublicUrl(filename);
+        imageUrl = urlData.publicUrl;
+        setUploadingImage(false);
+      }
       const taggedIds = taggedArtists.map(a => a.id);
       const { data, error: postError } = await supabase.from('posts').insert({
         artist_id: artist.id,
@@ -141,6 +175,7 @@ export default function PostComposer({ onPostCreated }) {
         youtube_id: youtubeId || null,
         track_id: taggedTrack?.id || null,
         scheduled_at: scheduledAt || null,
+        media_urls: imageUrl ? [imageUrl] : [],
         is_auto_generated: false,
       }).select().single();
       if (postError) throw postError;
@@ -168,6 +203,7 @@ export default function PostComposer({ onPostCreated }) {
       setContent('');
       setTaggedArtists([]);
       setTaggedTrack(null);
+      removeImage();
       if (onPostCreated) onPostCreated(data);
     } catch (err) {
       console.error('Post error:', err);
