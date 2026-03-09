@@ -141,13 +141,7 @@ export default function ProfilePage() {
         </div>
       )}
       {!isArtist && (
-          <button
-            onClick={() => nav('/profile/edit')}
-            className="mt-3 w-full flex items-center justify-between px-2 py-2 rounded-lg hover:bg-white/[0.04] transition"
-          >
-            <span className="text-xs text-white/40">Edit Profile</span>
-            <ChevronRight className="w-3.5 h-3.5 text-white/20" />
-          </button>
+
         )}
       </div>
 

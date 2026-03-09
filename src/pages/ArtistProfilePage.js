@@ -103,7 +103,7 @@ export default function ArtistProfilePage() {
       if (user) {
         const { data: followData } = await supabase
           .from('follows').select('id')
-          .eq('artist_id', artistData.id).eq('follower_id', user.id).single();
+          .eq('artist_id', artistData.id).eq('follower_id', user.id).maybeSingle();
         setIsFollowing(!!followData);
       }
     } catch (err) { console.error('Error fetching artist:', err); }
