@@ -51,7 +51,7 @@ export default function AppRouter() {
             <Route path="/login" element={<LoginPage />} />
             <Route path="/setup" element={<ProfileSetup />} />
             <Route path="/dashboard" element={<ArtistDashboard />} />
-            <Route path="/artist/:slug" element={<ArtistProfilePage />} />
+
             <Route path="/upgrade" element={<TierUpgradePage />} />
             <Route path="/chat/:roomId" element={<ChatRoomView />} />
             <Route path="/privacy-policy" element={<PrivacyPolicy />} />
@@ -74,6 +74,7 @@ export default function AppRouter() {
               <Route path="/notifications" element={<NotificationsPage />} />
               <Route path="/hub" element={<HubPage />} />
               <Route path="/album/:id" element={<AlbumDetailPage />} />
+              <Route path="/artist/:slug" element={<ArtistProfilePage />} />
               <Route path="/admin" element={<AdminDashboard />} />
               <Route path="/admin/artists" element={<AdminArtists />} />
               <Route path="/admin/analytics" element={<AdminAnalytics />} />
