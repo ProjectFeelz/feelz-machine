@@ -198,17 +198,6 @@ export default function ChatRoomView() {
     setJoining(true);
 
     try {
-      // Check if user has spent at least $10
-      const { data: purchases } = await supabase
-        .from('downloads')
-        .select('amount_paid')
-        .eq('user_id', user.id);
-      const totalSpent = (purchases || []).reduce((sum, p) => sum + (parseFloat(p.amount_paid) || 0), 0);
-      if (totalSpent < 10) {
-        setJoinError('Chat rooms require at least $10 in purchases to join.');
-        setJoining(false);
-        return;
-      }
 
       const { error } = await supabase.from('chat_room_members').insert({
         room_id: roomId,

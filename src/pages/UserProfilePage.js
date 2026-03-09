@@ -74,10 +74,12 @@ export default function UserProfilePage() {
           
           
           updated_at: new Date().toISOString(),
-        });
+        })
+        .eq('user_id', user.id);
       if (upsertErr) throw upsertErr;
 
       setAvatarUrl(newAvatarUrl);
+      if (newAvatarUrl) { await supabase.auth.updateUser({ data: { avatar_url: newAvatarUrl } }); }
       setAvatarFile(null);
       setAvatarPreview('');
       if (refreshProfile) await refreshProfile();

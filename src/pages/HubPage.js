@@ -117,7 +117,6 @@ export default function HubPage() {
         <Section title="Discover" icon={Music}>
           <LinkCard icon={Music} label="Browse Music" description="Find new tracks and artists" path="/browse" color="bg-purple-500/20" />
           <LinkCard icon={Mic2} label="Discover Artists" description="Find and follow new artists" path="/browse?tab=artists" color="bg-indigo-500/20" />
-          <LinkCard icon={Mic2} label="Discover Artists" description="Find and follow new artists" path="/browse?tab=artists" color="bg-indigo-500/20" />
           <LinkCard icon={Users} label="Following" description="Artists you follow" path="/library/following" color="bg-cyan-500/20" />
           <LinkCard icon={MessageCircle} label="Community" description="Feed and chat rooms" path="/community" color="bg-teal-500/20" />
           <LinkCard icon={Star} label="Liked Songs" description="Your saved tracks" path="/library/likes" color="bg-pink-500/20" />
