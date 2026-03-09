@@ -33,14 +33,8 @@ export async function checkStreamMilestone(trackId, trackTitle, artistId, curren
   for (const ms of MILESTONES) {
     if (currentCount >= ms.count) {
       // Check if this milestone notification already exists
-      const { count } = await supabase
-        .from('notifications')
-        .select('*', { count: 'exact', head: true })
-        .eq('artist_id', artistId)
-        .eq('track_id', trackId)
-        .eq('type', ms.type);
-
-      if (count === 0) {
+      // Milestones now handled by SQL triggers - skip client-side check
+      if (currentCount === ms.count) {
         await createNotification({
           artistId,
           type: ms.type,
@@ -143,7 +137,7 @@ export default function useNotifications() {
   useEffect(() => {
     if (!artist && !user) return;
     fetchNotifications();
-    pollRef.current = setInterval(fetchUnreadCount, 20000);
+    pollRef.current = setInterval(fetchUnreadCount, 60000);
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, [artist, fetchNotifications, fetchUnreadCount]);
 
