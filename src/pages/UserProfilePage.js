@@ -23,14 +23,14 @@ export default function UserProfilePage() {
     if (!user) return;
     const fetchProfile = async () => {
       const { data } = await supabase
-        .from('profiles')
-        .select('display_name, bio, avatar_url')
-        .eq('id', user.id)
+        .from('user_profiles')
+        .select('name, country, city')
+        .eq('user_id', user.id)
         .single();
       if (data) {
-        setDisplayName(data.display_name || '');
-        setBio(data.bio || '');
-        setAvatarUrl(data.avatar_url || '');
+        setDisplayName(data.name || '');
+        setBio('' || '');
+        setAvatarUrl('' || '');
       } else {
         // profiles row might not exist yet — use user metadata
         setDisplayName(user.user_metadata?.display_name || user.email?.split('@')[0] || '');
@@ -58,21 +58,21 @@ export default function UserProfilePage() {
         const ext = avatarFile.name.split('.').pop();
         const path = `user-avatars/${user.id}.${ext}`;
         const { error: uploadErr } = await supabase.storage
-          .from('avatars')
-          .upload(path, avatarFile, { upsert: true });
+          .from('feelz-samples')
+          .upload(path, avatarFile, { upsert: true }).eq('user_id', user.id);
         if (uploadErr) throw uploadErr;
         const { data: urlData } = supabase.storage.from('feelz-samples').getPublicUrl(path);
         newAvatarUrl = urlData.publicUrl;
       }
 
-      // Upsert into profiles table
+      // Update user_profiles
       const { error: upsertErr } = await supabase
-        .from('profiles')
-        .upsert({
-          id: user.id,
-          display_name: displayName.trim() || user.email?.split('@')[0],
-          bio: bio.trim(),
-          avatar_url: newAvatarUrl,
+        .from('user_profiles')
+        .update({
+          
+          name: displayName.trim() || user.email?.split('@')[0],
+          
+          
           updated_at: new Date().toISOString(),
         });
       if (upsertErr) throw upsertErr;
