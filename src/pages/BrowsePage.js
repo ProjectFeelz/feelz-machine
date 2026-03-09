@@ -31,7 +31,10 @@ export default function BrowsePage() {
   const { playTrack, currentTrack, isPlaying, togglePlay } = usePlayer();
 
   const [query, setQuery] = useState('');
-  const [activeTab, setActiveTab] = useState('trending');
+  const [activeTab, setActiveTab] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('tab') || 'trending';
+  });
   const [selectedGenre, setSelectedGenre] = useState('All');
   const [trending, setTrending] = useState([]);
   const [allTracks, setAllTracks] = useState([]);

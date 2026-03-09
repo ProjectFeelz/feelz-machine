@@ -1,4 +1,5 @@
 import { downloadTrack } from '../utils/downloadTrack';
+import TrackActionSheet from '../components/TrackActionSheet';
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
@@ -7,7 +8,7 @@ import { usePlayer } from '../contexts/PlayerContext';
 import {
   ArrowLeft, Play, Pause, Share2, UserPlus, UserCheck,
   Instagram, Twitter, Youtube, MessageCircle, Globe, Music,
-  Loader, Verified, Download, Heart, ListMusic, Check
+  Loader, Verified, Download, Heart, ListMusic, Check, MoreHorizontal
 } from 'lucide-react';
 
 const PAYPAL_CLIENT_ID = 'AXhUqyXxTmBJ8Q6bqt0yiOEuLxqbbhnP93YONXL5Oiy3btUntKK8M7F2WfOeUzoVPxjHEalbRRRU52yY';
@@ -49,6 +50,7 @@ export default function ArtistProfilePage() {
   const [followerCount, setFollowerCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [showAllTracks, setShowAllTracks] = useState(false);
+  const [actionSheetTrack, setActionSheetTrack] = useState(null);
   const [copied, setCopied] = useState(false);
   const [downloading, setDownloading] = useState(null);
   const [purchaseTrack, setPurchaseTrack] = useState(null);
@@ -473,6 +475,7 @@ export default function ArtistProfilePage() {
                     </div>
                   </div>
                   {track.duration && <span className="text-xs flex-shrink-0" style={{ color: `${textColor}30` }}>{formatDuration(track.duration)}</span>}
+                  <button onClick={(e) => { e.stopPropagation(); setActionSheetTrack(track); }} className="flex-shrink-0 p-1.5 rounded-lg transition-all active:scale-95 md:opacity-0 md:group-hover:opacity-100" style={{ color: textColor + "30" }} title="More"><MoreHorizontal className="w-4 h-4" /></button>
                   <button onClick={(e) => handleLike(track, e)} className="flex-shrink-0 p-1.5 rounded-lg transition-all active:scale-95" style={{ color: likedTracks[track.id] ? '#ef4444' : `${textColor}30` }}>
                     <Heart className="w-4 h-4" fill={likedTracks[track.id] ? '#ef4444' : 'none'} />
                   </button>
@@ -611,6 +614,8 @@ export default function ArtistProfilePage() {
       )}
 
       {/* PURCHASE MODAL */}
+      <TrackActionSheet track={actionSheetTrack} artist={artist} onClose={() => setActionSheetTrack(null)} />
+
       {purchaseTrack && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.8)' }}
           onClick={() => { setPurchaseTrack(null); setPurchasing(false); setPurchaseError(''); }}>
