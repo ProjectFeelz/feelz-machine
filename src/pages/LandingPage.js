@@ -23,6 +23,23 @@ function LogoIcon({ size = 32 }) {
 export default function LandingPage() {
   const [apkUrl, setApkUrl] = useState(null);
   const [scrolled, setScrolled] = useState(false);
+  const [installPrompt, setInstallPrompt] = useState(null);
+
+  useEffect(() => {
+    const handler = (e) => { e.preventDefault(); setInstallPrompt(e); };
+    window.addEventListener('beforeinstallprompt', handler);
+    return () => window.removeEventListener('beforeinstallprompt', handler);
+  }, []);
+
+  const handleInstall = async () => {
+    if (installPrompt) {
+      installPrompt.prompt();
+      const result = await installPrompt.userChoice;
+      if (result.outcome === 'accepted') setInstallPrompt(null);
+    } else if (apkUrl) {
+      window.open(apkUrl, '_blank');
+    }
+  };
 
   useEffect(() => {
     // Fetch APK URL from platform_settings
@@ -169,7 +186,7 @@ export default function LandingPage() {
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
             </svg>
-            Download APK
+            Install App
           </a>
         </div>
       </nav>
@@ -193,9 +210,9 @@ export default function LandingPage() {
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
             </svg>
-            Download APK
+            Install App
           </a>
-          <p style={s.heroMeta} className="anim4">Android 8.0+ · Free to install · No Play Store needed</p>
+          <p style={s.heroMeta} className="anim4">Works on any device · Free to install · Add to home screen</p>
         </div>
         <div style={s.wave}>
           {bars.map((b, i) => (
@@ -318,7 +335,7 @@ export default function LandingPage() {
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
             </svg>
-            Download APK
+            Install App
           </a>
         ) : (
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10, padding: '16px 28px', fontSize: 14, color: 'rgba(255,255,255,0.3)', position: 'relative' }}>
