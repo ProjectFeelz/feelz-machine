@@ -61,7 +61,7 @@ export default function UserProfilePage() {
           .from('avatars')
           .upload(path, avatarFile, { upsert: true });
         if (uploadErr) throw uploadErr;
-        const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(path);
+        const { data: urlData } = supabase.storage.from('feelz-samples').getPublicUrl(path);
         newAvatarUrl = urlData.publicUrl;
       }
 
