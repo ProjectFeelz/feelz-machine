@@ -125,7 +125,7 @@ export default function ChatRoomView() {
       if (missingIds.length > 0) {
         const { data: profilesData } = await supabase
           .from('user_profiles')
-          .select('user_id, name, email')
+          .select('user_id, name, email, avatar_url')
           .in('user_id', missingIds);
         (profilesData || []).forEach(p => { profileMap[p.user_id] = p; });
       }
@@ -134,6 +134,7 @@ export default function ChatRoomView() {
         ...m,
         artist: artistMap[m.user_id] || null,
         listener_name: profileMap[m.user_id]?.name || profileMap[m.user_id]?.email?.split('@')[0] || null,
+        listener_avatar: profileMap[m.user_id]?.avatar_url || null,
       }));
 
       setMessages(enriched);
@@ -159,12 +160,13 @@ export default function ChatRoomView() {
       if (!artistData) {
         const { data: profileData } = await supabase
           .from('user_profiles')
-          .select('name, email')
+          .select('name, email, avatar_url')
           .eq('user_id', data.user_id)
           .maybeSingle();
         listenerName = profileData?.name || profileData?.email?.split('@')[0] || null;
+        const listenerAvatar = profileData?.avatar_url || null;
       }
-      const enriched = { ...data, artist: artistData || null, listener_name: listenerName };
+      const enriched = { ...data, artist: artistData || null, listener_name: listenerName, listener_avatar: listenerAvatar };
       setMessages(prev => {
         if (prev.find(m => m.id === enriched.id)) return prev;
         return [...prev, enriched];
@@ -433,9 +435,9 @@ export default function ChatRoomView() {
               {/* Avatar (only show if different sender) */}
               {!sameSender ? (
                 <div className="w-8 h-8 rounded-full overflow-hidden bg-gradient-to-br from-purple-600/30 to-blue-600/20 flex items-center justify-center flex-shrink-0 mt-0.5">
-                  {msg.artist?.profile_image_url
-                    ? <img src={msg.artist.profile_image_url} alt="" className="w-8 h-8 rounded-full object-cover" />
-                    : <span className="text-xs font-bold text-white/40">{(msg.artist?.artist_name || '?')[0]}</span>}
+                  {(msg.artist?.profile_image_url || msg.listener_avatar)
+                    ? <img src={msg.artist?.profile_image_url || msg.listener_avatar} alt="" className="w-8 h-8 rounded-full object-cover" />
+                    : <span className="text-xs font-bold text-white/40">{(msg.artist?.artist_name || msg.listener_name || '?')[0]}</span>}
                 </div>
               ) : (
                 <div className="w-8 flex-shrink-0" />

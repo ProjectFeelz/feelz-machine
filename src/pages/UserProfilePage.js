@@ -24,13 +24,13 @@ export default function UserProfilePage() {
     const fetchProfile = async () => {
       const { data } = await supabase
         .from('user_profiles')
-        .select('name, country, city')
+        .select('name, country, city, avatar_url')
         .eq('user_id', user.id)
         .single();
       if (data) {
         setDisplayName(data.name || '');
         setBio('' || '');
-        setAvatarUrl(user.user_metadata?.avatar_url || user.user_metadata?.picture || '');
+        setAvatarUrl(data?.avatar_url || user.user_metadata?.avatar_url || user.user_metadata?.picture || '');
       } else {
         // profiles row might not exist yet — use user metadata
         setDisplayName(user.user_metadata?.display_name || user.email?.split('@')[0] || '');

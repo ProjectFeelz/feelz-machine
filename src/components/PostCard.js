@@ -392,7 +392,7 @@ export default function PostCard({ post, onDelete, onUpdate }) {
             {comments.map(comment => (
               <div key={comment.id} className="flex space-x-3 px-4 py-3 border-b border-white/[0.02]">
                 <div className="w-7 h-7 rounded-full bg-gradient-to-br from-purple-600/50 to-blue-600/50 flex items-center justify-center overflow-hidden flex-shrink-0">
-                  {comment.artists?.profile_image_url
+                  {(comment.artists?.profile_image_url || comment.listener_avatar)
                     ? <img src={comment.artists.profile_image_url} alt="" className="w-7 h-7 rounded-full object-cover" />
                     : <span className="text-[10px] font-bold text-white">{((comment.artists?.artist_name || comment.listener_name) || comment.listener_name || '?')?.[0]?.toUpperCase()}</span>}
                 </div>
