@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import TrackActionSheet from '../components/TrackActionSheet';
 import { downloadTrack } from '../utils/downloadTrack';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
@@ -45,6 +46,7 @@ export default function AlbumDetailPage() {
   const [addedTo, setAddedTo] = useState({});
 
   // Purchase state — for individual track OR full album
+  const [actionSheetTrack, setActionSheetTrack] = useState(null);
   const [purchaseTarget, setPurchaseTarget] = useState(null); // { type: 'track'|'album', track?, price, label }
   const [paypalReady, setPaypalReady] = useState(false);
   const [purchasing, setPurchasing] = useState(false);
@@ -521,6 +523,7 @@ export default function AlbumDetailPage() {
           </div>
         </div>
       )}
+      <TrackActionSheet track={actionSheetTrack} artist={artist} onClose={() => setActionSheetTrack(null)} />
     </div>
   );
 }

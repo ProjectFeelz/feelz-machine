@@ -394,11 +394,11 @@ export default function PostCard({ post, onDelete, onUpdate }) {
                 <div className="w-7 h-7 rounded-full bg-gradient-to-br from-purple-600/50 to-blue-600/50 flex items-center justify-center overflow-hidden flex-shrink-0">
                   {comment.artists?.profile_image_url
                     ? <img src={comment.artists.profile_image_url} alt="" className="w-7 h-7 rounded-full object-cover" />
-                    : <span className="text-[10px] font-bold text-white">{(comment.artists?.artist_name || '?')?.[0]?.toUpperCase()}</span>}
+                    : <span className="text-[10px] font-bold text-white">{((comment.artists?.artist_name || comment.listener_name) || comment.listener_name || '?')?.[0]?.toUpperCase()}</span>}
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center space-x-1.5">
-                    <span className="text-xs font-medium text-white">{comment.artists?.artist_name || 'User'}</span>
+                    <span className="text-xs font-medium text-white">{(comment.artists?.artist_name || comment.listener_name) || 'User'}</span>
                     <span className="text-[10px] text-white/20">{timeAgo(comment.created_at)}</span>
                   </div>
                   <p className="text-xs text-white/60 mt-0.5">{comment.content}</p>

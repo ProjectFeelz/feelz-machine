@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
+import TrackActionSheet from '../components/TrackActionSheet';
 import { usePlayer } from '../contexts/PlayerContext';
 import {
   Search, Flame, TrendingUp, Play, Pause, Music, Crown,
@@ -31,6 +32,7 @@ export default function BrowsePage() {
   const { playTrack, currentTrack, isPlaying, togglePlay } = usePlayer();
 
   const [query, setQuery] = useState('');
+  const [actionSheetTrack, setActionSheetTrack] = useState(null);
   const [activeTab, setActiveTab] = useState(() => {
     const params = new URLSearchParams(window.location.search);
     return params.get('tab') || 'trending';

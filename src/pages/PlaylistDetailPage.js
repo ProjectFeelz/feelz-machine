@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
+import TrackActionSheet from '../components/TrackActionSheet';
 import { usePlayer } from '../contexts/PlayerContext';
 import {
   ArrowLeft, Play, Pause, Music, Loader, Trash2,
@@ -29,6 +30,7 @@ export default function PlaylistDetailPage() {
   const [searchResults, setSearchResults] = useState([]);
   const [searching, setSearching] = useState(false);
   const [adding, setAdding] = useState(null);
+  const [actionSheetTrack, setActionSheetTrack] = useState(null);
   const [removing, setRemoving] = useState(null);
   const [editingName, setEditingName] = useState(false);
   const [newName, setNewName] = useState('');
@@ -322,6 +324,7 @@ export default function PlaylistDetailPage() {
           ))}
         </div>
       )}
+      <TrackActionSheet track={actionSheetTrack} artist={actionSheetTrack ? { artist_name: actionSheetTrack.artist_name } : null} onClose={() => setActionSheetTrack(null)} />
     </div>
   );
 }
