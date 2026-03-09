@@ -10,6 +10,7 @@ export function AuthProvider({ children }) {
   const [listener, setListener] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [viewAs, setViewAs] = useState(null); // null | 'artist' | 'listener' | 'admin'
 
   const fetchProfile = async (userId) => {
     let { data } = await supabase
@@ -133,11 +134,16 @@ export function AuthProvider({ children }) {
     artist,
     listener,
     loading,
-    isAdmin,
-    isArtist: !!artist,
-    isListener: !!listener,
+    isAdmin: viewAs ? viewAs === 'admin' : isAdmin,
+    isArtist: viewAs ? (viewAs === 'artist' || viewAs === 'admin') : !!artist,
+    isListener: viewAs ? viewAs === 'listener' : !!listener,
+    rawIsAdmin: isAdmin,
+    rawIsArtist: !!artist,
+    rawIsMaster: artist?.is_master || false,
     hasProfile: !!artist || !!listener,
-    isMaster: artist?.is_master || false,
+    isMaster: viewAs ? false : (artist?.is_master || false),
+    viewAs,
+    setViewAs,
     signInWithGoogle,
     signInWithEmail,
     signUpWithEmail,
