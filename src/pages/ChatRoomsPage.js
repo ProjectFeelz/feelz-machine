@@ -299,12 +299,12 @@ export default function ChatRoomsPage() {
                     <button
                       onClick={e => handleDeleteRoom(e, room.id)}
                       disabled={deletingRoomId === room.id}
-                      className={p-1.5 rounded-lg transition }
+                      className={`p-1.5 rounded-lg transition ${confirmDeleteId === room.id ? "bg-red-500/20" : "hover:bg-white/[0.08]"}`}
                       title={confirmDeleteId === room.id ? 'Click again to confirm' : 'Delete room'}
                     >
                       {deletingRoomId === room.id
                         ? <Loader className="w-3 h-3 animate-spin text-red-400" />
-                        : <Trash2 className={w-3 h-3 } />}
+                        : <Trash2 className={`w-3 h-3 ${confirmDeleteId === room.id ? "text-red-400" : "text-white/30"}`} />}
                     </button>
                   </>
                 )}
