@@ -152,7 +152,7 @@ function SquareCard({ item, itemList = [], isAlbum = false, onPlay, currentTrack
         {/* 3-dot button */}
         <button
           onClick={(e) => { e.stopPropagation(); setShowMenu(p => !p); }}
-          className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/60 backdrop-blur flex items-center justify-center opacity-0 group-hover:opacity-100 transition"
+          className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/60 backdrop-blur flex items-center justify-center md:opacity-0 md:group-hover:opacity-100 transition"
         >
           <MoreHorizontal className="w-3.5 h-3.5 text-white" />
         </button>
