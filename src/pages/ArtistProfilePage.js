@@ -346,8 +346,8 @@ export default function ArtistProfilePage() {
           </button>
         </div>
         {/* Avatar overlapping bottom of banner */}
-        <div className="absolute -bottom-10 left-1/2 -translate-x-1/2 z-10">
-          <div className="w-20 h-20 rounded-2xl overflow-hidden border-4 shadow-2xl"
+        <div className="absolute -bottom-14 left-1/2 -translate-x-1/2 z-10">
+          <div className="w-28 h-28 rounded-2xl overflow-hidden border-4 shadow-2xl"
             style={{ borderColor: bgColor, backgroundColor: `${secondaryColor}30` }}>
             {artist.profile_image_url ? (
               <img src={artist.profile_image_url} alt={artist.artist_name} className="w-full h-full object-cover" />
@@ -362,7 +362,7 @@ export default function ArtistProfilePage() {
       </div>
 
       {/* ARTIST INFO */}
-      <div className="px-6 pt-14 flex flex-col items-center text-center">
+      <div className="px-6 pt-20 flex flex-col items-center text-center">
         <div className="flex items-center space-x-2 mb-1">
           <h1 className="text-2xl font-bold" style={{ fontFamily: `"${headingFont}", sans-serif`, color: textColor }}>{artist.artist_name}</h1>
           {artist.is_verified && (
