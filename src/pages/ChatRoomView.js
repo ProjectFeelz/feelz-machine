@@ -119,9 +119,21 @@ export default function ChatRoomView() {
       const artistMap = {};
       (artistsData || []).forEach(a => { artistMap[a.user_id] = a; });
 
+      // Also fetch listener names for non-artists
+      const missingIds = userIds.filter(uid => !artistMap[uid]);
+      let profileMap = {};
+      if (missingIds.length > 0) {
+        const { data: profilesData } = await supabase
+          .from('user_profiles')
+          .select('user_id, name, email')
+          .in('user_id', missingIds);
+        (profilesData || []).forEach(p => { profileMap[p.user_id] = p; });
+      }
+
       const enriched = data.map(m => ({
         ...m,
         artist: artistMap[m.user_id] || null,
+        listener_name: profileMap[m.user_id]?.name || profileMap[m.user_id]?.email?.split('@')[0] || null,
       }));
 
       setMessages(enriched);
@@ -143,7 +155,16 @@ export default function ChatRoomView() {
         .eq('user_id', data.user_id)
         .single();
 
-      const enriched = { ...data, artist: artistData || null };
+      let listenerName = null;
+      if (!artistData) {
+        const { data: profileData } = await supabase
+          .from('user_profiles')
+          .select('name, email')
+          .eq('user_id', data.user_id)
+          .maybeSingle();
+        listenerName = profileData?.name || profileData?.email?.split('@')[0] || null;
+      }
+      const enriched = { ...data, artist: artistData || null, listener_name: listenerName };
       setMessages(prev => {
         if (prev.find(m => m.id === enriched.id)) return prev;
         return [...prev, enriched];
@@ -208,7 +229,7 @@ export default function ChatRoomView() {
       setIsMember(true);
       setMyMembership({ role: 'member' });
     } catch (err) {
-      console.error('Join error:', err); setJoinError(err.message || 'Unable to join — this room may be subscribers-only.');
+      console.error('Join error:', err); setJoinError(err.message || 'Unable to join ï¿½ this room may be subscribers-only.');
     }
     setJoining(false);
   };
@@ -436,7 +457,7 @@ export default function ChatRoomView() {
                 {!sameSender && (
                   <div className="flex items-center space-x-1.5 mb-0.5">
                     <span className={`text-xs font-semibold ${isRoomOwner ? 'text-purple-400' : 'text-white'}`}>
-                      {msg.artist?.artist_name || 'User'}
+                      {msg.artist?.artist_name || msg.listener_name || 'User'}
                     </span>
                     {isRoomOwner && (
                       <span className="text-[9px] px-1.5 py-0.5 bg-purple-500/10 text-purple-400 rounded font-medium">HOST</span>
