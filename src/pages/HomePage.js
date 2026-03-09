@@ -167,7 +167,7 @@ function SquareCard({ item, itemList = [], isAlbum = false, onPlay, currentTrack
         <div ref={menuRef}
           onClick={(e) => e.stopPropagation()}
           className="absolute right-0 z-50 w-52 rounded-xl shadow-2xl overflow-hidden"
-          style={{ top: '100%', marginTop: '4px', backgroundColor: '#1a1a1a', border: '1px solid rgba(255,255,255,0.08)' }}>
+          style={{ bottom: '100%', marginBottom: '4px', backgroundColor: '#1a1a1a', border: '1px solid rgba(255,255,255,0.08)' }}>
           {showPlaylists ? (
             <>
               <div className="flex items-center justify-between px-4 py-2.5 border-b border-white/[0.06]">
