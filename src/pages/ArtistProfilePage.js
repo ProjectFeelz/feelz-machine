@@ -241,6 +241,18 @@ export default function ArtistProfilePage() {
     if (!existing) {
       const { data: last } = await supabase.from('playlist_tracks').select('position').eq('playlist_id', playlistId).order('position', { ascending: false }).limit(1).maybeSingle();
       await supabase.from('playlist_tracks').insert({ playlist_id: playlistId, track_id: trackId, position: (last?.position ?? -1) + 1 });
+      // Notify track owner
+      const { data: trackData } = await supabase.from('tracks').select('artist_id, title').eq('id', trackId).maybeSingle();
+      const { data: plData } = await supabase.from('playlists').select('name').eq('id', playlistId).maybeSingle();
+      if (trackData?.artist_id && trackData.artist_id !== artist?.id) {
+        const myName = artist?.artist_name || 'Someone';
+        await supabase.from('notifications').insert({
+          artist_id: trackData.artist_id, type: 'track_liked',
+          title: myName + ' added ' + trackData.title + ' to ' + (plData?.name || 'a playlist'),
+          track_id: trackId, from_artist_id: artist?.id,
+          metadata: { playlist_add: true, playlist_id: playlistId }
+        }).catch(() => {});
+      }
     }
     setAddedTo(prev => ({ ...prev, [`${playlistId}-${trackId}`]: true }));
     setAddingTo(null);

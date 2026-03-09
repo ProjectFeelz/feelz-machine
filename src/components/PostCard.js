@@ -297,6 +297,15 @@ export default function PostCard({ post, onDelete, onUpdate }) {
         </p>
       </div>
 
+      {/* Post images */}
+      {post.media_urls && post.media_urls.length > 0 && (
+        <div className="px-4 pb-3">
+          <div className="rounded-xl overflow-hidden">
+            <img src={post.media_urls[0]} alt="" className="w-full max-h-96 object-cover rounded-xl" />
+          </div>
+        </div>
+      )}
+
       {/* YouTube embed */}
       {post.youtube_id && (
         <div className="px-4 pb-3">
@@ -307,6 +316,15 @@ export default function PostCard({ post, onDelete, onUpdate }) {
               allowFullScreen
               title="YouTube video"
             />
+          </div>
+        </div>
+      )}
+
+      {/* Post images */}
+      {post.media_urls && post.media_urls.length > 0 && (
+        <div className="px-4 pb-3">
+          <div className="rounded-xl overflow-hidden">
+            <img src={post.media_urls[0]} alt="" className="w-full max-h-96 object-cover rounded-xl" />
           </div>
         </div>
       )}
