@@ -50,7 +50,7 @@ export default function PaymentSettings() {
       .select('*, platform_tiers(*)')
       .eq('artist_id', artist.id)
       .eq('status', 'active')
-      .single();
+      .maybeSingle();
 
     if (sub?.platform_tiers) {
       setCurrentTier(sub.platform_tiers);
