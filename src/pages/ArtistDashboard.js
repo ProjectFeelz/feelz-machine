@@ -10,6 +10,34 @@ import TrackUploadPanel from './TrackUploadPanel';
 import CollabRequests, { CollabBadge } from '../components/CollabRequests';
 import TierGate, { UploadGate, TierBadge } from '../components/TierGate';
 
+function ContactExportButton({ artist }) {
+  const [exporting, setExporting] = React.useState(false);
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      const { data: followers } = await supabase.from('follows').select('follower_id').eq('artist_id', artist.id);
+      if (!followers || followers.length === 0) { alert('No followers yet'); setExporting(false); return; }
+      const userIds = followers.map(f => f.follower_id);
+      const { data: profiles } = await supabase.from('user_profiles').select('name, email').in('user_id', userIds);
+      if (profiles && profiles.length > 0) {
+        const csv = ['name,email', ...profiles.map(p => (p.name || '') + ',' + (p.email || ''))].join('\n');
+        const blob = new Blob([csv], { type: 'text/csv' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a'); a.href = url; a.download = 'follower_contacts.csv'; a.click();
+        URL.revokeObjectURL(url);
+      }
+    } catch (err) { console.error('Export error:', err); }
+    setExporting(false);
+  };
+  return (
+    <button onClick={handleExport} disabled={exporting}
+      className="flex items-center space-x-2 px-4 py-2.5 bg-white/[0.04] rounded-xl text-sm text-white/60 hover:bg-white/[0.08] transition border border-white/[0.06] disabled:opacity-40">
+      <Download className="w-3.5 h-3.5" />
+      <span>{exporting ? 'Exporting...' : 'Export CSV'}</span>
+    </button>
+  );
+}
+
 export default function ArtistDashboard() {
   const navigate = useNavigate();
   const { artist, isMaster } = useAuth();
@@ -141,6 +169,19 @@ export default function ArtistDashboard() {
                       </div>
                     ))}
                   </div>
+
+                  {/* Contact Export - Premium only */}
+                  <TierGate feature="advanced_analytics" inline>
+                    <div className="bg-white/[0.03] rounded-xl p-4 border border-white/[0.06]">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-semibold text-white">Follower Contacts</p>
+                          <p className="text-xs text-white/30 mt-0.5">Export your followers\u2019 names and emails</p>
+                        </div>
+                        <ContactExportButton artist={artist} />
+                      </div>
+                    </div>
+                  </TierGate>
 
                   <div className="bg-white/[0.03] rounded-xl p-5 border border-white/[0.06]">
                     <div className="flex items-center space-x-2 mb-4">
