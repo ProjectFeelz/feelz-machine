@@ -157,6 +157,7 @@ export default function ChatRoomView() {
         .single();
 
       let listenerName = null;
+      let listenerAvatar = null;
       if (!artistData) {
         const { data: profileData } = await supabase
           .from('user_profiles')
@@ -164,7 +165,7 @@ export default function ChatRoomView() {
           .eq('user_id', data.user_id)
           .maybeSingle();
         listenerName = profileData?.name || profileData?.email?.split('@')[0] || null;
-        const listenerAvatar = profileData?.avatar_url || null;
+        listenerAvatar = profileData?.avatar_url || null;
       }
       const enriched = { ...data, artist: artistData || null, listener_name: listenerName, listener_avatar: listenerAvatar };
       setMessages(prev => {
