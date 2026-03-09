@@ -140,9 +140,6 @@ export default function ProfilePage() {
           </button>
         </div>
       )}
-      {!isArtist && (
-
-        )}
       </div>
 
       {/* Section tabs for artists */}
