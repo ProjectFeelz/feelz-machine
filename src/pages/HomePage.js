@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { downloadTrack } from '../utils/downloadTrack';
+import TrackActionSheet from '../components/TrackActionSheet';
 import { usePaidPlayLimit } from '../hooks/usePaidPlayLimit';
 import PaidPlayGate from '../components/PaidPlayGate';
 
@@ -33,12 +34,13 @@ function Section({ title, icon: Icon, onSeeAll, children }) {
         )}
       </div>
       {children}
+      <TrackActionSheet track={actionSheetTrack} artist={actionSheetTrack ? { artist_name: actionSheetTrack.artist_name, slug: actionSheetTrack.artist_slug } : null} onClose={() => setActionSheetTrack(null)} />
     </div>
   );
 }
 
 // Square card used for Featured, New Releases, Trending
-function SquareCard({ item, itemList = [], isAlbum = false, onPlay, currentTrack, isPlaying }) {
+function SquareCard({ item, itemList = [], isAlbum = false, onPlay, currentTrack, isPlaying, onActionSheet }) {
   const { addToQueue } = usePlayer();
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -151,7 +153,7 @@ function SquareCard({ item, itemList = [], isAlbum = false, onPlay, currentTrack
         )}
         {/* 3-dot button */}
         <button
-          onClick={(e) => { e.stopPropagation(); setShowMenu(p => !p); }}
+          onClick={(e) => { e.stopPropagation(); if (onActionSheet) onActionSheet(item); else setShowMenu(p => !p); }}
           className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/60 backdrop-blur flex items-center justify-center md:opacity-0 md:group-hover:opacity-100 transition"
         >
           <MoreHorizontal className="w-3.5 h-3.5 text-white" />
@@ -355,7 +357,7 @@ export default function HomePage() {
           <div className="flex space-x-3 overflow-x-auto px-6 scrollbar-hide">
             {featuredTracks.map((track) => (
               <SquareCard key={track.id} item={track} itemList={featuredTracks}
-                onPlay={handlePlay} currentTrack={currentTrack} isPlaying={isPlaying} />
+                onPlay={handlePlay} currentTrack={currentTrack} isPlaying={isPlaying} onActionSheet={setActionSheetTrack} />
             ))}
           </div>
         </Section>
@@ -369,7 +371,7 @@ export default function HomePage() {
               <SquareCard key={`${item._isAlbum ? 'album' : 'track'}-${item.id}`}
                 item={item} itemList={newReleases.filter(i => !i._isAlbum)}
                 isAlbum={item._isAlbum}
-                onPlay={handlePlay} currentTrack={currentTrack} isPlaying={isPlaying} />
+                onPlay={handlePlay} currentTrack={currentTrack} isPlaying={isPlaying} onActionSheet={setActionSheetTrack} />
             ))}
           </div>
         </Section>
@@ -381,7 +383,7 @@ export default function HomePage() {
           <div className="flex space-x-3 overflow-x-auto px-6 scrollbar-hide">
             {trending.map((track) => (
               <SquareCard key={track.id} item={track} itemList={trending}
-                onPlay={handlePlay} currentTrack={currentTrack} isPlaying={isPlaying} />
+                onPlay={handlePlay} currentTrack={currentTrack} isPlaying={isPlaying} onActionSheet={setActionSheetTrack} />
             ))}
           </div>
         </Section>

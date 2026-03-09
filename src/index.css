@@ -89,4 +89,4 @@ body {
 }
 /* Hide scrollbars site-wide */
 * { scrollbar-width: none; -ms-overflow-style: none; }
-*::-webkit-scrollbar { display: none; }
+*::-webkit-scrollbar { display: none; }\n@keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }\n.animate-slide-up { animation: slideUp 0.25s ease-out; }\n
