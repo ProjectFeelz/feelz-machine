@@ -10,6 +10,11 @@ import { useAuth } from '../../contexts/AuthContext';
 import { Bell } from 'lucide-react';
 import useNotifications from '../../contexts/useNotifications';
 
+// Heights (keep in sync with actual component heights)
+const NAV_HEIGHT = 64;        // MobileNav bottom bar
+const MINI_PLAYER_HEIGHT = 64; // MiniPlayer bar
+const NAV_WITH_PLAYER = NAV_HEIGHT + MINI_PLAYER_HEIGHT; // 128px
+
 function MobileBellButton() {
   const { unreadCount } = useNotifications();
   const navigate = useNavigate();
@@ -43,6 +48,13 @@ export default function AppLayout() {
     }
   }, [user, hasProfile, loading, location.pathname]);
 
+  // Mobile bottom padding:
+  // - always leave room for nav bar (64px)
+  // - if mini player is showing, add its height too (64px)
+  const mobilePaddingBottom = currentTrack
+    ? NAV_WITH_PLAYER  // 128px: nav + mini player
+    : NAV_HEIGHT;       // 64px: just nav
+
   return (
     <div className="min-h-screen bg-black text-white">
       {/* Desktop sidebar */}
@@ -54,13 +66,14 @@ export default function AppLayout() {
       {/* Main content */}
       <main
         className="w-full md:w-[calc(100%-256px)] md:ml-64"
-        style={{
-          paddingBottom: currentTrack ? '152px' : '80px',
-        }}>
-        {/* Desktop: add bottom padding for player bar */}
+        style={{ paddingBottom: mobilePaddingBottom }}
+      >
+        {/* Desktop overrides — player bar is ~72px tall */}
         <style>{`
           @media (min-width: 768px) {
-            main { padding-bottom: ${currentTrack ? '100px' : '0px'} !important; }
+            main {
+              padding-bottom: ${currentTrack ? '100px' : '0px'} !important;
+            }
           }
         `}</style>
         <div className="md:px-8 md:pt-8 w-full">
@@ -68,14 +81,15 @@ export default function AppLayout() {
         </div>
       </main>
 
-      {/* Players */}
+      {/* Full screen player */}
       <FullPlayer />
+
+      {/* Desktop player bar */}
       <DesktopPlayer />
 
-      {/* Mobile only */}
+      {/* Mobile: mini player sits directly above nav */}
       <MiniPlayer />
       <MobileNav />
     </div>
   );
 }
-

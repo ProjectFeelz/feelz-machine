@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import { Send, Loader, X, Music, Search, Plus, Calendar } from 'lucide-react';
+import { usePlayer } from '../contexts/PlayerContext';
 
 const YOUTUBE_REGEX = /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/;
 const EXTERNAL_LINK_REGEX = /https?:\/\/[^\s]+/g;
@@ -17,6 +18,12 @@ function hasBlockedLinks(text) {
 
 export default function PostComposer({ onPostCreated }) {
   const { user, artist } = useAuth();
+  const { currentTrack } = usePlayer();
+
+  // Bottom offsets: nav=64px, miniPlayer=64px
+  const NAV_H = 64;
+  const MINI_H = currentTrack ? 64 : 0;
+  const baseBottom = NAV_H + MINI_H + 8; // 8px gap above mini player
   const [open, setOpen] = useState(false);
   const [content, setContent] = useState('');
   const [posting, setPosting] = useState(false);
@@ -223,11 +230,15 @@ export default function PostComposer({ onPostCreated }) {
 
   return (
     <>
-      {/* Floating + button */}
+      {/* Floating + button — always sits above mini player + nav */}
       <button
         onClick={() => setOpen(true)}
-        className="fixed bottom-24 right-5 z-40 w-14 h-14 rounded-full bg-white flex items-center justify-center transition-all duration-200 active:scale-90 hover:scale-105"
-        style={{ boxShadow: '0 4px 24px rgba(255,255,255,0.18), 0 2px 8px rgba(0,0,0,0.4)' }}
+        className="fixed right-5 z-40 w-14 h-14 rounded-full bg-white flex items-center justify-center active:scale-90 hover:scale-105"
+        style={{
+          bottom: baseBottom,
+          boxShadow: '0 4px 24px rgba(255,255,255,0.18), 0 2px 8px rgba(0,0,0,0.4)',
+          transition: 'bottom 0.2s ease',
+        }}
       >
         <Plus className="w-6 h-6 text-black" strokeWidth={2.5} />
       </button>
@@ -246,12 +257,12 @@ export default function PostComposer({ onPostCreated }) {
         <div
           className="fixed left-0 right-0 z-50 rounded-t-2xl flex flex-col"
           style={{
-            bottom: keyboardOffset,
+            bottom: keyboardOffset > 0 ? keyboardOffset : baseBottom - 8,
             backgroundColor: '#0f0f0f',
             border: '1px solid rgba(255,255,255,0.08)',
             borderBottom: 'none',
             animation: 'pcSlideUp 0.28s cubic-bezier(0.32, 0.72, 0, 1)',
-            maxHeight: '90vh',
+            maxHeight: `calc(100vh - ${baseBottom + 16}px)`,
             transition: 'bottom 0.15s ease',
           }}
           onClick={e => e.stopPropagation()}
