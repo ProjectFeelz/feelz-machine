@@ -119,23 +119,50 @@ export default function NotificationsPage() {
 
   const handleClick = (notif) => {
     if (!notif.read) markAsRead(notif.id);
-    // Navigate based on notification type
-    if (notif.metadata?.post_id) {
+    const type = notif.type;
+    // Post interactions -> community
+    if (type === 'track_commented' || type === 'new_post' || type === 'mention') {
       navigate('/community');
       return;
     }
-    if (notif.track?.id) {
-      const slug = notif.from_artist?.slug || notif.metadata?.artist_slug;
-      if (slug) navigate('/artist/' + slug);
+    // Track liked with post_like metadata -> community
+    if (notif.metadata?.post_like || notif.metadata?.comment) {
+      navigate('/community');
       return;
     }
-    if (notif.from_artist?.slug) {
+    // Playlist add -> library
+    if (notif.metadata?.playlist_add) {
+      navigate('/library/playlists');
+      return;
+    }
+    // Track interactions -> artist profile
+    if (notif.track?.id && notif.from_artist?.slug) {
       navigate('/artist/' + notif.from_artist.slug);
       return;
     }
-    if (notif.type === 'announcement') return;
-    if (notif.type === 'tier_granted') {
+    // New follower -> their profile
+    if (type === 'new_follower' && notif.from_artist?.slug) {
+      navigate('/artist/' + notif.from_artist.slug);
+      return;
+    }
+    // Tier granted -> profile
+    if (type === 'tier_granted') {
       navigate('/profile');
+      return;
+    }
+    // Download notification -> dashboard
+    if (type === 'download') {
+      navigate('/dashboard?tab=analytics');
+      return;
+    }
+    // Collab notifications -> dashboard collabs
+    if (type.startsWith('collab_')) {
+      navigate('/dashboard?tab=collabs');
+      return;
+    }
+    // Milestone -> dashboard analytics
+    if (type.startsWith('milestone_')) {
+      navigate('/dashboard?tab=analytics');
       return;
     }
   };
