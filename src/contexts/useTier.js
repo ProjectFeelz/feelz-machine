@@ -100,10 +100,13 @@ export function useTier() {
         setTierSlug(['master','premium'].includes(sub.platform_tiers.slug) ? 'premium' : sub.platform_tiers.slug === 'pro' ? 'pro' : 'free');
         setTierData(sub.platform_tiers);
       } else {
-        setTierSlug('free');
+        // Fallback to artist.tier from the artists table
+        const fallback = artist?.tier || 'free';
+        setTierSlug(['master','premium'].includes(fallback) ? 'premium' : fallback === 'pro' ? 'pro' : 'free');
       }
     } catch {
-      setTierSlug('free');
+      const fallback = artist?.tier || 'free';
+      setTierSlug(['master','premium'].includes(fallback) ? 'premium' : fallback === 'pro' ? 'pro' : 'free');
     }
     setLoading(false);
   };
