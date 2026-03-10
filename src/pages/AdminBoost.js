@@ -1,11 +1,10 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import {
   ChevronLeft, Search, Flame, Star, TrendingUp, Shield,
-  Check, Loader, Music, Users, Verified, Zap, Crown,
-  ToggleLeft, ToggleRight, Sliders, RefreshCw
+  Loader, Music, Users, Zap, Crown, RefreshCw, BarChart2
 } from 'lucide-react';
 
 function Toast({ message, type }) {
@@ -46,6 +45,63 @@ function ScoreSlider({ value, onChange, disabled }) {
   );
 }
 
+// Animated stream count display
+function StreamCounter({ trackId, baseCount, boostProgress }) {
+  const displayed = boostProgress[trackId]
+    ? baseCount + boostProgress[trackId].added
+    : baseCount;
+  const isActive = boostProgress[trackId]?.active;
+  return (
+    <p className={`text-xs transition-colors ${isActive ? 'text-green-400 font-semibold' : 'text-white/20'}`}>
+      {displayed.toLocaleString()} plays
+      {isActive && <span className="ml-1 animate-pulse">↑</span>}
+    </p>
+  );
+}
+
+// Stream boost control row
+function StreamBoostRow({ track, onBoost, isBoosting }) {
+  const [amount, setAmount] = useState(500);
+  const presets = [
+    { label: '100', value: 100 },
+    { label: '500', value: 500 },
+    { label: '1K', value: 1000 },
+    { label: '5K', value: 5000 },
+  ];
+  return (
+    <div className="flex items-center justify-between px-3 py-2.5 bg-white/[0.03] rounded-lg">
+      <div className="flex items-center space-x-2">
+        <BarChart2 className="w-3.5 h-3.5 text-green-400" />
+        <span className="text-xs text-white/60">Stream Boost</span>
+      </div>
+      <div className="flex items-center space-x-1.5">
+        {/* Quick preset buttons */}
+        {presets.map(p => (
+          <button
+            key={p.value}
+            onClick={() => setAmount(p.value)}
+            className={`px-2 py-1 rounded-lg text-[10px] font-semibold transition ${
+              amount === p.value
+                ? 'bg-green-500/30 text-green-300'
+                : 'bg-white/[0.04] text-white/30 hover:bg-white/[0.08]'
+            }`}>
+            {p.label}
+          </button>
+        ))}
+        {/* Boost button */}
+        <button
+          onClick={() => onBoost(track, amount)}
+          disabled={isBoosting}
+          className="px-2.5 py-1 bg-green-500/20 text-green-400 text-xs rounded-lg hover:bg-green-500/30 transition disabled:opacity-40 flex items-center space-x-1">
+          {isBoosting
+            ? <><Loader className="w-3 h-3 animate-spin" /><span>Boosting</span></>
+            : <><Flame className="w-3 h-3" /><span>Boost</span></>}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function AdminBoost() {
   const navigate = useNavigate();
   const { isAdmin, loading: authLoading } = useAuth();
@@ -59,14 +115,86 @@ export default function AdminBoost() {
   const [saving, setSaving] = useState({});
   const [toast, setToast] = useState({ message: '', type: '' });
 
-  useEffect(() => { if (!authLoading && !isAdmin) { navigate('/hub'); return; } }, [isAdmin, authLoading]);
+  // Track incremental boost animation state per track
+  // { [trackId]: { active: bool, added: number, total: number } }
+  const [boostProgress, setBoostProgress] = useState({});
+  const animationRefs = useRef({});
+
+  useEffect(() => {
+    if (!authLoading && !isAdmin) navigate('/hub');
+  }, [isAdmin, authLoading]);
+
+  // Cleanup all animation intervals on unmount
+  useEffect(() => {
+    return () => {
+      Object.values(animationRefs.current).forEach(clearInterval);
+    };
+  }, []);
 
   const showToast = (message, type = 'success') => {
     setToast({ message, type });
     setTimeout(() => setToast({ message: '', type: '' }), 2500);
   };
 
-  // ── TRACKS ──────────────────────────────────────────────
+  // ── STREAM BOOST (works for all artists via SECURITY DEFINER RPC) ──
+  const handleStreamBoost = async (track, amount) => {
+    setSaving(p => ({ ...p, [`${track.id}-boost`]: true }));
+
+    // Clear any existing animation for this track
+    if (animationRefs.current[track.id]) {
+      clearInterval(animationRefs.current[track.id]);
+    }
+
+    try {
+      const { data, error } = await supabase.rpc('boost_track_streams', {
+        p_track_id: track.id,
+        p_count: amount,
+      });
+
+      if (error) throw error;
+
+      const inserted = data?.inserted || amount;
+
+      // Start incremental counter animation
+      let added = 0;
+      const step = Math.max(1, Math.floor(inserted / 80)); // ~80 ticks
+      setBoostProgress(p => ({ ...p, [track.id]: { active: true, added: 0, total: inserted } }));
+
+      animationRefs.current[track.id] = setInterval(() => {
+        added = Math.min(added + step, inserted);
+        setBoostProgress(p => ({
+          ...p,
+          [track.id]: { active: added < inserted, added, total: inserted },
+        }));
+
+        if (added >= inserted) {
+          clearInterval(animationRefs.current[track.id]);
+          // Commit the final count to the tracks state
+          setTracks(prev => prev.map(t =>
+            t.id === track.id
+              ? { ...t, stream_count: (t.stream_count || 0) + inserted }
+              : t
+          ));
+          // Clear progress after a short delay
+          setTimeout(() => {
+            setBoostProgress(p => {
+              const next = { ...p };
+              delete next[track.id];
+              return next;
+            });
+          }, 2000);
+        }
+      }, 40); // tick every 40ms → ~3.2s total animation
+
+      showToast(`+${inserted.toLocaleString()} streams boosted for ${track.title}`);
+    } catch (err) {
+      showToast(err.message || 'Boost failed', 'error');
+    }
+
+    setSaving(p => ({ ...p, [`${track.id}-boost`]: false }));
+  };
+
+  // ── TRACKS ──
   const searchTracks = useCallback(async () => {
     setIsLoading(true);
     const q = supabase
@@ -87,8 +215,9 @@ export default function AdminBoost() {
   const handleTrackField = async (track, field, value) => {
     setSaving(p => ({ ...p, [`${track.id}-${field}`]: true }));
     try {
-      const update = { [field]: value, updated_at: new Date().toISOString() };
-      const { error } = await supabase.from('tracks').update(update).eq('id', track.id);
+      const { error } = await supabase.from('tracks').update({
+        [field]: value, updated_at: new Date().toISOString()
+      }).eq('id', track.id);
       if (error) throw error;
       setTracks(prev => prev.map(t => t.id === track.id ? { ...t, [field]: value } : t));
       showToast(`${track.title} updated`);
@@ -114,7 +243,7 @@ export default function AdminBoost() {
     setSaving(p => ({ ...p, [`${track.id}-score`]: false }));
   };
 
-  // ── ARTISTS ─────────────────────────────────────────────
+  // ── ARTISTS ──
   const searchArtists = useCallback(async () => {
     setIsLoading(true);
     const q = supabase
@@ -175,7 +304,8 @@ export default function AdminBoost() {
     setSaving(p => ({ ...p, [`${artist.id}-tier`]: false }));
   };
 
-  if (authLoading) return null; if (!isAdmin) return null;
+  if (authLoading) return null;
+  if (!isAdmin) return null;
 
   return (
     <div className="pt-14 md:pt-0 pb-32 px-4 max-w-3xl mx-auto">
@@ -213,7 +343,6 @@ export default function AdminBoost() {
       {/* ── TRACKS TAB ── */}
       {activeTab === 'tracks' && (
         <div className="space-y-4">
-          {/* Search */}
           <div className="flex space-x-2">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20" />
@@ -245,6 +374,10 @@ export default function AdminBoost() {
               <Zap className="w-3 h-3 text-blue-400" />
               <span className="text-[10px] text-white/30">Published</span>
             </div>
+            <div className="flex items-center space-x-1.5">
+              <BarChart2 className="w-3 h-3 text-green-400" />
+              <span className="text-[10px] text-white/30">Stream Boost</span>
+            </div>
           </div>
 
           {isLoading ? (
@@ -266,7 +399,11 @@ export default function AdminBoost() {
                   <p className="text-xs text-white/30 truncate">{track.artists?.artist_name}</p>
                 </div>
                 <div className="text-right flex-shrink-0">
-                  <p className="text-xs text-white/20">{(track.stream_count || 0).toLocaleString()} plays</p>
+                  <StreamCounter
+                    trackId={track.id}
+                    baseCount={track.stream_count || 0}
+                    boostProgress={boostProgress}
+                  />
                 </div>
               </div>
 
@@ -319,7 +456,7 @@ export default function AdminBoost() {
                   </div>
                 </div>
 
-                {/* Quick presets */}
+                {/* Quick score presets */}
                 <div className="flex items-center space-x-2 px-1">
                   <span className="text-[10px] text-white/20">Quick:</span>
                   {[
@@ -329,12 +466,39 @@ export default function AdminBoost() {
                     { label: '👑 MAX', value: 9999, color: 'text-purple-400 bg-purple-500/10' },
                   ].map(({ label, value, color }) => (
                     <button key={label}
-                      onClick={() => { setTracks(prev => prev.map(t => t.id === track.id ? { ...t, _score: value } : t)); handleScoreCommit({ ...track, _score: value }, value); }}
+                      onClick={() => {
+                        setTracks(prev => prev.map(t => t.id === track.id ? { ...t, _score: value } : t));
+                        handleScoreCommit({ ...track, _score: value }, value);
+                      }}
                       className={`px-2 py-1 rounded-lg text-[10px] font-semibold transition ${color} hover:opacity-80`}>
                       {label}
                     </button>
                   ))}
                 </div>
+
+                {/* ── Stream Boost (RPC — works for ALL artists) ── */}
+                <StreamBoostRow
+                  track={track}
+                  onBoost={handleStreamBoost}
+                  isBoosting={!!saving[`${track.id}-boost`]}
+                />
+
+                {/* Boost progress bar */}
+                {boostProgress[track.id] && (
+                  <div className="px-1">
+                    <div className="w-full h-1 bg-white/[0.06] rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-green-400 rounded-full transition-all duration-75"
+                        style={{
+                          width: `${Math.round((boostProgress[track.id].added / boostProgress[track.id].total) * 100)}%`
+                        }}
+                      />
+                    </div>
+                    <p className="text-[10px] text-green-400/60 mt-1">
+                      +{boostProgress[track.id].added.toLocaleString()} / {boostProgress[track.id].total.toLocaleString()} streams
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
           ))}
@@ -344,7 +508,6 @@ export default function AdminBoost() {
       {/* ── ARTISTS TAB ── */}
       {activeTab === 'artists' && (
         <div className="space-y-4">
-          {/* Search */}
           <div className="flex space-x-2">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20" />
@@ -385,7 +548,6 @@ export default function AdminBoost() {
                   </div>
                   <p className="text-xs text-white/30">{(artist.follower_count || 0).toLocaleString()} followers</p>
                 </div>
-                {/* Tier badge */}
                 <span className={`text-[10px] font-bold px-2 py-1 rounded-lg flex-shrink-0 ${
                   artist.tier === 'premium' ? 'bg-yellow-500/20 text-yellow-400'
                   : artist.tier === 'pro' ? 'bg-purple-500/20 text-purple-400'
@@ -395,7 +557,6 @@ export default function AdminBoost() {
                 </span>
               </div>
 
-              {/* Controls */}
               <div className="grid grid-cols-1 gap-2.5">
                 {/* Verified */}
                 <div className="flex items-center justify-between px-3 py-2 bg-white/[0.03] rounded-lg">
@@ -444,7 +605,9 @@ export default function AdminBoost() {
                     <input
                       type="number" min="0"
                       value={artist.follower_count || 0}
-                      onChange={(e) => setArtists(prev => prev.map(a => a.id === artist.id ? { ...a, follower_count: parseInt(e.target.value) || 0 } : a))}
+                      onChange={(e) => setArtists(prev => prev.map(a =>
+                        a.id === artist.id ? { ...a, follower_count: parseInt(e.target.value) || 0 } : a
+                      ))}
                       className="w-20 px-2 py-1 bg-white/[0.06] rounded-lg text-xs text-white text-right outline-none border border-white/[0.06] focus:border-white/20"
                     />
                     <button
@@ -466,7 +629,10 @@ export default function AdminBoost() {
                     { label: '100K', value: 100000 },
                   ].map(({ label, value }) => (
                     <button key={label}
-                      onClick={() => { setArtists(prev => prev.map(a => a.id === artist.id ? { ...a, follower_count: value } : a)); handleFollowerBoost({ ...artist, follower_count: value }, value); }}
+                      onClick={() => {
+                        setArtists(prev => prev.map(a => a.id === artist.id ? { ...a, follower_count: value } : a));
+                        handleFollowerBoost({ ...artist, follower_count: value }, value);
+                      }}
                       className="px-2 py-1 rounded-lg text-[10px] font-semibold bg-white/[0.04] text-white/30 hover:bg-white/[0.08] hover:text-white/50 transition">
                       {label}
                     </button>
@@ -480,8 +646,3 @@ export default function AdminBoost() {
     </div>
   );
 }
-
-
-
-
-
