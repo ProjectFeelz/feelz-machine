@@ -8,9 +8,6 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { downloadTrack } from '../utils/downloadTrack';
-import TrackActionSheet from '../components/TrackActionSheet';
-import { usePaidPlayLimit } from '../hooks/usePaidPlayLimit';
-import PaidPlayGate from '../components/PaidPlayGate';
 
 function formatNumber(n) {
   if (!n) return '0';
@@ -39,7 +36,7 @@ function Section({ title, icon: Icon, onSeeAll, children }) {
 }
 
 // Square card used for Featured, New Releases, Trending
-function SquareCard({ item, itemList = [], isAlbum = false, onPlay, currentTrack, isPlaying, onActionSheet }) {
+function SquareCard({ item, itemList = [], isAlbum = false, onPlay, currentTrack, isPlaying }) {
   const { addToQueue } = usePlayer();
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -51,8 +48,6 @@ function SquareCard({ item, itemList = [], isAlbum = false, onPlay, currentTrack
   const [addingTo, setAddingTo] = useState(null);
   const [addedTo, setAddedTo] = useState({});
   const menuRef = useRef(null);
-  const { checkPlayLimit, recordPlay, resetPlayCount } = usePaidPlayLimit();
-  const [limitedTrack, setLimitedTrack] = useState(null);
 
   const isActive = !isAlbum && currentTrack?.id === item.id;
   const isCurrentPlaying = isActive && isPlaying;
@@ -121,13 +116,7 @@ function SquareCard({ item, itemList = [], isAlbum = false, onPlay, currentTrack
       {/* Artwork */}
       <div
         className="aspect-square rounded-xl overflow-hidden bg-white/[0.06] mb-2 relative"
-        onClick={() => {
-  if (isAlbum) { navigate(`/album/${item.id}`); return; }
-  const { allowed } = checkPlayLimit(item);
-  if (!allowed) { setLimitedTrack(item); return; }
-  recordPlay(item.id);
-  onPlay(item, itemList);
-}}
+        onClick={() => isAlbum ? navigate(`/album/${item.id}`) : onPlay(item, itemList)}
       >
         {item.cover_artwork_url
           ? <img src={item.cover_artwork_url} alt={item.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
@@ -152,8 +141,8 @@ function SquareCard({ item, itemList = [], isAlbum = false, onPlay, currentTrack
         )}
         {/* 3-dot button */}
         <button
-          onClick={(e) => { e.stopPropagation(); if (onActionSheet) onActionSheet(item); else setShowMenu(p => !p); }}
-          className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/60 backdrop-blur flex items-center justify-center md:opacity-0 md:group-hover:opacity-100 transition"
+          onClick={(e) => { e.stopPropagation(); setShowMenu(p => !p); }}
+          className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/60 backdrop-blur flex items-center justify-center opacity-0 group-hover:opacity-100 transition"
         >
           <MoreHorizontal className="w-3.5 h-3.5 text-white" />
         </button>
@@ -168,7 +157,7 @@ function SquareCard({ item, itemList = [], isAlbum = false, onPlay, currentTrack
         <div ref={menuRef}
           onClick={(e) => e.stopPropagation()}
           className="absolute right-0 z-50 w-52 rounded-xl shadow-2xl overflow-hidden"
-          style={{ bottom: '100%', marginBottom: '4px', backgroundColor: '#1a1a1a', border: '1px solid rgba(255,255,255,0.08)' }}>
+          style={{ top: '100%', marginTop: '4px', backgroundColor: '#1a1a1a', border: '1px solid rgba(255,255,255,0.08)' }}>
           {showPlaylists ? (
             <>
               <div className="flex items-center justify-between px-4 py-2.5 border-b border-white/[0.06]">
@@ -229,12 +218,6 @@ function SquareCard({ item, itemList = [], isAlbum = false, onPlay, currentTrack
           )}
         </div>
       )}
-    <PaidPlayGate
-        track={limitedTrack}
-        artist={item.artists}
-        onClose={() => setLimitedTrack(null)}
-        onPurchaseComplete={(t) => { resetPlayCount(t.id); onPlay(t, itemList); setLimitedTrack(null); }}
-      />
     </div>
   );
 }
@@ -243,7 +226,6 @@ export default function HomePage() {
   const { user, artist } = useAuth();
   const { playTrack, currentTrack, isPlaying, togglePlay } = usePlayer();
   const navigate = useNavigate();
-  const [actionSheetTrack, setActionSheetTrack] = useState(null);
   const [featuredTracks, setFeaturedTracks] = useState([]);
   const [newReleases, setNewReleases] = useState([]);
   const [trending, setTrending] = useState([]);
@@ -264,7 +246,7 @@ export default function HomePage() {
         supabase.from('tracks')
           .select('*, artists(artist_name, slug, profile_image_url, tier)')
           .eq('is_published', true).eq('featured', true)
-          .order('created_at', { ascending: false }).limit(8),
+          .order('created_at', { ascending: false }).limit(10),
         supabase.from('tracks')
           .select('*, artists(artist_name, slug, profile_image_url)')
           .eq('is_published', true)
@@ -357,7 +339,7 @@ export default function HomePage() {
           <div className="flex space-x-3 overflow-x-auto px-6 scrollbar-hide">
             {featuredTracks.map((track) => (
               <SquareCard key={track.id} item={track} itemList={featuredTracks}
-                onPlay={handlePlay} currentTrack={currentTrack} isPlaying={isPlaying} onActionSheet={setActionSheetTrack} />
+                onPlay={handlePlay} currentTrack={currentTrack} isPlaying={isPlaying} />
             ))}
           </div>
         </Section>
@@ -371,7 +353,7 @@ export default function HomePage() {
               <SquareCard key={`${item._isAlbum ? 'album' : 'track'}-${item.id}`}
                 item={item} itemList={newReleases.filter(i => !i._isAlbum)}
                 isAlbum={item._isAlbum}
-                onPlay={handlePlay} currentTrack={currentTrack} isPlaying={isPlaying} onActionSheet={setActionSheetTrack} />
+                onPlay={handlePlay} currentTrack={currentTrack} isPlaying={isPlaying} />
             ))}
           </div>
         </Section>
@@ -383,7 +365,7 @@ export default function HomePage() {
           <div className="flex space-x-3 overflow-x-auto px-6 scrollbar-hide">
             {trending.map((track) => (
               <SquareCard key={track.id} item={track} itemList={trending}
-                onPlay={handlePlay} currentTrack={currentTrack} isPlaying={isPlaying} onActionSheet={setActionSheetTrack} />
+                onPlay={handlePlay} currentTrack={currentTrack} isPlaying={isPlaying} />
             ))}
           </div>
         </Section>
@@ -414,7 +396,6 @@ export default function HomePage() {
           </div>
         </Section>
       )}
-      <TrackActionSheet track={actionSheetTrack} artist={actionSheetTrack ? { artist_name: actionSheetTrack.artist_name, slug: actionSheetTrack.artist_slug } : null} onClose={() => setActionSheetTrack(null)} />
     </div>
   );
 }
