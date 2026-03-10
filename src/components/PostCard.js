@@ -419,7 +419,7 @@ export default function PostCard({ post, onDelete, onUpdate }) {
                     <span className="text-xs font-medium text-white">{(comment.artists?.artist_name || comment.listener_name) || 'User'}</span>
                     {comment.parent && <span className="text-[10px] text-white/15 ml-1">replied</span>}
                     <span className="text-[10px] text-white/20">{timeAgo(comment.created_at)}</span>
-                    <button onClick={() => setReplyTo(comment)} className="text-[10px] text-white/20 hover:text-white/40 transition ml-2">Reply</button>
+                    <button onClick={() => setReplyTo(comment)} className="text-[11px] text-white/30 hover:text-white/60 transition ml-2 font-medium">Reply</button>
                   </div>
                   <p className="text-xs text-white/60 mt-0.5">{comment.content}</p>
                 </div>

@@ -471,7 +471,7 @@ export default function ChatRoomView() {
                   </div>
                 )}
                 <p className="text-sm text-white/80 break-words leading-relaxed">{msg.content}</p>
-                <button onClick={() => setReplyTo(msg)} className="text-[10px] text-white/15 hover:text-white/30 transition mt-0.5">Reply</button>
+                <button onClick={() => setReplyTo(msg)} className="text-[11px] text-white/30 hover:text-white/60 transition mt-0.5 font-medium">Reply</button>
               </div>
 
               {/* Admin actions */}
