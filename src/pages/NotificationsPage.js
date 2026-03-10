@@ -119,6 +119,25 @@ export default function NotificationsPage() {
 
   const handleClick = (notif) => {
     if (!notif.read) markAsRead(notif.id);
+    // Navigate based on notification type
+    if (notif.metadata?.post_id) {
+      navigate('/community');
+      return;
+    }
+    if (notif.track?.id) {
+      const slug = notif.from_artist?.slug || notif.metadata?.artist_slug;
+      if (slug) navigate('/artist/' + slug);
+      return;
+    }
+    if (notif.from_artist?.slug) {
+      navigate('/artist/' + notif.from_artist.slug);
+      return;
+    }
+    if (notif.type === 'announcement') return;
+    if (notif.type === 'tier_granted') {
+      navigate('/profile');
+      return;
+    }
   };
 
   // Not logged in at all

@@ -441,7 +441,7 @@ export default function TrackUploadPanel() {
         <div>
           <label className="block text-xs text-white/40 mb-1.5">Album (optional)</label>
           <select value={form.album_id} onChange={(e) => setForm({ ...form, album_id: e.target.value })}
-            className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none">
+            className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none" style={{ colorScheme: 'dark' }}>
             <option value="">No Album (Single)</option>
             {albums.map(a => <option key={a.id} value={a.id}>{a.title}</option>)}
           </select>
@@ -449,7 +449,7 @@ export default function TrackUploadPanel() {
         <div>
           <label className="block text-xs text-white/40 mb-1.5">Genre</label>
           <select value={form.genre} onChange={(e) => setForm({ ...form, genre: e.target.value })}
-            className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none">
+            className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none" style={{ colorScheme: 'dark' }}>
             <option value="">Select genre...</option>
             {GENRES.map(g => <option key={g} value={g}>{g}</option>)}
           </select>
@@ -457,7 +457,7 @@ export default function TrackUploadPanel() {
         <div>
           <label className="block text-xs text-white/40 mb-1.5">Mood</label>
           <select value={form.mood} onChange={(e) => setForm({ ...form, mood: e.target.value })}
-            className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none">
+            className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none" style={{ colorScheme: 'dark' }}>
             <option value="">Select mood...</option>
             {MOODS.map(m => <option key={m} value={m}>{m}</option>)}
           </select>
@@ -755,7 +755,7 @@ export default function TrackUploadPanel() {
                   <div>
                     <label className="block text-xs text-white/40 mb-1.5">Release Type</label>
                     <select value={albumForm.release_type} onChange={(e) => setAlbumForm({ ...albumForm, release_type: e.target.value })}
-                      className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none">
+                      className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none" style={{ colorScheme: 'dark' }}>
                       {['single','ep','album','mixtape','live','compilation'].map(t => (
                         <option key={t} value={t}>{t.charAt(0).toUpperCase()+t.slice(1)}</option>
                       ))}
@@ -863,7 +863,7 @@ export default function TrackUploadPanel() {
                               <label className="block text-xs text-white/40 mb-1.5">Release Type</label>
                               <select value={editAlbumForm.release_type}
                                 onChange={(e) => setEditAlbumForm({ ...editAlbumForm, release_type: e.target.value })}
-                                className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none">
+                                className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none" style={{ colorScheme: 'dark' }}>
                                 {['single','ep','album','mixtape','live','compilation'].map(t => (
                                   <option key={t} value={t}>{t.charAt(0).toUpperCase()+t.slice(1)}</option>
                                 ))}
