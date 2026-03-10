@@ -359,6 +359,14 @@ export default function PostComposer({ onPostCreated }) {
               )}
             </div>
             <button
+              onClick={() => imageInputRef.current?.click()}
+              className={`flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg text-xs transition ${imageFile ? 'bg-green-500/20 text-green-400' : 'text-white/30 hover:text-white/60 hover:bg-white/[0.04]'}`}
+              title="Add image">
+              <Image className="w-3.5 h-3.5" />
+              <span>{imageFile ? 'Image added' : 'Image'}</span>
+            </button>
+            <input ref={imageInputRef} type="file" accept="image/*" onChange={handleImageSelect} className="hidden" />
+            <button
               onClick={() => { setShowTrackPicker(p => !p); if (!showTrackPicker) searchTracks(''); }}
               className={`flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg text-xs transition ${taggedTrack ? 'bg-purple-500/20 text-purple-400' : 'text-white/30 hover:text-white/60 hover:bg-white/[0.04]'}`}
               title="Tag a track">
@@ -366,6 +374,14 @@ export default function PostComposer({ onPostCreated }) {
               <span>Tag Track</span>
             </button>
           </div>
+          {imagePreview && (
+            <div className="relative mt-2 inline-block">
+              <img src={imagePreview} alt="Preview" className="w-20 h-20 rounded-lg object-cover" />
+              <button onClick={removeImage} className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center">
+                <X className="w-3 h-3 text-white" />
+              </button>
+            </div>
+          )}
           <button
             onClick={handleSubmit}
             disabled={posting || !content.trim() || blocked}

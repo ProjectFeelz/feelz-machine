@@ -154,6 +154,23 @@ export function PlayerProvider({ children }) {
   }, [repeat, playNext]);
 
   const addToQueue = useCallback((track) => { setQueue(prev => [...prev, track]); }, []);
+
+  const removeFromQueue = useCallback((index) => {
+    setQueue(prev => {
+      const next = prev.filter((_, i) => i !== index);
+      return next;
+    });
+    setQueueIndex(prev => index < prev ? prev - 1 : prev);
+  }, []);
+
+  const moveInQueue = useCallback((from, to) => {
+    setQueue(prev => {
+      const next = [...prev];
+      const [item] = next.splice(from, 1);
+      next.splice(to, 0, item);
+      return next;
+    });
+  }, []);
   const playNextInQueue = useCallback((track) => {
     setQueue(prev => {
       const next = [...prev];
@@ -171,7 +188,7 @@ export function PlayerProvider({ children }) {
   const value = {
     currentTrack, isPlaying, duration, currentTime, volume, queue, queueIndex,
     shuffle, repeat, isMinimized, setIsMinimized, playTrack, togglePlay, seek,
-    setVolume: setVolumeLevel, playNext, playPrev, addToQueue, playNextInQueue, clearQueue, toggleShuffle, toggleRepeat,
+    setVolume: setVolumeLevel, playNext, playPrev, addToQueue, removeFromQueue, moveInQueue, playNextInQueue, clearQueue, toggleShuffle, toggleRepeat,
   };
 
   return <PlayerContext.Provider value={value}>{children}</PlayerContext.Provider>;
