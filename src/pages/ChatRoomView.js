@@ -170,7 +170,9 @@ export default function ChatRoomView() {
       }
       const enriched = { ...data, artist: artistData || null, listener_name: listenerName, listener_avatar: listenerAvatar };
       setMessages(prev => {
-        if (prev.find(m => m.id === enriched.id)) return prev;
+        if (prev.find(m => m.id === enriched.id || (m.id?.startsWith?.('temp-') && m.content === enriched.content && m.user_id === enriched.user_id))) {
+            return prev.map(m => m.id?.startsWith?.('temp-') && m.content === enriched.content ? enriched : m);
+          }
         return [...prev, enriched];
       });
     }
@@ -290,6 +292,20 @@ export default function ChatRoomView() {
         reply_to_name: replyTo?.artist?.artist_name || replyTo?.listener_name || null,
       });
       if (error) throw error;
+      // Optimistically add own message
+      const optimistic = {
+        id: 'temp-' + Date.now(),
+        room_id: roomId,
+        user_id: user.id,
+        content: input.trim(),
+        reply_to_name: replyTo?.artist?.artist_name || replyTo?.listener_name || null,
+        reply_to_content: replyTo?.content?.substring(0, 80) || null,
+        created_at: new Date().toISOString(),
+        artist: artist || null,
+        listener_name: artist ? null : (user.user_metadata?.name || user.email?.split('@')[0]),
+        listener_avatar: artist ? null : (user.user_metadata?.avatar_url || null),
+      };
+      setMessages(prev => [...prev, optimistic]);
       setInput('');
       setReplyTo(null);
       inputRef.current?.focus();

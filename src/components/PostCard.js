@@ -176,8 +176,10 @@ export default function PostCard({ post, onDelete, onUpdate }) {
       .order('created_at', { ascending: true })
       .limit(50);
     // Enrich with listener names and avatars
+    const commentMap = {};
+    (data || []).forEach(c => { commentMap[c.id] = c; });
     const enriched = await Promise.all((data || []).map(async (comment) => {
-      if (comment.artists && comment.artists.artist_name) return comment;
+      if (comment.artists && comment.artists.artist_name) return { ...comment, reply_to_name: comment.parent_id ? (commentMap[comment.parent_id]?.artists?.artist_name || 'User') : null };
       try {
         const { data: profile } = await supabase.from('user_profiles')
           .select('name, email, avatar_url')
@@ -187,6 +189,7 @@ export default function PostCard({ post, onDelete, onUpdate }) {
           ...comment,
           listener_name: profile?.name || profile?.email?.split('@')[0] || null,
           listener_avatar: profile?.avatar_url || null,
+          reply_to_name: comment.parent_id ? (commentMap[comment.parent_id]?.artists?.artist_name || 'User') : null,
         };
       } catch { return comment; }
     }));
@@ -206,13 +209,29 @@ export default function PostCard({ post, onDelete, onUpdate }) {
         post_id: post.id,
         user_id: user.id,
         parent_id: replyTo?.id || null,
+        reply_to_name: replyTo ? (replyTo.artists?.artist_name || replyTo.listener_name || 'User') : null,
         artist_id: myArtist?.id || null,
         content: commentText.trim(),
       });
       if (error) throw error;
+      // Optimistic add
+      const newComment = {
+        id: 'temp-' + Date.now(),
+        post_id: post.id,
+        user_id: user.id,
+        content: commentText.trim(),
+        parent_id: replyTo?.id || null,
+        reply_to_name: replyTo ? (replyTo.artists?.artist_name || replyTo.listener_name || 'User') : null,
+        created_at: new Date().toISOString(),
+        artists: myArtist ? { artist_name: myArtist.artist_name, slug: myArtist.slug, profile_image_url: myArtist.profile_image_url } : null,
+        listener_name: myArtist ? null : (user.user_metadata?.name || user.email?.split('@')[0]),
+        listener_avatar: myArtist ? null : (user.user_metadata?.avatar_url || null),
+      };
+      setComments(prev => [...prev, newComment]);
       setCommentText('');
       setReplyTo(null);
-      fetchComments();
+      // Refresh in background to get real data
+      setTimeout(fetchComments, 1000);
       // Notify post owner
       if (postArtist?.id && myArtist?.id !== postArtist.id) {
         await supabase.from('notifications').insert({
@@ -421,7 +440,12 @@ export default function PostCard({ post, onDelete, onUpdate }) {
                     <span className="text-[10px] text-white/20">{timeAgo(comment.created_at)}</span>
                     <button onClick={() => setReplyTo(comment)} className="text-[11px] text-white/30 hover:text-white/60 transition ml-2 font-medium">Reply</button>
                   </div>
-                  <p className="text-xs text-white/60 mt-0.5">{comment.content}</p>
+                  {comment.parent_id && comment.reply_to_name && (
+                  <p className="text-[10px] text-white/15 mt-0.5 pl-2 border-l border-white/10">
+                    replying to <span className="text-white/25">{comment.reply_to_name}</span>
+                  </p>
+                )}
+                <p className="text-xs text-white/60 mt-0.5">{comment.content}</p>
                 </div>
               </div>
             ))}
