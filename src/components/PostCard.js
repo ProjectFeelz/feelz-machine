@@ -95,6 +95,7 @@ export default function PostCard({ post, onDelete, onUpdate }) {
   const [comments, setComments] = useState([]);
   const [showComments, setShowComments] = useState(false);
   const [commentText, setCommentText] = useState('');
+  const [replyTo, setReplyTo] = useState(null);
   const [posting, setPosting] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [taggedArtistData, setTaggedArtistData] = useState([]);
@@ -170,7 +171,7 @@ export default function PostCard({ post, onDelete, onUpdate }) {
   const fetchComments = async () => {
     const { data } = await supabase
       .from('comments')
-      .select('*, artists(artist_name, slug, profile_image_url, is_verified)')
+      .select('*, artists(artist_name, slug, profile_image_url, is_verified), parent:parent_id(id, content, user_id, artists(artist_name))')
       .eq('post_id', post.id)
       .order('created_at', { ascending: true })
       .limit(50);
@@ -204,11 +205,13 @@ export default function PostCard({ post, onDelete, onUpdate }) {
       const { error } = await supabase.from('comments').insert({
         post_id: post.id,
         user_id: user.id,
+        parent_id: replyTo?.id || null,
         artist_id: myArtist?.id || null,
         content: commentText.trim(),
       });
       if (error) throw error;
       setCommentText('');
+      setReplyTo(null);
       fetchComments();
       // Notify post owner
       if (postArtist?.id && myArtist?.id !== postArtist.id) {
@@ -414,7 +417,9 @@ export default function PostCard({ post, onDelete, onUpdate }) {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center space-x-1.5">
                     <span className="text-xs font-medium text-white">{(comment.artists?.artist_name || comment.listener_name) || 'User'}</span>
+                    {comment.parent && <span className="text-[10px] text-white/15 ml-1">replied</span>}
                     <span className="text-[10px] text-white/20">{timeAgo(comment.created_at)}</span>
+                    <button onClick={() => setReplyTo(comment)} className="text-[10px] text-white/20 hover:text-white/40 transition ml-2">Reply</button>
                   </div>
                   <p className="text-xs text-white/60 mt-0.5">{comment.content}</p>
                 </div>
@@ -433,7 +438,7 @@ export default function PostCard({ post, onDelete, onUpdate }) {
                 value={commentText}
                 onChange={(e) => setCommentText(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && submitComment()}
-                placeholder="Add a comment..."
+                placeholder={replyTo ? `Reply to ${replyTo.artists?.artist_name || replyTo.listener_name || "User"}...` : "Add a comment..."}
                 maxLength={500}
                 className="flex-1 bg-white/[0.04] rounded-lg px-3 py-2 text-sm text-white placeholder-white/20 outline-none"
               />

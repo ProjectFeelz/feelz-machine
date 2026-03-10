@@ -35,6 +35,7 @@ export default function ChatRoomView() {
   const [joining, setJoining] = useState(false);
   const [showMembers, setShowMembers] = useState(false);
   const [modWarning, setModWarning] = useState('');
+  const [replyTo, setReplyTo] = useState(null);
   const [joinError, setJoinError] = useState('');
 // In catch: setJoinError('Unable to join — this room may be subscribers-only.')
 // In JSX above button: {joinError && <p className="text-xs text-red-400 mb-2">{joinError}</p>}
@@ -284,9 +285,13 @@ export default function ChatRoomView() {
         room_id: roomId,
         user_id: user.id,
         content: input.trim(),
+        reply_to_id: replyTo?.id || null,
+        reply_to_content: replyTo?.content?.substring(0, 80) || null,
+        reply_to_name: replyTo?.artist?.artist_name || replyTo?.listener_name || null,
       });
       if (error) throw error;
       setInput('');
+      setReplyTo(null);
       inputRef.current?.focus();
     } catch (err) {
       console.error('Send error:', err);
@@ -460,7 +465,13 @@ export default function ChatRoomView() {
                     <span className="text-[10px] text-white/15">{timeAgo(msg.created_at)}</span>
                   </div>
                 )}
+                {msg.reply_to_name && (
+                  <div className="text-[10px] text-white/20 mb-1 pl-2 border-l-2 border-white/10">
+                    <span className="text-white/30">{msg.reply_to_name}</span>: {msg.reply_to_content}
+                  </div>
+                )}
                 <p className="text-sm text-white/80 break-words leading-relaxed">{msg.content}</p>
+                <button onClick={() => setReplyTo(msg)} className="text-[10px] text-white/15 hover:text-white/30 transition mt-0.5">Reply</button>
               </div>
 
               {/* Admin actions */}
@@ -488,6 +499,12 @@ export default function ChatRoomView() {
       {/* Input area */}
       {isMember ? (
         <div className="px-4 py-3 border-t border-white/[0.06] bg-black/95 backdrop-blur-xl flex-shrink-0">
+          {replyTo && (
+            <div className="flex items-center justify-between px-4 py-2 bg-white/[0.04] border-b border-white/[0.06]">
+              <p className="text-xs text-white/30">Replying to <span className="text-white/50">{replyTo.artist?.artist_name || replyTo.listener_name || 'User'}</span>: <span className="text-white/20">{replyTo.content?.substring(0, 50)}</span></p>
+              <button onClick={() => setReplyTo(null)} className="text-xs text-white/30 hover:text-white/50 ml-2">Cancel</button>
+            </div>
+          )}
           {myMembership?.is_muted ? (
             <div className="flex items-center justify-center space-x-2 py-2">
               <VolumeX className="w-4 h-4 text-white/20" />
