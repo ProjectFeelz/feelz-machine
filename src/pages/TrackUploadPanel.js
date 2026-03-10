@@ -14,7 +14,7 @@ const GENRES = [
   'Electronic', 'House', 'Deep House', 'Tech House', 'Techno', 'Dubstep',
   'Drum & Bass', 'Ambient', 'Downtempo', 'Future Bass', 'Jersey Club',
   'Jazz', 'Funk', 'Soul', 'Rock', 'Metal', 'Indie', 'Alternative',
-  'Afrobeat', 'Amapiano', 'Reggae', 'Dancehall', 'Latin', 'Reggaeton',
+  'Afrobeat', 'Afro House', 'Amapiano', 'Reggae', 'Dancehall', 'Latin', 'Reggaeton',
   'Country', 'EDM', 'Trance', 'Hardstyle', 'UK Garage', 'Grime',
   'Experimental', 'Vaporwave', 'Synthwave', 'Other'
 ];
@@ -452,6 +452,7 @@ export default function TrackUploadPanel() {
             className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none" style={{ colorScheme: 'dark' }}>
             <option value="">Select genre...</option>
             {GENRES.map(g => <option key={g} value={g}>{g}</option>)}
+            <option value="Other">Other</option>
           </select>
         </div>
         <div>
