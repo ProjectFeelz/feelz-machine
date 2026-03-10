@@ -37,17 +37,6 @@ export default function ChatRoomView() {
   const [modWarning, setModWarning] = useState('');
   const [replyTo, setReplyTo] = useState(null);
   const [joinError, setJoinError] = useState('');
-// In catch: setJoinError('Unable to join — this room may be subscribers-only.')
-// In JSX above button: {joinError === 'followers_only' ? (
-            <div className="mb-3 p-3 rounded-xl bg-white/[0.04] border border-white/[0.06]">
-              <p className="text-xs text-white/40 mb-2">This room is for followers only</p>
-              <button onClick={async () => {
-                await supabase.from('follows').insert({ follower_id: user.id, artist_id: room.artist_id });
-                setJoinError('');
-                handleJoin();
-              }} className="w-full py-2 rounded-lg bg-purple-600 text-white text-sm font-medium transition active:scale-95">Follow & Join</button>
-            </div>
-          joinError ? <p className="text-xs text-red-400 mb-2">{joinError}</p> : null}
 
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
@@ -117,8 +106,6 @@ export default function ChatRoomView() {
       .order('created_at', { ascending: true })
       .limit(200);
 
-    // Refetch with proper artist join via user_id
-    // Since chat_messages has user_id, we need to match to artists
     if (data) {
       const userIds = [...new Set(data.map(m => m.user_id))];
       const { data: artistsData } = await supabase
@@ -129,7 +116,6 @@ export default function ChatRoomView() {
       const artistMap = {};
       (artistsData || []).forEach(a => { artistMap[a.user_id] = a; });
 
-      // Also fetch listener names for non-artists
       const missingIds = userIds.filter(uid => !artistMap[uid]);
       let profileMap = {};
       if (missingIds.length > 0) {
@@ -159,7 +145,6 @@ export default function ChatRoomView() {
       .single();
 
     if (data) {
-      // Get artist info
       const { data: artistData } = await supabase
         .from('artists')
         .select('user_id, artist_name, slug, profile_image_url, is_verified')
@@ -213,7 +198,6 @@ export default function ChatRoomView() {
     setJoining(true);
 
     try {
-
       const { error } = await supabase.from('chat_room_members').insert({
         room_id: roomId,
         user_id: user.id,
@@ -221,7 +205,6 @@ export default function ChatRoomView() {
       });
       if (error) throw error;
 
-      // Increment member count
       try {
         await supabase.rpc('increment_chat_member_count', { room_id_input: roomId });
       } catch {
@@ -233,19 +216,18 @@ export default function ChatRoomView() {
       setIsMember(true);
       setMyMembership({ role: 'member' });
     } catch (err) {
-      console.error('Join error:', err); setJoinError(err.message || 'Unable to join � this room may be subscribers-only.');
+      console.error('Join error:', err);
+      setJoinError(err.message || 'Unable to join — this room may be subscribers-only.');
     }
     setJoining(false);
   };
 
   // Moderation checks
   const moderateMessage = useCallback((text) => {
-    // Check for external links
     if (LINK_REGEX.test(text)) {
       return 'External links are not allowed in chat rooms';
     }
 
-    // Check word filters
     for (const filter of wordFilters) {
       if (filter.is_regex) {
         try {
@@ -265,7 +247,6 @@ export default function ChatRoomView() {
       }
     }
 
-    // Check for image/file patterns
     if (/\.(jpg|jpeg|png|gif|webp|mp4|mov|avi|pdf|zip|exe|dmg)/i.test(text)) {
       return 'File sharing is not allowed in chat rooms';
     }
@@ -282,7 +263,6 @@ export default function ChatRoomView() {
       return;
     }
 
-    // Run moderation
     const modResult = moderateMessage(input.trim());
     if (modResult) {
       setModWarning(modResult);
@@ -301,7 +281,6 @@ export default function ChatRoomView() {
         reply_to_name: replyTo?.artist?.artist_name || replyTo?.listener_name || null,
       });
       if (error) throw error;
-      // Optimistically add own message
       const optimistic = {
         id: 'temp-' + Date.now(),
         room_id: roomId,
@@ -463,7 +442,6 @@ export default function ChatRoomView() {
 
           return (
             <div key={msg.id} className={`group flex items-start space-x-2.5 px-2 py-1 rounded-lg hover:bg-white/[0.02] transition ${sameSender ? 'mt-0' : 'mt-2'}`}>
-              {/* Avatar (only show if different sender) */}
               {!sameSender ? (
                 <div className="w-8 h-8 rounded-full overflow-hidden bg-gradient-to-br from-purple-600/30 to-blue-600/20 flex items-center justify-center flex-shrink-0 mt-0.5">
                   {(msg.artist?.profile_image_url || msg.listener_avatar)
@@ -474,7 +452,6 @@ export default function ChatRoomView() {
                 <div className="w-8 flex-shrink-0" />
               )}
 
-              {/* Message body */}
               <div className="flex-1 min-w-0">
                 {!sameSender && (
                   <div className="flex items-center space-x-1.5 mb-0.5">
@@ -499,7 +476,6 @@ export default function ChatRoomView() {
                 <button onClick={() => setReplyTo(msg)} className="text-[11px] text-white/30 hover:text-white/60 transition mt-0.5 font-medium">Reply</button>
               </div>
 
-              {/* Admin actions */}
               {isRoomAdmin && !isMe && (
                 <button onClick={() => handleDelete(msg.id)}
                   className="opacity-0 group-hover:opacity-100 w-7 h-7 flex items-center justify-center rounded-full hover:bg-red-500/10 transition flex-shrink-0">
@@ -558,7 +534,8 @@ export default function ChatRoomView() {
         </div>
       ) : (
         <div className="px-4 py-3 border-t border-white/[0.06] flex-shrink-0">
-          {joinError && <p className="text-xs text-red-400 mb-2 text-center">{joinError}</p>}<button onClick={joinRoom} disabled={joining}
+          {joinError && <p className="text-xs text-red-400 mb-2 text-center">{joinError}</p>}
+          <button onClick={joinRoom} disabled={joining}
             className="w-full py-3 bg-white text-black rounded-xl font-semibold text-sm flex items-center justify-center space-x-2 disabled:opacity-50 transition">
             {joining ? <Loader className="w-4 h-4 animate-spin" /> : <Users className="w-4 h-4" />}
             <span>{joining ? 'Joining...' : 'Join Room to Chat'}</span>
@@ -567,7 +544,4 @@ export default function ChatRoomView() {
       )}
     </div>
   );
-
-
-
-
+}
