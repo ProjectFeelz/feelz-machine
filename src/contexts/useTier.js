@@ -76,8 +76,8 @@ export function useTier() {
       return;
     }
     if (artist) {
-      fetchTier();
-      fetchTrackCount();
+      fetchTier(artist.id);
+      fetchTrackCount(artist.id);
     } else {
       setTierSlug('free');
       setLoading(false);
@@ -85,12 +85,14 @@ export function useTier() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [artist?.id, isAdmin]);
 
-  const fetchTier = async () => {
+  const fetchTier = async (artistId) => {
+    if (!artistId) return;
+    console.log('[useTier] fetching tier for artist:', artistId);
     try {
       const { data: sub } = await supabase
         .from('artist_tier_subscriptions')
         .select('*, platform_tiers(*)')
-        .eq('artist_id', artist.id)
+        .eq('artist_id', artistId)
         .eq('status', 'active')
         .maybeSingle();
 
@@ -106,11 +108,12 @@ export function useTier() {
     setLoading(false);
   };
 
-  const fetchTrackCount = async () => {
+  const fetchTrackCount = async (artistId) => {
+    if (!artistId) return;
     const { count } = await supabase
       .from('tracks')
       .select('*', { count: 'exact', head: true })
-      .eq('artist_id', artist.id);
+      .eq('artist_id', artistId);
     setTrackCount(count || 0);
   };
 
@@ -170,7 +173,7 @@ export function useTier() {
     uploadsRemaining,
     getMinTier,
     getFeatureInfo,
-    refreshTier: fetchTier,
+    refreshTier: () => artist?.id && fetchTier(artist.id),
   };
 }
 
