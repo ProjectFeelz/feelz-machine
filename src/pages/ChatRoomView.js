@@ -38,7 +38,16 @@ export default function ChatRoomView() {
   const [replyTo, setReplyTo] = useState(null);
   const [joinError, setJoinError] = useState('');
 // In catch: setJoinError('Unable to join — this room may be subscribers-only.')
-// In JSX above button: {joinError && <p className="text-xs text-red-400 mb-2">{joinError}</p>}
+// In JSX above button: {joinError === 'followers_only' ? (
+            <div className="mb-3 p-3 rounded-xl bg-white/[0.04] border border-white/[0.06]">
+              <p className="text-xs text-white/40 mb-2">This room is for followers only</p>
+              <button onClick={async () => {
+                await supabase.from('follows').insert({ follower_id: user.id, artist_id: room.artist_id });
+                setJoinError('');
+                handleJoin();
+              }} className="w-full py-2 rounded-lg bg-purple-600 text-white text-sm font-medium transition active:scale-95">Follow & Join</button>
+            </div>
+          ) : joinError ? <p className="text-xs text-red-400 mb-2">{joinError}</p> : null}
 
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
