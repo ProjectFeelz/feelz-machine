@@ -47,7 +47,7 @@ export default function ChatRoomView() {
                 handleJoin();
               }} className="w-full py-2 rounded-lg bg-purple-600 text-white text-sm font-medium transition active:scale-95">Follow & Join</button>
             </div>
-          ) : joinError ? <p className="text-xs text-red-400 mb-2">{joinError}</p> : null}
+          joinError ? <p className="text-xs text-red-400 mb-2">{joinError}</p> : null}
 
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
@@ -567,7 +567,7 @@ export default function ChatRoomView() {
       )}
     </div>
   );
-}
+
 
 
 
