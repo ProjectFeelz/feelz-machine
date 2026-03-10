@@ -204,7 +204,7 @@ export default function FullPlayer() {
               </button>
 
             {/* Volume */}
-            <div className="flex items-center space-x-3 mt-4 px-2">
+            <div className="hidden md:flex items-center space-x-3 mt-4 px-2">
               <button onClick={() => setVolumeLevel(volume > 0 ? 0 : 1)} className="text-white/40">
                 {volume === 0 ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
               </button>
