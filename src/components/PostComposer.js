@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
-import { Send, Loader, X, Music, Search, Image } from 'lucide-react';
-import TierGate from './TierGate';
+import { Send, Loader, X, Music, Search, Plus, Calendar } from 'lucide-react';
 
 const YOUTUBE_REGEX = /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/;
 const EXTERNAL_LINK_REGEX = /https?:\/\/[^\s]+/g;
@@ -18,15 +17,16 @@ function hasBlockedLinks(text) {
 
 export default function PostComposer({ onPostCreated }) {
   const { user, artist } = useAuth();
+  const [open, setOpen] = useState(false);
   const [content, setContent] = useState('');
   const [posting, setPosting] = useState(false);
-  const [tagSearch, setTagSearch] = useState('');
   const [tagResults, setTagResults] = useState([]);
   const [taggedArtists, setTaggedArtists] = useState([]);
   const [showTagDropdown, setShowTagDropdown] = useState(false);
   const [cursorPos, setCursorPos] = useState(0);
   const [error, setError] = useState('');
   const [scheduledAt, setScheduledAt] = useState('');
+  const [showSchedule, setShowSchedule] = useState(false);
 
   // Track tagging
   const [showTrackPicker, setShowTrackPicker] = useState(false);
@@ -38,13 +38,20 @@ export default function PostComposer({ onPostCreated }) {
   const editorRef = useRef(null);
   const tagTimeoutRef = useRef(null);
   const trackTimeoutRef = useRef(null);
-  const imageInputRef = useRef(null);
-  const [imageFile, setImageFile] = useState(null);
-  const [imagePreview, setImagePreview] = useState(null);
-  const [uploadingImage, setUploadingImage] = useState(false);
 
   const youtubeId = extractYouTubeId(content);
   const blocked = hasBlockedLinks(content);
+
+  // Focus textarea when opened
+  useEffect(() => {
+    if (open) setTimeout(() => editorRef.current?.focus(), 100);
+  }, [open]);
+
+  // Lock body scroll when open
+  useEffect(() => {
+    document.body.style.overflow = open ? 'hidden' : '';
+    return () => { document.body.style.overflow = ''; };
+  }, [open]);
 
   // Artist @mention detection
   useEffect(() => {
@@ -52,10 +59,8 @@ export default function PostComposer({ onPostCreated }) {
     const textBeforeCursor = content.substring(0, cursorPos);
     const atMatch = textBeforeCursor.match(/@(\w*)$/);
     if (atMatch) {
-      const query = atMatch[1];
-      setTagSearch(query);
       if (tagTimeoutRef.current) clearTimeout(tagTimeoutRef.current);
-      tagTimeoutRef.current = setTimeout(() => searchArtists(query), 200);
+      tagTimeoutRef.current = setTimeout(() => searchArtists(atMatch[1]), 200);
     } else {
       setShowTagDropdown(false);
     }
@@ -87,7 +92,7 @@ export default function PostComposer({ onPostCreated }) {
         .eq('is_published', true)
         .limit(8);
       if (query) q = q.ilike('title', `%${query}%`);
-      else q = q.eq('artist_id', artist.id); // default: own tracks
+      else q = q.eq('artist_id', artist.id);
       const { data } = await q;
       setTrackResults(data || []);
     } catch (err) { console.error('Track search error:', err); }
@@ -104,7 +109,7 @@ export default function PostComposer({ onPostCreated }) {
     if (!taggedArtists.find(a => a.id === tagArtist.id)) {
       setTaggedArtists([...taggedArtists, tagArtist]);
     }
-    setTimeout(() => { if (editorRef.current) editorRef.current.focus(); }, 50);
+    setTimeout(() => editorRef.current?.focus(), 50);
   };
 
   const selectTrack = (track) => {
@@ -115,26 +120,16 @@ export default function PostComposer({ onPostCreated }) {
 
   const removeTag = (artistId) => setTaggedArtists(taggedArtists.filter(a => a.id !== artistId));
 
-  const handleImageSelect = (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (!file.type.startsWith('image/')) { setError('Please select an image file'); return; }
-    if (file.size > 10 * 1024 * 1024) { setError('Image must be under 10MB'); return; }
-    setImageFile(file);
-    setImagePreview(URL.createObjectURL(file));
-    setError('');
-  };
-
-  const removeImage = () => {
-    setImageFile(null);
-    if (imagePreview) URL.revokeObjectURL(imagePreview);
-    setImagePreview(null);
-    if (imageInputRef.current) imageInputRef.current.value = '';
+  const handleClose = () => {
+    setOpen(false);
+    setShowTrackPicker(false);
+    setShowSchedule(false);
+    setShowTagDropdown(false);
   };
 
   const handleSubmit = async () => {
     if (!content.trim() || !user || !artist) return;
-    if (blocked) { setError('External links are not allowed. You can share YouTube links only.'); return; }
+    if (blocked) { setError('External links are not allowed. YouTube links only.'); return; }
     setPosting(true);
     setError('');
     try {
@@ -152,37 +147,33 @@ export default function PostComposer({ onPostCreated }) {
           return;
         }
       }
-      let imageUrl = null;
-      if (imageFile) {
-        setUploadingImage(true);
-        const ext = imageFile.name.split('.').pop();
-        const filename = `posts/${artist.id}-${Date.now()}.${ext}`;
-        const { error: uploadErr } = await supabase.storage
-          .from('feelz-samples')
-          .upload(filename, imageFile, { contentType: imageFile.type, upsert: true });
-        if (uploadErr) throw uploadErr;
-        const { data: urlData } = supabase.storage.from('feelz-samples').getPublicUrl(filename);
-        imageUrl = urlData.publicUrl;
-        setUploadingImage(false);
-      }
-      const taggedIds = taggedArtists.map(a => a.id);
-      const { data, error: postError } = await supabase.from('posts').insert({
+
+      const postPayload = {
         artist_id: artist.id,
         user_id: user.id,
         content: content.trim(),
-        tagged_artist_ids: taggedIds,
-        post_type: 'blog',
+        tagged_artist_ids: taggedArtists.map(a => a.id),
         youtube_id: youtubeId || null,
         track_id: taggedTrack?.id || null,
         scheduled_at: scheduledAt || null,
         media_urls: [],
         is_auto_generated: false,
-      }).select().single();
+      };
+
+      // Try allowed post_type values in order until one works
+      let data, postError;
+      for (const pt of ['blog', 'standard', 'track_share', 'news']) {
+        const result = await supabase.from('posts').insert({ ...postPayload, post_type: pt }).select().single();
+        data = result.data;
+        postError = result.error;
+        if (!postError) break;
+        if (!postError.message?.includes('post_type_check')) break;
+      }
       if (postError) throw postError;
 
       // Notify followers
       const { data: followers } = await supabase.from('follows').select('follower_id').eq('artist_id', artist.id);
-      if (followers && followers.length > 0) {
+      if (followers?.length > 0) {
         const notifs = followers.map(f => ({
           artist_id: null, user_id: f.follower_id, type: 'new_post',
           title: `${artist.artist_name} posted something new`,
@@ -203,7 +194,9 @@ export default function PostComposer({ onPostCreated }) {
       setContent('');
       setTaggedArtists([]);
       setTaggedTrack(null);
-      removeImage();
+      setScheduledAt('');
+      setShowSchedule(false);
+      handleClose();
       if (onPostCreated) onPostCreated(data);
     } catch (err) {
       console.error('Post error:', err);
@@ -215,182 +208,244 @@ export default function PostComposer({ onPostCreated }) {
   if (!user || !artist) return null;
 
   return (
-    <div className="bg-white/[0.03] rounded-xl border border-white/[0.06] p-4 mb-4">
-        {/* Author header */}
-        <div className="flex items-center space-x-3 mb-3">
-          <div className="w-9 h-9 rounded-full bg-gradient-to-br from-purple-600 to-blue-600 flex items-center justify-center overflow-hidden flex-shrink-0">
-            {artist.profile_image_url
-              ? <img src={artist.profile_image_url} alt="" className="w-full h-full object-cover" />
-              : <span className="text-sm font-bold text-white">{artist.artist_name?.[0]}</span>
-            }
+    <>
+      {/* Floating + button */}
+      <button
+        onClick={() => setOpen(true)}
+        className="fixed bottom-24 right-5 z-40 w-14 h-14 rounded-full bg-white flex items-center justify-center transition-all duration-200 active:scale-90 hover:scale-105"
+        style={{ boxShadow: '0 4px 24px rgba(255,255,255,0.18), 0 2px 8px rgba(0,0,0,0.4)' }}
+      >
+        <Plus className="w-6 h-6 text-black" strokeWidth={2.5} />
+      </button>
+
+      {/* Backdrop */}
+      {open && (
+        <div
+          className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm"
+          style={{ animation: 'pcFadeIn 0.2s ease' }}
+          onClick={handleClose}
+        />
+      )}
+
+      {/* Bottom sheet */}
+      {open && (
+        <div
+          className="fixed bottom-0 left-0 right-0 z-50 rounded-t-2xl flex flex-col"
+          style={{
+            backgroundColor: '#0f0f0f',
+            border: '1px solid rgba(255,255,255,0.08)',
+            borderBottom: 'none',
+            animation: 'pcSlideUp 0.28s cubic-bezier(0.32, 0.72, 0, 1)',
+            maxHeight: '90vh',
+          }}
+          onClick={e => e.stopPropagation()}
+        >
+          {/* Handle bar */}
+          <div className="flex justify-center pt-3 pb-1 flex-shrink-0">
+            <div className="w-10 h-1 rounded-full bg-white/10" />
           </div>
-          <p className="text-sm font-medium text-white">{artist.artist_name}</p>
-        </div>
 
-        {/* Textarea */}
-        <div className="relative">
-          <textarea
-            ref={editorRef}
-            value={content}
-            onChange={(e) => { setContent(e.target.value); setCursorPos(e.target.selectionStart); }}
-            onKeyUp={(e) => setCursorPos(e.target.selectionStart)}
-            onClick={(e) => setCursorPos(e.target.selectionStart)}
-            placeholder="Share something with your community... (use @ to tag artists)"
-            rows={3}
-            className="w-full bg-transparent text-white text-sm placeholder-white/20 outline-none resize-none leading-relaxed"
-          />
-
-          {/* Artist tag dropdown */}
-          {showTagDropdown && tagResults.length > 0 && (
-            <div className="absolute left-0 z-50 w-64 rounded-xl overflow-hidden shadow-2xl"
-              style={{ backgroundColor: '#1a1a1a', border: '1px solid rgba(255,255,255,0.08)', top: '100%' }}>
-              {tagResults.map(a => (
-                <button key={a.id} onClick={() => insertTag(a)}
-                  className="w-full flex items-center space-x-2 px-3 py-2.5 hover:bg-white/[0.06] transition text-left">
-                  <div className="w-7 h-7 rounded-full overflow-hidden bg-white/10 flex-shrink-0">
-                    {a.profile_image_url
-                      ? <img src={a.profile_image_url} alt="" className="w-full h-full object-cover" />
-                      : <span className="w-full h-full flex items-center justify-center text-xs text-white/50">{a.artist_name?.[0]}</span>
-                    }
-                  </div>
-                  <span className="text-sm text-white truncate">{a.artist_name}</span>
-                </button>
-              ))}
+          {/* Header */}
+          <div className="flex items-center justify-between px-4 py-3 flex-shrink-0">
+            <div className="flex items-center space-x-2.5">
+              <div className="w-8 h-8 rounded-full overflow-hidden bg-gradient-to-br from-purple-600 to-blue-600 flex items-center justify-center flex-shrink-0">
+                {artist.profile_image_url
+                  ? <img src={artist.profile_image_url} alt="" className="w-full h-full object-cover" />
+                  : <span className="text-xs font-bold text-white">{artist.artist_name?.[0]}</span>}
+              </div>
+              <span className="text-sm font-semibold text-white">{artist.artist_name}</span>
             </div>
-          )}
-        </div>
-
-        {/* YouTube preview */}
-        {youtubeId && (
-          <div className="mt-2 rounded-lg overflow-hidden">
-            <img src={`https://img.youtube.com/vi/${youtubeId}/mqdefault.jpg`} alt="YouTube thumbnail" className="w-full rounded-lg opacity-70" />
-          </div>
-        )}
-
-        {/* Tagged track preview */}
-        {taggedTrack && (
-          <div className="mt-3 flex items-center space-x-3 p-2.5 rounded-xl bg-white/[0.04] border border-white/[0.06]">
-            <div className="w-9 h-9 rounded-lg overflow-hidden flex-shrink-0 bg-white/10">
-              {taggedTrack.cover_artwork_url
-                ? <img src={taggedTrack.cover_artwork_url} alt="" className="w-full h-full object-cover" />
-                : <div className="w-full h-full flex items-center justify-center"><Music className="w-4 h-4 text-white/20" /></div>
-              }
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-medium text-white truncate">{taggedTrack.title}</p>
-              <p className="text-[10px] text-white/40">Tagged track</p>
-            </div>
-            <button onClick={() => setTaggedTrack(null)} className="text-white/30 hover:text-white/60 transition flex-shrink-0">
-              <X className="w-3.5 h-3.5" />
+            <button
+              onClick={handleClose}
+              className="w-8 h-8 flex items-center justify-center rounded-full bg-white/[0.06] hover:bg-white/[0.1] transition"
+            >
+              <X className="w-4 h-4 text-white/60" />
             </button>
           </div>
-        )}
 
-        {/* Tagged artists */}
-        {taggedArtists.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 mt-2">
-            {taggedArtists.map(a => (
-              <span key={a.id} className="flex items-center space-x-1 text-xs bg-purple-500/10 text-purple-400 px-2 py-1 rounded-full">
-                <span>@{a.artist_name}</span>
-                <button onClick={() => removeTag(a.id)}><X className="w-3 h-3" /></button>
-              </span>
-            ))}
-          </div>
-        )}
-
-        {/* Track picker modal */}
-        {showTrackPicker && (
-          <div className="mt-3 rounded-xl overflow-hidden border border-white/[0.08]" style={{ backgroundColor: '#111' }}>
-            <div className="flex items-center space-x-2 px-3 py-2.5 border-b border-white/[0.06]">
-              <Search className="w-3.5 h-3.5 text-white/30" />
-              <input
-                type="text"
-                value={trackSearch}
-                onChange={(e) => setTrackSearch(e.target.value)}
-                placeholder="Search tracks..."
-                autoFocus
-                className="flex-1 bg-transparent text-sm text-white placeholder-white/20 outline-none"
+          {/* Scrollable body */}
+          <div className="flex-1 overflow-y-auto px-4 pb-2 min-h-0">
+            {/* Textarea */}
+            <div className="relative">
+              <textarea
+                ref={editorRef}
+                value={content}
+                onChange={(e) => { setContent(e.target.value); setCursorPos(e.target.selectionStart); }}
+                onKeyUp={(e) => setCursorPos(e.target.selectionStart)}
+                onClick={(e) => setCursorPos(e.target.selectionStart)}
+                placeholder="Share something with your community... (use @ to tag artists)"
+                rows={4}
+                className="w-full bg-transparent text-white text-sm placeholder-white/20 outline-none resize-none leading-relaxed"
               />
-              <button onClick={() => setShowTrackPicker(false)} className="text-white/30 hover:text-white/60">
-                <X className="w-3.5 h-3.5" />
-              </button>
-            </div>
-            <div className="max-h-48 overflow-y-auto">
-              {searchingTracks
-                ? <div className="flex justify-center py-4"><Loader className="w-4 h-4 animate-spin text-white/30" /></div>
-                : trackResults.length === 0
-                ? <p className="text-center text-white/20 text-xs py-4">No tracks found</p>
-                : trackResults.map(t => (
-                    <button key={t.id} onClick={() => selectTrack(t)}
-                      className="w-full flex items-center space-x-3 px-3 py-2.5 hover:bg-white/[0.04] transition text-left">
-                      <div className="w-8 h-8 rounded-md overflow-hidden flex-shrink-0 bg-white/10">
-                        {t.cover_artwork_url
-                          ? <img src={t.cover_artwork_url} alt="" className="w-full h-full object-cover" />
-                          : <div className="w-full h-full flex items-center justify-center"><Music className="w-3 h-3 text-white/20" /></div>
-                        }
+              {/* Artist tag dropdown */}
+              {showTagDropdown && tagResults.length > 0 && (
+                <div
+                  className="absolute left-0 z-50 w-64 rounded-xl overflow-hidden shadow-2xl"
+                  style={{ backgroundColor: '#1a1a1a', border: '1px solid rgba(255,255,255,0.08)', top: '100%' }}
+                >
+                  {tagResults.map(a => (
+                    <button key={a.id} onClick={() => insertTag(a)}
+                      className="w-full flex items-center space-x-2 px-3 py-2.5 hover:bg-white/[0.06] transition text-left">
+                      <div className="w-7 h-7 rounded-full overflow-hidden bg-white/10 flex-shrink-0">
+                        {a.profile_image_url
+                          ? <img src={a.profile_image_url} alt="" className="w-full h-full object-cover" />
+                          : <span className="w-full h-full flex items-center justify-center text-xs text-white/50">{a.artist_name?.[0]}</span>}
                       </div>
-                      <p className="text-sm text-white truncate">{t.title}</p>
+                      <span className="text-sm text-white truncate">{a.artist_name}</span>
                     </button>
-                  ))
-              }
-            </div>
-          </div>
-        )}
-
-        {error && <p className="text-xs text-red-400 mt-2">{error}</p>}
-        {blocked && <p className="text-xs text-yellow-400/70 mt-2">External links aren't allowed. YouTube links only.</p>}
-
-        {/* Toolbar */}
-        <div className="flex items-center justify-between mt-3 pt-3 border-t border-white/[0.05]">
-          <div className="flex items-center space-x-1">
-            <div className="flex items-center space-x-1.5">
-              <input
-                type="datetime-local"
-                value={scheduledAt}
-                onChange={(e) => setScheduledAt(e.target.value)}
-                min={new Date().toISOString().slice(0, 16)}
-                className="text-xs bg-white/[0.04] text-white/40 border border-white/[0.08] rounded-lg px-2 py-1.5 outline-none focus:border-white/20 transition"
-                title="Schedule post"
-              />
-              {scheduledAt && (
-                <button onClick={() => setScheduledAt('')} className="text-white/20 hover:text-white/40 transition">
-                  <X className="w-3 h-3" />
-                </button>
+                  ))}
+                </div>
               )}
             </div>
-            <button
-              onClick={() => imageInputRef.current?.click()}
-              className={`flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg text-xs transition ${imageFile ? 'bg-green-500/20 text-green-400' : 'text-white/30 hover:text-white/60 hover:bg-white/[0.04]'}`}
-              title="Add image">
-              <Image className="w-3.5 h-3.5" />
-              <span>{imageFile ? 'Image added' : 'Image'}</span>
-            </button>
-            <input ref={imageInputRef} type="file" accept="image/*" onChange={handleImageSelect} className="hidden" />
-            <button
-              onClick={() => { setShowTrackPicker(p => !p); if (!showTrackPicker) searchTracks(''); }}
-              className={`flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg text-xs transition ${taggedTrack ? 'bg-purple-500/20 text-purple-400' : 'text-white/30 hover:text-white/60 hover:bg-white/[0.04]'}`}
-              title="Tag a track">
-              <Music className="w-3.5 h-3.5" />
-              <span>Tag Track</span>
-            </button>
+
+            {/* YouTube preview */}
+            {youtubeId && (
+              <div className="mt-2 rounded-lg overflow-hidden">
+                <img src={`https://img.youtube.com/vi/${youtubeId}/mqdefault.jpg`} alt="YouTube thumbnail" className="w-full rounded-lg opacity-70" />
+              </div>
+            )}
+
+            {/* Tagged track */}
+            {taggedTrack && (
+              <div className="mt-3 flex items-center space-x-3 p-2.5 rounded-xl bg-white/[0.04] border border-white/[0.06]">
+                <div className="w-9 h-9 rounded-lg overflow-hidden flex-shrink-0 bg-white/10">
+                  {taggedTrack.cover_artwork_url
+                    ? <img src={taggedTrack.cover_artwork_url} alt="" className="w-full h-full object-cover" />
+                    : <div className="w-full h-full flex items-center justify-center"><Music className="w-4 h-4 text-white/20" /></div>}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium text-white truncate">{taggedTrack.title}</p>
+                  <p className="text-[10px] text-white/40">Tagged track</p>
+                </div>
+                <button onClick={() => setTaggedTrack(null)} className="text-white/30 hover:text-white/60 transition">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
+
+            {/* Tagged artists */}
+            {taggedArtists.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 mt-2">
+                {taggedArtists.map(a => (
+                  <span key={a.id} className="flex items-center space-x-1 text-xs bg-purple-500/10 text-purple-400 px-2 py-1 rounded-full">
+                    <span>@{a.artist_name}</span>
+                    <button onClick={() => removeTag(a.id)}><X className="w-3 h-3" /></button>
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {/* Schedule picker */}
+            {showSchedule && (
+              <div className="mt-3 flex items-center space-x-2 p-3 rounded-xl bg-white/[0.04] border border-white/[0.06]">
+                <Calendar className="w-4 h-4 text-white/30 flex-shrink-0" />
+                <input
+                  type="datetime-local"
+                  value={scheduledAt}
+                  onChange={(e) => setScheduledAt(e.target.value)}
+                  min={new Date().toISOString().slice(0, 16)}
+                  className="flex-1 bg-transparent text-sm text-white/60 outline-none"
+                />
+                {scheduledAt && (
+                  <button onClick={() => setScheduledAt('')} className="text-white/20 hover:text-white/40 transition">
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Track picker */}
+            {showTrackPicker && (
+              <div className="mt-3 rounded-xl overflow-hidden border border-white/[0.08]" style={{ backgroundColor: '#111' }}>
+                <div className="flex items-center space-x-2 px-3 py-2.5 border-b border-white/[0.06]">
+                  <Search className="w-3.5 h-3.5 text-white/30" />
+                  <input
+                    type="text"
+                    value={trackSearch}
+                    onChange={(e) => setTrackSearch(e.target.value)}
+                    placeholder="Search your tracks..."
+                    autoFocus
+                    className="flex-1 bg-transparent text-sm text-white placeholder-white/20 outline-none"
+                  />
+                  <button onClick={() => setShowTrackPicker(false)} className="text-white/30 hover:text-white/60">
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+                <div className="max-h-44 overflow-y-auto">
+                  {searchingTracks
+                    ? <div className="flex justify-center py-4"><Loader className="w-4 h-4 animate-spin text-white/30" /></div>
+                    : trackResults.length === 0
+                    ? <p className="text-center text-white/20 text-xs py-4">No tracks found</p>
+                    : trackResults.map(t => (
+                        <button key={t.id} onClick={() => selectTrack(t)}
+                          className="w-full flex items-center space-x-3 px-3 py-2.5 hover:bg-white/[0.04] transition text-left">
+                          <div className="w-8 h-8 rounded-md overflow-hidden flex-shrink-0 bg-white/10">
+                            {t.cover_artwork_url
+                              ? <img src={t.cover_artwork_url} alt="" className="w-full h-full object-cover" />
+                              : <div className="w-full h-full flex items-center justify-center"><Music className="w-3 h-3 text-white/20" /></div>}
+                          </div>
+                          <p className="text-sm text-white truncate">{t.title}</p>
+                        </button>
+                      ))
+                  }
+                </div>
+              </div>
+            )}
+
+            {error && <p className="text-xs text-red-400 mt-3">{error}</p>}
+            {blocked && <p className="text-xs text-yellow-400/70 mt-2">External links aren't allowed. YouTube links only.</p>}
           </div>
-          {imagePreview && (
-            <div className="relative mt-2 inline-block">
-              <img src={imagePreview} alt="Preview" className="w-20 h-20 rounded-lg object-cover" />
-              <button onClick={removeImage} className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center">
-                <X className="w-3 h-3 text-white" />
+
+          {/* Fixed bottom toolbar */}
+          <div
+            className="flex-shrink-0 px-4 pt-3 pb-6 border-t border-white/[0.06]"
+            style={{ paddingBottom: 'max(1.5rem, env(safe-area-inset-bottom))' }}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => { setShowTrackPicker(p => !p); if (!showTrackPicker) searchTracks(''); }}
+                  className={`flex items-center space-x-1.5 px-3 py-2 rounded-lg text-xs font-medium transition ${
+                    taggedTrack ? 'bg-purple-500/20 text-purple-400' : 'text-white/40 hover:text-white/70 hover:bg-white/[0.06]'
+                  }`}
+                >
+                  <Music className="w-3.5 h-3.5" />
+                  <span>Tag Track</span>
+                </button>
+                <button
+                  onClick={() => setShowSchedule(p => !p)}
+                  className={`flex items-center space-x-1.5 px-3 py-2 rounded-lg text-xs font-medium transition ${
+                    scheduledAt ? 'bg-blue-500/20 text-blue-400' : 'text-white/40 hover:text-white/70 hover:bg-white/[0.06]'
+                  }`}
+                >
+                  <Calendar className="w-3.5 h-3.5" />
+                  <span>{scheduledAt ? 'Scheduled' : 'Schedule'}</span>
+                </button>
+              </div>
+              <button
+                onClick={handleSubmit}
+                disabled={posting || !content.trim() || blocked}
+                className="flex items-center space-x-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition disabled:opacity-30 active:scale-95 flex-shrink-0"
+                style={{ backgroundColor: 'white', color: 'black' }}
+              >
+                {posting ? <Loader className="w-4 h-4 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                <span>{posting ? 'Posting...' : scheduledAt ? 'Schedule' : 'Post'}</span>
               </button>
             </div>
-          )}
-          <button
-            onClick={handleSubmit}
-            disabled={posting || !content.trim() || blocked}
-            className="flex items-center space-x-1.5 px-4 py-2 rounded-lg text-sm font-medium transition disabled:opacity-40"
-            style={{ backgroundColor: 'white', color: 'black' }}>
-            {posting ? <Loader className="w-4 h-4 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-            <span>{posting ? 'Posting...' : scheduledAt ? 'Schedule' : 'Post'}</span>
-          </button>
+          </div>
         </div>
-      </div>
+      )}
+
+      <style>{`
+        @keyframes pcFadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+        @keyframes pcSlideUp {
+          from { transform: translateY(100%); }
+          to { transform: translateY(0); }
+        }
+      `}</style>
+    </>
   );
 }
