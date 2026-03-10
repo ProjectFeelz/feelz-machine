@@ -171,7 +171,7 @@ export default function PostCard({ post, onDelete, onUpdate }) {
   const fetchComments = async () => {
     const { data } = await supabase
       .from('comments')
-      .select('*, artists(artist_name, slug, profile_image_url, is_verified), parent:parent_id(id, content, user_id, artists(artist_name))')
+      .select('*, artists(artist_name, slug, profile_image_url, is_verified)')
       .eq('post_id', post.id)
       .order('created_at', { ascending: true })
       .limit(50);
