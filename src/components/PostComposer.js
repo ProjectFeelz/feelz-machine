@@ -171,11 +171,11 @@ export default function PostComposer({ onPostCreated }) {
         user_id: user.id,
         content: content.trim(),
         tagged_artist_ids: taggedIds,
-        post_type: taggedTrack ? 'track_share' : 'standard',
+        post_type: 'blog',
         youtube_id: youtubeId || null,
         track_id: taggedTrack?.id || null,
         scheduled_at: scheduledAt || null,
-        media_urls: imageUrl ? [imageUrl] : [],
+        media_urls: [],
         is_auto_generated: false,
       }).select().single();
       if (postError) throw postError;

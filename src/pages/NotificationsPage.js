@@ -135,9 +135,9 @@ export default function NotificationsPage() {
       navigate('/library/playlists');
       return;
     }
-    // Track liked -> community or artist
-    if (type === 'track_liked') {
-      navigate('/community');
+    // Track liked -> go to track's artist page via metadata
+    if (type === 'track_liked' && notif.metadata?.artist_slug) {
+      navigate('/artist/' + notif.metadata.artist_slug);
       return;
     }
     // Track interactions -> artist profile

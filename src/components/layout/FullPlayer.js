@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import {
   Play, Pause, SkipBack, SkipForward, ChevronDown,
   Shuffle, Repeat, Repeat1, Heart, Share2, ListMusic, Check, Volume2, VolumeX
-} from 'lucide-react';
+, X } from 'lucide-react';
 import { usePlayer } from '../../contexts/PlayerContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../supabaseClient';
@@ -21,7 +21,7 @@ export default function FullPlayer() {
     playNext, playPrev, seek, duration, currentTime,
     shuffle, repeat, toggleShuffle, toggleRepeat,
     isMinimized, setIsMinimized, queue, volume, setVolumeLevel,
-  } = usePlayer();
+    removeFromQueue } = usePlayer();
   const { user } = useAuth();
 
   const [liked, setLiked] = useState(false);
@@ -122,12 +122,16 @@ export default function FullPlayer() {
                 <p className={`text-sm font-medium truncate ${track.id === currentTrack.id ? 'text-white' : 'text-white/60'}`}>{track.title}</p>
                 <p className="text-xs text-white/30 truncate">{track.artist_name}</p>
               </div>
-              {track.id === currentTrack.id && (
+              {track.id === currentTrack.id ? (
                 <div className="flex items-end space-x-0.5 h-4 flex-shrink-0">
                   <div className="w-0.5 bg-white rounded-full animate-pulse" style={{ height: '100%' }} />
                   <div className="w-0.5 bg-white rounded-full animate-pulse" style={{ height: '60%', animationDelay: '0.15s' }} />
                   <div className="w-0.5 bg-white rounded-full animate-pulse" style={{ height: '80%', animationDelay: '0.3s' }} />
                 </div>
+              ) : (
+                <button onClick={(e) => { e.stopPropagation(); removeFromQueue(i); }} className="p-1.5 rounded-full hover:bg-white/10 transition flex-shrink-0">
+                  <X className="w-3.5 h-3.5 text-white/30" />
+                </button>
               )}
             </div>
           ))}

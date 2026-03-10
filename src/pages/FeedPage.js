@@ -12,6 +12,8 @@ export default function FeedPage() {
   const navigate = useNavigate();
   const { user, artist } = useAuth();
   const [posts, setPosts] = useState([]);
+  const [feedFilter, setFeedFilter] = useState('all');
+  const [followedArtistIds, setFollowedArtistIds] = useState([]);
   const [trending, setTrending] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -181,6 +183,12 @@ export default function FeedPage() {
         </div>
       )}
 
+      {/* Feed filter */}
+      <div className="flex space-x-2 mb-4">
+        <button onClick={() => setFeedFilter('all')} className={`px-4 py-1.5 rounded-lg text-xs font-medium transition ${feedFilter === 'all' ? 'bg-white/10 text-white' : 'text-white/30 hover:text-white/50'}`}>All</button>
+        <button onClick={() => setFeedFilter('following')} className={`px-4 py-1.5 rounded-lg text-xs font-medium transition ${feedFilter === 'following' ? 'bg-white/10 text-white' : 'text-white/30 hover:text-white/50'}`}>Following</button>
+      </div>
+
       {/* Post composer */}
       {user && artist && <PostComposer onPostCreated={handlePostCreated} />}
       {user && !artist && (
@@ -202,7 +210,7 @@ export default function FeedPage() {
         </div>
       ) : (
         <div className="space-y-4">
-          {posts.map(post => (
+          {posts.filter(post => feedFilter === 'all' || followedArtistIds.includes(post.artist_id)).map(post => (
             <div key={post.id} id={`post-${post.id}`}>
               <PostCard post={post} onDelete={handlePostDeleted} />
             </div>
