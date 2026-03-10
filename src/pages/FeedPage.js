@@ -73,6 +73,13 @@ export default function FeedPage() {
     fetchTrending();
   }, [fetchPosts]);
 
+  // Fetch followed artist IDs for the Following filter
+  useEffect(() => {
+    if (!user) return;
+    supabase.from('follows').select('artist_id').eq('follower_id', user.id)
+      .then(({ data }) => setFollowedArtistIds((data || []).map(f => f.artist_id)));
+  }, [user]);
+
   // Scroll to shared post if ?post= param present
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -99,7 +106,6 @@ export default function FeedPage() {
         schema: 'public',
         table: 'posts',
       }, async (payload) => {
-        // Fetch the full post with artist data
         const { data } = await supabase
           .from('posts')
           .select('*, artists(id, artist_name, slug, profile_image_url, is_verified)')
@@ -115,8 +121,7 @@ export default function FeedPage() {
   }, []);
 
   const handlePostCreated = (newPost) => {
-    // Will be caught by realtime, but add immediately for responsiveness
-    // Already handled by realtime subscription
+    // Handled by realtime subscription
   };
 
   const handlePostDeleted = (postId) => {
@@ -216,7 +221,6 @@ export default function FeedPage() {
             </div>
           ))}
 
-          {/* Load more */}
           {hasMore && (
             <button onClick={loadMore} disabled={loadingMore}
               className="w-full py-3 text-center text-sm text-white/30 hover:text-white/50 transition">
@@ -228,11 +232,3 @@ export default function FeedPage() {
     </div>
   );
 }
-
-
-
-
-
-
-
-

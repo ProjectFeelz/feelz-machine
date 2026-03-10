@@ -62,7 +62,6 @@ export default function ChatRoomView() {
         table: 'chat_messages',
         filter: `room_id=eq.${roomId}`,
       }, (payload) => {
-        // Fetch the full message with artist data
         fetchSingleMessage(payload.new.id);
       })
       .on('postgres_changes', {
@@ -71,7 +70,6 @@ export default function ChatRoomView() {
         table: 'chat_messages',
         filter: `room_id=eq.${roomId}`,
       }, (payload) => {
-        // Handle deletions
         if (payload.new.is_deleted) {
           setMessages(prev => prev.map(m =>
             m.id === payload.new.id ? { ...m, is_deleted: true, deleted_reason: payload.new.deleted_reason } : m
@@ -165,8 +163,8 @@ export default function ChatRoomView() {
       const enriched = { ...data, artist: artistData || null, listener_name: listenerName, listener_avatar: listenerAvatar };
       setMessages(prev => {
         if (prev.find(m => m.id === enriched.id || (m.id?.startsWith?.('temp-') && m.content === enriched.content && m.user_id === enriched.user_id))) {
-            return prev.map(m => m.id?.startsWith?.('temp-') && m.content === enriched.content ? enriched : m);
-          }
+          return prev.map(m => m.id?.startsWith?.('temp-') && m.content === enriched.content ? enriched : m);
+        }
         return [...prev, enriched];
       });
     }
@@ -196,8 +194,23 @@ export default function ChatRoomView() {
   const joinRoom = async () => {
     if (!user) { navigate('/login'); return; }
     setJoining(true);
+    setJoinError('');
 
     try {
+      // Check subscribers-only gate
+      if (room?.is_subscribers_only) {
+        const { count } = await supabase
+          .from('follows')
+          .select('*', { count: 'exact', head: true })
+          .eq('follower_id', user.id)
+          .eq('artist_id', room.artist_id);
+        if (!count || count === 0) {
+          setJoinError('followers_only');
+          setJoining(false);
+          return;
+        }
+      }
+
       const { error } = await supabase.from('chat_room_members').insert({
         room_id: roomId,
         user_id: user.id,
@@ -220,6 +233,18 @@ export default function ChatRoomView() {
       setJoinError(err.message || 'Unable to join — this room may be subscribers-only.');
     }
     setJoining(false);
+  };
+
+  const handleFollowAndJoin = async () => {
+    try {
+      await supabase.from('follows').insert({ follower_id: user.id, artist_id: room.artist_id });
+      setJoinError('');
+      // Small delay to let the insert settle, then join
+      setTimeout(() => joinRoom(), 300);
+    } catch (err) {
+      console.error('Follow error:', err);
+      setJoinError('Failed to follow. Please try again.');
+    }
   };
 
   // Moderation checks
@@ -534,7 +559,21 @@ export default function ChatRoomView() {
         </div>
       ) : (
         <div className="px-4 py-3 border-t border-white/[0.06] flex-shrink-0">
-          {joinError && <p className="text-xs text-red-400 mb-2 text-center">{joinError}</p>}
+          {/* Subscribers-only gate */}
+          {joinError === 'followers_only' ? (
+            <div className="mb-3 p-3 rounded-xl bg-white/[0.04] border border-white/[0.06]">
+              <p className="text-xs text-white/40 mb-2">This room is for followers only</p>
+              <button
+                onClick={handleFollowAndJoin}
+                disabled={joining}
+                className="w-full py-2 rounded-lg bg-purple-600 text-white text-sm font-medium transition active:scale-95 disabled:opacity-50">
+                {joining ? <Loader className="w-4 h-4 animate-spin mx-auto" /> : 'Follow & Join'}
+              </button>
+            </div>
+          ) : joinError ? (
+            <p className="text-xs text-red-400 mb-2 text-center">{joinError}</p>
+          ) : null}
+
           <button onClick={joinRoom} disabled={joining}
             className="w-full py-3 bg-white text-black rounded-xl font-semibold text-sm flex items-center justify-center space-x-2 disabled:opacity-50 transition">
             {joining ? <Loader className="w-4 h-4 animate-spin" /> : <Users className="w-4 h-4" />}

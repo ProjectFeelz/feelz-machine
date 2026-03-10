@@ -202,8 +202,9 @@ export default function FullPlayer() {
                 className={`w-10 h-10 flex items-center justify-center ${repeat !== 'none' ? 'text-white' : 'text-white/30'}`}>
                 {repeat === 'one' ? <Repeat1 className="w-5 h-5" /> : <Repeat className="w-5 h-5" />}
               </button>
+            </div>
 
-            {/* Volume */}
+            {/* Volume — desktop only */}
             <div className="hidden md:flex items-center space-x-3 mt-4 px-2">
               <button onClick={() => setVolumeLevel(volume > 0 ? 0 : 1)} className="text-white/40">
                 {volume === 0 ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
@@ -212,7 +213,6 @@ export default function FullPlayer() {
                 onChange={(e) => setVolumeLevel(parseFloat(e.target.value))}
                 className="flex-1 h-1 rounded-full appearance-none bg-white/10 accent-white"
                 style={{ accentColor: 'white' }} />
-            </div>
             </div>
 
             {/* Share */}
@@ -231,4 +231,3 @@ export default function FullPlayer() {
     </motion.div>
   );
 }
-
