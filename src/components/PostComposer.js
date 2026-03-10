@@ -38,6 +38,7 @@ export default function PostComposer({ onPostCreated }) {
   const editorRef = useRef(null);
   const tagTimeoutRef = useRef(null);
   const trackTimeoutRef = useRef(null);
+  const [keyboardOffset, setKeyboardOffset] = useState(0);
 
   const youtubeId = extractYouTubeId(content);
   const blocked = hasBlockedLinks(content);
@@ -51,6 +52,23 @@ export default function PostComposer({ onPostCreated }) {
   useEffect(() => {
     document.body.style.overflow = open ? 'hidden' : '';
     return () => { document.body.style.overflow = ''; };
+  }, [open]);
+
+  // Track keyboard height via visualViewport
+  useEffect(() => {
+    if (!open) { setKeyboardOffset(0); return; }
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const onResize = () => {
+      const offset = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+      setKeyboardOffset(offset);
+    };
+    vv.addEventListener('resize', onResize);
+    vv.addEventListener('scroll', onResize);
+    return () => {
+      vv.removeEventListener('resize', onResize);
+      vv.removeEventListener('scroll', onResize);
+    };
   }, [open]);
 
   // Artist @mention detection
@@ -160,15 +178,11 @@ export default function PostComposer({ onPostCreated }) {
         is_auto_generated: false,
       };
 
-      // Try allowed post_type values in order until one works
-      let data, postError;
-      for (const pt of ['blog', 'standard', 'track_share', 'news']) {
-        const result = await supabase.from('posts').insert({ ...postPayload, post_type: pt }).select().single();
-        data = result.data;
-        postError = result.error;
-        if (!postError) break;
-        if (!postError.message?.includes('post_type_check')) break;
-      }
+      // post_type constraint allows: standard, track_share, blog, announcement, update, poll, exclusive, question, media
+      const postType = taggedTrack ? 'track_share' : 'standard';
+      const result = await supabase.from('posts').insert({ ...postPayload, post_type: postType }).select().single();
+      let data = result.data;
+      let postError = result.error;
       if (postError) throw postError;
 
       // Notify followers
@@ -230,13 +244,15 @@ export default function PostComposer({ onPostCreated }) {
       {/* Bottom sheet */}
       {open && (
         <div
-          className="fixed bottom-0 left-0 right-0 z-50 rounded-t-2xl flex flex-col"
+          className="fixed left-0 right-0 z-50 rounded-t-2xl flex flex-col"
           style={{
+            bottom: keyboardOffset,
             backgroundColor: '#0f0f0f',
             border: '1px solid rgba(255,255,255,0.08)',
             borderBottom: 'none',
             animation: 'pcSlideUp 0.28s cubic-bezier(0.32, 0.72, 0, 1)',
             maxHeight: '90vh',
+            transition: 'bottom 0.15s ease',
           }}
           onClick={e => e.stopPropagation()}
         >
