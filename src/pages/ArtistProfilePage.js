@@ -596,7 +596,7 @@ export default function ArtistProfilePage() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium truncate" style={{ color: textColor }}>{collab.tracks?.title || 'Untitled'}</p>
-                  <p className="text-xs" style={{ color: `${textColor}40` }}>{collab.role} · {collab.split_percent}% split</p>
+                  <p className="text-xs" style={{ color: `${textColor}40` }}>{collab.role}</p>
                 </div>
                 <span className="text-[10px] px-2 py-0.5 rounded-full font-medium" style={{ backgroundColor: `${secondaryColor}20`, color: secondaryColor }}>Collab</span>
               </div>

@@ -215,8 +215,7 @@ export default function PostComposer({ onPostCreated }) {
   if (!user || !artist) return null;
 
   return (
-    <TierGate feature="community_post">
-      <div className="bg-white/[0.03] rounded-xl border border-white/[0.06] p-4 mb-4">
+    <div className="bg-white/[0.03] rounded-xl border border-white/[0.06] p-4 mb-4">
         {/* Author header */}
         <div className="flex items-center space-x-3 mb-3">
           <div className="w-9 h-9 rounded-full bg-gradient-to-br from-purple-600 to-blue-600 flex items-center justify-center overflow-hidden flex-shrink-0">
@@ -377,6 +376,5 @@ export default function PostComposer({ onPostCreated }) {
           </button>
         </div>
       </div>
-    </TierGate>
   );
 }
