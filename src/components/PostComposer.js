@@ -189,7 +189,7 @@ export default function PostComposer({ onPostCreated }) {
           message: content.substring(0, 100),
           metadata: { post_id: data.id, artist_id: artist.id, artist_name: artist.artist_name },
         }));
-        await supabase.from('notifications').insert(notifs).catch(() => {});
+        try { await supabase.from('notifications').insert(notifs); } catch {}
       }
       for (const ta of taggedArtists) {
         await supabase.from('notifications').insert({
@@ -197,7 +197,7 @@ export default function PostComposer({ onPostCreated }) {
           title: `${artist.artist_name} mentioned you in a post`,
           message: content.substring(0, 100),
           metadata: { post_id: data.id, tagger_artist_id: artist.id },
-        }).catch(() => {});
+        });
       }
 
       setContent('');
