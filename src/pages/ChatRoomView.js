@@ -4,7 +4,7 @@ import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import {
   ArrowLeft, Send, Loader, Users, Settings, Shield,
-  AlertTriangle, Trash2, VolumeX, Volume2, Lock, Info, X
+  AlertTriangle, Trash2, VolumeX, Volume2, Lock, Info, X, CornerDownRight
 } from 'lucide-react';
 
 // FIX 4: Do NOT use /g flag with .test() — it causes stateful lastIndex bugs
@@ -37,6 +37,7 @@ export default function ChatRoomView() {
   const [joining, setJoining] = useState(false);
   const [showMembers, setShowMembers] = useState(false);
   const [modWarning, setModWarning] = useState('');
+  const [replyingTo, setReplyingTo] = useState(null); // { id, artist_name }
 
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
@@ -87,11 +88,12 @@ export default function ChatRoomView() {
   }, [messages]);
 
   const fetchRoom = async () => {
+    // CHANGE 1: .single() -> .maybeSingle() to fix 406
     const { data } = await supabase
       .from('chat_rooms')
       .select('*, artists(id, artist_name, slug, profile_image_url, is_verified, user_id)')
       .eq('id', roomId)
-      .single();
+      .maybeSingle();
     setRoom(data);
     setLoading(false);
   };
@@ -280,10 +282,12 @@ export default function ChatRoomView() {
       const { error } = await supabase.from('chat_messages').insert({
         room_id: roomId,
         user_id: user.id,
-        content: input.trim(),
+        // CHANGE 2: prepend reply mention if replying
+        content: replyingTo ? `@${replyingTo.artist_name} ${input.trim()}` : input.trim(),
       });
       if (error) throw error;
       setInput('');
+      setReplyingTo(null);
       inputRef.current?.focus();
     } catch (err) {
       console.error('Send error:', err);
@@ -417,6 +421,8 @@ export default function ChatRoomView() {
             (new Date(msg.created_at) - new Date(prevMsg.created_at)) < 120000;
           const isMe = msg.user_id === user.id;
           const isRoomOwner = msg.user_id === room.artists?.user_id;
+          // CHANGE 3: can delete own messages OR if room admin
+          const canDelete = isMe || isRoomAdmin;
 
           if (msg.is_deleted) {
             return (
@@ -458,12 +464,26 @@ export default function ChatRoomView() {
                 <p className="text-sm text-white/80 break-words leading-relaxed">{msg.content}</p>
               </div>
 
-              {isRoomAdmin && !isMe && (
-                <button onClick={() => handleDelete(msg.id)}
-                  className="opacity-0 group-hover:opacity-100 w-7 h-7 flex items-center justify-center rounded-full hover:bg-red-500/10 transition flex-shrink-0">
-                  <Trash2 className="w-3 h-3 text-red-400/50" />
-                </button>
-              )}
+              {/* CHANGE 4: reply + delete buttons, visible on hover */}
+              <div className="opacity-0 group-hover:opacity-100 flex items-center space-x-1 flex-shrink-0 transition">
+                {isMember && !isMe && (
+                  <button
+                    onClick={() => {
+                      setReplyingTo({ id: msg.id, artist_name: msg.artist?.artist_name || 'User' });
+                      setInput(`@${msg.artist?.artist_name || 'User'} `);
+                      inputRef.current?.focus();
+                    }}
+                    className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-white/[0.06] transition">
+                    <CornerDownRight className="w-3 h-3 text-white/30" />
+                  </button>
+                )}
+                {canDelete && (
+                  <button onClick={() => handleDelete(msg.id)}
+                    className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-red-500/10 transition">
+                    <Trash2 className="w-3 h-3 text-red-400/50" />
+                  </button>
+                )}
+              </div>
             </div>
           );
         })}
@@ -488,24 +508,33 @@ export default function ChatRoomView() {
               <p className="text-xs text-white/20">You are muted in this room</p>
             </div>
           ) : (
-            <div className="flex items-center space-x-2">
-              <input
-                ref={inputRef}
-                type="text"
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSend()}
-                placeholder="Type a message..."
-                maxLength={500}
-                className="flex-1 bg-white/[0.06] rounded-xl px-4 py-2.5 text-sm text-white placeholder-white/20 outline-none"
-              />
-              <button onClick={handleSend} disabled={!input.trim() || sending}
-                className="w-10 h-10 flex items-center justify-center rounded-xl bg-purple-600 disabled:opacity-30 transition active:scale-95">
-                {sending
-                  ? <Loader className="w-4 h-4 animate-spin text-white" />
-                  : <Send className="w-4 h-4 text-white" />}
-              </button>
-            </div>
+            <>
+              {/* CHANGE 4b: reply banner above input */}
+              {replyingTo && (
+                <div className="flex items-center justify-between mb-2 px-3 py-1.5 bg-purple-500/10 rounded-lg">
+                  <span className="text-[11px] text-purple-400">Replying to @{replyingTo.artist_name}</span>
+                  <button onClick={() => { setReplyingTo(null); setInput(''); }} className="text-white/30 hover:text-white/60 text-sm leading-none">×</button>
+                </div>
+              )}
+              <div className="flex items-center space-x-2">
+                <input
+                  ref={inputRef}
+                  type="text"
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSend()}
+                  placeholder={replyingTo ? `Reply to @${replyingTo.artist_name}...` : 'Type a message...'}
+                  maxLength={500}
+                  className="flex-1 bg-white/[0.06] rounded-xl px-4 py-2.5 text-sm text-white placeholder-white/20 outline-none"
+                />
+                <button onClick={handleSend} disabled={!input.trim() || sending}
+                  className="w-10 h-10 flex items-center justify-center rounded-xl bg-purple-600 disabled:opacity-30 transition active:scale-95">
+                  {sending
+                    ? <Loader className="w-4 h-4 animate-spin text-white" />
+                    : <Send className="w-4 h-4 text-white" />}
+                </button>
+              </div>
+            </>
           )}
         </div>
       ) : (
