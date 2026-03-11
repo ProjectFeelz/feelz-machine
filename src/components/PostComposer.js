@@ -179,7 +179,6 @@ export default function PostComposer({ onPostCreated }) {
         youtube_id: youtubeId || null,
         track_id: taggedTrack?.id || null,
         scheduled_at: scheduledAt || null,
-        image_url: null,
       };
 
       const { data, error: postError } = await supabase
