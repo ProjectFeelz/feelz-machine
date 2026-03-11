@@ -35,8 +35,6 @@ export default function ChatRoomView() {
   const [joining, setJoining] = useState(false);
   const [showMembers, setShowMembers] = useState(false);
   const [modWarning, setModWarning] = useState('');
-  const [replyTo, setReplyTo] = useState(null);
-  const [joinError, setJoinError] = useState('');
 
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
@@ -62,6 +60,7 @@ export default function ChatRoomView() {
         table: 'chat_messages',
         filter: `room_id=eq.${roomId}`,
       }, (payload) => {
+        // Fetch the full message with artist data
         fetchSingleMessage(payload.new.id);
       })
       .on('postgres_changes', {
@@ -70,6 +69,7 @@ export default function ChatRoomView() {
         table: 'chat_messages',
         filter: `room_id=eq.${roomId}`,
       }, (payload) => {
+        // Handle deletions
         if (payload.new.is_deleted) {
           setMessages(prev => prev.map(m =>
             m.id === payload.new.id ? { ...m, is_deleted: true, deleted_reason: payload.new.deleted_reason } : m
@@ -99,11 +99,13 @@ export default function ChatRoomView() {
   const fetchMessages = async () => {
     const { data } = await supabase
       .from('chat_messages')
-      .select('*')
+      .select('*, artists:user_id(artist_name, slug, profile_image_url, is_verified)')
       .eq('room_id', roomId)
       .order('created_at', { ascending: true })
       .limit(200);
 
+    // Refetch with proper artist join via user_id
+    // Since chat_messages has user_id, we need to match to artists
     if (data) {
       const userIds = [...new Set(data.map(m => m.user_id))];
       const { data: artistsData } = await supabase
@@ -114,21 +116,9 @@ export default function ChatRoomView() {
       const artistMap = {};
       (artistsData || []).forEach(a => { artistMap[a.user_id] = a; });
 
-      const missingIds = userIds.filter(uid => !artistMap[uid]);
-      let profileMap = {};
-      if (missingIds.length > 0) {
-        const { data: profilesData } = await supabase
-          .from('user_profiles')
-          .select('user_id, name, email, avatar_url')
-          .in('user_id', missingIds);
-        (profilesData || []).forEach(p => { profileMap[p.user_id] = p; });
-      }
-
       const enriched = data.map(m => ({
         ...m,
         artist: artistMap[m.user_id] || null,
-        listener_name: profileMap[m.user_id]?.name || profileMap[m.user_id]?.email?.split('@')[0] || null,
-        listener_avatar: profileMap[m.user_id]?.avatar_url || null,
       }));
 
       setMessages(enriched);
@@ -143,28 +133,16 @@ export default function ChatRoomView() {
       .single();
 
     if (data) {
+      // Get artist info
       const { data: artistData } = await supabase
         .from('artists')
         .select('user_id, artist_name, slug, profile_image_url, is_verified')
         .eq('user_id', data.user_id)
         .single();
 
-      let listenerName = null;
-      let listenerAvatar = null;
-      if (!artistData) {
-        const { data: profileData } = await supabase
-          .from('user_profiles')
-          .select('name, email, avatar_url')
-          .eq('user_id', data.user_id)
-          .maybeSingle();
-        listenerName = profileData?.name || profileData?.email?.split('@')[0] || null;
-        listenerAvatar = profileData?.avatar_url || null;
-      }
-      const enriched = { ...data, artist: artistData || null, listener_name: listenerName, listener_avatar: listenerAvatar };
+      const enriched = { ...data, artist: artistData || null };
       setMessages(prev => {
-        if (prev.find(m => m.id === enriched.id || (m.id?.startsWith?.('temp-') && m.content === enriched.content && m.user_id === enriched.user_id))) {
-          return prev.map(m => m.id?.startsWith?.('temp-') && m.content === enriched.content ? enriched : m);
-        }
+        if (prev.find(m => m.id === enriched.id)) return prev;
         return [...prev, enriched];
       });
     }
@@ -194,23 +172,8 @@ export default function ChatRoomView() {
   const joinRoom = async () => {
     if (!user) { navigate('/login'); return; }
     setJoining(true);
-    setJoinError('');
 
     try {
-      // Check subscribers-only gate
-      if (room?.is_subscribers_only) {
-        const { count } = await supabase
-          .from('follows')
-          .select('*', { count: 'exact', head: true })
-          .eq('follower_id', user.id)
-          .eq('artist_id', room.artist_id);
-        if (!count || count === 0) {
-          setJoinError('followers_only');
-          setJoining(false);
-          return;
-        }
-      }
-
       const { error } = await supabase.from('chat_room_members').insert({
         room_id: roomId,
         user_id: user.id,
@@ -218,41 +181,30 @@ export default function ChatRoomView() {
       });
       if (error) throw error;
 
-      try {
-        await supabase.rpc('increment_chat_member_count', { room_id_input: roomId });
-      } catch {
-        await supabase.from('chat_rooms').update({
+      // Increment member count
+      await supabase.rpc('increment_chat_member_count', { room_id_input: roomId }).catch(() => {
+        // RPC might not exist, manually update
+        supabase.from('chat_rooms').update({
           member_count: (room?.member_count || 0) + 1
         }).eq('id', roomId);
-      }
+      });
 
       setIsMember(true);
       setMyMembership({ role: 'member' });
     } catch (err) {
       console.error('Join error:', err);
-      setJoinError(err.message || 'Unable to join — this room may be subscribers-only.');
     }
     setJoining(false);
   };
 
-  const handleFollowAndJoin = async () => {
-    try {
-      await supabase.from('follows').insert({ follower_id: user.id, artist_id: room.artist_id });
-      setJoinError('');
-      // Small delay to let the insert settle, then join
-      setTimeout(() => joinRoom(), 300);
-    } catch (err) {
-      console.error('Follow error:', err);
-      setJoinError('Failed to follow. Please try again.');
-    }
-  };
-
   // Moderation checks
   const moderateMessage = useCallback((text) => {
+    // Check for external links
     if (LINK_REGEX.test(text)) {
       return 'External links are not allowed in chat rooms';
     }
 
+    // Check word filters
     for (const filter of wordFilters) {
       if (filter.is_regex) {
         try {
@@ -272,6 +224,7 @@ export default function ChatRoomView() {
       }
     }
 
+    // Check for image/file patterns
     if (/\.(jpg|jpeg|png|gif|webp|mp4|mov|avi|pdf|zip|exe|dmg)/i.test(text)) {
       return 'File sharing is not allowed in chat rooms';
     }
@@ -288,6 +241,7 @@ export default function ChatRoomView() {
       return;
     }
 
+    // Run moderation
     const modResult = moderateMessage(input.trim());
     if (modResult) {
       setModWarning(modResult);
@@ -301,26 +255,9 @@ export default function ChatRoomView() {
         room_id: roomId,
         user_id: user.id,
         content: input.trim(),
-        reply_to_id: replyTo?.id || null,
-        reply_to_content: replyTo?.content?.substring(0, 80) || null,
-        reply_to_name: replyTo?.artist?.artist_name || replyTo?.listener_name || null,
       });
       if (error) throw error;
-      const optimistic = {
-        id: 'temp-' + Date.now(),
-        room_id: roomId,
-        user_id: user.id,
-        content: input.trim(),
-        reply_to_name: replyTo?.artist?.artist_name || replyTo?.listener_name || null,
-        reply_to_content: replyTo?.content?.substring(0, 80) || null,
-        created_at: new Date().toISOString(),
-        artist: artist || null,
-        listener_name: artist ? null : (user.user_metadata?.name || user.email?.split('@')[0]),
-        listener_avatar: artist ? null : (user.user_metadata?.avatar_url || null),
-      };
-      setMessages(prev => [...prev, optimistic]);
       setInput('');
-      setReplyTo(null);
       inputRef.current?.focus();
     } catch (err) {
       console.error('Send error:', err);
@@ -379,7 +316,7 @@ export default function ChatRoomView() {
       {/* Top bar */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.06] bg-black/95 backdrop-blur-xl flex-shrink-0">
         <div className="flex items-center space-x-3">
-          <button onClick={() => navigate(-1)}
+          <button onClick={() => navigate('/chat')}
             className="w-9 h-9 flex items-center justify-center rounded-full bg-white/[0.06]">
             <ArrowLeft className="w-5 h-5 text-white" />
           </button>
@@ -467,21 +404,23 @@ export default function ChatRoomView() {
 
           return (
             <div key={msg.id} className={`group flex items-start space-x-2.5 px-2 py-1 rounded-lg hover:bg-white/[0.02] transition ${sameSender ? 'mt-0' : 'mt-2'}`}>
+              {/* Avatar (only show if different sender) */}
               {!sameSender ? (
                 <div className="w-8 h-8 rounded-full overflow-hidden bg-gradient-to-br from-purple-600/30 to-blue-600/20 flex items-center justify-center flex-shrink-0 mt-0.5">
-                  {(msg.artist?.profile_image_url || msg.listener_avatar)
-                    ? <img src={msg.artist?.profile_image_url || msg.listener_avatar} alt="" className="w-8 h-8 rounded-full object-cover" />
-                    : <span className="text-xs font-bold text-white/40">{(msg.artist?.artist_name || msg.listener_name || '?')[0]}</span>}
+                  {msg.artist?.profile_image_url
+                    ? <img src={msg.artist.profile_image_url} alt="" className="w-8 h-8 rounded-full object-cover" />
+                    : <span className="text-xs font-bold text-white/40">{(msg.artist?.artist_name || '?')[0]}</span>}
                 </div>
               ) : (
                 <div className="w-8 flex-shrink-0" />
               )}
 
+              {/* Message body */}
               <div className="flex-1 min-w-0">
                 {!sameSender && (
                   <div className="flex items-center space-x-1.5 mb-0.5">
                     <span className={`text-xs font-semibold ${isRoomOwner ? 'text-purple-400' : 'text-white'}`}>
-                      {msg.artist?.artist_name || msg.listener_name || 'User'}
+                      {msg.artist?.artist_name || 'User'}
                     </span>
                     {isRoomOwner && (
                       <span className="text-[9px] px-1.5 py-0.5 bg-purple-500/10 text-purple-400 rounded font-medium">HOST</span>
@@ -492,15 +431,10 @@ export default function ChatRoomView() {
                     <span className="text-[10px] text-white/15">{timeAgo(msg.created_at)}</span>
                   </div>
                 )}
-                {msg.reply_to_name && (
-                  <div className="text-[10px] text-white/20 mb-1 pl-2 border-l-2 border-white/10">
-                    <span className="text-white/30">{msg.reply_to_name}</span>: {msg.reply_to_content}
-                  </div>
-                )}
                 <p className="text-sm text-white/80 break-words leading-relaxed">{msg.content}</p>
-                <button onClick={() => setReplyTo(msg)} className="text-[11px] text-white/30 hover:text-white/60 transition mt-0.5 font-medium">Reply</button>
               </div>
 
+              {/* Admin actions */}
               {isRoomAdmin && !isMe && (
                 <button onClick={() => handleDelete(msg.id)}
                   className="opacity-0 group-hover:opacity-100 w-7 h-7 flex items-center justify-center rounded-full hover:bg-red-500/10 transition flex-shrink-0">
@@ -525,12 +459,6 @@ export default function ChatRoomView() {
       {/* Input area */}
       {isMember ? (
         <div className="px-4 py-3 border-t border-white/[0.06] bg-black/95 backdrop-blur-xl flex-shrink-0">
-          {replyTo && (
-            <div className="flex items-center justify-between px-4 py-2 bg-white/[0.04] border-b border-white/[0.06]">
-              <p className="text-xs text-white/30">Replying to <span className="text-white/50">{replyTo.artist?.artist_name || replyTo.listener_name || 'User'}</span>: <span className="text-white/20">{replyTo.content?.substring(0, 50)}</span></p>
-              <button onClick={() => setReplyTo(null)} className="text-xs text-white/30 hover:text-white/50 ml-2">Cancel</button>
-            </div>
-          )}
           {myMembership?.is_muted ? (
             <div className="flex items-center justify-center space-x-2 py-2">
               <VolumeX className="w-4 h-4 text-white/20" />
@@ -559,21 +487,6 @@ export default function ChatRoomView() {
         </div>
       ) : (
         <div className="px-4 py-3 border-t border-white/[0.06] flex-shrink-0">
-          {/* Subscribers-only gate */}
-          {joinError === 'followers_only' ? (
-            <div className="mb-3 p-3 rounded-xl bg-white/[0.04] border border-white/[0.06]">
-              <p className="text-xs text-white/40 mb-2">This room is for followers only</p>
-              <button
-                onClick={handleFollowAndJoin}
-                disabled={joining}
-                className="w-full py-2 rounded-lg bg-purple-600 text-white text-sm font-medium transition active:scale-95 disabled:opacity-50">
-                {joining ? <Loader className="w-4 h-4 animate-spin mx-auto" /> : 'Follow & Join'}
-              </button>
-            </div>
-          ) : joinError ? (
-            <p className="text-xs text-red-400 mb-2 text-center">{joinError}</p>
-          ) : null}
-
           <button onClick={joinRoom} disabled={joining}
             className="w-full py-3 bg-white text-black rounded-xl font-semibold text-sm flex items-center justify-center space-x-2 disabled:opacity-50 transition">
             {joining ? <Loader className="w-4 h-4 animate-spin" /> : <Users className="w-4 h-4" />}

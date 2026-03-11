@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
-import { Heart, MessageCircle, Share2, MoreHorizontal, Trash2, Flag, Verified, Loader, Send } from 'lucide-react';
+import { Heart, MessageCircle, Share2, MoreHorizontal, Trash2, Flag, Verified } from 'lucide-react';
 
 function timeAgo(date) {
   const seconds = Math.floor((Date.now() - new Date(date).getTime()) / 1000);
@@ -95,11 +95,9 @@ export default function PostCard({ post, onDelete, onUpdate }) {
   const [comments, setComments] = useState([]);
   const [showComments, setShowComments] = useState(false);
   const [commentText, setCommentText] = useState('');
-  const [replyTo, setReplyTo] = useState(null);
   const [posting, setPosting] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [taggedArtistData, setTaggedArtistData] = useState([]);
-  const [copied, setCopied] = useState(false);
 
   const postArtist = post.artists || post.artist || null;
   const isOwner = user && (post.user_id === user.id);
@@ -124,7 +122,7 @@ export default function PostCard({ post, onDelete, onUpdate }) {
         .select('id')
         .eq('post_id', post.id)
         .eq('user_id', user.id)
-        .maybeSingle();
+        .single();
       setLiked(!!data);
     }
   };
@@ -152,16 +150,6 @@ export default function PostCard({ post, onDelete, onUpdate }) {
         await supabase.from('post_likes').insert({ post_id: post.id, user_id: user.id });
         setLiked(true);
         setLikeCount(prev => prev + 1);
-        // Notify post owner
-        if (postArtist?.id && myArtist?.id !== postArtist.id) {
-          await supabase.from('notifications').insert({
-            artist_id: postArtist.id,
-            type: 'track_liked',
-            title: `${myArtist?.artist_name || 'Someone'} liked your post`,
-            message: post.content?.substring(0, 80),
-            from_artist_id: myArtist?.id || null,
-          }).catch(() => {});
-        }
       }
     } catch (err) {
       console.error('Like error:', err);
@@ -175,25 +163,7 @@ export default function PostCard({ post, onDelete, onUpdate }) {
       .eq('post_id', post.id)
       .order('created_at', { ascending: true })
       .limit(50);
-    // Enrich with listener names and avatars
-    const commentMap = {};
-    (data || []).forEach(c => { commentMap[c.id] = c; });
-    const enriched = await Promise.all((data || []).map(async (comment) => {
-      if (comment.artists && comment.artists.artist_name) return { ...comment, reply_to_name: comment.parent_id ? (commentMap[comment.parent_id]?.artists?.artist_name || 'User') : null };
-      try {
-        const { data: profile } = await supabase.from('user_profiles')
-          .select('name, email, avatar_url')
-          .eq('user_id', comment.user_id)
-          .maybeSingle();
-        return {
-          ...comment,
-          listener_name: profile?.name || profile?.email?.split('@')[0] || null,
-          listener_avatar: profile?.avatar_url || null,
-          reply_to_name: comment.parent_id ? (commentMap[comment.parent_id]?.artists?.artist_name || 'User') : null,
-        };
-      } catch { return comment; }
-    }));
-    setComments(enriched);
+    setComments(data || []);
   };
 
   const toggleComments = () => {
@@ -208,40 +178,12 @@ export default function PostCard({ post, onDelete, onUpdate }) {
       const { error } = await supabase.from('comments').insert({
         post_id: post.id,
         user_id: user.id,
-        parent_id: replyTo?.id || null,
-        reply_to_name: replyTo ? (replyTo.artists?.artist_name || replyTo.listener_name || 'User') : null,
         artist_id: myArtist?.id || null,
         content: commentText.trim(),
       });
       if (error) throw error;
-      // Optimistic add
-      const newComment = {
-        id: 'temp-' + Date.now(),
-        post_id: post.id,
-        user_id: user.id,
-        content: commentText.trim(),
-        parent_id: replyTo?.id || null,
-        reply_to_name: replyTo ? (replyTo.artists?.artist_name || replyTo.listener_name || 'User') : null,
-        created_at: new Date().toISOString(),
-        artists: myArtist ? { artist_name: myArtist.artist_name, slug: myArtist.slug, profile_image_url: myArtist.profile_image_url } : null,
-        listener_name: myArtist ? null : (user.user_metadata?.name || user.email?.split('@')[0]),
-        listener_avatar: myArtist ? null : (user.user_metadata?.avatar_url || null),
-      };
-      setComments(prev => [...prev, newComment]);
       setCommentText('');
-      setReplyTo(null);
-      // Refresh in background to get real data
-      setTimeout(fetchComments, 1000);
-      // Notify post owner
-      if (postArtist?.id && myArtist?.id !== postArtist.id) {
-        await supabase.from('notifications').insert({
-          artist_id: postArtist.id,
-          type: 'track_commented',
-          title: `${myArtist?.artist_name || 'Someone'} commented on your post`,
-          message: commentText.trim().substring(0, 80),
-          from_artist_id: myArtist?.id || null,
-        }).catch(() => {});
-      }
+      fetchComments();
     } catch (err) {
       console.error('Comment error:', err);
     }
@@ -260,14 +202,11 @@ export default function PostCard({ post, onDelete, onUpdate }) {
   };
 
   const handleShare = async () => {
-    const url = `${window.location.origin}/community?post=${post.id}`;
-    const text = `${postArtist?.artist_name || 'An artist'} on Feelz Machine: ${post.content?.substring(0, 80)}`;
+    const url = `${window.location.origin}/feed`;
     if (navigator.share) {
-      try { await navigator.share({ title: 'Feelz Machine', text, url }); } catch (e) {}
+      try { await navigator.share({ title: 'Feelz Machine', text: post.content?.substring(0, 100), url }); } catch (e) {}
     } else {
       await navigator.clipboard.writeText(url);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
     }
   };
 
@@ -334,52 +273,6 @@ export default function PostCard({ post, onDelete, onUpdate }) {
         </p>
       </div>
 
-      {/* Post images */}
-      {post.media_urls && post.media_urls.length > 0 && (
-        <div className="px-4 pb-3">
-          <div className="rounded-xl overflow-hidden">
-            <img src={post.media_urls[0]} alt="" className="w-full max-h-96 object-cover rounded-xl" />
-          </div>
-        </div>
-      )}
-
-      {/* YouTube embed */}
-      {post.youtube_id && (
-        <div className="px-4 pb-3">
-          <div className="rounded-xl overflow-hidden aspect-video bg-black">
-            <iframe
-              src={`https://www.youtube.com/embed/${post.youtube_id}`}
-              className="w-full h-full"
-              allowFullScreen
-              title="YouTube video"
-            />
-          </div>
-        </div>
-      )}
-
-      {/* Post images */}
-      {post.media_urls && post.media_urls.length > 0 && (
-        <div className="px-4 pb-3">
-          <div className="rounded-xl overflow-hidden">
-            <img src={post.media_urls[0]} alt="" className="w-full max-h-96 object-cover rounded-xl" />
-          </div>
-        </div>
-      )}
-
-      {/* YouTube embed */}
-      {post.youtube_id && (
-        <div className="px-4 pb-3">
-          <div className="rounded-xl overflow-hidden bg-black" style={{ aspectRatio: '16/9' }}>
-            <iframe
-              src={`https://www.youtube.com/embed/${post.youtube_id}`}
-              className="w-full h-full"
-              allowFullScreen
-              title="YouTube video"
-            />
-          </div>
-        </div>
-      )}
-
       {/* Tagged artists bar */}
       {taggedArtistData.length > 0 && (
         <div className="px-4 pb-3">
@@ -417,7 +310,6 @@ export default function PostCard({ post, onDelete, onUpdate }) {
         <button onClick={handleShare}
           className="flex items-center space-x-1.5 transition active:scale-90">
           <Share2 className="w-4 h-4 text-white/30" />
-          {copied && <span className="text-[10px] text-white/40">Copied!</span>}
         </button>
       </div>
 
@@ -429,23 +321,16 @@ export default function PostCard({ post, onDelete, onUpdate }) {
             {comments.map(comment => (
               <div key={comment.id} className="flex space-x-3 px-4 py-3 border-b border-white/[0.02]">
                 <div className="w-7 h-7 rounded-full bg-gradient-to-br from-purple-600/50 to-blue-600/50 flex items-center justify-center overflow-hidden flex-shrink-0">
-                  {(comment.artists?.profile_image_url || comment.listener_avatar)
+                  {comment.artists?.profile_image_url
                     ? <img src={comment.artists.profile_image_url} alt="" className="w-7 h-7 rounded-full object-cover" />
-                    : <span className="text-[10px] font-bold text-white">{((comment.artists?.artist_name || comment.listener_name) || comment.listener_name || '?')?.[0]?.toUpperCase()}</span>}
+                    : <span className="text-[10px] font-bold text-white">{(comment.artists?.artist_name || '?')?.[0]?.toUpperCase()}</span>}
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center space-x-1.5">
-                    <span className="text-xs font-medium text-white">{(comment.artists?.artist_name || comment.listener_name) || 'User'}</span>
-                    {comment.parent && <span className="text-[10px] text-white/15 ml-1">replied</span>}
+                    <span className="text-xs font-medium text-white">{comment.artists?.artist_name || 'User'}</span>
                     <span className="text-[10px] text-white/20">{timeAgo(comment.created_at)}</span>
-                    <button onClick={() => setReplyTo(comment)} className="text-[11px] text-white/30 hover:text-white/60 transition ml-2 font-medium">Reply</button>
                   </div>
-                  {comment.parent_id && comment.reply_to_name && (
-                  <p className="text-[10px] text-white/15 mt-0.5 pl-2 border-l border-white/10">
-                    replying to <span className="text-white/25">{comment.reply_to_name}</span>
-                  </p>
-                )}
-                <p className="text-xs text-white/60 mt-0.5">{comment.content}</p>
+                  <p className="text-xs text-white/60 mt-0.5">{comment.content}</p>
                 </div>
               </div>
             ))}
@@ -462,7 +347,7 @@ export default function PostCard({ post, onDelete, onUpdate }) {
                 value={commentText}
                 onChange={(e) => setCommentText(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && submitComment()}
-                placeholder={replyTo ? `Reply to ${replyTo.artists?.artist_name || replyTo.listener_name || "User"}...` : "Add a comment..."}
+                placeholder="Add a comment..."
                 maxLength={500}
                 className="flex-1 bg-white/[0.04] rounded-lg px-3 py-2 text-sm text-white placeholder-white/20 outline-none"
               />
