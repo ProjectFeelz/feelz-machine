@@ -31,7 +31,7 @@ export default function FeedPage() {
 
       const { data, error } = await supabase
         .from('artist_posts')
-        .select('*, artists(id, artist_name, slug, profile_image_url, is_verified)')
+        .select('*, track_id, tagged_artist_ids, artists(id, artist_name, slug, profile_image_url, is_verified)')
         .order('created_at', { ascending: false })
         .range(from, to);
 
