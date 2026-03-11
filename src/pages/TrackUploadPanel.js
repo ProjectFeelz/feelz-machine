@@ -14,7 +14,7 @@ const GENRES = [
   'Electronic', 'House', 'Deep House', 'Tech House', 'Techno', 'Dubstep',
   'Drum & Bass', 'Ambient', 'Downtempo', 'Future Bass', 'Jersey Club',
   'Jazz', 'Funk', 'Soul', 'Rock', 'Metal', 'Indie', 'Alternative',
-  'Afrobeat', 'Afro House', 'Amapiano', 'Reggae', 'Dancehall', 'Latin', 'Reggaeton',
+  'Afrobeat', 'Amapiano', 'Reggae', 'Dancehall', 'Latin', 'Reggaeton',
   'Country', 'EDM', 'Trance', 'Hardstyle', 'UK Garage', 'Grime',
   'Experimental', 'Vaporwave', 'Synthwave', 'Other'
 ];
@@ -428,8 +428,8 @@ export default function TrackUploadPanel() {
     { key: 'manage', label: 'Manage Tracks', icon: Edit },
   ];
 
-  // Shared track form fields - called as function, not component, to avoid remount
-  const renderTrackFormFields = (form, setForm) => (
+  // Shared track form fields component
+  const TrackFormFields = ({ form, setForm }) => (
     <div className="space-y-4">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
@@ -441,7 +441,7 @@ export default function TrackUploadPanel() {
         <div>
           <label className="block text-xs text-white/40 mb-1.5">Album (optional)</label>
           <select value={form.album_id} onChange={(e) => setForm({ ...form, album_id: e.target.value })}
-            className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none" style={{ colorScheme: 'dark' }}>
+            className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none">
             <option value="">No Album (Single)</option>
             {albums.map(a => <option key={a.id} value={a.id}>{a.title}</option>)}
           </select>
@@ -449,16 +449,15 @@ export default function TrackUploadPanel() {
         <div>
           <label className="block text-xs text-white/40 mb-1.5">Genre</label>
           <select value={form.genre} onChange={(e) => setForm({ ...form, genre: e.target.value })}
-            className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none" style={{ colorScheme: 'dark' }}>
+            className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none">
             <option value="">Select genre...</option>
             {GENRES.map(g => <option key={g} value={g}>{g}</option>)}
-            <option value="Other">Other</option>
           </select>
         </div>
         <div>
           <label className="block text-xs text-white/40 mb-1.5">Mood</label>
           <select value={form.mood} onChange={(e) => setForm({ ...form, mood: e.target.value })}
-            className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none" style={{ colorScheme: 'dark' }}>
+            className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none">
             <option value="">Select mood...</option>
             {MOODS.map(m => <option key={m} value={m}>{m}</option>)}
           </select>
@@ -563,7 +562,7 @@ export default function TrackUploadPanel() {
         <form onSubmit={(e) => handleTrackUpload(e)} className="space-y-4">
           <div className="bg-white/[0.03] rounded-xl p-5 border border-white/[0.06] space-y-4">
             <h3 className="text-base font-semibold text-white">Track Details</h3>
-            {renderTrackFormFields(trackForm, setTrackForm)}
+            <TrackFormFields form={trackForm} setForm={setTrackForm} />
             <TierGate feature="collaborations" inline>
               <CollaboratorSearch collaborators={collaborators} setCollaborators={setCollaborators} currentArtistId={artist.id} />
             </TierGate>
@@ -690,7 +689,7 @@ export default function TrackUploadPanel() {
                   <form onSubmit={(e) => handleTrackUpload(e, quickTrackForm, quickVersionFiles, quickCollaborators, true)}
                     className="px-5 pb-5 space-y-4 border-t border-white/[0.06]">
                     <div className="pt-4">
-                      {renderTrackFormFields(quickTrackForm, setQuickTrackForm)}
+                      <TrackFormFields form={quickTrackForm} setForm={setQuickTrackForm} />
                     </div>
                     <TierGate feature="collaborations" inline>
                       <CollaboratorSearch collaborators={quickCollaborators} setCollaborators={setQuickCollaborators} currentArtistId={artist.id} />
@@ -756,7 +755,7 @@ export default function TrackUploadPanel() {
                   <div>
                     <label className="block text-xs text-white/40 mb-1.5">Release Type</label>
                     <select value={albumForm.release_type} onChange={(e) => setAlbumForm({ ...albumForm, release_type: e.target.value })}
-                      className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none" style={{ colorScheme: 'dark' }}>
+                      className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none">
                       {['single','ep','album','mixtape','live','compilation'].map(t => (
                         <option key={t} value={t}>{t.charAt(0).toUpperCase()+t.slice(1)}</option>
                       ))}
@@ -864,7 +863,7 @@ export default function TrackUploadPanel() {
                               <label className="block text-xs text-white/40 mb-1.5">Release Type</label>
                               <select value={editAlbumForm.release_type}
                                 onChange={(e) => setEditAlbumForm({ ...editAlbumForm, release_type: e.target.value })}
-                                className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none" style={{ colorScheme: 'dark' }}>
+                                className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none">
                                 {['single','ep','album','mixtape','live','compilation'].map(t => (
                                   <option key={t} value={t}>{t.charAt(0).toUpperCase()+t.slice(1)}</option>
                                 ))}
