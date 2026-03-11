@@ -30,6 +30,7 @@ export default function TermsPage() {
   return (
     <div className="min-h-screen bg-black text-white pt-14 md:pt-0 pb-32">
       <div className="max-w-2xl mx-auto px-4">
+
         {/* Header */}
         <div className="flex items-center space-x-3 py-6 mb-2">
           <button onClick={() => navigate(-1)} className="p-2 -ml-2 hover:bg-white/[0.05] rounded-lg transition">
@@ -58,12 +59,21 @@ export default function TermsPage() {
             {COMPANY} acts solely as a <strong className="text-white/70">technology host and facilitator</strong>. We do not produce, commission, own,
             or claim any rights over any music, lyrics, artwork, or other creative content uploaded by artists.
           </p>
+          <p>
+            The Platform includes the following features: music streaming, track and album uploads, artist profiles, community posts and feeds,
+            live chat rooms, collaborative track credits, playlist management, download purchases, artist tier subscriptions, and administrative
+            moderation tools.
+          </p>
         </Section>
 
         <Section title="2. User-Generated Content & DMCA Safe Harbour">
           <p>
             All music, lyrics, artwork, samples, and other content on the Platform is uploaded exclusively by registered artists and users.
             {COMPANY} does not review, curate, or endorse any uploaded content prior to publication.
+          </p>
+          <p>
+            <strong className="text-white/70">Cover Artwork Requirement:</strong> Artists are required to upload cover artwork before publishing
+            any track. This requirement is enforced at the platform level to maintain content quality standards.
           </p>
           <p>
             <strong className="text-white/70">Copyright Responsibility:</strong> By uploading content to the Platform, each artist and user represents
@@ -92,8 +102,7 @@ export default function TermsPage() {
             <strong className="text-white/70">Indemnification:</strong> Each artist and user agrees to indemnify, defend, and hold harmless {COMPANY},
             its officers, directors, employees, agents, and affiliates from and against any and all claims, liabilities, damages, losses, costs, and
             expenses (including reasonable legal fees) arising out of or related to: (i) content they upload or publish on the Platform; (ii) their
-            violation of these Terms; or (iii) their infringement of any third-party rights including intellectual property rights. {COMPANY} shall not
-            be liable to any third party for copyright infringement or any other intellectual property violation committed by users of the Platform.
+            violation of these Terms; or (iii) their infringement of any third-party rights including intellectual property rights.
           </p>
         </Section>
 
@@ -113,14 +122,17 @@ export default function TermsPage() {
           </p>
         </Section>
 
-        <Section title="4. Prohibited Content">
-          <p>Users must not upload content that:</p>
+        <Section title="4. Prohibited Content & Conduct">
+          <p>Users must not upload content or engage in conduct that:</p>
           <ul className="list-disc pl-5 space-y-1">
             <li>Infringes any copyright, trademark, or other intellectual property right;</li>
             <li>Contains unlicensed samples or interpolations without appropriate clearance;</li>
             <li>Promotes illegal activity, violence, or hatred;</li>
             <li>Contains content involving minors in a sexual context;</li>
             <li>Constitutes defamation, harassment, or invasion of privacy;</li>
+            <li>Involves spam, artificial stream manipulation, or platform abuse;</li>
+            <li>Attempts to circumvent platform security, access controls, or content restrictions;</li>
+            <li>Shares external links, files, or media in chat rooms;</li>
             <li>Violates any applicable law or regulation.</li>
           </ul>
           <p>
@@ -141,21 +153,95 @@ export default function TermsPage() {
           </p>
         </Section>
 
-        <Section title="6. Payments & Refunds">
+        <Section title="6. Payments, Splits & Refunds">
           <p>
-            Purchases are processed via PayPal. {COMPANY} does not store payment card details. All transactions are subject to PayPal's terms of service.
+            All purchases on the Platform are processed via <strong className="text-white/70">PayPal</strong>. {COMPANY} does not store payment card
+            details. All transactions are subject to PayPal's terms of service.
           </p>
           <p>
-            All sales of digital downloads are <strong className="text-white/70">final and non-refundable</strong> once the download has been delivered,
-            due to the nature of digital goods. Refund requests for failed or duplicate transactions should be directed to {CONTACT_EMAIL} within 7 days.
+            <strong className="text-white/70">Revenue Splits:</strong> Where an artist has designated collaborators on a track or album with agreed
+            split percentages, the Platform will process revenue splits automatically at the time of purchase via PayPal. Split payments are disbursed
+            directly to each collaborator's designated PayPal account. {COMPANY} is not responsible for incorrect PayPal details provided by artists
+            or collaborators, failed disbursements due to inactive PayPal accounts, or disputes between collaborating artists regarding agreed splits.
+            Artists are responsible for ensuring their collaborators' payment details are correct before publishing paid content.
           </p>
           <p>
-            Artist tier subscriptions (Pro, Premium) are billed periodically or granted by admin. Cancellation takes effect at the end of the current
-            billing period.
+            <strong className="text-white/70">Refunds:</strong> All sales of digital downloads are <strong className="text-white/70">final and
+            non-refundable</strong> once the download has been delivered, due to the nature of digital goods. Refund requests for failed or duplicate
+            transactions should be directed to {CONTACT_EMAIL} within 7 days.
+          </p>
+          <p>
+            <strong className="text-white/70">Artist Tier Subscriptions:</strong> Artist tiers (Pro, Premium) unlock additional platform features
+            including collaboration tools, download sales, and lyrics publishing. Subscriptions are billed periodically or granted by admin.
+            Cancellation takes effect at the end of the current billing period. Downgrading a tier does not affect existing published content but
+            may restrict access to tier-gated features going forward.
+          </p>
+          <p>
+            <strong className="text-white/70">1-on-1 Support Sessions:</strong> Artists may offer paid 1-on-1 support or consultation sessions
+            booked through the Platform. These are transactions directly between the artist and listener. {COMPANY} facilitates the booking and
+            payment only and bears no responsibility for the content or delivery of such sessions. Refunds for sessions are at the artist's discretion.
           </p>
         </Section>
 
-        <Section title="7. Platform Liability Limitations">
+        <Section title="7. Collaborations & Credits">
+          <p>
+            Artists may add collaborators to tracks and albums with defined roles and revenue split percentages. By accepting a collaboration request,
+            a collaborator agrees to the stated role and split percentage and confirms they have contributed original work to the track.
+          </p>
+          <p>
+            Collaboration credits are displayed publicly on the Platform. Artists agree not to falsely attribute credits or manipulate split
+            arrangements to misrepresent ownership or contributions. {COMPANY} may remove credits or suspend accounts where fraudulent collaboration
+            arrangements are detected.
+          </p>
+          <p>
+            Each collaborator is solely responsible for declaring any income received through the Platform in accordance with the tax laws of their
+            jurisdiction. {COMPANY} does not provide tax advice and is not liable for any tax obligations arising from payments received.
+          </p>
+        </Section>
+
+        <Section title="8. Chat Rooms & Community">
+          <p>
+            The Platform provides live chat rooms and community post feeds for artists and listeners to interact. By participating in these features,
+            users agree to communicate respectfully and in compliance with these Terms.
+          </p>
+          <p>
+            <strong className="text-white/70">Chat Room Rules:</strong> External links, file sharing, and image or video sharing are not permitted
+            in chat rooms. Profanity filters and word moderation are applied automatically. Messages containing prohibited content will be blocked.
+            Room hosts and platform administrators may remove messages and mute or remove members at their discretion.
+          </p>
+          <p>
+            <strong className="text-white/70">Subscribers-Only Rooms:</strong> Some chat rooms may be restricted to followers of a particular artist.
+            Access is contingent on maintaining a follow relationship with the artist at the time of joining.
+          </p>
+          <p>
+            {COMPANY} is not responsible for the content of user messages in chat rooms and community posts but reserves the right to moderate,
+            remove, or restrict access to any content or user at any time.
+          </p>
+        </Section>
+
+        <Section title="9. Content Moderation & Account Suspension">
+          <p>
+            {COMPANY} reserves the right to moderate all content on the Platform and to take the following actions at its sole discretion:
+          </p>
+          <ul className="list-disc pl-5 space-y-1">
+            <li>Remove or unpublish any track, album, post, or comment;</li>
+            <li>Remove featured status from any content;</li>
+            <li>Suspend or permanently ban any artist or listener account;</li>
+            <li>Flag accounts for suspected fraudulent stream activity;</li>
+            <li>Refer content or conduct to relevant legal authorities.</li>
+          </ul>
+          <p>
+            <strong className="text-white/70">Stream Fraud:</strong> The Platform employs automated detection systems to identify artificial stream
+            manipulation. Accounts detected engaging in stream fraud may be suspended without prior notice and any artificially inflated stream counts
+            may be corrected or removed.
+          </p>
+          <p>
+            Suspended accounts may appeal by contacting {CONTACT_EMAIL}. {COMPANY} will review appeals in good faith but is not obligated to
+            reinstate any suspended account.
+          </p>
+        </Section>
+
+        <Section title="10. Platform Liability Limitations">
           <p>
             To the maximum extent permitted by applicable law, {COMPANY} and its affiliates, officers, employees, and licensors shall not be liable for:
           </p>
@@ -163,6 +249,9 @@ export default function TermsPage() {
             <li>Any indirect, incidental, special, consequential, or punitive damages;</li>
             <li>Loss of profits, revenue, data, goodwill, or other intangible losses;</li>
             <li>Damages arising from user-uploaded content including copyright infringement;</li>
+            <li>Failed, delayed, or incorrect revenue split disbursements due to incorrect payment details;</li>
+            <li>Disputes between collaborating artists over credits or revenue;</li>
+            <li>Content or conduct in chat rooms or community posts;</li>
             <li>Interruption or cessation of the Platform;</li>
             <li>Unauthorised access to or alteration of your data.</li>
           </ul>
@@ -172,18 +261,23 @@ export default function TermsPage() {
           </p>
         </Section>
 
-        <Section title="8. Privacy">
+        <Section title="11. Privacy & Data">
           <p>
-            We collect limited personal data necessary to operate the Platform including account registration data, usage analytics, and payment
-            transaction records (processed by PayPal — we do not receive full payment details). We do not sell user data to third parties.
+            We collect limited personal data necessary to operate the Platform including account registration data, usage analytics, stream history,
+            download records, and payment transaction records (processed by PayPal — we do not receive full payment details). We do not sell user
+            data to third parties.
           </p>
           <p>
             For users in the European Economic Area, your data is processed on the basis of contract performance and legitimate interests.
             You have the right to access, correct, and delete your personal data. Contact {CONTACT_EMAIL} for data requests.
           </p>
+          <p>
+            The Platform uses Google OAuth for authentication. By signing in with Google, you agree to Google's terms of service and privacy policy
+            in addition to these Terms.
+          </p>
         </Section>
 
-        <Section title="9. Governing Law & Disputes">
+        <Section title="12. Governing Law & Disputes">
           <p>
             These Terms are governed by and construed in accordance with the laws of the Republic of South Africa, without regard to conflict of law
             principles. Any disputes shall first be subject to good faith negotiation, and if unresolved, submitted to binding arbitration or the
@@ -194,7 +288,7 @@ export default function TermsPage() {
           </p>
         </Section>
 
-        <Section title="10. Changes to These Terms">
+        <Section title="13. Changes to These Terms">
           <p>
             We reserve the right to update these Terms at any time. Changes will be posted on this page with an updated date. Continued use of the
             Platform after changes constitutes acceptance of the revised Terms.
