@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
-import { Heart, MessageCircle, Share2, MoreHorizontal, Trash2, Flag, Verified } from 'lucide-react';
+import { Heart, MessageCircle, Share2, MoreHorizontal, Trash2, Flag, Verified , Loader, Send } from 'lucide-react';
 
 function timeAgo(date) {
   const seconds = Math.floor((Date.now() - new Date(date).getTime()) / 1000);
