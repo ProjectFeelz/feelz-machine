@@ -1,7 +1,6 @@
 import React from 'react';
-import { Play, Pause, SkipForward, MoreHorizontal, Heart, Download, ListMusic } from 'lucide-react';
+import { Play, Pause, SkipForward, MoreHorizontal } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import { supabase } from '../../supabaseClient';
 import { useNavigate } from 'react-router-dom';
 import { downloadTrack } from '../../utils/downloadTrack';
 import { useState } from 'react';
@@ -9,11 +8,12 @@ import TrackActionSheet from '../TrackActionSheet';
 import { usePlayer } from '../../contexts/PlayerContext';
 
 export default function MiniPlayer() {
-  const { currentTrack, isPlaying, togglePlay, playNext, duration, currentTime, setIsMinimized, addToQueue } = usePlayer();
+  const { currentTrack, isPlaying, togglePlay, playNext, duration, currentTime, setIsMinimized } = usePlayer();
   const { user } = useAuth();
   const navigate = useNavigate();
   const [showActionSheet, setShowActionSheet] = useState(false);
   const [downloading, setDownloading] = useState(false);
+
   const handleDownload = async (e) => {
     e.stopPropagation();
     if (!user) { navigate(`/login`); return; }
@@ -29,13 +29,13 @@ export default function MiniPlayer() {
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
 
   return (
-    // Mobile only — desktop uses DesktopPlayer
-    <div className="md:hidden fixed left-0 right-0 z-50" style={{ bottom: '60px' }}>
+    // FIX: increased bottom from 60px to 68px and py-2 to py-2.5 so artist name has room
+    <div className="md:hidden fixed left-0 right-0 z-50" style={{ bottom: '68px' }}>
       <div className="h-[2px] bg-white/10 w-full">
         <div className="h-full bg-white transition-all duration-200" style={{ width: `${progress}%` }} />
       </div>
       <div
-        className="bg-[#1a1a1a]/95 backdrop-blur-xl border-t border-white/[0.04] px-3 py-2 cursor-pointer"
+        className="bg-[#1a1a1a]/95 backdrop-blur-xl border-t border-white/[0.04] px-3 py-2.5 cursor-pointer"
         onClick={() => setIsMinimized(false)}>
         <div className="flex items-center justify-between max-w-lg mx-auto">
           <div className="flex items-center space-x-3 flex-1 min-w-0">
@@ -46,8 +46,8 @@ export default function MiniPlayer() {
               }
             </div>
             <div className="min-w-0">
-              <p className="text-sm text-white font-medium truncate">{currentTrack.title}</p>
-              <p className="text-xs text-white/50 truncate">{currentTrack.artist_name || 'Unknown Artist'}</p>
+              <p className="text-sm text-white font-medium truncate leading-tight">{currentTrack.title}</p>
+              <p className="text-xs text-white/50 truncate leading-tight mt-0.5">{currentTrack.artist_name || 'Unknown Artist'}</p>
             </div>
           </div>
           <div className="flex items-center space-x-1" onClick={(e) => e.stopPropagation()}>
@@ -68,7 +68,11 @@ export default function MiniPlayer() {
                 <MoreHorizontal className="w-4 h-4 text-white/60" />
               </button>
               {showActionSheet && (
-                <TrackActionSheet track={currentTrack} artist={currentTrack ? { artist_name: currentTrack.artist_name } : null} onClose={() => setShowActionSheet(false)} />
+                <TrackActionSheet
+                  track={currentTrack}
+                  artist={currentTrack ? { artist_name: currentTrack.artist_name } : null}
+                  onClose={() => setShowActionSheet(false)}
+                />
               )}
             </div>
           </div>
@@ -77,6 +81,3 @@ export default function MiniPlayer() {
     </div>
   );
 }
-
-
-
