@@ -320,7 +320,7 @@ export default function HomePage() {
   }
 
   return (
-    <div className="pt-12 md:pt-0 pb-4 px-6 md:px-0">
+    <div className="pt-12 md:pt-0 pb-4">
       {/* Greeting */}
       <div className="px-6 mb-8">
         <h1 className="text-2xl font-bold text-white">
