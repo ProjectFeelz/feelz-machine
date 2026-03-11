@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import { usePlayer } from '../contexts/PlayerContext';
-import { Heart, MessageCircle, Share2, MoreHorizontal, Trash2, Flag, Verified, Loader, Send, Music, Play, Pause } from 'lucide-react';
+import { Heart, MessageCircle, Share2, MoreHorizontal, Trash2, Flag, Verified, Loader, Send, Music, Play, Pause, CornerDownRight } from 'lucide-react';
 
 function timeAgo(date) {
   const seconds = Math.floor((Date.now() - new Date(date).getTime()) / 1000);
@@ -74,10 +74,12 @@ export default function PostCard({ post, onDelete, onUpdate }) {
   const [comments, setComments] = useState([]);
   const [showComments, setShowComments] = useState(false);
   const [commentText, setCommentText] = useState('');
+  const [replyingTo, setReplyingTo] = useState(null); // { id, artist_name }
   const [posting, setPosting] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [taggedArtistData, setTaggedArtistData] = useState([]);
   const [trackData, setTrackData] = useState(null);
+  const [trackArtist, setTrackArtist] = useState(null); // the actual artist who owns the track
 
   const postArtist = post.artists || post.artist || null;
   const isOwner = user && myArtist && (post.artist_id === myArtist.id);
@@ -96,7 +98,18 @@ export default function PostCard({ post, onDelete, onUpdate }) {
       .select('id, title, cover_artwork_url, file_url, duration, stream_count, artist_id')
       .eq('id', post.track_id)
       .maybeSingle();
-    if (data) setTrackData(data);
+    if (data) {
+      setTrackData(data);
+      // FIX: fetch the actual artist who owns the track, not the post author
+      if (data.artist_id) {
+        const { data: artistData } = await supabase
+          .from('artists')
+          .select('id, artist_name, slug, profile_image_url, is_verified')
+          .eq('id', data.artist_id)
+          .maybeSingle();
+        setTrackArtist(artistData || null);
+      }
+    }
   };
 
   const fetchLikeStatus = async () => {
@@ -151,14 +164,16 @@ export default function PostCard({ post, onDelete, onUpdate }) {
     if (isTrackActive) {
       togglePlay?.();
     } else {
-      const enriched = { ...trackData, artist_name: postArtist?.artist_name, artist_slug: postArtist?.slug };
+      // FIX: use trackArtist (track owner) not postArtist (post author)
+      const artist = trackArtist || postArtist;
+      const enriched = { ...trackData, artist_name: artist?.artist_name, artist_slug: artist?.slug };
       playTrack(enriched, [enriched]);
     }
   };
 
   const fetchComments = async () => {
     const { data, error } = await supabase
-      .from('post_comments')
+      .from('artist_post_comments')
       .select('id, post_id, user_id, content, created_at')
       .eq('post_id', post.id)
       .order('created_at', { ascending: true })
@@ -185,17 +200,23 @@ export default function PostCard({ post, onDelete, onUpdate }) {
     setShowComments(!showComments);
   };
 
+  const handleReply = (comment) => {
+    setReplyingTo({ id: comment.id, artist_name: comment.artists?.artist_name || 'User' });
+    setCommentText(`@${comment.artists?.artist_name || 'User'} `);
+  };
+
   const submitComment = async () => {
     if (!commentText.trim() || !user) return;
     setPosting(true);
     try {
-      const { error } = await supabase.from('post_comments').insert({
+      const { error } = await supabase.from('artist_post_comments').insert({
         post_id: post.id,
         user_id: user.id,
         content: commentText.trim(),
       });
       if (error) throw error;
       setCommentText('');
+      setReplyingTo(null);
       fetchComments();
     } catch (err) {
       console.error('Comment error:', err);
@@ -291,10 +312,14 @@ export default function PostCard({ post, onDelete, onUpdate }) {
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-white truncate">{trackData.title}</p>
-              <p className="text-xs text-white/40 mt-0.5">
-                {postArtist?.artist_name}
+              {/* FIX: show track's actual artist, not post author */}
+              <button
+                onClick={(e) => { e.stopPropagation(); trackArtist?.slug && navigate(`/artist/${trackArtist.slug}`); }}
+                className="text-xs text-white/40 mt-0.5 hover:text-purple-400 transition text-left"
+              >
+                {trackArtist?.artist_name || postArtist?.artist_name}
                 {trackData.duration ? ` · ${formatDuration(trackData.duration)}` : ''}
-              </p>
+              </button>
             </div>
             <div className="flex-shrink-0 px-2.5 py-1 rounded-full bg-white/[0.08]">
               <span className="text-[10px] text-white/40 font-medium">
@@ -345,38 +370,63 @@ export default function PostCard({ post, onDelete, onUpdate }) {
         <div className="border-t border-white/[0.04]">
           <div className="max-h-64 overflow-y-auto">
             {comments.map(comment => (
-              <div key={comment.id} className="flex space-x-3 px-4 py-3 border-b border-white/[0.02]">
-                <div className="w-7 h-7 rounded-full bg-gradient-to-br from-purple-600/50 to-blue-600/50 flex items-center justify-center overflow-hidden flex-shrink-0">
+              <div key={comment.id} className="flex space-x-3 px-4 py-3 border-b border-white/[0.02] group">
+                <button
+                  onClick={() => comment.artists?.slug && navigate(`/artist/${comment.artists.slug}`)}
+                  className="w-7 h-7 rounded-full bg-gradient-to-br from-purple-600/50 to-blue-600/50 flex items-center justify-center overflow-hidden flex-shrink-0">
                   {comment.artists?.profile_image_url
                     ? <img src={comment.artists.profile_image_url} alt="" className="w-7 h-7 rounded-full object-cover" />
                     : <span className="text-[10px] font-bold text-white">{(comment.artists?.artist_name || '?')?.[0]?.toUpperCase()}</span>}
-                </div>
+                </button>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center space-x-1.5">
-                    <span className="text-xs font-medium text-white">{comment.artists?.artist_name || 'User'}</span>
+                    <button
+                      onClick={() => comment.artists?.slug && navigate(`/artist/${comment.artists.slug}`)}
+                      className="text-xs font-medium text-white hover:text-purple-300 transition">
+                      {comment.artists?.artist_name || 'User'}
+                    </button>
                     <span className="text-[10px] text-white/20">{timeAgo(comment.created_at)}</span>
                   </div>
                   <p className="text-xs text-white/60 mt-0.5">{comment.content}</p>
                 </div>
+                {/* Reply button */}
+                {user && (
+                  <button
+                    onClick={() => handleReply(comment)}
+                    className="opacity-0 group-hover:opacity-100 flex items-center space-x-1 text-[10px] text-white/30 hover:text-purple-400 transition flex-shrink-0 mt-1">
+                    <CornerDownRight className="w-3 h-3" />
+                    <span>Reply</span>
+                  </button>
+                )}
               </div>
             ))}
             {comments.length === 0 && <p className="text-center text-xs text-white/20 py-6">No comments yet</p>}
           </div>
           {user && (
-            <div className="flex items-center space-x-2 px-4 py-3">
-              <input
-                type="text"
-                value={commentText}
-                onChange={(e) => setCommentText(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && submitComment()}
-                placeholder="Add a comment..."
-                maxLength={500}
-                className="flex-1 bg-white/[0.04] rounded-lg px-3 py-2 text-sm text-white placeholder-white/20 outline-none"
-              />
-              <button onClick={submitComment} disabled={!commentText.trim() || posting}
-                className="w-8 h-8 flex items-center justify-center rounded-full bg-white/[0.06] disabled:opacity-30 transition">
-                {posting ? <Loader className="w-3.5 h-3.5 animate-spin text-white/40" /> : <Send className="w-3.5 h-3.5 text-white/50" />}
-              </button>
+            <div className="px-4 py-3">
+              {replyingTo && (
+                <div className="flex items-center justify-between mb-2 px-2 py-1 bg-purple-500/10 rounded-lg">
+                  <span className="text-[11px] text-purple-400">Replying to @{replyingTo.artist_name}</span>
+                  <button onClick={() => { setReplyingTo(null); setCommentText(''); }} className="text-white/30 hover:text-white/60">
+                    ×
+                  </button>
+                </div>
+              )}
+              <div className="flex items-center space-x-2">
+                <input
+                  type="text"
+                  value={commentText}
+                  onChange={(e) => setCommentText(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && submitComment()}
+                  placeholder={replyingTo ? `Reply to @${replyingTo.artist_name}...` : 'Add a comment...'}
+                  maxLength={500}
+                  className="flex-1 bg-white/[0.04] rounded-lg px-3 py-2 text-sm text-white placeholder-white/20 outline-none"
+                />
+                <button onClick={submitComment} disabled={!commentText.trim() || posting}
+                  className="w-8 h-8 flex items-center justify-center rounded-full bg-white/[0.06] disabled:opacity-30 transition">
+                  {posting ? <Loader className="w-3.5 h-3.5 animate-spin text-white/40" /> : <Send className="w-3.5 h-3.5 text-white/50" />}
+                </button>
+              </div>
             </div>
           )}
         </div>
