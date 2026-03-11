@@ -7,8 +7,10 @@ import {
   AlertTriangle, Trash2, VolumeX, Volume2, Lock, Info, X
 } from 'lucide-react';
 
-// Moderation: block external links
-const LINK_REGEX = /https?:\/\/[^\s]+|www\.[^\s]+|[a-zA-Z0-9-]+\.(com|net|org|io|co|xyz|me|dev|app|gg)[^\s]*/gi;
+// FIX 4: Do NOT use /g flag with .test() — it causes stateful lastIndex bugs
+// Use a fresh regex each time via a function instead
+const hasExternalLink = (text) =>
+  /https?:\/\/[^\s]+|www\.[^\s]+|[a-zA-Z0-9-]+\.(com|net|org|io|co|xyz|me|dev|app|gg)[^\s]*/i.test(text);
 
 function timeAgo(date) {
   const seconds = Math.floor((Date.now() - new Date(date).getTime()) / 1000);
@@ -60,7 +62,6 @@ export default function ChatRoomView() {
         table: 'chat_messages',
         filter: `room_id=eq.${roomId}`,
       }, (payload) => {
-        // Fetch the full message with artist data
         fetchSingleMessage(payload.new.id);
       })
       .on('postgres_changes', {
@@ -69,7 +70,6 @@ export default function ChatRoomView() {
         table: 'chat_messages',
         filter: `room_id=eq.${roomId}`,
       }, (payload) => {
-        // Handle deletions
         if (payload.new.is_deleted) {
           setMessages(prev => prev.map(m =>
             m.id === payload.new.id ? { ...m, is_deleted: true, deleted_reason: payload.new.deleted_reason } : m
@@ -96,17 +96,21 @@ export default function ChatRoomView() {
     setLoading(false);
   };
 
+  // FIX 2: Skip the broken FK join — go straight to the manual enrichment approach
   const fetchMessages = async () => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('chat_messages')
-      .select('*, artists:user_id(artist_name, slug, profile_image_url, is_verified)')
+      .select('id, room_id, user_id, content, created_at, is_deleted, deleted_reason')
       .eq('room_id', roomId)
       .order('created_at', { ascending: true })
       .limit(200);
 
-    // Refetch with proper artist join via user_id
-    // Since chat_messages has user_id, we need to match to artists
-    if (data) {
+    if (error) {
+      console.error('fetchMessages error:', error);
+      return;
+    }
+
+    if (data && data.length > 0) {
       const userIds = [...new Set(data.map(m => m.user_id))];
       const { data: artistsData } = await supabase
         .from('artists')
@@ -122,23 +126,24 @@ export default function ChatRoomView() {
       }));
 
       setMessages(enriched);
+    } else {
+      setMessages([]);
     }
   };
 
   const fetchSingleMessage = async (msgId) => {
     const { data } = await supabase
       .from('chat_messages')
-      .select('*')
+      .select('id, room_id, user_id, content, created_at, is_deleted, deleted_reason')
       .eq('id', msgId)
       .single();
 
     if (data) {
-      // Get artist info
       const { data: artistData } = await supabase
         .from('artists')
         .select('user_id, artist_name, slug, profile_image_url, is_verified')
         .eq('user_id', data.user_id)
-        .single();
+        .maybeSingle(); // FIX: use maybeSingle in case artist row doesn't exist
 
       const enriched = { ...data, artist: artistData || null };
       setMessages(prev => {
@@ -155,25 +160,46 @@ export default function ChatRoomView() {
     setWordFilters(data || []);
   };
 
+  // FIX 3: Use .maybeSingle() instead of .single() — .single() throws 406 when no row found
   const checkMembership = async () => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('chat_room_members')
       .select('*')
       .eq('room_id', roomId)
       .eq('user_id', user.id)
-      .single();
+      .maybeSingle();
 
     if (data) {
       setIsMember(true);
       setMyMembership(data);
+    } else {
+      setIsMember(false);
+      setMyMembership(null);
     }
   };
 
+  // FIX 1: Handle duplicate membership gracefully + fix broken .rpc().catch() chaining
   const joinRoom = async () => {
     if (!user) { navigate('/login'); return; }
     setJoining(true);
 
     try {
+      // Check if already a member before inserting
+      const { data: existing } = await supabase
+        .from('chat_room_members')
+        .select('id')
+        .eq('room_id', roomId)
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (existing) {
+        // Already a member — just update local state
+        setIsMember(true);
+        setMyMembership({ role: 'member' });
+        setJoining(false);
+        return;
+      }
+
       const { error } = await supabase.from('chat_room_members').insert({
         room_id: roomId,
         user_id: user.id,
@@ -181,30 +207,32 @@ export default function ChatRoomView() {
       });
       if (error) throw error;
 
-      // Increment member count
-      await supabase.rpc('increment_chat_member_count', { room_id_input: roomId }).catch(() => {
-        // RPC might not exist, manually update
-        supabase.from('chat_rooms').update({
-          member_count: (room?.member_count || 0) + 1
-        }).eq('id', roomId);
-      });
+      // FIX 1b: Properly await the RPC and handle failure without .catch() chaining
+      try {
+        await supabase.rpc('increment_chat_member_count', { room_id_input: roomId });
+      } catch {
+        // RPC doesn't exist — fallback to manual update
+        await supabase
+          .from('chat_rooms')
+          .update({ member_count: (room?.member_count || 0) + 1 })
+          .eq('id', roomId);
+      }
 
       setIsMember(true);
       setMyMembership({ role: 'member' });
     } catch (err) {
       console.error('Join error:', err);
     }
+
     setJoining(false);
   };
 
-  // Moderation checks
+  // FIX 4: Use the non-stateful hasExternalLink() function
   const moderateMessage = useCallback((text) => {
-    // Check for external links
-    if (LINK_REGEX.test(text)) {
+    if (hasExternalLink(text)) {
       return 'External links are not allowed in chat rooms';
     }
 
-    // Check word filters
     for (const filter of wordFilters) {
       if (filter.is_regex) {
         try {
@@ -224,7 +252,6 @@ export default function ChatRoomView() {
       }
     }
 
-    // Check for image/file patterns
     if (/\.(jpg|jpeg|png|gif|webp|mp4|mov|avi|pdf|zip|exe|dmg)/i.test(text)) {
       return 'File sharing is not allowed in chat rooms';
     }
@@ -241,7 +268,6 @@ export default function ChatRoomView() {
       return;
     }
 
-    // Run moderation
     const modResult = moderateMessage(input.trim());
     if (modResult) {
       setModWarning(modResult);
@@ -404,7 +430,6 @@ export default function ChatRoomView() {
 
           return (
             <div key={msg.id} className={`group flex items-start space-x-2.5 px-2 py-1 rounded-lg hover:bg-white/[0.02] transition ${sameSender ? 'mt-0' : 'mt-2'}`}>
-              {/* Avatar (only show if different sender) */}
               {!sameSender ? (
                 <div className="w-8 h-8 rounded-full overflow-hidden bg-gradient-to-br from-purple-600/30 to-blue-600/20 flex items-center justify-center flex-shrink-0 mt-0.5">
                   {msg.artist?.profile_image_url
@@ -415,7 +440,6 @@ export default function ChatRoomView() {
                 <div className="w-8 flex-shrink-0" />
               )}
 
-              {/* Message body */}
               <div className="flex-1 min-w-0">
                 {!sameSender && (
                   <div className="flex items-center space-x-1.5 mb-0.5">
@@ -434,7 +458,6 @@ export default function ChatRoomView() {
                 <p className="text-sm text-white/80 break-words leading-relaxed">{msg.content}</p>
               </div>
 
-              {/* Admin actions */}
               {isRoomAdmin && !isMe && (
                 <button onClick={() => handleDelete(msg.id)}
                   className="opacity-0 group-hover:opacity-100 w-7 h-7 flex items-center justify-center rounded-full hover:bg-red-500/10 transition flex-shrink-0">

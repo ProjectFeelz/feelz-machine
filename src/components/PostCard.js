@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
-import { Heart, MessageCircle, Share2, MoreHorizontal, Trash2, Flag, Verified , Loader, Send } from 'lucide-react';
+import { Heart, MessageCircle, Share2, MoreHorizontal, Trash2, Flag, Verified, Loader, Send } from 'lucide-react';
 
 function timeAgo(date) {
   const seconds = Math.floor((Date.now() - new Date(date).getTime()) / 1000);
@@ -15,73 +15,41 @@ function timeAgo(date) {
 
 function renderContent(text, taggedArtists, navigate) {
   if (!text) return null;
-
-  // Parse markdown-lite: **bold**, *italic*, __underline__
-  let parts = text;
-
-  // Split by @mentions and format
   const tokens = [];
-  let remaining = parts;
   const mentionRegex = /@(\w[\w\s]*?\w|\w+)/g;
   let lastIndex = 0;
   let match;
-
-  while ((match = mentionRegex.exec(parts)) !== null) {
-    // Text before mention
-    if (match.index > lastIndex) {
-      tokens.push({ type: 'text', value: parts.substring(lastIndex, match.index) });
-    }
-
+  while ((match = mentionRegex.exec(text)) !== null) {
+    if (match.index > lastIndex) tokens.push({ type: 'text', value: text.substring(lastIndex, match.index) });
     const mentionName = match[1];
     const tagged = taggedArtists?.find(a => a.artist_name === mentionName);
-
-    if (tagged) {
-      tokens.push({ type: 'mention', value: mentionName, slug: tagged.slug });
-    } else {
-      tokens.push({ type: 'mention_text', value: `@${mentionName}` });
-    }
-
+    if (tagged) tokens.push({ type: 'mention', value: mentionName, slug: tagged.slug });
+    else tokens.push({ type: 'mention_text', value: `@${mentionName}` });
     lastIndex = match.index + match[0].length;
   }
-
-  if (lastIndex < parts.length) {
-    tokens.push({ type: 'text', value: parts.substring(lastIndex) });
-  }
-
+  if (lastIndex < text.length) tokens.push({ type: 'text', value: text.substring(lastIndex) });
   return tokens.map((token, i) => {
-    if (token.type === 'mention') {
-      return (
-        <button key={i} onClick={() => navigate(`/artist/${token.slug}`)}
-          className="text-purple-400 font-medium hover:text-purple-300 transition">
-          @{token.value}
-        </button>
-      );
-    }
-    if (token.type === 'mention_text') {
-      return <span key={i} className="text-purple-400/60">{token.value}</span>;
-    }
-    // Parse basic formatting in text
+    if (token.type === 'mention') return (
+      <button key={i} onClick={() => navigate(`/artist/${token.slug}`)} className="text-purple-400 font-medium hover:text-purple-300 transition">
+        @{token.value}
+      </button>
+    );
+    if (token.type === 'mention_text') return <span key={i} className="text-purple-400/60">{token.value}</span>;
     return <span key={i}>{formatInline(token.value)}</span>;
   });
 }
 
 function formatInline(text) {
-  // Simple markdown: **bold** → <strong>, *italic* → <em>, __underline__ → <u>
   const parts = [];
-  let remaining = text;
-  let key = 0;
-
-  // Process bold
   const boldRegex = /\*\*(.+?)\*\*/g;
   let lastIdx = 0;
+  let key = 0;
   let m;
-
   while ((m = boldRegex.exec(text)) !== null) {
     if (m.index > lastIdx) parts.push(<span key={key++}>{text.substring(lastIdx, m.index)}</span>);
     parts.push(<strong key={key++} className="font-semibold">{m[1]}</strong>);
     lastIdx = m.index + m[0].length;
   }
-
   if (parts.length === 0) return text;
   if (lastIdx < text.length) parts.push(<span key={key++}>{text.substring(lastIdx)}</span>);
   return parts;
@@ -91,7 +59,7 @@ export default function PostCard({ post, onDelete, onUpdate }) {
   const navigate = useNavigate();
   const { user, artist: myArtist } = useAuth();
   const [liked, setLiked] = useState(false);
-  const [likeCount, setLikeCount] = useState(0);
+  const [likeCount, setLikeCount] = useState(post.like_count || 0);
   const [comments, setComments] = useState([]);
   const [showComments, setShowComments] = useState(false);
   const [commentText, setCommentText] = useState('');
@@ -100,7 +68,8 @@ export default function PostCard({ post, onDelete, onUpdate }) {
   const [taggedArtistData, setTaggedArtistData] = useState([]);
 
   const postArtist = post.artists || post.artist || null;
-  const isOwner = user && (post.user_id === user.id);
+  // FIX 6: artist_posts uses artist_id, not user_id — check ownership via artist
+  const isOwner = user && myArtist && (post.artist_id === myArtist.id);
 
   useEffect(() => {
     fetchLikeStatus();
@@ -108,21 +77,21 @@ export default function PostCard({ post, onDelete, onUpdate }) {
   }, [post.id]);
 
   const fetchLikeStatus = async () => {
-    // Get like count
+    // FIX 1: Use artist_post_likes instead of post_likes
     const { count } = await supabase
-      .from('post_likes')
+      .from('artist_post_likes')
       .select('*', { count: 'exact', head: true })
       .eq('post_id', post.id);
     setLikeCount(count || 0);
 
-    // Check if current user liked
     if (user) {
+      // FIX 5: Use maybeSingle — single() throws 406 when no row found
       const { data } = await supabase
-        .from('post_likes')
+        .from('artist_post_likes')
         .select('id')
         .eq('post_id', post.id)
         .eq('user_id', user.id)
-        .single();
+        .maybeSingle();
       setLiked(!!data);
     }
   };
@@ -139,15 +108,15 @@ export default function PostCard({ post, onDelete, onUpdate }) {
 
   const handleLike = async () => {
     if (!user) { navigate('/login'); return; }
-
     try {
       if (liked) {
-        await supabase.from('post_likes').delete()
+        // FIX 1: artist_post_likes
+        await supabase.from('artist_post_likes').delete()
           .eq('post_id', post.id).eq('user_id', user.id);
         setLiked(false);
         setLikeCount(prev => Math.max(prev - 1, 0));
       } else {
-        await supabase.from('post_likes').insert({ post_id: post.id, user_id: user.id });
+        await supabase.from('artist_post_likes').insert({ post_id: post.id, user_id: user.id });
         setLiked(true);
         setLikeCount(prev => prev + 1);
       }
@@ -157,13 +126,28 @@ export default function PostCard({ post, onDelete, onUpdate }) {
   };
 
   const fetchComments = async () => {
-    const { data } = await supabase
-      .from('comments')
-      .select('*, artists(artist_name, slug, profile_image_url, is_verified)')
+    // FIX 3: post_comments exists in DB but has no artists FK — enrich manually
+    const { data, error } = await supabase
+      .from('post_comments')
+      .select('id, post_id, user_id, content, created_at')
       .eq('post_id', post.id)
       .order('created_at', { ascending: true })
       .limit(50);
-    setComments(data || []);
+
+    if (error) { console.error('fetchComments error:', error); return; }
+
+    if (data && data.length > 0) {
+      const userIds = [...new Set(data.map(c => c.user_id))];
+      const { data: artistsData } = await supabase
+        .from('artists')
+        .select('user_id, artist_name, slug, profile_image_url, is_verified')
+        .in('user_id', userIds);
+      const artistMap = {};
+      (artistsData || []).forEach(a => { artistMap[a.user_id] = a; });
+      setComments(data.map(c => ({ ...c, artists: artistMap[c.user_id] || null })));
+    } else {
+      setComments([]);
+    }
   };
 
   const toggleComments = () => {
@@ -175,10 +159,10 @@ export default function PostCard({ post, onDelete, onUpdate }) {
     if (!commentText.trim() || !user) return;
     setPosting(true);
     try {
-      const { error } = await supabase.from('comments').insert({
+      // FIX 2: Use post_comments (the table that actually exists)
+      const { error } = await supabase.from('post_comments').insert({
         post_id: post.id,
         user_id: user.id,
-        artist_id: myArtist?.id || null,
         content: commentText.trim(),
       });
       if (error) throw error;
@@ -193,7 +177,8 @@ export default function PostCard({ post, onDelete, onUpdate }) {
   const handleDelete = async () => {
     if (!isOwner) return;
     try {
-      await supabase.from('posts').delete().eq('id', post.id);
+      // FIX 4: Delete from artist_posts not posts
+      await supabase.from('artist_posts').delete().eq('id', post.id);
       if (onDelete) onDelete(post.id);
     } catch (err) {
       console.error('Delete error:', err);
@@ -202,7 +187,8 @@ export default function PostCard({ post, onDelete, onUpdate }) {
   };
 
   const handleShare = async () => {
-    const url = `${window.location.origin}/feed`;
+    // FIX: Share link now points to the specific post via ?post= param
+    const url = `${window.location.origin}/feed?post=${post.id}`;
     if (navigator.share) {
       try { await navigator.share({ title: 'Feelz Machine', text: post.content?.substring(0, 100), url }); } catch (e) {}
     } else {
@@ -224,9 +210,7 @@ export default function PostCard({ post, onDelete, onUpdate }) {
           <div className="text-left">
             <div className="flex items-center space-x-1.5">
               <span className="text-sm font-semibold text-white">{postArtist?.artist_name || 'Anonymous'}</span>
-              {postArtist?.is_verified && (
-                <Verified className="w-3.5 h-3.5 text-blue-400" />
-              )}
+              {postArtist?.is_verified && <Verified className="w-3.5 h-3.5 text-blue-400" />}
             </div>
             <span className="text-[11px] text-white/30">{timeAgo(post.created_at)}</span>
           </div>
@@ -254,18 +238,6 @@ export default function PostCard({ post, onDelete, onUpdate }) {
         </div>
       </div>
 
-      {/* Post type badge */}
-      {post.post_type && post.post_type !== 'standard' && (
-        <div className="px-4 pt-2">
-          <span className="text-[10px] px-2 py-0.5 rounded-full font-medium" style={{
-            backgroundColor: post.post_type === 'news' ? 'rgba(59,130,246,0.1)' : post.post_type === 'trending' ? 'rgba(234,179,8,0.1)' : 'rgba(139,92,246,0.1)',
-            color: post.post_type === 'news' ? '#60A5FA' : post.post_type === 'trending' ? '#FBBF24' : '#A78BFA',
-          }}>
-            {post.post_type === 'news' ? 'News' : post.post_type === 'trending' ? 'Trending' : post.post_type === 'milestone' ? 'Milestone' : post.post_type}
-          </span>
-        </div>
-      )}
-
       {/* Content */}
       <div className="px-4 py-3">
         <p className="text-sm text-white/90 leading-relaxed whitespace-pre-wrap">
@@ -279,7 +251,7 @@ export default function PostCard({ post, onDelete, onUpdate }) {
           <div className="flex items-center space-x-2 overflow-x-auto">
             {taggedArtistData.map(ta => (
               <button key={ta.id} onClick={() => navigate(`/artist/${ta.slug}`)}
-                className="flex items-center space-x-1.5 px-2.5 py-1.5 bg-purple-500/8 rounded-lg flex-shrink-0 hover:bg-purple-500/15 transition">
+                className="flex items-center space-x-1.5 px-2.5 py-1.5 bg-purple-500/[0.08] rounded-lg flex-shrink-0 hover:bg-purple-500/15 transition">
                 <div className="w-5 h-5 rounded-full overflow-hidden bg-purple-600/30 flex-shrink-0">
                   {ta.profile_image_url
                     ? <img src={ta.profile_image_url} alt="" className="w-5 h-5 rounded-full object-cover" />
@@ -295,20 +267,15 @@ export default function PostCard({ post, onDelete, onUpdate }) {
 
       {/* Action bar */}
       <div className="flex items-center px-4 py-2.5 border-t border-white/[0.04]">
-        <button onClick={handleLike}
-          className="flex items-center space-x-1.5 mr-5 transition active:scale-90">
-          <Heart className={`w-4.5 h-4.5 transition ${liked ? 'text-red-500 fill-red-500' : 'text-white/30'}`} />
+        <button onClick={handleLike} className="flex items-center space-x-1.5 mr-5 transition active:scale-90">
+          <Heart className={`w-4 h-4 transition ${liked ? 'text-red-500 fill-red-500' : 'text-white/30'}`} />
           {likeCount > 0 && <span className={`text-xs ${liked ? 'text-red-400' : 'text-white/30'}`}>{likeCount}</span>}
         </button>
-
-        <button onClick={toggleComments}
-          className="flex items-center space-x-1.5 mr-5 transition active:scale-90">
-          <MessageCircle className="w-4.5 h-4.5 text-white/30" />
+        <button onClick={toggleComments} className="flex items-center space-x-1.5 mr-5 transition active:scale-90">
+          <MessageCircle className="w-4 h-4 text-white/30" />
           {post.comment_count > 0 && <span className="text-xs text-white/30">{post.comment_count}</span>}
         </button>
-
-        <button onClick={handleShare}
-          className="flex items-center space-x-1.5 transition active:scale-90">
+        <button onClick={handleShare} className="flex items-center space-x-1.5 transition active:scale-90">
           <Share2 className="w-4 h-4 text-white/30" />
         </button>
       </div>
@@ -316,7 +283,6 @@ export default function PostCard({ post, onDelete, onUpdate }) {
       {/* Comments section */}
       {showComments && (
         <div className="border-t border-white/[0.04]">
-          {/* Comment list */}
           <div className="max-h-64 overflow-y-auto">
             {comments.map(comment => (
               <div key={comment.id} className="flex space-x-3 px-4 py-3 border-b border-white/[0.02]">
@@ -334,12 +300,8 @@ export default function PostCard({ post, onDelete, onUpdate }) {
                 </div>
               </div>
             ))}
-            {comments.length === 0 && (
-              <p className="text-center text-xs text-white/20 py-6">No comments yet</p>
-            )}
+            {comments.length === 0 && <p className="text-center text-xs text-white/20 py-6">No comments yet</p>}
           </div>
-
-          {/* Comment input */}
           {user && (
             <div className="flex items-center space-x-2 px-4 py-3">
               <input

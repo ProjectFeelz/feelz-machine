@@ -7,12 +7,12 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
   const [artist, setArtist] = useState(null);
-  const [listener, setListener] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [viewAs, setViewAs] = useState(null); // null | 'artist' | 'listener' | 'admin'
+  const [viewAs, setViewAs] = useState(null);
 
   const fetchProfile = async (userId) => {
+    // Try user_profiles first, fall back to profiles
     let { data } = await supabase
       .from('user_profiles')
       .select('*')
@@ -35,16 +35,7 @@ export function AuthProvider({ children }) {
       .select('*')
       .eq('user_id', userId)
       .maybeSingle();
-    if (data) setArtist(data);
-  };
-
-  const fetchListener = async (userId) => {
-    const { data } = await supabase
-      .from('listeners')
-      .select('*')
-      .eq('user_id', userId)
-      .maybeSingle();
-    if (data) setListener(data);
+    setArtist(data || null);
   };
 
   const checkAdmin = async (userId) => {
@@ -62,7 +53,6 @@ export function AuthProvider({ children }) {
     await Promise.all([
       fetchProfile(sessionUser.id),
       fetchArtist(sessionUser.id),
-      fetchListener(sessionUser.id),
       checkAdmin(sessionUser.id),
     ]);
   };
@@ -73,15 +63,19 @@ export function AuthProvider({ children }) {
       setLoading(false);
     });
 
-    const { data: authListener } = supabase.auth.onAuthStateChange((event) => {
+    const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_IN' && session?.user) {
+        // FIX: Reload full user data on sign-in (covers OAuth redirect return)
+        await loadUser(session.user);
+      }
       if (event === 'SIGNED_OUT') {
         setUser(null);
         setProfile(null);
         setArtist(null);
-        setListener(null);
         setIsAdmin(false);
       }
     });
+
     return () => authListener?.subscription?.unsubscribe();
   }, []);
 
@@ -116,15 +110,15 @@ export function AuthProvider({ children }) {
     setUser(null);
     setProfile(null);
     setArtist(null);
-    setListener(null);
     setIsAdmin(false);
   };
 
   const refreshProfile = async () => {
     if (user) {
-      await fetchProfile(user.id);
-      await fetchArtist(user.id);
-      await fetchListener(user.id);
+      await Promise.all([
+        fetchProfile(user.id),
+        fetchArtist(user.id),
+      ]);
     }
   };
 
@@ -132,15 +126,18 @@ export function AuthProvider({ children }) {
     user,
     profile,
     artist,
-    listener,
+    // FIX: removed listener (table doesn't exist) — non-artist users
+    // are identified by artist being null
+    listener: null,
     loading,
     isAdmin: viewAs ? viewAs === 'admin' : isAdmin,
     isArtist: viewAs ? (viewAs === 'artist' || viewAs === 'admin') : !!artist,
-    isListener: viewAs ? viewAs === 'listener' : !!listener,
+    // FIX: isListener is true for any logged-in non-artist user
+    isListener: viewAs ? viewAs === 'listener' : (!!user && !artist),
     rawIsAdmin: isAdmin,
     rawIsArtist: !!artist,
     rawIsMaster: artist?.is_master || false,
-    hasProfile: !!artist || !!listener,
+    hasProfile: !!profile,
     isMaster: viewAs ? false : (artist?.is_master || false),
     viewAs,
     setViewAs,

@@ -9,35 +9,35 @@ import {
 import useNotifications from '../contexts/useNotifications';
 
 const TYPE_CONFIG = {
-  collab_request:   { icon: Users,          color: 'text-blue-400',   bg: 'bg-blue-500/10',   label: 'Collab Request' },
-  collab_accepted:  { icon: Check,          color: 'text-green-400',  bg: 'bg-green-500/10',  label: 'Collab Accepted' },
-  collab_declined:  { icon: X,              color: 'text-white/30',   bg: 'bg-white/[0.06]',  label: 'Collab Declined' },
-  new_follower:     { icon: UserPlus,       color: 'text-pink-400',   bg: 'bg-pink-500/10',   label: 'New Follower' },
-  track_liked:      { icon: Heart,          color: 'text-red-400',    bg: 'bg-red-500/10',    label: 'Track Liked' },
-  track_commented:  { icon: MessageCircle,  color: 'text-purple-400', bg: 'bg-purple-500/10', label: 'Comment' },
-  milestone_100:    { icon: TrendingUp,     color: 'text-yellow-400', bg: 'bg-yellow-500/10', label: 'Milestone' },
-  milestone_500:    { icon: TrendingUp,     color: 'text-yellow-400', bg: 'bg-yellow-500/10', label: 'Milestone' },
-  milestone_1k:     { icon: TrendingUp,     color: 'text-orange-400', bg: 'bg-orange-500/10', label: 'Milestone' },
-  milestone_10k:    { icon: TrendingUp,     color: 'text-orange-400', bg: 'bg-orange-500/10', label: 'Milestone' },
-  download:         { icon: Download,        color: 'text-green-400',  bg: 'bg-green-500/10',  label: 'Download' },
-  announcement:     { icon: Megaphone,       color: 'text-yellow-400', bg: 'bg-yellow-500/10', label: 'Announcement' },
-  new_post:         { icon: Music,           color: 'text-green-400',  bg: 'bg-green-500/10',  label: 'New Post' },
-  mention:          { icon: MessageCircle,   color: 'text-purple-400', bg: 'bg-purple-500/10', label: 'Mention' },
-  tier_granted:     { icon: TrendingUp,     color: 'text-yellow-400', bg: 'bg-yellow-500/10', label: 'Tier Update' },
+  collab_request:   { icon: Users,         color: 'text-blue-400',   bg: 'bg-blue-500/10',   label: 'Collab Request' },
+  collab_accepted:  { icon: Check,         color: 'text-green-400',  bg: 'bg-green-500/10',  label: 'Collab Accepted' },
+  collab_declined:  { icon: X,             color: 'text-white/30',   bg: 'bg-white/[0.06]',  label: 'Collab Declined' },
+  new_follower:     { icon: UserPlus,      color: 'text-pink-400',   bg: 'bg-pink-500/10',   label: 'New Follower' },
+  track_liked:      { icon: Heart,         color: 'text-red-400',    bg: 'bg-red-500/10',    label: 'Track Liked' },
+  track_commented:  { icon: MessageCircle, color: 'text-purple-400', bg: 'bg-purple-500/10', label: 'Comment' },
+  milestone_100:    { icon: TrendingUp,    color: 'text-yellow-400', bg: 'bg-yellow-500/10', label: 'Milestone' },
+  milestone_500:    { icon: TrendingUp,    color: 'text-yellow-400', bg: 'bg-yellow-500/10', label: 'Milestone' },
+  milestone_1k:     { icon: TrendingUp,    color: 'text-orange-400', bg: 'bg-orange-500/10', label: 'Milestone' },
+  milestone_10k:    { icon: TrendingUp,    color: 'text-orange-400', bg: 'bg-orange-500/10', label: 'Milestone' },
+  download:         { icon: Download,      color: 'text-green-400',  bg: 'bg-green-500/10',  label: 'Download' },
+  announcement:     { icon: Megaphone,     color: 'text-yellow-400', bg: 'bg-yellow-500/10', label: 'Announcement' },
+  new_post:         { icon: Music,         color: 'text-green-400',  bg: 'bg-green-500/10',  label: 'New Post' },
+  mention:          { icon: MessageCircle, color: 'text-purple-400', bg: 'bg-purple-500/10', label: 'Mention' },
+  tier_granted:     { icon: TrendingUp,    color: 'text-yellow-400', bg: 'bg-yellow-500/10', label: 'Tier Update' },
 };
 
 const FILTERS = [
-  { key: 'all', label: 'All' },
-  { key: 'collabs', label: 'Collabs' },
-  { key: 'social', label: 'Social' },
+  { key: 'all',        label: 'All' },
+  { key: 'collabs',    label: 'Collabs' },
+  { key: 'social',     label: 'Social' },
   { key: 'milestones', label: 'Milestones' },
 ];
 
 function filterMatch(type, filter) {
   if (filter === 'all') return true;
-  if (filter === 'collabs') return type.startsWith('collab_');
-  if (filter === 'social') return ['new_follower', 'track_liked', 'track_commented'].includes(type);
-  if (filter === 'milestones') return type.startsWith('milestone_');
+  if (filter === 'collabs') return type?.startsWith('collab_');
+  if (filter === 'social') return ['new_follower', 'track_liked', 'track_commented', 'new_post', 'mention'].includes(type);
+  if (filter === 'milestones') return type?.startsWith('milestone_');
   return true;
 }
 
@@ -48,7 +48,6 @@ function formatDate(date) {
   const diffMins = Math.floor(diffMs / 60000);
   const diffHrs = Math.floor(diffMs / 3600000);
   const diffDays = Math.floor(diffMs / 86400000);
-
   if (diffMins < 1) return 'Just now';
   if (diffMins < 60) return `${diffMins}m ago`;
   if (diffHrs < 24) return `${diffHrs}h ago`;
@@ -58,9 +57,8 @@ function formatDate(date) {
 
 export default function NotificationsPage() {
   const navigate = useNavigate();
-  // Support both artists and plain listeners
   const { artist, user } = useAuth();
-  const { notifications, unreadCount, loading, markAsRead, markAllRead, clearAll, refetch } = useNotifications();
+  const { unreadCount, markAsRead, markAllRead, clearAll } = useNotifications();
   const [filter, setFilter] = useState('all');
   const [allNotifs, setAllNotifs] = useState([]);
   const [pageLoading, setPageLoading] = useState(true);
@@ -69,26 +67,33 @@ export default function NotificationsPage() {
     if (!user) return;
     setPageLoading(true);
     try {
+      // FIX: Simplified query — removed broken FK joins (from_artist, track).
+      // Notifications store data in metadata instead — no FK join needed.
       let query = supabase
         .from('notifications')
-        .select(`
-          *,
-          from_artist:artists!notifications_from_artist_id_fkey(id, artist_name, profile_image_url, slug),
-          track:tracks!notifications_track_id_fkey(id, title, cover_artwork_url)
-        `)
+        .select('*')
         .order('created_at', { ascending: false })
         .limit(100);
 
       if (artist) {
-        // Artist: fetch by artist_id
         query = query.eq('artist_id', artist.id);
       } else {
-        // Listener: fetch by user_id
         query = query.eq('user_id', user.id);
       }
 
-      const { data } = await query;
-      setAllNotifs(data || []);
+      const { data, error } = await query;
+      if (error) {
+        // notifications table may not exist yet — fail gracefully
+        if (error.code === '42P01') {
+          console.warn('notifications table does not exist yet');
+          setAllNotifs([]);
+        } else {
+          console.error('Notifications fetch error:', error);
+          setAllNotifs([]);
+        }
+      } else {
+        setAllNotifs(data || []);
+      }
     } catch (err) {
       console.error('Notifications fetch error:', err);
       setAllNotifs([]);
@@ -107,12 +112,10 @@ export default function NotificationsPage() {
     const today = new Date();
     const yesterday = new Date(today);
     yesterday.setDate(yesterday.getDate() - 1);
-
     let key;
     if (d.toDateString() === today.toDateString()) key = 'Today';
     else if (d.toDateString() === yesterday.toDateString()) key = 'Yesterday';
     else key = d.toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
-
     if (!grouped[key]) grouped[key] = [];
     grouped[key].push(n);
   });
@@ -120,59 +123,73 @@ export default function NotificationsPage() {
   const handleClick = (notif) => {
     if (!notif.read) markAsRead(notif.id);
     const type = notif.type;
-    // Post interactions -> community
-    if (type === 'track_commented' || type === 'new_post' || type === 'mention') {
-      navigate('/community');
+    const meta = notif.metadata || {};
+
+    // FIX: new_post and mention now deep-link to the specific post via ?post= param
+    if (type === 'new_post' && meta.post_id) {
+      navigate(`/feed?post=${meta.post_id}`);
       return;
     }
-    // Track liked with post_like metadata -> community
-    if (notif.metadata?.post_like || notif.metadata?.comment) {
-      navigate('/community');
+    if (type === 'mention' && meta.post_id) {
+      navigate(`/feed?post=${meta.post_id}`);
       return;
     }
+    if (type === 'track_commented' && meta.post_id) {
+      navigate(`/feed?post=${meta.post_id}`);
+      return;
+    }
+
+    // Track liked with post_like metadata -> feed
+    if (meta.post_like && meta.post_id) {
+      navigate(`/feed?post=${meta.post_id}`);
+      return;
+    }
+
     // Playlist add -> library
-    if (notif.metadata?.playlist_add) {
+    if (meta.playlist_add) {
       navigate('/library/playlists');
       return;
     }
-    // Track liked -> go to track's artist page via metadata
-    if (type === 'track_liked' && notif.metadata?.artist_slug) {
-      navigate('/artist/' + notif.metadata.artist_slug);
+
+    // Track liked -> artist page
+    if (type === 'track_liked' && meta.artist_slug) {
+      navigate('/artist/' + meta.artist_slug);
       return;
     }
-    // Track interactions -> artist profile
-    if (notif.track?.id && notif.from_artist?.slug) {
-      navigate('/artist/' + notif.from_artist.slug);
+
+    // New follower -> their profile (stored in metadata)
+    if (type === 'new_follower' && meta.from_artist_slug) {
+      navigate('/artist/' + meta.from_artist_slug);
       return;
     }
-    // New follower -> their profile
-    if (type === 'new_follower' && notif.from_artist?.slug) {
-      navigate('/artist/' + notif.from_artist.slug);
-      return;
-    }
+
     // Tier granted -> profile
     if (type === 'tier_granted') {
       navigate('/profile');
       return;
     }
+
     // Download notification -> dashboard
     if (type === 'download') {
       navigate('/dashboard?tab=analytics');
       return;
     }
-    // Collab notifications -> dashboard collabs
-    if (type.startsWith('collab_')) {
+
+    // Collab notifications -> dashboard
+    if (type?.startsWith('collab_')) {
       navigate('/dashboard?tab=collabs');
       return;
     }
+
     // Milestone -> dashboard analytics
-    if (type.startsWith('milestone_')) {
+    if (type?.startsWith('milestone_')) {
       navigate('/dashboard?tab=analytics');
       return;
     }
+
+    // Announcement -> stay on page (video rendered inline)
   };
 
-  // Not logged in at all
   if (!user) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center">
@@ -187,14 +204,13 @@ export default function NotificationsPage() {
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center space-x-3">
-            <button onClick={() => navigate(-1)} className="w-9 h-9 flex items-center justify-center rounded-full bg-white/[0.06] hover:bg-white/[0.1] transition relative z-10">
+            <button onClick={() => navigate(-1)}
+              className="w-9 h-9 flex items-center justify-center rounded-full bg-white/[0.06] hover:bg-white/[0.1] transition">
               <ChevronLeft className="w-5 h-5 text-white" />
             </button>
             <div>
               <h1 className="text-xl font-bold text-white">Notifications</h1>
-              {unreadCount > 0 && (
-                <p className="text-xs text-white/40">{unreadCount} unread</p>
-              )}
+              {unreadCount > 0 && <p className="text-xs text-white/40">{unreadCount} unread</p>}
             </div>
           </div>
           <div className="flex items-center space-x-2">
@@ -215,7 +231,7 @@ export default function NotificationsPage() {
           </div>
         </div>
 
-        {/* Filters — only show collab filter for artists */}
+        {/* Filters */}
         <div className="flex space-x-1 bg-white/[0.03] rounded-lg p-1 mb-6">
           {FILTERS.filter(f => artist || f.key !== 'collabs').map(f => (
             <button key={f.key} onClick={() => setFilter(f.key)}
@@ -251,6 +267,7 @@ export default function NotificationsPage() {
                   {notifs.map((notif) => {
                     const config = TYPE_CONFIG[notif.type] || TYPE_CONFIG.new_follower;
                     const Icon = config.icon;
+                    const meta = notif.metadata || {};
 
                     return (
                       <button
@@ -260,9 +277,10 @@ export default function NotificationsPage() {
                           !notif.read ? 'bg-white/[0.02] border border-white/[0.06]' : ''
                         }`}
                       >
-                        {notif.from_artist?.profile_image_url ? (
+                        {/* Avatar: use from_artist_image from metadata if available */}
+                        {meta.from_artist_image ? (
                           <div className="relative flex-shrink-0">
-                            <img src={notif.from_artist.profile_image_url} alt="" className="w-10 h-10 rounded-full object-cover" />
+                            <img src={meta.from_artist_image} alt="" className="w-10 h-10 rounded-full object-cover" />
                             <div className={`absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full ${config.bg} flex items-center justify-center border border-black`}>
                               <Icon className={`w-2.5 h-2.5 ${config.color}`} />
                             </div>
@@ -281,11 +299,12 @@ export default function NotificationsPage() {
                             <p className="text-xs text-white/30 mt-0.5 line-clamp-2">{notif.message}</p>
                           )}
 
-                          {notif.type === 'announcement' && notif.metadata?.youtube_id && (
+                          {/* Announcement YouTube embed */}
+                          {notif.type === 'announcement' && meta.youtube_id && (
                             <div className="mt-3 rounded-xl overflow-hidden bg-black"
-                              style={{ aspectRatio: notif.metadata.is_short ? '9/16' : '16/9', maxHeight: notif.metadata.is_short ? 360 : 220 }}>
+                              style={{ aspectRatio: meta.is_short ? '9/16' : '16/9', maxHeight: meta.is_short ? 360 : 220 }}>
                               <iframe
-                                src={`https://www.youtube.com/embed/${notif.metadata.youtube_id}`}
+                                src={`https://www.youtube.com/embed/${meta.youtube_id}`}
                                 className="w-full h-full"
                                 allowFullScreen
                                 title="Video"
@@ -294,16 +313,13 @@ export default function NotificationsPage() {
                             </div>
                           )}
 
-                          {notif.track && (
+                          {/* Track thumbnail from metadata */}
+                          {meta.track_title && (
                             <div className="flex items-center space-x-2 mt-2 p-2 bg-white/[0.03] rounded-lg">
-                              {notif.track.cover_artwork_url ? (
-                                <img src={notif.track.cover_artwork_url} alt="" className="w-7 h-7 rounded object-cover" />
-                              ) : (
-                                <div className="w-7 h-7 rounded bg-white/[0.06] flex items-center justify-center">
-                                  <Music className="w-3 h-3 text-white/20" />
-                                </div>
+                              {meta.track_artwork && (
+                                <img src={meta.track_artwork} alt="" className="w-7 h-7 rounded object-cover" />
                               )}
-                              <p className="text-[11px] text-white/40 truncate">{notif.track.title}</p>
+                              <p className="text-[11px] text-white/40 truncate">{meta.track_title}</p>
                             </div>
                           )}
 

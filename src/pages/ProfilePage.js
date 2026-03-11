@@ -13,6 +13,7 @@ const TikTokIcon = ({ className }) => (
     <path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.89-2.89 2.89 2.89 0 012.89-2.89c.28 0 .54.04.79.1V9.01a6.33 6.33 0 00-.79-.05 6.34 6.34 0 00-6.34 6.34 6.34 6.34 0 006.34 6.34 6.34 6.34 0 006.33-6.34V8.75a8.16 8.16 0 004.77 1.52V6.82a4.85 4.85 0 01-1-.13z"/>
   </svg>
 );
+
 const SOCIALS = [
   { key: 'instagram', label: 'Instagram', icon: Instagram, ph: 'https://instagram.com/yourname' },
   { key: 'twitter', label: 'X (Twitter)', icon: Twitter, ph: 'https://x.com/yourname' },
@@ -23,60 +24,113 @@ const SOCIALS = [
   { key: 'website', label: 'Website', icon: Globe, ph: 'https://yourwebsite.com' },
 ];
 
+// Dedicated storage bucket for artist profile images (created in schema setup).
+const PROFILE_IMAGE_BUCKET = 'artist-images';
+
 export default function ProfilePage() {
   const nav = useNavigate();
-  const { user, profile, artist, isAdmin, isArtist, signOut, refreshProfile, rawIsAdmin, rawIsArtist, rawIsMaster, viewAs, setViewAs } = useAuth();
+  const {
+    user, profile, artist, isAdmin, isArtist, signOut, refreshProfile,
+    rawIsAdmin, rawIsArtist, rawIsMaster, viewAs, setViewAs
+  } = useAuth();
+
   const [activeSection, setActiveSection] = useState('info');
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState('');
   const [profileImgFile, setProfileImgFile] = useState(null);
-  const [form, setForm] = useState({ artist_name: '', bio: '', instagram: '', twitter: '', youtube: '', tiktok: '', facebook: '', discord: '', website: '' });
+  const [form, setForm] = useState({
+    artist_name: '', bio: '',
+    instagram: '', twitter: '', youtube: '',
+    tiktok: '', facebook: '', discord: '', website: ''
+  });
 
   useEffect(() => {
     if (artist) {
       const s = artist.social_links || {};
       setForm({
-        artist_name: artist.artist_name || '', bio: artist.bio || '',
-        instagram: s.instagram || '', twitter: s.twitter || '', youtube: s.youtube || '',
-        tiktok: s.tiktok || '', facebook: s.facebook || '', discord: s.discord || '', website: s.website || ''
+        artist_name: artist.artist_name || '',
+        bio: artist.bio || '',
+        instagram: s.instagram || '',
+        twitter: s.twitter || '',
+        youtube: s.youtube || '',
+        tiktok: s.tiktok || '',
+        facebook: s.facebook || '',
+        discord: s.discord || '',
+        website: s.website || '',
       });
     }
   }, [artist]);
 
+  // FIX 1: Upload to the correct bucket for profile images
   const uploadFile = async (file, folder) => {
     const ext = file.name.split('.').pop();
     const name = `${folder}${Date.now()}-${Math.random().toString(36).substring(7)}.${ext}`;
-    const { error } = await supabase.storage.from('feelz-samples').upload(name, file);
-    if (error) throw error;
-    const { data: { publicUrl } } = supabase.storage.from('feelz-samples').getPublicUrl(name);
+
+    const { error: uploadError } = await supabase.storage
+      .from(PROFILE_IMAGE_BUCKET)
+      .upload(name, file, { upsert: true });
+
+    // FIX 2: Explicit upload error with a clear message
+    if (uploadError) {
+      throw new Error(`Image upload failed: ${uploadError.message}`);
+    }
+
+    const { data: { publicUrl } } = supabase.storage
+      .from(PROFILE_IMAGE_BUCKET)
+      .getPublicUrl(name);
+
     return publicUrl;
   };
 
   const save = async () => {
     if (!artist) return;
     setSaving(true);
+    setMsg('');
+
     try {
       const sl = {};
       SOCIALS.forEach(p => { if (form[p.key]?.trim()) sl[p.key] = form[p.key].trim(); });
 
       const updateData = {
-        artist_name: form.artist_name, bio: form.bio,
-        social_links: sl, updated_at: new Date().toISOString()
+        artist_name: form.artist_name,
+        bio: form.bio,
+        social_links: sl,
+        updated_at: new Date().toISOString(),
       };
 
       if (profileImgFile) {
+        // FIX 2: Error message is now descriptive if upload fails
         const imgUrl = await uploadFile(profileImgFile, 'profile-images/');
         updateData.profile_image_url = imgUrl;
       }
 
       const { error } = await supabase.from('artists').update(updateData).eq('id', artist.id);
       if (error) throw error;
-      setMsg('Saved!'); setEditing(false); setProfileImgFile(null);
-      refreshProfile();
+
+      setMsg('Saved!');
+      setEditing(false);
+      setProfileImgFile(null);
+
+      // FIX 3: Await refreshProfile so UI reflects new data immediately
+      await refreshProfile();
+
       setTimeout(() => setMsg(''), 3000);
-    } catch (e) { setMsg('Error: ' + e.message); }
+    } catch (e) {
+      setMsg('Error: ' + e.message);
+    }
+
     setSaving(false);
+  };
+
+  // FIX 4: Await signOut before navigating to avoid race condition
+  const handleSignOut = async () => {
+    try {
+      await signOut();
+    } catch (e) {
+      console.error('Sign out error:', e);
+    }
+    nav('/');
   };
 
   if (!user) {
@@ -92,16 +146,26 @@ export default function ProfilePage() {
   return (
     <div className="pt-12 md:pt-0 pb-4 px-6 md:px-0">
       <h1 className="text-2xl font-bold text-white mb-4">Profile</h1>
-      {msg && <div className={`mb-4 p-3 rounded-lg text-sm ${msg.startsWith('Error') ? 'bg-red-500/10 text-red-400' : 'bg-green-500/10 text-green-400'}`}>{msg}</div>}
+      {msg && (
+        <div className={`mb-4 p-3 rounded-lg text-sm ${msg.startsWith('Error') ? 'bg-red-500/10 text-red-400' : 'bg-green-500/10 text-green-400'}`}>
+          {msg}
+        </div>
+      )}
 
       {/* Avatar card */}
       <div className="bg-white/[0.03] rounded-xl p-4 border border-white/[0.06] mb-4">
         <div className="flex items-center space-x-3">
           <div className="w-14 h-14 rounded-full bg-gradient-to-br from-purple-600 to-blue-600 flex items-center justify-center overflow-hidden">
-            {artist?.profile_image_url ? <img src={artist.profile_image_url} alt="" className="w-14 h-14 rounded-full object-cover" /> : <span className="text-xl font-bold text-white">{(artist?.artist_name || profile?.display_name || user.email)?.[0]?.toUpperCase()}</span>}
+            {artist?.profile_image_url
+              ? <img src={artist.profile_image_url} alt="" className="w-14 h-14 rounded-full object-cover" />
+              : <span className="text-xl font-bold text-white">
+                  {(artist?.artist_name || profile?.display_name || user.email)?.[0]?.toUpperCase()}
+                </span>}
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-base font-semibold text-white truncate">{artist?.artist_name || profile?.display_name || user.email}</p>
+            <p className="text-base font-semibold text-white truncate">
+              {artist?.artist_name || profile?.display_name || user.email}
+            </p>
             <p className="text-xs text-white/40 truncate">{user.email}</p>
             {isArtist && (
               <div className="flex items-center space-x-2 mt-1">
@@ -122,8 +186,9 @@ export default function ProfilePage() {
               <ExternalLink className="w-3 h-3" />
               <span>View profile</span>
             </button>
-            <button onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/player/artist/${artist.slug}`); }}
-              className="flex items-center space-x-1.5 text-xs text-white/30 hover:text-white/50 transition">
+            <button onClick={() => {
+              navigator.clipboard.writeText(`${window.location.origin}/player/artist/${artist.slug}`);
+            }} className="flex items-center space-x-1.5 text-xs text-white/30 hover:text-white/50 transition">
               <span>Copy share link</span>
             </button>
           </div>
@@ -131,15 +196,15 @@ export default function ProfilePage() {
 
         {/* Listener: edit profile button */}
         {!isArtist && (
-        <div className="mt-3">
-          <button
-            onClick={() => nav("/profile/edit")}
-            className="flex items-center space-x-1.5 text-xs text-white/40 hover:text-white/60 transition border border-white/[0.08] rounded-lg px-3 py-2"
-          >
-            <span>Edit Profile</span>
-          </button>
-        </div>
-      )}
+          <div className="mt-3">
+            <button
+              onClick={() => nav('/profile/edit')}
+              className="flex items-center space-x-1.5 text-xs text-white/40 hover:text-white/60 transition border border-white/[0.08] rounded-lg px-3 py-2"
+            >
+              <span>Edit Profile</span>
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Section tabs for artists */}
@@ -159,17 +224,20 @@ export default function ProfilePage() {
       )}
 
       {/* Info & Socials section */}
-      {(activeSection === 'info' || !isArtist) && isArtist && (
+      {activeSection === 'info' && isArtist && (
         <div className="bg-white/[0.03] rounded-xl p-4 border border-white/[0.06] mb-4 space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-semibold text-white">Artist Profile</h3>
-            <button onClick={() => setEditing(!editing)} className="text-xs text-white/40 hover:text-white/60">{editing ? 'Cancel' : 'Edit'}</button>
+            <button onClick={() => setEditing(!editing)} className="text-xs text-white/40 hover:text-white/60">
+              {editing ? 'Cancel' : 'Edit'}
+            </button>
           </div>
           {editing ? (
             <div className="space-y-3">
               <div>
                 <label className="block text-xs text-white/40 mb-1">Artist Name</label>
-                <input type="text" value={form.artist_name} onChange={e => setForm({...form, artist_name: e.target.value})}
+                <input type="text" value={form.artist_name}
+                  onChange={e => setForm({ ...form, artist_name: e.target.value })}
                   className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none" />
               </div>
               <div>
@@ -181,7 +249,8 @@ export default function ProfilePage() {
               </div>
               <div>
                 <label className="block text-xs text-white/40 mb-1">Bio</label>
-                <textarea rows={3} value={form.bio} onChange={e => setForm({...form, bio: e.target.value})}
+                <textarea rows={3} value={form.bio}
+                  onChange={e => setForm({ ...form, bio: e.target.value })}
                   className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none resize-none" />
               </div>
               <div>
@@ -190,8 +259,10 @@ export default function ProfilePage() {
                   {SOCIALS.map(({ key, icon: I, ph }) => (
                     <div key={key} className="flex items-center space-x-2">
                       <I className="w-4 h-4 text-white/30 flex-shrink-0" />
-                      <input type="text" value={form[key]} onChange={e => setForm({...form, [key]: e.target.value})}
-                        placeholder={ph} className="flex-1 px-3 py-2 bg-white/[0.06] rounded-lg text-white text-sm outline-none placeholder-white/20" />
+                      <input type="text" value={form[key]}
+                        onChange={e => setForm({ ...form, [key]: e.target.value })}
+                        placeholder={ph}
+                        className="flex-1 px-3 py-2 bg-white/[0.06] rounded-lg text-white text-sm outline-none placeholder-white/20" />
                     </div>
                   ))}
                 </div>
@@ -207,10 +278,13 @@ export default function ProfilePage() {
               {form.bio && <p className="text-sm text-white/60">{form.bio}</p>}
               {SOCIALS.filter(p => form[p.key]).map(({ key, icon: I }) => (
                 <div key={key} className="flex items-center space-x-2 text-sm">
-                  <I className="w-3.5 h-3.5 text-white/30" /><span className="text-white/50">{form[key]}</span>
+                  <I className="w-3.5 h-3.5 text-white/30" />
+                  <span className="text-white/50">{form[key]}</span>
                 </div>
               ))}
-              {!form.bio && !SOCIALS.some(p => form[p.key]) && <p className="text-xs text-white/20">No bio or social links yet. Tap Edit to add.</p>}
+              {!form.bio && !SOCIALS.some(p => form[p.key]) && (
+                <p className="text-xs text-white/20">No bio or social links yet. Tap Edit to add.</p>
+              )}
             </div>
           )}
         </div>
@@ -245,23 +319,39 @@ export default function ProfilePage() {
       {/* Navigation links */}
       <div className="bg-white/[0.03] rounded-xl border border-white/[0.06] overflow-hidden mb-4">
         {isArtist && (
-          <button onClick={() => nav('/dashboard')} className="w-full flex items-center justify-between p-4 hover:bg-white/[0.03] transition border-b border-white/[0.04]">
-            <div className="flex items-center space-x-3"><Music className="w-5 h-5 text-purple-400" /><span className="text-sm text-white">Artist Dashboard</span></div>
+          <button onClick={() => nav('/dashboard')}
+            className="w-full flex items-center justify-between p-4 hover:bg-white/[0.03] transition border-b border-white/[0.04]">
+            <div className="flex items-center space-x-3">
+              <Music className="w-5 h-5 text-purple-400" />
+              <span className="text-sm text-white">Artist Dashboard</span>
+            </div>
             <ChevronRight className="w-4 h-4 text-white/20" />
           </button>
         )}
         {isAdmin && (
-          <button onClick={() => nav('/admin')} className="w-full flex items-center justify-between p-4 hover:bg-white/[0.03] transition border-b border-white/[0.04]">
-            <div className="flex items-center space-x-3"><Shield className="w-5 h-5 text-yellow-400" /><span className="text-sm text-white">Admin Panel (Legacy)</span></div>
+          <button onClick={() => nav('/admin')}
+            className="w-full flex items-center justify-between p-4 hover:bg-white/[0.03] transition border-b border-white/[0.04]">
+            <div className="flex items-center space-x-3">
+              <Shield className="w-5 h-5 text-yellow-400" />
+              <span className="text-sm text-white">Admin Panel (Legacy)</span>
+            </div>
             <ChevronRight className="w-4 h-4 text-white/20" />
           </button>
         )}
-        <button onClick={() => nav('/privacy-policy')} className="w-full flex items-center justify-between p-4 hover:bg-white/[0.03] transition border-b border-white/[0.04]">
-          <div className="flex items-center space-x-3"><Globe className="w-5 h-5 text-white/30" /><span className="text-sm text-white">Privacy Policy</span></div>
+        <button onClick={() => nav('/privacy-policy')}
+          className="w-full flex items-center justify-between p-4 hover:bg-white/[0.03] transition border-b border-white/[0.04]">
+          <div className="flex items-center space-x-3">
+            <Globe className="w-5 h-5 text-white/30" />
+            <span className="text-sm text-white">Privacy Policy</span>
+          </div>
           <ChevronRight className="w-4 h-4 text-white/20" />
         </button>
-        <button onClick={() => nav('/terms-of-use')} className="w-full flex items-center justify-between p-4 hover:bg-white/[0.03] transition">
-          <div className="flex items-center space-x-3"><Globe className="w-5 h-5 text-white/30" /><span className="text-sm text-white">Terms of Use</span></div>
+        <button onClick={() => nav('/terms-of-use')}
+          className="w-full flex items-center justify-between p-4 hover:bg-white/[0.03] transition">
+          <div className="flex items-center space-x-3">
+            <Globe className="w-5 h-5 text-white/30" />
+            <span className="text-sm text-white">Terms of Use</span>
+          </div>
           <ChevronRight className="w-4 h-4 text-white/20" />
         </button>
       </div>
@@ -278,7 +368,9 @@ export default function ProfilePage() {
               { key: 'listener', label: 'Listener' },
             ].map(opt => (
               <button key={opt.key || 'default'} onClick={() => setViewAs(opt.key)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${viewAs === opt.key ? 'bg-white text-black' : 'bg-white/[0.06] text-white/50 hover:bg-white/[0.1]'}`}>
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${
+                  viewAs === opt.key ? 'bg-white text-black' : 'bg-white/[0.06] text-white/50 hover:bg-white/[0.1]'
+                }`}>
                 {opt.label}
               </button>
             ))}
@@ -287,13 +379,13 @@ export default function ProfilePage() {
         </div>
       )}
 
-      <button onClick={async () => { await signOut(); nav('/'); }}
+      {/* FIX 4: Use dedicated handleSignOut to avoid nav race condition */}
+      <button
+        onClick={handleSignOut}
         className="w-full py-3 bg-red-500/10 text-red-400 rounded-xl font-medium text-sm flex items-center justify-center space-x-2 hover:bg-red-500/15 transition">
-        <LogOut className="w-4 h-4" /><span>Sign Out</span>
+        <LogOut className="w-4 h-4" />
+        <span>Sign Out</span>
       </button>
     </div>
   );
 }
-
-
-

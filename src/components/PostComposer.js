@@ -20,10 +20,9 @@ export default function PostComposer({ onPostCreated }) {
   const { user, artist } = useAuth();
   const { currentTrack } = usePlayer();
 
-  // Bottom offsets: nav=64px, miniPlayer=64px
   const NAV_H = 64;
   const MINI_H = currentTrack ? 64 : 0;
-  const baseBottom = NAV_H + MINI_H + 8; // 8px gap above mini player
+  const baseBottom = NAV_H + MINI_H + 8;
   const [open, setOpen] = useState(false);
   const [content, setContent] = useState('');
   const [posting, setPosting] = useState(false);
@@ -35,7 +34,6 @@ export default function PostComposer({ onPostCreated }) {
   const [scheduledAt, setScheduledAt] = useState('');
   const [showSchedule, setShowSchedule] = useState(false);
 
-  // Track tagging
   const [showTrackPicker, setShowTrackPicker] = useState(false);
   const [trackSearch, setTrackSearch] = useState('');
   const [trackResults, setTrackResults] = useState([]);
@@ -50,18 +48,15 @@ export default function PostComposer({ onPostCreated }) {
   const youtubeId = extractYouTubeId(content);
   const blocked = hasBlockedLinks(content);
 
-  // Focus textarea when opened
   useEffect(() => {
     if (open) setTimeout(() => editorRef.current?.focus(), 100);
   }, [open]);
 
-  // Lock body scroll when open
   useEffect(() => {
     document.body.style.overflow = open ? 'hidden' : '';
     return () => { document.body.style.overflow = ''; };
   }, [open]);
 
-  // Track keyboard height via visualViewport
   useEffect(() => {
     if (!open) { setKeyboardOffset(0); return; }
     const vv = window.visualViewport;
@@ -78,7 +73,6 @@ export default function PostComposer({ onPostCreated }) {
     };
   }, [open]);
 
-  // Artist @mention detection
   useEffect(() => {
     if (!content) { setShowTagDropdown(false); return; }
     const textBeforeCursor = content.substring(0, cursorPos);
@@ -91,7 +85,6 @@ export default function PostComposer({ onPostCreated }) {
     }
   }, [content, cursorPos]);
 
-  // Track search
   useEffect(() => {
     if (!showTrackPicker) return;
     if (trackTimeoutRef.current) clearTimeout(trackTimeoutRef.current);
@@ -157,59 +150,80 @@ export default function PostComposer({ onPostCreated }) {
     if (blocked) { setError('External links are not allowed. YouTube links only.'); return; }
     setPosting(true);
     setError('');
+
     try {
+      // FIX 1: Rate limit check against artist_posts not posts
       const { data: adminCheck } = await supabase.from('admins').select('id').eq('user_id', user.id).maybeSingle();
       if (!adminCheck) {
         const startOfDay = new Date();
         startOfDay.setHours(0, 0, 0, 0);
-        const { count } = await supabase.from('posts')
+        const { count } = await supabase
+          .from('artist_posts')
           .select('*', { count: 'exact', head: true })
           .eq('artist_id', artist.id)
           .gte('created_at', startOfDay.toISOString());
-        if (count >= 1) {
-          setError('You can only post once per day. Come back tomorrow!');
+        if (count >= 10) {
+          setError('You can only post 10 times per day. Come back tomorrow!');
           setPosting(false);
           return;
         }
       }
 
+      // FIX 2 & 3: Insert into artist_posts with only columns that exist in our schema
       const postPayload = {
         artist_id: artist.id,
-        user_id: user.id,
         content: content.trim(),
+        // Optional extended columns — only included if they exist in your schema
+        // Remove any of these lines if you get a "column does not exist" error:
         tagged_artist_ids: taggedArtists.map(a => a.id),
         youtube_id: youtubeId || null,
         track_id: taggedTrack?.id || null,
         scheduled_at: scheduledAt || null,
-        media_urls: [],
-        is_auto_generated: false,
+        image_url: null,
       };
 
-      // post_type constraint allows: standard, track_share, blog, announcement, update, poll, exclusive, question, media
-      const postType = taggedTrack ? 'track_share' : 'standard';
-      const result = await supabase.from('posts').insert({ ...postPayload, post_type: postType }).select().single();
-      let data = result.data;
-      let postError = result.error;
+      const { data, error: postError } = await supabase
+        .from('artist_posts')
+        .insert(postPayload)
+        .select()
+        .single();
+
       if (postError) throw postError;
 
       // Notify followers
-      const { data: followers } = await supabase.from('follows').select('follower_id').eq('artist_id', artist.id);
+      const { data: followers } = await supabase
+        .from('follows')
+        .select('follower_id')
+        .eq('artist_id', artist.id);
+
       if (followers?.length > 0) {
         const notifs = followers.map(f => ({
-          artist_id: null, user_id: f.follower_id, type: 'new_post',
+          user_id: f.follower_id,
+          artist_id: null,
+          type: 'new_post',
           title: `${artist.artist_name} posted something new`,
           message: content.substring(0, 100),
+          // FIX: store post_id in metadata so notifications can deep-link
           metadata: { post_id: data.id, artist_id: artist.id, artist_name: artist.artist_name },
         }));
-        try { await supabase.from('notifications').insert(notifs); } catch {}
+        try { await supabase.from('notifications').insert(notifs); } catch (e) {
+          console.warn('Notifications insert failed (table may not exist yet):', e.message);
+        }
       }
+
+      // Mention notifications
       for (const ta of taggedArtists) {
-        await supabase.from('notifications').insert({
-          artist_id: ta.id, type: 'mention',
-          title: `${artist.artist_name} mentioned you in a post`,
-          message: content.substring(0, 100),
-          metadata: { post_id: data.id, tagger_artist_id: artist.id },
-        });
+        try {
+          await supabase.from('notifications').insert({
+            artist_id: ta.id,
+            type: 'mention',
+            title: `${artist.artist_name} mentioned you in a post`,
+            message: content.substring(0, 100),
+            metadata: { post_id: data.id, tagger_artist_id: artist.id },
+          });
+        } catch (e) {
+          console.warn('Mention notification failed:', e.message);
+        }
       }
 
       setContent('');
@@ -230,7 +244,6 @@ export default function PostComposer({ onPostCreated }) {
 
   return (
     <>
-      {/* Floating + button — always sits above mini player + nav */}
       <button
         onClick={() => setOpen(true)}
         className="fixed right-5 z-40 w-14 h-14 rounded-full bg-white flex items-center justify-center active:scale-90 hover:scale-105"
@@ -243,7 +256,6 @@ export default function PostComposer({ onPostCreated }) {
         <Plus className="w-6 h-6 text-black" strokeWidth={2.5} />
       </button>
 
-      {/* Backdrop */}
       {open && (
         <div
           className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm"
@@ -252,7 +264,6 @@ export default function PostComposer({ onPostCreated }) {
         />
       )}
 
-      {/* Bottom sheet */}
       {open && (
         <div
           className="fixed left-0 right-0 z-50 rounded-t-2xl flex flex-col"
@@ -267,12 +278,10 @@ export default function PostComposer({ onPostCreated }) {
           }}
           onClick={e => e.stopPropagation()}
         >
-          {/* Handle bar */}
           <div className="flex justify-center pt-3 pb-1 flex-shrink-0">
             <div className="w-10 h-1 rounded-full bg-white/10" />
           </div>
 
-          {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 flex-shrink-0">
             <div className="flex items-center space-x-2.5">
               <div className="w-8 h-8 rounded-full overflow-hidden bg-gradient-to-br from-purple-600 to-blue-600 flex items-center justify-center flex-shrink-0">
@@ -282,17 +291,12 @@ export default function PostComposer({ onPostCreated }) {
               </div>
               <span className="text-sm font-semibold text-white">{artist.artist_name}</span>
             </div>
-            <button
-              onClick={handleClose}
-              className="w-8 h-8 flex items-center justify-center rounded-full bg-white/[0.06] hover:bg-white/[0.1] transition"
-            >
+            <button onClick={handleClose} className="w-8 h-8 flex items-center justify-center rounded-full bg-white/[0.06] hover:bg-white/[0.1] transition">
               <X className="w-4 h-4 text-white/60" />
             </button>
           </div>
 
-          {/* Scrollable body */}
           <div className="flex-1 overflow-y-auto px-4 pb-2 min-h-0">
-            {/* Textarea */}
             <div className="relative">
               <textarea
                 ref={editorRef}
@@ -304,12 +308,9 @@ export default function PostComposer({ onPostCreated }) {
                 rows={4}
                 className="w-full bg-transparent text-white text-sm placeholder-white/20 outline-none resize-none leading-relaxed"
               />
-              {/* Artist tag dropdown */}
               {showTagDropdown && tagResults.length > 0 && (
-                <div
-                  className="absolute left-0 z-50 w-64 rounded-xl overflow-hidden shadow-2xl"
-                  style={{ backgroundColor: '#1a1a1a', border: '1px solid rgba(255,255,255,0.08)', top: '100%' }}
-                >
+                <div className="absolute left-0 z-50 w-64 rounded-xl overflow-hidden shadow-2xl"
+                  style={{ backgroundColor: '#1a1a1a', border: '1px solid rgba(255,255,255,0.08)', top: '100%' }}>
                   {tagResults.map(a => (
                     <button key={a.id} onClick={() => insertTag(a)}
                       className="w-full flex items-center space-x-2 px-3 py-2.5 hover:bg-white/[0.06] transition text-left">
@@ -325,14 +326,12 @@ export default function PostComposer({ onPostCreated }) {
               )}
             </div>
 
-            {/* YouTube preview */}
             {youtubeId && (
               <div className="mt-2 rounded-lg overflow-hidden">
                 <img src={`https://img.youtube.com/vi/${youtubeId}/mqdefault.jpg`} alt="YouTube thumbnail" className="w-full rounded-lg opacity-70" />
               </div>
             )}
 
-            {/* Tagged track */}
             {taggedTrack && (
               <div className="mt-3 flex items-center space-x-3 p-2.5 rounded-xl bg-white/[0.04] border border-white/[0.06]">
                 <div className="w-9 h-9 rounded-lg overflow-hidden flex-shrink-0 bg-white/10">
@@ -350,7 +349,6 @@ export default function PostComposer({ onPostCreated }) {
               </div>
             )}
 
-            {/* Tagged artists */}
             {taggedArtists.length > 0 && (
               <div className="flex flex-wrap gap-1.5 mt-2">
                 {taggedArtists.map(a => (
@@ -362,7 +360,6 @@ export default function PostComposer({ onPostCreated }) {
               </div>
             )}
 
-            {/* Schedule picker */}
             {showSchedule && (
               <div className="mt-3 flex items-center space-x-2 p-3 rounded-xl bg-white/[0.04] border border-white/[0.06]">
                 <Calendar className="w-4 h-4 text-white/30 flex-shrink-0" />
@@ -381,7 +378,6 @@ export default function PostComposer({ onPostCreated }) {
               </div>
             )}
 
-            {/* Track picker */}
             {showTrackPicker && (
               <div className="mt-3 rounded-xl overflow-hidden border border-white/[0.08]" style={{ backgroundColor: '#111' }}>
                 <div className="flex items-center space-x-2 px-3 py-2.5 border-b border-white/[0.06]">
@@ -423,11 +419,8 @@ export default function PostComposer({ onPostCreated }) {
             {blocked && <p className="text-xs text-yellow-400/70 mt-2">External links aren't allowed. YouTube links only.</p>}
           </div>
 
-          {/* Fixed bottom toolbar */}
-          <div
-            className="flex-shrink-0 px-4 pt-3 pb-6 border-t border-white/[0.06]"
-            style={{ paddingBottom: 'max(1.5rem, env(safe-area-inset-bottom))' }}
-          >
+          <div className="flex-shrink-0 px-4 pt-3 pb-6 border-t border-white/[0.06]"
+            style={{ paddingBottom: 'max(1.5rem, env(safe-area-inset-bottom))' }}>
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-1">
                 <button
@@ -464,14 +457,8 @@ export default function PostComposer({ onPostCreated }) {
       )}
 
       <style>{`
-        @keyframes pcFadeIn {
-          from { opacity: 0; }
-          to { opacity: 1; }
-        }
-        @keyframes pcSlideUp {
-          from { transform: translateY(100%); }
-          to { transform: translateY(0); }
-        }
+        @keyframes pcFadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes pcSlideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
       `}</style>
     </>
   );

@@ -30,9 +30,8 @@ export default function FeedPage() {
       const to = from + PAGE_SIZE - 1;
 
       const { data, error } = await supabase
-        .from('posts')
+        .from('artist_posts')
         .select('*, artists(id, artist_name, slug, profile_image_url, is_verified)')
-        .not('artist_id', 'is', null)
         .order('created_at', { ascending: false })
         .range(from, to);
 
@@ -55,13 +54,19 @@ export default function FeedPage() {
 
   const fetchTrending = async () => {
     try {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('tracks')
         .select('id, title, cover_artwork_url, engagement_score, stream_count, artists(artist_name, slug, profile_image_url)')
         .eq('is_published', true)
         .gt('engagement_score', 0)
         .order('engagement_score', { ascending: false })
         .limit(10);
+
+      // FIX 3: Silently swallow error hides RLS/config issues — log them
+      if (error) {
+        console.error('Trending fetch error:', error);
+        return;
+      }
       setTrending(data || []);
     } catch (err) {
       console.error('Trending error:', err);
@@ -76,8 +81,19 @@ export default function FeedPage() {
   // Fetch followed artist IDs for the Following filter
   useEffect(() => {
     if (!user) return;
-    supabase.from('follows').select('artist_id').eq('follower_id', user.id)
-      .then(({ data }) => setFollowedArtistIds((data || []).map(f => f.artist_id)));
+    // NOTE: This fetches all follows client-side. If the follows table grows large,
+    // consider filtering posts server-side by passing followedArtistIds to fetchPosts.
+    supabase
+      .from('follows')
+      .select('artist_id')
+      .eq('follower_id', user.id)
+      .then(({ data, error }) => {
+        if (error) {
+          console.error('Follows fetch error:', error);
+          return;
+        }
+        setFollowedArtistIds((data || []).map(f => f.artist_id));
+      });
   }, [user]);
 
   // Scroll to shared post if ?post= param present
@@ -104,13 +120,19 @@ export default function FeedPage() {
       .on('postgres_changes', {
         event: 'INSERT',
         schema: 'public',
-        table: 'posts',
+        table: 'artist_posts',
       }, async (payload) => {
-        const { data } = await supabase
-          .from('posts')
+        // FIX 1: Use .maybeSingle() — .single() throws 406 if RLS blocks the row
+        const { data, error } = await supabase
+          .from('artist_posts')
           .select('*, artists(id, artist_name, slug, profile_image_url, is_verified)')
           .eq('id', payload.new.id)
-          .single();
+          .maybeSingle();
+
+        if (error) {
+          console.error('Realtime post fetch error:', error);
+          return;
+        }
         if (data) {
           setPosts(prev => [data, ...prev]);
         }
@@ -128,10 +150,13 @@ export default function FeedPage() {
     setPosts(prev => prev.filter(p => p.id !== postId));
   };
 
+  // FIX 4: Use functional state update to avoid stale `page` closure in loadMore
   const loadMore = () => {
-    const nextPage = page + 1;
-    setPage(nextPage);
-    fetchPosts(nextPage, true);
+    setPage(prev => {
+      const nextPage = prev + 1;
+      fetchPosts(nextPage, true);
+      return nextPage;
+    });
   };
 
   const refresh = () => {
@@ -215,11 +240,13 @@ export default function FeedPage() {
         </div>
       ) : (
         <div className="space-y-4">
-          {posts.filter(post => feedFilter === 'all' || followedArtistIds.includes(post.artist_id)).map(post => (
-            <div key={post.id} id={`post-${post.id}`}>
-              <PostCard post={post} onDelete={handlePostDeleted} />
-            </div>
-          ))}
+          {posts
+            .filter(post => feedFilter === 'all' || followedArtistIds.includes(post.artist_id))
+            .map(post => (
+              <div key={post.id} id={`post-${post.id}`}>
+                <PostCard post={post} onDelete={handlePostDeleted} />
+              </div>
+            ))}
 
           {hasMore && (
             <button onClick={loadMore} disabled={loadingMore}

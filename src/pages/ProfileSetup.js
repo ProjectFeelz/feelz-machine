@@ -4,6 +4,9 @@ import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import { Music, Headphones, Upload, Loader, User, ArrowRight, ArrowLeft } from 'lucide-react';
 
+// Storage bucket for profile images (must exist in Supabase)
+const PROFILE_IMAGE_BUCKET = 'artist-images';
+
 function slugify(text) {
   return text.toString().toLowerCase().trim()
     .replace(/\s+/g, '-')
@@ -52,21 +55,22 @@ export default function ProfileSetup() {
         const ext = imageFile.name.split('.').pop();
         const fileName = `profile-images/${Date.now()}-${Math.random().toString(36).substring(7)}.${ext}`;
         const { error: uploadErr } = await supabase.storage
-          .from('feelz-samples')
+          .from(PROFILE_IMAGE_BUCKET)
           .upload(fileName, imageFile);
-        if (uploadErr) throw uploadErr;
+        if (uploadErr) throw new Error(`Image upload failed: ${uploadErr.message}`);
         const { data: { publicUrl } } = supabase.storage
-          .from('feelz-samples')
+          .from(PROFILE_IMAGE_BUCKET)
           .getPublicUrl(fileName);
         profileImageUrl = publicUrl;
       }
 
       let slug = slugify(artistName);
+      // Use maybeSingle to avoid 406 if no existing slug found
       const { data: existing } = await supabase
         .from('artists')
         .select('slug')
         .eq('slug', slug)
-        .single();
+        .maybeSingle();
       if (existing) slug = `${slug}-${Date.now().toString(36)}`;
 
       const { error: insertErr } = await supabase.from('artists').insert({
@@ -90,16 +94,23 @@ export default function ProfileSetup() {
     setSaving(false);
   };
 
+  // Listeners don't get a DB row — non-artist users are identified
+  // by the absence of an artists row (artist === null in AuthContext).
+  // We just update their display_name in profiles if provided.
   const handleListenerSubmit = async () => {
     if (!user) { setError('Not signed in'); return; }
     setSaving(true);
     setError('');
     try {
-      const { error: insertErr } = await supabase.from('listeners').insert({
-        user_id: user.id,
-        display_name: displayName.trim() || user.email.split('@')[0],
-      });
-      if (insertErr) throw insertErr;
+      const name = displayName.trim() || user.email.split('@')[0];
+      // Update the existing profiles row (created by auth trigger on signup)
+      const { error: updateErr } = await supabase
+        .from('profiles')
+        .update({ display_name: name })
+        .eq('id', user.id);
+      // Non-critical — profile row may already have a name, ignore errors
+      if (updateErr) console.warn('Profile name update:', updateErr.message);
+
       await refreshProfile();
       navigate('/');
     } catch (err) {
