@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
-import { Heart, MessageCircle, Share2, MoreHorizontal, Trash2, Flag, Verified, Loader, Send } from 'lucide-react';
+import { usePlayer } from '../contexts/PlayerContext';
+import { Heart, MessageCircle, Share2, MoreHorizontal, Trash2, Flag, Verified, Loader, Send, Music, Play, Pause } from 'lucide-react';
 
 function timeAgo(date) {
   const seconds = Math.floor((Date.now() - new Date(date).getTime()) / 1000);
@@ -11,6 +12,13 @@ function timeAgo(date) {
   if (seconds < 86400) return `${Math.floor(seconds / 3600)}h`;
   if (seconds < 604800) return `${Math.floor(seconds / 86400)}d`;
   return new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+function formatDuration(seconds) {
+  if (!seconds) return '';
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
 function renderContent(text, taggedArtists, navigate) {
@@ -58,6 +66,9 @@ function formatInline(text) {
 export default function PostCard({ post, onDelete, onUpdate }) {
   const navigate = useNavigate();
   const { user, artist: myArtist } = useAuth();
+  const playerContext = usePlayer?.();
+  const { playTrack, currentTrack, isPlaying, togglePlay } = playerContext || {};
+
   const [liked, setLiked] = useState(false);
   const [likeCount, setLikeCount] = useState(post.like_count || 0);
   const [comments, setComments] = useState([]);
@@ -66,18 +77,29 @@ export default function PostCard({ post, onDelete, onUpdate }) {
   const [posting, setPosting] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [taggedArtistData, setTaggedArtistData] = useState([]);
+  const [trackData, setTrackData] = useState(null);
 
   const postArtist = post.artists || post.artist || null;
-  // FIX 6: artist_posts uses artist_id, not user_id — check ownership via artist
   const isOwner = user && myArtist && (post.artist_id === myArtist.id);
+  const isTrackActive = currentTrack?.id === post.track_id;
+  const isTrackPlaying = isTrackActive && isPlaying;
 
   useEffect(() => {
     fetchLikeStatus();
     fetchTaggedArtists();
+    if (post.track_id) fetchTrack();
   }, [post.id]);
 
+  const fetchTrack = async () => {
+    const { data } = await supabase
+      .from('tracks')
+      .select('id, title, cover_artwork_url, file_url, duration, stream_count, artist_id')
+      .eq('id', post.track_id)
+      .maybeSingle();
+    if (data) setTrackData(data);
+  };
+
   const fetchLikeStatus = async () => {
-    // FIX 1: Use artist_post_likes instead of post_likes
     const { count } = await supabase
       .from('artist_post_likes')
       .select('*', { count: 'exact', head: true })
@@ -85,7 +107,6 @@ export default function PostCard({ post, onDelete, onUpdate }) {
     setLikeCount(count || 0);
 
     if (user) {
-      // FIX 5: Use maybeSingle — single() throws 406 when no row found
       const { data } = await supabase
         .from('artist_post_likes')
         .select('id')
@@ -110,7 +131,6 @@ export default function PostCard({ post, onDelete, onUpdate }) {
     if (!user) { navigate('/login'); return; }
     try {
       if (liked) {
-        // FIX 1: artist_post_likes
         await supabase.from('artist_post_likes').delete()
           .eq('post_id', post.id).eq('user_id', user.id);
         setLiked(false);
@@ -125,8 +145,18 @@ export default function PostCard({ post, onDelete, onUpdate }) {
     }
   };
 
+  const handlePlayTrack = (e) => {
+    e.stopPropagation();
+    if (!trackData || !playTrack) return;
+    if (isTrackActive) {
+      togglePlay?.();
+    } else {
+      const enriched = { ...trackData, artist_name: postArtist?.artist_name, artist_slug: postArtist?.slug };
+      playTrack(enriched, [enriched]);
+    }
+  };
+
   const fetchComments = async () => {
-    // FIX 3: post_comments exists in DB but has no artists FK — enrich manually
     const { data, error } = await supabase
       .from('post_comments')
       .select('id, post_id, user_id, content, created_at')
@@ -159,7 +189,6 @@ export default function PostCard({ post, onDelete, onUpdate }) {
     if (!commentText.trim() || !user) return;
     setPosting(true);
     try {
-      // FIX 2: Use post_comments (the table that actually exists)
       const { error } = await supabase.from('post_comments').insert({
         post_id: post.id,
         user_id: user.id,
@@ -177,7 +206,6 @@ export default function PostCard({ post, onDelete, onUpdate }) {
   const handleDelete = async () => {
     if (!isOwner) return;
     try {
-      // FIX 4: Delete from artist_posts not posts
       await supabase.from('artist_posts').delete().eq('id', post.id);
       if (onDelete) onDelete(post.id);
     } catch (err) {
@@ -187,7 +215,6 @@ export default function PostCard({ post, onDelete, onUpdate }) {
   };
 
   const handleShare = async () => {
-    // FIX: Share link now points to the specific post via ?post= param
     const url = `${window.location.origin}/feed?post=${post.id}`;
     if (navigator.share) {
       try { await navigator.share({ title: 'Feelz Machine', text: post.content?.substring(0, 100), url }); } catch (e) {}
@@ -244,6 +271,39 @@ export default function PostCard({ post, onDelete, onUpdate }) {
           {renderContent(post.content, taggedArtistData, navigate)}
         </p>
       </div>
+
+      {/* Tagged track preview */}
+      {trackData && (
+        <div className="px-4 pb-3">
+          <button
+            onClick={handlePlayTrack}
+            className="w-full flex items-center space-x-3 p-3 rounded-xl bg-white/[0.04] border border-white/[0.06] hover:bg-white/[0.07] transition active:scale-[0.99] text-left"
+          >
+            <div className="relative w-12 h-12 rounded-lg overflow-hidden flex-shrink-0 bg-white/[0.08]">
+              {trackData.cover_artwork_url
+                ? <img src={trackData.cover_artwork_url} alt="" className="w-full h-full object-cover" />
+                : <div className="w-full h-full flex items-center justify-center"><Music className="w-5 h-5 text-white/20" /></div>}
+              <div className="absolute inset-0 flex items-center justify-center bg-black/40">
+                {isTrackPlaying
+                  ? <Pause className="w-4 h-4 text-white" fill="white" />
+                  : <Play className="w-4 h-4 text-white" fill="white" />}
+              </div>
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-white truncate">{trackData.title}</p>
+              <p className="text-xs text-white/40 mt-0.5">
+                {postArtist?.artist_name}
+                {trackData.duration ? ` · ${formatDuration(trackData.duration)}` : ''}
+              </p>
+            </div>
+            <div className="flex-shrink-0 px-2.5 py-1 rounded-full bg-white/[0.08]">
+              <span className="text-[10px] text-white/40 font-medium">
+                {isTrackActive && isTrackPlaying ? 'Playing' : 'Play'}
+              </span>
+            </div>
+          </button>
+        </div>
+      )}
 
       {/* Tagged artists bar */}
       {taggedArtistData.length > 0 && (
