@@ -251,7 +251,7 @@ export default function TrackUploadPanel() {
               collaboration_id: cd.id, from_artist_id: artist.id,
               to_artist_id: collab.artist_id, message: collab.message || null, status: 'pending',
             }]);
-          } catch {}
+          } catch(e) { console.error("collab error:", e); }
         }
       }
       showMessage('success', 'Album created! Now add tracks.');
@@ -313,7 +313,7 @@ export default function TrackUploadPanel() {
             collaboration_id: cd.id, from_artist_id: artist.id,
             to_artist_id: collab.artist_id, message: collab.message || null, status: 'pending',
           }]);
-        } catch {}
+        } catch(e) { console.error("collab error:", e); }
       }
       showMessage('success', 'Album updated!');
       setEditingAlbumId(null);
@@ -1042,3 +1042,4 @@ export default function TrackUploadPanel() {
     </div>
   );
 }
+
