@@ -198,7 +198,7 @@ export default function PostCard({ post, onDelete, onUpdate }) {
       if (missingIds.length > 0) {
         const { data: profilesData } = await supabase
           .from('profiles')
-          .select('id, display_name, username, avatar_url')
+          .select('id, display_name, username')
           .in('id', missingIds);
         (profilesData || []).forEach(p => { profileMap[p.id] = p; });
       }
@@ -210,7 +210,7 @@ export default function PostCard({ post, onDelete, onUpdate }) {
           ...c,
           artists: {
             artist_name: profile.display_name || profile.username || 'Listener',
-            profile_image_url: profile.avatar_url || null,
+            profile_image_url: null,
             slug: null,
             is_verified: false,
           }

@@ -127,7 +127,7 @@ export default function ChatRoomView() {
       if (missingIds.length > 0) {
         const { data: profilesData } = await supabase
           .from('profiles')
-          .select('id, display_name, username, avatar_url')
+          .select('id, display_name, username')
           .in('id', missingIds);
         (profilesData || []).forEach(p => { profileMap[p.id] = p; });
       }
@@ -139,7 +139,7 @@ export default function ChatRoomView() {
           ...m,
           artist: {
             artist_name: profile.display_name || profile.username || 'Listener',
-            profile_image_url: profile.avatar_url || null,
+            profile_image_url: null,
             slug: null,
             is_verified: false,
           }
@@ -165,7 +165,7 @@ export default function ChatRoomView() {
       const { data: artistData } = await supabase
         .from('artists')
         .select('user_id, artist_name, slug, profile_image_url, is_verified')
-        .eq('user_id', data.user_id)
+        .eq('id', data.user_id)
         .maybeSingle();
 
       let artist = artistData || null;
@@ -174,13 +174,13 @@ export default function ChatRoomView() {
       if (!artist) {
         const { data: profileData } = await supabase
           .from('profiles')
-          .select('id, display_name, username, avatar_url')
+          .select('id, display_name, username')
           .eq('id', data.user_id)
           .maybeSingle();
         if (profileData) {
           artist = {
             artist_name: profileData.display_name || profileData.username || 'Listener',
-            profile_image_url: profileData.avatar_url || null,
+            profile_image_url: null,
             slug: null,
             is_verified: false,
           };
