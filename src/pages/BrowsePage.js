@@ -3,9 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import TrackActionSheet from '../components/TrackActionSheet';
 import { usePlayer } from '../contexts/PlayerContext';
+import { useAuth } from '../contexts/AuthContext';
 import {
   Search, Flame, TrendingUp, Play, Pause, Music, Crown,
-  Loader, ChevronRight, Verified, Heart, Disc3
+  Loader, Verified, Disc3, Star, Sparkles
 } from 'lucide-react';
 
 function formatNumber(n) {
@@ -29,7 +30,13 @@ const GENRE_TAGS = [
 
 export default function BrowsePage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const { playTrack, currentTrack, isPlaying, togglePlay } = usePlayer();
+
+  // Redirect if not logged in
+  useEffect(() => {
+    if (user === null) navigate('/login');
+  }, [user]);
 
   const [query, setQuery] = useState('');
   const [actionSheetTrack, setActionSheetTrack] = useState(null);
@@ -39,98 +46,117 @@ export default function BrowsePage() {
   });
   const [selectedGenre, setSelectedGenre] = useState('All');
   const [trending, setTrending] = useState([]);
+  const [featured, setFeatured] = useState([]);
+  const [newReleases, setNewReleases] = useState([]);
   const [allTracks, setAllTracks] = useState([]);
   const [artists, setArtists] = useState([]);
   const [albums, setAlbums] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchResults, setSearchResults] = useState(null);
 
-  useEffect(() => {
-    fetchAll();
-  }, []);
+  useEffect(() => { if (user) fetchAll(); }, [user]);
 
   useEffect(() => {
-    if (query.trim().length >= 2) {
-      searchAll(query.trim());
-    } else {
-      setSearchResults(null);
-    }
+    if (query.trim().length >= 2) searchAll(query.trim());
+    else setSearchResults(null);
   }, [query]);
+
+  // Sync tab with URL param
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const tab = params.get('tab');
+    if (tab) setActiveTab(tab);
+  }, [window.location.search]);
 
   const fetchAll = async () => {
     try {
-      // Trending — fetch top 20, then boost Premium/Pro artists client-side
-      const { data: trendingRaw } = await supabase
-        .from('tracks')
-        .select('*, artists(id, artist_name, slug, profile_image_url, is_verified, tier)')
-        .eq('is_published', true)
-        .order('engagement_score', { ascending: false })
-        .limit(20);
+      const [
+        { data: trendingRaw },
+        { data: featuredRaw },
+        { data: tracksRaw },
+        { data: albumsRaw },
+        { data: artistsData },
+      ] = await Promise.all([
+        supabase.from('tracks')
+          .select('*, artists(id, artist_name, slug, profile_image_url, is_verified, tier)')
+          .eq('is_published', true)
+          .order('engagement_score', { ascending: false })
+          .limit(200),
+        supabase.from('tracks')
+          .select('*, artists(id, artist_name, slug, profile_image_url, is_verified)')
+          .eq('is_published', true)
+          .eq('featured', true)
+          .order('created_at', { ascending: false })
+          .limit(200),
+        supabase.from('tracks')
+          .select('*, artists(id, artist_name, slug, profile_image_url, is_verified)')
+          .eq('is_published', true)
+          .order('created_at', { ascending: false })
+          .limit(500),
+        supabase.from('albums')
+          .select('*, artists(artist_name, slug)')
+          .eq('is_published', true)
+          .order('release_date', { ascending: false })
+          .limit(200),
+        supabase.from('artists')
+          .select('*')
+          .order('total_streams', { ascending: false })
+          .limit(200),
+      ]);
 
-      const trendingData = (trendingRaw || [])
+      const norm = (list) => (list || []).map(t => ({
+        ...t, artist_name: t.artists?.artist_name || 'Unknown',
+      }));
+      const normAlbums = (list) => (list || []).map(a => ({
+        ...a, artist_name: a.artists?.artist_name || 'Unknown',
+      }));
+
+      const trendingBoosted = (trendingRaw || [])
         .map(t => ({
           ...t,
+          artist_name: t.artists?.artist_name || 'Unknown',
           _boosted: (t.engagement_score || 0) * (
             t.artists?.tier === 'premium' ? 1.5 :
             t.artists?.tier === 'pro' ? 1.2 : 1
           ),
         }))
-        .sort((a, b) => b._boosted - a._boosted)
-        .slice(0, 10);
+        .sort((a, b) => b._boosted - a._boosted);
 
-      // All tracks for browse
-      const { data: tracksData } = await supabase
-        .from('tracks')
-        .select('*, artists(id, artist_name, slug, profile_image_url, is_verified)')
-        .eq('is_published', true)
-        .order('created_at', { ascending: false })
-        .limit(100);
+      const allNorm = norm(tracksRaw);
+      const albumsNorm = normAlbums(albumsRaw);
 
-      // Top artists by follower count / streams
-      const { data: artistsData } = await supabase
-        .from('artists')
-        .select('*')
-        .order('total_streams', { ascending: false })
-        .limit(20);
+      // New releases = tracks + albums merged by date
+      const merged = [
+        ...allNorm.map(t => ({ ...t, _isAlbum: false, _date: t.created_at })),
+        ...albumsNorm.map(a => ({ ...a, _isAlbum: true, _date: a.release_date || a.created_at })),
+      ].sort((a, b) => new Date(b._date) - new Date(a._date));
 
-      // Albums
-      const { data: albumsData } = await supabase
-        .from('albums')
-        .select('*, artists(artist_name, slug)')
-        .eq('is_published', true)
-        .order('release_date', { ascending: false })
-        .limit(20);
-
-      const norm = (list) => (list || []).map(t => ({
-        ...t,
-        artist_name: t.artists?.artist_name || 'Unknown',
-      }));
-
-      setTrending(norm(trendingData));
-      setAllTracks(norm(tracksData));
+      setTrending(trendingBoosted);
+      setFeatured(norm(featuredRaw));
+      setNewReleases(merged);
+      setAllTracks(allNorm);
+      setAlbums(albumsNorm);
       setArtists(artistsData || []);
-      setAlbums((albumsData || []).map(a => ({ ...a, artist_name: a.artists?.artist_name || 'Unknown' })));
     } catch (err) {
       console.error('Browse fetch error:', err);
     }
     setLoading(false);
   };
 
-  const searchAll = async (q) => {
+  const searchAll = (q) => {
     const lower = q.toLowerCase();
-    const matchTracks = allTracks.filter(t =>
-      t.title?.toLowerCase().includes(lower) ||
-      t.artist_name?.toLowerCase().includes(lower) ||
-      t.genre?.toLowerCase().includes(lower)
-    );
-    const matchArtists = artists.filter(a =>
-      a.artist_name?.toLowerCase().includes(lower)
-    );
-    const matchAlbums = albums.filter(a =>
-      a.title?.toLowerCase().includes(lower) ||
-      a.artist_name?.toLowerCase().includes(lower)
-    );
-    setSearchResults({ tracks: matchTracks, artists: matchArtists, albums: matchAlbums });
+    setSearchResults({
+      tracks: allTracks.filter(t =>
+        t.title?.toLowerCase().includes(lower) ||
+        t.artist_name?.toLowerCase().includes(lower) ||
+        t.genre?.toLowerCase().includes(lower)
+      ),
+      artists: artists.filter(a => a.artist_name?.toLowerCase().includes(lower)),
+      albums: albums.filter(a =>
+        a.title?.toLowerCase().includes(lower) ||
+        a.artist_name?.toLowerCase().includes(lower)
+      ),
+    });
   };
 
   const filteredTracks = selectedGenre === 'All'
@@ -138,21 +164,20 @@ export default function BrowsePage() {
     : allTracks.filter(t => t.genre?.toLowerCase() === selectedGenre.toLowerCase());
 
   const handlePlayTrack = (track, list) => {
-    if (currentTrack?.id === track.id) {
-      togglePlay();
-    } else {
-      playTrack(track, list);
-    }
+    if (currentTrack?.id === track.id) togglePlay();
+    else playTrack(track, list);
   };
 
   const tabs = [
+    { key: 'featured', label: 'Featured', icon: Star },
+    { key: 'new', label: 'New', icon: Sparkles },
     { key: 'trending', label: 'Trending', icon: Flame },
     { key: 'tracks', label: 'Tracks', icon: Music },
     { key: 'artists', label: 'Artists', icon: Crown },
     { key: 'albums', label: 'Albums', icon: Disc3 },
   ];
 
-  if (loading) {
+  if (!user || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Loader className="w-6 h-6 animate-spin text-white/20" />
@@ -182,19 +207,17 @@ export default function BrowsePage() {
         </div>
       </div>
 
-      {/* Search results overlay */}
+      {/* Search results */}
       {searchResults && (
         <div className="mb-6">
           <p className="text-xs text-white/30 mb-3">Results for "{query}"</p>
-
-          {/* Artists */}
           {searchResults.artists.length > 0 && (
             <div className="mb-4">
               <p className="text-xs font-medium text-white/50 mb-2">Artists</p>
               <div className="flex space-x-3 overflow-x-auto scrollbar-hide">
                 {searchResults.artists.map(a => (
                   <button key={a.id} onClick={() => navigate(`/artist/${a.slug}`)}
-                    className="flex-shrink-0 w-20 text-center group">
+                    className="flex-shrink-0 w-20 text-center">
                     <div className="w-16 h-16 rounded-full mx-auto mb-1.5 overflow-hidden bg-white/[0.06]">
                       {a.profile_image_url
                         ? <img src={a.profile_image_url} alt="" className="w-full h-full object-cover" />
@@ -208,8 +231,6 @@ export default function BrowsePage() {
               </div>
             </div>
           )}
-
-          {/* Tracks */}
           {searchResults.tracks.length > 0 && (
             <div className="mb-4">
               <p className="text-xs font-medium text-white/50 mb-2">Tracks</p>
@@ -217,12 +238,11 @@ export default function BrowsePage() {
                 <TrackRow key={track.id} track={track} index={i}
                   currentTrack={currentTrack} isPlaying={isPlaying}
                   onPlay={() => handlePlayTrack(track, searchResults.tracks)}
+                  onMore={() => setActionSheetTrack(track)}
                   onArtist={() => track.artists?.slug && navigate(`/artist/${track.artists.slug}`)} />
               ))}
             </div>
           )}
-
-          {/* Albums */}
           {searchResults.albums.length > 0 && (
             <div className="mb-4">
               <p className="text-xs font-medium text-white/50 mb-2">Albums</p>
@@ -233,20 +253,18 @@ export default function BrowsePage() {
               </div>
             </div>
           )}
-
           {searchResults.tracks.length === 0 && searchResults.artists.length === 0 && searchResults.albums.length === 0 && (
             <p className="text-center text-white/20 text-sm py-8">No results found</p>
           )}
-
           <div className="border-b border-white/[0.06] mb-4" />
         </div>
       )}
 
       {/* Tabs */}
-      <div className="flex space-x-1 bg-white/[0.03] rounded-xl p-1 mb-5">
+      <div className="flex space-x-1 overflow-x-auto scrollbar-hide bg-white/[0.03] rounded-xl p-1 mb-5">
         {tabs.map(({ key, label, icon: Icon }) => (
           <button key={key} onClick={() => setActiveTab(key)}
-            className={`flex-1 flex items-center justify-center space-x-1.5 py-2 rounded-lg text-xs font-medium transition ${
+            className={`flex-shrink-0 flex items-center justify-center space-x-1.5 px-3 py-2 rounded-lg text-xs font-medium transition ${
               activeTab === key ? 'bg-white text-black' : 'text-white/40'
             }`}>
             <Icon className="w-3.5 h-3.5" />
@@ -255,10 +273,109 @@ export default function BrowsePage() {
         ))}
       </div>
 
+      {/* ========== FEATURED TAB ========== */}
+      {activeTab === 'featured' && (
+        <div>
+          <div className="flex items-center space-x-2 mb-4">
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-yellow-400 to-orange-500 flex items-center justify-center">
+              <Star className="w-4 h-4 text-white" />
+            </div>
+            <div>
+              <h2 className="text-base font-bold text-white">Featured</h2>
+              <p className="text-[10px] text-white/30">Hand-picked tracks from our team</p>
+            </div>
+          </div>
+          {featured.length > 0 ? (
+            <>
+              {/* Grid on desktop, list on mobile */}
+              <div className="hidden md:grid md:grid-cols-2 lg:grid-cols-3 gap-3 mb-4">
+                {featured.map(track => (
+                  <TrackCard key={track.id} track={track}
+                    currentTrack={currentTrack} isPlaying={isPlaying}
+                    onPlay={() => handlePlayTrack(track, featured)}
+                    onMore={() => setActionSheetTrack(track)}
+                    onArtist={() => track.artists?.slug && navigate(`/artist/${track.artists.slug}`)} />
+                ))}
+              </div>
+              <div className="md:hidden space-y-1">
+                {featured.map((track, i) => (
+                  <TrackRow key={track.id} track={track} index={i}
+                    currentTrack={currentTrack} isPlaying={isPlaying}
+                    onPlay={() => handlePlayTrack(track, featured)}
+                    onMore={() => setActionSheetTrack(track)}
+                    onArtist={() => track.artists?.slug && navigate(`/artist/${track.artists.slug}`)} />
+                ))}
+              </div>
+            </>
+          ) : (
+            <div className="text-center py-16">
+              <Star className="w-12 h-12 mx-auto text-white/10 mb-3" />
+              <p className="text-sm text-white/30">No featured tracks yet</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ========== NEW RELEASES TAB ========== */}
+      {activeTab === 'new' && (
+        <div>
+          <div className="flex items-center space-x-2 mb-4">
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
+              <Sparkles className="w-4 h-4 text-white" />
+            </div>
+            <div>
+              <h2 className="text-base font-bold text-white">New Releases</h2>
+              <p className="text-[10px] text-white/30">Latest tracks and albums</p>
+            </div>
+          </div>
+          {newReleases.length > 0 ? (
+            <>
+              <div className="hidden md:grid md:grid-cols-2 lg:grid-cols-3 gap-3 mb-4">
+                {newReleases.map(item => item._isAlbum ? (
+                  <AlbumTile key={`album-${item.id}`} album={item} navigate={navigate} />
+                ) : (
+                  <TrackCard key={`track-${item.id}`} track={item}
+                    currentTrack={currentTrack} isPlaying={isPlaying}
+                    onPlay={() => handlePlayTrack(item, newReleases.filter(i => !i._isAlbum))}
+                    onMore={() => setActionSheetTrack(item)}
+                    onArtist={() => item.artists?.slug && navigate(`/artist/${item.artists.slug}`)} />
+                ))}
+              </div>
+              <div className="md:hidden space-y-1">
+                {newReleases.map((item, i) => item._isAlbum ? (
+                  <button key={`album-${item.id}`} onClick={() => navigate(`/album/${item.id}`)}
+                    className="w-full flex items-center space-x-3 p-2.5 rounded-xl hover:bg-white/[0.02] transition text-left">
+                    <div className="w-10 h-10 rounded-md overflow-hidden flex-shrink-0 bg-white/[0.06]">
+                      {item.cover_artwork_url
+                        ? <img src={item.cover_artwork_url} alt="" className="w-full h-full object-cover" />
+                        : <div className="w-full h-full flex items-center justify-center"><Disc3 className="w-4 h-4 text-white/15" /></div>}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-white truncate">{item.title}</p>
+                      <p className="text-xs text-white/30 truncate">{item.artist_name} · {item.release_type?.toUpperCase() || 'ALBUM'}</p>
+                    </div>
+                  </button>
+                ) : (
+                  <TrackRow key={`track-${item.id}`} track={item} index={i}
+                    currentTrack={currentTrack} isPlaying={isPlaying}
+                    onPlay={() => handlePlayTrack(item, newReleases.filter(i => !i._isAlbum))}
+                    onMore={() => setActionSheetTrack(item)}
+                    onArtist={() => item.artists?.slug && navigate(`/artist/${item.artists.slug}`)} />
+                ))}
+              </div>
+            </>
+          ) : (
+            <div className="text-center py-16">
+              <Sparkles className="w-12 h-12 mx-auto text-white/10 mb-3" />
+              <p className="text-sm text-white/30">No releases yet</p>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* ========== TRENDING TAB ========== */}
       {activeTab === 'trending' && (
         <div>
-          {/* Header */}
           <div className="flex items-center space-x-2 mb-4">
             <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-orange-500 to-red-600 flex items-center justify-center">
               <Flame className="w-4 h-4 text-white" />
@@ -268,30 +385,33 @@ export default function BrowsePage() {
               <p className="text-[10px] text-white/30">Based on streams, likes, saves & playlist adds</p>
             </div>
           </div>
-
           {trending.length > 0 ? (
-            <div className="space-y-1">
-              {trending.map((track, i) => (
-                <TrendingRow
-                  key={track.id}
-                  track={track}
-                  rank={i + 1}
-                  currentTrack={currentTrack}
-                  isPlaying={isPlaying}
-                  onPlay={() => handlePlayTrack(track, trending)}
-                  onArtist={() => track.artists?.slug && navigate(`/artist/${track.artists.slug}`)}
-                />
-              ))}
-            </div>
+            <>
+              <div className="hidden md:grid md:grid-cols-2 lg:grid-cols-3 gap-3 mb-4">
+                {trending.map((track, i) => (
+                  <TrackCard key={track.id} track={track} rank={i + 1}
+                    currentTrack={currentTrack} isPlaying={isPlaying}
+                    onPlay={() => handlePlayTrack(track, trending)}
+                    onMore={() => setActionSheetTrack(track)}
+                    onArtist={() => track.artists?.slug && navigate(`/artist/${track.artists.slug}`)} />
+                ))}
+              </div>
+              <div className="md:hidden space-y-1">
+                {trending.map((track, i) => (
+                  <TrendingRow key={track.id} track={track} rank={i + 1}
+                    currentTrack={currentTrack} isPlaying={isPlaying}
+                    onPlay={() => handlePlayTrack(track, trending)}
+                    onMore={() => setActionSheetTrack(track)}
+                    onArtist={() => track.artists?.slug && navigate(`/artist/${track.artists.slug}`)} />
+                ))}
+              </div>
+            </>
           ) : (
             <div className="text-center py-16">
               <TrendingUp className="w-12 h-12 mx-auto text-white/10 mb-3" />
               <p className="text-sm text-white/30 mb-1">No trending tracks yet</p>
-              <p className="text-xs text-white/15">Upload music and start building engagement!</p>
             </div>
           )}
-
-          {/* Scoring explanation */}
           <div className="mt-6 rounded-xl bg-white/[0.02] border border-white/[0.04] p-4">
             <h4 className="text-xs font-semibold text-white/50 mb-2">How Trending Works</h4>
             <p className="text-[11px] text-white/25 leading-relaxed">
@@ -306,29 +426,37 @@ export default function BrowsePage() {
       {/* ========== TRACKS TAB ========== */}
       {activeTab === 'tracks' && (
         <div>
-          {/* Genre filter */}
           <div className="flex space-x-2 overflow-x-auto scrollbar-hide mb-4 -mx-1 px-1">
             {GENRE_TAGS.map(genre => (
               <button key={genre} onClick={() => setSelectedGenre(genre)}
                 className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition ${
-                  selectedGenre === genre
-                    ? 'bg-white text-black'
-                    : 'bg-white/[0.06] text-white/50'
+                  selectedGenre === genre ? 'bg-white text-black' : 'bg-white/[0.06] text-white/50'
                 }`}>
                 {genre}
               </button>
             ))}
           </div>
-
           {filteredTracks.length > 0 ? (
-            <div className="space-y-1">
-              {filteredTracks.map((track, i) => (
-                <TrackRow key={track.id} track={track} index={i}
-                  currentTrack={currentTrack} isPlaying={isPlaying}
-                  onPlay={() => handlePlayTrack(track, filteredTracks)}
-                  onArtist={() => track.artists?.slug && navigate(`/artist/${track.artists.slug}`)} />
-              ))}
-            </div>
+            <>
+              <div className="hidden md:grid md:grid-cols-2 lg:grid-cols-3 gap-3 mb-4">
+                {filteredTracks.map((track, i) => (
+                  <TrackCard key={track.id} track={track}
+                    currentTrack={currentTrack} isPlaying={isPlaying}
+                    onPlay={() => handlePlayTrack(track, filteredTracks)}
+                    onMore={() => setActionSheetTrack(track)}
+                    onArtist={() => track.artists?.slug && navigate(`/artist/${track.artists.slug}`)} />
+                ))}
+              </div>
+              <div className="md:hidden space-y-1">
+                {filteredTracks.map((track, i) => (
+                  <TrackRow key={track.id} track={track} index={i}
+                    currentTrack={currentTrack} isPlaying={isPlaying}
+                    onPlay={() => handlePlayTrack(track, filteredTracks)}
+                    onMore={() => setActionSheetTrack(track)}
+                    onArtist={() => track.artists?.slug && navigate(`/artist/${track.artists.slug}`)} />
+                ))}
+              </div>
+            </>
           ) : (
             <p className="text-center text-white/20 text-sm py-12">
               {selectedGenre === 'All' ? 'No tracks yet' : `No ${selectedGenre} tracks yet`}
@@ -382,25 +510,70 @@ export default function BrowsePage() {
           )}
         </div>
       )}
+
+      {/* TrackActionSheet */}
+      {actionSheetTrack && (
+        <TrackActionSheet
+          track={actionSheetTrack}
+          artist={{ artist_name: actionSheetTrack.artist_name, slug: actionSheetTrack.artists?.slug }}
+          onClose={() => setActionSheetTrack(null)}
+        />
+      )}
     </div>
   );
 }
 
 /* ========== SUB COMPONENTS ========== */
 
-function TrendingRow({ track, rank, currentTrack, isPlaying, onPlay, onArtist }) {
+function TrackCard({ track, rank, currentTrack, isPlaying, onPlay, onMore, onArtist }) {
   const isActive = currentTrack?.id === track.id;
   const isTrackPlaying = isActive && isPlaying;
 
-  const rankColors = {
-    1: 'from-yellow-400 to-orange-500',
-    2: 'from-gray-300 to-gray-400',
-    3: 'from-amber-600 to-amber-700',
-  };
+  return (
+    <div onClick={onPlay}
+      className={`relative flex items-center space-x-3 p-3 rounded-xl transition cursor-pointer ${isActive ? 'bg-white/[0.06]' : 'bg-white/[0.03] hover:bg-white/[0.05]'}`}>
+      {rank && (
+        <span className="absolute top-2 left-2 text-[10px] font-bold text-white/20">#{rank}</span>
+      )}
+      <div className="relative w-12 h-12 rounded-lg overflow-hidden flex-shrink-0 bg-white/[0.06]">
+        {track.cover_artwork_url
+          ? <img src={track.cover_artwork_url} alt="" className="w-full h-full object-cover" />
+          : <div className="w-full h-full flex items-center justify-center"><Music className="w-5 h-5 text-white/15" /></div>}
+        <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+          {isTrackPlaying
+            ? <Pause className="w-4 h-4 text-white" fill="white" />
+            : <Play className="w-4 h-4 text-white" fill="white" />}
+        </div>
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className={`text-sm font-medium truncate ${isActive ? 'text-purple-400' : 'text-white'}`}>{track.title}</p>
+        <button onClick={(e) => { e.stopPropagation(); onArtist(); }}
+          className="text-xs text-white/40 truncate hover:text-white/60 transition text-left">
+          {track.artist_name}
+        </button>
+        {track.engagement_score > 0 && (
+          <div className="flex items-center space-x-1 mt-0.5">
+            <TrendingUp className="w-2.5 h-2.5 text-green-400" />
+            <span className="text-[9px] text-green-400">{formatNumber(track.engagement_score)}</span>
+          </div>
+        )}
+      </div>
+      <button onClick={(e) => { e.stopPropagation(); onMore(); }}
+        className="p-1.5 rounded-full hover:bg-white/10 transition flex-shrink-0">
+        <span className="text-white/30 text-lg leading-none">···</span>
+      </button>
+    </div>
+  );
+}
+
+function TrendingRow({ track, rank, currentTrack, isPlaying, onPlay, onMore, onArtist }) {
+  const isActive = currentTrack?.id === track.id;
+  const isTrackPlaying = isActive && isPlaying;
+
+  const rankColors = { 1: 'from-yellow-400 to-orange-500', 2: 'from-gray-300 to-gray-400', 3: 'from-amber-600 to-amber-700' };
 
   return (
     <div onClick={onPlay} className={`flex items-center space-x-3 p-2.5 rounded-xl transition cursor-pointer ${isActive ? 'bg-white/[0.04]' : 'hover:bg-white/[0.02]'}`}>
-      {/* Rank */}
       <div className="w-8 flex items-center justify-center flex-shrink-0">
         {rank <= 3 ? (
           <div className={`w-7 h-7 rounded-lg bg-gradient-to-br ${rankColors[rank]} flex items-center justify-center`}>
@@ -410,21 +583,10 @@ function TrendingRow({ track, rank, currentTrack, isPlaying, onPlay, onArtist })
           <span className="text-sm font-bold text-white/20">{rank}</span>
         )}
       </div>
-
-      {/* Artwork + play */}
-      <button onClick={onPlay} className="relative w-11 h-11 rounded-lg overflow-hidden flex-shrink-0 group">
-        {track.cover_artwork_url ? (
-          <img src={track.cover_artwork_url} alt="" className="w-full h-full object-cover" />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-purple-900/40 to-blue-900/30">
-            <Music className="w-4 h-4 text-white/20" />
-          </div>
-        )}
-        <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition">
-          {isTrackPlaying
-            ? <Pause className="w-4 h-4 text-white" fill="white" />
-            : <Play className="w-4 h-4 text-white" fill="white" />}
-        </div>
+      <div className="relative w-11 h-11 rounded-lg overflow-hidden flex-shrink-0">
+        {track.cover_artwork_url
+          ? <img src={track.cover_artwork_url} alt="" className="w-full h-full object-cover" />
+          : <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-purple-900/40 to-blue-900/30"><Music className="w-4 h-4 text-white/20" /></div>}
         {isTrackPlaying && (
           <div className="absolute bottom-0.5 right-0.5 flex items-end space-x-px">
             <div className="w-[3px] h-2 bg-purple-400 rounded-sm animate-pulse" />
@@ -432,22 +594,14 @@ function TrendingRow({ track, rank, currentTrack, isPlaying, onPlay, onArtist })
             <div className="w-[3px] h-1.5 bg-purple-400 rounded-sm animate-pulse" style={{ animationDelay: '0.3s' }} />
           </div>
         )}
-      </button>
-
-      {/* Info */}
+      </div>
       <div className="flex-1 min-w-0">
-        <p className={`text-sm font-medium truncate ${isActive ? 'text-purple-400' : 'text-white'}`}>
-          {track.title}
-        </p>
-        <button onClick={onArtist} className="flex items-center space-x-1">
-          <span className="text-xs text-white/40 truncate hover:text-white/60 transition">
-            {track.artist_name}
-          </span>
+        <p className={`text-sm font-medium truncate ${isActive ? 'text-purple-400' : 'text-white'}`}>{track.title}</p>
+        <button onClick={(e) => { e.stopPropagation(); onArtist(); }} className="flex items-center space-x-1">
+          <span className="text-xs text-white/40 truncate hover:text-white/60 transition">{track.artist_name}</span>
           {track.artists?.is_verified && <Verified className="w-2.5 h-2.5 text-blue-400 flex-shrink-0" />}
         </button>
       </div>
-
-      {/* Engagement score badge */}
       <div className="flex flex-col items-end flex-shrink-0">
         {track.engagement_score > 0 && (
           <div className="flex items-center space-x-1 mb-0.5">
@@ -461,14 +615,13 @@ function TrendingRow({ track, rank, currentTrack, isPlaying, onPlay, onArtist })
   );
 }
 
-function TrackRow({ track, index, currentTrack, isPlaying, onPlay, onArtist }) {
+function TrackRow({ track, index, currentTrack, isPlaying, onPlay, onMore, onArtist }) {
   const isActive = currentTrack?.id === track.id;
   const isTrackPlaying = isActive && isPlaying;
 
   return (
     <button onClick={onPlay}
       className={`w-full flex items-center space-x-3 p-2.5 rounded-xl transition text-left ${isActive ? 'bg-white/[0.04]' : 'hover:bg-white/[0.02]'}`}>
-      {/* Number */}
       <div className="w-6 flex items-center justify-center flex-shrink-0">
         {isTrackPlaying ? (
           <div className="flex items-end space-x-px h-3.5">
@@ -482,33 +635,19 @@ function TrackRow({ track, index, currentTrack, isPlaying, onPlay, onArtist }) {
           <span className="text-xs text-white/20">{index + 1}</span>
         )}
       </div>
-
-      {/* Artwork */}
       <div className="w-10 h-10 rounded-md overflow-hidden flex-shrink-0 bg-white/[0.06]">
-        {track.cover_artwork_url ? (
-          <img src={track.cover_artwork_url} alt="" className="w-full h-full object-cover" />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-purple-900/30 to-blue-900/20">
-            <Music className="w-4 h-4 text-white/15" />
-          </div>
-        )}
+        {track.cover_artwork_url
+          ? <img src={track.cover_artwork_url} alt="" className="w-full h-full object-cover" />
+          : <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-purple-900/30 to-blue-900/20"><Music className="w-4 h-4 text-white/15" /></div>}
       </div>
-
-      {/* Info */}
       <div className="flex-1 min-w-0">
-        <p className={`text-sm font-medium truncate ${isActive ? 'text-purple-400' : 'text-white'}`}>
-          {track.title}
-        </p>
+        <p className={`text-sm font-medium truncate ${isActive ? 'text-purple-400' : 'text-white'}`}>{track.title}</p>
         <div className="flex items-center space-x-1.5">
-          {track.is_explicit && (
-            <span className="text-[8px] font-bold px-1 py-0.5 bg-white/[0.1] text-white/40 rounded">E</span>
-          )}
+          {track.is_explicit && <span className="text-[8px] font-bold px-1 py-0.5 bg-white/[0.1] text-white/40 rounded">E</span>}
           <span className="text-xs text-white/30 truncate">{track.artist_name}</span>
           {track.genre && <span className="text-[10px] text-white/15">· {track.genre}</span>}
         </div>
       </div>
-
-      {/* Duration + plays */}
       <div className="flex flex-col items-end flex-shrink-0">
         {track.duration && <span className="text-[11px] text-white/25">{formatDuration(track.duration)}</span>}
         <span className="text-[10px] text-white/15">{formatNumber(track.stream_count)} plays</span>
@@ -519,32 +658,17 @@ function TrackRow({ track, index, currentTrack, isPlaying, onPlay, onArtist }) {
 
 function AlbumTile({ album, navigate }) {
   return (
-    <button onClick={() => navigate(`/album/${album.slug || album.id}`)}
-      className="text-left group">
+    <button onClick={() => navigate(`/album/${album.slug || album.id}`)} className="text-left group">
       <div className="aspect-square rounded-xl overflow-hidden bg-white/[0.06] mb-2">
-        {album.cover_artwork_url ? (
-          <img src={album.cover_artwork_url} alt=""
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-white/[0.06] to-white/[0.02]">
-            <Disc3 className="w-8 h-8 text-white/10" />
-          </div>
-        )}
+        {album.cover_artwork_url
+          ? <img src={album.cover_artwork_url} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+          : <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-white/[0.06] to-white/[0.02]"><Disc3 className="w-8 h-8 text-white/10" /></div>}
       </div>
       <p className="text-sm font-medium text-white truncate">{album.title}</p>
       <p className="text-xs text-white/30 truncate">
         {album.artist_name}
-        {album.release_type && album.release_type !== 'album' && (
-          <span className="ml-1">· {album.release_type.toUpperCase()}</span>
-        )}
+        {album.release_type && album.release_type !== 'album' && <span className="ml-1">· {album.release_type.toUpperCase()}</span>}
       </p>
     </button>
   );
 }
-
-
-
-
-
-
-

@@ -290,7 +290,7 @@ export default function HomePage() {
 
       {/* New Releases — tracks + albums mixed */}
       {newReleases.length > 0 && (
-        <Section title="New Releases" onSeeAll={() => navigate('/browse')}>
+        <Section title="New Releases" onSeeAll={() => navigate('/browse?tab=new')}>
           <div className="flex space-x-3 overflow-x-auto px-6 scrollbar-hide">
             {newReleases.map((item) => (
               <SquareCard key={`${item._isAlbum ? 'album' : 'track'}-${item.id}`}
@@ -304,7 +304,7 @@ export default function HomePage() {
 
       {/* Trending */}
       {trending.length > 0 && (
-        <Section title="Trending" icon={Flame} onSeeAll={() => navigate('/browse')}>
+        <Section title="Trending" icon={Flame} onSeeAll={() => navigate('/browse?tab=trending')}>
           <div className="flex space-x-3 overflow-x-auto px-6 scrollbar-hide">
             {trending.map((track) => (
               <SquareCard key={track.id} item={track} itemList={trending}
