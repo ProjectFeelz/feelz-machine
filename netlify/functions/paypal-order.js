@@ -104,7 +104,7 @@ exports.handler = async (event) => {
             currency_code: 'USD',
             value: parseFloat(amount).toFixed(2),
           },
-          description: `${trackTitle} by ${artistName || 'Artist'} — Feelz Machine`,
+          description: `${trackTitle} by ${artistName || 'Artist'} - Feelz Machine`,
           custom_id: trackId,
         }],
         application_context: {
