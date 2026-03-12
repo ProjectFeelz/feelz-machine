@@ -44,7 +44,7 @@ export default function AppRouter() {
   }
 
   return (
-    <BrowserRouter basename="/player">
+    <BrowserRouter basename="/">
       <AuthProvider>
         <PlayerProvider>
           <Routes>
