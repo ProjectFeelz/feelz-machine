@@ -129,7 +129,7 @@ export default function ChatRoomView() {
           .from('user_profiles')
           .select('user_id, name, email, avatar_url')
           .in('user_id', missingIds);
-        (profilesData || []).forEach(p => { profileMap[p.id] = p; });
+        (profilesData || []).forEach(p => { profileMap[p.user_id] = p; });
       }
 
       const enriched = data.map(m => {
@@ -138,8 +138,8 @@ export default function ChatRoomView() {
         if (profile) return {
           ...m,
           artist: {
-            artist_name: profile.display_name || profile.username || 'Listener',
-            profile_image_url: profile.avatar_url || null,
+            artist_name: profile.name || 'Listener',
+            profile_image_url: null,
             slug: null,
             is_verified: false,
           }

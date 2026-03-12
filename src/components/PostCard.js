@@ -209,8 +209,8 @@ export default function PostCard({ post, onDelete, onUpdate }) {
         if (profile) return {
           ...c,
           artists: {
-            artist_name: profile.display_name || profile.username || 'Listener',
-            profile_image_url: profile.avatar_url || null,
+            artist_name: profile.name || 'Listener',
+            profile_image_url: null,
             slug: null,
             is_verified: false,
           }
