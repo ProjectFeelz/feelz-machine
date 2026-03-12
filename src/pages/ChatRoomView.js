@@ -180,7 +180,7 @@ export default function ChatRoomView() {
         if (profileData) {
           artist = {
             artist_name: profileData.display_name || profileData.username || 'Listener',
-            profile_image_url: profile.avatar_url || null,
+            profile_image_url: profileData.avatar_url || null,
             slug: null,
             is_verified: false,
           };
