@@ -126,9 +126,9 @@ export default function ChatRoomView() {
       const profileMap = {};
       if (missingIds.length > 0) {
         const { data: profilesData } = await supabase
-          .from('profiles')
-          .select('id, display_name, username, avatar_url')
-          .in('id', missingIds);
+          .from('user_profiles')
+          .select('user_id, name, email, avatar_url')
+          .in('user_id', missingIds);
         (profilesData || []).forEach(p => { profileMap[p.id] = p; });
       }
 
@@ -173,9 +173,9 @@ export default function ChatRoomView() {
       // Fallback to profiles for listeners
       if (!artist) {
         const { data: profileData } = await supabase
-          .from('profiles')
-          .select('id, display_name, username, avatar_url')
-          .eq('id', data.user_id)
+          .from('user_profiles')
+          .select('user_id, name, email, avatar_url')
+          .eq('user_id', data.user_id)
           .maybeSingle();
         if (profileData) {
           artist = {

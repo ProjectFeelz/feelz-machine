@@ -197,10 +197,10 @@ export default function PostCard({ post, onDelete, onUpdate }) {
       const profileMap = {};
       if (missingIds.length > 0) {
         const { data: profilesData } = await supabase
-          .from('profiles')
-          .select('id, display_name, username, avatar_url')
-          .in('id', missingIds);
-        (profilesData || []).forEach(p => { profileMap[p.id] = p; });
+          .from('user_profiles')
+          .select('user_id, name, email, avatar_url')
+          .in('user_id', missingIds);
+        (profilesData || []).forEach(p => { profileMap[p.user_id] = p; });
       }
 
       setComments(data.map(c => {
