@@ -183,13 +183,40 @@ export default function PostCard({ post, onDelete, onUpdate }) {
 
     if (data && data.length > 0) {
       const userIds = [...new Set(data.map(c => c.user_id))];
+
+      // Fetch artists first
       const { data: artistsData } = await supabase
         .from('artists')
         .select('user_id, artist_name, slug, profile_image_url, is_verified')
         .in('user_id', userIds);
       const artistMap = {};
       (artistsData || []).forEach(a => { artistMap[a.user_id] = a; });
-      setComments(data.map(c => ({ ...c, artists: artistMap[c.user_id] || null })));
+
+      // Fetch user_profiles for listeners (those without an artist row)
+      const missingIds = userIds.filter(id => !artistMap[id]);
+      const profileMap = {};
+      if (missingIds.length > 0) {
+        const { data: profilesData } = await supabase
+          .from('user_profiles')
+          .select('id, display_name, avatar_url, username')
+          .in('id', missingIds);
+        (profilesData || []).forEach(p => { profileMap[p.id] = p; });
+      }
+
+      setComments(data.map(c => {
+        if (artistMap[c.user_id]) return { ...c, artists: artistMap[c.user_id] };
+        const profile = profileMap[c.user_id];
+        if (profile) return {
+          ...c,
+          artists: {
+            artist_name: profile.display_name || profile.username || 'Listener',
+            profile_image_url: profile.avatar_url || null,
+            slug: null,
+            is_verified: false,
+          }
+        };
+        return { ...c, artists: null };
+      }));
     } else {
       setComments([]);
     }
