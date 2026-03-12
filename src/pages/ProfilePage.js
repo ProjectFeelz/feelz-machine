@@ -72,6 +72,7 @@ export default function ProfilePage() {
       .upload(name, file, { upsert: true });
 
     // FIX 2: Explicit upload error with a clear message
+    console.error('Upload error full:', JSON.stringify(uploadError));
     if (uploadError) {
       throw new Error(`Image upload failed: ${uploadError.message}`);
     }
