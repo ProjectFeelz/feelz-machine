@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { downloadTrack } from '../utils/downloadTrack';
+import TrackActionSheet from '../components/TrackActionSheet';
 
 function formatNumber(n) {
   if (!n) return '0';
@@ -40,7 +41,7 @@ function SquareCard({ item, itemList = [], isAlbum = false, onPlay, currentTrack
   const { addToQueue } = usePlayer();
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [showMenu, setShowMenu] = useState(false);
+  const [showActionSheet, setShowActionSheet] = useState(false);
   const [shared, setShared] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [playlists, setPlaylists] = useState([]);
@@ -141,7 +142,7 @@ function SquareCard({ item, itemList = [], isAlbum = false, onPlay, currentTrack
         )}
         {/* 3-dot button */}
         <button
-          onClick={(e) => { e.stopPropagation(); setShowMenu(p => !p); }}
+          onClick={(e) => { e.stopPropagation(); setShowActionSheet(true); }}
           className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/60 backdrop-blur flex items-center justify-center opacity-0 group-hover:opacity-100 transition"
         >
           <MoreHorizontal className="w-3.5 h-3.5 text-white" />
@@ -153,71 +154,13 @@ function SquareCard({ item, itemList = [], isAlbum = false, onPlay, currentTrack
       <p className="text-xs text-white/40 truncate">{item.artist_name}</p>
 
       {/* 3-dot dropdown */}
-      {showMenu && (
-        <div ref={menuRef}
-          onClick={(e) => e.stopPropagation()}
-          className="absolute right-0 z-50 w-52 rounded-xl shadow-2xl overflow-hidden"
-          style={{ top: '100%', marginTop: '4px', backgroundColor: '#1a1a1a', border: '1px solid rgba(255,255,255,0.08)' }}>
-          {showPlaylists ? (
-            <>
-              <div className="flex items-center justify-between px-4 py-2.5 border-b border-white/[0.06]">
-                <button onClick={(e) => { e.stopPropagation(); setShowPlaylists(false); }} className="text-white/30 hover:text-white/60 text-sm">← Back</button>
-                <p className="text-xs font-semibold text-white/50">Add to Playlist</p>
-                <button onClick={(e) => { e.stopPropagation(); setShowMenu(false); }}><X className="w-3.5 h-3.5 text-white/30" /></button>
-              </div>
-              {playlists.length === 0
-                ? <div className="px-4 py-3"><p className="text-xs text-white/30">No playlists yet</p></div>
-                : playlists.map(pl => (
-                    <button key={pl.id} onClick={(e) => { e.stopPropagation(); handleAddToPlaylist(pl.id); }} disabled={addingTo === pl.id}
-                      className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-white/[0.04] transition text-left">
-                      <span className="text-sm text-white/70 truncate">{pl.name}</span>
-                      {addedTo[pl.id] ? <Check className="w-3.5 h-3.5 text-green-400" /> : addingTo === pl.id ? <Loader className="w-3.5 h-3.5 animate-spin text-white/30" /> : null}
-                    </button>
-                  ))
-              }
-            </>
-          ) : (
-            <>
-              <button onClick={handleShare} className="w-full flex items-center space-x-3 px-4 py-3 hover:bg-white/[0.04] transition text-left">
-                {shared ? <Check className="w-4 h-4 text-green-400" /> : <Share2 className="w-4 h-4 text-white/50" />}
-                <span className="text-sm text-white/70">{shared ? 'Copied!' : 'Share'}</span>
-              </button>
-              {!isAlbum && (
-                <>
-                  <button onClick={(e) => { e.stopPropagation(); addToQueue(item); setShowMenu(false); }}
-                    className="w-full flex items-center space-x-3 px-4 py-3 hover:bg-white/[0.04] transition text-left">
-                    <ListMusic className="w-4 h-4 text-white/50" />
-                    <span className="text-sm text-white/70">Add to Queue</span>
-                  </button>
-                  <button onClick={loadPlaylists} className="w-full flex items-center space-x-3 px-4 py-3 hover:bg-white/[0.04] transition text-left">
-                    <ListMusic className="w-4 h-4 text-white/50" />
-                    <span className="text-sm text-white/70">Add to Playlist</span>
-                  </button>
-                  {item.is_downloadable && (
-                    <button onClick={handleDownload} disabled={downloading}
-                      className="w-full flex items-center space-x-3 px-4 py-3 hover:bg-white/[0.04] transition text-left disabled:opacity-40">
-                      {downloading ? <Loader className="w-4 h-4 animate-spin text-white/50" /> : <Download className="w-4 h-4 text-white/50" />}
-                      <span className="text-sm text-white/70">{downloading ? 'Downloading...' : 'Download'}</span>
-                    </button>
-                  )}
-                </>
-              )}
-              {isAlbum && (
-                <button onClick={(e) => { e.stopPropagation(); navigate(`/album/${item.id}`); setShowMenu(false); }}
-                  className="w-full flex items-center space-x-3 px-4 py-3 hover:bg-white/[0.04] transition text-left">
-                  <Disc className="w-4 h-4 text-white/50" />
-                  <span className="text-sm text-white/70">View Album</span>
-                </button>
-              )}
-              <button
-                onClick={(e) => { e.stopPropagation(); const slug = isAlbum ? item.artists?.slug : (item.artist_slug || item.artists?.slug); if (slug) { navigate(`/artist/${slug}`); setShowMenu(false); } }}
-                className="w-full flex items-center space-x-3 px-4 py-3 hover:bg-white/[0.04] transition text-left border-t border-white/[0.05]">
-                <span className="text-sm text-white/40">View Artist</span>
-              </button>
-            </>
-          )}
-        </div>
-      )}
+      {showActionSheet && (
+  <TrackActionSheet
+    track={isAlbum ? null : item}
+    artist={{ artist_name: item.artist_name, slug: item.artist_slug || item.artists?.slug }}
+    onClose={() => setShowActionSheet(false)}
+  />
+)}
     </div>
   );
 }
