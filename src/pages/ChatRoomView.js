@@ -127,7 +127,7 @@ export default function ChatRoomView() {
       if (missingIds.length > 0) {
         const { data: profilesData } = await supabase
           .from('profiles')
-          .select('id, display_name, username')
+          .select('id, display_name, username, avatar_url')
           .in('id', missingIds);
         (profilesData || []).forEach(p => { profileMap[p.id] = p; });
       }
@@ -139,7 +139,7 @@ export default function ChatRoomView() {
           ...m,
           artist: {
             artist_name: profile.display_name || profile.username || 'Listener',
-            profile_image_url: null,
+            profile_image_url: profile.avatar_url || null,
             slug: null,
             is_verified: false,
           }
@@ -174,13 +174,13 @@ export default function ChatRoomView() {
       if (!artist) {
         const { data: profileData } = await supabase
           .from('profiles')
-          .select('id, display_name, username')
+          .select('id, display_name, username, avatar_url')
           .eq('id', data.user_id)
           .maybeSingle();
         if (profileData) {
           artist = {
             artist_name: profileData.display_name || profileData.username || 'Listener',
-            profile_image_url: null,
+            profile_image_url: profile.avatar_url || null,
             slug: null,
             is_verified: false,
           };
