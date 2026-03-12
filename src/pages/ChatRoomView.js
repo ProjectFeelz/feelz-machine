@@ -88,7 +88,6 @@ export default function ChatRoomView() {
   }, [messages]);
 
   const fetchRoom = async () => {
-    // CHANGE 1: .single() -> .maybeSingle() to fix 406
     const { data } = await supabase
       .from('chat_rooms')
       .select('*, artists(id, artist_name, slug, profile_image_url, is_verified, user_id)')
@@ -98,7 +97,6 @@ export default function ChatRoomView() {
     setLoading(false);
   };
 
-  // FIX 2: Skip the broken FK join — go straight to the manual enrichment approach
   const fetchMessages = async () => {
     const { data, error } = await supabase
       .from('chat_messages')
@@ -114,18 +112,40 @@ export default function ChatRoomView() {
 
     if (data && data.length > 0) {
       const userIds = [...new Set(data.map(m => m.user_id))];
+
+      // Fetch artists first
       const { data: artistsData } = await supabase
         .from('artists')
         .select('user_id, artist_name, slug, profile_image_url, is_verified')
         .in('user_id', userIds);
-
       const artistMap = {};
       (artistsData || []).forEach(a => { artistMap[a.user_id] = a; });
 
-      const enriched = data.map(m => ({
-        ...m,
-        artist: artistMap[m.user_id] || null,
-      }));
+      // Fallback to profiles for listeners without an artist row
+      const missingIds = userIds.filter(id => !artistMap[id]);
+      const profileMap = {};
+      if (missingIds.length > 0) {
+        const { data: profilesData } = await supabase
+          .from('profiles')
+          .select('id, display_name, username, avatar_url')
+          .in('id', missingIds);
+        (profilesData || []).forEach(p => { profileMap[p.id] = p; });
+      }
+
+      const enriched = data.map(m => {
+        if (artistMap[m.user_id]) return { ...m, artist: artistMap[m.user_id] };
+        const profile = profileMap[m.user_id];
+        if (profile) return {
+          ...m,
+          artist: {
+            artist_name: profile.display_name || profile.username || 'Listener',
+            profile_image_url: profile.avatar_url || null,
+            slug: null,
+            is_verified: false,
+          }
+        };
+        return { ...m, artist: null };
+      });
 
       setMessages(enriched);
     } else {
@@ -141,13 +161,33 @@ export default function ChatRoomView() {
       .single();
 
     if (data) {
+      // Try artist first
       const { data: artistData } = await supabase
         .from('artists')
         .select('user_id, artist_name, slug, profile_image_url, is_verified')
         .eq('user_id', data.user_id)
-        .maybeSingle(); // FIX: use maybeSingle in case artist row doesn't exist
+        .maybeSingle();
 
-      const enriched = { ...data, artist: artistData || null };
+      let artist = artistData || null;
+
+      // Fallback to profiles for listeners
+      if (!artist) {
+        const { data: profileData } = await supabase
+          .from('profiles')
+          .select('id, display_name, username, avatar_url')
+          .eq('id', data.user_id)
+          .maybeSingle();
+        if (profileData) {
+          artist = {
+            artist_name: profileData.display_name || profileData.username || 'Listener',
+            profile_image_url: profileData.avatar_url || null,
+            slug: null,
+            is_verified: false,
+          };
+        }
+      }
+
+      const enriched = { ...data, artist };
       setMessages(prev => {
         if (prev.find(m => m.id === enriched.id)) return prev;
         return [...prev, enriched];
@@ -162,7 +202,6 @@ export default function ChatRoomView() {
     setWordFilters(data || []);
   };
 
-  // FIX 3: Use .maybeSingle() instead of .single() — .single() throws 406 when no row found
   const checkMembership = async () => {
     const { data, error } = await supabase
       .from('chat_room_members')
@@ -180,13 +219,11 @@ export default function ChatRoomView() {
     }
   };
 
-  // FIX 1: Handle duplicate membership gracefully + fix broken .rpc().catch() chaining
   const joinRoom = async () => {
     if (!user) { navigate('/login'); return; }
     setJoining(true);
 
     try {
-      // Check if already a member before inserting
       const { data: existing } = await supabase
         .from('chat_room_members')
         .select('id')
@@ -195,7 +232,6 @@ export default function ChatRoomView() {
         .maybeSingle();
 
       if (existing) {
-        // Already a member — just update local state
         setIsMember(true);
         setMyMembership({ role: 'member' });
         setJoining(false);
@@ -209,11 +245,9 @@ export default function ChatRoomView() {
       });
       if (error) throw error;
 
-      // FIX 1b: Properly await the RPC and handle failure without .catch() chaining
       try {
         await supabase.rpc('increment_chat_member_count', { room_id_input: roomId });
       } catch {
-        // RPC doesn't exist — fallback to manual update
         await supabase
           .from('chat_rooms')
           .update({ member_count: (room?.member_count || 0) + 1 })
@@ -229,7 +263,6 @@ export default function ChatRoomView() {
     setJoining(false);
   };
 
-  // FIX 4: Use the non-stateful hasExternalLink() function
   const moderateMessage = useCallback((text) => {
     if (hasExternalLink(text)) {
       return 'External links are not allowed in chat rooms';
@@ -282,7 +315,6 @@ export default function ChatRoomView() {
       const { error } = await supabase.from('chat_messages').insert({
         room_id: roomId,
         user_id: user.id,
-        // CHANGE 2: prepend reply mention if replying
         content: replyingTo ? `@${replyingTo.artist_name} ${input.trim()}` : input.trim(),
       });
       if (error) throw error;
@@ -421,7 +453,6 @@ export default function ChatRoomView() {
             (new Date(msg.created_at) - new Date(prevMsg.created_at)) < 120000;
           const isMe = msg.user_id === user.id;
           const isRoomOwner = msg.user_id === room.artists?.user_id;
-          // CHANGE 3: can delete own messages OR if room admin
           const canDelete = isMe || isRoomAdmin;
 
           if (msg.is_deleted) {
@@ -464,7 +495,7 @@ export default function ChatRoomView() {
                 <p className="text-sm text-white/80 break-words leading-relaxed">{msg.content}</p>
               </div>
 
-              {/* CHANGE 4: reply + delete buttons, visible on hover */}
+              {/* reply + delete buttons, visible on hover */}
               <div className="opacity-0 group-hover:opacity-100 flex items-center space-x-1 flex-shrink-0 transition">
                 {isMember && !isMe && (
                   <button
@@ -509,7 +540,6 @@ export default function ChatRoomView() {
             </div>
           ) : (
             <>
-              {/* CHANGE 4b: reply banner above input */}
               {replyingTo && (
                 <div className="flex items-center justify-between mb-2 px-3 py-1.5 bg-purple-500/10 rounded-lg">
                   <span className="text-[11px] text-purple-400">Replying to @{replyingTo.artist_name}</span>

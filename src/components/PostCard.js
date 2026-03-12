@@ -192,15 +192,15 @@ export default function PostCard({ post, onDelete, onUpdate }) {
       const artistMap = {};
       (artistsData || []).forEach(a => { artistMap[a.user_id] = a; });
 
-      // Fetch user_profiles for listeners (those without an artist row)
+      // Fetch profiles for listeners (those without an artist row)
       const missingIds = userIds.filter(id => !artistMap[id]);
       const profileMap = {};
       if (missingIds.length > 0) {
         const { data: profilesData } = await supabase
-          .from('user_profiles')
-          .select('user_id, name')
-          .in('user_id', missingIds);
-        (profilesData || []).forEach(p => { profileMap[p.user_id] = p; });
+          .from('profiles')
+          .select('id, display_name, username, avatar_url')
+          .in('id', missingIds);
+        (profilesData || []).forEach(p => { profileMap[p.id] = p; });
       }
 
       setComments(data.map(c => {
@@ -209,8 +209,8 @@ export default function PostCard({ post, onDelete, onUpdate }) {
         if (profile) return {
           ...c,
           artists: {
-            artist_name: profile.name || 'Listener',
-            profile_image_url: null,
+            artist_name: profile.display_name || profile.username || 'Listener',
+            profile_image_url: profile.avatar_url || null,
             slug: null,
             is_verified: false,
           }
