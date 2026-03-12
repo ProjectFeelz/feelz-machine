@@ -2,8 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import {
   Play, Pause, SkipBack, SkipForward, ChevronDown,
-  Shuffle, Repeat, Repeat1, Heart, Share2, ListMusic, Check, Volume2, VolumeX
-, X } from 'lucide-react';
+  Shuffle, Repeat, Repeat1, Heart, Share2, ListMusic, Check, Volume2, VolumeX,
+  X, MoreHorizontal } from 'lucide-react';
 import { usePlayer } from '../../contexts/PlayerContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../supabaseClient';
