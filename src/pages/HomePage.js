@@ -56,7 +56,7 @@ function SquareCard({ item, itemList = [], isAlbum = false, onPlay, currentTrack
   useEffect(() => {
     const handler = (e) => {
       if (menuRef.current && !menuRef.current.contains(e.target)) {
-        setshowActionSheet(false); setShowPlaylists(false);
+        setShowActionSheet(false); setShowPlaylists(false);
       }
     };
     if (showActionSheet) document.addEventListener('mousedown', handler);
@@ -76,7 +76,7 @@ function SquareCard({ item, itemList = [], isAlbum = false, onPlay, currentTrack
       await navigator.clipboard.writeText(url);
       setShared(true); setTimeout(() => setShared(false), 2000);
     }
-    setshowActionSheet(false);
+    setShowActionSheet(false);
   };
 
   const handleDownload = async (e) => {
@@ -88,7 +88,7 @@ function SquareCard({ item, itemList = [], isAlbum = false, onPlay, currentTrack
       await supabase.from('downloads').insert({ user_id: user.id, track_id: item.id });
       await downloadTrack(item.file_url, item.title);
     } catch {}
-    setDownloading(false); setshowActionSheet(false);
+    setDownloading(false); setShowActionSheet(false);
   };
 
   const loadPlaylists = async (e) => {
@@ -109,7 +109,7 @@ function SquareCard({ item, itemList = [], isAlbum = false, onPlay, currentTrack
     }
     setAddedTo(prev => ({ ...prev, [playlistId]: true }));
     setAddingTo(null);
-    setTimeout(() => { setAddedTo(prev => { const n = { ...prev }; delete n[playlistId]; return n; }); setshowActionSheet(false); setShowPlaylists(false); }, 1500);
+    setTimeout(() => { setAddedTo(prev => { const n = { ...prev }; delete n[playlistId]; return n; }); setShowActionSheet(false); setShowPlaylists(false); }, 1500);
   };
 
   return (
