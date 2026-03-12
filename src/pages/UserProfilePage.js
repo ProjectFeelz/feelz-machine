@@ -71,6 +71,7 @@ export default function UserProfilePage() {
         .update({
           
           name: displayName.trim() || user.email?.split('@')[0],
+          avatar_url: newAvatarUrl,
           
           
           updated_at: new Date().toISOString(),
