@@ -399,10 +399,16 @@ export default function ChatRoomView() {
           </button>
         </div>
 
-        <button onClick={() => setShowMembers(!showMembers)}
-          className="w-9 h-9 flex items-center justify-center rounded-full bg-white/[0.06]">
-          <Users className="w-4 h-4 text-white/50" />
-        </button>
+        <div className="flex items-center space-x-2">
+          <button onClick={fetchMessages}
+            className="w-9 h-9 flex items-center justify-center rounded-full bg-white/[0.06]">
+            <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 text-white/50" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+          </button>
+          <button onClick={() => setShowMembers(!showMembers)}
+            className="w-9 h-9 flex items-center justify-center rounded-full bg-white/[0.06]">
+            <Users className="w-4 h-4 text-white/50" />
+          </button>
+        </div>
       </div>
 
       {/* Members sidebar */}
