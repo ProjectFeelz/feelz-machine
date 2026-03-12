@@ -80,6 +80,7 @@ export default function PostCard({ post, onDelete, onUpdate }) {
   const [taggedArtistData, setTaggedArtistData] = useState([]);
   const [trackData, setTrackData] = useState(null);
   const [trackArtist, setTrackArtist] = useState(null); // the actual artist who owns the track
+  const [commentCount, setCommentCount] = useState(post.comment_count || 0);
 
   const postArtist = post.artists || post.artist || null;
   const isOwner = user && myArtist && (post.artist_id === myArtist.id);
@@ -244,6 +245,7 @@ export default function PostCard({ post, onDelete, onUpdate }) {
       if (error) throw error;
       setCommentText('');
       setReplyingTo(null);
+      setCommentCount(prev => prev + 1);
       fetchComments();
     } catch (err) {
       console.error('Comment error:', err);
@@ -385,7 +387,7 @@ export default function PostCard({ post, onDelete, onUpdate }) {
         </button>
         <button onClick={toggleComments} className="flex items-center space-x-1.5 mr-5 transition active:scale-90">
           <MessageCircle className="w-4 h-4 text-white/30" />
-          {post.comment_count > 0 && <span className="text-xs text-white/30">{post.comment_count}</span>}
+          {commentCount > 0 && <span className="text-xs text-white/30">{commentCount}</span>}
         </button>
         <button onClick={handleShare} className="flex items-center space-x-1.5 transition active:scale-90">
           <Share2 className="w-4 h-4 text-white/30" />
