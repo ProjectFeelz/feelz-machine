@@ -198,9 +198,9 @@ export default function PostCard({ post, onDelete, onUpdate }) {
       if (missingIds.length > 0) {
         const { data: profilesData } = await supabase
           .from('user_profiles')
-          .select('id, display_name, avatar_url, username')
-          .in('id', missingIds);
-        (profilesData || []).forEach(p => { profileMap[p.id] = p; });
+          .select('user_id, name')
+          .in('user_id', missingIds);
+        (profilesData || []).forEach(p => { profileMap[p.user_id] = p; });
       }
 
       setComments(data.map(c => {
@@ -209,8 +209,8 @@ export default function PostCard({ post, onDelete, onUpdate }) {
         if (profile) return {
           ...c,
           artists: {
-            artist_name: profile.display_name || profile.username || 'Listener',
-            profile_image_url: profile.avatar_url || null,
+            artist_name: profile.name || 'Listener',
+            profile_image_url: null,
             slug: null,
             is_verified: false,
           }
