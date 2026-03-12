@@ -210,7 +210,7 @@ export default function PostCard({ post, onDelete, onUpdate }) {
           ...c,
           artists: {
             artist_name: profile.name || 'Listener',
-            profile_image_url: null,
+            profile_image_url: profile.avatar_url || null,
             slug: null,
             is_verified: false,
           }
