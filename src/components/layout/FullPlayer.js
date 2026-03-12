@@ -7,6 +7,7 @@ import {
 import { usePlayer } from '../../contexts/PlayerContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../supabaseClient';
+import TrackActionSheet from '../TrackActionSheet';
 
 function formatTime(secs) {
   if (!secs || isNaN(secs)) return '0:00';
@@ -27,6 +28,7 @@ export default function FullPlayer() {
   const [liked, setLiked] = useState(false);
   const [shared, setShared] = useState(false);
   const [showQueue, setShowQueue] = useState(false);
+  const [showActionSheet, setShowActionSheet] = useState(false);
 
   useEffect(() => {
     if (!currentTrack || !user) { setLiked(false); return; }
@@ -215,8 +217,8 @@ export default function FullPlayer() {
                 style={{ accentColor: 'white' }} />
             </div>
 
-            {/* Share */}
-            <div className="flex items-center justify-center mt-6">
+            {/* Actions */}
+            <div className="flex items-center justify-center mt-6 space-x-6">
               <button onClick={handleShare}
                 className="flex items-center space-x-2 text-white/40 hover:text-white/70 transition active:scale-95">
                 {shared
@@ -224,7 +226,19 @@ export default function FullPlayer() {
                   : <><Share2 className="w-4 h-4" /><span className="text-xs">Share</span></>
                 }
               </button>
+              <button onClick={() => setShowActionSheet(true)}
+                className="flex items-center space-x-2 text-white/40 hover:text-white/70 transition active:scale-95">
+                <MoreHorizontal className="w-4 h-4" />
+                <span className="text-xs">More</span>
+              </button>
             </div>
+            {showActionSheet && (
+              <TrackActionSheet
+                track={currentTrack}
+                artist={{ artist_name: currentTrack.artist_name, slug: currentTrack.artist_slug }}
+                onClose={() => setShowActionSheet(false)}
+              />
+            )}
           </div>
         </>
       )}
