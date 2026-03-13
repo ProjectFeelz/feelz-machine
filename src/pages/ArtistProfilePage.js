@@ -191,7 +191,7 @@ export default function ArtistProfilePage() {
     try {
       await supabase.from('downloads').insert({ user_id: user.id, track_id: track.id }).catch(() => {});
       const { data: myProfile } = await supabase.from('artists').select('id, artist_name').eq('user_id', user.id).maybeSingle();
-      await supabase.from('notifications').insert({ artist_id: artist.id, type: 'download', title: `${myProfile?.artist_name || 'Someone'} downloaded ${track.title}`, track_id: track.id, from_artist_id: myProfile?.id || null, metadata: { download: true, purchase_price: track.download_price || 0 } }).catch(() => {});
+      try { await supabase.from('notifications').insert({ artist_id: artist.id, type: 'download', title: `${myProfile?.artist_name || 'Someone'} downloaded ${track.title}`, track_id: track.id, from_artist_id: myProfile?.id || null, metadata: { download: true, purchase_price: track.download_price || 0 } }); } catch {}
       await downloadTrack(track.file_url, track.title);
     } catch (err) { console.error('Download error:', err); }
     setDownloading(null);
