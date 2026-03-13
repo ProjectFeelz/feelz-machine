@@ -109,8 +109,21 @@ export function PlayerProvider({ children }) {
       const { data: track } = await supabase.from('tracks').select('stream_count, artist_id').eq('id', trackId).single();
       if (track) {
         await supabase.from('tracks').update({ stream_count: (track.stream_count || 0) + 1 }).eq('id', trackId);
+        // Update main artist streams
         const { data: art } = await supabase.from('artists').select('total_streams').eq('id', track.artist_id).single();
         if (art) await supabase.from('artists').update({ total_streams: (art.total_streams || 0) + 1 }).eq('id', track.artist_id);
+        // Update collab artist streams
+        const { data: collabs } = await supabase.from('collaborations')
+          .select('artist_id')
+          .eq('track_id', trackId)
+          .eq('status', 'accepted');
+        if (collabs?.length) {
+          for (const collab of collabs) {
+            if (collab.artist_id === track.artist_id) continue;
+            const { data: collabArt } = await supabase.from('artists').select('total_streams').eq('id', collab.artist_id).single();
+            if (collabArt) await supabase.from('artists').update({ total_streams: (collabArt.total_streams || 0) + 1 }).eq('id', collab.artist_id);
+          }
+        }
       }
     } catch (err) {
       console.error('Failed to log stream:', err);
