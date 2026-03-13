@@ -428,28 +428,17 @@ export default function ChatRoomView() {
 
       {/* Messages area */}
       <div className="flex-1 overflow-y-auto px-4 py-3 space-y-1">
-        {/* Room welcome */}
-        <div className="text-center py-6 mb-4">
-          <div className="w-14 h-14 rounded-2xl mx-auto mb-3 overflow-hidden bg-gradient-to-br from-purple-600/20 to-blue-600/10 flex items-center justify-center">
+        {/* Room welcome — compact */}
+        <div className="flex items-center space-x-2 px-2 py-2 mb-2 border-b border-white/[0.04]">
+          <div className="w-7 h-7 rounded-lg overflow-hidden bg-gradient-to-br from-purple-600/20 to-blue-600/10 flex items-center justify-center flex-shrink-0">
             {room.artists?.profile_image_url
-              ? <img src={room.artists.profile_image_url} alt="" className="w-14 h-14 object-cover" />
-              : <span className="text-xl font-bold text-white/30">{room.artists?.artist_name?.[0]}</span>}
+              ? <img src={room.artists.profile_image_url} alt="" className="w-7 h-7 object-cover" />
+              : <span className="text-xs font-bold text-white/30">{room.artists?.artist_name?.[0]}</span>}
           </div>
-          <h3 className="text-base font-bold text-white mb-1">{room.name}</h3>
-          <p className="text-xs text-white/30">Created by {room.artists?.artist_name}</p>
-          <div className="flex items-center justify-center space-x-3 mt-2">
-            <span className="inline-flex items-center space-x-1 text-[10px] text-white/20">
-              <Shield className="w-3 h-3" />
-              <span>No links</span>
-            </span>
-            <span className="inline-flex items-center space-x-1 text-[10px] text-white/20">
-              <Shield className="w-3 h-3" />
-              <span>No images</span>
-            </span>
-            <span className="inline-flex items-center space-x-1 text-[10px] text-white/20">
-              <Shield className="w-3 h-3" />
-              <span>Moderated</span>
-            </span>
+          <p className="text-xs text-white/30 flex-1">{room.name} · Created by {room.artists?.artist_name}</p>
+          <div className="flex items-center space-x-2">
+            <Shield className="w-3 h-3 text-white/15" />
+            <span className="text-[10px] text-white/15">Moderated</span>
           </div>
         </div>
 
