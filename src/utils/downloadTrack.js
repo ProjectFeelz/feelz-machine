@@ -16,13 +16,19 @@ export async function downloadTrack(fileUrl, title) {
     document.body.removeChild(a);
     setTimeout(() => URL.revokeObjectURL(blobUrl), 30000);
   } catch (err) {
-    // Fallback: open with download parameter
-    const link = document.createElement('a');
-    link.href = fileUrl;
-    link.download = cleanName + '.' + ext;
-    link.target = '_blank';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    try {
+      const response = await fetch(fileUrl, { mode: 'cors', cache: 'no-store' });
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = cleanName + '.' + ext;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 30000);
+    } catch {
+      window.open(fileUrl, '_blank');
+    }
   }
 }
