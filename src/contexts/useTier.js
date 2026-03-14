@@ -87,41 +87,38 @@ export function useTier() {
 
   const fetchTier = async (artistId) => {
     if (!artistId) return;
-    console.log('[useTier] fetching tier for artist:', artistId);
     try {
+      // Step 1: get subscription row
       const { data: sub } = await supabase
         .from('artist_tier_subscriptions')
-        .select('*, platform_tiers(*)')
+        .select('tier_id, status')
         .eq('artist_id', artistId)
         .eq('status', 'active')
         .maybeSingle();
-      
-      console.log('[useTier] sub result:', JSON.stringify(sub));
-      console.log('[useTier] sub result:', JSON.stringify(sub));
-      if (sub?.platform_tiers) {
-        setTierSlug(['master','premium'].includes(sub.platform_tiers.slug) ? 'premium' : sub.platform_tiers.slug === 'pro' ? 'pro' : 'free');
-        setTierData(sub.platform_tiers);
-      } else {
-        // Join failed — fetch tier directly without join
-        const { data: subRaw } = await supabase
-          .from('artist_tier_subscriptions')
-          .select('tier_id')
-          .eq('artist_id', artistId)
-          .eq('status', 'active')
+
+      if (sub?.tier_id) {
+        // Step 2: get tier slug separately
+        const { data: tierRow } = await supabase
+          .from('platform_tiers')
+          .select('*')
+          .eq('id', sub.tier_id)
           .maybeSingle();
-        if (subRaw?.tier_id) {
-          const { data: tierRow } = await supabase
-            .from('platform_tiers')
-            .select('slug')
-            .eq('id', subRaw.tier_id)
-            .maybeSingle();
-          const slug = tierRow?.slug || artist?.tier || 'free';
-          setTierSlug(['master','premium'].includes(slug) ? 'premium' : slug === 'pro' ? 'pro' : 'free');
-        } else {
-          const fallback = artist?.tier || 'free';
-          setTierSlug(['master','premium'].includes(fallback) ? 'premium' : fallback === 'pro' ? 'pro' : 'free');
+        if (tierRow) {
+          setTierSlug(['master','premium'].includes(tierRow.slug) ? 'premium' : tierRow.slug === 'pro' ? 'pro' : 'free');
+          setTierData(tierRow);
+          setLoading(false);
+          return;
         }
       }
+
+      // Fallback: use artists.tier column directly
+      const { data: artistRow } = await supabase
+        .from('artists')
+        .select('tier')
+        .eq('id', artistId)
+        .maybeSingle();
+      const fallback = artistRow?.tier || 'free';
+      setTierSlug(['master','premium'].includes(fallback) ? 'premium' : fallback === 'pro' ? 'pro' : 'free');
     } catch {
       const fallback = artist?.tier || 'free';
       setTierSlug(['master','premium'].includes(fallback) ? 'premium' : fallback === 'pro' ? 'pro' : 'free');
