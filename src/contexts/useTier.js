@@ -95,7 +95,9 @@ export function useTier() {
         .eq('artist_id', artistId)
         .eq('status', 'active')
         .maybeSingle();
-
+      
+      console.log('[useTier] sub result:', JSON.stringify(sub));
+      console.log('[useTier] sub result:', JSON.stringify(sub));
       if (sub?.platform_tiers) {
         setTierSlug(['master','premium'].includes(sub.platform_tiers.slug) ? 'premium' : sub.platform_tiers.slug === 'pro' ? 'pro' : 'free');
         setTierData(sub.platform_tiers);
