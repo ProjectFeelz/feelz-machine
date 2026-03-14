@@ -102,9 +102,25 @@ export function useTier() {
         setTierSlug(['master','premium'].includes(sub.platform_tiers.slug) ? 'premium' : sub.platform_tiers.slug === 'pro' ? 'pro' : 'free');
         setTierData(sub.platform_tiers);
       } else {
-        // Fallback to artist.tier from the artists table
-        const fallback = artist?.tier || 'free';
-        setTierSlug(['master','premium'].includes(fallback) ? 'premium' : fallback === 'pro' ? 'pro' : 'free');
+        // Join failed — fetch tier directly without join
+        const { data: subRaw } = await supabase
+          .from('artist_tier_subscriptions')
+          .select('tier_id')
+          .eq('artist_id', artistId)
+          .eq('status', 'active')
+          .maybeSingle();
+        if (subRaw?.tier_id) {
+          const { data: tierRow } = await supabase
+            .from('platform_tiers')
+            .select('slug')
+            .eq('id', subRaw.tier_id)
+            .maybeSingle();
+          const slug = tierRow?.slug || artist?.tier || 'free';
+          setTierSlug(['master','premium'].includes(slug) ? 'premium' : slug === 'pro' ? 'pro' : 'free');
+        } else {
+          const fallback = artist?.tier || 'free';
+          setTierSlug(['master','premium'].includes(fallback) ? 'premium' : fallback === 'pro' ? 'pro' : 'free');
+        }
       }
     } catch {
       const fallback = artist?.tier || 'free';
