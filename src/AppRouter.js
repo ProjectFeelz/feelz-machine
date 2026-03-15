@@ -34,6 +34,7 @@ import AdminBroadcast from './pages/AdminBroadcast';
 import RecentlyPlayedPage from './pages/RecentlyPlayedPage';
 import UserProfilePage from './pages/UserProfilePage';
 import AlbumDetailPage from './pages/AlbumDetailPage';
+import AdminUserBehaviorPage from './pages/AdminUserBehaviorPage';
 
 // If we're at the root "/" serve the landing page standalone
 const isLanding = window.location.pathname === '/' || window.location.pathname === '';
@@ -81,6 +82,7 @@ export default function AppRouter() {
               <Route path="/admin/moderation" element={<AdminModeration />} />
               <Route path="/admin/boost" element={<AdminBoost />} />
               <Route path="/admin/broadcast" element={<AdminBroadcast />} />
+              <Route path="/admin/behavior" element={<AdminUserBehaviorPage />} />
             </Route>
           </Routes>
         </PlayerProvider>
