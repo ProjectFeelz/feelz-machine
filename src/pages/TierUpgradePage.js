@@ -149,19 +149,24 @@ export default function TierUpgradePage() {
 
   const fetchCurrentTier = async () => {
     try {
-      // Check active subscription
       const { data: sub } = await supabase
         .from('artist_tier_subscriptions')
-        .select('*, platform_tiers(*)')
+        .select('tier_id')
         .eq('artist_id', artist.id)
         .eq('status', 'active')
-        .single();
-
-      if (sub?.platform_tiers) {
-        setCurrentTier(sub.platform_tiers.slug);
-      } else {
-        setCurrentTier('free');
+        .maybeSingle();
+      if (sub?.tier_id) {
+        const { data: tierRow } = await supabase
+          .from('platform_tiers')
+          .select('slug')
+          .eq('id', sub.tier_id)
+          .maybeSingle();
+        if (tierRow) { setCurrentTier(tierRow.slug); setLoading(false); return; }
       }
+      // Fallback to artist.tier
+      const { data: artistRow } = await supabase
+        .from('artists').select('tier').eq('id', artist.id).maybeSingle();
+      setCurrentTier(artistRow?.tier || 'free');
     } catch {
       setCurrentTier('free');
     }
