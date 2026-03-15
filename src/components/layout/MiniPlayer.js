@@ -70,7 +70,7 @@ export default function MiniPlayer() {
               {showActionSheet && (
                 <TrackActionSheet
                   track={currentTrack}
-                  artist={currentTrack ? { artist_name: currentTrack.artist_name } : null}
+                  artist={currentTrack ? { artist_name: currentTrack.artist_name, slug: currentTrack.artist_slug } : null}
                   onClose={() => setShowActionSheet(false)}
                 />
               )}
