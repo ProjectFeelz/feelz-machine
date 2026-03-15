@@ -81,10 +81,9 @@ export default function PostCard({ post, onDelete, onUpdate }) {
   const [trackData, setTrackData] = useState(null);
   const [trackArtist, setTrackArtist] = useState(null); // the actual artist who owns the track
   const [commentCount, setCommentCount] = useState(post.comment_count || 0);
-  const canPin = isOwner || isAdmin;
-
   const postArtist = post.artists || post.artist || null;
   const isOwner = user && myArtist && (post.artist_id === myArtist.id);
+  const canPin = isOwner || isAdmin;
   const isTrackActive = currentTrack?.id === post.track_id;
   const isTrackPlaying = isTrackActive && isPlaying;
 
