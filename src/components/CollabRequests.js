@@ -26,8 +26,8 @@ export default function CollabRequests() {
     setLoading(true);
     try {
       const [{ data: incoming }, { data: outgoing }] = await Promise.all([
-        supabase.from('collab_requests').select(`*, collaboration:collaborations(role, split_percent), from_artist:artists!collab_requests_from_artist_id_fkey(id, artist_name, profile_image_url), track:tracks!collab_requests_track_id_fkey(id, title, cover_artwork_url)`).eq('to_artist_id', artist.id).order('created_at', { ascending: false }),
-        supabase.from('collab_requests').select(`*, collaboration:collaborations(role, split_percent), to_artist:artists!collab_requests_to_artist_id_fkey(id, artist_name, profile_image_url), track:tracks!collab_requests_track_id_fkey(id, title, cover_artwork_url)`).eq('from_artist_id', artist.id).order('created_at', { ascending: false }),
+        supabase.from('collab_requests').select(`*, collaboration:collaborations(role, split_percent, album_id, albums(id, title, cover_artwork_url)), from_artist:artists!collab_requests_from_artist_id_fkey(id, artist_name, profile_image_url), track:tracks!collab_requests_track_id_fkey(id, title, cover_artwork_url)`).eq('to_artist_id', artist.id).order('created_at', { ascending: false }),
+        supabase.from('collab_requests').select(`*, collaboration:collaborations(role, split_percent, album_id, albums(id, title, cover_artwork_url)), to_artist:artists!collab_requests_to_artist_id_fkey(id, artist_name, profile_image_url), track:tracks!collab_requests_track_id_fkey(id, title, cover_artwork_url)`).eq('from_artist_id', artist.id).order('created_at', { ascending: false }),
       ]);
       const data = [...(incoming || []).map(r => ({...r, direction: 'incoming'})), ...(outgoing || []).map(r => ({...r, direction: 'outgoing', from_artist: r.to_artist}))];
       const error = null;
@@ -165,7 +165,7 @@ export default function CollabRequests() {
                       </div>
                     )}
                     <div className="min-w-0">
-                      <p className="text-xs font-medium text-white truncate">{req.track?.title || 'Untitled'}</p>
+                      <p className="text-xs font-medium text-white truncate">{req.track?.title || req.collaboration?.albums?.title || (req.collaboration?.album_id ? 'Album Collab' : 'Untitled')}</p>
                       <p className="text-[10px] text-white/30">
                         {req.collaboration?.split_percent || 0}% royalty split
                       </p>
