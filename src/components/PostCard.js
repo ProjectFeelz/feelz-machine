@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import { usePlayer } from '../contexts/PlayerContext';
-import { Heart, MessageCircle, Share2, MoreHorizontal, Trash2, Flag, Verified, Loader, Send, Music, Play, Pause, CornerDownRight } from 'lucide-react';
+import { Heart, MessageCircle, Share2, MoreHorizontal, Trash2, Flag, Verified, Loader, Send, Music, Play, Pause, CornerDownRight, Pin } from 'lucide-react';
 
 function timeAgo(date) {
   const seconds = Math.floor((Date.now() - new Date(date).getTime()) / 1000);
@@ -65,7 +65,7 @@ function formatInline(text) {
 
 export default function PostCard({ post, onDelete, onUpdate }) {
   const navigate = useNavigate();
-  const { user, artist: myArtist } = useAuth();
+  const { user, artist: myArtist, isAdmin } = useAuth();
   const playerContext = usePlayer?.();
   const { playTrack, currentTrack, isPlaying, togglePlay } = playerContext || {};
 
@@ -81,6 +81,7 @@ export default function PostCard({ post, onDelete, onUpdate }) {
   const [trackData, setTrackData] = useState(null);
   const [trackArtist, setTrackArtist] = useState(null); // the actual artist who owns the track
   const [commentCount, setCommentCount] = useState(post.comment_count || 0);
+  const canPin = isOwner || isAdmin;
 
   const postArtist = post.artists || post.artist || null;
   const isOwner = user && myArtist && (post.artist_id === myArtist.id);
@@ -175,7 +176,8 @@ export default function PostCard({ post, onDelete, onUpdate }) {
   const fetchComments = async () => {
     const { data, error } = await supabase
       .from('artist_post_comments')
-      .select('id, post_id, user_id, content, created_at')
+      .select('id, post_id, user_id, content, created_at, is_pinned')
+      .order('is_pinned', { ascending: false })
       .eq('post_id', post.id)
       .order('created_at', { ascending: true })
       .limit(50);
@@ -262,6 +264,17 @@ export default function PostCard({ post, onDelete, onUpdate }) {
       console.error('Delete error:', err);
     }
     setShowMenu(false);
+  };
+
+  const handlePin = async (commentId, currentlyPinned) => {
+    if (!canPin) return;
+    // Unpin all first
+    await supabase.from('artist_post_comments').update({ is_pinned: false }).eq('post_id', post.id);
+    // Pin this one if it wasn't already pinned
+    if (!currentlyPinned) {
+      await supabase.from('artist_post_comments').update({ is_pinned: true }).eq('id', commentId);
+    }
+    fetchComments();
   };
 
   const handleShare = async () => {
@@ -399,7 +412,7 @@ export default function PostCard({ post, onDelete, onUpdate }) {
         <div className="border-t border-white/[0.04]">
           <div className="max-h-64 overflow-y-auto">
             {comments.map(comment => (
-              <div key={comment.id} className="flex space-x-3 px-4 py-3 border-b border-white/[0.02] group">
+              <div key={comment.id} className={`flex space-x-3 px-4 py-3 border-b border-white/[0.02] group ${comment.is_pinned ? 'bg-purple-500/[0.05] border-l-2 border-l-purple-500/40' : ''}`}>
                 <button
                   onClick={() => comment.artists?.slug && navigate(`/artist/${comment.artists.slug}`)}
                   className="w-7 h-7 rounded-full bg-gradient-to-br from-purple-600/50 to-blue-600/50 flex items-center justify-center overflow-hidden flex-shrink-0">
@@ -408,25 +421,38 @@ export default function PostCard({ post, onDelete, onUpdate }) {
                     : <span className="text-[10px] font-bold text-white">{(comment.artists?.artist_name || '?')?.[0]?.toUpperCase()}</span>}
                 </button>
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center space-x-1.5">
+                  <div className="flex items-center space-x-1.5 flex-wrap">
                     <button
                       onClick={() => comment.artists?.slug && navigate(`/artist/${comment.artists.slug}`)}
                       className="text-xs font-medium text-white hover:text-purple-300 transition">
                       {comment.artists?.artist_name || 'User'}
                     </button>
+                    {comment.is_pinned && (
+                      <span className="flex items-center space-x-0.5 text-[9px] text-purple-400 font-medium">
+                        <Pin className="w-2.5 h-2.5" /><span>Pinned</span>
+                      </span>
+                    )}
                     <span className="text-[10px] text-white/20">{timeAgo(comment.created_at)}</span>
                   </div>
                   <p className="text-xs text-white/60 mt-0.5">{comment.content}</p>
                 </div>
-                {/* Reply button */}
-                {user && (
-                  <button
-                    onClick={() => handleReply(comment)}
-                    className="opacity-0 group-hover:opacity-100 flex items-center space-x-1 text-[10px] text-white/30 hover:text-purple-400 transition flex-shrink-0 mt-1">
-                    <CornerDownRight className="w-3 h-3" />
-                    <span>Reply</span>
-                  </button>
-                )}
+                {/* Reply + Pin buttons */}
+                <div className="opacity-0 group-hover:opacity-100 flex items-center space-x-1 flex-shrink-0 mt-1 transition">
+                  {user && (
+                    <button onClick={() => handleReply(comment)}
+                      className="flex items-center space-x-1 text-[10px] text-white/30 hover:text-purple-400 transition">
+                      <CornerDownRight className="w-3 h-3" />
+                      <span>Reply</span>
+                    </button>
+                  )}
+                  {canPin && (
+                    <button onClick={() => handlePin(comment.id, comment.is_pinned)}
+                      className={`ml-2 flex items-center space-x-1 text-[10px] transition ${comment.is_pinned ? 'text-purple-400' : 'text-white/30 hover:text-purple-400'}`}>
+                      <Pin className="w-3 h-3" />
+                      <span>{comment.is_pinned ? 'Unpin' : 'Pin'}</span>
+                    </button>
+                  )}
+                </div>
               </div>
             ))}
             {comments.length === 0 && <p className="text-center text-xs text-white/20 py-6">No comments yet</p>}
