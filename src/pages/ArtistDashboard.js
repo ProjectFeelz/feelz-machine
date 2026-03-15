@@ -15,17 +15,20 @@ function ContactExportButton({ artist }) {
   const handleExport = async () => {
     setExporting(true);
     try {
-      const { data: followers } = await supabase.from('follows').select('follower_id').eq('artist_id', artist.id);
-      if (!followers || followers.length === 0) { alert('No followers yet'); setExporting(false); return; }
-      const userIds = followers.map(f => f.follower_id);
-      const { data: profiles } = await supabase.from('user_profiles').select('name, email').in('user_id', userIds);
-      if (profiles && profiles.length > 0) {
-        const csv = ['name,email', ...profiles.map(p => (p.name || '') + ',' + (p.email || ''))].join('\n');
-        const blob = new Blob([csv], { type: 'text/csv' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a'); a.href = url; a.download = 'follower_contacts.csv'; a.click();
-        URL.revokeObjectURL(url);
-      }
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch('/.netlify/functions/export-contacts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ artist_id: artist.id, user_id: session?.user?.id }),
+      });
+      const data = await res.json();
+      if (data.error) { alert(data.error); setExporting(false); return; }
+      if (data.count === 0) { alert('No follower emails found yet'); setExporting(false); return; }
+      const blob = new Blob([data.csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = `${artist.artist_name}_contacts.csv`; a.click();
+      URL.revokeObjectURL(url);
     } catch (err) { console.error('Export error:', err); }
     setExporting(false);
   };
