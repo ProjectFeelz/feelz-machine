@@ -45,23 +45,30 @@ export default function PaymentSettings() {
   };
 
   const fetchCurrentTier = async () => {
-    const { data: sub } = await supabase
-      .from('artist_tier_subscriptions')
-      .select('*, platform_tiers(*)')
-      .eq('artist_id', artist.id)
-      .eq('status', 'active')
-      .maybeSingle();
-
-    if (sub?.platform_tiers) {
-      setCurrentTier(sub.platform_tiers);
-    } else {
-      // Default to free tier
-      const { data: freeTier } = await supabase
-        .from('platform_tiers')
-        .select('*')
-        .eq('slug', 'free')
-        .single();
-      setCurrentTier(freeTier);
+    try {
+      const { data: sub } = await supabase
+        .from('artist_tier_subscriptions')
+        .select('tier_id')
+        .eq('artist_id', artist.id)
+        .eq('status', 'active')
+        .maybeSingle();
+      if (sub?.tier_id) {
+        const { data: tierRow } = await supabase
+          .from('platform_tiers')
+          .select('*')
+          .eq('id', sub.tier_id)
+          .maybeSingle();
+        if (tierRow) { setCurrentTier(tierRow); return; }
+      }
+      // Fallback to artist.tier
+      const { data: artistRow } = await supabase
+        .from('artists').select('tier').eq('id', artist.id).maybeSingle();
+      const slug = artistRow?.tier || 'free';
+      const { data: tierRow } = await supabase
+        .from('platform_tiers').select('*').eq('slug', slug).maybeSingle();
+      setCurrentTier(tierRow || { slug: 'free', name: 'Free' });
+    } catch {
+      setCurrentTier({ slug: 'free', name: 'Free' });
     }
   };
 
