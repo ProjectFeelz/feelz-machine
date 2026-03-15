@@ -4,7 +4,7 @@ import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import {
   ArrowLeft, Send, Loader, Users, Shield,
-  AlertTriangle, Trash2, VolumeX, Lock, X, CornerDownRight, BarChart2, Plus, Check
+  AlertTriangle, Trash2, VolumeX, Lock, X, CornerDownRight, BarChart2, Plus, Check, Pin
 } from 'lucide-react';
 
 const hasExternalLink = (text) =>
@@ -155,7 +155,7 @@ function CreatePollModal({ roomId, artistId, onClose, onCreated }) {
 export default function ChatRoomView() {
   const { roomId } = useParams();
   const navigate = useNavigate();
-  const { user, artist } = useAuth();
+  const { user, artist, isAdmin } = useAuth();
 
   const [room, setRoom] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -244,8 +244,8 @@ export default function ChatRoomView() {
 
   const fetchMessages = async () => {
     const { data, error } = await supabase.from('chat_messages')
-      .select('id, room_id, user_id, content, created_at, is_deleted, deleted_reason')
-      .eq('room_id', roomId).order('created_at', { ascending: true }).limit(200);
+      .select('id, room_id, user_id, content, created_at, is_deleted, deleted_reason, is_pinned')
+      .eq('room_id', roomId).order('is_pinned', { ascending: false }).order('created_at', { ascending: true }).limit(200);
     if (error) { console.error('fetchMessages error:', error); return; }
     if (data && data.length > 0) {
       const userIds = [...new Set(data.map(m => m.user_id))];
@@ -343,6 +343,16 @@ export default function ChatRoomView() {
       setInput(''); setReplyingTo(null); inputRef.current?.focus();
     } catch (err) { console.error('Send error:', err); }
     setSending(false);
+  };
+
+  const handlePin = async (msgId, currentlyPinned) => {
+    try {
+      await supabase.from('chat_messages').update({ is_pinned: false }).eq('room_id', roomId);
+      if (!currentlyPinned) {
+        await supabase.from('chat_messages').update({ is_pinned: true }).eq('id', msgId);
+      }
+      fetchMessages();
+    } catch (err) { console.error('Pin error:', err); }
   };
 
   const handleDelete = async (msgId) => {
@@ -450,7 +460,7 @@ export default function ChatRoomView() {
           );
 
           return (
-            <div key={msg.id} className={`group flex items-start space-x-2.5 px-2 py-1 rounded-lg hover:bg-white/[0.02] transition ${sameSender ? 'mt-0' : 'mt-2'}`}>
+            <div key={msg.id} className={`group flex items-start space-x-2.5 px-2 py-1 rounded-lg hover:bg-white/[0.02] transition ${sameSender ? 'mt-0' : 'mt-2'} ${msg.is_pinned ? 'bg-purple-500/[0.05] border-l-2 border-purple-500/40' : ''}`}>
               {!sameSender ? (
                 <div className="w-8 h-8 rounded-full overflow-hidden bg-gradient-to-br from-purple-600/30 to-blue-600/20 flex items-center justify-center flex-shrink-0 mt-0.5">
                   {msg.artist?.profile_image_url
@@ -464,6 +474,7 @@ export default function ChatRoomView() {
                     <span className={`text-xs font-semibold ${isRoomOwner ? 'text-purple-400' : 'text-white'}`}>{msg.artist?.artist_name || 'User'}</span>
                     {isRoomOwner && <span className="text-[9px] px-1.5 py-0.5 bg-purple-500/10 text-purple-400 rounded font-medium">HOST</span>}
                     {msg.artist?.is_verified && <span className="text-[9px] text-blue-400">✓</span>}
+                    {msg.is_pinned && <span className="flex items-center space-x-0.5 text-[9px] text-purple-400 font-medium"><Pin className="w-2.5 h-2.5" /><span>Pinned</span></span>}
                     <span className="text-[10px] text-white/15">{timeAgo(msg.created_at)}</span>
                   </div>
                 )}
@@ -474,6 +485,12 @@ export default function ChatRoomView() {
                   <button onClick={() => { setReplyingTo({ id: msg.id, artist_name: msg.artist?.artist_name || 'User' }); setInput(`@${msg.artist?.artist_name || 'User'} `); inputRef.current?.focus(); }}
                     className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-white/[0.06] transition">
                     <CornerDownRight className="w-3 h-3 text-white/30" />
+                  </button>
+                )}
+                {(isRoomAdmin || isAdmin) && (
+                  <button onClick={() => handlePin(msg.id, msg.is_pinned)}
+                    className={`w-7 h-7 flex items-center justify-center rounded-full hover:bg-purple-500/10 transition ${msg.is_pinned ? 'text-purple-400' : 'text-white/30'}`}>
+                    <Pin className="w-3 h-3" />
                   </button>
                 )}
                 {canDelete && (

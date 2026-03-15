@@ -211,7 +211,7 @@ export default function HomePage() {
         ...t, artist_name: t.artists?.artist_name || 'Unknown Artist',
       }));
       const normAlbum = (list) => (list || []).map(a => ({
-        ...a, artist_name: a.artists?.artist_name || 'Unknown Artist', _isAlbum: true,
+        ...a, artist_name: a.artists?.artist_name || 'Unknown Artist', artist_slug: a.artists?.slug || null, _isAlbum: true,
       }));
 
       // Merge tracks + albums for New Releases, sorted by created_at
