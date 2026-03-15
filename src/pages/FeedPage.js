@@ -243,11 +243,7 @@ export default function FeedPage() {
         </div>
       ) : (
         <div className="relative space-y-4">
-          <button
-            onClick={() => window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' })}
-            className="fixed bottom-24 right-4 z-40 w-10 h-10 rounded-full bg-white/10 backdrop-blur flex items-center justify-center shadow-lg border border-white/10 hover:bg-white/20 transition">
-            <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 text-white/60" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9" /></svg>
-          </button>
+          
           {posts
             .filter(post => {
               if (feedFilter === 'following') return followedArtistIds.includes(post.artist_id);
