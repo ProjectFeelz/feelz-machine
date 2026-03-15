@@ -187,6 +187,27 @@ export default function TrackUploadPanel() {
         await saveCollaborations(trackId, collabArr);
       }
       showMessage('success', 'Track uploaded successfully!');
+      // Notify followers
+      if (form.is_published) {
+        try {
+          const { data: followers } = await supabase
+            .from('follows')
+            .select('follower_id')
+            .eq('artist_id', artist.id);
+          if (followers && followers.length > 0) {
+            const notifications = followers.map(f => ({
+              user_id: f.follower_id,
+              artist_id: artist.id,
+              type: 'new_track',
+              title: `${artist.artist_name} uploaded a new track`,
+              body: form.title,
+              track_id: trackId,
+              metadata: { track_title: form.title, artist_name: artist.artist_name },
+            }));
+            await supabase.from('notifications').insert(notifications);
+          }
+        } catch (notifErr) { console.error('Notification error:', notifErr); }
+      }
       if (isQuick) {
         setQuickTrackForm({ ...BLANK_TRACK, album_id: activeAlbum?.id || '' });
         setQuickVersionFiles([]); setQuickCollaborators([]);
