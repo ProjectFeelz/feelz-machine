@@ -88,13 +88,13 @@ export function useTier() {
   const fetchTier = async (artistId) => {
     if (!artistId) return;
     try {
-      // Step 1: get subscription row
-      const { data: sub } = await supabase
+      const { data: sub, error: subErr } = await supabase
         .from('artist_tier_subscriptions')
         .select('tier_id, status')
         .eq('artist_id', artistId)
         .eq('status', 'active')
         .maybeSingle();
+      console.log('[tier] sub:', JSON.stringify(sub), 'err:', JSON.stringify(subErr));
 
       if (sub?.tier_id) {
         // Step 2: get tier slug separately
