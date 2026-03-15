@@ -24,6 +24,7 @@ const TYPE_CONFIG = {
   new_post:         { icon: Music,         color: 'text-green-400',  bg: 'bg-green-500/10',  label: 'New Post' },
   mention:          { icon: MessageCircle, color: 'text-purple-400', bg: 'bg-purple-500/10', label: 'Mention' },
   tier_granted:     { icon: TrendingUp,    color: 'text-yellow-400', bg: 'bg-yellow-500/10', label: 'Tier Update' },
+  new_track:        { icon: Music,         color: 'text-purple-400', bg: 'bg-purple-500/10', label: 'New Track' },
 };
 
 const FILTERS = [
