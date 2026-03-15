@@ -548,7 +548,7 @@ export default function TrackUploadPanel() {
 
       <div className="flex space-x-1 bg-white/[0.03] rounded-lg p-1">
         {tabs.map(({ key, label, icon: Icon }) => (
-          <button key={key} onClick={() => setActiveTab(key)}
+          <button type="button" key={key} onClick={() => setActiveTab(key)}
             className={`flex-1 flex items-center justify-center space-x-2 py-2.5 rounded-md text-sm font-medium transition ${
               activeTab === key ? 'bg-white text-black' : 'text-white/50 hover:text-white/70'
             }`}>
@@ -616,7 +616,7 @@ export default function TrackUploadPanel() {
           {albumStep === 'tracks' && activeAlbum && (
             <div className="space-y-4">
               <div className="flex items-center space-x-3">
-                <button onClick={() => { setAlbumStep('list'); setActiveAlbum(null); setShowQuickUpload(false); }}
+                <button type="button" onClick={() => { setAlbumStep('list'); setActiveAlbum(null); setShowQuickUpload(false); }}
                   className="p-2 hover:bg-white/[0.06] rounded-lg transition">
                   <ArrowLeft className="w-4 h-4 text-white/40" />
                 </button>
@@ -645,7 +645,7 @@ export default function TrackUploadPanel() {
                           {t.cover_artwork_url ? <img src={t.cover_artwork_url} alt="" className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center"><Music className="w-3 h-3 text-white/20" /></div>}
                         </div>
                         <p className="text-sm text-white flex-1 truncate">{t.title}</p>
-                        <button onClick={() => removeTrackFromAlbum(t.id)} className="p-1.5 bg-red-500/10 rounded hover:bg-red-500/20 transition">
+                        <button type="button" onClick={() => removeTrackFromAlbum(t.id)} className="p-1.5 bg-red-500/10 rounded hover:bg-red-500/20 transition">
                           <X className="w-3.5 h-3.5 text-red-400" />
                         </button>
                       </div>
@@ -666,7 +666,7 @@ export default function TrackUploadPanel() {
                           {t.cover_artwork_url ? <img src={t.cover_artwork_url} alt="" className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center"><Music className="w-3 h-3 text-white/20" /></div>}
                         </div>
                         <p className="text-sm text-white flex-1 truncate">{t.title}</p>
-                        <button onClick={() => addTrackToAlbum(t.id)} className="p-1.5 bg-white/10 rounded hover:bg-white/20 transition">
+                        <button type="button" onClick={() => addTrackToAlbum(t.id)} className="p-1.5 bg-white/10 rounded hover:bg-white/20 transition">
                           <Plus className="w-3.5 h-3.5 text-white/60" />
                         </button>
                       </div>
@@ -677,7 +677,7 @@ export default function TrackUploadPanel() {
 
               {/* Quick upload new track directly to album */}
               <div className="bg-white/[0.03] rounded-xl border border-white/[0.06] overflow-hidden">
-                <button onClick={() => setShowQuickUpload(p => !p)}
+                <button type="button" onClick={() => setShowQuickUpload(p => !p)}
                   className="w-full flex items-center justify-between px-5 py-4 hover:bg-white/[0.02] transition">
                   <div className="flex items-center space-x-2">
                     <Plus className="w-4 h-4 text-white/40" />
@@ -739,7 +739,7 @@ export default function TrackUploadPanel() {
           {albumStep === 'create' && (
             <div className="space-y-4">
               <div className="flex items-center space-x-3 mb-2">
-                <button onClick={() => setAlbumStep('list')} className="p-2 hover:bg-white/[0.06] rounded-lg transition">
+                <button type="button" onClick={() => setAlbumStep('list')} className="p-2 hover:bg-white/[0.06] rounded-lg transition">
                   <ArrowLeft className="w-4 h-4 text-white/40" />
                 </button>
                 <h3 className="text-base font-semibold text-white">Create Album</h3>
@@ -811,7 +811,7 @@ export default function TrackUploadPanel() {
           {/* STEP: LIST */}
           {albumStep === 'list' && (
             <div className="space-y-4">
-              <button onClick={() => setAlbumStep('create')}
+              <button type="button" onClick={() => setAlbumStep('create')}
                 className="w-full py-3 bg-white/[0.06] text-white/70 font-medium rounded-lg hover:bg-white/[0.1] transition flex items-center justify-center space-x-2">
                 <Plus className="w-4 h-4" /><span>Create New Album</span>
               </button>
@@ -838,11 +838,11 @@ export default function TrackUploadPanel() {
                             className="px-3 py-1.5 bg-white/[0.06] rounded-lg text-xs text-white/60 hover:bg-white/[0.1] transition">
                             Tracks
                           </button>
-                          <button onClick={() => editingAlbumId === album.id ? setEditingAlbumId(null) : startEditAlbum(album)}
+                          <button type="button" onClick={() => editingAlbumId === album.id ? setEditingAlbumId(null) : startEditAlbum(album)}
                             className="p-2 bg-white/[0.04] rounded-lg hover:bg-white/[0.08] transition">
                             <Edit className="w-4 h-4 text-white/40" />
                           </button>
-                          <button onClick={() => deleteAlbum(album.id, album.title)}
+                          <button type="button" onClick={() => deleteAlbum(album.id, album.title)}
                             className="p-2 bg-red-500/[0.06] rounded-lg hover:bg-red-500/[0.12] transition">
                             <Trash2 className="w-4 h-4 text-red-400/60" />
                           </button>
@@ -908,12 +908,12 @@ export default function TrackUploadPanel() {
                             </div>
                           </TierGate>
                           <div className="flex space-x-2">
-                            <button onClick={() => saveAlbumEdit(album.id)} disabled={uploading}
+                            <button type="button" onClick={() => saveAlbumEdit(album.id)} disabled={uploading}
                               className="px-4 py-2 bg-white text-black rounded-lg text-sm font-medium flex items-center space-x-1 disabled:opacity-50">
                               {uploading ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
                               <span>Save</span>
                             </button>
-                            <button onClick={() => setEditingAlbumId(null)}
+                            <button type="button" onClick={() => setEditingAlbumId(null)}
                               className="px-4 py-2 bg-white/[0.06] text-white/60 rounded-lg text-sm flex items-center space-x-1">
                               <X className="w-3.5 h-3.5" /><span>Cancel</span>
                             </button>
@@ -994,11 +994,11 @@ export default function TrackUploadPanel() {
                         <CollaboratorSearch collaborators={editCollaborators} setCollaborators={setEditCollaborators} currentArtistId={artist.id} />
                       </div>
                       <div className="flex space-x-2">
-                        <button onClick={() => saveEdit(track.id)}
+                        <button type="button" onClick={() => saveEdit(track.id)}
                           className="px-4 py-2 bg-white text-black rounded-lg text-sm font-medium flex items-center space-x-1">
                           <Save className="w-3.5 h-3.5" /><span>Save</span>
                         </button>
-                        <button onClick={() => setEditingId(null)}
+                        <button type="button" onClick={() => setEditingId(null)}
                           className="px-4 py-2 bg-white/[0.06] text-white/60 rounded-lg text-sm flex items-center space-x-1">
                           <X className="w-3.5 h-3.5" /><span>Cancel</span>
                         </button>
@@ -1024,10 +1024,10 @@ export default function TrackUploadPanel() {
                         </div>
                       </div>
                       <div className="flex items-center space-x-1 ml-2">
-                        <button onClick={() => startEdit(track)} className="p-2 bg-white/[0.04] rounded-lg hover:bg-white/[0.08] transition">
+                        <button type="button" onClick={() => startEdit(track)} className="p-2 bg-white/[0.04] rounded-lg hover:bg-white/[0.08] transition">
                           <Edit className="w-4 h-4 text-white/40" />
                         </button>
-                        <button onClick={() => deleteTrack(track.id, track.title)} className="p-2 bg-red-500/[0.06] rounded-lg hover:bg-red-500/[0.12] transition">
+                        <button type="button" onClick={() => deleteTrack(track.id, track.title)} className="p-2 bg-red-500/[0.06] rounded-lg hover:bg-red-500/[0.12] transition">
                           <Trash2 className="w-4 h-4 text-red-400/60" />
                         </button>
                       </div>
