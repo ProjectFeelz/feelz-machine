@@ -54,6 +54,113 @@ const BLANK_ALBUM = {
   release_date: '', is_published: false, price: '0', cover_file: null,
 };
 
+const TrackFormFields = ({ form, setForm }) => (
+  <div className="space-y-4">
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div>
+        <label className="block text-xs text-white/40 mb-1.5">Track Title *</label>
+        <input type="text" required value={form.title}
+          onChange={(e) => setForm({ ...form, title: e.target.value })}
+          className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none focus:bg-white/[0.1] transition" />
+      </div>
+      <div>
+        <label className="block text-xs text-white/40 mb-1.5">Album (optional)</label>
+        <select value={form.album_id} onChange={(e) => setForm({ ...form, album_id: e.target.value })}
+          className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none">
+          <option value="">No Album (Single)</option>
+          {albums.map(a => <option key={a.id} value={a.id}>{a.title}</option>)}
+        </select>
+      </div>
+      <div>
+        <label className="block text-xs text-white/40 mb-1.5">Genre</label>
+        <select value={form.genre} onChange={(e) => setForm({ ...form, genre: e.target.value })}
+          className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none">
+          <option value="">Select genre...</option>
+          {GENRES.map(g => <option key={g} value={g}>{g}</option>)}
+        </select>
+      </div>
+      <div>
+        <label className="block text-xs text-white/40 mb-1.5">Mood</label>
+        <select value={form.mood} onChange={(e) => setForm({ ...form, mood: e.target.value })}
+          className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none">
+          <option value="">Select mood...</option>
+          {MOODS.map(m => <option key={m} value={m}>{m}</option>)}
+        </select>
+      </div>
+      <div>
+        <label className="block text-xs text-white/40 mb-1.5">Track Number</label>
+        <input type="number" min="1" value={form.track_number}
+          onChange={(e) => setForm({ ...form, track_number: e.target.value })}
+          className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none" />
+      </div>
+      <TierGate feature="download_sales" inline>
+        <div>
+          <label className="block text-xs text-white/40 mb-1.5">Download Price (USD)</label>
+          <input type="number" min="0" step="0.01" value={form.download_price}
+            onChange={(e) => setForm({ ...form, download_price: e.target.value })}
+            className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none" />
+        </div>
+      </TierGate>
+    </div>
+    <TierGate feature="lyrics" inline>
+      <div>
+        <label className="block text-xs text-white/40 mb-1.5">Lyrics (optional)</label>
+        <textarea rows={3} value={form.lyrics} onChange={(e) => setForm({ ...form, lyrics: e.target.value })}
+          placeholder="Paste lyrics here..."
+          className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none resize-none" />
+      </div>
+    </TierGate>
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div>
+        <label className="block text-xs text-white/40 mb-1.5">Audio File * (.mp3, .wav, .flac)</label>
+        <input type="file" accept=".wav,.mp3,.flac,.m4a,.ogg"
+          onChange={(e) => {
+            const f = e.target.files[0];
+            if (f && f.size > 500 * 1024 * 1024) { showMessage('error', 'File too large! Max 500MB'); return; }
+            setForm({ ...form, audio_file: f });
+          }}
+          className="w-full text-sm text-white/60 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:bg-white/[0.06] file:text-white/60 file:text-sm hover:file:bg-white/[0.1]" />
+        {form.audio_file && (
+          <p className="text-xs text-white/30 mt-1">{form.audio_file.name} ({(form.audio_file.size / (1024 * 1024)).toFixed(1)}MB)</p>
+        )}
+      </div>
+      <div>
+        <label className="block text-xs text-white/40 mb-1.5">Cover Artwork (.jpg, .png)</label>
+        <input type="file" accept=".jpg,.jpeg,.png,.webp"
+          onChange={(e) => setForm({ ...form, cover_file: e.target.files[0] })}
+          className="w-full text-sm text-white/60 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:bg-white/[0.06] file:text-white/60 file:text-sm hover:file:bg-white/[0.1]" />
+      </div>
+    </div>
+    <div className="flex flex-wrap gap-4">
+      {[
+        { key: 'is_published', label: 'Published' },
+        { key: 'featured', label: 'Featured' },
+        { key: 'is_explicit', label: 'Explicit' },
+        { key: 'is_downloadable', label: 'Downloadable' },
+        { key: 'is_premium', label: 'Premium', premiumOnly: true },
+        { key: 'has_versions', label: 'Has Versions' },
+      ].map(({ key, label, premiumOnly }) => (
+        <label key={key} className="flex items-center space-x-2 cursor-pointer">
+          {premiumOnly ? (
+            <TierGate feature="download_sales" inline>
+              <div className={`w-8 h-5 rounded-full transition-colors flex items-center px-0.5 ${form[key] ? 'bg-white' : 'bg-white/10'}`}
+                onClick={() => setForm({ ...form, [key]: !form[key] })}>
+                <div className={`w-4 h-4 rounded-full transition-transform ${form[key] ? 'translate-x-3 bg-black' : 'translate-x-0 bg-white/30'}`} />
+              </div>
+            </TierGate>
+          ) : (
+            <div className={`w-8 h-5 rounded-full transition-colors flex items-center px-0.5 ${form[key] ? 'bg-white' : 'bg-white/10'}`}
+              onClick={() => setForm({ ...form, [key]: !form[key] })}>
+              <div className={`w-4 h-4 rounded-full transition-transform ${form[key] ? 'translate-x-3 bg-black' : 'translate-x-0 bg-white/30'}`} />
+            </div>
+          )}
+          <span className="text-xs text-white/50">{label}</span>
+        </label>
+      ))}
+    </div>
+  </div>
+);
+
 export default function TrackUploadPanel() {
   const { artist } = useAuth();
   const [activeTab, setActiveTab] = useState('upload');
@@ -449,113 +556,7 @@ export default function TrackUploadPanel() {
     { key: 'manage', label: 'Manage Tracks', icon: Edit },
   ];
 
-  // Shared track form fields component
-  const TrackFormFields = ({ form, setForm }) => (
-    <div className="space-y-4">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <label className="block text-xs text-white/40 mb-1.5">Track Title *</label>
-          <input type="text" required value={form.title}
-            onChange={(e) => setForm({ ...form, title: e.target.value })}
-            className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none focus:bg-white/[0.1] transition" />
-        </div>
-        <div>
-          <label className="block text-xs text-white/40 mb-1.5">Album (optional)</label>
-          <select value={form.album_id} onChange={(e) => setForm({ ...form, album_id: e.target.value })}
-            className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none">
-            <option value="">No Album (Single)</option>
-            {albums.map(a => <option key={a.id} value={a.id}>{a.title}</option>)}
-          </select>
-        </div>
-        <div>
-          <label className="block text-xs text-white/40 mb-1.5">Genre</label>
-          <select value={form.genre} onChange={(e) => setForm({ ...form, genre: e.target.value })}
-            className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none">
-            <option value="">Select genre...</option>
-            {GENRES.map(g => <option key={g} value={g}>{g}</option>)}
-          </select>
-        </div>
-        <div>
-          <label className="block text-xs text-white/40 mb-1.5">Mood</label>
-          <select value={form.mood} onChange={(e) => setForm({ ...form, mood: e.target.value })}
-            className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none">
-            <option value="">Select mood...</option>
-            {MOODS.map(m => <option key={m} value={m}>{m}</option>)}
-          </select>
-        </div>
-        <div>
-          <label className="block text-xs text-white/40 mb-1.5">Track Number</label>
-          <input type="number" min="1" value={form.track_number}
-            onChange={(e) => setForm({ ...form, track_number: e.target.value })}
-            className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none" />
-        </div>
-        <TierGate feature="download_sales" inline>
-          <div>
-            <label className="block text-xs text-white/40 mb-1.5">Download Price (USD)</label>
-            <input type="number" min="0" step="0.01" value={form.download_price}
-              onChange={(e) => setForm({ ...form, download_price: e.target.value })}
-              className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none" />
-          </div>
-        </TierGate>
-      </div>
-      <TierGate feature="lyrics" inline>
-        <div>
-          <label className="block text-xs text-white/40 mb-1.5">Lyrics (optional)</label>
-          <textarea rows={3} value={form.lyrics} onChange={(e) => setForm({ ...form, lyrics: e.target.value })}
-            placeholder="Paste lyrics here..."
-            className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none resize-none" />
-        </div>
-      </TierGate>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <label className="block text-xs text-white/40 mb-1.5">Audio File * (.mp3, .wav, .flac)</label>
-          <input type="file" accept=".wav,.mp3,.flac,.m4a,.ogg"
-            onChange={(e) => {
-              const f = e.target.files[0];
-              if (f && f.size > 500 * 1024 * 1024) { showMessage('error', 'File too large! Max 500MB'); return; }
-              setForm({ ...form, audio_file: f });
-            }}
-            className="w-full text-sm text-white/60 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:bg-white/[0.06] file:text-white/60 file:text-sm hover:file:bg-white/[0.1]" />
-          {form.audio_file && (
-            <p className="text-xs text-white/30 mt-1">{form.audio_file.name} ({(form.audio_file.size / (1024 * 1024)).toFixed(1)}MB)</p>
-          )}
-        </div>
-        <div>
-          <label className="block text-xs text-white/40 mb-1.5">Cover Artwork (.jpg, .png)</label>
-          <input type="file" accept=".jpg,.jpeg,.png,.webp"
-            onChange={(e) => setForm({ ...form, cover_file: e.target.files[0] })}
-            className="w-full text-sm text-white/60 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:bg-white/[0.06] file:text-white/60 file:text-sm hover:file:bg-white/[0.1]" />
-        </div>
-      </div>
-      <div className="flex flex-wrap gap-4">
-        {[
-          { key: 'is_published', label: 'Published' },
-          { key: 'featured', label: 'Featured' },
-          { key: 'is_explicit', label: 'Explicit' },
-          { key: 'is_downloadable', label: 'Downloadable' },
-          { key: 'is_premium', label: 'Premium', premiumOnly: true },
-          { key: 'has_versions', label: 'Has Versions' },
-        ].map(({ key, label, premiumOnly }) => (
-          <label key={key} className="flex items-center space-x-2 cursor-pointer">
-            {premiumOnly ? (
-              <TierGate feature="download_sales" inline>
-                <div className={`w-8 h-5 rounded-full transition-colors flex items-center px-0.5 ${form[key] ? 'bg-white' : 'bg-white/10'}`}
-                  onClick={() => setForm({ ...form, [key]: !form[key] })}>
-                  <div className={`w-4 h-4 rounded-full transition-transform ${form[key] ? 'translate-x-3 bg-black' : 'translate-x-0 bg-white/30'}`} />
-                </div>
-              </TierGate>
-            ) : (
-              <div className={`w-8 h-5 rounded-full transition-colors flex items-center px-0.5 ${form[key] ? 'bg-white' : 'bg-white/10'}`}
-                onClick={() => setForm({ ...form, [key]: !form[key] })}>
-                <div className={`w-4 h-4 rounded-full transition-transform ${form[key] ? 'translate-x-3 bg-black' : 'translate-x-0 bg-white/30'}`} />
-              </div>
-            )}
-            <span className="text-xs text-white/50">{label}</span>
-          </label>
-        ))}
-      </div>
-    </div>
-  );
+
 
   return (
     <div className="space-y-6">
