@@ -81,7 +81,7 @@ export default function BrowsePage() {
           .select('*, artists(id, artist_name, slug, profile_image_url, is_verified, tier)')
           .eq('is_published', true)
           .order('engagement_score', { ascending: false })
-          .limit(200),
+          .limit(50),
         supabase.from('tracks')
           .select('*, artists(id, artist_name, slug, profile_image_url, is_verified)')
           .eq('is_published', true)
@@ -92,16 +92,16 @@ export default function BrowsePage() {
           .select('*, artists(id, artist_name, slug, profile_image_url, is_verified)')
           .eq('is_published', true)
           .order('created_at', { ascending: false })
-          .limit(500),
+          .limit(50),
         supabase.from('albums')
           .select('*, artists(artist_name, slug)')
           .eq('is_published', true)
           .order('release_date', { ascending: false })
-          .limit(200),
+          .limit(50),
         supabase.from('artists')
-          .select('*')
+          .select('id, artist_name, slug, profile_image_url, is_verified, follower_count, total_streams, tier')
           .order('total_streams', { ascending: false })
-          .limit(200),
+          .limit(50),
       ]);
 
       const norm = (list) => (list || []).map(t => ({
@@ -195,7 +195,7 @@ export default function BrowsePage() {
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search tracks, artists, albums..."
+            placeholder="Search tracks, artists, albums..." aria-label="Search tracks, artists, albums"
             className="w-full pl-10 pr-4 py-2.5 bg-white/[0.06] rounded-xl text-sm text-white placeholder-white/30 outline-none focus:bg-white/[0.1] transition"
           />
           {query && (
@@ -261,9 +261,9 @@ export default function BrowsePage() {
       )}
 
       {/* Tabs */}
-      <div className="flex space-x-1 overflow-x-auto scrollbar-hide bg-white/[0.03] rounded-xl p-1 mb-5">
+      <div role="tablist" aria-label="Browse categories" className="flex space-x-1 overflow-x-auto scrollbar-hide bg-white/[0.03] rounded-xl p-1 mb-5">
         {tabs.map(({ key, label, icon: Icon }) => (
-          <button key={key} onClick={() => setActiveTab(key)}
+          <button key={key} role="tab" aria-selected={activeTab === key} onClick={() => setActiveTab(key)}
             className={`flex-shrink-0 flex items-center justify-center space-x-1.5 px-3 py-2 rounded-lg text-xs font-medium transition ${
               activeTab === key ? 'bg-white text-black' : 'text-white/40'
             }`}>
