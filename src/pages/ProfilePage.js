@@ -146,7 +146,7 @@ export default function ProfilePage() {
 
   return (
     <div className="pt-12 md:pt-0 pb-4 px-6 md:px-0">
-      <h1 className="text-2xl font-bold text-white mb-4">Profile</h1>
+      <h1 className="text-2xl font-bold text-white mb-4 sticky top-0 z-20 bg-black/90 backdrop-blur-sm md:relative md:top-auto md:bg-transparent md:backdrop-blur-none pt-2 pb-2 -mx-6 px-6">Profile</h1>
       {msg && (
         <div className={`mb-4 p-3 rounded-lg text-sm ${msg.startsWith('Error') ? 'bg-red-500/10 text-red-400' : 'bg-green-500/10 text-green-400'}`}>
           {msg}
