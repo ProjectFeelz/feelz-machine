@@ -19,11 +19,11 @@ function MobileBellButton() {
   const { unreadCount } = useNotifications();
   const navigate = useNavigate();
   return (
-    <div className="md:hidden fixed top-0 left-0 right-0 z-40 h-14 flex items-center justify-end px-4 pt-3">
+    <div className="md:hidden fixed top-0 left-0 right-0 z-40 h-14 flex items-center justify-end px-4 pt-3 pointer-events-none">
       <button
         onClick={() => navigate('/notifications')}
         aria-label="Notifications"
-        className="relative w-9 h-9 flex items-center justify-center rounded-full hover:bg-white/[0.06] transition">
+        className="relative w-9 h-9 flex items-center justify-center rounded-full hover:bg-white/[0.06] transition pointer-events-auto">
         <Bell className="w-5 h-5 text-white/60" />
         {unreadCount > 0 && (
           <span className="absolute top-1 right-1 w-4 h-4 rounded-full bg-red-500 flex items-center justify-center text-[9px] font-bold text-white">
