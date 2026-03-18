@@ -54,7 +54,7 @@ const BLANK_ALBUM = {
   release_date: '', is_published: false, price: '0', cover_file: null,
 };
 
-const TrackFormFields = ({ form, setForm }) => (
+const TrackFormFields = ({ form, setForm, albums, showMessage }) => (
   <div className="space-y-4">
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
       <div>
@@ -584,7 +584,7 @@ export default function TrackUploadPanel() {
         <form onSubmit={(e) => handleTrackUpload(e)} className="space-y-4">
           <div className="bg-white/[0.03] rounded-xl p-5 border border-white/[0.06] space-y-4">
             <h3 className="text-base font-semibold text-white">Track Details</h3>
-            <TrackFormFields form={trackForm} setForm={setTrackForm} />
+            <TrackFormFields form={trackForm} setForm={setTrackForm} albums={albums} showMessage={showMessage} />
             <TierGate feature="collaborations" inline>
               <CollaboratorSearch collaborators={collaborators} setCollaborators={setCollaborators} currentArtistId={artist.id} />
             </TierGate>
@@ -711,7 +711,7 @@ export default function TrackUploadPanel() {
                   <form onSubmit={(e) => handleTrackUpload(e, quickTrackForm, quickVersionFiles, quickCollaborators, true)}
                     className="px-5 pb-5 space-y-4 border-t border-white/[0.06]">
                     <div className="pt-4">
-                      <TrackFormFields form={quickTrackForm} setForm={setQuickTrackForm} />
+                      <TrackFormFields form={quickTrackForm} setForm={setQuickTrackForm} albums={albums} showMessage={showMessage} />
                     </div>
                     <TierGate feature="collaborations" inline>
                       <CollaboratorSearch collaborators={quickCollaborators} setCollaborators={setQuickCollaborators} currentArtistId={artist.id} />
