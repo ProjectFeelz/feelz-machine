@@ -11,12 +11,6 @@ import { downloadTrack } from '../utils/downloadTrack';
 import TrackActionSheet from '../components/TrackActionSheet';
 
 // Resize cover art via Supabase image transform (avoids serving 3072px images at 208px)
-function thumbUrl(url, size) {
-  var s = size || 400;
-  if (!url) return url;
-  return url + (url.includes('?') ? '&' : '?') + 'width=' + s + '&quality=75&resize=cover';
-}
-
 
 function formatNumber(n) {
   if (!n) return '0';
@@ -128,7 +122,7 @@ function SquareCard({ item, itemList = [], isAlbum = false, onPlay, currentTrack
         onClick={() => isAlbum ? navigate(`/album/${item.id}`) : onPlay(item, itemList)}
       >
         {item.cover_artwork_url
-          ? <img src={thumbUrl(item.cover_artwork_url, 400)} alt={item.title ? item.title.trim() : ''} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" loading="lazy" decoding="async" />
+          ? <img src={item.cover_artwork_url} alt={item.title ? item.title.trim() : ''} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
           : <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-white/10 to-white/5">
               {isAlbum ? <Disc className="w-8 h-8 text-white/20" /> : <Music className="w-8 h-8 text-white/20" />}
             </div>
@@ -332,7 +326,7 @@ export default function HomePage() {
                 className="flex-shrink-0 w-40 md:w-52 text-center group">
                 <div className="w-40 h-40 md:w-52 md:h-52 rounded-full overflow-hidden bg-white/[0.06] mb-2 mx-auto">
                   {a.profile_image_url
-                    ? <img src={a.profile_image_url} alt={a.artist_name || ''} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" loading="lazy" decoding="async" />
+                    ? <img src={a.profile_image_url} alt={a.artist_name || ''} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
                     : <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-purple-600/30 to-blue-600/20">
                         <span className="text-3xl font-bold text-white/40">{a.artist_name?.[0]}</span>
                       </div>
