@@ -73,7 +73,7 @@ export default function HubPage() {
     <div className="pt-14 md:pt-0 pb-32 px-4 md:px-0">
 
       {/* Header */}
-      <div className="mb-6">
+      <div className="mb-6 sticky top-0 z-20 bg-black/90 backdrop-blur-sm md:relative md:top-auto md:bg-transparent md:backdrop-blur-none pt-2 -mx-4 px-4">
         <div className="flex items-center space-x-3 mb-1">
           <LayoutDashboard className="w-6 h-6 text-white/60" />
           <h1 className="text-2xl font-bold text-white">Hub</h1>
