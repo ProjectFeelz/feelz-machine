@@ -31,6 +31,7 @@ function DesktopNotifButton() {
   return (
     <button
       onClick={() => navigate('/notifications')}
+      aria-label="Notifications"
       className="w-full flex items-center justify-between px-3 py-2 rounded-xl hover:bg-white/[0.04] transition">
       <span className="text-xs text-white/30 font-medium">Notifications</span>
       <div className="relative">
