@@ -1,5 +1,5 @@
 const PAYPAL_CONFIG = {
-  clientId: 'AXhUqyXxTmBJ8Q6bqt0yiOEuLxqbbhnP93YONXL5Oiy3btUntKK8M7F2WfOeUzoVPxjHEalbRRRU52yY',
+  clientId: process.env.REACT_APP_PAYPAL_CLIENT_ID,
   planIds: {
     pro: 'P-23B04242GD219860SNGUF3XQ',
     premium: 'P-9ED159925B232625WNGUF53Q',
