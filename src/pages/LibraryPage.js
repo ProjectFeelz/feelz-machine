@@ -17,7 +17,7 @@ export default function LibraryPage() {
 
   return (
     <div className="pt-12 md:pt-0 pb-4 px-6 md:px-0">
-      <h1 className="text-2xl font-bold text-white mb-6">Your Library</h1>
+      <h1 className="text-2xl font-bold text-white mb-6 sticky top-0 z-20 bg-black/90 backdrop-blur-sm md:relative md:top-auto md:bg-transparent md:backdrop-blur-none pt-2 pb-2 -mx-6 px-6">Your Library</h1>
       <div className="space-y-2">
         {items.map(({ icon: Icon, label, path, color }) => (
           <button key={path} onClick={() => navigate(path)}
