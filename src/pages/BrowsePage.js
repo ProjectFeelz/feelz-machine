@@ -186,7 +186,7 @@ export default function BrowsePage() {
   }
 
   return (
-    <div className="pt-12 md:pt-0 pb-4 px-6 md:px-0">
+    <div className="pt-12 md:pt-0 pb-4 px-6 md:px-0 sticky top-0 z-20 bg-black/90 backdrop-blur-sm md:relative md:top-auto md:bg-transparent md:backdrop-blur-none">
       {/* Search */}
       <div className="mb-4">
         <div className="relative">
