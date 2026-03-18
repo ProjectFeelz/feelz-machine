@@ -22,6 +22,7 @@ function MobileBellButton() {
     <div className="md:hidden fixed top-0 left-0 right-0 z-40 h-14 flex items-center justify-end px-4 pt-3">
       <button
         onClick={() => navigate('/notifications')}
+        aria-label="Notifications"
         className="relative w-9 h-9 flex items-center justify-center rounded-full hover:bg-white/[0.06] transition">
         <Bell className="w-5 h-5 text-white/60" />
         {unreadCount > 0 && (
@@ -47,6 +48,28 @@ export default function AppLayout() {
       navigate('/setup');
     }
   }, [user, hasProfile, loading, location.pathname]);
+
+
+  // Update page title on route change
+  useEffect(() => {
+    var titles = {
+      '/': 'Home',
+      '/browse': 'Browse',
+      '/library': 'Library',
+      '/community': 'Community',
+      '/hub': 'Hub',
+      '/profile': 'Profile',
+      '/notifications': 'Notifications',
+      '/chat': 'Chat',
+      '/dashboard': 'Dashboard',
+      '/upgrade': 'Upgrade',
+    };
+    var base = 'Feelz Machine';
+    var match = Object.keys(titles).find(function(k) {
+      return location.pathname === k || location.pathname.startsWith(k + '/');
+    });
+    document.title = match ? titles[match] + ' · ' + base : base;
+  }, [location.pathname]);
 
   // Mobile bottom padding:
   // - always leave room for nav bar (64px)
