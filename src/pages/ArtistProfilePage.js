@@ -11,7 +11,7 @@ import {
   Loader, Verified, Download, Heart, ListMusic, Check, MoreHorizontal
 } from 'lucide-react';
 
-const PAYPAL_CLIENT_ID = 'AXhUqyXxTmBJ8Q6bqt0yiOEuLxqbbhnP93YONXL5Oiy3btUntKK8M7F2WfOeUzoVPxjHEalbRRRU52yY';
+const PAYPAL_CLIENT_ID = process.env.REACT_APP_PAYPAL_CLIENT_ID;
 
 const SOCIAL_ICONS = {
   instagram: Instagram, twitter: Twitter, youtube: Youtube,
