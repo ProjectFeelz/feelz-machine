@@ -161,7 +161,7 @@ export default function ChatRoomsPage() {
     <div className="pt-12 md:pt-0 pb-4 px-6 md:px-0">
 
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-6 sticky top-0 z-20 bg-black/90 backdrop-blur-sm md:relative md:top-auto md:bg-transparent md:backdrop-blur-none pt-2 pb-2 -mx-6 px-6">
         <h1 className="text-2xl font-bold text-white">Chat Rooms</h1>
         {artist && (
           <button
