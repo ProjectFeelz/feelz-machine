@@ -268,7 +268,7 @@ export default function HomePage() {
   return (
     <div className="pt-12 md:pt-0 pb-4">
       {/* Greeting */}
-      <div className="px-6 mb-8">
+      <div className="px-6 mb-4 sticky top-0 z-20 bg-black/90 backdrop-blur-sm md:relative md:top-auto md:bg-transparent md:backdrop-blur-none pt-2">
         <h1 className="text-2xl font-bold text-white">
           {user ? greeting() : 'Feelz Machine'}
         </h1>
