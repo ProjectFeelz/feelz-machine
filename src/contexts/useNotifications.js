@@ -84,17 +84,14 @@ export default function useNotifications() {
   }, [artist, user]);
 
   const fetchUnreadCount = useCallback(async () => {
-    if (!artist && !user) return;
-    let query = supabase
+    // Only fire when both user and artist are resolved to avoid a redundant
+    // partial query (user_id only) followed by a full query (artist_id + user_id)
+    if (!user || !artist) return;
+    const { count } = await supabase
       .from('notifications')
       .select('*', { count: 'exact', head: true })
-      .eq('read', false);
-    if (artist) {
-      query = query.or(`artist_id.eq.${artist.id},user_id.eq.${user.id}`);
-    } else {
-      query = query.eq('user_id', user.id);
-    }
-    const { count } = await query;
+      .eq('read', false)
+      .or(`artist_id.eq.${artist.id},user_id.eq.${user.id}`);
     setUnreadCount(count || 0);
   }, [artist, user]);
 
