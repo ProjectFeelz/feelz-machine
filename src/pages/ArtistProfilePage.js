@@ -344,7 +344,7 @@ export default function ArtistProfilePage() {
           <img src={theme.background_image_url} alt="" className="absolute inset-0 w-full h-full object-cover opacity-30" />
         )}
         <div className="absolute inset-0" style={{ background: `linear-gradient(to bottom, transparent 20%, ${bgColor} 100%)` }} />
-        <div className="absolute top-0 left-0 right-0 flex items-center justify-center p-5 z-10">
+        <div className="fixed top-0 left-0 right-0 flex items-center justify-center p-5 z-50">
           <button onClick={() => navigate(-1)}
             className="absolute left-5 w-9 h-9 flex items-center justify-center rounded-full backdrop-blur-md"
             style={{ backgroundColor: `${bgColor}80` }}>
