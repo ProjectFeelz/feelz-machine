@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react'; import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   Play, Pause, SkipBack, SkipForward, ChevronDown,
@@ -17,6 +17,7 @@ function formatTime(secs) {
 }
 
 export default function FullPlayer() {
+  const navigate = useNavigate();
   const {
     currentTrack, isPlaying, togglePlay,
     playNext, playPrev, seek, duration, currentTime,
@@ -117,7 +118,7 @@ export default function FullPlayer() {
               <div className="w-10 h-10 rounded-lg overflow-hidden bg-white/[0.06] flex-shrink-0">
                 {track.cover_artwork_url
                   ? <img src={track.cover_artwork_url} alt="" className="w-full h-full object-cover" />
-                  : <div className="w-full h-full flex items-center justify-center text-white/20 text-lg">♪</div>
+                  : <div className="w-full h-full flex items-center justify-center text-white/20 text-lg">âª</div>
                 }
               </div>
               <div className="flex-1 min-w-0">
@@ -206,7 +207,7 @@ export default function FullPlayer() {
               </button>
             </div>
 
-            {/* Volume — desktop only */}
+            {/* Volume â desktop only */}
             <div className="hidden md:flex items-center space-x-3 mt-4 px-2">
               <button onClick={() => setVolumeLevel(volume > 0 ? 0 : 1)} className="text-white/40">
                 {volume === 0 ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
