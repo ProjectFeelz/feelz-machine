@@ -5,7 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { usePlayer } from '../contexts/PlayerContext';
 import { downloadTrack } from '../utils/downloadTrack';
 import {
-    X, Share2, ListMusic, Download, Heart, Plhay, Music,
+    X, Share2, ListMusic, Download, Heart, Play, Music,
     Loader, Check, ChevronLeft
 } from 'lucide-react';
 
