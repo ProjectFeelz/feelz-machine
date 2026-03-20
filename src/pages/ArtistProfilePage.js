@@ -80,7 +80,7 @@ export default function ArtistProfilePage() {
       if (themeData) setTheme(themeData);
 
       const { data: trackData } = await supabase
-        .from('tracks').select('*, albums(title, cover_artwork_url)')
+        .from('tracks').select('*, albums(title, cover_artwork_url, price)')
         .eq('artist_id', artistData.id).eq('is_published', true)
         .order('engagement_score', { ascending: false });
       setTracks(trackData || []);
@@ -139,7 +139,7 @@ export default function ArtistProfilePage() {
         try {
           const res = await fetch('/.netlify/functions/paypal-order', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'create', trackId: purchaseTrack.id, amount: purchaseTrack.download_price, trackTitle: purchaseTrack.title, artistName: artist.artist_name }),
+            body: JSON.stringify({ action: 'create', trackId: purchaseTrack.id, amount: getEffectivePrice(purchaseTrack), trackTitle: purchaseTrack.title, artistName: artist.artist_name }),
           });
           const { orderId, error } = await res.json();
           if (error || !orderId) throw new Error(error || 'Failed to create order');
@@ -154,10 +154,10 @@ export default function ArtistProfilePage() {
           });
           const captureData = await res.json();
           if (!captureData.success) throw new Error('Payment capture failed');
-          await supabase.from('downloads').insert({ user_id: user.id, track_id: purchaseTrack.id, amount_paid: purchaseTrack.download_price });
+          await supabase.from('downloads').insert({ user_id: user.id, track_id: purchaseTrack.id, amount_paid: getEffectivePrice(purchaseTrack) });
           await fetch('/.netlify/functions/process-split-payout', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ track_id: purchaseTrack.id, transaction_id: captureData.captureId, total_amount: purchaseTrack.download_price, buyer_user_id: user.id }),
+            body: JSON.stringify({ track_id: purchaseTrack.id, transaction_id: captureData.captureId, total_amount: getEffectivePrice(purchaseTrack), buyer_user_id: user.id }),
           });
           setPurchaseSuccess(true); setPurchasing(false);
           setTimeout(async () => { await triggerDownload(purchaseTrack); setPurchaseTrack(null); setPurchaseSuccess(false); }, 1500);
@@ -198,11 +198,18 @@ export default function ArtistProfilePage() {
     setDownloading(null);
   };
 
+  // Returns the effective download price: track's own price, or album price if track has no price
+  const getEffectivePrice = (track) => {
+    if (track.download_price > 0) return track.download_price;
+    if (track.album_id && track.albums?.price > 0) return track.albums.price;
+    return 0;
+  };
+
   const handleDownload = (track, e) => {
     e.stopPropagation();
     if (!user) { navigate('/login'); return; }
     if (downloading === track.id) return;
-    if (track.download_price > 0) { setPurchaseTrack(track); } else { triggerDownload(track); }
+    if (getEffectivePrice(track) > 0) { setPurchaseTrack(track); } else { triggerDownload(track); }
   };
 
   const handleShare = async () => {
@@ -512,7 +519,7 @@ export default function ArtistProfilePage() {
                       className="flex-shrink-0 flex items-center space-x-1 px-2.5 py-1.5 rounded-lg transition-all active:scale-95 disabled:opacity-50"
                       style={{ backgroundColor: `${secondaryColor}20`, color: secondaryColor }}>
                       {downloading === track.id ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
-                      {track.download_price > 0 && <span className="text-[11px] font-semibold">${track.download_price}</span>}
+                      {getEffectivePrice(track) > 0 && <span className="text-[11px] font-semibold">${getEffectivePrice(track)}</span>}
                     </button>
                   )}
                 </div>
@@ -643,7 +650,7 @@ export default function ArtistProfilePage() {
                     <p className="font-semibold truncate" style={{ color: textColor }}>{purchaseTrack.title}</p>
                     <p className="text-sm" style={{ color: `${textColor}50` }}>{artist.artist_name}</p>
                   </div>
-                  <p className="text-xl font-bold flex-shrink-0" style={{ color: secondaryColor }}>${purchaseTrack.download_price}</p>
+                  <p className="text-xl font-bold flex-shrink-0" style={{ color: secondaryColor }}>{getEffectivePrice(purchaseTrack)}</p>
                 </div>
                 <div className="rounded-xl p-3 text-center" style={{ backgroundColor: `${textColor}05`, border: `1px solid ${textColor}10` }}>
                   <p className="text-xs" style={{ color: `${textColor}40` }}>High-quality MP3 download delivered instantly after payment</p>
