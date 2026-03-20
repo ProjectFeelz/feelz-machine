@@ -316,6 +316,7 @@ export default function AlbumDetailPage() {
           <button onClick={handleShare} className="w-9 h-9 flex items-center justify-center rounded-full bg-black/40 backdrop-blur-md">
             {copied ? <Check className="w-4 h-4 text-green-400" /> : <Share2 className="w-4 h-4 text-white" />}
           </button>
+                    <div className="w-9 h-9" />
         </div>
         <div className="absolute bottom-0 left-0 right-0 px-5 pb-5 flex items-end space-x-4">
           <div className="w-28 h-28 rounded-xl overflow-hidden bg-white/[0.06] flex-shrink-0 shadow-2xl">

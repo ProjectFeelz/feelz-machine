@@ -173,8 +173,9 @@ export default function TrackActionSheet({ track, artist, onClose }) {
                    )}
 </>
               )}
-              <button onClick={() => navigate(`/player/artist/${artist?.slug || ''}`)} className="w-full flex items-center space-x-4 px-5 py-3.5 active:bg-white/[0.04] transition" onClickCapture={onClose}>
-                                <span className="text-sm text-white/40">View Artist</span>
+              <button onClick={() => navigate(`/artist/${artist?.slug || ''}`); onClose()} className="w-full flex items-center space-x-4 px-5 py-3.5 active:bg-white/[0.04] transition" onClickCapture={onClose}>
+                                                <Music className="w-5 h-5 text-white/40" />
+                                                                                <span className="text-sm text-white/70">View Artist</span>
                 </button>
                 </>
           )}

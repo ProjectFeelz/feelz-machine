@@ -157,7 +157,7 @@ export default function ChatRoomView() {
   const navigate = useNavigate();
   const { user, artist, isAdmin } = useAuth();
 
-  const [room, setRoom] = useState(null);
+  const [room, setRoom] = useState(null);  const [spendGate, setSpendGate] = useState(false); // true when user hasn't spent $5 on this artist
   const [messages, setMessages] = useState([]);
   const [polls, setPolls] = useState([]);
   const [wordFilters, setWordFilters] = useState([]);
@@ -170,7 +170,7 @@ export default function ChatRoomView() {
   const [showMembers, setShowMembers] = useState(false);
   const [modWarning, setModWarning] = useState('');
   const [replyingTo, setReplyingTo] = useState(null);
-  const [showPollModal, setShowPollModal] = useState(false);
+  const [showPollModal, setShowPollModal] = useState(false);  const [spendGate, setSpendGate] = useState(false);
 
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
@@ -299,21 +299,45 @@ export default function ChatRoomView() {
     if (data) { setIsMember(true); setMyMembership(data); } else { setIsMember(false); setMyMembership(null); }
   };
 
-  const joinRoom = async () => {
-    if (!user) { navigate('/login'); return; }
-    setJoining(true);
-    try {
-      const { data: existing } = await supabase.from('chat_room_members').select('id')
-        .eq('room_id', roomId).eq('user_id', user.id).maybeSingle();
-      if (existing) { setIsMember(true); setMyMembership({ role: 'member' }); setJoining(false); return; }
-      const { error } = await supabase.from('chat_room_members').insert({ room_id: roomId, user_id: user.id, role: 'member' });
-      if (error) throw error;
-      try { await supabase.rpc('increment_chat_member_count', { room_id_input: roomId }); }
-      catch { await supabase.from('chat_rooms').update({ member_count: (room?.member_count || 0) + 1 }).eq('id', roomId); }
-      setIsMember(true); setMyMembership({ role: 'member' });
-    } catch (err) { console.error('Join error:', err); }
-    setJoining(false);
-  };
+    const joinRoom = async () => {
+          if (!user) { navigate('/login'); return; }
+              setJoining(true);
+                  try {
+                        // Subscriber-only rooms require $5 minimum spend on this artist
+                              if (room?.is_subscribers_only) {
+                                      const artistId = room?.artists?.id;
+                                              if (artistId) {
+                                                        // Get all track IDs by this artist first
+                                                                  const { data: artistTracks } = await supabase
+                                                                              .from('tracks')
+                                                                                          .select('id')
+                                                                                                      .eq('artist_id', artistId);
+                                                                                                                const trackIds = (artistTracks || []).map(t => t.id);
+                                                                                                                          let totalSpent = 0;
+                                                                                                                                    if (trackIds.length > 0) {
+                                                                                                                                                const { data: spendData } = await supabase
+                                                                                                                                                              .from('downloads')
+                                                                                                                                                                            .select('amount_paid')
+                                                                                                                                                                                          .eq('user_id', user.id)
+                                                                                                                                                                                                        .in('track_id', trackIds);
+                                                                                                                                                                                                                    totalSpent = (spendData || []).reduce((sum, d) => sum + (d.amount_paid || 0), 0);
+                                                                                                                                                                                                                              }
+                                                                                                                                                                                                                                        if (totalSpent < 5) {
+                                                                                                                                                                                                                                                    setSpendGate(true);
+                                                                                                                                                                                                                                                                setJoining(false);
+                                                                                                                                                                                                                                                                            return;
+                                                                                                                                                                                                                                                                                      }
+                                                                                                                                                                                                                                                                                              }
+                                                                                                                                                                                                                                                                                                    }
+                                                                                                                                                                                                                                                                                                          const { data: existing } = await supabase.from('chat_room_members').select('id')
+                                                                                                                                                                                                                                                                                                                  .eq('room_id', roomId).eq('user_id', user.id).maybeSingle();
+                                                                                                                                                                                                                                                                                                                        if (existing) { setIsMember(true); setMyMembership({ role: 'member' }); setJoining(false); return; }
+                                                                                                                                                                                                                                                                                                                              const { error } = await supabase.from('chat_room_members').insert({ room_id: roomId, user_id: user.id, role: 'member' });
+                                                                                                                                                                                                                                                                                                                                    if (error) throw error;
+                                                                                                                                                                                                                                                                                                                                          try { await supabase.rpc('increment_chat_member_count', { room_id_input: roomId }); }
+                                                                                                                                                                                                                                                                                                                                                catch { await supabase.from('chat_rooms').update({ member_count: (room?.member_count || 0) + 1 }).eq('id', roomId); }
+                                                                                                                                                                                                                                                                                                                                                
+    }};
 
   const moderateMessage = useCallback((text) => {
     if (hasExternalLink(text)) return 'External links are not allowed in chat rooms';
@@ -549,15 +573,35 @@ export default function ChatRoomView() {
           )}
         </div>
       ) : (
-        <div className="px-4 py-3 border-t border-white/[0.06] flex-shrink-0">
-          <button onClick={joinRoom} disabled={joining}
-            className="w-full py-3 bg-white text-black rounded-xl font-semibold text-sm flex items-center justify-center space-x-2 disabled:opacity-50 transition">
-            {joining ? <Loader className="w-4 h-4 animate-spin" /> : <Users className="w-4 h-4" />}
-            <span>{joining ? 'Joining...' : 'Join Room to Chat'}</span>
-          </button>
-        </div>
-      )}
-
+                  spendGate ? (
+                              <div className="px-4 py-4 border-t border-white/[0.06] flex-shrink-0">
+                                            <div className="rounded-xl bg-yellow-500/10 border border-yellow-500/20 p-4 text-center">
+                                                            <Lock className="w-6 h-6 text-yellow-400 mx-auto mb-2" />
+                                                                            <p className="text-sm font-semibold text-white mb-1">Supporter Access Required</p>
+                                                                                            <p className="text-xs text-white/40 mb-3">
+                                                                                                              This is a subscriber-only room. Purchase at least <span className="text-white font-semibold">$5</span> of music
+                                                                                                                                from <span className="text-white">{room?.artists?.artist_name}</span> to join — a single, multiple singles, or an album all count.
+                                                                                                                                                </p>
+                                                                                                                                                                <button
+                                                                                                                                                                                  onClick={() => navigate(`/artist/${room?.artists?.slug}`)}
+                                                                                                                                                                                                    className="w-full py-2.5 bg-yellow-500 text-black rounded-xl font-semibold text-sm transition active:scale-95"
+                                                                                                                                                                                                                    >
+                                                                                                                                                                                                                                      Browse {room?.artists?.artist_name}&apos;s Music
+                                                                                                                                                                                                                                                      </button>
+                                                                                                                                                                                                                                                                    </div>
+                                                                                                                                                                                                                                                                                </div>
+                                                                                                                                                                                                                                                                                          ) : (
+                                                                                                                                                                                                                                                                                                      <div className="px-4 py-3 border-t border-white/[0.06] flex-shrink-0">
+                                                                                                                                                                                                                                                                                                                    <button onClick={joinRoom} disabled={joining}
+                                                                                                                                                                                                                                                                                                                                    className="w-full py-3 bg-white text-black rounded-xl font-semibold text-sm flex items-center justify-center space-x-2 disabled:opacity-50 transition">
+                                                                                                                                                                                                                                                                                                                                                    {joining ? <Loader className="w-4 h-4 animate-spin" /> : <Users className="w-4 h-4" />}
+                                                                                                                                                                                                                                                                                                                                                                    <span>{joining ? 'Joining...' : 'Join Room to Chat'}</span>
+                                                                                                                                                                                                                                                                                                                                                                                  </button>
+                                                                                                                                                                                                                                                                                                                                                                                              </div>
+                                                                                                                                                                                                                                                                                                                                                                                                        )
+                                                                                                                                                                                                                                                                                                                                                                                                                )}
+                                                                                                                                                                                                                                                                                                                                                                                                                
+      )
       {showPollModal && (
         <CreatePollModal roomId={roomId} artistId={artist?.id}
           onClose={() => setShowPollModal(false)} onCreated={fetchPolls} />
