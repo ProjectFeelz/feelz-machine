@@ -7,6 +7,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { usePlayer } from '../contexts/PlayerContext';
 import { usePaidPlayLimit } from '../hooks/usePaidPlayLimit';
 import PaidPlayGate from '../components/PaidPlayGate';
+import TrackCredits, { TrackCreditsInline } from '../components/TrackCredits';
 import {
   ArrowLeft, Play, Pause, Music, Loader, Download,
   Heart, Share2, Check, ListMusic, ShoppingCart, X
@@ -404,6 +405,7 @@ export default function AlbumDetailPage() {
                     {track.is_explicit && <span className="text-[9px] font-bold px-1 py-0.5 bg-white/10 text-white/40 rounded">E</span>}
                     <span className="text-xs text-white/30">{formatNumber(track.stream_count || 0)} plays</span>
                     {track.duration && <span className="text-xs text-white/20">{formatDuration(track.duration)}</span>}
+                    <TrackCreditsInline trackId={track.id} />
                   </div>
                 </button>
                 <div className="flex items-center space-x-1 flex-shrink-0">
@@ -459,6 +461,15 @@ export default function AlbumDetailPage() {
           );
         })}
       </div>
+
+      {/* Collaborator credits for each track */}
+      {tracks.some(t => t.id) && (
+        <div className="px-4 mt-2 space-y-3">
+          {tracks.map(track => (
+            <TrackCredits key={track.id} trackId={track.id} />
+          ))}
+        </div>
+      )}
 
       <PaidPlayGate
         track={limitedTrack}
