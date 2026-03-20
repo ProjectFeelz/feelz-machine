@@ -170,7 +170,7 @@ export default function ChatRoomView() {
   const [showMembers, setShowMembers] = useState(false);
   const [modWarning, setModWarning] = useState('');
   const [replyingTo, setReplyingTo] = useState(null);
-  const [showPollModal, setShowPollModal] = useState(false);  const [spendGate, setSpendGate] = useState(false);
+  const [showPollModal, setShowPollModal] = useState(false);
 
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
