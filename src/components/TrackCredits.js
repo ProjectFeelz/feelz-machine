@@ -5,11 +5,19 @@ import { Users } from 'lucide-react';
 
 const ROLE_LABELS = {
   featured: 'ft.',
+  performing_artist: 'perf.',
   producer: 'prod.',
+  co_producer: 'co-prod.',
   songwriter: 'written by',
+  lyricist: 'lyrics',
   vocalist: 'vocals',
+  musician: 'music',
+  arranger: 'arr.',
   remix: 'remix',
-  engineer: 'eng.',
+  engineer: 'mix',
+  mastering: 'master',
+  recording: 'rec.',
+  director: 'A&R',
 };
 
 // Inline credits — e.g. "ft. ArtistName, prod. AnotherArtist"
@@ -56,7 +64,7 @@ export default function TrackCredits({ trackId }) {
       setLoading(true);
       const { data } = await supabase
         .from('collaborations')
-        .select('role, split_percent, artist:artists(id, artist_name, avatar_url, slug)')
+        .select('role, split_percent, artist:artists(id, artist_name, profile_image_url, slug)')
         .eq('track_id', trackId)
         .eq('status', 'accepted')
         .order('split_percent', { ascending: false });
@@ -81,8 +89,8 @@ export default function TrackCredits({ trackId }) {
             onClick={() => c.artist?.slug && navigate(`/artist/${c.artist.slug}`)}
             className="w-full flex items-center space-x-3 p-2 rounded-lg hover:bg-white/[0.04] transition text-left"
           >
-            {c.artist?.avatar_url ? (
-              <img src={c.artist.avatar_url} alt="" className="w-8 h-8 rounded-full object-cover" />
+            {c.artist?.profile_image_url ? (
+              <img src={c.artist.profile_image_url} alt="" className="w-8 h-8 rounded-full object-cover" />
             ) : (
               <div className="w-8 h-8 rounded-full bg-white/[0.08] flex items-center justify-center">
                 <span className="text-xs font-bold text-white/30">
