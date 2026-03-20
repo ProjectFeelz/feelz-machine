@@ -300,45 +300,57 @@ export default function ChatRoomView() {
   };
 
     const joinRoom = async () => {
-          if (!user) { navigate('/login'); return; }
-              setJoining(true);
-                  try {
-                        // Subscriber-only rooms require $5 minimum spend on this artist
-                              if (room?.is_subscribers_only) {
-                                      const artistId = room?.artists?.id;
-                                              if (artistId) {
-                                                        // Get all track IDs by this artist first
-                                                                  const { data: artistTracks } = await supabase
-                                                                              .from('tracks')
-                                                                                          .select('id')
-                                                                                                      .eq('artist_id', artistId);
-                                                                                                                const trackIds = (artistTracks || []).map(t => t.id);
-                                                                                                                          let totalSpent = 0;
-                                                                                                                                    if (trackIds.length > 0) {
-                                                                                                                                                const { data: spendData } = await supabase
-                                                                                                                                                              .from('downloads')
-                                                                                                                                                                            .select('amount_paid')
-                                                                                                                                                                                          .eq('user_id', user.id)
-                                                                                                                                                                                                        .in('track_id', trackIds);
-                                                                                                                                                                                                                    totalSpent = (spendData || []).reduce((sum, d) => sum + (d.amount_paid || 0), 0);
-                                                                                                                                                                                                                              }
-                                                                                                                                                                                                                                        if (totalSpent < 5) {
-                                                                                                                                                                                                                                                    setSpendGate(true);
-                                                                                                                                                                                                                                                                setJoining(false);
-                                                                                                                                                                                                                                                                            return;
-                                                                                                                                                                                                                                                                                      }
-                                                                                                                                                                                                                                                                                              }
-                                                                                                                                                                                                                                                                                                    }
-                                                                                                                                                                                                                                                                                                          const { data: existing } = await supabase.from('chat_room_members').select('id')
-                                                                                                                                                                                                                                                                                                                  .eq('room_id', roomId).eq('user_id', user.id).maybeSingle();
-                                                                                                                                                                                                                                                                                                                        if (existing) { setIsMember(true); setMyMembership({ role: 'member' }); setJoining(false); return; }
-                                                                                                                                                                                                                                                                                                                              const { error } = await supabase.from('chat_room_members').insert({ room_id: roomId, user_id: user.id, role: 'member' });
-                                                                                                                                                                                                                                                                                                                                    if (error) throw error;
-                                                                                                                                                                                                                                                                                                                                          try { await supabase.rpc('increment_chat_member_count', { room_id_input: roomId }); }
-                                                                                                                                                                                                                                                                                                                                                catch { await supabase.from('chat_rooms').update({ member_count: (room?.member_count || 0) + 1 }).eq('id', roomId); }
-                                                                                                                                                                                                                                                                                                                                                
-    }};
-
+  if (!user) { navigate('/login'); return; }
+  setJoining(true);
+  try {
+    if (room?.is_subscribers_only) {
+      const artistId = room?.artists?.id;
+      if (artistId) {
+        const { data: artistTracks } = await supabase
+          .from('tracks')
+          .select('id')
+          .eq('artist_id', artistId);
+        const trackIds = (artistTracks || []).map(t => t.id);
+        let totalSpent = 0;
+        if (trackIds.length > 0) {
+          const { data: spendData } = await supabase
+            .from('downloads')
+            .select('amount_paid')
+            .eq('user_id', user.id)
+            .in('track_id', trackIds);
+          totalSpent = (spendData || []).reduce((sum, d) => sum + (d.amount_paid || 0), 0);
+        }
+        if (totalSpent < 5) {
+          setSpendGate(true);
+          setJoining(false);
+          return;
+        }
+      }
+    }
+    const { data: existing } = await supabase.from('chat_room_members').select('id')
+      .eq('room_id', roomId).eq('user_id', user.id).maybeSingle();
+    if (existing) {
+      setIsMember(true);
+      setMyMembership({ role: 'member' });
+      setJoining(false);
+      return;
+    }
+    const { error } = await supabase.from('chat_room_members').insert({
+      room_id: roomId, user_id: user.id, role: 'member'
+    });
+    if (error) throw error;
+    try {
+      await supabase.rpc('increment_chat_member_count', { room_id_input: roomId });
+    } catch {
+      await supabase.from('chat_rooms').update({ member_count: (room?.member_count || 0) + 1 }).eq('id', roomId);
+    }
+    setIsMember(true);
+    setMyMembership({ role: 'member' });
+  } catch (err) {
+    console.error('Join error:', err);
+  }
+  setJoining(false);
+};
   const moderateMessage = useCallback((text) => {
     if (hasExternalLink(text)) return 'External links are not allowed in chat rooms';
     for (const filter of wordFilters) {
@@ -428,7 +440,7 @@ export default function ChatRoomView() {
                 <p className="text-sm font-semibold text-white">{room.name}</p>
                 {room.is_subscribers_only && <Lock className="w-3 h-3 text-yellow-400" />}
               </div>
-              <p className="text-[10px] text-white/30">{room.artists?.artist_name} · {room.member_count} members</p>
+              <p className="text-[10px] text-white/30">{room.artists?.artist_name} Â· {room.member_count} members</p>
             </div>
           </button>
         </div>
@@ -460,7 +472,7 @@ export default function ChatRoomView() {
               ? <img src={room.artists.profile_image_url} alt="" className="w-7 h-7 object-cover" />
               : <span className="text-xs font-bold text-white/30">{room.artists?.artist_name?.[0]}</span>}
           </div>
-          <p className="text-xs text-white/30 flex-1">{room.name} · Created by {room.artists?.artist_name}</p>
+          <p className="text-xs text-white/30 flex-1">{room.name} Â· Created by {room.artists?.artist_name}</p>
           <Shield className="w-3 h-3 text-white/15" />
           <span className="text-[10px] text-white/15">Moderated</span>
         </div>
@@ -497,7 +509,7 @@ export default function ChatRoomView() {
                   <div className="flex items-center space-x-1.5 mb-0.5">
                     <span className={`text-xs font-semibold ${isRoomOwner ? 'text-purple-400' : 'text-white'}`}>{msg.artist?.artist_name || 'User'}</span>
                     {isRoomOwner && <span className="text-[9px] px-1.5 py-0.5 bg-purple-500/10 text-purple-400 rounded font-medium">HOST</span>}
-                    {msg.artist?.is_verified && <span className="text-[9px] text-blue-400">✓</span>}
+                    {msg.artist?.is_verified && <span className="text-[9px] text-blue-400">â</span>}
                     {msg.is_pinned && <span className="flex items-center space-x-0.5 text-[9px] text-purple-400 font-medium"><Pin className="w-2.5 h-2.5" /><span>Pinned</span></span>}
                     <span className="text-[10px] text-white/15">{timeAgo(msg.created_at)}</span>
                   </div>
@@ -548,7 +560,7 @@ export default function ChatRoomView() {
               {replyingTo && (
                 <div className="flex items-center justify-between mb-2 px-3 py-1.5 bg-purple-500/10 rounded-lg">
                   <span className="text-[11px] text-purple-400">Replying to @{replyingTo.artist_name}</span>
-                  <button onClick={() => { setReplyingTo(null); setInput(''); }} className="text-white/30 hover:text-white/60 text-sm leading-none">×</button>
+                  <button onClick={() => { setReplyingTo(null); setInput(''); }} className="text-white/30 hover:text-white/60 text-sm leading-none">Ã</button>
                 </div>
               )}
               <div className="flex items-center space-x-2">
@@ -580,7 +592,7 @@ export default function ChatRoomView() {
                                                                             <p className="text-sm font-semibold text-white mb-1">Supporter Access Required</p>
                                                                                             <p className="text-xs text-white/40 mb-3">
                                                                                                               This is a subscriber-only room. Purchase at least <span className="text-white font-semibold">$5</span> of music
-                                                                                                                                from <span className="text-white">{room?.artists?.artist_name}</span> to join — a single, multiple singles, or an album all count.
+                                                                                                                                from <span className="text-white">{room?.artists?.artist_name}</span> to join â a single, multiple singles, or an album all count.
                                                                                                                                                 </p>
                                                                                                                                                                 <button
                                                                                                                                                                                   onClick={() => navigate(`/artist/${room?.artists?.slug}`)}
