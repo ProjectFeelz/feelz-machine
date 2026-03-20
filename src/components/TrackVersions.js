@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
-import { ChevronDown, ChevronUp, Play, Download, Loader } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
+import { ChevronDown, ChevronUp, Play, Download, Loader, Lock } from 'lucide-react';
 
 const VERSION_TYPE_LABELS = {
   remix:        'Remix',
@@ -17,11 +18,8 @@ const VERSION_TYPE_LABELS = {
 };
 
 // Extract the storage path from a Supabase public or signed URL
-// e.g. ".../storage/v1/object/public/feelz-samples/versions/foo.wav"
-//   -> "versions/foo.wav"
 function extractStoragePath(url) {
   if (!url) return null;
-  // Match path after the bucket name "feelz-samples/"
   const match = url.match(/feelz-samples\/(.+?)(?:\?|$)/);
   return match ? match[1] : null;
 }
@@ -29,40 +27,79 @@ function extractStoragePath(url) {
 // Get a short-lived signed URL for a private bucket file
 async function getSignedUrl(rawUrl) {
   const path = extractStoragePath(rawUrl);
-  if (!path) return rawUrl; // fallback
+  if (!path) return rawUrl;
   const { data, error } = await supabase.storage
     .from('feelz-samples')
-    .createSignedUrl(path, 300); // 5 minutes — enough for streaming + download
+    .createSignedUrl(path, 300); // 5 min
   if (error || !data?.signedUrl) return null;
   return data.signedUrl;
 }
 
-// Compact toggle + list shown inline under a track row
-export default function TrackVersions({ track, onPlayVersion }) {
+// Determine effective price: own price > 0, or album price
+function getEffectivePrice(track) {
+  if (track.download_price > 0) return track.download_price;
+  if (track.album_id && track.albums?.price > 0) return track.albums.price;
+  return 0;
+}
+
+export default function TrackVersions({ track, onPlayVersion, onPurchaseRequired }) {
+  const { user } = useAuth();
   const [versions, setVersions] = useState([]);
   const [expanded, setExpanded] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [hasPurchased, setHasPurchased] = useState(false);
+  const [checkingPurchase, setCheckingPurchase] = useState(false);
   const [playingId, setPlayingId] = useState(null);
   const [downloadingId, setDownloadingId] = useState(null);
 
-  // Only fetch when user opens the panel
+  const effectivePrice = getEffectivePrice(track);
+  const isPaid = effectivePrice > 0;
+
+  // When panel opens, fetch versions AND check purchase status if track is paid
   useEffect(() => {
-    if (!expanded || loaded) return;
-    supabase
-      .from('track_versions')
-      .select('id, version_name, version_type, file_url, duration')
-      .eq('track_id', track.id)
-      .order('created_at', { ascending: true })
-      .then(({ data }) => {
-        setVersions(data || []);
-        setLoaded(true);
-      });
-  }, [expanded, loaded, track.id]);
+    if (!expanded) return;
+
+    if (!loaded) {
+      supabase
+        .from('track_versions')
+        .select('id, version_name, version_type, file_url, duration')
+        .eq('track_id', track.id)
+        .order('created_at', { ascending: true })
+        .then(({ data }) => {
+          setVersions(data || []);
+          setLoaded(true);
+        });
+    }
+
+    if (isPaid && user && !hasPurchased) {
+      setCheckingPurchase(true);
+      supabase
+        .from('downloads')
+        .select('id')
+        .eq('track_id', track.id)
+        .eq('user_id', user.id)
+        .maybeSingle()
+        .then(({ data }) => {
+          setHasPurchased(!!data);
+          setCheckingPurchase(false);
+        });
+    }
+  }, [expanded, loaded, isPaid, user, track.id]);
 
   if (!track.has_versions) return null;
 
+  // Can the user access version files?
+  // - Free track: always yes
+  // - Paid track: only if logged in AND has a download record
+  const canAccess = !isPaid || (user && hasPurchased);
+
   const handlePlay = async (e, ver) => {
     e.stopPropagation();
+    if (!canAccess) {
+      // Kick up to parent to open purchase modal
+      onPurchaseRequired && onPurchaseRequired(track);
+      return;
+    }
     if (playingId === ver.id) return;
     setPlayingId(ver.id);
     const signedUrl = await getSignedUrl(ver.file_url);
@@ -78,12 +115,15 @@ export default function TrackVersions({ track, onPlayVersion }) {
   const handleDownload = async (e, ver) => {
     e.stopPropagation();
     e.preventDefault();
+    if (!canAccess) {
+      onPurchaseRequired && onPurchaseRequired(track);
+      return;
+    }
     if (downloadingId === ver.id) return;
     setDownloadingId(ver.id);
     const signedUrl = await getSignedUrl(ver.file_url);
     setDownloadingId(null);
     if (!signedUrl) return;
-    // Blob download with proper filename
     try {
       const res = await fetch(signedUrl);
       const blob = await res.blob();
@@ -107,15 +147,51 @@ export default function TrackVersions({ track, onPlayVersion }) {
       >
         {expanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
         <span>{expanded ? 'Hide versions' : 'Versions'}</span>
+        {isPaid && <Lock className="w-2.5 h-2.5 ml-0.5 opacity-50" />}
       </button>
 
       {/* Version rows */}
       {expanded && (
         <div className="ml-2 mt-1 space-y-1 border-l border-white/[0.06] pl-3">
-          {versions.length === 0 && loaded && (
+
+          {/* Locked state — paid track, not purchased */}
+          {isPaid && !canAccess && !checkingPurchase && (
+            <div className="flex items-center space-x-2 py-2 px-1">
+              <Lock className="w-3 h-3 text-white/25 flex-shrink-0" />
+              <p className="text-[11px] text-white/30">
+                Purchase the track to access versions
+              </p>
+              <button
+                onClick={(e) => { e.stopPropagation(); onPurchaseRequired && onPurchaseRequired(track); }}
+                className="text-[11px] px-2 py-0.5 rounded-md font-medium transition hover:opacity-80"
+                style={{ backgroundColor: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.6)' }}
+              >
+                Buy ${effectivePrice.toFixed(2)}
+              </button>
+            </div>
+          )}
+
+          {checkingPurchase && (
+            <div className="flex items-center space-x-2 py-2 px-1">
+              <Loader className="w-3 h-3 text-white/25 animate-spin" />
+              <p className="text-[11px] text-white/25">Checking access...</p>
+            </div>
+          )}
+
+          {/* No login prompt */}
+          {isPaid && !user && (
+            <div className="flex items-center space-x-2 py-2 px-1">
+              <Lock className="w-3 h-3 text-white/25 flex-shrink-0" />
+              <p className="text-[11px] text-white/30">Log in to access versions</p>
+            </div>
+          )}
+
+          {versions.length === 0 && loaded && canAccess && (
             <p className="text-[11px] text-white/25 py-1">No versions available.</p>
           )}
-          {versions.map((ver) => (
+
+          {/* Show version rows only if accessible */}
+          {canAccess && versions.map((ver) => (
             <div
               key={ver.id}
               className="flex items-center justify-between py-1.5 px-2 rounded-lg hover:bg-white/[0.04] transition group"
@@ -141,8 +217,8 @@ export default function TrackVersions({ track, onPlayVersion }) {
                 </div>
               </button>
 
-              {/* Download version — only if parent track is downloadable and free */}
-              {track.is_downloadable && !(track.download_price > 0) && (
+              {/* Download — only if track is downloadable and user has access */}
+              {track.is_downloadable && canAccess && (
                 <button
                   onClick={(e) => handleDownload(e, ver)}
                   disabled={downloadingId === ver.id}
