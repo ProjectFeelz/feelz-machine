@@ -4,11 +4,19 @@ import { Search, X, Users, Percent, ChevronDown, AlertCircle } from 'lucide-reac
 
 const ROLES = [
   { value: 'featured', label: 'Featured Artist' },
+  { value: 'performing_artist', label: 'Performing Artist' },
   { value: 'producer', label: 'Producer' },
+  { value: 'co_producer', label: 'Co-Producer' },
   { value: 'songwriter', label: 'Songwriter' },
+  { value: 'lyricist', label: 'Lyricist' },
   { value: 'vocalist', label: 'Vocalist' },
+  { value: 'musician', label: 'Musician' },
+  { value: 'arranger', label: 'Arranger' },
   { value: 'remix', label: 'Remix' },
-  { value: 'engineer', label: 'Engineer' },
+  { value: 'engineer', label: 'Mixing Engineer' },
+  { value: 'mastering', label: 'Mastering Engineer' },
+  { value: 'recording', label: 'Recording Engineer' },
+  { value: 'director', label: 'A&R / Director' },
 ];
 
 export default function CollaboratorSearch({ collaborators, setCollaborators, currentArtistId }) {
