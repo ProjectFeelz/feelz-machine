@@ -437,6 +437,10 @@ export default function AlbumDetailPage() {
                   { ...version, artist_name: artist?.artist_name },
                   tracks.map(t => ({ ...t, artist_name: artist?.artist_name }))
                 )}
+                onPurchaseRequired={(t) => {
+                  const price = getTrackPrice(t);
+                  if (price > 0) setPurchaseTarget({ type: 'track', track: t, price, label: t.title });
+                }}
               />
 
               {/* Add to playlist dropdown */}
