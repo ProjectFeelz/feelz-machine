@@ -1,4 +1,4 @@
-// Downloads a track via the secure get-download-url netlify function.
+—// Downloads a track via the secure get-download-url netlify function.
 // Requires the user's auth token and track ID — the backend verifies
 // a purchase record exists before issuing a short-lived signed URL.
 export async function downloadTrack(trackId, title, authToken) {
