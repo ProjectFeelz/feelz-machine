@@ -8,6 +8,7 @@ import { usePlayer } from '../contexts/PlayerContext';
 import { usePaidPlayLimit } from '../hooks/usePaidPlayLimit';
 import PaidPlayGate from '../components/PaidPlayGate';
 import TrackCredits, { TrackCreditsInline } from '../components/TrackCredits';
+import TrackVersions from '../components/TrackVersions';
 import {
   ArrowLeft, Play, Pause, Music, Loader, Download,
   Heart, Share2, Check, ListMusic, ShoppingCart, X
@@ -430,6 +431,13 @@ export default function AlbumDetailPage() {
                   )}
                 </div>
               </div>
+              <TrackVersions
+                track={track}
+                onPlayVersion={(version) => playTrack(
+                  { ...version, artist_name: artist?.artist_name },
+                  tracks.map(t => ({ ...t, artist_name: artist?.artist_name }))
+                )}
+              />
 
               {/* Add to playlist dropdown */}
               {showAddToPlaylist === track.id && (
