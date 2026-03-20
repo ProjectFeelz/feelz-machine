@@ -533,6 +533,7 @@ export default function ArtistProfilePage() {
                       tracks.map(t => ({ ...t, artist_name: artist?.artist_name, artist_slug: artist?.slug }))
                     );
                   }}
+                  onPurchaseRequired={(t) => setPurchaseTrack(t)}
                 />
                 </React.Fragment>
               );
