@@ -231,7 +231,8 @@ export default function AlbumDetailPage() {
     setDownloading(track.id);
     try {
       await supabase.from('downloads').insert({ user_id: user.id, track_id: track.id }).catch(() => {});
-      await downloadTrack(track.file_url, track.title);
+      const { data: { session } } = await supabase.auth.getSession();
+      await downloadTrack(track.id, track.title, session?.access_token);
     } catch {}
     setDownloading(null);
   };
@@ -242,7 +243,8 @@ export default function AlbumDetailPage() {
       if (track.file_url) {
         try {
           await supabase.from('downloads').insert({ user_id: user.id, track_id: track.id }).catch(() => {});
-          await downloadTrack(track.file_url, track.title);
+          const { data: { session } } = await supabase.auth.getSession();
+          await downloadTrack(track.id, track.title, session?.access_token);
           await new Promise(r => setTimeout(r, 800)); // stagger downloads
         } catch {}
       }
