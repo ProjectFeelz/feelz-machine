@@ -1,76 +1,29 @@
 {
-  "short_name": "Feelz Machine",
-  "name": "Feelz Machine",
-  "description": "Independent music streaming platform for artists and fans",
-  "lang": "en",
-  "dir": "ltr",
-  "categories": ["music", "entertainment"],
-  "icons": [
-    {
-      "src": "/logo.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "any maskable"
-    },
-    {
-      "src": "/icon.png",
-      "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "any maskable"
-    }
-  ],
-  "start_url": "/player",
-  "scope": "/",
-  "display": "standalone",
-  "orientation": "portrait",
-  "theme_color": "#000000",
-  "background_color": "#000000",
-  "id": "/player"
-}{
-  "short_name": "Feelz Machine",
-  "name": "Feelz Machine",
-  "description": "Independent music streaming platform for artists and fans",
-  "lang": "en",
-  "dir": "ltr",
-  "categories": [
-    "music",
-    "entertainment"
-  ],
-  "icons": [
-    {
-      "src": "/logo.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "any maskable"
-    },
-    {
-      "src": "/icon.png",
-      "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "any maskable"
-    }
-  ],
-  "screenshots": [
-    {
-      "src": "https://www.feelzmachine.com/player/screenshots/desktop.png",
-      "sizes": "1280x800",
-      "type": "image/png",
-      "form_factor": "wide",
-      "label": "Feelz Machine - Desktop"
-    },
-    {
-      "src": "https://www.feelzmachine.com/player/screenshots/mobile.png",
-      "sizes": "390x844",
-      "type": "image/png",
-      "form_factor": "narrow",
-      "label": "Feelz Machine - Mobile"
-    }
-  ],
-  "start_url": "/player",
-  "scope": "/",
-  "display": "standalone",
-  "orientation": "portrait",
-  "theme_color": "#000000",
-  "background_color": "#000000",
-  "id": "/player"
+    "short_name": "Feelz Machine",
+    "name": "Feelz Machine",
+    "description": "Independent music streaming platform for artists and fans",
+    "lang": "en",
+    "dir": "ltr",
+    "categories": ["music", "entertainment"],
+    "icons": [
+          {
+                  "src": "/logo.png",
+                  "sizes": "512x512",
+                  "type": "image/png",
+                  "purpose": "any maskable"
+          },
+          {
+                  "src": "/icon.png",
+                  "sizes": "192x192",
+                  "type": "image/png",
+                  "purpose": "any maskable"
+          }
+    ],
+    "start_url": "/player",
+    "scope": "/",
+    "display": "standalone",
+    "orientation": "portrait",
+    "theme_color": "#000000",
+    "background_color": "#000000",
+    "id": "/player"
 }
