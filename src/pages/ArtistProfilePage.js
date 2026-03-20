@@ -4,7 +4,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
-import { usePlayer } from '../contexts/PlayerContext';
+import { usePlayer } from '../contexts/PlayerChontext';
 import {
   ArrowLeft, Play, Pause, Share2, UserPlus, UserCheck,
   Instagram, Twitter, Youtube, MessageCircle, Globe, Music,
@@ -192,7 +192,8 @@ export default function ArtistProfilePage() {
       try { await supabase.from('downloads').upsert({ user_id: user.id, track_id: track.id }, { onConflict: 'user_id,track_id', ignoreDuplicates: true }); } catch {}
       const { data: myProfile } = await supabase.from('artists').select('id, artist_name').eq('user_id', user.id).maybeSingle();
       try { await supabase.from('notifications').insert({ artist_id: artist.id, type: 'download', title: `${myProfile?.artist_name || 'Someone'} downloaded ${track.title}`, track_id: track.id, from_artist_id: myProfile?.id || null, metadata: { download: true, purchase_price: track.download_price || 0 } }); } catch {}
-      await downloadTrack(track.file_url, track.title);
+      const { data: { session } } = await supabase.auth.getSession();
+      await downloadTrack(track.id, track.title, session?.access_token);
     } catch (err) { console.error('Download error:', err); }
     setDownloading(null);
   };
