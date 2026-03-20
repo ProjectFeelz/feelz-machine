@@ -1,5 +1,6 @@
 import { downloadTrack } from '../utils/downloadTrack';
 import TrackActionSheet from '../components/TrackActionSheet';
+import TrackVersions from '../components/TrackVersions';
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
@@ -450,7 +451,8 @@ export default function ArtistProfilePage() {
               const isActive = currentTrack?.id === track.id;
               const isTrackPlaying = isActive && isPlaying;
               return (
-                <div key={track.id} onClick={() => handlePlayTrack(track)}
+                <React.Fragment key={track.id}>
+                <div onClick={() => handlePlayTrack(track)}
                   className="w-full flex items-center space-x-3 p-2.5 rounded-lg transition-all cursor-pointer"
                   style={{ backgroundColor: isActive ? `${secondaryColor}15` : 'transparent' }}>
                   <div className="w-7 flex items-center justify-center flex-shrink-0">
@@ -523,6 +525,16 @@ export default function ArtistProfilePage() {
                     </button>
                   )}
                 </div>
+                <TrackVersions
+                  track={track}
+                  onPlayVersion={(version) => {
+                    playTrack(
+                      { ...version, artist_name: artist?.artist_name, artist_slug: artist?.slug },
+                      tracks.map(t => ({ ...t, artist_name: artist?.artist_name, artist_slug: artist?.slug }))
+                    );
+                  }}
+                />
+                </React.Fragment>
               );
             })}
           </div>
