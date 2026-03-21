@@ -8,6 +8,7 @@ import {
 import { usePlayer } from '../../contexts/PlayerContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../supabaseClient';
+import { downloadTrack } from '../../utils/downloadTrack';
 
 export default function DesktopPlayer() {
   const navigate = useNavigate();
@@ -68,16 +69,13 @@ export default function DesktopPlayer() {
   };
 
   const handleDownload = async () => {
-    if (!currentTrack?.file_url || !user) return;
+    if (!currentTrack?.is_downloadable || !user) return;
     setDownloading(true);
     try {
-      await supabase.from('downloads').insert({ user_id: user.id, track_id: currentTrack.id });
-      const a = document.createElement('a');
-      a.href = currentTrack.file_url;
-      a.target = '_blank';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
+      const { data: { session } } = await supabase.auth.getSession();
+      const authToken = session?.access_token;
+      if (!authToken) return;
+      await downloadTrack(currentTrack.id, currentTrack.title, authToken);
     } catch (e) { console.error(e); }
     setDownloading(false);
     setShowMenu(false);
