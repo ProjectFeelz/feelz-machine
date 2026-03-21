@@ -154,7 +154,7 @@ function SquareCard({ item, itemList = [], isAlbum = false, onPlay, currentTrack
 
       {/* Title + artist */}
       <p className="text-sm font-medium text-white truncate">{item.title}</p>
-      <p className="text-xs text-white/40 truncate">{item.artist_name}</p>
+      <button onClick={(e) => { e.stopPropagation(); if (item.artist_slug) navigate(`/artist/${item.artist_slug}`); }} className="text-xs text-white/40 truncate hover:text-white/70 transition text-left w-full block">{item.artist_name}</button>
 
       {/* 3-dot dropdown */}
       {showActionSheet && (
