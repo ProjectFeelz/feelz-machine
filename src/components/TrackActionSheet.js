@@ -118,7 +118,10 @@ export default function TrackActionSheet({ track, artist, onClose }) {
           </div>
           <div className="flex-1 min-w-0">
                       <p className="text-sm font-semibold text-white truncate">{track.title}</p>
-            <p className="text-xs text-white/40 truncate">{artist?.artist_name || track.artist_name}</p>
+            <button
+              onClick={() => { const slug = artist?.slug || track.artist_slug; if (slug) { navigate(`/artist/${slug}`); onClose(); } }}
+              className="text-xs text-white/40 truncate hover:text-white/70 transition text-left w-full block"
+            >{artist?.artist_name || track.artist_name}</button>
           </div>
           <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full bg-white/[0.06]">
                       <X className="w-4 h-4 text-white/50" />
