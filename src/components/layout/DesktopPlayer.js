@@ -268,6 +268,7 @@ export default function DesktopPlayer() {
                     <span className="text-sm text-white/70">{shared ? 'Copied!' : 'Share'}</span>
                   </button>
                   {currentTrack.is_downloadable && (
+                    <>
                     <button onClick={handleDownload} disabled={downloading}
                       className="w-full flex items-center space-x-3 px-4 py-3 hover:bg-white/[0.04] transition text-left disabled:opacity-40">
                       {downloading ? <Loader className="w-4 h-4 animate-spin text-white/50" /> : <Download className="w-4 h-4 text-white/50" />}
@@ -276,6 +277,7 @@ export default function DesktopPlayer() {
                     {downloadError && (
                       <p className="text-xs text-red-400 px-4 pb-2">{downloadError}</p>
                     )}
+                    </>
                   )}
                   {currentTrack.artist_slug && (
                     <button onClick={() => { navigate(`/artist/${currentTrack.artist_slug}`); setShowMenu(false); }}
