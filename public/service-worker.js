@@ -27,7 +27,7 @@ self.addEventListener('activate', e => {
   self.clients.claim();
 });
 
-// Fetch: network-first for API calls, cache-first for assets, offline fallback for navigation
+// Fetch: network-first for navigation, cache-first for assets, offline fallback
 self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
 
@@ -39,7 +39,9 @@ self.addEventListener('fetch', e => {
   if (e.request.mode === 'navigate') {
     e.respondWith(
       fetch(e.request).catch(() =>
-        caches.match(OFFLINE_URL).then(r => r || caches.match('/player/'))
+        caches.match(OFFLINE_URL)
+          .then(r => r || caches.match('/player/'))
+          .then(r => r || new Response('Offline', { status: 503, headers: { 'Content-Type': 'text/plain' } }))
       )
     );
     return;
@@ -55,7 +57,9 @@ self.addEventListener('fetch', e => {
           caches.open(CACHE).then(cache => cache.put(e.request, clone));
         }
         return response;
-      }).catch(() => cached);
+      }).catch(() =>
+        cached || new Response('Not available offline', { status: 503, headers: { 'Content-Type': 'text/plain' } })
+      );
     })
   );
 });
