@@ -17,8 +17,9 @@ export default function MiniPlayer() {
 
   const handleArtistClick = (e) => {
         e.stopPropagation();
-        if (currentTrack?.artist_slug) {
-                navigate(`/artist/${currentTrack.artist_slug}`);
+        const slug = currentTrack?.artist_slug || currentTrack?.artists?.slug;
+        if (slug) {
+                navigate(`/artist/${slug}`);
         }
   };
 
@@ -71,7 +72,7 @@ export default function MiniPlayer() {
 {showActionSheet && (
                   <TrackActionSheet
                    track={currentTrack}
-                   artist={{ artist_name: currentTrack.artist_name, slug: currentTrack.artist_slug }}
+                   artist={{ artist_name: currentTrack.artist_name, slug: currentTrack.artist_slug || currentTrack.artists?.slug }}
                   onClose={() => setShowActionSheet(false)}
                 />
                                   )}
