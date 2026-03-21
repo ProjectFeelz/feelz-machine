@@ -37,12 +37,16 @@ import AlbumDetailPage from './pages/AlbumDetailPage';
 import AdminUserBehaviorPage from './pages/AdminUserBehaviorPage';
 
 export default function AppRouter() {
-    return (
-          <BrowserRouter basename="/player">
-            <AuthProvider>
-              <PlayerProvider>
-                <Routes>
-                  <Route path="/login" element={<LoginPage />} />
+      return (
+              <BrowserRouter>
+                <AuthProvider>
+                  <PlayerProvider>
+                    <Routes>
+      {/* Legacy /player/* redirects for any old bookmarks/links */}
+                      <Route path="/player" element={<Navigate to="/" replace />} />
+            <Route path="/player/*" element={<Navigate to="/" replace />} />
+
+            <Route path="/login" element={<LoginPage />} />
             <Route path="/setup" element={<ProfileSetup />} />
             <Route path="/dashboard" element={<ArtistDashboard />} />
             <Route path="/upgrade" element={<TierUpgradePage />} />
@@ -50,7 +54,7 @@ export default function AppRouter() {
             <Route path="/privacy-policy" element={<PrivacyPolicy />} />
             <Route path="/terms-of-use" element={<TermsOfUse />} />
             <Route element={<AppLayout />}>
-                <Route path="/" element={<HomePage />} />
+                  <Route path="/" element={<HomePage />} />
               <Route path="/browse" element={<BrowsePage />} />
               <Route path="/library" element={<LibraryPage />} />
               <Route path="/library/likes" element={<LikedSongsPage />} />
@@ -76,10 +80,10 @@ export default function AppRouter() {
               <Route path="/admin/boost" element={<AdminBoost />} />
               <Route path="/admin/broadcast" element={<AdminBroadcast />} />
               <Route path="/admin/behavior" element={<AdminUserBehaviorPage />} />
-  </Route>
-  </Routes>
-  </PlayerProvider>
-  </AuthProvider>
-  </BrowserRouter>
+    </Route>
+    </Routes>
+    </PlayerProvider>
+    </AuthProvider>
+    </BrowserRouter>
   );
 }
