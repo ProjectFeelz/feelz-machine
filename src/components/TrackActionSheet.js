@@ -6,7 +6,7 @@ import { usePlayer } from '../contexts/PlayerContext';
 import { downloadTrack } from '../utils/downloadTrack';
 import {
       X, Share2, ListMusic, Download, Heart, Play, Music,
-      Loader, Check, ChevronLeft, ShoppingCart, Lock,
+      Loader, Check, ChevronLeft, ShoppingCart, Lock, PlusCircle,
 } from 'lucide-react';
 
 const PAYPAL_CLIENT_ID = process.env.REACT_APP_PAYPAL_CLIENT_ID;
@@ -24,6 +24,9 @@ export default function TrackActionSheet({ track, artist, onClose }) {
       const [downloading, setDownloading] = useState(false);
       const [liked, setLiked] = useState(false);
       const [downloadError, setDownloadError] = useState(null);
+  const [newPlaylistName, setNewPlaylistName] = useState('');
+  const [creatingPlaylist, setCreatingPlaylist] = useState(false);
+  const [showNewPlaylist, setShowNewPlaylist] = useState(false);
 
   // Purchase state
   const [paypalReady, setPaypalReady] = useState(false);
@@ -158,6 +161,25 @@ export default function TrackActionSheet({ track, artist, onClose }) {
           setView('playlists');
   };
 
+  const handleCreatePlaylist = async () => {
+    const name = newPlaylistName.trim();
+    if (!name || creatingPlaylist) return;
+    setCreatingPlaylist(true);
+    const { data, error } = await supabase
+      .from('playlists')
+      .insert({ name, user_id: user.id })
+      .select('id, name')
+      .single();
+    if (!error && data) {
+      // Immediately add the track to the new playlist
+      await handleAddToPlaylist(data.id);
+      setPlaylists(prev => [...prev, data]);
+    }
+    setNewPlaylistName('');
+    setShowNewPlaylist(false);
+    setCreatingPlaylist(false);
+  };
+
   const handleAddToPlaylist = async (playlistId) => {
           setAddingTo(playlistId);
           const { data: existing } = await supabase
@@ -276,30 +298,66 @@ export default function TrackActionSheet({ track, artist, onClose }) {
 {/* Views */}
         <div className="py-2">
 
-        {/* ── Playlists view ── */}
-{view === 'playlists' && (
-                <>
-{playlists.length === 0
-                 ? <p className="text-xs text-white/30 px-5 py-3">No playlists yet</p>
-                 : playlists.map(pl => (
-                                       <button
-                                                     key={pl.id}
-                    onClick={() => handleAddToPlaylist(pl.id)}
-                    disabled={addingTo === pl.id}
-                                            className="w-full flex items-center justify-between px-5 py-3.5 active:bg-white/[0.04] transition"
+        {/* ── Playlists vie{/* ── Playlists view ── */}
+          {view === 'playlists' && (
+            <div>
+              {/* New playlist inline form */}
+              {showNewPlaylist ? (
+                <div className="flex items-center space-x-2 px-4 py-2.5 border-b border-white/[0.05]">
+                  <input
+                    autoFocus
+                    type="text"
+                    value={newPlaylistName}
+                    onChange={e => setNewPlaylistName(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') handleCreatePlaylist(); if (e.key === 'Escape') { setShowNewPlaylist(false); setNewPlaylistName(''); } }}
+                    placeholder="Playlist name"
+                    className="flex-1 bg-white/[0.06] text-white text-sm rounded-lg px-3 py-2 outline-none placeholder:text-white/25 border border-white/[0.08] focus:border-white/20"
+                    maxLength={60}
+                  />
+                  <button
+                    onClick={handleCreatePlaylist}
+                    disabled={!newPlaylistName.trim() || creatingPlaylist}
+                    className="px-3 py-2 rounded-lg text-xs font-semibold text-black bg-white disabled:opacity-40 transition active:scale-95 flex-shrink-0"
                   >
-                                            <span className="text-sm text-white/70 truncate">{pl.name}</span>
-{addedTo[pl.id]
-                       ? <Check className="w-4 h-4 text-green-400" />
-                          : addingTo === pl.id
-                         ? <Loader className="w-4 h-4 animate-spin text-white/30" />
-                            : null}
-</button>
-                ))}
-                    </>
+                    {creatingPlaylist ? <Loader className="w-3.5 h-3.5 animate-spin" /> : 'Create'}
+                  </button>
+                  <button onClick={() => { setShowNewPlaylist(false); setNewPlaylistName(''); }} className="p-2 text-white/30 hover:text-white/60 transition flex-shrink-0">
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setShowNewPlaylist(true)}
+                  className="w-full flex items-center space-x-3 px-5 py-3 text-left hover:bg-white/[0.04] transition border-b border-white/[0.05]"
+                >
+                  <PlusCircle className="w-4 h-4 text-white/40" />
+                  <span className="text-sm text-white/60">New playlist</span>
+                </button>
+              )}
+
+              {/* Existing playlists */}
+              {playlists.length === 0 && !showNewPlaylist && (
+                <p className="text-xs text-white/30 px-5 py-3">No playlists yet — create one above</p>
+              )}
+              {playlists.map(pl => (
+                <button
+                  key={pl.id}
+                  onClick={() => handleAddToPlaylist(pl.id)}
+                  disabled={addingTo === pl.id}
+                  className="w-full flex items-center justify-between px-5 py-3.5 active:bg-white/[0.04] transition"
+                >
+                  <span className="text-sm text-white/70 truncate">{pl.name}</span>
+                  {addedTo[pl.id]
+                    ? <Check className="w-4 h-4 text-green-400" />
+                    : addingTo === pl.id
+                      ? <Loader className="w-4 h-4 animate-spin text-white/30" />
+                      : null}
+                </button>
+              ))}
+            </div>
           )}
 
-{/* ── Purchase view ── */}
+          {/* ── Purchase view ── */}
 {view === 'purchase' && (
                 <div className="px-5 py-4 space-y-4">
 {purchaseSuccess ? (
