@@ -9,7 +9,7 @@ import { usePlayer } from '../contexts/PlayerContext';
 import {
   ArrowLeft, Play, Pause, Share2, UserPlus, UserCheck,
   Instagram, Twitter, Youtube, MessageCircle, Globe, Music,
-  Loader, Verified, Download, Heart, ListMusic, Check, MoreHorizontal
+  Loader, Verified, Download, Heart, ListMusic, Check, MoreHorizontal, DollarSign
 } from 'lucide-react';
 
 const PAYPAL_CLIENT_ID = process.env.REACT_APP_PAYPAL_CLIENT_ID;
@@ -59,6 +59,12 @@ export default function ArtistProfilePage() {
   const [purchaseSuccess, setPurchaseSuccess] = useState(false);
   const [paypalReady, setPaypalReady] = useState(false);
   const [purchaseError, setPurchaseError] = useState('');
+  const [pwywTrack, setPwywTrack] = useState(null);
+  const [pwywFanPrice, setPwywFanPrice] = useState('');
+  const [pwywFanPriceError, setPwywFanPriceError] = useState('');
+  const [pwywPaypalReady, setPwywPaypalReady] = useState(false);
+  const [pwywPurchaseSuccess, setPwywPurchaseSuccess] = useState(false);
+  const [pwywPurchaseError, setPwywPurchaseError] = useState('');
   const [likedTracks, setLikedTracks] = useState({});
   const [showAddToPlaylist, setShowAddToPlaylist] = useState(null);
   const [playlists, setPlaylists] = useState([]);
@@ -81,7 +87,7 @@ export default function ArtistProfilePage() {
       if (themeData) setTheme(themeData);
 
       const { data: trackData } = await supabase
-        .from('tracks').select('*, albums(title, cover_artwork_url, price)')
+        .from('tracks').select('*, albums(title, cover_artwork_url, price), pay_what_you_want, minimum_price')
         .eq('artist_id', artistData.id).eq('is_published', true)
         .order('engagement_score', { ascending: false });
       setTracks(trackData || []);
@@ -127,6 +133,21 @@ export default function ArtistProfilePage() {
     script.onerror = () => setPurchaseError('Failed to load PayPal. Please try again.');
     document.head.appendChild(script);
   }, [purchaseTrack?.id]);
+
+  useEffect(() => {
+    if (!pwywTrack) return;
+    setPwywPaypalReady(false);
+    setPwywPurchaseError('');
+    const existing = document.getElementById('paypal-sdk-pwyw');
+    if (existing) existing.remove();
+    const script = document.createElement('script');
+    script.id = 'paypal-sdk-pwyw';
+    script.src = `https://www.paypal.com/sdk/js?client-id=${PAYPAL_CLIENT_ID}&currency=USD`;
+    script.async = true;
+    script.onload = () => setPwywPaypalReady(true);
+    script.onerror = () => setPwywPurchaseError('Failed to load PayPal. Please try again.');
+    document.head.appendChild(script);
+  }, [pwywTrack?.id]);
 
   useEffect(() => {
     if (!paypalReady || !purchaseTrack || !window.paypal) return;
@@ -210,7 +231,18 @@ export default function ArtistProfilePage() {
     e.stopPropagation();
     if (!user) { navigate('/login'); return; }
     if (downloading === track.id) return;
-    if (getEffectivePrice(track) > 0) { setPurchaseTrack(track); } else { triggerDownload(track); }
+    if (track.pay_what_you_want) {
+      const suggested = Math.max(getEffectivePrice(track), parseFloat(track.minimum_price) || 0);
+      setPwywFanPrice(suggested > 0 ? suggested.toFixed(2) : '');
+      setPwywFanPriceError('');
+      setPwywPurchaseError('');
+      setPwywPurchaseSuccess(false);
+      setPwywTrack(track);
+    } else if (getEffectivePrice(track) > 0) {
+      setPurchaseTrack(track);
+    } else {
+      triggerDownload(track);
+    }
   };
 
   const handleShare = async () => {
@@ -342,7 +374,7 @@ export default function ArtistProfilePage() {
   return (
     <div className="min-h-screen pb-32" style={{ backgroundColor: bgColor, color: textColor, fontFamily: `"${bodyFont}", sans-serif`, ...themeStyles }}>
 
-      {/* BANNER — reduced height so music is seen immediately */}
+      {/* BANNER â reduced height so music is seen immediately */}
       <div className="relative w-full" style={{ height: '160px' }}>
         {artist.banner_image_url || theme?.banner_image_url ? (
           <img src={artist.banner_image_url || theme?.banner_image_url} alt="" className="absolute inset-0 w-full h-full object-cover" />
@@ -442,7 +474,7 @@ export default function ArtistProfilePage() {
         )}
       </div>
 
-      {/* POPULAR TRACKS — first */}
+      {/* POPULAR TRACKS â first */}
       {tracks.length > 0 && (
         <div className="px-6 mb-8">
           <h2 className="text-lg font-bold mb-3" style={{ fontFamily: `"${headingFont}", sans-serif` }}>Popular</h2>
@@ -497,7 +529,7 @@ export default function ArtistProfilePage() {
                       <div className="absolute right-0 bottom-8 z-50 w-52 rounded-xl shadow-2xl overflow-hidden" style={{ backgroundColor: '#111', border: '1px solid rgba(255,255,255,0.08)' }}>
                         <div className="flex items-center justify-between px-4 py-2.5 border-b border-white/[0.06]">
                           <p className="text-xs font-semibold text-white/50">Add to Playlist</p>
-                          <button onClick={(e) => { e.stopPropagation(); setShowAddToPlaylist(null); }} className="text-white/30 text-lg leading-none">×</button>
+                          <button onClick={(e) => { e.stopPropagation(); setShowAddToPlaylist(null); }} className="text-white/30 text-lg leading-none">Ã</button>
                         </div>
                         {playlists.length === 0
                           ? <div className="px-4 py-3"><p className="text-xs text-white/30">No playlists yet</p></div>
@@ -521,7 +553,10 @@ export default function ArtistProfilePage() {
                       className="flex-shrink-0 flex items-center space-x-1 px-2.5 py-1.5 rounded-lg transition-all active:scale-95 disabled:opacity-50"
                       style={{ backgroundColor: `${secondaryColor}20`, color: secondaryColor }}>
                       {downloading === track.id ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
-                      {getEffectivePrice(track) > 0 && <span className="text-[11px] font-semibold">${getEffectivePrice(track)}</span>}
+                      {track.pay_what_you_want
+                    ? <span className="text-[11px] font-semibold">PWYW</span>
+                    : getEffectivePrice(track) > 0 && <span className="text-[11px] font-semibold">${getEffectivePrice(track)}</span>
+                  }
                     </button>
                   )}
                 </div>
@@ -548,7 +583,7 @@ export default function ArtistProfilePage() {
         </div>
       )}
 
-      {/* ALBUMS — second */}
+      {/* ALBUMS â second */}
       {albums.length > 0 && (
         <div className="mb-8">
           <h2 className="text-lg font-bold px-6 mb-3" style={{ fontFamily: `"${headingFont}", sans-serif` }}>Albums</h2>
@@ -572,7 +607,7 @@ export default function ArtistProfilePage() {
         </div>
       )}
 
-      {/* SINGLES — third */}
+      {/* SINGLES â third */}
       {tracks.filter(t => !t.album_id).length > 0 && (
         <div className="mb-8">
           <h2 className="text-lg font-bold px-6 mb-3" style={{ fontFamily: `"${headingFont}", sans-serif` }}>Singles</h2>
@@ -596,7 +631,7 @@ export default function ArtistProfilePage() {
         </div>
       )}
 
-      {/* COLLABORATIONS — fourth */}
+      {/* COLLABORATIONS â fourth */}
       {collabs.length > 0 && (
         <div className="px-6 mb-8">
           <h2 className="text-lg font-bold mb-3" style={{ fontFamily: `"${headingFont}", sans-serif` }}>Collaborations</h2>
@@ -635,6 +670,153 @@ export default function ArtistProfilePage() {
         </div>
       )}
 
+      {/* PWYW MODAL */}
+      {pwywTrack && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ backgroundColor: 'rgba(0,0,0,0.85)' }}
+          onClick={() => { setPwywTrack(null); }}>
+          <div className="w-full max-w-sm rounded-2xl p-6 space-y-4"
+            style={{ backgroundColor: bgColor, border: `1px solid ${primaryColor}20`, maxHeight: '90vh', overflowY: 'auto' }}
+            onClick={e => e.stopPropagation()}>
+            {pwywPurchaseSuccess ? (
+              <div className="text-center py-4">
+                <div className="w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-3" style={{ backgroundColor: `${secondaryColor}20` }}>
+                  <Check className="w-7 h-7" style={{ color: secondaryColor }} />
+                </div>
+                <p className="font-semibold" style={{ color: textColor }}>Purchase Complete!</p>
+                <p className="text-sm mt-1" style={{ color: `${textColor}50` }}>Starting download...</p>
+              </div>
+            ) : (
+              <>
+                <div className="flex items-center space-x-3">
+                  <div className="w-12 h-12 rounded-lg overflow-hidden flex-shrink-0" style={{ backgroundColor: `${secondaryColor}20` }}>
+                    {pwywTrack.cover_artwork_url
+                      ? <img src={pwywTrack.cover_artwork_url} alt="" className="w-full h-full object-cover" />
+                      : <div className="w-full h-full flex items-center justify-center"><Music className="w-5 h-5" style={{ color: `${textColor}30` }} /></div>}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold truncate" style={{ color: textColor }}>{pwywTrack.title}</p>
+                    <p className="text-sm" style={{ color: `${textColor}50` }}>{artist.artist_name}</p>
+                  </div>
+                  <DollarSign className="w-5 h-5 flex-shrink-0" style={{ color: secondaryColor }} />
+                </div>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-medium" style={{ color: textColor }}>Pay what you want</p>
+                    {parseFloat(pwywTrack.minimum_price) > 0 && (
+                      <p className="text-xs" style={{ color: `${textColor}40` }}>min ${parseFloat(pwywTrack.minimum_price).toFixed(2)}</p>
+                    )}
+                  </div>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm" style={{ color: `${textColor}50` }}>$</span>
+                    <input
+                      type="number"
+                      min={parseFloat(pwywTrack.minimum_price) > 0 ? pwywTrack.minimum_price : 0}
+                      step="0.01"
+                      value={pwywFanPrice}
+                      onChange={e => { setPwywFanPrice(e.target.value); setPwywFanPriceError(''); }}
+                      placeholder="0.00"
+                      className="w-full pl-7 pr-4 py-3 rounded-xl text-lg font-semibold outline-none text-center"
+                      style={{ backgroundColor: `${textColor}08`, color: textColor, border: `1px solid ${textColor}15` }}
+                    />
+                  </div>
+                  {pwywFanPriceError && <p className="text-xs text-red-400 text-center">{pwywFanPriceError}</p>}
+                  {parseFloat(pwywTrack.minimum_price) === 0 && (
+                    <p className="text-xs text-center" style={{ color: `${textColor}30` }}>Enter $0 to download free</p>
+                  )}
+                  <div className="flex space-x-2">
+                    {[1, 2, 5, 10].filter(v => v >= (parseFloat(pwywTrack.minimum_price) || 0)).map(v => (
+                      <button key={v} type="button"
+                        onClick={() => { setPwywFanPrice(v.toFixed(2)); setPwywFanPriceError(''); }}
+                        className="flex-1 py-1.5 rounded-lg text-xs font-medium transition"
+                        style={{
+                          backgroundColor: parseFloat(pwywFanPrice) === v ? primaryColor : `${textColor}08`,
+                          color: parseFloat(pwywFanPrice) === v ? bgColor : `${textColor}50`,
+                          border: `1px solid ${textColor}10`
+                        }}>
+                        ${v}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {parseFloat(pwywFanPrice) > 0 ? (
+                  <>
+                    {pwywPurchaseError && <p className="text-xs text-red-400 text-center">{pwywPurchaseError}</p>}
+                    {!pwywPaypalReady && !pwywPurchaseError && (
+                      <div className="flex justify-center py-2"><Loader className="w-5 h-5 animate-spin" style={{ color: `${textColor}30` }} /></div>
+                    )}
+                    {pwywPaypalReady && (() => {
+                      const minPrice = parseFloat(pwywTrack.minimum_price) || 0;
+                      const amount = parseFloat(pwywFanPrice);
+                      if (minPrice > 0 && amount < minPrice) {
+                        return <p className="text-xs text-red-400 text-center">Minimum is ${minPrice.toFixed(2)}</p>;
+                      }
+                      setTimeout(() => {
+                        const container = document.getElementById('paypal-pwyw-container');
+                        if (!container || !window.paypal) return;
+                        container.innerHTML = '';
+                        window.paypal.Buttons({
+                          style: { layout: 'vertical', color: 'gold', shape: 'rect', label: 'pay' },
+                          createOrder: async () => {
+                            setPwywPurchaseError('');
+                            const res = await fetch('/.netlify/functions/paypal-order', {
+                              method: 'POST', headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ action: 'create', trackId: pwywTrack.id, amount, trackTitle: pwywTrack.title, artistName: artist?.artist_name }),
+                            });
+                            const { orderId, error } = await res.json();
+                            if (error || !orderId) throw new Error(error || 'Failed to create order');
+                            return orderId;
+                          },
+                          onApprove: async (data) => {
+                            const res = await fetch('/.netlify/functions/paypal-order', {
+                              method: 'POST', headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ action: 'capture', orderId: data.orderID }),
+                            });
+                            const captureData = await res.json();
+                            if (!captureData.success) throw new Error('Payment capture failed');
+                            await supabase.from('downloads').insert({ user_id: user.id, track_id: pwywTrack.id, amount_paid: amount }).catch(() => {});
+                            await fetch('/.netlify/functions/process-split-payout', {
+                              method: 'POST', headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ track_id: pwywTrack.id, transaction_id: captureData.captureId, total_amount: amount, buyer_user_id: user.id }),
+                            }).catch(() => {});
+                            setPwywPurchaseSuccess(true);
+                            setTimeout(async () => {
+                              await triggerDownload(pwywTrack);
+                              setPwywTrack(null);
+                              setPwywPurchaseSuccess(false);
+                            }, 1500);
+                          },
+                          onError: () => setPwywPurchaseError('Payment failed. Please try again.'),
+                          onCancel: () => {},
+                        }).render('#paypal-pwyw-container');
+                      }, 0);
+                      return null;
+                    })()}
+                    <div id="paypal-pwyw-container" style={{ backgroundColor: '#fff', borderRadius: '8px', padding: '4px' }} />
+                  </>
+                ) : (
+                  <button
+                    onClick={async () => {
+                      const minPrice = parseFloat(pwywTrack.minimum_price) || 0;
+                      if (minPrice > 0) { setPwywFanPriceError(`Minimum is ${minPrice.toFixed(2)}`); return; }
+                      await supabase.from('downloads').insert({ user_id: user.id, track_id: pwywTrack.id, amount_paid: 0 }).catch(() => {});
+                      await triggerDownload(pwywTrack);
+                      setPwywTrack(null);
+                    }}
+                    className="w-full py-3 rounded-xl text-sm font-semibold transition"
+                    style={{ backgroundColor: primaryColor, color: bgColor }}
+                  >
+                    Download Free
+                  </button>
+                )}
+                <button onClick={() => setPwywTrack(null)} className="w-full py-2 text-sm transition"
+                  style={{ color: `${textColor}30` }}>Cancel</button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* PURCHASE MODAL */}
       <TrackActionSheet track={actionSheetTrack} artist={artist} onClose={() => setActionSheetTrack(null)} />
 
@@ -647,7 +829,7 @@ export default function ArtistProfilePage() {
             {purchaseSuccess ? (
               <div className="text-center py-4">
                 <div className="w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-3" style={{ backgroundColor: `${secondaryColor}20` }}>
-                  <span className="text-2xl">✓</span>
+                  <span className="text-2xl">â</span>
                 </div>
                 <p className="font-semibold" style={{ color: textColor }}>Purchase Complete!</p>
                 <p className="text-sm mt-1" style={{ color: `${textColor}50` }}>Starting download...</p>
