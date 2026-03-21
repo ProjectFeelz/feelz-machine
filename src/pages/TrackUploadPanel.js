@@ -267,14 +267,30 @@ export default function TrackUploadPanel() {
     setMessage({ type, text });
     setTimeout(() => setMessage({ type: '', text: '' }), 4000);
   };
-  const uploadFile = async (file, folder = '') => {
-    const fileExt = file.name.split('.').pop();
-    const fileName = `${folder}${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
-    const { error } = await supabase.storage.from('feelz-samples').upload(fileName, file);
-    if (error) throw error;
-    const { data: { publicUrl } } = supabase.storage.from('feelz-samples').getPublicUrl(fileName);
-    return publicUrl;
-  };
+const uploadFile = async (file, folder = '', retries = 3) => {
+                                const fileExt = file.name.split('.').pop();
+                                const fileName = `${folder}${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+                for (let attempt = 1; attempt <= retries; attempt++) {
+                      const { error } = await supabase.storage.from('feelz-samples').upload(fileName, file);
+                            if (!error) {
+                                    const { data: { publicUrl } } = supabase.storage.from('feelz-samples').getPublicUrl(fileName);
+                                            return publicUrl;
+                                                  }
+                                                        const is503 =
+                                                                error?.statusCode === 503 ||
+                                                                        error?.message?.includes('503') ||
+                                                                                error?.message?.toLowerCase().includes('service unavailable');
+                                                                                      if (attempt < retries && is503) {
+                                                                                              await new Promise(r => setTimeout(r, 1500 * attempt));
+                                                                                                      continue;
+                                                                                                            }
+                                                                                                                  throw new Error(
+                                                                                                                          is503
+                                                                                                                                    ? 'Upload service temporarily unavailable (503). Please try again in a moment.'
+                                                                                                                                              : error.message
+                                                                                                                                                    );
+                                                                                                                                                        }
+                                                                                                                                                          };
 
   // ==================== TRACK UPLOAD ====================
   const handleTrackUpload = async (e, form = trackForm, versionsArr = versionFiles, collabArr = collaborators, isQuick = false) => {
