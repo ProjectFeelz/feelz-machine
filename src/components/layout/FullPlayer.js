@@ -161,7 +161,7 @@ export default function FullPlayer() {
             <div className="flex items-center justify-between mb-6">
               <div className="min-w-0 flex-1">
                 <h2 className="text-xl font-bold text-white truncate">{currentTrack.title}</h2>
-                <button onClick={() => currentTrack.artist_slug && navigate(`/artist/${currentTrack.artist_slug}`)} className="text-base text-white/50 truncate hover:text-white/80 transition text-left">{currentTrack.artist_name || 'Unknown Artist'}</button>
+                <button onClick={() => { const slug = currentTrack.artist_slug || currentTrack.artists?.slug; if (slug) navigate(`/artist/${slug}`); }} className="text-base text-white/50 truncate hover:text-white/80 transition text-left">{currentTrack.artist_name || 'Unknown Artist'}</button>
               </div>
               <button onClick={handleLike}
                 className="ml-4 w-10 h-10 flex items-center justify-center active:scale-90 transition-transform">
@@ -236,7 +236,7 @@ export default function FullPlayer() {
             {showActionSheet && (
               <TrackActionSheet
                 track={currentTrack}
-                artist={{ artist_name: currentTrack.artist_name, slug: currentTrack.artist_slug }}
+                artist={{ artist_name: currentTrack.artist_name, slug: currentTrack.artist_slug || currentTrack.artists?.slug }}
                 onClose={() => setShowActionSheet(false)}
               />
             )}
