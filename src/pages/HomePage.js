@@ -211,7 +211,7 @@ export default function HomePage() {
       ]);
 
       const normTrack = (list) => (list || []).map(t => ({
-        ...t, artist_name: t.artists?.artist_name || 'Unknown Artist',
+        ...t, artist_name: t.artists?.artist_name || 'Unknown Artist', artist_slug: t.artists?.slug || t.artist_slug || null,
       }));
       const normAlbum = (list) => (list || []).map(a => ({
         ...a, artist_name: a.artists?.artist_name || 'Unknown Artist', artist_slug: a.artists?.slug || null, _isAlbum: true,
@@ -227,6 +227,7 @@ export default function HomePage() {
         .map(t => ({
           ...t,
           artist_name: t.artists?.artist_name || 'Unknown Artist',
+          artist_slug: t.artists?.slug || t.artist_slug || null,
           _boosted: (t.engagement_score || 0) * (
             t.artists?.tier === 'premium' ? 1.5 : t.artists?.tier === 'pro' ? 1.2 : 1
           ),
