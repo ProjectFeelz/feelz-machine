@@ -46,6 +46,9 @@ export default function AlbumDetailPage() {
   const [playlists, setPlaylists] = useState([]);
   const [addingTo, setAddingTo] = useState(null);
   const [addedTo, setAddedTo] = useState({});
+  const [showNewPlaylist, setShowNewPlaylist] = useState(false);
+  const [newPlaylistName, setNewPlaylistName] = useState('');
+  const [creatingPlaylist, setCreatingPlaylist] = useState(false);
 
   // Purchase state — for individual track OR full album
   const [actionSheetTrack, setActionSheetTrack] = useState(null);
@@ -287,6 +290,24 @@ export default function AlbumDetailPage() {
     setTimeout(() => setAddedTo(prev => { const n = { ...prev }; delete n[`${playlistId}-${trackId}`]; return n; }), 2000);
   };
 
+  const handleCreatePlaylist = async (trackId) => {
+    const name = newPlaylistName.trim();
+    if (!name || creatingPlaylist) return;
+    setCreatingPlaylist(true);
+    const { data, error } = await supabase
+      .from('playlists')
+      .insert({ name, user_id: user.id })
+      .select('id, name')
+      .single();
+    if (!error && data) {
+      setPlaylists(prev => [...prev, data]);
+      await handleAddToPlaylist(data.id, trackId);
+    }
+    setNewPlaylistName('');
+    setShowNewPlaylist(false);
+    setCreatingPlaylist(false);
+  };
+
   const totalDuration = tracks.reduce((sum, t) => sum + (t.duration || 0), 0);
   const totalMins = Math.round(totalDuration / 60);
   const allDownloadable = tracks.some(t => t.is_downloadable);
@@ -446,32 +467,72 @@ export default function AlbumDetailPage() {
               />
 
               {/* Add to playlist dropdown */}
-              {showAddToPlaylist === track.id && (
-                <div className="absolute right-4 z-50 w-56 bg-zinc-900 border border-white/[0.08] rounded-xl shadow-2xl overflow-hidden" style={{ top: '100%', marginTop: '4px' }}>
-                  <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.06]">
-                    <p className="text-xs font-semibold text-white/60">Add to Playlist</p>
-                    <button onClick={() => setShowAddToPlaylist(null)}>
-                      <X className="w-4 h-4 text-white/30" />
+            {showAddToPlaylist === track.id && (
+              <div
+                className="absolute right-4 z-50 w-64 bg-zinc-900 border border-white/[0.08] rounded-xl shadow-2xl overflow-hidden"
+                style={{ top: '100%', marginTop: '4px' }}
+              >
+                <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.06]">
+                  <p className="text-xs font-semibold text-white/60">Add to Playlist</p>
+                  <button onClick={() => { setShowAddToPlaylist(null); setShowNewPlaylist(false); setNewPlaylistName(''); }}>
+                    <X className="w-4 h-4 text-white/30" />
+                  </button>
+                </div>
+
+                {/* New playlist inline form */}
+                {showNewPlaylist ? (
+                  <div className="flex items-center space-x-2 px-3 py-2 border-b border-white/[0.05]">
+                    <input
+                      autoFocus
+                      type="text"
+                      value={newPlaylistName}
+                      onChange={e => setNewPlaylistName(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') handleCreatePlaylist(track.id);
+                        if (e.key === 'Escape') { setShowNewPlaylist(false); setNewPlaylistName(''); }
+                      }}
+                      placeholder="Playlist name"
+                      className="flex-1 bg-white/[0.06] text-white text-xs rounded-lg px-2.5 py-1.5 outline-none placeholder:text-white/25 border border-white/[0.08] focus:border-white/20"
+                      maxLength={60}
+                    />
+                    <button
+                      onClick={() => handleCreatePlaylist(track.id)}
+                      disabled={!newPlaylistName.trim() || creatingPlaylist}
+                      className="px-2.5 py-1.5 rounded-lg text-xs font-semibold text-black bg-white disabled:opacity-40 flex-shrink-0"
+                    >
+                      {creatingPlaylist ? <Loader className="w-3 h-3 animate-spin" /> : 'Create'}
                     </button>
                   </div>
-                  {playlists.length === 0 ? (
-                    <div className="px-4 py-3">
-                      <p className="text-xs text-white/30">No playlists yet</p>
-                      <button onClick={() => navigate('/library/playlists')} className="text-xs text-white/50 hover:text-white mt-1 transition">Create one →</button>
-                    </div>
-                  ) : playlists.map(pl => {
-                    const key = `${pl.id}-${track.id}`;
-                    return (
-                      <button key={pl.id} onClick={() => handleAddToPlaylist(pl.id, track.id)} disabled={addingTo === pl.id}
-                        className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-white/[0.04] transition text-left">
-                        <span className="text-sm text-white/70 truncate">{pl.name}</span>
-                        {addedTo[key] && <Check className="w-3.5 h-3.5 text-green-400 flex-shrink-0" />}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
+                ) : (
+                  <button
+                    onClick={() => setShowNewPlaylist(true)}
+                    className="w-full flex items-center space-x-2 px-4 py-2.5 hover:bg-white/[0.04] transition text-left border-b border-white/[0.05]"
+                  >
+                    <span className="text-xs text-white/50">+ New playlist</span>
+                  </button>
+                )}
+
+                {playlists.length === 0 && !showNewPlaylist ? (
+                  <div className="px-4 py-3">
+                    <p className="text-xs text-white/30">No playlists yet — create one above</p>
+                  </div>
+                ) : playlists.map(pl => {
+                  const key = `${pl.id}-${track.id}`;
+                  return (
+                    <button
+                      key={pl.id}
+                      onClick={() => handleAddToPlaylist(pl.id, track.id)}
+                      disabled={addingTo === pl.id}
+                      className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-white/[0.04] transition text-left"
+                    >
+                      <span className="text-sm text-white/70 truncate">{pl.name}</span>
+                      {addedTo[key] && <Check className="w-3.5 h-3.5 text-green-400 flex-shrink-0" />}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
           );
         })}
       </div>
