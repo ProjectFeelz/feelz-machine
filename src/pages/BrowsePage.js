@@ -78,18 +78,18 @@ export default function BrowsePage() {
         { data: artistsData },
       ] = await Promise.all([
         supabase.from('tracks')
-          .select('*, artists(id, artist_name, slug, profile_image_url, is_verified, tier)')
+          .select('*, albums(title, cover_artwork_url, price), artists(id, artist_name, slug, profile_image_url, is_verified, tier)')
           .eq('is_published', true)
           .order('engagement_score', { ascending: false })
           .limit(50),
         supabase.from('tracks')
-          .select('*, artists(id, artist_name, slug, profile_image_url, is_verified)')
+          .select('*, albums(title, cover_artwork_url, price), artists(id, artist_name, slug, profile_image_url, is_verified)')
           .eq('is_published', true)
           .eq('featured', true)
           .order('created_at', { ascending: false })
           .limit(200),
         supabase.from('tracks')
-          .select('*, artists(id, artist_name, slug, profile_image_url, is_verified)')
+          .select('*, albums(title, cover_artwork_url, price), artists(id, artist_name, slug, profile_image_url, is_verified)')
           .eq('is_published', true)
           .order('created_at', { ascending: false })
           .limit(50),
