@@ -45,7 +45,7 @@ function slugify(text, unique = false) {
 const BLANK_TRACK = {
   title: '', genre: '', mood: '', lyrics: '',
   is_explicit: false, is_downloadable: true, is_published: true,
-  is_premium: false, download_price: '0', featured: false,
+  is_premium: false, download_price: '0', featured: false, pay_what_you_want: false, minimum_price: '0',
   album_id: '', track_number: '1',
   audio_file: null, cover_file: null, has_versions: false,
 };
@@ -101,6 +101,31 @@ const TrackFormFields = ({ form, setForm, albums, showMessage }) => (
             className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none" />
         </div>
       </TierGate>
+      {form.is_downloadable && parseFloat(form.download_price) > 0 && (
+        <div>
+          <label className="block text-xs text-white/40 mb-1.5">Pay What You Want</label>
+          <div className="flex items-center space-x-3">
+            <div
+              className={`w-8 h-5 rounded-full transition-colors flex items-center px-0.5 ${form.pay_what_you_want ? 'bg-white' : 'bg-white/10'}`}
+              onClick={() => setForm({ ...form, pay_what_you_want: !form.pay_what_you_want })}
+            >
+              <div className={`w-4 h-4 rounded-full transition-transform ${form.pay_what_you_want ? 'translate-x-3 bg-black' : 'translate-x-0 bg-white/30'}`} />
+            </div>
+            <span className="text-xs text-white/50">Let fans choose their price</span>
+          </div>
+          {form.pay_what_you_want && (
+            <div className="mt-2">
+              <label className="block text-xs text-white/40 mb-1.5">Minimum Price (0 = free)</label>
+              <input
+                type="number" min="0" step="0.01"
+                value={form.minimum_price}
+                onChange={(e) => setForm({ ...form, minimum_price: e.target.value })}
+                className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none"
+              />
+            </div>
+          )}
+        </div>
+      )}
     </div>
     <TierGate feature="lyrics" inline>
       <div>
@@ -180,7 +205,7 @@ export default function TrackUploadPanel() {
   const [versionFiles, setVersionFiles] = useState([]);
   const [collaborators, setCollaborators] = useState([]);
 
-  // Album state — step-based wizard
+  // Album state â step-based wizard
   const [albumForm, setAlbumForm] = useState(BLANK_ALBUM);
   const [albumStep, setAlbumStep] = useState('list'); // 'list' | 'create' | 'tracks'
   const [activeAlbum, setActiveAlbum] = useState(null);
@@ -274,6 +299,8 @@ export default function TrackUploadPanel() {
         is_published: form.is_published, is_premium: form.is_premium,
         download_price: parseFloat(form.download_price) || 0,
         featured: form.featured, has_versions: form.has_versions,
+      pay_what_you_want: form.pay_what_you_want || false,
+      minimum_price: parseFloat(form.minimum_price) > 0 ? parseFloat(form.minimum_price) : null,
       }]).select();
       if (error) throw error;
       const trackId = data[0].id;
@@ -479,7 +506,10 @@ export default function TrackUploadPanel() {
       lyrics: track.lyrics || '', is_explicit: track.is_explicit,
       is_downloadable: track.is_downloadable, is_published: track.is_published,
       is_premium: track.is_premium, download_price: track.download_price || 0,
-      featured: track.featured, album_id: track.album_id || '',
+      featured: track.featured,
+      pay_what_you_want: track.pay_what_you_want || false,
+      minimum_price: track.minimum_price?.toString() || '0',
+      album_id: track.album_id || '',
       track_number: track.track_number || 1,
     });
     const { data } = await supabase.from('collaborations')
@@ -507,7 +537,10 @@ export default function TrackUploadPanel() {
         is_explicit: editForm.is_explicit, is_downloadable: editForm.is_downloadable,
         is_published: editForm.is_published, is_premium: editForm.is_premium,
         download_price: parseFloat(editForm.download_price) || 0,
-        featured: editForm.featured, album_id: editForm.album_id || null,
+        featured: editForm.featured,
+        pay_what_you_want: editForm.pay_what_you_want || false,
+        minimum_price: parseFloat(editForm.minimum_price) > 0 ? parseFloat(editForm.minimum_price) : null,
+        album_id: editForm.album_id || null,
         track_number: parseInt(editForm.track_number) || 1,
         updated_at: new Date().toISOString(),
       }).eq('id', id);
@@ -824,7 +857,7 @@ export default function TrackUploadPanel() {
                 <button type="submit" disabled={uploading}
                   className="w-full py-3 bg-white text-black font-semibold rounded-lg hover:bg-white/90 disabled:opacity-50 transition flex items-center justify-center space-x-2">
                   {uploading ? <Loader className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-                  <span>{uploading ? 'Creating...' : 'Create Album & Add Tracks →'}</span>
+                  <span>{uploading ? 'Creating...' : 'Create Album & Add Tracks â'}</span>
                 </button>
               </form>
             </div>
@@ -852,7 +885,7 @@ export default function TrackUploadPanel() {
                           : <div className="w-14 h-14 rounded-lg bg-white/[0.06] flex items-center justify-center flex-shrink-0"><Music className="w-5 h-5 text-white/20" /></div>}
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium text-white truncate">{album.title}</p>
-                          <p className="text-xs text-white/40">{album.release_type?.toUpperCase()} · {album.is_published ? 'Live' : 'Draft'}</p>
+                          <p className="text-xs text-white/40">{album.release_type?.toUpperCase()} Â· {album.is_published ? 'Live' : 'Draft'}</p>
                         </div>
                         <div className="flex items-center space-x-1 flex-shrink-0">
                           <button
@@ -998,6 +1031,22 @@ export default function TrackUploadPanel() {
                         <div><label className="block text-xs text-white/40 mb-1">Price</label>
                           <input type="number" min="0" step="0.01" value={editForm.download_price} onChange={(e) => setEditForm({ ...editForm, download_price: e.target.value })}
                             className="w-full px-3 py-2 bg-white/[0.06] rounded text-white text-sm outline-none" /></div>
+                <div>
+                  <label className="block text-xs text-white/40 mb-1">Pay What You Want</label>
+                  <div className="flex items-center space-x-2 mt-1">
+                    <div className={`w-8 h-5 rounded-full transition-colors flex items-center px-0.5 ${editForm.pay_what_you_want ? 'bg-white' : 'bg-white/10'}`}
+                      onClick={() => setEditForm({ ...editForm, pay_what_you_want: !editForm.pay_what_you_want })}>
+                      <div className={`w-4 h-4 rounded-full transition-transform ${editForm.pay_what_you_want ? 'translate-x-3 bg-black' : 'translate-x-0 bg-white/30'}`} />
+                    </div>
+                    <span className="text-xs text-white/50">Fan chooses price</span>
+                  </div>
+                  {editForm.pay_what_you_want && (
+                    <div className="mt-1">
+                      <label className="block text-xs text-white/40 mb-1">Min Price</label>
+                      <input type="number" min="0" step="0.01" value={editForm.minimum_price || '0'} onChange={(e) => setEditForm({ ...editForm, minimum_price: e.target.value })} className="w-full px-3 py-2 bg-white/[0.06] rounded text-white text-sm outline-none" />
+                    </div>
+                  )}
+                </div>
                       </div>
                       <div><label className="block text-xs text-white/40 mb-1">Lyrics</label>
                         <textarea rows={2} value={editForm.lyrics} onChange={(e) => setEditForm({ ...editForm, lyrics: e.target.value })}
