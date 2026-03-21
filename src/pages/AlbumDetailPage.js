@@ -434,6 +434,7 @@ export default function AlbumDetailPage() {
               </div>
               <TrackVersions
                 track={track}
+                albumPrice={albumPrice}
                 onPlayVersion={(version) => playTrack(
                   { ...version, artist_name: artist?.artist_name },
                   tracks.map(t => ({ ...t, artist_name: artist?.artist_name }))
