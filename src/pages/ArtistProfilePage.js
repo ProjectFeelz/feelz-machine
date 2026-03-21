@@ -527,6 +527,7 @@ export default function ArtistProfilePage() {
                 </div>
                 <TrackVersions
                   track={track}
+                  albumPrice={track.albums?.price || 0}
                   onPlayVersion={(version) => {
                     playTrack(
                       { ...version, artist_name: artist?.artist_name, artist_slug: artist?.slug },
