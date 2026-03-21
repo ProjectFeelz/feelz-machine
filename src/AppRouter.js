@@ -3,7 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import { PlayerProvider } from './contexts/PlayerContext';
 import AppLayout from './components/layout/AppLayout';
-import LandingPage from './pages/LandingPage';
+import AboutPage from './pages/AboutPage';
 import HomePage from './pages/HomePage';
 import BrowsePage from './pages/BrowsePage';
 import LoginPage from './pages/LoginPage';
@@ -36,29 +36,21 @@ import UserProfilePage from './pages/UserProfilePage';
 import AlbumDetailPage from './pages/AlbumDetailPage';
 import AdminUserBehaviorPage from './pages/AdminUserBehaviorPage';
 
-// If we're at the root "/" serve the landing page standalone
-const isLanding = window.location.pathname === '/' || window.location.pathname === '';
-
 export default function AppRouter() {
-  if (isLanding) {
-    return <LandingPage />;
-  }
-
-  return (
-    <BrowserRouter basename="/player">
-      <AuthProvider>
-        <PlayerProvider>
-          <Routes>
-            <Route path="/login" element={<LoginPage />} />
+    return (
+          <BrowserRouter basename="/player">
+            <AuthProvider>
+              <PlayerProvider>
+                <Routes>
+                  <Route path="/login" element={<LoginPage />} />
             <Route path="/setup" element={<ProfileSetup />} />
             <Route path="/dashboard" element={<ArtistDashboard />} />
-
             <Route path="/upgrade" element={<TierUpgradePage />} />
             <Route path="/chat/:roomId" element={<ChatRoomView />} />
             <Route path="/privacy-policy" element={<PrivacyPolicy />} />
             <Route path="/terms-of-use" element={<TermsOfUse />} />
             <Route element={<AppLayout />}>
-              <Route path="/" element={<HomePage />} />
+                <Route path="/" element={<HomePage />} />
               <Route path="/browse" element={<BrowsePage />} />
               <Route path="/library" element={<LibraryPage />} />
               <Route path="/library/likes" element={<LikedSongsPage />} />
@@ -74,6 +66,7 @@ export default function AppRouter() {
               <Route path="/profile/edit" element={<UserProfilePage />} />
               <Route path="/notifications" element={<NotificationsPage />} />
               <Route path="/hub" element={<HubPage />} />
+              <Route path="/about" element={<AboutPage />} />
               <Route path="/album/:id" element={<AlbumDetailPage />} />
               <Route path="/artist/:slug" element={<ArtistProfilePage />} />
               <Route path="/admin" element={<AdminDashboard />} />
@@ -83,10 +76,10 @@ export default function AppRouter() {
               <Route path="/admin/boost" element={<AdminBoost />} />
               <Route path="/admin/broadcast" element={<AdminBroadcast />} />
               <Route path="/admin/behavior" element={<AdminUserBehaviorPage />} />
-            </Route>
-          </Routes>
-        </PlayerProvider>
-      </AuthProvider>
-    </BrowserRouter>
+  </Route>
+  </Routes>
+  </PlayerProvider>
+  </AuthProvider>
+  </BrowserRouter>
   );
 }
