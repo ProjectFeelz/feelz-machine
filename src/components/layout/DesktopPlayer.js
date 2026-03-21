@@ -25,6 +25,7 @@ export default function DesktopPlayer() {
   const [showMenu, setShowMenu] = useState(false);
   const [shared, setShared] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  const [downloadError, setDownloadError] = useState(null);
   const menuRef = useRef(null);
 
   useEffect(() => {
@@ -70,15 +71,23 @@ export default function DesktopPlayer() {
 
   const handleDownload = async () => {
     if (!currentTrack?.is_downloadable || !user) return;
+    setDownloadError(null);
     setDownloading(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const authToken = session?.access_token;
-      if (!authToken) return;
+      if (!authToken) throw new Error('Not authenticated');
       await downloadTrack(currentTrack.id, currentTrack.title, authToken);
-    } catch (e) { console.error(e); }
-    setDownloading(false);
-    setShowMenu(false);
+      setShowMenu(false);
+    } catch (e) {
+      if (e.message === 'purchase_required') {
+        setDownloadError('Purchase this track to download it.');
+      } else {
+        setDownloadError('Download failed. Please try again.');
+      }
+    } finally {
+      setDownloading(false);
+    }
   };
 
   const handleSeek = (e) => {
@@ -264,6 +273,9 @@ export default function DesktopPlayer() {
                       {downloading ? <Loader className="w-4 h-4 animate-spin text-white/50" /> : <Download className="w-4 h-4 text-white/50" />}
                       <span className="text-sm text-white/70">{downloading ? 'Downloading...' : 'Download'}</span>
                     </button>
+                    {downloadError && (
+                      <p className="text-xs text-red-400 px-4 pb-2">{downloadError}</p>
+                    )}
                   )}
                   {currentTrack.artist_slug && (
                     <button onClick={() => { navigate(`/artist/${currentTrack.artist_slug}`); setShowMenu(false); }}
