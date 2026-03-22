@@ -195,7 +195,8 @@ export default function TrackUploadPanel() {
   const [searchTerm, setSearchTerm] = useState('');
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({});
-  const [editCollaborators, setEditCollaborators] = useState([]);
+  const [editCollaborators, setEditCollaborators] = useState([]);  const [editCoverFile, setEditCoverFile] = useState(null);
+  const [editAudioFile, setEditAudioFile] = useState(null);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
@@ -517,6 +518,7 @@ const uploadFile = async (file, folder = '', retries = 3) => {
   // ==================== TRACK EDIT ====================
   const startEdit = async (track) => {
     setEditingId(track.id);
+    setEditCoverFile(null); setEditAudioFile(null);
     setEditForm({
       title: track.title, genre: track.genre || '', mood: track.mood || '',
       lyrics: track.lyrics || '', is_explicit: track.is_explicit,
@@ -526,7 +528,7 @@ const uploadFile = async (file, folder = '', retries = 3) => {
       pay_what_you_want: track.pay_what_you_want || false,
       minimum_price: track.minimum_price?.toString() || '0',
       album_id: track.album_id || '',
-      track_number: track.track_number || 1,
+      track_number: track.track_number || 1, is_preorder: track.is_preorder || false, release_date: track.release_date || null, has_versions: track.has_versions || false, cover_artwork_url: track.cover_artwork_url || '',
     });
     const { data } = await supabase.from('collaborations')
       .select('*, artists(artist_name, profile_image_url)').eq('track_id', track.id);
@@ -537,7 +539,20 @@ const uploadFile = async (file, folder = '', retries = 3) => {
   };
 
   const saveEdit = async (id) => {
+    setUploading(true);
     try {
+      let coverUrl = editForm.cover_artwork_url || '';
+      let audioUrl = null;
+      if (editCoverFile) {
+        const ext = editCoverFile.name.split('.').pop();
+        const path = `covers/${id}_${Date.now()}.${ext}`;
+        coverUrl = await uploadFile(editCoverFile, 'tracks', path);
+      }
+      if (editAudioFile) {
+        const ext = editAudioFile.name.split('.').pop();
+        const path = `audio/${id}_${Date.now()}.${ext}`;
+        audioUrl = await uploadFile(editAudioFile, 'tracks', path);
+      }
       if (editCollaborators.length > 0) {
         await supabase.from('collaborations').delete().eq('track_id', id);
         for (const collab of editCollaborators) {
@@ -558,12 +573,18 @@ const uploadFile = async (file, folder = '', retries = 3) => {
         minimum_price: parseFloat(editForm.minimum_price) > 0 ? parseFloat(editForm.minimum_price) : null,
         album_id: editForm.album_id || null,
         track_number: parseInt(editForm.track_number) || 1,
+        cover_artwork_url: coverUrl,
+        ...(audioUrl && { file_url: audioUrl }),
+        is_preorder: editForm.is_preorder || false,
+        release_date: editForm.is_preorder && editForm.release_date ? editForm.release_date : null,
+        has_versions: editForm.has_versions || false,
         updated_at: new Date().toISOString(),
       }).eq('id', id);
       if (error) throw error;
       showMessage('success', 'Track updated!');
-      setEditingId(null); fetchTracks();
+      setEditingId(null); setEditCoverFile(null); setEditAudioFile(null); fetchTracks();
     } catch (err) { showMessage('error', 'Failed: ' + err.message); }
+    finally { setUploading(false); }
   };
 
   const deleteTrack = async (id, title) => {
@@ -1076,6 +1097,41 @@ const uploadFile = async (file, folder = '', retries = 3) => {
                           </label>
                         ))}
                       </div>
+                  <div className="mt-3">
+                      <label className="block text-xs text-white/40 mb-1">Cover Artwork</label>
+                      <div className="flex items-center gap-3">
+                          {(editCoverFile ? URL.createObjectURL(editCoverFile) : editForm.cover_artwork_url) && (
+                            <img src={editCoverFile ? URL.createObjectURL(editCoverFile) : editForm.cover_artwork_url} alt="cover" className="w-14 h-14 rounded object-cover" />
+                          )}
+                          <label className="cursor-pointer text-xs px-3 py-1.5 bg-white/10 rounded hover:bg-white/20 text-white/70">
+                            Replace Image
+                            <input type="file" accept="image/*" className="hidden" onChange={(e) => setEditCoverFile(e.target.files[0])} />
+                          </label>
+                      </div>
+                  </div>
+                  <div className="mt-3">
+                      <label className="block text-xs text-white/40 mb-1">Replace Audio File</label>
+                      <label className="cursor-pointer text-xs px-3 py-1.5 bg-white/10 rounded hover:bg-white/20 text-white/70">
+                          {editAudioFile ? editAudioFile.name : 'Choose new audio file…'}
+                          <input type="file" accept="audio/*" className="hidden" onChange={(e) => setEditAudioFile(e.target.files[0])} />
+                      </label>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-3">
+                      <label className="flex items-center space-x-1.5 text-xs text-white/60 cursor-pointer">
+                          <input type="checkbox" checked={editForm.is_preorder || false} onChange={() => setEditForm({ ...editForm, is_preorder: !editForm.is_preorder })} className="rounded" />
+                          <span>Pre-order</span>
+                      </label>
+                      <label className="flex items-center space-x-1.5 text-xs text-white/60 cursor-pointer">
+                          <input type="checkbox" checked={editForm.has_versions || false} onChange={() => setEditForm({ ...editForm, has_versions: !editForm.has_versions })} className="rounded" />
+                          <span>Has Versions</span>
+                      </label>
+                  </div>
+                  {editForm.is_preorder && (
+                      <div className="mt-2">
+                          <label className="block text-xs text-white/40 mb-1">Release Date</label>
+                          <input type="datetime-local" value={editForm.release_date ? editForm.release_date.substring(0, 16) : ''} onChange={(e) => setEditForm({ ...editForm, release_date: e.target.value })} className="w-full px-3 py-2 bg-white/[0.06] rounded text-white text-sm outline-none" />
+                      </div>
+                  )}
                       <div className="mt-3">
                         <label className="block text-xs text-white/40 mb-2">Collaborators</label>
                         <CollaboratorSearch collaborators={editCollaborators} setCollaborators={setEditCollaborators} currentArtistId={artist.id} />
