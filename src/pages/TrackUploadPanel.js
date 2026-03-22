@@ -127,6 +127,7 @@ const TrackFormFields = ({ form, setForm, albums, showMessage }) => (
         </div>
       )}
     </div>
+    <TierGate feature="lyrics" inline>
     {form.is_downloadable && (
         <div>
       <div>
@@ -135,6 +136,8 @@ const TrackFormFields = ({ form, setForm, albums, showMessage }) => (
           placeholder="Paste lyrics here..."
           className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none resize-none" />
       </div>
+            </div>
+    )}
     </TierGate>
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
       <div>
