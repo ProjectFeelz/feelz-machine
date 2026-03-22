@@ -87,7 +87,7 @@ export default function ArtistProfilePage() {
       if (themeData) setTheme(themeData);
 
       const { data: trackData } = await supabase
-        .from('tracks').select('*, albums(title, cover_artwork_url, price), pay_what_you_want, minimum_price')
+        .from('tracks').select('*, albums(title, cover_artwork_url, price), pay_what_you_want, minimum_price, is_preorder, release_date')
         .eq('artist_id', artistData.id).eq('is_published', true)
         .order('engagement_score', { ascending: false });
       setTracks(trackData || []);
@@ -510,7 +510,7 @@ export default function ArtistProfilePage() {
                     )}
                   </div>
                   <div className="flex-1 min-w-0 text-left">
-                    <p className="text-sm font-medium truncate" style={{ color: isActive ? secondaryColor : textColor }}>{track.title}</p>
+                    <p className="text-sm font-medium truncate" style={{ color: isActive ? secondaryColor : textColor }}>{track.title}{track.is_preorder && track.release_date && new Date(track.release_date) > new Date() && (<span className="ml-1.5 text-[9px] font-bold px-1 py-0.5 rounded-full bg-yellow-400/20 text-yellow-300 border border-yellow-400/30 uppercase tracking-wide align-middle">Pre</span>)}</p>
                     <div className="flex items-center space-x-2">
                       {track.is_explicit && <span className="text-[9px] font-bold px-1 py-0.5 rounded" style={{ backgroundColor: `${textColor}15`, color: `${textColor}50` }}>E</span>}
                       <span className="text-xs truncate" style={{ color: `${textColor}40` }}>{formatNumber(track.stream_count || 0)} plays</span>
