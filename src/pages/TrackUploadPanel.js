@@ -127,7 +127,8 @@ const TrackFormFields = ({ form, setForm, albums, showMessage }) => (
         </div>
       )}
     </div>
-    {form.is_downloadable && (        <div>
+    {form.is_downloadable && (
+        <div>
       <div>
         <label className="block text-xs text-white/40 mb-1.5">Lyrics (optional)</label>
         <textarea rows={3} value={form.lyrics} onChange={(e) => setForm({ ...form, lyrics: e.target.value })}
