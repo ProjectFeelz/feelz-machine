@@ -45,7 +45,7 @@ function slugify(text, unique = false) {
 const BLANK_TRACK = {
   title: '', genre: '', mood: '', lyrics: '',
   is_explicit: false, is_downloadable: true, is_published: true,
-  is_premium: false, download_price: '0', featured: false, pay_what_you_want: false, minimum_price: '0',
+  is_premium: false, download_price: '0', featured: false, pay_what_you_want: false, minimum_price: '0', is_preorder: false, release_date: null,
   album_id: '', track_number: '1',
   audio_file: null, cover_file: null, has_versions: false,
 };
@@ -127,7 +127,7 @@ const TrackFormFields = ({ form, setForm, albums, showMessage }) => (
         </div>
       )}
     </div>
-    <TierGate feature="lyrics" inline>
+    {form.is_downloadable && (        <div>
       <div>
         <label className="block text-xs text-white/40 mb-1.5">Lyrics (optional)</label>
         <textarea rows={3} value={form.lyrics} onChange={(e) => setForm({ ...form, lyrics: e.target.value })}
