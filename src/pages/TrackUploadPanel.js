@@ -548,14 +548,10 @@ const uploadFile = async (file, folder = '', retries = 3) => {
       let coverUrl = editForm.cover_artwork_url || '';
       let audioUrl = null;
       if (editCoverFile) {
-        const ext = editCoverFile.name.split('.').pop();
-        const path = `covers/${id}_${Date.now()}.${ext}`;
-        coverUrl = await uploadFile(editCoverFile, 'tracks', path);
+        coverUrl = await uploadFile(editCoverFile, 'covers/');
       }
       if (editAudioFile) {
-        const ext = editAudioFile.name.split('.').pop();
-        const path = `audio/${id}_${Date.now()}.${ext}`;
-        audioUrl = await uploadFile(editAudioFile, 'tracks', path);
+        audioUrl = await uploadFile(editAudioFile, 'tracks/');
       }
       if (editCollaborators.length > 0) {
         await supabase.from('collaborations').delete().eq('track_id', id);
@@ -594,7 +590,7 @@ const uploadFile = async (file, folder = '', retries = 3) => {
   const deleteTrack = async (id, title) => {
     if (!window.confirm(`Delete "${title}"? This cannot be undone.`)) return;
     try {
-      const { error } = await supabase.from('tracks').delete().eq('id', id);
+      const { error } = await supabase.from('tracks').delete().eq('id', id)h;
       if (error) throw error;
       showMessage('success', 'Track deleted'); fetchTracks();
     } catch (err) { showMessage('error', 'Failed: ' + err.message); }
