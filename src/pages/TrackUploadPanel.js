@@ -590,7 +590,7 @@ const uploadFile = async (file, folder = '', retries = 3) => {
   const deleteTrack = async (id, title) => {
     if (!window.confirm(`Delete "${title}"? This cannot be undone.`)) return;
     try {
-      const { error } = await supabase.from('tracks').delete().eq('id', id)h;
+      const { error } = await supabase.from('tracks').delete().eq('id', id);
       if (error) throw error;
       showMessage('success', 'Track deleted'); fetchTracks();
     } catch (err) { showMessage('error', 'Failed: ' + err.message); }
