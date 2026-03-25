@@ -94,7 +94,6 @@ export function useTier() {
         .eq('artist_id', artistId)
         .eq('status', 'active')
         .maybeSingle();
-      console.log('[tier] sub:', JSON.stringify(sub), 'err:', JSON.stringify(subErr));
 
       if (sub?.tier_id) {
         // Step 2: get tier slug separately
