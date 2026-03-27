@@ -69,7 +69,7 @@ export default function ArtistProfilePage() {
   const [showAddToPlaylist, setShowAddToPlaylist] = useState(null);
   const [playlists, setPlaylists] = useState([]);
   const [addingTo, setAddingTo] = useState(null);
-  const [addedTo, setAddedTo] = useState({});  const [recommendedTracks, setRecommendedTracks] = useState([]);  const [similarArtists, setSimilarArtists] = useState([]);  const [recommendedTracks, setRecommendedTracks] = useState([]);
+  const [addedTo, setAddedTo] = useState({});  const [recommendedTracks, setRecommendedTracks] = useState([]);  const [similarArtists, setSimilarArtists] = useState([]);
 
   useEffect(() => { if (slug) fetchArtist(); }, [slug]);
 
