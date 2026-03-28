@@ -7,9 +7,9 @@ import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import { usePlayer } from '../contexts/PlayerContext';
 import {
-  ArrowLeft, Play, Pause, Share2, UserPlus, UserCheck,h
+  ArrowLeft, Play, Pause, Share2, UserPlus, UserCheck,
   Instagram, Twitter, Youtube, MessageCircle, Globe, Music,
-  Loader, Verified, Download, Heart, ListMusic, Check, MoreHorizontal, DollarSignh
+  Loader, Verified, Download, Heart, ListMusic, Check, MoreHorizontal, DollarSign
 } from 'lucide-react';
 
 const PAYPAL_CLIENT_ID = process.env.REACT_APP_PAYPAL_CLIENT_ID;
