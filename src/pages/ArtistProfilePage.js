@@ -586,27 +586,24 @@ export default function ArtistProfilePage() {
       {recommendedTracks.length > 0 && (
         <div className="mb-8">
           <h2 className="text-lg font-bold px-6 mb-3" style={{ fontFamily: `"${headingFont}", sans-serif` }}>Recommended For You</h2>
-          <div className="space-y-1 px-6">
+          <div className="flex space-x-3 overflow-x-auto px-6 scrollbar-hide">
             {recommendedTracks.map(track => (
               <div
                 key={track.id}
-                className="flex items-center space-x-3 p-2 rounded-xl cursor-pointer transition-opacity hover:opacity-80"
-                style={{ backgroundColor: `${textColor}05` }}
+                className="flex-shrink-0 w-36 cursor-pointer group"
                 onClick={() => handlePlayTrack(track)}
               >
-                <div className="w-10 h-10 rounded-lg overflow-hidden flex-shrink-0" style={{ backgroundColor: `${textColor}08` }}>
+                <div className="aspect-square rounded-xl overflow-hidden mb-2" style={{ backgroundColor: `${textColor}08` }}>
                   {track.cover_artwork_url ? (
                     <img src={track.cover_artwork_url} alt={track.title} className="w-full h-full object-cover" />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center">
-                      <Music className="w-5 h-5" style={{ color: `${textColor}20` }} />
+                      <Music className="w-8 h-8" style={{ color: `${textColor}20` }} />
                     </div>
                   )}
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate" style={{ color: textColor }}>{track.title}</p>
-                  <p className="text-xs truncate" style={{ color: `${textColor}50` }}>{track.albums?.title || 'Single'}</p>
-                </div>
+                <p className="text-sm font-medium truncate" style={{ color: textColor }}>{track.title}</p>
+                <p className="text-xs truncate" style={{ color: `${textColor}50` }}>{track.albums?.title || 'Single'}</p>
               </div>
             ))}
           </div>
