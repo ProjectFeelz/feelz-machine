@@ -48,6 +48,9 @@ export default function ArtistDashboard() {
   const [stats, setStats] = useState({ streams: 0, downloads: 0, followers: 0, tracks: 0, likes: 0 });
   const [topTracks, setTopTracks] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [thought, setThought] = useState('');
+  const [thoughtSaving, setThoughtSaving] = useState(false);
+  const [thoughtMsg, setThoughtMsg] = useState('');
 
   const fetchStats = useCallback(async () => {
     if (!artist) return;
@@ -80,10 +83,28 @@ export default function ArtistDashboard() {
   }, [artist]);
 
   useEffect(() => {
-    if (activeTab === 'analytics' && artist) fetchStats();
-  }, [activeTab, artist, fetchStats]);
+  if (activeTab === 'analytics' && artist) fetchStats();
+}, [activeTab, artist, fetchStats]);
 
-  if (!artist) {
+useEffect(() => {
+  if (!artist) return;
+  supabase.from('artist_thoughts').select('content').eq('artist_id', artist.id).maybeSingle()
+    .then(({ data }) => { if (data) setThought(data.content); });
+}, [artist]);
+
+  const saveThought = async () => {
+  if (!thought.trim()) return;
+  setThoughtSaving(true);
+  const { error } = await supabase.from('artist_thoughts').upsert(
+    { artist_id: artist.id, content: thought.trim(), updated_at: new Date().toISOString() },
+    { onConflict: 'artist_id' }
+  );
+  setThoughtSaving(false);
+  setThoughtMsg(error ? 'Failed to save' : 'Posted!');
+  setTimeout(() => setThoughtMsg(''), 2500);
+};
+
+if (!artist) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center px-6">
         <div className="text-center">
@@ -144,10 +165,34 @@ export default function ArtistDashboard() {
 
         {/* Upload Tab — wrapped with UploadGate for free tier limit */}
         {activeTab === 'upload' && (
-          <UploadGate>
-            <TrackUploadPanel />
-          </UploadGate>
-        )}
+  <UploadGate>
+    <TierGate feature="daily_thought">
+<div className="bg-white/[0.03] rounded-xl p-4 border border-white/[0.06] mb-5">
+  <p className="text-sm font-semibold text-white mb-1">💭 Daily Thought</p>
+      <p className="text-xs text-white/30 mb-3">Share what's on your mind — shows at the top of your profile</p>
+      <textarea
+        rows={3}
+        maxLength={280}
+        value={thought}
+        onChange={e => setThought(e.target.value)}
+        placeholder="What's on your mind today?"
+        className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none resize-none placeholder-white/20"
+      />
+      <div className="flex items-center justify-between mt-2">
+        <span className="text-xs text-white/20">{thought.length}/280</span>
+        <div className="flex items-center space-x-3">
+          {thoughtMsg && <span className="text-xs text-green-400">{thoughtMsg}</span>}
+          <button onClick={saveThought} disabled={thoughtSaving || !thought.trim()}
+            className="px-4 py-1.5 bg-white text-black text-xs font-semibold rounded-lg disabled:opacity-40 transition">
+            {thoughtSaving ? 'Posting...' : 'Post'}
+          </button>
+        </div>
+      </div>
+    </div>
+</TierGate>
+<TrackUploadPanel />
+  </UploadGate>
+)}
 
         {/* Collabs Tab — request inbox */}
         {activeTab === 'collabs' && <CollabRequests />}
