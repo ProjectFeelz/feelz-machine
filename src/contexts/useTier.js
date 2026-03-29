@@ -30,7 +30,9 @@ const TIER_ACCESS = {
     custom_branding: true,
     advanced_analytics: false,
     community_post: true,
+    daily_thought: true,
   },
+
   premium: {
     max_singles: Infinity,
     max_albums: Infinity,
@@ -44,6 +46,7 @@ const TIER_ACCESS = {
     custom_branding: true,
     advanced_analytics: true,
     community_post: true,
+    daily_thought: true,
   },
 };
 
@@ -60,9 +63,10 @@ const FEATURE_LABELS = {
   advanced_analytics: { name: 'Advanced Analytics', description: 'Deep audience insights and export tools', minTier: 'premium' },
   community_post: { name: 'Community Posts', description: 'Share updates and music with your fans', minTier: 'pro' },
   unlimited_uploads: { name: 'Unlimited Uploads', description: 'Upload unlimited tracks and albums', minTier: 'pro' },
-};
+  daily_thought: { name: 'Daily Thought', description: 'Post a daily message on your artist profile', minTier: 'pro' },
+}
 
-export function useTier() {
+  export function useTier() {
   const { artist, isAdmin } = useAuth();
   const [tierSlug, setTierSlug] = useState('free');
   const [tierData, setTierData] = useState(null);
