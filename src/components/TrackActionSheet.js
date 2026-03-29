@@ -291,16 +291,6 @@ export default function TrackActionSheet({ track, artist, onClose }) {
             const authToken = session?.access_token;
             if (!authToken) throw new Error('Not authenticated');
 
-            // FREE TRACK: insert the download record and skip PayPal entirely
-            if (!isPWYW && basePrice <= 0) {
-                await supabase
-                    .from('downloads')
-                    .insert({ user_id: user.id, track_id: track.id, amount_paid: 0 })
-                    .catch(() => {});
-                await downloadTrack(track.id, track.title, authToken);
-                onClose();
-                return;
-            }
 
             await downloadTrack(track.id, track.title, authToken);
             onClose();
