@@ -40,7 +40,6 @@ export default function PaidPlayGate({ track, artist, onClose, onPurchaseComplet
   const { user } = useAuth();
   const navigate = useNavigate();
   const { FREE_PLAY_LIMIT } = usePaidPlayLimit();
-
   const [paypalReady, setPaypalReady] = useState(false);
   const [purchasing, setPurchasing] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -48,6 +47,9 @@ export default function PaidPlayGate({ track, artist, onClose, onPurchaseComplet
 
   useEffect(() => {
     if (!track) return;
+    // PaidPlayGate should only ever be shown for tracks with a price > 0,
+    // but guard here just in case so we never try to load PayPal for a free track
+    if (!track.download_price || track.download_price <= 0) return;
     setPaypalReady(false); setError(''); setSuccess(false);
     const existing = document.getElementById('paypal-sdk-gate');
     if (existing) existing.remove();
@@ -62,9 +64,12 @@ export default function PaidPlayGate({ track, artist, onClose, onPurchaseComplet
 
   useEffect(() => {
     if (!paypalReady || !track || !window.paypal) return;
+    // Never render PayPal for a $0 track
+    if (!track.download_price || track.download_price <= 0) return;
     const container = document.getElementById('paypal-gate-container');
     if (!container) return;
     container.innerHTML = '';
+
     window.paypal.Buttons({
       style: { layout: 'vertical', color: 'gold', shape: 'rect', label: 'pay' },
       createOrder: async () => {
@@ -72,7 +77,13 @@ export default function PaidPlayGate({ track, artist, onClose, onPurchaseComplet
         try {
           const res = await fetch('/.netlify/functions/paypal-order', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'create', trackId: track.id, amount: track.download_price, trackTitle: track.title, artistName: artist?.artist_name }),
+            body: JSON.stringify({
+              action: 'create',
+              trackId: track.id,
+              amount: track.download_price,
+              trackTitle: track.title,
+              artistName: artist?.artist_name,
+            }),
           });
           const { orderId, error: err } = await res.json();
           if (err || !orderId) throw new Error(err || 'Failed to create order');
@@ -91,7 +102,12 @@ export default function PaidPlayGate({ track, artist, onClose, onPurchaseComplet
             await supabase.from('downloads').insert({ user_id: user.id, track_id: track.id, amount_paid: track.download_price }).catch(() => {});
             await fetch('/.netlify/functions/process-split-payout', {
               method: 'POST', headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ track_id: track.id, transaction_id: captureData.captureId, total_amount: track.download_price, buyer_user_id: user.id }),
+              body: JSON.stringify({
+                track_id: track.id,
+                transaction_id: captureData.captureId,
+                total_amount: track.download_price,
+                buyer_user_id: user.id,
+              }),
             }).catch(() => {});
           }
           setSuccess(true); setPurchasing(false);
@@ -112,7 +128,6 @@ export default function PaidPlayGate({ track, artist, onClose, onPurchaseComplet
       <div className="w-full max-w-sm rounded-2xl overflow-hidden"
         style={{ backgroundColor: '#0c0c0c', border: '1px solid rgba(255,255,255,0.10)' }}
         onClick={(e) => e.stopPropagation()}>
-
         {success ? (
           <div className="p-8 text-center">
             <div className="w-14 h-14 rounded-full bg-white/10 flex items-center justify-center mx-auto mb-3">
