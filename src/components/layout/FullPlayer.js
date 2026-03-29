@@ -65,7 +65,7 @@ export default function FullPlayer() {
   const handleShare = async () => {
     const artistSlug = currentTrack.artist_slug || currentTrack.slug || '';
     const url = artistSlug
-      ? `${window.location.origin}/player/artist/${artistSlug}`
+      ? `${window.location.origin}/artist/${artistSlug}`
       : window.location.href;
     if (navigator.share) {
       try {
