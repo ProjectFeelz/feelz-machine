@@ -290,8 +290,6 @@ export default function TrackActionSheet({ track, artist, onClose }) {
             const { data: { session } } = await supabase.auth.getSession();
             const authToken = session?.access_token;
             if (!authToken) throw new Error('Not authenticated');
-
-
             await downloadTrack(track.id, track.title, authToken);
             onClose();
         } catch (err) {
@@ -479,9 +477,8 @@ export default function TrackActionSheet({ track, artist, onClose }) {
                                                 <button onClick={async () => {
                                                     if (!validateFanPrice()) return;
                                                     try {
-                                                        await supabase.from('downloads').insert({ user_id: user.id, track_id: track.id, amount_paid: 0 }).catch(() => {});
+                                                        const { data: { session } } = await supabase.auth.getSession();
                                                         if (!(isPreorder && isNotYetReleased)) {
-                                                            const { data: { session } } = await supabase.auth.getSession();
                                                             await downloadTrack(track.id, track.title, session?.access_token);
                                                         } else {
                                                             setAlreadyPreordered(true);
@@ -515,9 +512,8 @@ export default function TrackActionSheet({ track, artist, onClose }) {
                                             {effectivePrice <= 0 ? (
                                                 <button onClick={async () => {
                                                     try {
-                                                        await supabase.from('downloads').insert({ user_id: user.id, track_id: track.id, amount_paid: 0 }).catch(() => {});
+                                                        const { data: { session } } = await supabase.auth.getSession();
                                                         if (!(isPreorder && isNotYetReleased)) {
-                                                            const { data: { session } } = await supabase.auth.getSession();
                                                             await downloadTrack(track.id, track.title, session?.access_token);
                                                         } else {
                                                             setAlreadyPreordered(true);
