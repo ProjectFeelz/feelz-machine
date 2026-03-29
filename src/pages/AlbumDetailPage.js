@@ -20,6 +20,7 @@ function formatDuration(s) {
   if (!s) return '';
   return `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 }
+
 function formatNumber(n) {
   if (!n) return '0';
   if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
@@ -50,9 +51,8 @@ export default function AlbumDetailPage() {
   const [newPlaylistName, setNewPlaylistName] = useState('');
   const [creatingPlaylist, setCreatingPlaylist] = useState(false);
 
-  // Purchase state — for individual track OR full album
   const [actionSheetTrack, setActionSheetTrack] = useState(null);
-  const [purchaseTarget, setPurchaseTarget] = useState(null); // { type: 'track'|'album', track?, price, label }
+  const [purchaseTarget, setPurchaseTarget] = useState(null);
   const [paypalReady, setPaypalReady] = useState(false);
   const [purchasing, setPurchasing] = useState(false);
   const [purchaseSuccess, setPurchaseSuccess] = useState(false);
@@ -61,9 +61,10 @@ export default function AlbumDetailPage() {
   useEffect(() => { fetchAlbum(); }, [id]);
   useEffect(() => { if (user && showAddToPlaylist) fetchPlaylists(); }, [showAddToPlaylist, user]);
 
-  // Load PayPal when purchase modal opens
+  // Load PayPal when purchase modal opens — only for paid items
   useEffect(() => {
     if (!purchaseTarget) return;
+    if (!purchaseTarget.price || purchaseTarget.price <= 0) return;
     setPaypalReady(false); setPurchaseError('');
     const existing = document.getElementById('paypal-sdk-album');
     if (existing) existing.remove();
@@ -78,9 +79,11 @@ export default function AlbumDetailPage() {
 
   useEffect(() => {
     if (!paypalReady || !purchaseTarget || !window.paypal) return;
+    if (!purchaseTarget.price || purchaseTarget.price <= 0) return;
     const container = document.getElementById('paypal-album-container');
     if (!container) return;
     container.innerHTML = '';
+
     window.paypal.Buttons({
       style: { layout: 'vertical', color: 'gold', shape: 'rect', label: 'pay' },
       createOrder: async () => {
@@ -111,16 +114,19 @@ export default function AlbumDetailPage() {
           if (!captureData.success) throw new Error('Payment capture failed');
 
           if (purchaseTarget.type === 'album') {
-            // Record download for each track + trigger downloads
             for (const t of tracks) {
-              await supabase.from('downloads').insert({ user_id: user.id, track_id: t.id, amount_paid: purchaseTarget.price / tracks.length }).catch(() => {});
+              await supabase.from('downloads')
+                .insert({ user_id: user.id, track_id: t.id, amount_paid: parseFloat((purchaseTarget.price / tracks.length).toFixed(2)) })
+                .catch(() => {});
             }
             await fetch('/.netlify/functions/process-split-payout', {
               method: 'POST', headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ album_id: album.id, transaction_id: captureData.captureId, total_amount: purchaseTarget.price, buyer_user_id: user.id }),
             }).catch(() => {});
           } else {
-            await supabase.from('downloads').insert({ user_id: user.id, track_id: purchaseTarget.track.id, amount_paid: purchaseTarget.price }).catch(() => {});
+            await supabase.from('downloads')
+              .insert({ user_id: user.id, track_id: purchaseTarget.track.id, amount_paid: purchaseTarget.price })
+              .catch(() => {});
             await fetch('/.netlify/functions/process-split-payout', {
               method: 'POST', headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ track_id: purchaseTarget.track.id, transaction_id: captureData.captureId, total_amount: purchaseTarget.price, buyer_user_id: user.id }),
@@ -195,6 +201,7 @@ export default function AlbumDetailPage() {
       tracks.map(t => ({ ...t, artist_name: artist?.artist_name }))
     );
   };
+
   const handlePlayAll = () => {
     if (tracks.length === 0) return;
     playTrack(
@@ -225,33 +232,37 @@ export default function AlbumDetailPage() {
     }
   };
 
-  // Per-track price: use track's own price if set, else split album price evenly
   const getTrackPrice = (track) => {
     if (track.download_price > 0) return track.download_price;
     if (album?.price > 0 && tracks.length > 0) return parseFloat((album.price / tracks.length).toFixed(2));
     return 0;
   };
 
+  // Triggers download — backend handles purchase record via upsert for free tracks
   const triggerDownload = async (track) => {
     setDownloading(track.id);
     try {
-      await supabase.from('downloads').insert({ user_id: user.id, track_id: track.id }).catch(() => {});
       const { data: { session } } = await supabase.auth.getSession();
-      await downloadTrack(track.id, track.title, session?.access_token);
-    } catch {}
+      if (!session?.access_token) throw new Error('Not authenticated');
+      await downloadTrack(track.id, track.title, session.access_token);
+    } catch (err) {
+      console.error('Download failed:', err.message);
+    }
     setDownloading(null);
   };
 
   const triggerAlbumDownload = async () => {
     setDownloadingAll(true);
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) { setDownloadingAll(false); return; }
     for (const track of tracks) {
       if (track.file_url) {
         try {
-          await supabase.from('downloads').insert({ user_id: user.id, track_id: track.id }).catch(() => {});
-          const { data: { session } } = await supabase.auth.getSession();
-          await downloadTrack(track.id, track.title, session?.access_token);
+          await downloadTrack(track.id, track.title, session.access_token);
           await new Promise(r => setTimeout(r, 800)); // stagger downloads
-        } catch {}
+        } catch (err) {
+          console.error(`Failed to download ${track.title}:`, err.message);
+        }
       }
     }
     setDownloadingAll(false);
@@ -318,6 +329,7 @@ export default function AlbumDetailPage() {
       <Loader className="w-6 h-6 animate-spin text-white/30" />
     </div>
   );
+
   if (!album) return null;
 
   return (
@@ -337,7 +349,7 @@ export default function AlbumDetailPage() {
           <button onClick={handleShare} className="w-9 h-9 flex items-center justify-center rounded-full bg-black/40 backdrop-blur-md">
             {copied ? <Check className="w-4 h-4 text-green-400" /> : <Share2 className="w-4 h-4 text-white" />}
           </button>
-                    <div className="w-9 h-9" />
+          <div className="w-9 h-9" />
         </div>
         <div className="absolute bottom-0 left-0 right-0 px-5 pb-5 flex items-end space-x-4">
           <div className="w-28 h-28 rounded-xl overflow-hidden bg-white/[0.06] flex-shrink-0 shadow-2xl">
@@ -363,14 +375,13 @@ export default function AlbumDetailPage() {
         </div>
       </div>
 
-      {/* Action bar — Play + Download/Buy Album */}
+      {/* Action bar */}
       <div className="px-5 py-4 flex items-center space-x-3 flex-wrap gap-y-2">
         <button onClick={handlePlayAll}
           className="flex items-center space-x-2 px-6 py-3 bg-white text-black rounded-full font-semibold text-sm hover:bg-white/90 active:scale-95 transition">
           <Play className="w-4 h-4" fill="black" />
           <span>Play All</span>
         </button>
-
         {allDownloadable && (
           <button onClick={handleAlbumDownload} disabled={downloadingAll}
             className="flex items-center space-x-2 px-5 py-3 rounded-full font-semibold text-sm transition active:scale-95 disabled:opacity-50"
@@ -389,7 +400,6 @@ export default function AlbumDetailPage() {
             </span>
           </button>
         )}
-
         {album.description && (
           <p className="text-xs text-white/30 w-full mt-1 line-clamp-2">{album.description}</p>
         )}
@@ -406,6 +416,7 @@ export default function AlbumDetailPage() {
           const isActive = currentTrack?.id === track.id;
           const isTrackPlaying = isActive && isPlaying;
           const trackPrice = getTrackPrice(track);
+
           return (
             <div key={track.id} className="relative">
               <div className={`flex items-center space-x-3 px-2 py-3 rounded-xl transition ${isActive ? 'bg-white/[0.06]' : 'hover:bg-white/[0.03]'}`}>
@@ -467,77 +478,72 @@ export default function AlbumDetailPage() {
               />
 
               {/* Add to playlist dropdown */}
-            {showAddToPlaylist === track.id && (
-              <div
-                className="absolute right-4 z-50 w-64 bg-zinc-900 border border-white/[0.08] rounded-xl shadow-2xl overflow-hidden"
-                style={{ top: '100%', marginTop: '4px' }}
-              >
-                <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.06]">
-                  <p className="text-xs font-semibold text-white/60">Add to Playlist</p>
-                  <button onClick={() => { setShowAddToPlaylist(null); setShowNewPlaylist(false); setNewPlaylistName(''); }}>
-                    <X className="w-4 h-4 text-white/30" />
-                  </button>
+              {showAddToPlaylist === track.id && (
+                <div
+                  className="absolute right-4 z-50 w-64 bg-zinc-900 border border-white/[0.08] rounded-xl shadow-2xl overflow-hidden"
+                  style={{ top: '100%', marginTop: '4px' }}
+                >
+                  <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.06]">
+                    <p className="text-xs font-semibold text-white/60">Add to Playlist</p>
+                    <button onClick={() => { setShowAddToPlaylist(null); setShowNewPlaylist(false); setNewPlaylistName(''); }}>
+                      <X className="w-4 h-4 text-white/30" />
+                    </button>
+                  </div>
+                  {showNewPlaylist ? (
+                    <div className="flex items-center space-x-2 px-3 py-2 border-b border-white/[0.05]">
+                      <input
+                        autoFocus type="text" value={newPlaylistName}
+                        onChange={e => setNewPlaylistName(e.target.value)}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') handleCreatePlaylist(track.id);
+                          if (e.key === 'Escape') { setShowNewPlaylist(false); setNewPlaylistName(''); }
+                        }}
+                        placeholder="Playlist name"
+                        className="flex-1 bg-white/[0.06] text-white text-xs rounded-lg px-2.5 py-1.5 outline-none placeholder:text-white/25 border border-white/[0.08] focus:border-white/20"
+                        maxLength={60}
+                      />
+                      <button
+                        onClick={() => handleCreatePlaylist(track.id)}
+                        disabled={!newPlaylistName.trim() || creatingPlaylist}
+                        className="px-2.5 py-1.5 rounded-lg text-xs font-semibold text-black bg-white disabled:opacity-40 flex-shrink-0"
+                      >
+                        {creatingPlaylist ? <Loader className="w-3 h-3 animate-spin" /> : 'Create'}
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setShowNewPlaylist(true)}
+                      className="w-full flex items-center space-x-2 px-4 py-2.5 hover:bg-white/[0.04] transition text-left border-b border-white/[0.05]"
+                    >
+                      <span className="text-xs text-white/50">+ New playlist</span>
+                    </button>
+                  )}
+                  {playlists.length === 0 && !showNewPlaylist ? (
+                    <div className="px-4 py-3">
+                      <p className="text-xs text-white/30">No playlists yet — create one above</p>
+                    </div>
+                  ) : playlists.map(pl => {
+                    const key = `${pl.id}-${track.id}`;
+                    return (
+                      <button
+                        key={pl.id}
+                        onClick={() => handleAddToPlaylist(pl.id, track.id)}
+                        disabled={addingTo === pl.id}
+                        className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-white/[0.04] transition text-left"
+                      >
+                        <span className="text-sm text-white/70 truncate">{pl.name}</span>
+                        {addedTo[key] && <Check className="w-3.5 h-3.5 text-green-400 flex-shrink-0" />}
+                      </button>
+                    );
+                  })}
                 </div>
-
-                {/* New playlist inline form */}
-                {showNewPlaylist ? (
-                  <div className="flex items-center space-x-2 px-3 py-2 border-b border-white/[0.05]">
-                    <input
-                      autoFocus
-                      type="text"
-                      value={newPlaylistName}
-                      onChange={e => setNewPlaylistName(e.target.value)}
-                      onKeyDown={e => {
-                        if (e.key === 'Enter') handleCreatePlaylist(track.id);
-                        if (e.key === 'Escape') { setShowNewPlaylist(false); setNewPlaylistName(''); }
-                      }}
-                      placeholder="Playlist name"
-                      className="flex-1 bg-white/[0.06] text-white text-xs rounded-lg px-2.5 py-1.5 outline-none placeholder:text-white/25 border border-white/[0.08] focus:border-white/20"
-                      maxLength={60}
-                    />
-                    <button
-                      onClick={() => handleCreatePlaylist(track.id)}
-                      disabled={!newPlaylistName.trim() || creatingPlaylist}
-                      className="px-2.5 py-1.5 rounded-lg text-xs font-semibold text-black bg-white disabled:opacity-40 flex-shrink-0"
-                    >
-                      {creatingPlaylist ? <Loader className="w-3 h-3 animate-spin" /> : 'Create'}
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    onClick={() => setShowNewPlaylist(true)}
-                    className="w-full flex items-center space-x-2 px-4 py-2.5 hover:bg-white/[0.04] transition text-left border-b border-white/[0.05]"
-                  >
-                    <span className="text-xs text-white/50">+ New playlist</span>
-                  </button>
-                )}
-
-                {playlists.length === 0 && !showNewPlaylist ? (
-                  <div className="px-4 py-3">
-                    <p className="text-xs text-white/30">No playlists yet — create one above</p>
-                  </div>
-                ) : playlists.map(pl => {
-                  const key = `${pl.id}-${track.id}`;
-                  return (
-                    <button
-                      key={pl.id}
-                      onClick={() => handleAddToPlaylist(pl.id, track.id)}
-                      disabled={addingTo === pl.id}
-                      className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-white/[0.04] transition text-left"
-                    >
-                      <span className="text-sm text-white/70 truncate">{pl.name}</span>
-                      {addedTo[key] && <Check className="w-3.5 h-3.5 text-green-400 flex-shrink-0" />}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+              )}
+            </div>
           );
         })}
       </div>
 
-      {/* Collaborator credits for each track */}
+      {/* Collaborator credits */}
       {tracks.some(t => t.id) && (
         <div className="px-4 mt-2 space-y-3">
           {tracks.map(track => (
@@ -562,7 +568,8 @@ export default function AlbumDetailPage() {
 
       {/* Purchase modal */}
       {purchaseTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.85)' }}
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ backgroundColor: 'rgba(0,0,0,0.85)' }}
           onClick={() => { if (!purchasing) { setPurchaseTarget(null); setPurchaseError(''); } }}>
           <div className="w-full max-w-sm rounded-2xl p-6 space-y-4 overflow-y-auto"
             style={{ backgroundColor: '#0a0a0a', border: '1px solid rgba(255,255,255,0.1)', maxHeight: '90vh' }}
@@ -611,8 +618,8 @@ export default function AlbumDetailPage() {
           </div>
         </div>
       )}
+
       <TrackActionSheet track={actionSheetTrack} artist={artist} onClose={() => setActionSheetTrack(null)} />
     </div>
   );
 }
-
