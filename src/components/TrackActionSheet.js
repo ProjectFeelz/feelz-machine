@@ -256,7 +256,7 @@ export default function TrackActionSheet({ track, artist, onClose }) {
     };
 
     const handleShare = async () => {
-        const url = window.location.origin + '/artist/' + (artist?.slug || track?.artist_slug || '');
+        const url = window.location.origin + '/artist/' + (artist?.slug || track?.artist_slug || '') + (track?.slug ? `?track=${track.slug}` : '');
         if (navigator.share) {
             try { await navigator.share({ title: track.title, text: track.title + ' by ' + (artist?.artist_name || track.artist_name), url }); } catch {}
         } else {
