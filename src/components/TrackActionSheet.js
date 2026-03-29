@@ -256,7 +256,7 @@ export default function TrackActionSheet({ track, artist, onClose }) {
     };
 
     const handleShare = async () => {
-        const url = window.location.origin + '/player/artist/' + (artist?.slug || '');
+        const url = window.location.origin + '/artist/' + (artist?.slug || track?.artist_slug || '');
         if (navigator.share) {
             try { await navigator.share({ title: track.title, text: track.title + ' by ' + (artist?.artist_name || track.artist_name), url }); } catch {}
         } else {
@@ -593,7 +593,7 @@ export default function TrackActionSheet({ track, artist, onClose }) {
                                     {downloadError && <p className="text-xs text-red-400 px-5 pb-2">{downloadError}</p>}
                                 </>
                             )}
-                            <button onClick={() => { navigate(`/artist/${artist?.slug || ''}`); onClose(); }}
+                            <button onClick={() => { const slug = artist?.slug || track?.artist_slug; if (slug) { navigate(`/artist/${slug}`); onClose(); } }}
                                 className="w-full flex items-center space-x-4 px-5 py-3.5 active:bg-white/[0.04] transition">
                                 <Music className="w-5 h-5 text-white/40" />
                                 <span className="text-sm text-white/70">View Artist</span>
