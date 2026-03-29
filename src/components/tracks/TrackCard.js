@@ -65,7 +65,7 @@ export default function TrackCard({ track, trackList = [], showArtwork = true, i
     e.stopPropagation();
     const artistSlug = track.artist_slug || track.slug || '';
     const url = artistSlug
-      ? `${window.location.origin}/player/artist/${artistSlug}`
+      ? `${window.location.origin}/artist/${artistSlug}`
       : window.location.href;
     if (navigator.share) {
       try { await navigator.share({ title: track.title, text: `${track.title} by ${track.artist_name}`, url }); }
