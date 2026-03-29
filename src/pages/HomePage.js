@@ -53,7 +53,7 @@ function SquareCard({ item, itemList = [], isAlbum = false, onPlay, currentTrack
           <div className="flex-shrink-0 w-40 md:w-52 cursor-pointer group relative">
             <div
             className="aspect-square rounded-xl overflow-hidden bg-white/[0.06] mb-2 relative"
-            onClick={() => isAlbum ? navigate(`/album/${item.id}`) : onPlay(item, itemList)}
+            onClick={() => isAlbum ? navigate(`/album/${item.slug || item.id}`) : onPlay(item, itemList)}
           >
             {item.cover_artwork_url
                        ? <img src={item.cover_artwork_url} alt={item.title ? item.title.trim() : ''} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
