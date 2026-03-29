@@ -188,7 +188,7 @@ export default function ProfilePage() {
               <span>View profile</span>
             </button>
             <button onClick={() => {
-              navigator.clipboard.writeText(`${window.location.origin}/player/artist/${artist.slug}`);
+              navigator.clipboard.writeText(`${window.location.origin}/artist/${artist.slug}`);
             }} className="flex items-center space-x-1.5 text-xs text-white/30 hover:text-white/50 transition">
               <span>Copy share link</span>
             </button>
