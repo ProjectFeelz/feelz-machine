@@ -6,7 +6,7 @@
   "main": "public/electron.js",
   "homepage": "https://www.feelzmachine.com",
   "private": true,
-  "dependencies": {
+  "react-helmet-async": "^2.0.4",
     "@supabase/supabase-js": "^2.39.0",
     "@testing-library/jest-dom": "^5.17.0",
     "@testing-library/react": "^13.4.0",
