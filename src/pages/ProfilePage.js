@@ -6,7 +6,7 @@ import {
   LogOut, ChevronRight, User, Music, Globe, Shield,
   Instagram, Twitter, Youtube, MessageCircle, Loader,
   Save, Palette, ExternalLink, DollarSign, Camera,
-  Link, Zap, Crown, Star, Trash2
+  Link, Zap, Crown, Star, Trash2, AlertTriangle
 } from 'lucide-react';
 import ThemeEditor from '../components/ThemeEditor';
 import PaymentSettings from '../components/PaymentSettings';
@@ -21,13 +21,13 @@ const TikTokIcon = ({ className }) => (
 );
 
 const SOCIALS = [
-  { key: 'instagram', label: 'Instagram',  icon: Instagram,     ph: 'https://instagram.com/yourname' },
-  { key: 'twitter',   label: 'X (Twitter)', icon: Twitter,      ph: 'https://x.com/yourname' },
-  { key: 'youtube',   label: 'YouTube',    icon: Youtube,       ph: 'https://youtube.com/yourchannel' },
-  { key: 'tiktok',    label: 'TikTok',     icon: TikTokIcon,    ph: 'https://tiktok.com/@yourname' },
-  { key: 'facebook',  label: 'Facebook',   icon: Globe,         ph: 'https://facebook.com/yourpage' },
-  { key: 'discord',   label: 'Discord',    icon: MessageCircle, ph: 'Discord invite link' },
-  { key: 'website',   label: 'Website',    icon: Globe,         ph: 'https://yourwebsite.com' },
+  { key: 'instagram', label: 'Instagram',   icon: Instagram,     ph: 'https://instagram.com/yourname' },
+  { key: 'twitter',   label: 'X (Twitter)', icon: Twitter,       ph: 'https://x.com/yourname' },
+  { key: 'youtube',   label: 'YouTube',     icon: Youtube,       ph: 'https://youtube.com/yourchannel' },
+  { key: 'tiktok',    label: 'TikTok',      icon: TikTokIcon,    ph: 'https://tiktok.com/@yourname' },
+  { key: 'facebook',  label: 'Facebook',    icon: Globe,         ph: 'https://facebook.com/yourpage' },
+  { key: 'discord',   label: 'Discord',     icon: MessageCircle, ph: 'Discord invite link' },
+  { key: 'website',   label: 'Website',     icon: Globe,         ph: 'https://yourwebsite.com' },
 ];
 
 const PROFILE_IMAGE_BUCKET = 'artist-images';
@@ -45,7 +45,7 @@ export default function ProfilePage() {
   const nav = useNavigate();
   const {
     user, profile, artist, isAdmin, isArtist, signOut, refreshProfile,
-    rawIsAdmin, rawIsArtist, rawIsMaster, viewAs, setViewAs,
+    rawIsAdmin, rawIsArtist, rawIsMaster, viewAs, setViewAs, deleteAccount,
   } = useAuth();
   const { tierSlug } = useTier();
 
@@ -61,6 +61,12 @@ export default function ProfilePage() {
     tiktok: '', facebook: '', discord: '', website: '',
   });
 
+  // ── Delete account state ─────────────────────────────────────────────────
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
+  const [deleting, setDeleting]                   = useState(false);
+  const [deleteError, setDeleteError]             = useState('');
+
   // ── Thought of the Day state ─────────────────────────────────────────────
   const [thoughts, setThoughts]           = useState([]);
   const [thoughtInput, setThoughtInput]   = useState('');
@@ -68,7 +74,6 @@ export default function ProfilePage() {
   const [thoughtMsg, setThoughtMsg]       = useState('');
   const [deletingId, setDeletingId]       = useState(null);
 
-  // Tier display config
   const tierConfig = {
     premium: { label: 'Premium', color: '#F59E0B', bg: 'rgba(245,158,11,0.08)', icon: Crown },
     pro:     { label: 'Pro',     color: '#8B5CF6', bg: 'rgba(139,92,246,0.08)', icon: Zap },
@@ -90,16 +95,10 @@ export default function ProfilePage() {
     if (!error) setThoughts(data || []);
   }, [artist]);
 
-  const todayCount = thoughts.filter(t => {
-    const posted = new Date(t.created_at);
-    const now    = new Date();
-    return (
-      posted.getFullYear() === now.getFullYear() &&
-      posted.getMonth()    === now.getMonth()    &&
-      posted.getDate()     === now.getDate()
-    );
+  const todayCount     = thoughts.filter(t => {
+    const p = new Date(t.created_at), n = new Date();
+    return p.getFullYear() === n.getFullYear() && p.getMonth() === n.getMonth() && p.getDate() === n.getDate();
   }).length;
-
   const remainingToday = MAX_DAILY_THOUGHTS - todayCount;
 
   const postThought = async () => {
@@ -117,13 +116,8 @@ export default function ProfilePage() {
       expires_at: new Date(Date.now() + THOUGHT_TTL_MS).toISOString(),
     });
     setThoughtSaving(false);
-    if (error) {
-      setThoughtMsg('Failed to post');
-    } else {
-      setThoughtInput('');
-      setThoughtMsg('Posted!');
-      fetchThoughts();
-    }
+    if (error) { setThoughtMsg('Failed to post'); }
+    else { setThoughtInput(''); setThoughtMsg('Posted!'); fetchThoughts(); }
     setTimeout(() => setThoughtMsg(''), 2500);
   };
 
@@ -135,7 +129,6 @@ export default function ProfilePage() {
   };
 
   useEffect(() => { if (artist) fetchThoughts(); }, [artist, fetchThoughts]);
-  // ─────────────────────────────────────────────────────────────────────────
 
   useEffect(() => {
     if (artist) {
@@ -154,7 +147,6 @@ export default function ProfilePage() {
     }
   }, [artist]);
 
-  // Local image preview
   useEffect(() => {
     if (!profileImgFile) { setPreviewUrl(null); return; }
     const url = URL.createObjectURL(profileImgFile);
@@ -166,42 +158,31 @@ export default function ProfilePage() {
     const ext  = file.name.split('.').pop();
     const name = `${folder}${Date.now()}-${Math.random().toString(36).substring(7)}.${ext}`;
     const { error: uploadError } = await supabase.storage
-      .from(PROFILE_IMAGE_BUCKET)
-      .upload(name, file, { upsert: true });
+      .from(PROFILE_IMAGE_BUCKET).upload(name, file, { upsert: true });
     if (uploadError) throw new Error(`Image upload failed: ${uploadError.message}`);
-    const { data: { publicUrl } } = supabase.storage
-      .from(PROFILE_IMAGE_BUCKET)
-      .getPublicUrl(name);
+    const { data: { publicUrl } } = supabase.storage.from(PROFILE_IMAGE_BUCKET).getPublicUrl(name);
     return publicUrl;
   };
 
   const save = async () => {
     if (!artist) return;
-    setSaving(true);
-    setMsg('');
+    setSaving(true); setMsg('');
     try {
       const sl = {};
       SOCIALS.forEach(p => { if (form[p.key]?.trim()) sl[p.key] = form[p.key].trim(); });
       const updateData = {
-        artist_name: form.artist_name,
-        bio:         form.bio,
-        social_links: sl,
-        updated_at:  new Date().toISOString(),
+        artist_name: form.artist_name, bio: form.bio,
+        social_links: sl, updated_at: new Date().toISOString(),
       };
       if (profileImgFile) {
         updateData.profile_image_url = await uploadFile(profileImgFile, 'profile-images/');
       }
       const { error } = await supabase.from('artists').update(updateData).eq('id', artist.id);
       if (error) throw error;
-      setMsg('Saved!');
-      setEditing(false);
-      setProfileImgFile(null);
-      setPreviewUrl(null);
+      setMsg('Saved!'); setEditing(false); setProfileImgFile(null); setPreviewUrl(null);
       await refreshProfile();
       setTimeout(() => setMsg(''), 3000);
-    } catch (e) {
-      setMsg('Error: ' + e.message);
-    }
+    } catch (e) { setMsg('Error: ' + e.message); }
     setSaving(false);
   };
 
@@ -210,15 +191,25 @@ export default function ProfilePage() {
     nav('/');
   };
 
+  const handleDeleteAccount = async () => {
+    if (deleteConfirmText !== 'DELETE') return;
+    setDeleting(true); setDeleteError('');
+    try {
+      await deleteAccount();
+      nav('/login');
+    } catch (e) {
+      setDeleteError(e.message || 'Something went wrong. Please try again.');
+      setDeleting(false);
+    }
+  };
+
   if (!user) {
     return (
       <div className="pt-16 md:pt-4 pb-4 px-4 text-center">
         <User className="w-16 h-16 mx-auto text-white/10 mb-4" />
         <h2 className="text-lg font-semibold text-white mb-2">Not signed in</h2>
         <button onClick={() => nav('/login')}
-          className="px-6 py-2.5 bg-white text-black rounded-lg font-medium text-sm">
-          Sign In
-        </button>
+          className="px-6 py-2.5 bg-white text-black rounded-lg font-medium text-sm">Sign In</button>
       </div>
     );
   }
@@ -229,34 +220,23 @@ export default function ProfilePage() {
   return (
     <div className="pt-12 md:pt-0 pb-8 px-4 md:px-0">
 
-      {/* ── Page title ── */}
       <h1 className="text-2xl font-bold text-white mb-5 sticky top-0 z-20
         bg-black/90 backdrop-blur-sm md:relative md:top-auto md:bg-transparent
-        md:backdrop-blur-none pt-2 pb-2 -mx-4 px-4">
-        Profile
-      </h1>
+        md:backdrop-blur-none pt-2 pb-2 -mx-4 px-4">Profile</h1>
 
-      {/* ── Global message ── */}
       {msg && (
         <div className={`mb-4 p-3 rounded-lg text-sm ${
           msg.startsWith('Error') ? 'bg-red-500/10 text-red-400' : 'bg-green-500/10 text-green-400'
-        }`}>
-          {msg}
-        </div>
+        }`}>{msg}</div>
       )}
 
-      {/* ══════════════════════════════════════════════════════════════════════
-          HERO CARD
-      ══════════════════════════════════════════════════════════════════════ */}
+      {/* ── Hero card ── */}
       <div className="relative rounded-2xl overflow-hidden border border-white/[0.06] mb-5"
         style={{ background: 'linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.02) 100%)' }}>
         <div className="absolute top-0 left-0 right-0 h-px"
           style={{ background: `linear-gradient(90deg, transparent, ${tier.color}60, transparent)` }} />
-
         <div className="p-5">
           <div className="flex items-center space-x-4">
-
-            {/* Avatar */}
             <div className="relative flex-shrink-0">
               <div className="w-16 h-16 rounded-2xl overflow-hidden border border-white/10"
                 style={{ background: `linear-gradient(135deg, ${tier.color}40, ${tier.color}15)` }}>
@@ -268,76 +248,48 @@ export default function ProfilePage() {
                 }
               </div>
               {editing && (
-                <label className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-white
-                  flex items-center justify-center cursor-pointer shadow-lg">
+                <label className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-white flex items-center justify-center cursor-pointer shadow-lg">
                   <Camera className="w-3 h-3 text-black" />
                   <input type="file" accept=".jpg,.jpeg,.png,.webp" className="hidden"
                     onChange={e => setProfileImgFile(e.target.files[0])} />
                 </label>
               )}
             </div>
-
-            {/* Name + meta */}
             <div className="flex-1 min-w-0">
               <p className="text-base font-semibold text-white truncate">
                 {artist?.artist_name || profile?.display_name || user.email}
               </p>
               <p className="text-xs text-white/30 truncate mb-1.5">{user.email}</p>
               <div className="flex items-center flex-wrap gap-1.5">
-                {isArtist && (
-                  <span className="text-[10px] px-1.5 py-0.5 bg-purple-500/10 text-purple-400 rounded font-medium">
-                    Artist
-                  </span>
-                )}
-                {artist?.is_verified && (
-                  <span className="text-[10px] px-1.5 py-0.5 bg-blue-500/10 text-blue-400 rounded font-medium">
-                    Verified
-                  </span>
-                )}
-                {artist?.is_master && (
-                  <span className="text-[10px] px-1.5 py-0.5 bg-yellow-500/10 text-yellow-400 rounded font-medium">
-                    Master
-                  </span>
-                )}
+                {isArtist && <span className="text-[10px] px-1.5 py-0.5 bg-purple-500/10 text-purple-400 rounded font-medium">Artist</span>}
+                {artist?.is_verified && <span className="text-[10px] px-1.5 py-0.5 bg-blue-500/10 text-blue-400 rounded font-medium">Verified</span>}
+                {artist?.is_master && <span className="text-[10px] px-1.5 py-0.5 bg-yellow-500/10 text-yellow-400 rounded font-medium">Master</span>}
                 <TierBadge size="xs" />
               </div>
             </div>
-
-            {/* Tier pill */}
             {isArtist && (
               <button onClick={() => nav('/upgrade')}
                 className="flex-shrink-0 flex items-center space-x-1.5 px-3 py-1.5 rounded-xl border transition hover:brightness-110"
                 style={{ backgroundColor: tier.bg, borderColor: `${tier.color}25` }}>
                 <TierIcon className="w-3.5 h-3.5" style={{ color: tier.color }} />
-                <span className="text-xs font-semibold" style={{ color: tier.color }}>
-                  {tier.label}
-                </span>
+                <span className="text-xs font-semibold" style={{ color: tier.color }}>{tier.label}</span>
               </button>
             )}
           </div>
-
-          {/* Public profile link */}
           {isArtist && artist?.slug && (
             <div className="flex items-center justify-between mt-4 pt-3 border-t border-white/[0.05]">
               <button onClick={() => nav(`/artist/${artist.slug}`)}
                 className="flex items-center space-x-1.5 text-xs text-white/30 hover:text-white/50 transition">
-                <ExternalLink className="w-3 h-3" />
-                <span>/artist/{artist.slug}</span>
+                <ExternalLink className="w-3 h-3" /><span>/artist/{artist.slug}</span>
               </button>
-              <button onClick={() => {
-                navigator.clipboard.writeText(`${window.location.origin}/artist/${artist.slug}`);
-              }} className="text-xs text-white/20 hover:text-white/40 transition">
-                Copy link
-              </button>
+              <button onClick={() => navigator.clipboard.writeText(`${window.location.origin}/artist/${artist.slug}`)}
+                className="text-xs text-white/20 hover:text-white/40 transition">Copy link</button>
             </div>
           )}
-
-          {/* Listener edit profile */}
           {!isArtist && (
             <div className="mt-3 pt-3 border-t border-white/[0.05]">
               <button onClick={() => nav('/profile/edit')}
-                className="flex items-center space-x-1.5 text-xs text-white/40 hover:text-white/60
-                  transition border border-white/[0.08] rounded-lg px-3 py-2">
+                className="flex items-center space-x-1.5 text-xs text-white/40 hover:text-white/60 transition border border-white/[0.08] rounded-lg px-3 py-2">
                 <span>Edit Profile</span>
               </button>
             </div>
@@ -345,31 +297,23 @@ export default function ProfilePage() {
         </div>
       </div>
 
-      {/* ══════════════════════════════════════════════════════════════════════
-          ARTIST TABS
-      ══════════════════════════════════════════════════════════════════════ */}
+      {/* ── Artist tabs ── */}
       {isArtist && (
         <>
-          {/* Tab bar */}
           <div className="flex space-x-1 p-1 rounded-xl mb-4"
             style={{ backgroundColor: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)' }}>
             {ARTIST_TABS.map(({ key, label, icon: Icon }) => (
               <button key={key} onClick={() => { setActiveTab(key); setEditing(false); }}
                 className="flex-1 flex items-center justify-center space-x-1.5 py-2 rounded-lg text-xs font-medium transition"
-                style={activeTab === key
-                  ? { backgroundColor: '#fff', color: '#000' }
-                  : { color: 'rgba(255,255,255,0.4)' }
-                }>
-                <Icon className="w-3.5 h-3.5" />
-                <span>{label}</span>
+                style={activeTab === key ? { backgroundColor: '#fff', color: '#000' } : { color: 'rgba(255,255,255,0.4)' }}>
+                <Icon className="w-3.5 h-3.5" /><span>{label}</span>
               </button>
             ))}
           </div>
 
-          {/* ── TAB: Profile ── */}
+          {/* Profile tab */}
           {activeTab === 'profile' && (
             <>
-              {/* Artist Info */}
               <div className="rounded-2xl border border-white/[0.06] overflow-hidden mb-4"
                 style={{ background: 'rgba(255,255,255,0.02)' }}>
                 <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.05]">
@@ -396,13 +340,11 @@ export default function ProfilePage() {
                       </div>
                       {profileImgFile && (
                         <p className="text-xs text-green-400 flex items-center space-x-1">
-                          <Camera className="w-3 h-3" />
-                          <span>{profileImgFile.name} selected</span>
+                          <Camera className="w-3 h-3" /><span>{profileImgFile.name} selected</span>
                         </p>
                       )}
                       <button onClick={save} disabled={saving}
-                        className="w-full py-2.5 bg-white text-black rounded-xl font-semibold text-sm
-                          flex items-center justify-center space-x-2 disabled:opacity-50 transition active:scale-[0.98]">
+                        className="w-full py-2.5 bg-white text-black rounded-xl font-semibold text-sm flex items-center justify-center space-x-2 disabled:opacity-50 transition active:scale-[0.98]">
                         {saving ? <Loader className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                         <span>{saving ? 'Saving...' : 'Save Changes'}</span>
                       </button>
@@ -411,88 +353,62 @@ export default function ProfilePage() {
                     <div className="space-y-3">
                       {form.bio
                         ? <p className="text-sm text-white/60 leading-relaxed">{form.bio}</p>
-                        : <p className="text-xs text-white/20 italic">No bio yet — tap Edit to add one</p>
-                      }
+                        : <p className="text-xs text-white/20 italic">No bio yet — tap Edit to add one</p>}
                     </div>
                   )}
                 </div>
               </div>
 
-              {/* Thought of the Day */}
               <TierGate feature="daily_thought">
                 <div className="rounded-2xl border border-white/[0.06] overflow-hidden mb-4"
                   style={{ background: 'rgba(255,255,255,0.02)' }}>
                   <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.05]">
                     <p className="text-sm font-semibold text-white">💭 Thought of the Day</p>
                     <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                      remainingToday === 0
-                        ? 'bg-red-500/10 text-red-400'
-                        : 'bg-white/[0.06] text-white/30'
-                    }`}>
-                      {remainingToday}/{MAX_DAILY_THOUGHTS} left today
-                    </span>
+                      remainingToday === 0 ? 'bg-red-500/10 text-red-400' : 'bg-white/[0.06] text-white/30'
+                    }`}>{remainingToday}/{MAX_DAILY_THOUGHTS} left today</span>
                   </div>
                   <div className="p-4 space-y-3">
-                    <p className="text-xs text-white/30">
-                      Share what's on your mind — appears on your profile for 24 hours
-                    </p>
-                    <textarea
-                      rows={3}
-                      maxLength={280}
-                      value={thoughtInput}
+                    <p className="text-xs text-white/30">Share what's on your mind — appears on your profile for 24 hours</p>
+                    <textarea rows={3} maxLength={280} value={thoughtInput}
                       onChange={e => setThoughtInput(e.target.value)}
                       placeholder="What's on your mind today?"
                       disabled={remainingToday <= 0}
-                      className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none resize-none border border-white/[0.06] focus:border-white/20 transition placeholder-white/15 disabled:opacity-40"
-                    />
+                      className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none resize-none border border-white/[0.06] focus:border-white/20 transition placeholder-white/15 disabled:opacity-40" />
                     <div className="flex items-center justify-between">
                       <span className="text-xs text-white/20">{thoughtInput.length}/280</span>
                       <div className="flex items-center space-x-3">
                         {thoughtMsg && (
-                          <span className={`text-xs ${
-                            thoughtMsg.includes('Failed') || thoughtMsg.includes('limit')
-                              ? 'text-red-400' : 'text-green-400'
-                          }`}>
+                          <span className={`text-xs ${thoughtMsg.includes('Failed') || thoughtMsg.includes('limit') ? 'text-red-400' : 'text-green-400'}`}>
                             {thoughtMsg}
                           </span>
                         )}
-                        <button
-                          onClick={postThought}
+                        <button onClick={postThought}
                           disabled={thoughtSaving || !thoughtInput.trim() || remainingToday <= 0}
-                          className="px-4 py-1.5 bg-white text-black text-xs font-semibold rounded-lg disabled:opacity-40 transition active:scale-95"
-                        >
+                          className="px-4 py-1.5 bg-white text-black text-xs font-semibold rounded-lg disabled:opacity-40 transition active:scale-95">
                           {thoughtSaving ? 'Posting...' : 'Post'}
                         </button>
                       </div>
                     </div>
-
-                    {/* Active thoughts list */}
                     {thoughts.length > 0 && (
                       <div className="space-y-2 pt-1">
-                        <p className="text-[11px] text-white/20 uppercase tracking-wider font-medium">
-                          Active thoughts
-                        </p>
+                        <p className="text-[11px] text-white/20 uppercase tracking-wider font-medium">Active thoughts</p>
                         {thoughts.map(t => {
                           const expiresAt = new Date(t.created_at).getTime() + THOUGHT_TTL_MS;
                           const minsLeft  = Math.max(0, Math.round((expiresAt - Date.now()) / 60000));
                           const hrsLeft   = Math.floor(minsLeft / 60);
                           const timeLabel = hrsLeft > 0 ? `${hrsLeft}h ${minsLeft % 60}m` : `${minsLeft}m`;
                           return (
-                            <div key={t.id}
-                              className="flex items-start space-x-3 p-3 bg-white/[0.04] rounded-xl border border-white/[0.05]">
+                            <div key={t.id} className="flex items-start space-x-3 p-3 bg-white/[0.04] rounded-xl border border-white/[0.05]">
                               <div className="flex-1 min-w-0">
                                 <p className="text-sm text-white/80 leading-relaxed">{t.content}</p>
                                 <p className="text-[10px] text-white/20 mt-1">Expires in {timeLabel}</p>
                               </div>
-                              <button
-                                onClick={() => deleteThought(t.id)}
-                                disabled={deletingId === t.id}
-                                className="flex-shrink-0 w-7 h-7 flex items-center justify-center rounded-lg hover:bg-red-500/10 transition"
-                              >
+                              <button onClick={() => deleteThought(t.id)} disabled={deletingId === t.id}
+                                className="flex-shrink-0 w-7 h-7 flex items-center justify-center rounded-lg hover:bg-red-500/10 transition">
                                 {deletingId === t.id
                                   ? <Loader className="w-3.5 h-3.5 animate-spin text-white/30" />
-                                  : <Trash2 className="w-3.5 h-3.5 text-white/20 hover:text-red-400 transition" />
-                                }
+                                  : <Trash2 className="w-3.5 h-3.5 text-white/20 hover:text-red-400 transition" />}
                               </button>
                             </div>
                           );
@@ -505,35 +421,29 @@ export default function ProfilePage() {
             </>
           )}
 
-          {/* ── TAB: Theme ── */}
+          {/* Theme tab */}
           {activeTab === 'theme' && (
             <div className="mb-4">
               <TierGate feature="custom_theme">
-                <div className="rounded-2xl border border-white/[0.06] overflow-hidden"
-                  style={{ background: 'rgba(255,255,255,0.02)' }}>
+                <div className="rounded-2xl border border-white/[0.06] overflow-hidden" style={{ background: 'rgba(255,255,255,0.02)' }}>
                   <div className="flex items-center space-x-2 px-4 py-3 border-b border-white/[0.05]">
                     <Palette className="w-4 h-4 text-white/40" />
                     <p className="text-sm font-semibold text-white">Customize Your Page</p>
                   </div>
-                  <div className="p-4">
-                    <ThemeEditor />
-                  </div>
+                  <div className="p-4"><ThemeEditor /></div>
                 </div>
               </TierGate>
             </div>
           )}
 
-          {/* ── TAB: Links ── */}
+          {/* Links tab */}
           {activeTab === 'links' && (
-            <div className="rounded-2xl border border-white/[0.06] overflow-hidden mb-4"
-              style={{ background: 'rgba(255,255,255,0.02)' }}>
+            <div className="rounded-2xl border border-white/[0.06] overflow-hidden mb-4" style={{ background: 'rgba(255,255,255,0.02)' }}>
               <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.05]">
                 <p className="text-sm font-semibold text-white">Social Links</p>
                 {!editing && (
                   <button onClick={() => setEditing(true)}
-                    className="text-xs text-white/40 hover:text-white/60 transition px-2 py-1 rounded-lg hover:bg-white/[0.04]">
-                    Edit
-                  </button>
+                    className="text-xs text-white/40 hover:text-white/60 transition px-2 py-1 rounded-lg hover:bg-white/[0.04]">Edit</button>
                 )}
               </div>
               <div className="p-4">
@@ -549,19 +459,15 @@ export default function ProfilePage() {
                           <input type="text" value={form[key]}
                             onChange={e => setForm({ ...form, [key]: e.target.value })}
                             placeholder={ph}
-                            className="flex-1 px-3 py-2 bg-white/[0.06] rounded-lg text-white text-sm outline-none
-                              border border-white/[0.06] focus:border-white/20 transition placeholder-white/15" />
+                            className="flex-1 px-3 py-2 bg-white/[0.06] rounded-lg text-white text-sm outline-none border border-white/[0.06] focus:border-white/20 transition placeholder-white/15" />
                         </div>
                       </div>
                     ))}
                     <div className="flex space-x-2 pt-1">
                       <button onClick={() => { setEditing(false); setMsg(''); }}
-                        className="flex-1 py-2.5 rounded-xl text-sm font-medium text-white/40 border border-white/[0.08] hover:bg-white/[0.04] transition">
-                        Cancel
-                      </button>
+                        className="flex-1 py-2.5 rounded-xl text-sm font-medium text-white/40 border border-white/[0.08] hover:bg-white/[0.04] transition">Cancel</button>
                       <button onClick={save} disabled={saving}
-                        className="flex-1 py-2.5 bg-white text-black rounded-xl font-semibold text-sm
-                          flex items-center justify-center space-x-2 disabled:opacity-50 transition active:scale-[0.98]">
+                        className="flex-1 py-2.5 bg-white text-black rounded-xl font-semibold text-sm flex items-center justify-center space-x-2 disabled:opacity-50 transition active:scale-[0.98]">
                         {saving ? <Loader className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                         <span>{saving ? 'Saving...' : 'Save'}</span>
                       </button>
@@ -581,9 +487,7 @@ export default function ProfilePage() {
                       </div>
                     ))}
                     {!SOCIALS.some(p => form[p.key]) && (
-                      <p className="text-xs text-white/20 italic py-2">
-                        No links added yet — tap Edit to add your socials
-                      </p>
+                      <p className="text-xs text-white/20 italic py-2">No links added yet — tap Edit to add your socials</p>
                     )}
                   </div>
                 )}
@@ -591,47 +495,34 @@ export default function ProfilePage() {
             </div>
           )}
 
-          {/* ── TAB: Payments ── */}
+          {/* Payments tab */}
           {activeTab === 'payments' && (
-            <div className="rounded-2xl border border-white/[0.06] overflow-hidden mb-4"
-              style={{ background: 'rgba(255,255,255,0.02)' }}>
+            <div className="rounded-2xl border border-white/[0.06] overflow-hidden mb-4" style={{ background: 'rgba(255,255,255,0.02)' }}>
               <div className="flex items-center space-x-2 px-4 py-3 border-b border-white/[0.05]">
                 <DollarSign className="w-4 h-4 text-white/40" />
                 <p className="text-sm font-semibold text-white">Payments & Subscription</p>
               </div>
-              <div className="p-4">
-                <PaymentSettings />
-              </div>
+              <div className="p-4"><PaymentSettings /></div>
             </div>
           )}
         </>
       )}
 
-      {/* ══════════════════════════════════════════════════════════════════════
-          NAVIGATION LINKS
-      ══════════════════════════════════════════════════════════════════════ */}
-      <div className="rounded-2xl border border-white/[0.06] overflow-hidden mb-4"
-        style={{ background: 'rgba(255,255,255,0.02)' }}>
-        {isArtist && (
-          <NavRow icon={Music} label="Artist Dashboard" iconColor="text-purple-400"
-            onClick={() => nav('/dashboard')} />
-        )}
-        {isAdmin && (
-          <NavRow icon={Shield} label="Admin Panel" iconColor="text-yellow-400"
-            onClick={() => nav('/admin')} border />
-        )}
+      {/* ── Nav links ── */}
+      <div className="rounded-2xl border border-white/[0.06] overflow-hidden mb-4" style={{ background: 'rgba(255,255,255,0.02)' }}>
+        {isArtist && <NavRow icon={Music} label="Artist Dashboard" iconColor="text-purple-400" onClick={() => nav('/dashboard')} />}
+        {isAdmin  && <NavRow icon={Shield} label="Admin Panel" iconColor="text-yellow-400" onClick={() => nav('/admin')} border />}
         <NavRow icon={Globe} label="Privacy Policy" onClick={() => nav('/privacy-policy')} border />
         <NavRow icon={Globe} label="Terms of Use"   onClick={() => nav('/terms-of-use')}   border />
       </div>
 
-      {/* ── Role Switcher ── */}
+      {/* ── Role switcher ── */}
       {(rawIsAdmin || rawIsMaster) && (
-        <div className="rounded-2xl border border-white/[0.06] p-4 mb-4"
-          style={{ background: 'rgba(255,255,255,0.02)' }}>
+        <div className="rounded-2xl border border-white/[0.06] p-4 mb-4" style={{ background: 'rgba(255,255,255,0.02)' }}>
           <p className="text-[10px] uppercase tracking-wider text-white/25 font-semibold mb-3">View As</p>
           <div className="flex flex-wrap gap-2">
             {[
-              { key: null,       label: 'Default' },
+              { key: null, label: 'Default' },
               ...(rawIsAdmin  ? [{ key: 'admin',    label: 'Admin' }]  : []),
               ...(rawIsArtist ? [{ key: 'artist',   label: 'Artist' }] : []),
               { key: 'listener', label: 'Listener' },
@@ -640,8 +531,7 @@ export default function ProfilePage() {
                 className="px-3 py-1.5 rounded-lg text-xs font-medium transition"
                 style={viewAs === opt.key
                   ? { backgroundColor: '#fff', color: '#000' }
-                  : { backgroundColor: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.5)' }
-                }>
+                  : { backgroundColor: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.5)' }}>
                 {opt.label}
               </button>
             ))}
@@ -653,10 +543,54 @@ export default function ProfilePage() {
       {/* ── Sign out ── */}
       <button onClick={handleSignOut}
         className="w-full py-3 rounded-2xl font-medium text-sm flex items-center justify-center space-x-2
-          bg-red-500/8 text-red-400 border border-red-500/10 hover:bg-red-500/12 transition active:scale-[0.98]">
-        <LogOut className="w-4 h-4" />
-        <span>Sign Out</span>
+          bg-red-500/8 text-red-400 border border-red-500/10 hover:bg-red-500/12 transition active:scale-[0.98] mb-3">
+        <LogOut className="w-4 h-4" /><span>Sign Out</span>
       </button>
+
+      {/* ── Delete account ── */}
+      {!showDeleteConfirm ? (
+        <button onClick={() => setShowDeleteConfirm(true)}
+          className="w-full py-2.5 rounded-2xl text-xs text-white/20 hover:text-red-400/60
+            border border-white/[0.04] hover:border-red-500/10 transition flex items-center justify-center space-x-2">
+          <AlertTriangle className="w-3.5 h-3.5" /><span>Delete Account</span>
+        </button>
+      ) : (
+        <div className="rounded-2xl border border-red-500/20 p-4 bg-red-500/5">
+          <div className="flex items-start space-x-3 mb-4">
+            <AlertTriangle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-semibold text-red-400 mb-1">Delete your account?</p>
+              <p className="text-xs text-white/40 leading-relaxed">
+                This permanently deletes your profile, tracks, followers and all associated data.
+                This action cannot be undone.
+              </p>
+            </div>
+          </div>
+          <p className="text-xs text-white/40 mb-2">
+            Type <span className="font-mono font-bold text-white/60">DELETE</span> to confirm
+          </p>
+          <input type="text" value={deleteConfirmText}
+            onChange={e => setDeleteConfirmText(e.target.value)}
+            placeholder="Type DELETE"
+            className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none
+              border border-red-500/20 focus:border-red-500/40 transition placeholder-white/20 mb-3" />
+          {deleteError && <p className="text-xs text-red-400 mb-3">{deleteError}</p>}
+          <div className="flex space-x-2">
+            <button onClick={() => { setShowDeleteConfirm(false); setDeleteConfirmText(''); setDeleteError(''); }}
+              className="flex-1 py-2.5 rounded-xl text-sm text-white/40 border border-white/[0.08] hover:bg-white/[0.04] transition">
+              Cancel
+            </button>
+            <button onClick={handleDeleteAccount}
+              disabled={deleteConfirmText !== 'DELETE' || deleting}
+              className="flex-1 py-2.5 rounded-xl text-sm font-semibold bg-red-500 text-white
+                disabled:opacity-30 transition active:scale-[0.98] flex items-center justify-center space-x-2">
+              {deleting
+                ? <><Loader className="w-4 h-4 animate-spin" /><span>Deleting...</span></>
+                : <><Trash2 className="w-4 h-4" /><span>Delete Forever</span></>}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -667,8 +601,7 @@ function NavRow({ icon: Icon, label, iconColor = 'text-white/30', onClick, borde
       className={`w-full flex items-center justify-between p-4 hover:bg-white/[0.03] transition
         ${border ? 'border-t border-white/[0.04]' : ''}`}>
       <div className="flex items-center space-x-3">
-        <Icon className={`w-5 h-5 ${iconColor}`} />
-        <span className="text-sm text-white">{label}</span>
+        <Icon className={`w-5 h-5 ${iconColor}`} /><span className="text-sm text-white">{label}</span>
       </div>
       <ChevronRight className="w-4 h-4 text-white/15" />
     </button>
