@@ -1,16 +1,16 @@
-﻿import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 
 const AuthContext = createContext({});
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null);
+  const [user, setUser]       = useState(null);
   const [profile, setProfile] = useState(null);
-  const [artist, setArtist] = useState(null);
+  const [artist, setArtist]   = useState(null);
   const [listener, setListener] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [viewAs, setViewAs] = useState(null); // null | 'artist' | 'listener' | 'admin'
+  const [viewAs, setViewAs]   = useState(null);
 
   const fetchProfile = async (userId) => {
     let { data } = await supabase
@@ -128,6 +128,76 @@ export function AuthProvider({ children }) {
     }
   };
 
+  /**
+   * deleteAccount
+   * Wipes all user data then deletes the auth account via an edge function.
+   * The edge function needs service_role access to call supabase.auth.admin.deleteUser().
+   * Falls back to a "deletion requested" flag if the edge function isn't set up yet.
+   */
+  const deleteAccount = async () => {
+    if (!user) throw new Error('Not signed in');
+
+    const userId = user.id;
+
+    // Step 1: Delete user-owned data in order of dependency
+    try {
+      // Follows
+      await supabase.from('follows').delete().eq('follower_id', userId);
+      // Track likes
+      await supabase.from('track_likes').delete().eq('user_id', userId);
+      // Downloads
+      await supabase.from('downloads').delete().eq('user_id', userId);
+      // Notifications
+      await supabase.from('notifications').delete().eq('user_id', userId);
+      // Artist thoughts
+      if (artist?.id) {
+        await supabase.from('artist_thoughts').delete().eq('artist_id', artist.id);
+        await supabase.from('artist_posts').delete().eq('artist_id', artist.id);
+        // Mark artist as deleted rather than hard delete to preserve collab history
+        await supabase.from('artists').update({
+          artist_name: '[Deleted Artist]',
+          bio: '',
+          profile_image_url: null,
+          social_links: {},
+          is_published: false,
+        }).eq('id', artist.id);
+      }
+      // Listener profile
+      await supabase.from('listeners').delete().eq('user_id', userId);
+      // User profile
+      await supabase.from('user_profiles').delete().eq('user_id', userId);
+    } catch (err) {
+      console.error('Data deletion error:', err);
+      // Continue — still attempt auth deletion
+    }
+
+    // Step 2: Delete the auth user via Netlify function
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch('/.netlify/functions/delete-account', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.access_token}`,
+        },
+        body: JSON.stringify({ user_id: userId }),
+      });
+      const result = await res.json();
+      if (!result.success) throw new Error(result.error || 'Deletion failed');
+    } catch (err) {
+      // Edge function not set up yet — sign out and flag for manual deletion
+      console.warn('Auth deletion via function failed, flagging for manual review:', err);
+      await supabase.from('user_profiles').upsert({
+        user_id: userId,
+        deletion_requested: true,
+        deletion_requested_at: new Date().toISOString(),
+      });
+    }
+
+    // Step 3: Sign out regardless
+    await signOut();
+  };
+
   const value = {
     user,
     profile,
@@ -149,6 +219,7 @@ export function AuthProvider({ children }) {
     signUpWithEmail,
     signOut,
     refreshProfile,
+    deleteAccount,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
