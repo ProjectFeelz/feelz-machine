@@ -1,3 +1,4 @@
+import { Helmet } from 'react-helmet-async';
 import { downloadTrack } from '../utils/downloadTrack';
 import TrackActionSheet from '../components/TrackActionSheet';
 import TrackVersions from '../components/TrackVersions';
@@ -17,6 +18,7 @@ import {
 const PAYPAL_CLIENT_ID = process.env.REACT_APP_PAYPAL_CLIENT_ID;
 const EMOJI_REACTIONS = ['🔥', '❤️', '👏', '😮', '😂', '🎵'];
 const THOUGHT_TTL_MS = 24 * 60 * 60 * 1000;
+const BASE_URL = 'https://www.feelzmachine.com';
 
 const TikTokIcon = ({ className, style }) => (
   <svg className={className} style={style} viewBox="0 0 24 24" fill="currentColor">
@@ -62,7 +64,6 @@ function timeAgo(date) {
   return new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
-// ── Thought of the Day block ─────────────────────────────────────────────────
 function ThoughtBlock({ thought, isOwner, secondaryColor, textColor, bgColor, user, navigate, onDeleted }) {
   const [reactions, setReactions] = useState({});
   const [myReactions, setMyReactions] = useState({});
@@ -203,28 +204,21 @@ function ThoughtBlock({ thought, isOwner, secondaryColor, textColor, bgColor, us
     setDeleting(false);
   };
 
-  // Expiry calculation
   const expiresAt = new Date(thought.created_at).getTime() + THOUGHT_TTL_MS;
   const pct = Math.min(100, ((Date.now() - new Date(thought.created_at).getTime()) / THOUGHT_TTL_MS) * 100);
   const minsLeft = Math.max(0, Math.round((expiresAt - Date.now()) / 60000));
   const hrsLeft = Math.floor(minsLeft / 60);
   const timeLabel = hrsLeft > 0 ? `${hrsLeft}h ${minsLeft % 60}m` : `${minsLeft}m`;
-
   const activeReactions = Object.entries(reactions).filter(([emoji, count]) => emoji !== 'like' && count > 0);
 
   return (
     <div className="rounded-2xl overflow-hidden" style={{ backgroundColor: `${secondaryColor}10`, border: `1px solid ${secondaryColor}20` }}>
-      {/* Header */}
       <div className="flex items-center justify-between px-4 pt-4 pb-0">
         <p className="text-xs font-semibold" style={{ color: `${secondaryColor}90` }}>💭 Thought of the Day</p>
         <div className="flex items-center space-x-2">
           <span className="text-[10px]" style={{ color: `${textColor}30` }}>{timeAgo(thought.created_at)}</span>
           {isOwner && (
-            <button
-              onClick={handleDelete}
-              disabled={deleting}
-              className="w-6 h-6 flex items-center justify-center rounded-full transition"
-            >
+            <button onClick={handleDelete} disabled={deleting} className="w-6 h-6 flex items-center justify-center rounded-full transition">
               {deleting
                 ? <Loader className="w-3 h-3 animate-spin" style={{ color: `${textColor}30` }} />
                 : <Trash2 className="w-3 h-3" style={{ color: `${textColor}20` }} />}
@@ -232,11 +226,8 @@ function ThoughtBlock({ thought, isOwner, secondaryColor, textColor, bgColor, us
           )}
         </div>
       </div>
-
-      {/* Content */}
       <div className="px-4 py-3">
         <p className="text-sm leading-relaxed" style={{ color: `${textColor}90` }}>{thought.content}</p>
-        {/* Expiry bar — owner only */}
         {isOwner && (
           <div className="mt-3">
             <div className="flex items-center justify-between mb-1">
@@ -244,72 +235,48 @@ function ThoughtBlock({ thought, isOwner, secondaryColor, textColor, bgColor, us
               <span className="text-[10px]" style={{ color: `${textColor}25` }}>{Math.round(100 - pct)}%</span>
             </div>
             <div className="w-full h-0.5 rounded-full overflow-hidden" style={{ backgroundColor: `${textColor}10` }}>
-              <div
-                className="h-full rounded-full transition-all duration-1000"
-                style={{ width: `${100 - pct}%`, background: `linear-gradient(to right, ${secondaryColor}80, ${secondaryColor}40)` }}
-              />
+              <div className="h-full rounded-full transition-all duration-1000"
+                style={{ width: `${100 - pct}%`, background: `linear-gradient(to right, ${secondaryColor}80, ${secondaryColor}40)` }} />
             </div>
           </div>
         )}
       </div>
-
-      {/* Active emoji reactions */}
       {activeReactions.length > 0 && (
         <div className="px-4 pb-2 flex flex-wrap gap-1.5">
           {activeReactions.map(([emoji, count]) => (
-            <button
-              key={emoji}
-              onClick={() => handleEmojiReact(emoji)}
+            <button key={emoji} onClick={() => handleEmojiReact(emoji)}
               className="flex items-center space-x-1 px-2 py-0.5 rounded-full text-xs transition active:scale-90"
               style={{
                 backgroundColor: myReactions[emoji] ? `${secondaryColor}25` : `${textColor}08`,
                 border: `1px solid ${myReactions[emoji] ? secondaryColor + '40' : textColor + '10'}`,
                 color: myReactions[emoji] ? secondaryColor : `${textColor}60`,
-              }}
-            >
+              }}>
               <span>{emoji}</span><span>{count}</span>
             </button>
           ))}
         </div>
       )}
-
-      {/* Action bar */}
       <div className="flex items-center px-4 py-2.5 relative" style={{ borderTop: `1px solid ${textColor}08` }}>
-        {/* Like */}
         <button onClick={handleLike} className="flex items-center space-x-1.5 mr-4 transition active:scale-90">
           <Heart className="w-4 h-4 transition" style={{ color: liked ? '#ef4444' : `${textColor}30` }} fill={liked ? '#ef4444' : 'none'} />
           {likeCount > 0 && <span className="text-xs" style={{ color: liked ? '#ef4444' : `${textColor}30` }}>{likeCount}</span>}
         </button>
-
-        {/* Emoji picker */}
         <div className="relative mr-4">
-          <button
-            onClick={() => { if (!user) { navigate('/login'); return; } setShowEmojiPicker(p => !p); }}
-            className="text-base leading-none transition active:scale-90"
-            style={{ opacity: 0.4 }}
-          >
-            😊
-          </button>
+          <button onClick={() => { if (!user) { navigate('/login'); return; } setShowEmojiPicker(p => !p); }}
+            className="text-base leading-none transition active:scale-90" style={{ opacity: 0.4 }}>😊</button>
           {showEmojiPicker && (
-            <div
-              className="absolute bottom-8 left-0 z-50 flex items-center space-x-1.5 p-2 rounded-xl shadow-2xl"
-              style={{ backgroundColor: '#1a1a1a', border: '1px solid rgba(255,255,255,0.1)' }}
-            >
+            <div className="absolute bottom-8 left-0 z-50 flex items-center space-x-1.5 p-2 rounded-xl shadow-2xl"
+              style={{ backgroundColor: '#1a1a1a', border: '1px solid rgba(255,255,255,0.1)' }}>
               {EMOJI_REACTIONS.map(emoji => (
-                <button
-                  key={emoji}
-                  onClick={() => handleEmojiReact(emoji)}
+                <button key={emoji} onClick={() => handleEmojiReact(emoji)}
                   className="text-xl transition active:scale-90 hover:scale-125 w-8 h-8 flex items-center justify-center rounded-lg"
-                  style={{ backgroundColor: myReactions[emoji] ? `${secondaryColor}25` : 'transparent' }}
-                >
+                  style={{ backgroundColor: myReactions[emoji] ? `${secondaryColor}25` : 'transparent' }}>
                   {emoji}
                 </button>
               ))}
             </div>
           )}
         </div>
-
-        {/* Comments toggle */}
         <button onClick={toggleComments} className="flex items-center space-x-1.5 transition active:scale-90">
           <MessageCircle className="w-4 h-4" style={{ color: `${textColor}30` }} />
           {commentCount > 0 && <span className="text-xs" style={{ color: `${textColor}30` }}>{commentCount}</span>}
@@ -318,18 +285,14 @@ function ThoughtBlock({ thought, isOwner, secondaryColor, textColor, bgColor, us
             : <ChevronDown className="w-3 h-3" style={{ color: `${textColor}20` }} />}
         </button>
       </div>
-
-      {/* Comments */}
       {showComments && (
         <div style={{ borderTop: `1px solid ${textColor}08` }}>
           <div className="max-h-56 overflow-y-auto">
             {comments.map(comment => (
               <div key={comment.id} className="flex space-x-3 px-4 py-3" style={{ borderBottom: `1px solid ${textColor}05` }}>
-                <button
-                  onClick={() => comment.commenter?.slug && navigate(`/artist/${comment.commenter.slug}`)}
+                <button onClick={() => comment.commenter?.slug && navigate(`/artist/${comment.commenter.slug}`)}
                   className="w-7 h-7 rounded-full flex items-center justify-center overflow-hidden flex-shrink-0"
-                  style={{ background: `linear-gradient(135deg, ${secondaryColor}50, ${secondaryColor}20)` }}
-                >
+                  style={{ background: `linear-gradient(135deg, ${secondaryColor}50, ${secondaryColor}20)` }}>
                   {comment.commenter?.profile_image_url
                     ? <img src={comment.commenter.profile_image_url} alt="" className="w-7 h-7 rounded-full object-cover" />
                     : <span className="text-[10px] font-bold" style={{ color: textColor }}>{(comment.commenter?.artist_name || '?')[0]?.toUpperCase()}</span>}
@@ -347,26 +310,17 @@ function ThoughtBlock({ thought, isOwner, secondaryColor, textColor, bgColor, us
               <p className="text-center text-xs py-6" style={{ color: `${textColor}20` }}>No comments yet</p>
             )}
           </div>
-
           {user && (
             <div className="px-4 py-3">
               <div className="flex items-center space-x-2">
-                <input
-                  type="text"
-                  value={commentText}
-                  onChange={e => setCommentText(e.target.value)}
+                <input type="text" value={commentText} onChange={e => setCommentText(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && submitComment()}
-                  placeholder="Add a comment..."
-                  maxLength={500}
+                  placeholder="Add a comment..." maxLength={500}
                   className="flex-1 rounded-lg px-3 py-2 text-sm outline-none"
-                  style={{ backgroundColor: `${textColor}08`, color: textColor, border: `1px solid ${textColor}10` }}
-                />
-                <button
-                  onClick={submitComment}
-                  disabled={!commentText.trim() || posting}
+                  style={{ backgroundColor: `${textColor}08`, color: textColor, border: `1px solid ${textColor}10` }} />
+                <button onClick={submitComment} disabled={!commentText.trim() || posting}
                   className="w-8 h-8 flex items-center justify-center rounded-full transition disabled:opacity-30"
-                  style={{ backgroundColor: `${textColor}08` }}
-                >
+                  style={{ backgroundColor: `${textColor}08` }}>
                   {posting
                     ? <Loader className="w-3.5 h-3.5 animate-spin" style={{ color: `${textColor}40` }} />
                     : <Send className="w-3.5 h-3.5" style={{ color: `${textColor}50` }} />}
@@ -380,7 +334,6 @@ function ThoughtBlock({ thought, isOwner, secondaryColor, textColor, bgColor, us
   );
 }
 
-// ────────────────────────────────────────────────────────────────────────────
 export default function ArtistProfilePage() {
   const { slug } = useParams();
   const navigate = useNavigate();
@@ -447,50 +400,40 @@ export default function ArtistProfilePage() {
       if (error || !artistData) { setLoading(false); return; }
       setArtist(artistData);
       setFollowerCount(artistData.follower_count || 0);
-
       const { data: themeData } = await supabase
         .from('artist_themes').select('*').eq('artist_id', artistData.id).maybeSingle();
       if (themeData) setTheme(themeData);
-
       const { data: trackData } = await supabase
         .from('tracks')
         .select('*, albums(title, cover_artwork_url, price), pay_what_you_want, minimum_price, is_preorder, release_date')
         .eq('artist_id', artistData.id).eq('is_published', true)
         .order('engagement_score', { ascending: false });
       setTracks(trackData || []);
-
       if (user) {
         const { data: likes } = await supabase.from('track_likes').select('track_id').eq('user_id', user.id);
         const likeMap = {};
         (likes || []).forEach(l => { likeMap[l.track_id] = true; });
         setLikedTracks(likeMap);
       }
-
       const { data: albumData } = await supabase
         .from('albums').select('*').eq('artist_id', artistData.id).eq('is_published', true)
         .order('release_date', { ascending: false });
       setAlbums(albumData || []);
-
       const { data: collabData } = await supabase
         .from('collaborations')
         .select('*, tracks(id, title, cover_artwork_url, file_url, duration, stream_count, artist_id, is_downloadable, download_price)')
         .eq('artist_id', artistData.id).eq('status', 'accepted');
       setCollabs(collabData || []);
-
-      // Fetch active thoughts (last 24h)
       const cutoff = new Date(Date.now() - THOUGHT_TTL_MS).toISOString();
       const { data: thoughtsData } = await supabase
         .from('artist_thoughts').select('id, content, created_at')
         .eq('artist_id', artistData.id).gte('created_at', cutoff)
         .order('created_at', { ascending: false });
       setThoughts(thoughtsData || []);
-
-      // Recommendations
       if (user) {
         const { data: streamData } = await supabase
           .from('streams').select('track_id, tracks(genre, mood)')
           .eq('tracks.artist_id', artistData.id).eq('user_id', user.id).limit(50);
-
         if (streamData && streamData.length > 0) {
           const tagCounts = {};
           streamData.forEach(s => {
@@ -517,8 +460,6 @@ export default function ArtistProfilePage() {
           setRecommendedTracks(topData || []);
         }
       }
-
-      // Similar artists
       const { data: artistGenres } = await supabase
         .from('tracks').select('genre, mood')
         .eq('artist_id', artistData.id).eq('is_published', true).limit(20);
@@ -546,7 +487,6 @@ export default function ArtistProfilePage() {
           }
         }
       }
-
       if (user) {
         const { data: followData } = await supabase
           .from('follows').select('id')
@@ -557,7 +497,6 @@ export default function ArtistProfilePage() {
     setLoading(false);
   };
 
-  // PayPal — fixed price
   useEffect(() => {
     if (!purchaseTrack) return;
     setPaypalReady(false); setPurchaseError('');
@@ -572,7 +511,6 @@ export default function ArtistProfilePage() {
     document.head.appendChild(script);
   }, [purchaseTrack?.id]);
 
-  // PayPal — PWYW
   useEffect(() => {
     if (!pwywTrack) return;
     setPwywPaypalReady(false); setPwywPurchaseError('');
@@ -587,7 +525,6 @@ export default function ArtistProfilePage() {
     document.head.appendChild(script);
   }, [pwywTrack?.id]);
 
-  // PayPal buttons — fixed price
   useEffect(() => {
     if (!paypalReady || !purchaseTrack || !window.paypal) return;
     const container = document.getElementById('paypal-checkout-container');
@@ -794,11 +731,11 @@ export default function ArtistProfilePage() {
     };
   }, [theme]);
 
-  const primaryColor = theme?.primary_color || '#FFFFFF';
+  const primaryColor   = theme?.primary_color   || '#FFFFFF';
   const secondaryColor = theme?.secondary_color || '#8B5CF6';
-  const accentColor = theme?.accent_color || '#3B82F6';
-  const bgColor = theme?.background_color || '#000000';
-  const textColor = theme?.text_color || '#FFFFFF';
+  const accentColor    = theme?.accent_color    || '#3B82F6';
+  const bgColor        = theme?.background_color || '#000000';
+  const textColor      = theme?.text_color      || '#FFFFFF';
 
   useEffect(() => {
     if (theme?.heading_font && theme.heading_font !== 'Inter') {
@@ -838,15 +775,37 @@ export default function ArtistProfilePage() {
     );
   }
 
-  const socials = artist.social_links || {};
-  const socialEntries = Object.entries(socials).filter(([_, v]) => v);
-  const headingFont = theme?.heading_font || 'Inter';
-  const bodyFont = theme?.body_font || 'Inter';
-  const visibleTracks = showAllTracks ? tracks : tracks.slice(0, 5);
+  const socials        = artist.social_links || {};
+  const socialEntries  = Object.entries(socials).filter(([_, v]) => v);
+  const headingFont    = theme?.heading_font || 'Inter';
+  const bodyFont       = theme?.body_font || 'Inter';
+  const visibleTracks  = showAllTracks ? tracks : tracks.slice(0, 5);
   const isProfileOwner = user && myArtist && myArtist.id === artist.id;
+  const pageUrl        = `${BASE_URL}/artist/${slug}`;
+  const ogImage        = artist.profile_image_url || `${BASE_URL}/og-default.png`;
+  const pageTitle      = `${artist.artist_name} · Feelz Machine`;
+  const pageDesc       = artist.bio
+    ? `${artist.bio.slice(0, 120)}${artist.bio.length > 120 ? '...' : ''}`
+    : `Stream music by ${artist.artist_name} on Feelz Machine — independent music platform.`;
 
   return (
     <div className="min-h-screen pb-32" style={{ backgroundColor: bgColor, color: textColor, fontFamily: `"${bodyFont}", sans-serif`, ...themeStyles }}>
+
+      {/* ── Dynamic head tags ── */}
+      <Helmet>
+        <title>{pageTitle}</title>
+        <meta name="description" content={pageDesc} />
+        <link rel="canonical" href={pageUrl} />
+        <meta property="og:title" content={pageTitle} />
+        <meta property="og:description" content={pageDesc} />
+        <meta property="og:url" content={pageUrl} />
+        <meta property="og:image" content={ogImage} />
+        <meta property="og:type" content="profile" />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content={pageTitle} />
+        <meta name="twitter:description" content={pageDesc} />
+        <meta name="twitter:image" content={ogImage} />
+      </Helmet>
 
       {/* BANNER */}
       <div className="relative w-full" style={{ height: '160px' }}>
@@ -860,24 +819,19 @@ export default function ArtistProfilePage() {
         )}
         <div className="absolute inset-0" style={{ background: `linear-gradient(to bottom, transparent 20%, ${bgColor} 100%)` }} />
         <div className="fixed top-0 left-0 right-0 flex items-center justify-center p-5 z-50">
-          <button
-            onClick={() => navigate(-1)}
+          <button onClick={() => navigate(-1)}
             className="absolute left-5 w-9 h-9 flex items-center justify-center rounded-full backdrop-blur-md"
-            style={{ backgroundColor: `${bgColor}80` }}
-          >
+            style={{ backgroundColor: `${bgColor}80` }}>
             <ArrowLeft className="w-5 h-5" style={{ color: textColor }} />
           </button>
-          <button
-            onClick={handleShare}
+          <button onClick={handleShare}
             className="w-9 h-9 flex items-center justify-center rounded-full backdrop-blur-md"
-            style={{ backgroundColor: `${bgColor}80` }}
-          >
+            style={{ backgroundColor: `${bgColor}80` }}>
             {copied
               ? <span className="text-xs" style={{ color: primaryColor }}>Copied!</span>
               : <Share2 className="w-4 h-4" style={{ color: textColor }} />}
           </button>
         </div>
-        {/* Avatar */}
         <div className="absolute -bottom-14 left-1/2 -translate-x-1/2 z-10">
           <div className="w-28 h-28 rounded-2xl overflow-hidden border-4 shadow-2xl"
             style={{ borderColor: bgColor, backgroundColor: `${secondaryColor}30` }}>
@@ -909,24 +863,20 @@ export default function ArtistProfilePage() {
           <span className="text-sm" style={{ color: `${textColor}80` }}>{formatNumber(artist.total_streams)} streams</span>
         </div>
         <div className="flex items-center justify-center space-x-3 mb-6">
-          <button
-            onClick={handleFollow}
+          <button onClick={handleFollow}
             className="flex items-center space-x-2 px-5 py-2.5 rounded-full text-sm font-semibold transition-all active:scale-95"
             style={{
               backgroundColor: isFollowing ? 'transparent' : primaryColor,
               color: isFollowing ? textColor : bgColor,
               border: `2px solid ${isFollowing ? `${textColor}30` : primaryColor}`,
-            }}
-          >
+            }}>
             {isFollowing ? <UserCheck className="w-4 h-4" /> : <UserPlus className="w-4 h-4" />}
             <span>{isFollowing ? 'Following' : 'Follow'}</span>
           </button>
           {tracks.length > 0 && (
-            <button
-              onClick={() => handlePlayTrack(tracks[0])}
+            <button onClick={() => handlePlayTrack(tracks[0])}
               className="flex items-center space-x-2 px-5 py-2.5 rounded-full text-sm font-semibold transition-all active:scale-95"
-              style={{ backgroundColor: secondaryColor, color: textColor }}
-            >
+              style={{ backgroundColor: secondaryColor, color: textColor }}>
               <Play className="w-4 h-4" fill={textColor} />
               <span>Play</span>
             </button>
@@ -960,26 +910,17 @@ export default function ArtistProfilePage() {
         )}
       </div>
 
-      {/* THOUGHT OF THE DAY */}
       {thoughts.length > 0 && (
         <div className="px-6 mb-6 space-y-3">
           {thoughts.map(thought => (
-            <ThoughtBlock
-              key={thought.id}
-              thought={thought}
-              isOwner={isProfileOwner}
-              secondaryColor={secondaryColor}
-              textColor={textColor}
-              bgColor={bgColor}
-              user={user}
-              navigate={navigate}
-              onDeleted={(id) => setThoughts(prev => prev.filter(t => t.id !== id))}
-            />
+            <ThoughtBlock key={thought.id} thought={thought} isOwner={isProfileOwner}
+              secondaryColor={secondaryColor} textColor={textColor} bgColor={bgColor}
+              user={user} navigate={navigate}
+              onDeleted={(id) => setThoughts(prev => prev.filter(t => t.id !== id))} />
           ))}
         </div>
       )}
 
-      {/* POPULAR TRACKS */}
       {tracks.length > 0 && (
         <div className="px-6 mb-8">
           <h2 className="text-lg font-bold mb-3" style={{ fontFamily: `"${headingFont}", sans-serif` }}>Popular</h2>
@@ -989,15 +930,12 @@ export default function ArtistProfilePage() {
               const isTrackPlaying = isActive && isPlaying;
               return (
                 <React.Fragment key={track.id}>
-                  <div
-                    id={`track-${track.id}`}
-                    onClick={() => handlePlayTrack(track)}
+                  <div id={`track-${track.id}`} onClick={() => handlePlayTrack(track)}
                     className="w-full flex items-center space-x-3 p-2.5 rounded-lg transition-all cursor-pointer"
                     style={{
                       backgroundColor: isActive ? `${secondaryColor}15` : highlightedTrackId === track.id ? `${secondaryColor}25` : 'transparent',
                       outline: highlightedTrackId === track.id ? `1px solid ${secondaryColor}50` : 'none',
-                    }}
-                  >
+                    }}>
                     <div className="w-7 flex items-center justify-center flex-shrink-0">
                       {isActive ? (
                         isTrackPlaying ? (
@@ -1035,27 +973,19 @@ export default function ArtistProfilePage() {
                       </div>
                     </div>
                     {track.duration && <span className="text-xs flex-shrink-0" style={{ color: `${textColor}30` }}>{formatDuration(track.duration)}</span>}
-                    <button
-                      onClick={(e) => { e.stopPropagation(); setActionSheetTrack(track); }}
+                    <button onClick={(e) => { e.stopPropagation(); setActionSheetTrack(track); }}
                       className="flex-shrink-0 p-1.5 rounded-lg transition-all active:scale-95"
-                      style={{ color: `${textColor}30` }}
-                      title="More"
-                    >
+                      style={{ color: `${textColor}30` }} title="More">
                       <MoreHorizontal className="w-4 h-4" />
                     </button>
-                    <button
-                      onClick={(e) => handleLike(track, e)}
+                    <button onClick={(e) => handleLike(track, e)}
                       className="flex-shrink-0 p-1.5 rounded-lg transition-all active:scale-95"
-                      style={{ color: likedTracks[track.id] ? '#ef4444' : `${textColor}30` }}
-                    >
+                      style={{ color: likedTracks[track.id] ? '#ef4444' : `${textColor}30` }}>
                       <Heart className="w-4 h-4" fill={likedTracks[track.id] ? '#ef4444' : 'none'} />
                     </button>
                     <div className="relative flex-shrink-0">
-                      <button
-                        onClick={(e) => { e.stopPropagation(); setShowAddToPlaylist(showAddToPlaylist === track.id ? null : track.id); }}
-                        className="p-1.5 rounded-lg transition-all active:scale-95"
-                        style={{ color: `${textColor}30` }}
-                      >
+                      <button onClick={(e) => { e.stopPropagation(); setShowAddToPlaylist(showAddToPlaylist === track.id ? null : track.id); }}
+                        className="p-1.5 rounded-lg transition-all active:scale-95" style={{ color: `${textColor}30` }}>
                         <ListMusic className="w-4 h-4" />
                       </button>
                       {showAddToPlaylist === track.id && (
@@ -1084,12 +1014,9 @@ export default function ArtistProfilePage() {
                       )}
                     </div>
                     {track.is_downloadable && (
-                      <button
-                        onClick={(e) => handleDownload(track, e)}
-                        disabled={downloading === track.id}
+                      <button onClick={(e) => handleDownload(track, e)} disabled={downloading === track.id}
                         className="flex-shrink-0 flex items-center space-x-1 px-2.5 py-1.5 rounded-lg transition-all active:scale-95 disabled:opacity-50"
-                        style={{ backgroundColor: `${secondaryColor}20`, color: secondaryColor }}
-                      >
+                        style={{ backgroundColor: `${secondaryColor}20`, color: secondaryColor }}>
                         {downloading === track.id ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
                         {track.pay_what_you_want
                           ? <span className="text-[11px] font-semibold">PWYW</span>
@@ -1098,34 +1025,27 @@ export default function ArtistProfilePage() {
                       </button>
                     )}
                   </div>
-                  <TrackVersions
-                    track={track}
-                    albumPrice={track.albums?.price || 0}
+                  <TrackVersions track={track} albumPrice={track.albums?.price || 0}
                     onPlayVersion={(version) => {
                       playTrack(
                         { ...version, artist_name: artist?.artist_name, artist_slug: artist?.slug },
                         tracks.map(t => ({ ...t, artist_name: artist?.artist_name, artist_slug: artist?.slug }))
                       );
                     }}
-                    onPurchaseRequired={(t) => setPurchaseTrack(t)}
-                  />
+                    onPurchaseRequired={(t) => setPurchaseTrack(t)} />
                 </React.Fragment>
               );
             })}
           </div>
           {tracks.length > 5 && (
-            <button
-              onClick={() => setShowAllTracks(!showAllTracks)}
-              className="mt-3 text-sm font-medium transition-colors"
-              style={{ color: `${textColor}50` }}
-            >
+            <button onClick={() => setShowAllTracks(!showAllTracks)}
+              className="mt-3 text-sm font-medium transition-colors" style={{ color: `${textColor}50` }}>
               {showAllTracks ? 'Show less' : `See all ${tracks.length} tracks`}
             </button>
           )}
         </div>
       )}
 
-      {/* RECOMMENDED */}
       {recommendedTracks.length > 0 && (
         <div className="mb-8">
           <h2 className="text-lg font-bold px-6 mb-3" style={{ fontFamily: `"${headingFont}", sans-serif` }}>Recommended For You</h2>
@@ -1145,7 +1065,6 @@ export default function ArtistProfilePage() {
         </div>
       )}
 
-      {/* ALBUMS */}
       {albums.length > 0 && (
         <div className="mb-8">
           <h2 className="text-lg font-bold px-6 mb-3" style={{ fontFamily: `"${headingFont}", sans-serif` }}>Albums</h2>
@@ -1165,7 +1084,6 @@ export default function ArtistProfilePage() {
         </div>
       )}
 
-      {/* SINGLES */}
       {tracks.filter(t => !t.album_id).length > 0 && (
         <div className="mb-8">
           <h2 className="text-lg font-bold px-6 mb-3" style={{ fontFamily: `"${headingFont}", sans-serif` }}>Singles</h2>
@@ -1185,18 +1103,15 @@ export default function ArtistProfilePage() {
         </div>
       )}
 
-      {/* COLLABORATIONS */}
       {collabs.length > 0 && (
         <div className="px-6 mb-8">
           <h2 className="text-lg font-bold mb-3" style={{ fontFamily: `"${headingFont}", sans-serif` }}>Collaborations</h2>
           <div className="space-y-2">
             {collabs.map(collab => (
-              <div
-                key={collab.id}
+              <div key={collab.id}
                 className="flex items-center space-x-3 p-3 rounded-xl cursor-pointer transition-opacity hover:opacity-80 active:opacity-60"
                 style={{ backgroundColor: `${textColor}05`, border: `1px solid ${textColor}08` }}
-                onClick={() => collab.tracks && handlePlayTrack(collab.tracks)}
-              >
+                onClick={() => collab.tracks && handlePlayTrack(collab.tracks)}>
                 <div className="w-10 h-10 rounded-lg overflow-hidden flex-shrink-0 relative group" style={{ backgroundColor: `${secondaryColor}20` }}>
                   {collab.tracks?.cover_artwork_url
                     ? <img src={collab.tracks.cover_artwork_url} alt="" className="w-full h-full object-cover" />
@@ -1216,7 +1131,6 @@ export default function ArtistProfilePage() {
         </div>
       )}
 
-      {/* EMPTY STATE */}
       {tracks.length === 0 && albums.length === 0 && (
         <div className="px-6 py-12 text-center">
           <Music className="w-12 h-12 mx-auto mb-3" style={{ color: `${textColor}15` }} />
@@ -1224,7 +1138,6 @@ export default function ArtistProfilePage() {
         </div>
       )}
 
-      {/* PWYW MODAL */}
       {pwywTrack && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
           style={{ backgroundColor: 'rgba(0,0,0,0.85)' }}
@@ -1254,7 +1167,6 @@ export default function ArtistProfilePage() {
                   </div>
                   <DollarSign className="w-5 h-5 flex-shrink-0" style={{ color: secondaryColor }} />
                 </div>
-
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <p className="text-sm font-medium" style={{ color: textColor }}>Pay what you want</p>
@@ -1264,16 +1176,12 @@ export default function ArtistProfilePage() {
                   </div>
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm" style={{ color: `${textColor}50` }}>$</span>
-                    <input
-                      type="number"
-                      min={parseFloat(pwywTrack.minimum_price) > 0 ? pwywTrack.minimum_price : 0}
-                      step="0.01"
-                      value={pwywFanPrice}
+                    <input type="number" min={parseFloat(pwywTrack.minimum_price) > 0 ? pwywTrack.minimum_price : 0}
+                      step="0.01" value={pwywFanPrice}
                       onChange={e => { setPwywFanPrice(e.target.value); setPwywFanPriceError(''); }}
                       placeholder="0.00"
                       className="w-full pl-7 pr-4 py-3 rounded-xl text-lg font-semibold outline-none text-center"
-                      style={{ backgroundColor: `${textColor}08`, color: textColor, border: `1px solid ${textColor}15` }}
-                    />
+                      style={{ backgroundColor: `${textColor}08`, color: textColor, border: `1px solid ${textColor}15` }} />
                   </div>
                   {pwywFanPriceError && <p className="text-xs text-red-400 text-center">{pwywFanPriceError}</p>}
                   {parseFloat(pwywTrack.minimum_price) === 0 && (
@@ -1281,30 +1189,24 @@ export default function ArtistProfilePage() {
                   )}
                   <div className="flex space-x-2">
                     {[1, 2, 5, 10].filter(v => v >= (parseFloat(pwywTrack.minimum_price) || 0)).map(v => (
-                      <button
-                        key={v}
-                        type="button"
+                      <button key={v} type="button"
                         onClick={() => { setPwywFanPrice(v.toFixed(2)); setPwywFanPriceError(''); }}
                         className="flex-1 py-1.5 rounded-lg text-xs font-medium transition"
                         style={{
                           backgroundColor: parseFloat(pwywFanPrice) === v ? primaryColor : `${textColor}08`,
                           color: parseFloat(pwywFanPrice) === v ? bgColor : `${textColor}50`,
                           border: `1px solid ${textColor}10`,
-                        }}
-                      >
+                        }}>
                         ${v}
                       </button>
                     ))}
                   </div>
                 </div>
-
                 {parseFloat(pwywFanPrice) > 0 ? (
                   <>
                     {pwywPurchaseError && <p className="text-xs text-red-400 text-center">{pwywPurchaseError}</p>}
                     {!pwywPaypalReady && !pwywPurchaseError && (
-                      <div className="flex justify-center py-2">
-                        <Loader className="w-5 h-5 animate-spin" style={{ color: `${textColor}30` }} />
-                      </div>
+                      <div className="flex justify-center py-2"><Loader className="w-5 h-5 animate-spin" style={{ color: `${textColor}30` }} /></div>
                     )}
                     {pwywPaypalReady && (() => {
                       const minPrice = parseFloat(pwywTrack.minimum_price) || 0;
@@ -1356,26 +1258,19 @@ export default function ArtistProfilePage() {
                     <div id="paypal-pwyw-container" style={{ backgroundColor: '#fff', borderRadius: '8px', padding: '4px' }} />
                   </>
                 ) : (
-                  <button
-                    onClick={async () => {
-                      const minPrice = parseFloat(pwywTrack.minimum_price) || 0;
-                      if (minPrice > 0) { setPwywFanPriceError(`Minimum is $${minPrice.toFixed(2)}`); return; }
-                      await supabase.from('downloads').insert({ user_id: user.id, track_id: pwywTrack.id, amount_paid: 0 }).catch(() => {});
-                      await triggerDownload(pwywTrack);
-                      setPwywTrack(null);
-                    }}
+                  <button onClick={async () => {
+                    const minPrice = parseFloat(pwywTrack.minimum_price) || 0;
+                    if (minPrice > 0) { setPwywFanPriceError(`Minimum is $${minPrice.toFixed(2)}`); return; }
+                    await supabase.from('downloads').insert({ user_id: user.id, track_id: pwywTrack.id, amount_paid: 0 }).catch(() => {});
+                    await triggerDownload(pwywTrack);
+                    setPwywTrack(null);
+                  }}
                     className="w-full py-3 rounded-xl text-sm font-semibold transition"
-                    style={{ backgroundColor: primaryColor, color: bgColor }}
-                  >
+                    style={{ backgroundColor: primaryColor, color: bgColor }}>
                     Download Free
                   </button>
                 )}
-
-                <button
-                  onClick={() => setPwywTrack(null)}
-                  className="w-full py-2 text-sm transition"
-                  style={{ color: `${textColor}30` }}
-                >
+                <button onClick={() => setPwywTrack(null)} className="w-full py-2 text-sm transition" style={{ color: `${textColor}30` }}>
                   Cancel
                 </button>
               </>
@@ -1384,19 +1279,14 @@ export default function ArtistProfilePage() {
         </div>
       )}
 
-      {/* PURCHASE MODAL */}
       <TrackActionSheet track={actionSheetTrack} artist={artist} onClose={() => setActionSheetTrack(null)} />
       {purchaseTrack && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
           style={{ backgroundColor: 'rgba(0,0,0,0.8)' }}
-          onClick={() => { setPurchaseTrack(null); setPurchasing(false); setPurchaseError(''); }}
-        >
-          <div
-            className="w-full max-w-sm rounded-2xl p-6 space-y-4 overflow-y-auto"
+          onClick={() => { setPurchaseTrack(null); setPurchasing(false); setPurchaseError(''); }}>
+          <div className="w-full max-w-sm rounded-2xl p-6 space-y-4 overflow-y-auto"
             style={{ backgroundColor: bgColor, border: `1px solid ${primaryColor}20`, maxHeight: '90vh' }}
-            onClick={e => e.stopPropagation()}
-          >
+            onClick={e => e.stopPropagation()}>
             {purchaseSuccess ? (
               <div className="text-center py-4">
                 <div className="w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-3" style={{ backgroundColor: `${secondaryColor}20` }}>
@@ -1424,16 +1314,11 @@ export default function ArtistProfilePage() {
                 </div>
                 {purchaseError && <p className="text-xs text-red-400 text-center">{purchaseError}</p>}
                 {!paypalReady && !purchaseError && (
-                  <div className="flex justify-center py-3">
-                    <Loader className="w-5 h-5 animate-spin text-white/30" />
-                  </div>
+                  <div className="flex justify-center py-3"><Loader className="w-5 h-5 animate-spin text-white/30" /></div>
                 )}
                 <div id="paypal-checkout-container" style={{ backgroundColor: '#fff', borderRadius: '8px', padding: '4px' }} />
-                <button
-                  onClick={() => { setPurchaseTrack(null); setPurchasing(false); setPurchaseError(''); }}
-                  className="w-full py-2.5 rounded-xl text-sm transition"
-                  style={{ color: `${textColor}40` }}
-                >
+                <button onClick={() => { setPurchaseTrack(null); setPurchasing(false); setPurchaseError(''); }}
+                  className="w-full py-2.5 rounded-xl text-sm transition" style={{ color: `${textColor}40` }}>
                   Cancel
                 </button>
               </>
@@ -1442,17 +1327,12 @@ export default function ArtistProfilePage() {
         </div>
       )}
 
-      {/* SIMILAR ARTISTS */}
       {similarArtists.length > 0 && (
         <div className="mb-8 px-6">
           <h2 className="text-lg font-bold mb-3" style={{ fontFamily: `"${headingFont}", sans-serif` }}>Artists Like This</h2>
           <div className="flex space-x-4 overflow-x-auto scrollbar-hide">
             {similarArtists.map(a => (
-              <div
-                key={a.id}
-                className="flex-shrink-0 w-24 cursor-pointer group"
-                onClick={() => navigate(`/artist/${a.slug}`)}
-              >
+              <div key={a.id} className="flex-shrink-0 w-24 cursor-pointer group" onClick={() => navigate(`/artist/${a.slug}`)}>
                 <div className="w-24 h-24 rounded-full overflow-hidden mb-2 mx-auto" style={{ backgroundColor: `${textColor}08` }}>
                   {a.profile_image_url
                     ? <img src={a.profile_image_url} alt={a.artist_name} className="w-full h-full object-cover" />
@@ -1465,13 +1345,11 @@ export default function ArtistProfilePage() {
         </div>
       )}
 
-      {/* FOOTER */}
       <div className="px-6 pt-8 pb-4 text-center">
         <p className="text-[11px]" style={{ color: `${textColor}20` }}>
           Powered by <span className="font-medium" style={{ color: `${textColor}30` }}>Feelz Machine</span>
         </p>
       </div>
-
     </div>
   );
 }
