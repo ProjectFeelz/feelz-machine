@@ -1,3 +1,4 @@
+import { Helmet } from 'react-helmet-async';
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
@@ -187,6 +188,13 @@ export default function BrowsePage() {
 
   return (
     <div className="pt-12 md:pt-0 pb-4 px-6 md:px-0 sticky top-0 z-20 bg-black/90 backdrop-blur-sm md:relative md:top-auto md:bg-transparent md:backdrop-blur-none">
+      <Helmet>
+        <title>Browse · Feelz Machine</title>
+        <meta name="description" content="Browse trending tracks, new releases, artists and albums on Feelz Machine." />
+        <link rel="canonical" href="https://www.feelzmachine.com/browse" />
+        <meta property="og:title" content="Browse · Feelz Machine" />
+        <meta property="og:url" content="https://www.feelzmachine.com/browse" />
+      </Helmet>
       {/* Search */}
       <div className="mb-4">
         <div className="relative">
