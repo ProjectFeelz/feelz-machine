@@ -148,7 +148,9 @@ export function UploadGate({ children }) {
  * TierBadge - Small badge showing current tier
  */
 export function TierBadge({ size = 'sm' }) {
-  const { tierSlug } = useTier();
+  const { tierSlug, tierLoading } = useTier();
+
+  if (tierLoading) return null;
 
   const config = {
     free: { label: 'Free', color: '#737373', icon: null },
