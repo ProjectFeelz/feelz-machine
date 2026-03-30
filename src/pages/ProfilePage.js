@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
@@ -6,7 +6,7 @@ import {
   LogOut, ChevronRight, User, Music, Globe, Shield,
   Instagram, Twitter, Youtube, MessageCircle, Loader,
   Save, Palette, ExternalLink, DollarSign, Camera,
-  Link, Zap, Crown, Star
+  Link, Zap, Crown, Star, Trash2
 } from 'lucide-react';
 import ThemeEditor from '../components/ThemeEditor';
 import PaymentSettings from '../components/PaymentSettings';
@@ -21,23 +21,24 @@ const TikTokIcon = ({ className }) => (
 );
 
 const SOCIALS = [
-  { key: 'instagram', label: 'Instagram', icon: Instagram, ph: 'https://instagram.com/yourname' },
-  { key: 'twitter',   label: 'X (Twitter)', icon: Twitter,   ph: 'https://x.com/yourname' },
-  { key: 'youtube',   label: 'YouTube',    icon: Youtube,   ph: 'https://youtube.com/yourchannel' },
-  { key: 'tiktok',    label: 'TikTok',     icon: TikTokIcon, ph: 'https://tiktok.com/@yourname' },
-  { key: 'facebook',  label: 'Facebook',   icon: Globe,     ph: 'https://facebook.com/yourpage' },
+  { key: 'instagram', label: 'Instagram',  icon: Instagram,     ph: 'https://instagram.com/yourname' },
+  { key: 'twitter',   label: 'X (Twitter)', icon: Twitter,      ph: 'https://x.com/yourname' },
+  { key: 'youtube',   label: 'YouTube',    icon: Youtube,       ph: 'https://youtube.com/yourchannel' },
+  { key: 'tiktok',    label: 'TikTok',     icon: TikTokIcon,    ph: 'https://tiktok.com/@yourname' },
+  { key: 'facebook',  label: 'Facebook',   icon: Globe,         ph: 'https://facebook.com/yourpage' },
   { key: 'discord',   label: 'Discord',    icon: MessageCircle, ph: 'Discord invite link' },
-  { key: 'website',   label: 'Website',    icon: Globe,     ph: 'https://yourwebsite.com' },
+  { key: 'website',   label: 'Website',    icon: Globe,         ph: 'https://yourwebsite.com' },
 ];
 
 const PROFILE_IMAGE_BUCKET = 'artist-images';
+const MAX_DAILY_THOUGHTS   = 3;
+const THOUGHT_TTL_MS       = 24 * 60 * 60 * 1000;
 
-// ── Tab definitions ──────────────────────────────────────────────────────────
 const ARTIST_TABS = [
-  { key: 'profile', label: 'Profile',  icon: User },
-  { key: 'theme',   label: 'Theme',    icon: Palette },
-  { key: 'links',   label: 'Links',    icon: Link },
-  { key: 'payments',label: 'Payments', icon: DollarSign },
+  { key: 'profile',  label: 'Profile',  icon: User },
+  { key: 'theme',    label: 'Theme',    icon: Palette },
+  { key: 'links',    label: 'Links',    icon: Link },
+  { key: 'payments', label: 'Payments', icon: DollarSign },
 ];
 
 export default function ProfilePage() {
@@ -48,17 +49,24 @@ export default function ProfilePage() {
   } = useAuth();
   const { tierSlug } = useTier();
 
-  const [activeTab, setActiveTab]         = useState('profile');
-  const [editing, setEditing]             = useState(false);
-  const [saving, setSaving]               = useState(false);
-  const [msg, setMsg]                     = useState('');
+  const [activeTab, setActiveTab]           = useState('profile');
+  const [editing, setEditing]               = useState(false);
+  const [saving, setSaving]                 = useState(false);
+  const [msg, setMsg]                       = useState('');
   const [profileImgFile, setProfileImgFile] = useState(null);
-  const [previewUrl, setPreviewUrl]       = useState(null);
+  const [previewUrl, setPreviewUrl]         = useState(null);
   const [form, setForm] = useState({
     artist_name: '', bio: '',
     instagram: '', twitter: '', youtube: '',
     tiktok: '', facebook: '', discord: '', website: '',
   });
+
+  // ── Thought of the Day state ─────────────────────────────────────────────
+  const [thoughts, setThoughts]           = useState([]);
+  const [thoughtInput, setThoughtInput]   = useState('');
+  const [thoughtSaving, setThoughtSaving] = useState(false);
+  const [thoughtMsg, setThoughtMsg]       = useState('');
+  const [deletingId, setDeletingId]       = useState(null);
 
   // Tier display config
   const tierConfig = {
@@ -66,22 +74,82 @@ export default function ProfilePage() {
     pro:     { label: 'Pro',     color: '#8B5CF6', bg: 'rgba(139,92,246,0.08)', icon: Zap },
     free:    { label: 'Free',    color: '#737373', bg: 'rgba(255,255,255,0.04)', icon: Star },
   };
-  const tier = tierConfig[tierSlug] || tierConfig.free;
+  const tier     = tierConfig[tierSlug] || tierConfig.free;
   const TierIcon = tier.icon;
+
+  // ── Thought of the Day logic ─────────────────────────────────────────────
+  const fetchThoughts = useCallback(async () => {
+    if (!artist) return;
+    const cutoff = new Date(Date.now() - THOUGHT_TTL_MS).toISOString();
+    const { data, error } = await supabase
+      .from('artist_thoughts')
+      .select('id, content, created_at')
+      .eq('artist_id', artist.id)
+      .gte('created_at', cutoff)
+      .order('created_at', { ascending: false });
+    if (!error) setThoughts(data || []);
+  }, [artist]);
+
+  const todayCount = thoughts.filter(t => {
+    const posted = new Date(t.created_at);
+    const now    = new Date();
+    return (
+      posted.getFullYear() === now.getFullYear() &&
+      posted.getMonth()    === now.getMonth()    &&
+      posted.getDate()     === now.getDate()
+    );
+  }).length;
+
+  const remainingToday = MAX_DAILY_THOUGHTS - todayCount;
+
+  const postThought = async () => {
+    if (!thoughtInput.trim() || !artist) return;
+    if (remainingToday <= 0) {
+      setThoughtMsg('Daily limit reached (3/3). Come back tomorrow!');
+      setTimeout(() => setThoughtMsg(''), 3000);
+      return;
+    }
+    setThoughtSaving(true);
+    const { error } = await supabase.from('artist_thoughts').insert({
+      artist_id:  artist.id,
+      content:    thoughtInput.trim(),
+      created_at: new Date().toISOString(),
+      expires_at: new Date(Date.now() + THOUGHT_TTL_MS).toISOString(),
+    });
+    setThoughtSaving(false);
+    if (error) {
+      setThoughtMsg('Failed to post');
+    } else {
+      setThoughtInput('');
+      setThoughtMsg('Posted!');
+      fetchThoughts();
+    }
+    setTimeout(() => setThoughtMsg(''), 2500);
+  };
+
+  const deleteThought = async (id) => {
+    setDeletingId(id);
+    await supabase.from('artist_thoughts').delete().eq('id', id);
+    setThoughts(prev => prev.filter(t => t.id !== id));
+    setDeletingId(null);
+  };
+
+  useEffect(() => { if (artist) fetchThoughts(); }, [artist, fetchThoughts]);
+  // ─────────────────────────────────────────────────────────────────────────
 
   useEffect(() => {
     if (artist) {
       const s = artist.social_links || {};
       setForm({
         artist_name: artist.artist_name || '',
-        bio: artist.bio || '',
-        instagram: s.instagram || '',
-        twitter:   s.twitter   || '',
-        youtube:   s.youtube   || '',
-        tiktok:    s.tiktok    || '',
-        facebook:  s.facebook  || '',
-        discord:   s.discord   || '',
-        website:   s.website   || '',
+        bio:         artist.bio         || '',
+        instagram:   s.instagram        || '',
+        twitter:     s.twitter          || '',
+        youtube:     s.youtube          || '',
+        tiktok:      s.tiktok           || '',
+        facebook:    s.facebook         || '',
+        discord:     s.discord          || '',
+        website:     s.website          || '',
       });
     }
   }, [artist]);
@@ -116,9 +184,9 @@ export default function ProfilePage() {
       SOCIALS.forEach(p => { if (form[p.key]?.trim()) sl[p.key] = form[p.key].trim(); });
       const updateData = {
         artist_name: form.artist_name,
-        bio: form.bio,
+        bio:         form.bio,
         social_links: sl,
-        updated_at: new Date().toISOString(),
+        updated_at:  new Date().toISOString(),
       };
       if (profileImgFile) {
         updateData.profile_image_url = await uploadFile(profileImgFile, 'profile-images/');
@@ -155,8 +223,7 @@ export default function ProfilePage() {
     );
   }
 
-  // ── Avatar display ──────────────────────────────────────────────────────────
-  const avatarSrc = previewUrl || artist?.profile_image_url;
+  const avatarSrc    = previewUrl || artist?.profile_image_url;
   const avatarLetter = (artist?.artist_name || profile?.display_name || user.email)?.[0]?.toUpperCase();
 
   return (
@@ -179,12 +246,10 @@ export default function ProfilePage() {
       )}
 
       {/* ══════════════════════════════════════════════════════════════════════
-          HERO CARD — avatar + name + tier badge
+          HERO CARD
       ══════════════════════════════════════════════════════════════════════ */}
       <div className="relative rounded-2xl overflow-hidden border border-white/[0.06] mb-5"
         style={{ background: 'linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.02) 100%)' }}>
-
-        {/* Subtle top accent line */}
         <div className="absolute top-0 left-0 right-0 h-px"
           style={{ background: `linear-gradient(90deg, transparent, ${tier.color}60, transparent)` }} />
 
@@ -202,7 +267,6 @@ export default function ProfilePage() {
                     </div>
                 }
               </div>
-              {/* Camera badge — only in editing mode */}
               {editing && (
                 <label className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-white
                   flex items-center justify-center cursor-pointer shadow-lg">
@@ -239,7 +303,7 @@ export default function ProfilePage() {
               </div>
             </div>
 
-            {/* Tier upgrade pill */}
+            {/* Tier pill */}
             {isArtist && (
               <button onClick={() => nav('/upgrade')}
                 className="flex-shrink-0 flex items-center space-x-1.5 px-3 py-1.5 rounded-xl border transition hover:brightness-110"
@@ -290,7 +354,7 @@ export default function ProfilePage() {
           <div className="flex space-x-1 p-1 rounded-xl mb-4"
             style={{ backgroundColor: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)' }}>
             {ARTIST_TABS.map(({ key, label, icon: Icon }) => (
-              <button key={key} onClick={() => setActiveTab(key)}
+              <button key={key} onClick={() => { setActiveTab(key); setEditing(false); }}
                 className="flex-1 flex items-center justify-center space-x-1.5 py-2 rounded-lg text-xs font-medium transition"
                 style={activeTab === key
                   ? { backgroundColor: '#fff', color: '#000' }
@@ -304,57 +368,141 @@ export default function ProfilePage() {
 
           {/* ── TAB: Profile ── */}
           {activeTab === 'profile' && (
-            <div className="rounded-2xl border border-white/[0.06] overflow-hidden mb-4"
-              style={{ background: 'rgba(255,255,255,0.02)' }}>
-
-              {/* Section header */}
-              <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.05]">
-                <p className="text-sm font-semibold text-white">Artist Info</p>
-                <button onClick={() => { setEditing(!editing); setMsg(''); }}
-                  className="text-xs text-white/40 hover:text-white/60 transition px-2 py-1 rounded-lg hover:bg-white/[0.04]">
-                  {editing ? 'Cancel' : 'Edit'}
-                </button>
+            <>
+              {/* Artist Info */}
+              <div className="rounded-2xl border border-white/[0.06] overflow-hidden mb-4"
+                style={{ background: 'rgba(255,255,255,0.02)' }}>
+                <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.05]">
+                  <p className="text-sm font-semibold text-white">Artist Info</p>
+                  <button onClick={() => { setEditing(!editing); setMsg(''); }}
+                    className="text-xs text-white/40 hover:text-white/60 transition px-2 py-1 rounded-lg hover:bg-white/[0.04]">
+                    {editing ? 'Cancel' : 'Edit'}
+                  </button>
+                </div>
+                <div className="p-4">
+                  {editing ? (
+                    <div className="space-y-3">
+                      <div>
+                        <label className="block text-xs text-white/40 mb-1">Artist Name</label>
+                        <input type="text" value={form.artist_name}
+                          onChange={e => setForm({ ...form, artist_name: e.target.value })}
+                          className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none border border-white/[0.06] focus:border-white/20 transition" />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-white/40 mb-1">Bio</label>
+                        <textarea rows={3} value={form.bio}
+                          onChange={e => setForm({ ...form, bio: e.target.value })}
+                          className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none resize-none border border-white/[0.06] focus:border-white/20 transition" />
+                      </div>
+                      {profileImgFile && (
+                        <p className="text-xs text-green-400 flex items-center space-x-1">
+                          <Camera className="w-3 h-3" />
+                          <span>{profileImgFile.name} selected</span>
+                        </p>
+                      )}
+                      <button onClick={save} disabled={saving}
+                        className="w-full py-2.5 bg-white text-black rounded-xl font-semibold text-sm
+                          flex items-center justify-center space-x-2 disabled:opacity-50 transition active:scale-[0.98]">
+                        {saving ? <Loader className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                        <span>{saving ? 'Saving...' : 'Save Changes'}</span>
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {form.bio
+                        ? <p className="text-sm text-white/60 leading-relaxed">{form.bio}</p>
+                        : <p className="text-xs text-white/20 italic">No bio yet — tap Edit to add one</p>
+                      }
+                    </div>
+                  )}
+                </div>
               </div>
 
-              <div className="p-4">
-                {editing ? (
-                  <div className="space-y-3">
-                    <div>
-                      <label className="block text-xs text-white/40 mb-1">Artist Name</label>
-                      <input type="text" value={form.artist_name}
-                        onChange={e => setForm({ ...form, artist_name: e.target.value })}
-                        className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none border border-white/[0.06] focus:border-white/20 transition" />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-white/40 mb-1">Bio</label>
-                      <textarea rows={3} value={form.bio}
-                        onChange={e => setForm({ ...form, bio: e.target.value })}
-                        className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none resize-none border border-white/[0.06] focus:border-white/20 transition" />
-                    </div>
-                    {profileImgFile && (
-                      <p className="text-xs text-green-400 flex items-center space-x-1">
-                        <Camera className="w-3 h-3" />
-                        <span>{profileImgFile.name} selected</span>
-                      </p>
-                    )}
-                    <button onClick={save} disabled={saving}
-                      className="w-full py-2.5 bg-white text-black rounded-xl font-semibold text-sm
-                        flex items-center justify-center space-x-2 disabled:opacity-50 transition active:scale-[0.98]">
-                      {saving ? <Loader className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                      <span>{saving ? 'Saving...' : 'Save Changes'}</span>
-                    </button>
+              {/* Thought of the Day */}
+              <TierGate feature="daily_thought">
+                <div className="rounded-2xl border border-white/[0.06] overflow-hidden mb-4"
+                  style={{ background: 'rgba(255,255,255,0.02)' }}>
+                  <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.05]">
+                    <p className="text-sm font-semibold text-white">💭 Thought of the Day</p>
+                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                      remainingToday === 0
+                        ? 'bg-red-500/10 text-red-400'
+                        : 'bg-white/[0.06] text-white/30'
+                    }`}>
+                      {remainingToday}/{MAX_DAILY_THOUGHTS} left today
+                    </span>
                   </div>
-                ) : (
-                  <div className="space-y-3">
-                    {form.bio ? (
-                      <p className="text-sm text-white/60 leading-relaxed">{form.bio}</p>
-                    ) : (
-                      <p className="text-xs text-white/20 italic">No bio yet — tap Edit to add one</p>
+                  <div className="p-4 space-y-3">
+                    <p className="text-xs text-white/30">
+                      Share what's on your mind — appears on your profile for 24 hours
+                    </p>
+                    <textarea
+                      rows={3}
+                      maxLength={280}
+                      value={thoughtInput}
+                      onChange={e => setThoughtInput(e.target.value)}
+                      placeholder="What's on your mind today?"
+                      disabled={remainingToday <= 0}
+                      className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none resize-none border border-white/[0.06] focus:border-white/20 transition placeholder-white/15 disabled:opacity-40"
+                    />
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-white/20">{thoughtInput.length}/280</span>
+                      <div className="flex items-center space-x-3">
+                        {thoughtMsg && (
+                          <span className={`text-xs ${
+                            thoughtMsg.includes('Failed') || thoughtMsg.includes('limit')
+                              ? 'text-red-400' : 'text-green-400'
+                          }`}>
+                            {thoughtMsg}
+                          </span>
+                        )}
+                        <button
+                          onClick={postThought}
+                          disabled={thoughtSaving || !thoughtInput.trim() || remainingToday <= 0}
+                          className="px-4 py-1.5 bg-white text-black text-xs font-semibold rounded-lg disabled:opacity-40 transition active:scale-95"
+                        >
+                          {thoughtSaving ? 'Posting...' : 'Post'}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Active thoughts list */}
+                    {thoughts.length > 0 && (
+                      <div className="space-y-2 pt-1">
+                        <p className="text-[11px] text-white/20 uppercase tracking-wider font-medium">
+                          Active thoughts
+                        </p>
+                        {thoughts.map(t => {
+                          const expiresAt = new Date(t.created_at).getTime() + THOUGHT_TTL_MS;
+                          const minsLeft  = Math.max(0, Math.round((expiresAt - Date.now()) / 60000));
+                          const hrsLeft   = Math.floor(minsLeft / 60);
+                          const timeLabel = hrsLeft > 0 ? `${hrsLeft}h ${minsLeft % 60}m` : `${minsLeft}m`;
+                          return (
+                            <div key={t.id}
+                              className="flex items-start space-x-3 p-3 bg-white/[0.04] rounded-xl border border-white/[0.05]">
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm text-white/80 leading-relaxed">{t.content}</p>
+                                <p className="text-[10px] text-white/20 mt-1">Expires in {timeLabel}</p>
+                              </div>
+                              <button
+                                onClick={() => deleteThought(t.id)}
+                                disabled={deletingId === t.id}
+                                className="flex-shrink-0 w-7 h-7 flex items-center justify-center rounded-lg hover:bg-red-500/10 transition"
+                              >
+                                {deletingId === t.id
+                                  ? <Loader className="w-3.5 h-3.5 animate-spin text-white/30" />
+                                  : <Trash2 className="w-3.5 h-3.5 text-white/20 hover:text-red-400 transition" />
+                                }
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
                     )}
                   </div>
-                )}
-              </div>
-            </div>
+                </div>
+              </TierGate>
+            </>
           )}
 
           {/* ── TAB: Theme ── */}
@@ -375,7 +523,7 @@ export default function ProfilePage() {
             </div>
           )}
 
-          {/* ── TAB: Links (Socials) ── */}
+          {/* ── TAB: Links ── */}
           {activeTab === 'links' && (
             <div className="rounded-2xl border border-white/[0.06] overflow-hidden mb-4"
               style={{ background: 'rgba(255,255,255,0.02)' }}>
@@ -460,7 +608,7 @@ export default function ProfilePage() {
       )}
 
       {/* ══════════════════════════════════════════════════════════════════════
-          NAVIGATION LINKS (all users)
+          NAVIGATION LINKS
       ══════════════════════════════════════════════════════════════════════ */}
       <div className="rounded-2xl border border-white/[0.06] overflow-hidden mb-4"
         style={{ background: 'rgba(255,255,255,0.02)' }}>
@@ -472,11 +620,11 @@ export default function ProfilePage() {
           <NavRow icon={Shield} label="Admin Panel" iconColor="text-yellow-400"
             onClick={() => nav('/admin')} border />
         )}
-        <NavRow icon={Globe} label="Privacy Policy"   onClick={() => nav('/privacy-policy')} border />
-        <NavRow icon={Globe} label="Terms of Use"     onClick={() => nav('/terms-of-use')}   border />
+        <NavRow icon={Globe} label="Privacy Policy" onClick={() => nav('/privacy-policy')} border />
+        <NavRow icon={Globe} label="Terms of Use"   onClick={() => nav('/terms-of-use')}   border />
       </div>
 
-      {/* ── Role Switcher (admin/master only) ── */}
+      {/* ── Role Switcher ── */}
       {(rawIsAdmin || rawIsMaster) && (
         <div className="rounded-2xl border border-white/[0.06] p-4 mb-4"
           style={{ background: 'rgba(255,255,255,0.02)' }}>
@@ -498,9 +646,7 @@ export default function ProfilePage() {
               </button>
             ))}
           </div>
-          {viewAs && (
-            <p className="text-[10px] text-yellow-400/50 mt-2">Viewing as {viewAs}</p>
-          )}
+          {viewAs && <p className="text-[10px] text-yellow-400/50 mt-2">Viewing as {viewAs}</p>}
         </div>
       )}
 
@@ -515,7 +661,6 @@ export default function ProfilePage() {
   );
 }
 
-// ── Small helper ─────────────────────────────────────────────────────────────
 function NavRow({ icon: Icon, label, iconColor = 'text-white/30', onClick, border = false }) {
   return (
     <button onClick={onClick}
