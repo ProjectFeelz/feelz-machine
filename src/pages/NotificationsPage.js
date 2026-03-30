@@ -1,3 +1,4 @@
+import { Helmet } from 'react-helmet-async';
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
@@ -202,6 +203,11 @@ export default function NotificationsPage() {
   return (
     <div className="min-h-screen bg-black text-white">
       <div className="max-w-2xl mx-auto px-4 py-6 pb-32">
+        <Helmet>
+          <title>Notifications · Feelz Machine</title>
+          <meta name="description" content="Your Feelz Machine notifications — followers, collabs, likes and milestones." />
+          <link rel="canonical" href="https://www.feelzmachine.com/notifications" />
+        </Helmet>
         {/* Header */}
         <div className="flex items-center justify-between mb-6 sticky top-0 z-20 bg-black/90 backdrop-blur-sm md:relative md:top-auto md:bg-transparent md:backdrop-blur-none pt-2 pb-2 -mx-4 px-4">
           <div className="flex items-center space-x-3">
