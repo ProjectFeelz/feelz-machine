@@ -160,7 +160,7 @@ export default function ProfilePage() {
   const avatarLetter = (artist?.artist_name || profile?.display_name || user.email)?.[0]?.toUpperCase();
 
   return (
-    <div className="pt-12 md:pt-0 pb-8 px-4 md:px-0 max-w-lg mx-auto">
+    <div className="pt-12 md:pt-0 pb-8 px-4 md:px-0">
 
       {/* ── Page title ── */}
       <h1 className="text-2xl font-bold text-white mb-5 sticky top-0 z-20
