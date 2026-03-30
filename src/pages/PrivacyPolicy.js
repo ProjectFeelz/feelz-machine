@@ -1,12 +1,23 @@
 import React from 'react';
+import { Helmet } from 'react-helmet-async';
 import { useNavigate } from 'react-router-dom';
 import { ChevronLeft, Shield } from 'lucide-react';
+
+const BASE_URL = 'https://www.feelzmachine.com';
 
 export default function PrivacyPolicy() {
   const navigate = useNavigate();
 
   return (
     <div className="min-h-screen bg-black text-white">
+      <Helmet>
+        <title>Privacy Policy · Feelz Machine</title>
+        <meta name="description" content="Feelz Machine privacy policy — how we collect, use and protect your personal information." />
+        <link rel="canonical" href={`${BASE_URL}/privacy-policy`} />
+        <meta property="og:title" content="Privacy Policy · Feelz Machine" />
+        <meta property="og:url" content={`${BASE_URL}/privacy-policy`} />
+      </Helmet>
+
       <div className="max-w-3xl mx-auto px-6 py-10">
         <button onClick={() => navigate(-1)}
           className="flex items-center space-x-2 text-white/40 hover:text-white/70 mb-8 transition">
