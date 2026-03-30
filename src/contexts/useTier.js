@@ -184,7 +184,7 @@ const FEATURE_LABELS = {
     tierData,
     tierLevel,
     access,
-    loading,
+    tierLoading: loading,
     trackCount,
     isPro,
     isPremium,
