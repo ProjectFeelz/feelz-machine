@@ -73,7 +73,7 @@ export default function AdminModeration() {
     try {
       const { data, error } = await supabase
         .from('artists')
-        .select('id, artist_name, slug, avatar_url, is_suspended, suspension_reason, suspended_at, created_at')
+        .select('id, artist_name, slug, profile_image_url, is_suspended, suspension_reason, suspended_at, created_at')
         .order('created_at', { ascending: false });
       if (error) throw error;
       setArtists(data || []);
@@ -365,8 +365,8 @@ export default function AdminModeration() {
                   className={`rounded-xl p-4 border transition ${artist.is_suspended ? 'bg-red-500/[0.04] border-red-500/20' : 'bg-white/[0.03] border-white/[0.06] hover:bg-white/[0.05]'}`}>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-3 min-w-0">
-                      {artist.avatar_url
-                        ? <img src={artist.avatar_url} alt="" className="w-11 h-11 rounded-full object-cover flex-shrink-0" />
+                      {artist.profile_image_url
+                        ? <img src={artist.profile_image_url} alt="" className="w-11 h-11 rounded-full object-cover flex-shrink-0" />
                         : <div className="w-11 h-11 rounded-full bg-white/[0.06] flex items-center justify-center flex-shrink-0"><User className="w-4 h-4 text-white/15" /></div>}
                       <div className="min-w-0">
                         <div className="flex items-center space-x-2">
