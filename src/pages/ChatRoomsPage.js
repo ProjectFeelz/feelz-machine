@@ -1,3 +1,4 @@
+import { Helmet } from 'react-helmet-async';
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
@@ -159,8 +160,16 @@ export default function ChatRoomsPage() {
 
   return (
     <div className="pt-12 md:pt-0 pb-4 px-6 md:px-0">
+      <Helmet>
+        <title>Chat Rooms · Feelz Machine</title>
+        <meta name="description" content="Join artist chat rooms and connect with the Feelz Machine community." />
+        <link rel="canonical" href="https://www.feelzmachine.com/chat" />
+        <meta property="og:title" content="Chat Rooms · Feelz Machine" />
+        <meta property="og:url" content="https://www.feelzmachine.com/chat" />
+      </Helmet>
 
       {/* Header */}
+      <div className="flex items-center justify-between mb-6
       <div className="flex items-center justify-between mb-6 sticky top-0 z-20 bg-black/90 backdrop-blur-sm md:relative md:top-auto md:bg-transparent md:backdrop-blur-none pt-2 pb-2 -mx-6 px-6">
         <h1 className="text-2xl font-bold text-white">Chat Rooms</h1>
         {artist && (
