@@ -214,7 +214,6 @@ function ThoughtBlock({ thought, isOwner, secondaryColor, textColor, bgColor, us
 
   return (
     <div className="rounded-2xl overflow-hidden" style={{ backgroundColor: `${secondaryColor}10`, border: `1px solid ${secondaryColor}20` }}>
-
       {/* Header */}
       <div className="flex items-center justify-between px-4 pt-4 pb-0">
         <p className="text-xs font-semibold" style={{ color: `${secondaryColor}90` }}>💭 Thought of the Day</p>
@@ -276,7 +275,6 @@ function ThoughtBlock({ thought, isOwner, secondaryColor, textColor, bgColor, us
 
       {/* Action bar */}
       <div className="flex items-center px-4 py-2.5 relative" style={{ borderTop: `1px solid ${textColor}08` }}>
-
         {/* Like */}
         <button onClick={handleLike} className="flex items-center space-x-1.5 mr-4 transition active:scale-90">
           <Heart className="w-4 h-4 transition" style={{ color: liked ? '#ef4444' : `${textColor}30` }} fill={liked ? '#ef4444' : 'none'} />
@@ -349,6 +347,7 @@ function ThoughtBlock({ thought, isOwner, secondaryColor, textColor, bgColor, us
               <p className="text-center text-xs py-6" style={{ color: `${textColor}20` }}>No comments yet</p>
             )}
           </div>
+
           {user && (
             <div className="px-4 py-3">
               <div className="flex items-center space-x-2">
@@ -380,8 +379,8 @@ function ThoughtBlock({ thought, isOwner, secondaryColor, textColor, bgColor, us
     </div>
   );
 }
-// ────────────────────────────────────────────────────────────────────────────
 
+// ────────────────────────────────────────────────────────────────────────────
 export default function ArtistProfilePage() {
   const { slug } = useParams();
   const navigate = useNavigate();
@@ -446,7 +445,6 @@ export default function ArtistProfilePage() {
       const { data: artistData, error } = await supabase
         .from('artists').select('*').eq('slug', slug).single();
       if (error || !artistData) { setLoading(false); return; }
-
       setArtist(artistData);
       setFollowerCount(artistData.follower_count || 0);
 
@@ -623,8 +621,7 @@ export default function ArtistProfilePage() {
             body: JSON.stringify({ track_id: purchaseTrack.id, transaction_id: captureData.captureId, total_amount: getEffectivePrice(purchaseTrack), buyer_user_id: user.id }),
           });
           setPurchaseSuccess(true); setPurchasing(false);
-          setTimeout(async () => { await triggerDownload(purchaseTrack); setPurchaseTrack(null); setP
-          urchaseSuccess(false); }, 1500);
+          setTimeout(async () => { await triggerDownload(purchaseTrack); setPurchaseTrack(null); setPurchaseSuccess(false); }, 1500);
         } catch (err) { setPurchaseError(err.message); setPurchasing(false); }
       },
       onError: (err) => { console.error('PayPal error:', err); setPurchaseError('Payment failed. Please try again.'); setPurchasing(false); },
@@ -829,8 +826,6 @@ export default function ArtistProfilePage() {
   const headingFont = theme?.heading_font || 'Inter';
   const bodyFont = theme?.body_font || 'Inter';
   const visibleTracks = showAllTracks ? tracks : tracks.slice(0, 5);
-
-  // Is the logged-in user the owner of this profile?
   const isProfileOwner = user && myArtist && myArtist.id === artist.id;
 
   return (
@@ -847,7 +842,6 @@ export default function ArtistProfilePage() {
           <img src={theme.background_image_url} alt="" className="absolute inset-0 w-full h-full object-cover opacity-30" />
         )}
         <div className="absolute inset-0" style={{ background: `linear-gradient(to bottom, transparent 20%, ${bgColor} 100%)` }} />
-
         <div className="fixed top-0 left-0 right-0 flex items-center justify-center p-5 z-50">
           <button
             onClick={() => navigate(-1)}
@@ -866,7 +860,6 @@ export default function ArtistProfilePage() {
               : <Share2 className="w-4 h-4" style={{ color: textColor }} />}
           </button>
         </div>
-
         {/* Avatar */}
         <div className="absolute -bottom-14 left-1/2 -translate-x-1/2 z-10">
           <div className="w-28 h-28 rounded-2xl overflow-hidden border-4 shadow-2xl"
@@ -893,13 +886,11 @@ export default function ArtistProfilePage() {
             </div>
           )}
         </div>
-
         <div className="flex items-center space-x-4 mb-4">
           <span className="text-sm" style={{ color: `${textColor}80` }}>{formatNumber(followerCount)} followers</span>
           <span className="text-sm" style={{ color: `${textColor}80` }}>{tracks.length} track{tracks.length !== 1 ? 's' : ''}</span>
           <span className="text-sm" style={{ color: `${textColor}80` }}>{formatNumber(artist.total_streams)} streams</span>
         </div>
-
         <div className="flex items-center justify-center space-x-3 mb-6">
           <button
             onClick={handleFollow}
@@ -924,13 +915,11 @@ export default function ArtistProfilePage() {
             </button>
           )}
         </div>
-
         {artist.bio && (
           <p className="text-sm leading-relaxed mb-6 max-w-sm" style={{ color: `${textColor}90`, fontFamily: `"${bodyFont}", sans-serif` }}>
             {artist.bio}
           </p>
         )}
-
         {socialEntries.length > 0 && (
           <div className="flex items-center space-x-3 mb-8">
             {socialEntries.map(([platform, value]) => {
@@ -1005,7 +994,6 @@ export default function ArtistProfilePage() {
                         <span className="text-sm" style={{ color: `${textColor}30` }}>{i + 1}</span>
                       )}
                     </div>
-
                     <div className="w-10 h-10 rounded-md overflow-hidden flex-shrink-0" style={{ backgroundColor: `${textColor}08` }}>
                       {(track.cover_artwork_url || track.albums?.cover_artwork_url) ? (
                         <img src={track.cover_artwork_url || track.albums?.cover_artwork_url} alt="" className="w-full h-full object-cover" />
@@ -1015,7 +1003,6 @@ export default function ArtistProfilePage() {
                         </div>
                       )}
                     </div>
-
                     <div className="flex-1 min-w-0 text-left">
                       <p className="text-sm font-medium truncate" style={{ color: isActive ? secondaryColor : textColor }}>
                         {track.title}
@@ -1030,9 +1017,7 @@ export default function ArtistProfilePage() {
                         <span className="text-xs truncate" style={{ color: `${textColor}40` }}>{formatNumber(track.stream_count || 0)} plays</span>
                       </div>
                     </div>
-
                     {track.duration && <span className="text-xs flex-shrink-0" style={{ color: `${textColor}30` }}>{formatDuration(track.duration)}</span>}
-
                     <button
                       onClick={(e) => { e.stopPropagation(); setActionSheetTrack(track); }}
                       className="flex-shrink-0 p-1.5 rounded-lg transition-all active:scale-95"
@@ -1041,7 +1026,6 @@ export default function ArtistProfilePage() {
                     >
                       <MoreHorizontal className="w-4 h-4" />
                     </button>
-
                     <button
                       onClick={(e) => handleLike(track, e)}
                       className="flex-shrink-0 p-1.5 rounded-lg transition-all active:scale-95"
@@ -1049,7 +1033,6 @@ export default function ArtistProfilePage() {
                     >
                       <Heart className="w-4 h-4" fill={likedTracks[track.id] ? '#ef4444' : 'none'} />
                     </button>
-
                     <div className="relative flex-shrink-0">
                       <button
                         onClick={(e) => { e.stopPropagation(); setShowAddToPlaylist(showAddToPlaylist === track.id ? null : track.id); }}
@@ -1083,7 +1066,6 @@ export default function ArtistProfilePage() {
                         </div>
                       )}
                     </div>
-
                     {track.is_downloadable && (
                       <button
                         onClick={(e) => handleDownload(track, e)}
@@ -1099,7 +1081,6 @@ export default function ArtistProfilePage() {
                       </button>
                     )}
                   </div>
-
                   <TrackVersions
                     track={track}
                     albumPrice={track.albums?.price || 0}
@@ -1388,7 +1369,6 @@ export default function ArtistProfilePage() {
 
       {/* PURCHASE MODAL */}
       <TrackActionSheet track={actionSheetTrack} artist={artist} onClose={() => setActionSheetTrack(null)} />
-
       {purchaseTrack && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4"
@@ -1422,11 +1402,9 @@ export default function ArtistProfilePage() {
                   </div>
                   <p className="text-xl font-bold flex-shrink-0" style={{ color: secondaryColor }}>${getEffectivePrice(purchaseTrack)}</p>
                 </div>
-
                 <div className="rounded-xl p-3 text-center" style={{ backgroundColor: `${textColor}05`, border: `1px solid ${textColor}10` }}>
                   <p className="text-xs" style={{ color: `${textColor}40` }}>High-quality MP3 download delivered instantly after payment</p>
                 </div>
-
                 {purchaseError && <p className="text-xs text-red-400 text-center">{purchaseError}</p>}
                 {!paypalReady && !purchaseError && (
                   <div className="flex justify-center py-3">
@@ -1434,7 +1412,6 @@ export default function ArtistProfilePage() {
                   </div>
                 )}
                 <div id="paypal-checkout-container" style={{ backgroundColor: '#fff', borderRadius: '8px', padding: '4px' }} />
-
                 <button
                   onClick={() => { setPurchaseTrack(null); setPurchasing(false); setPurchaseError(''); }}
                   className="w-full py-2.5 rounded-xl text-sm transition"
