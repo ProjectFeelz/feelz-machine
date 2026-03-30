@@ -82,10 +82,11 @@ function SplashScreen() {
   return (
     <div className="fixed inset-0 z-50 bg-black flex flex-col items-center justify-center">
       <div className="flex flex-col items-center space-y-4">
-        <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-purple-600 to-blue-600
-          flex items-center justify-center shadow-2xl animate-pulse">
-          <Music className="w-8 h-8 text-white" />
-        </div>
+        <img
+          src="/logo.png"
+          alt="Feelz Machine"
+          className="w-20 h-20 rounded-2xl shadow-2xl"
+        />
         <div className="space-y-1 text-center">
           <p className="text-white font-bold text-xl tracking-tight">Feelz Machine</p>
           <p className="text-white/30 text-xs">Loading...</p>
