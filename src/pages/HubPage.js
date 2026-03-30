@@ -1,3 +1,4 @@
+import { Helmet } from 'react-helmet-async';
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
@@ -71,6 +72,13 @@ export default function HubPage() {
 
   return (
     <div className="pt-14 md:pt-0 pb-32 px-4 md:px-0">
+      <Helmet>
+        <title>Hub · Feelz Machine</title>
+        <meta name="description" content="Your Feelz Machine control center — access your dashboard, library, community and settings." />
+        <link rel="canonical" href="https://www.feelzmachine.com/hub" />
+        <meta property="og:title" content="Hub · Feelz Machine" />
+        <meta property="og:url" content="https://www.feelzmachine.com/hub" />
+      </Helmet>
 
       {/* Header */}
       <div className="mb-6 sticky top-0 z-20 bg-black/90 backdrop-blur-sm md:relative md:top-auto md:bg-transparent md:backdrop-blur-none pt-2 -mx-4 px-4">
