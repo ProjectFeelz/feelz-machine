@@ -1245,8 +1245,7 @@ export default function ArtistProfilePage() {
             ) : (
               <>
                 <div className="flex items-center space-x-3">
-                  <div
-<div className="w-12 h-12 rounded-lg overflow-hidden flex-shrink-0" style={{ backgroundColor: `${secondaryColor}20` }}>
+                  <div className="w-12 h-12 rounded-lg overflow-hidden flex-shrink-0" style={{ backgroundColor: `${secondaryColor}20` }}>
                     {pwywTrack.cover_artwork_url
                       ? <img src={pwywTrack.cover_artwork_url} alt="" className="w-full h-full object-cover" />
                       : <div className="w-full h-full flex items-center justify-center"><Music className="w-5 h-5" style={{ color: `${textColor}30` }} /></div>}
