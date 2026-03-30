@@ -45,7 +45,7 @@ function Section({ title, icon: Icon, children }) {
 export default function HubPage() {
   const navigate = useNavigate();
   const { user, artist, isAdmin, isArtist, isListener, signOut } = useAuth();
-  const { tierSlug } = useTier();
+  const { tierSlug, tierLoading } = useTier();
 
   const tierConfig = {
     premium: { label: 'Premium', color: 'text-yellow-400', bg: 'bg-yellow-500/10', icon: Crown },
@@ -82,7 +82,7 @@ export default function HubPage() {
       </div>
 
       {/* Tier card — only for artists */}
-      {isArtist && (
+      {isArtist && !tierLoading && (
         <button
           onClick={() => navigate('/upgrade')}
           className={`w-full flex items-center justify-between p-4 rounded-xl border border-white/[0.06] ${tier.bg} mb-6 transition hover:brightness-110`}
