@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import MobileNav from './MobileNav';
 import DesktopSidebar from './DesktopSidebar';
@@ -7,14 +7,104 @@ import MiniPlayer from './MiniPlayer';
 import FullPlayer from './FullPlayer';
 import { usePlayer } from '../../contexts/PlayerContext';
 import { useAuth } from '../../contexts/AuthContext';
-import { Bell } from 'lucide-react';
+import { Bell, Music } from 'lucide-react';
 import useNotifications from '../../contexts/useNotifications';
 
-// Heights (keep in sync with actual component heights)
-const NAV_HEIGHT = 64;        // MobileNav bottom bar
-const MINI_PLAYER_HEIGHT = 64; // MiniPlayer bar
-const NAV_WITH_PLAYER = NAV_HEIGHT + MINI_PLAYER_HEIGHT; // 128px
+const NAV_HEIGHT = 64;
+const MINI_PLAYER_HEIGHT = 64;
+const NAV_WITH_PLAYER = NAV_HEIGHT + MINI_PLAYER_HEIGHT;
 
+// ── Dynamic title map ────────────────────────────────────────────────────────
+const PAGE_TITLES = {
+  '/':                    'Home',
+  '/browse':              'Browse',
+  '/library':             'Library',
+  '/library/likes':       'Liked Songs',
+  '/library/downloads':   'Downloads',
+  '/library/recent':      'Recently Played',
+  '/library/following':   'Following',
+  '/library/playlists':   'Playlists',
+  '/community':           'Community',
+  '/hub':                 'Hub',
+  '/profile':             'Profile',
+  '/profile/edit':        'Edit Profile',
+  '/notifications':       'Notifications',
+  '/chat':                'Chat',
+  '/dashboard':           'Artist Dashboard',
+  '/upgrade':             'Upgrade',
+  '/about':               'About',
+  '/admin':               'Admin',
+  '/admin/artists':       'All Artists · Admin',
+  '/admin/analytics':     'Analytics · Admin',
+  '/admin/moderation':    'Moderation · Admin',
+  '/admin/boost':         'Boost Manager · Admin',
+  '/admin/broadcast':     'Broadcast · Admin',
+  '/admin/behavior':      'User Behavior · Admin',
+  '/privacy-policy':      'Privacy Policy',
+  '/terms-of-use':        'Terms of Use',
+};
+
+const BASE_TITLE = 'Feelz Machine';
+
+function getTitle(pathname) {
+  // Exact match first
+  if (PAGE_TITLES[pathname]) return PAGE_TITLES[pathname];
+
+  // Artist profile pages: /artist/:slug
+  if (pathname.startsWith('/artist/')) {
+    const slug = pathname.split('/artist/')[1]?.split('/')[0];
+    if (slug) {
+      const name = slug.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+      return name;
+    }
+  }
+
+  // Album pages: /album/:id
+  if (pathname.startsWith('/album/')) return 'Album';
+
+  // Playlist detail: /library/playlists/:id
+  if (pathname.startsWith('/library/playlists/')) return 'Playlist · Library';
+
+  // Chat room: /chat/:roomId
+  if (pathname.startsWith('/chat/')) return 'Chat Room';
+
+  // Prefix match fallback
+  const prefix = Object.keys(PAGE_TITLES).find(k =>
+    k !== '/' && pathname.startsWith(k + '/')
+  );
+  if (prefix) return PAGE_TITLES[prefix];
+
+  return null;
+}
+
+// ── Splash screen ────────────────────────────────────────────────────────────
+function SplashScreen() {
+  return (
+    <div className="fixed inset-0 z-50 bg-black flex flex-col items-center justify-center">
+      <div className="flex flex-col items-center space-y-4">
+        <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-purple-600 to-blue-600
+          flex items-center justify-center shadow-2xl animate-pulse">
+          <Music className="w-8 h-8 text-white" />
+        </div>
+        <div className="space-y-1 text-center">
+          <p className="text-white font-bold text-xl tracking-tight">Feelz Machine</p>
+          <p className="text-white/30 text-xs">Loading...</p>
+        </div>
+        <div className="flex space-x-1 mt-2">
+          {[0, 1, 2].map(i => (
+            <div
+              key={i}
+              className="w-1.5 h-1.5 rounded-full bg-purple-500 animate-bounce"
+              style={{ animationDelay: `${i * 0.15}s` }}
+            />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Bell button ───────────────────────────────────────────────────────────────
 function MobileBellButton() {
   const { unreadCount } = useNotifications();
   const navigate = useNavigate();
@@ -35,63 +125,52 @@ function MobileBellButton() {
   );
 }
 
+// ── Main layout ───────────────────────────────────────────────────────────────
 export default function AppLayout() {
   const { currentTrack } = usePlayer();
   const { user, hasProfile, loading } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
+  // Show splash while auth is resolving
+  const [splashDone, setSplashDone] = useState(false);
+
+  useEffect(() => {
+    if (!loading) {
+      // Small delay so splash doesn't flash for <100ms on fast connections
+      const t = setTimeout(() => setSplashDone(true), 300);
+      return () => clearTimeout(t);
+    }
+  }, [loading]);
+
+  // Auth guard
   useEffect(() => {
     if (loading) return;
-    const publicPaths = ['/login', '/setup', '/privacy-policy', '/terms-of-use'];
+    const publicPaths = ['/login', '/setup', '/privacy-policy', '/terms-of-use', '/terms'];
     if (user && !hasProfile && !publicPaths.includes(location.pathname)) {
       navigate('/setup');
     }
   }, [user, hasProfile, loading, location.pathname]);
 
-
-  // Update page title on route change
+  // Dynamic page titles
   useEffect(() => {
-    var titles = {
-      '/': 'Home',
-      '/browse': 'Browse',
-      '/library': 'Library',
-      '/community': 'Community',
-      '/hub': 'Hub',
-      '/profile': 'Profile',
-      '/notifications': 'Notifications',
-      '/chat': 'Chat',
-      '/dashboard': 'Dashboard',
-      '/upgrade': 'Upgrade',
-    };
-    var base = 'Feelz Machine';
-    var match = Object.keys(titles).find(function(k) {
-      return location.pathname === k || location.pathname.startsWith(k + '/');
-    });
-    document.title = match ? titles[match] + ' · ' + base : base;
+    const title = getTitle(location.pathname);
+    document.title = title ? `${title} · ${BASE_TITLE}` : BASE_TITLE;
   }, [location.pathname]);
 
-  // Mobile bottom padding:
-  // - always leave room for nav bar (64px)
-  // - if mini player is showing, add its height too (64px)
-  const mobilePaddingBottom = currentTrack
-    ? NAV_WITH_PLAYER  // 128px: nav + mini player
-    : NAV_HEIGHT;       // 64px: just nav
+  const mobilePaddingBottom = currentTrack ? NAV_WITH_PLAYER : NAV_HEIGHT;
+
+  // Show splash until auth has resolved
+  if (!splashDone) return <SplashScreen />;
 
   return (
     <div className="min-h-screen bg-black text-white">
-      {/* Desktop sidebar */}
       <DesktopSidebar />
-
-      {/* Mobile top bar (notification bell) */}
       <MobileBellButton />
-
-      {/* Main content */}
       <main
         className="w-full md:w-[calc(100%-256px)] md:ml-64"
         style={{ paddingBottom: mobilePaddingBottom }}
       >
-        {/* Desktop overrides — player bar is ~72px tall */}
         <style>{`
           @media (min-width: 768px) {
             main {
@@ -103,14 +182,8 @@ export default function AppLayout() {
           <Outlet />
         </div>
       </main>
-
-      {/* Full screen player */}
       <FullPlayer />
-
-      {/* Desktop player bar */}
       <DesktopPlayer />
-
-      {/* Mobile: mini player sits directly above nav */}
       <MiniPlayer />
       <MobileNav />
     </div>
