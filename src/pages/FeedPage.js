@@ -1,3 +1,4 @@
+import { Helmet } from 'react-helmet-async';
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
@@ -150,6 +151,13 @@ export default function FeedPage() {
 
   return (
     <div className="pt-10 md:pt-0 pb-4 px-6 md:px-0">
+      <Helmet>
+        <title>Community · Feelz Machine</title>
+        <meta name="description" content="See the latest posts, updates and music from independent artists on Feelz Machine." />
+        <link rel="canonical" href="https://www.feelzmachine.com/community" />
+        <meta property="og:title" content="Community · Feelz Machine" />
+        <meta property="og:url" content="https://www.feelzmachine.com/community" />
+      </Helmet>
 
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
