@@ -4,14 +4,18 @@ import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import {
   BarChart3, Download, Music, Loader,
-  Upload, ChevronLeft, Headphones, Heart, TrendingUp, Users
+  Upload, ChevronLeft, Headphones, Heart, TrendingUp, Users, Trash2
 } from 'lucide-react';
 import TrackUploadPanel from './TrackUploadPanel';
 import CollabRequests, { CollabBadge } from '../components/CollabRequests';
 import TierGate, { UploadGate, TierBadge } from '../components/TierGate';
 
+const MAX_DAILY_THOUGHTS = 3;
+const THOUGHT_TTL_MS = 24 * 60 * 60 * 1000;
+
 function ContactExportButton({ artist }) {
   const [exporting, setExporting] = React.useState(false);
+
   const handleExport = async () => {
     setExporting(true);
     try {
@@ -27,14 +31,22 @@ function ContactExportButton({ artist }) {
       const blob = new Blob([data.csv], { type: 'text/csv' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
-      a.href = url; a.download = `${artist.artist_name}_contacts.csv`; a.click();
+      a.href = url;
+      a.download = `${artist.artist_name}_contacts.csv`;
+      a.click();
       URL.revokeObjectURL(url);
-    } catch (err) { console.error('Export error:', err); }
+    } catch (err) {
+      console.error('Export error:', err);
+    }
     setExporting(false);
   };
+
   return (
-    <button onClick={handleExport} disabled={exporting}
-      className="flex items-center space-x-2 px-4 py-2.5 bg-white/[0.04] rounded-xl text-sm text-white/60 hover:bg-white/[0.08] transition border border-white/[0.06] disabled:opacity-40">
+    <button
+      onClick={handleExport}
+      disabled={exporting}
+      className="flex items-center space-x-2 px-4 py-2.5 bg-white/[0.04] rounded-xl text-sm text-white/60 hover:bg-white/[0.08] transition border border-white/[0.06] disabled:opacity-40"
+    >
       <Download className="w-3.5 h-3.5" />
       <span>{exporting ? 'Exporting...' : 'Export CSV'}</span>
     </button>
@@ -44,67 +56,140 @@ function ContactExportButton({ artist }) {
 export default function ArtistDashboard() {
   const navigate = useNavigate();
   const { artist, isMaster } = useAuth();
-  const [activeTab, setActiveTab] = useState(new URLSearchParams(window.location.search).get('tab') || 'analytics');
-  const [stats, setStats] = useState({ streams: 0, downloads: 0, followers: 0, tracks: 0, likes: 0 });
+
+  const [activeTab, setActiveTab] = useState(
+    new URLSearchParams(window.location.search).get('tab') || 'analytics'
+  );
+  const [stats, setStats] = useState({
+    streams: 0, downloads: 0, followers: 0, tracks: 0, likes: 0,
+  });
   const [topTracks, setTopTracks] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [thought, setThought] = useState('');
+
+  // ── Thought of the Day ──────────────────────────────────────────────────────
+  const [thoughts, setThoughts] = useState([]);       // active thoughts (< 24h old)
+  const [thoughtInput, setThoughtInput] = useState('');
   const [thoughtSaving, setThoughtSaving] = useState(false);
   const [thoughtMsg, setThoughtMsg] = useState('');
+  const [deletingId, setDeletingId] = useState(null);
 
+  // How many thoughts posted so far today
+  const todayCount = thoughts.filter(t => {
+    const posted = new Date(t.created_at);
+    const now = new Date();
+    return (
+      posted.getFullYear() === now.getFullYear() &&
+      posted.getMonth() === now.getMonth() &&
+      posted.getDate() === now.getDate()
+    );
+  }).length;
+
+  const remainingToday = MAX_DAILY_THOUGHTS - todayCount;
+  // ────────────────────────────────────────────────────────────────────────────
+
+  // ── Fetch active thoughts (< 24 h old) for this artist ──────────────────────
+  const fetchThoughts = useCallback(async () => {
+    if (!artist) return;
+    const cutoff = new Date(Date.now() - THOUGHT_TTL_MS).toISOString();
+    const { data, error } = await supabase
+      .from('artist_thoughts')
+      .select('id, content, created_at')
+      .eq('artist_id', artist.id)
+      .gte('created_at', cutoff)
+      .order('created_at', { ascending: false });
+    if (!error) setThoughts(data || []);
+  }, [artist]);
+
+  useEffect(() => {
+    if (artist) fetchThoughts();
+  }, [artist, fetchThoughts]);
+
+  // ── Post a new thought ───────────────────────────────────────────────────────
+  const postThought = async () => {
+    if (!thoughtInput.trim() || !artist) return;
+    if (remainingToday <= 0) {
+      setThoughtMsg('Daily limit reached (3/3). Come back tomorrow!');
+      setTimeout(() => setThoughtMsg(''), 3000);
+      return;
+    }
+    setThoughtSaving(true);
+    const expiresAt = new Date(Date.now() + THOUGHT_TTL_MS).toISOString();
+    const { error } = await supabase.from('artist_thoughts').insert({
+      artist_id: artist.id,
+      content: thoughtInput.trim(),
+      created_at: new Date().toISOString(),
+      expires_at: expiresAt,
+    });
+    setThoughtSaving(false);
+    if (error) {
+      setThoughtMsg('Failed to post');
+    } else {
+      setThoughtInput('');
+      setThoughtMsg('Posted!');
+      fetchThoughts();
+    }
+    setTimeout(() => setThoughtMsg(''), 2500);
+  };
+
+  // ── Delete a thought ─────────────────────────────────────────────────────────
+  const deleteThought = async (id) => {
+    setDeletingId(id);
+    await supabase.from('artist_thoughts').delete().eq('id', id);
+    setThoughts(prev => prev.filter(t => t.id !== id));
+    setDeletingId(null);
+  };
+
+  // ── Analytics ────────────────────────────────────────────────────────────────
   const fetchStats = useCallback(async () => {
     if (!artist) return;
     setLoading(true);
     try {
-      const { data: artistTracks } = await supabase.from('tracks').select('id').eq('artist_id', artist.id);
+      const { data: artistTracks } = await supabase
+        .from('tracks').select('id').eq('artist_id', artist.id);
       const trackIds = (artistTracks || []).map(t => t.id);
 
       let streamCount = 0, dlCount = 0;
       if (trackIds.length > 0) {
-        const { data: streamData } = await supabase.from('tracks').select('stream_count, download_count').eq('artist_id', artist.id);
+        const { data: streamData } = await supabase
+          .from('tracks').select('stream_count, download_count').eq('artist_id', artist.id);
         streamCount = (streamData || []).reduce((s, t) => s + (t.stream_count || 0), 0);
         dlCount = (streamData || []).reduce((s, t) => s + (t.download_count || 0), 0);
       }
 
-      const { count: followCount } = await supabase.from('follows').select('*', { count: 'exact', head: true }).eq('artist_id', artist.id);
+      const { count: followCount } = await supabase
+        .from('follows').select('*', { count: 'exact', head: true }).eq('artist_id', artist.id);
+
       let likeCount = 0;
       if (trackIds.length > 0) {
-        const { count: lc } = await supabase.from('track_likes').select('*', { count: 'exact', head: true }).in('track_id', trackIds);
+        const { count: lc } = await supabase
+          .from('track_likes').select('*', { count: 'exact', head: true }).in('track_id', trackIds);
         likeCount = lc || 0;
       }
-      setStats({ streams: streamCount, downloads: dlCount, followers: followCount || 0, tracks: trackIds.length, likes: likeCount });
 
-      const { data: tracks } = await supabase.from('tracks')
+      setStats({
+        streams: streamCount, downloads: dlCount,
+        followers: followCount || 0, tracks: trackIds.length, likes: likeCount,
+      });
+
+      const { data: tracks } = await supabase
+        .from('tracks')
         .select('id, title, cover_artwork_url, stream_count, download_count')
-        .eq('artist_id', artist.id).order('stream_count', { ascending: false }).limit(5);
+        .eq('artist_id', artist.id)
+        .order('stream_count', { ascending: false })
+        .limit(5);
       setTopTracks(tracks || []);
-    } catch (err) { console.error('Stats error:', err); }
+    } catch (err) {
+      console.error('Stats error:', err);
+    }
     setLoading(false);
   }, [artist]);
 
   useEffect(() => {
-  if (activeTab === 'analytics' && artist) fetchStats();
-}, [activeTab, artist, fetchStats]);
+    if (activeTab === 'analytics' && artist) fetchStats();
+  }, [activeTab, artist, fetchStats]);
 
-useEffect(() => {
-  if (!artist) return;
-  supabase.from('artist_thoughts').select('content').eq('artist_id', artist.id).maybeSingle()
-    .then(({ data }) => { if (data) setThought(data.content); });
-}, [artist]);
-
-  const saveThought = async () => {
-  if (!thought.trim()) return;
-  setThoughtSaving(true);
-  const { error } = await supabase.from('artist_thoughts').upsert(
-    { artist_id: artist.id, content: thought.trim(), updated_at: new Date().toISOString() },
-    { onConflict: 'artist_id' }
-  );
-  setThoughtSaving(false);
-  setThoughtMsg(error ? 'Failed to save' : 'Posted!');
-  setTimeout(() => setThoughtMsg(''), 2500);
-};
-
-if (!artist) {
+  // ── No artist guard ───────────────────────────────────────────────────────────
+  if (!artist) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center px-6">
         <div className="text-center">
@@ -118,24 +203,28 @@ if (!artist) {
 
   const statCards = [
     { icon: Headphones, label: 'Total Streams', value: stats.streams, color: 'text-purple-400' },
-    { icon: Download, label: 'Downloads', value: stats.downloads, color: 'text-blue-400' },
-    { icon: Users, label: 'Followers', value: stats.followers, color: 'text-pink-400' },
-    { icon: Music, label: 'Tracks', value: stats.tracks, color: 'text-green-400' },
-    { icon: Heart, label: 'Likes', value: stats.likes, color: 'text-red-400' },
+    { icon: Download,   label: 'Downloads',     value: stats.downloads, color: 'text-blue-400' },
+    { icon: Users,      label: 'Followers',     value: stats.followers, color: 'text-pink-400' },
+    { icon: Music,      label: 'Tracks',        value: stats.tracks,    color: 'text-green-400' },
+    { icon: Heart,      label: 'Likes',         value: stats.likes,     color: 'text-red-400' },
   ];
 
   const tabs = [
-    { key: 'upload', label: 'Upload', icon: Upload },
-    { key: 'collabs', label: 'Collabs', icon: Users, hasBadge: true },
+    { key: 'upload',    label: 'Upload',    icon: Upload },
+    { key: 'collabs',   label: 'Collabs',   icon: Users, hasBadge: true },
     { key: 'analytics', label: 'Analytics', icon: BarChart3 },
   ];
 
   return (
     <div className="min-h-screen bg-black text-white">
       <div className="max-w-4xl mx-auto px-6 py-8 pb-32">
-        {/* Header */}
+
+        {/* ── Header ── */}
         <div className="flex items-center space-x-3 mb-6">
-          <button onClick={() => navigate('/')} className="w-9 h-9 flex items-center justify-center rounded-full bg-white/[0.06] hover:bg-white/[0.1] transition">
+          <button
+            onClick={() => navigate('/')}
+            className="w-9 h-9 flex items-center justify-center rounded-full bg-white/[0.06] hover:bg-white/[0.1] transition"
+          >
             <ChevronLeft className="w-5 h-5 text-white" />
           </button>
           <div className="flex-1">
@@ -143,17 +232,22 @@ if (!artist) {
               <h1 className="text-xl font-bold text-white">Dashboard</h1>
               <TierBadge size="xs" />
             </div>
-            <p className="text-xs text-white/40">{artist.artist_name} {isMaster ? '(Master)' : ''}</p>
+            <p className="text-xs text-white/40">
+              {artist.artist_name} {isMaster ? '(Master)' : ''}
+            </p>
           </div>
         </div>
 
-        {/* Tab Bar */}
+        {/* ── Tab Bar ── */}
         <div className="flex space-x-1 bg-white/[0.03] rounded-lg p-1 mb-6">
           {tabs.map(({ key, label, icon: Icon, hasBadge }) => (
-            <button key={key} onClick={() => setActiveTab(key)}
+            <button
+              key={key}
+              onClick={() => setActiveTab(key)}
               className={`flex-1 flex items-center justify-center space-x-2 py-2.5 rounded-md text-sm font-medium transition relative ${
                 activeTab === key ? 'bg-white text-black' : 'text-white/50 hover:text-white/70'
-              }`}>
+              }`}
+            >
               <div className="relative">
                 <Icon className="w-4 h-4" />
                 {hasBadge && activeTab !== key && <CollabBadge />}
@@ -163,47 +257,113 @@ if (!artist) {
           ))}
         </div>
 
-        {/* Upload Tab — wrapped with UploadGate for free tier limit */}
+        {/* ── Upload Tab ── */}
         {activeTab === 'upload' && (
-  <UploadGate>
-    <TierGate feature="daily_thought">
-<div className="bg-white/[0.03] rounded-xl p-4 border border-white/[0.06] mb-5">
-  <p className="text-sm font-semibold text-white mb-1">💭 Daily Thought</p>
-      <p className="text-xs text-white/30 mb-3">Share what's on your mind — shows at the top of your profile</p>
-      <textarea
-        rows={3}
-        maxLength={280}
-        value={thought}
-        onChange={e => setThought(e.target.value)}
-        placeholder="What's on your mind today?"
-        className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none resize-none placeholder-white/20"
-      />
-      <div className="flex items-center justify-between mt-2">
-        <span className="text-xs text-white/20">{thought.length}/280</span>
-        <div className="flex items-center space-x-3">
-          {thoughtMsg && <span className="text-xs text-green-400">{thoughtMsg}</span>}
-          <button onClick={saveThought} disabled={thoughtSaving || !thought.trim()}
-            className="px-4 py-1.5 bg-white text-black text-xs font-semibold rounded-lg disabled:opacity-40 transition">
-            {thoughtSaving ? 'Posting...' : 'Post'}
-          </button>
-        </div>
-      </div>
-    </div>
-</TierGate>
-<TrackUploadPanel />
-  </UploadGate>
-)}
+          <UploadGate>
+            <TierGate feature="daily_thought">
+              <div className="bg-white/[0.03] rounded-xl p-4 border border-white/[0.06] mb-5">
 
-        {/* Collabs Tab — request inbox */}
+                {/* Section header */}
+                <div className="flex items-center justify-between mb-1">
+                  <p className="text-sm font-semibold text-white">💭 Thought of the Day</p>
+                  <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                    remainingToday === 0
+                      ? 'bg-red-500/10 text-red-400'
+                      : 'bg-white/[0.06] text-white/30'
+                  }`}>
+                    {remainingToday}/{MAX_DAILY_THOUGHTS} left today
+                  </span>
+                </div>
+                <p className="text-xs text-white/30 mb-3">
+                  Share what's on your mind — appears in the community feed for 24 hours
+                </p>
+
+                {/* Composer */}
+                <textarea
+                  rows={3}
+                  maxLength={280}
+                  value={thoughtInput}
+                  onChange={e => setThoughtInput(e.target.value)}
+                  placeholder="What's on your mind today?"
+                  disabled={remainingToday <= 0}
+                  className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none resize-none placeholder-white/20 disabled:opacity-40"
+                />
+                <div className="flex items-center justify-between mt-2">
+                  <span className="text-xs text-white/20">{thoughtInput.length}/280</span>
+                  <div className="flex items-center space-x-3">
+                    {thoughtMsg && (
+                      <span className={`text-xs ${thoughtMsg.includes('Failed') || thoughtMsg.includes('limit') ? 'text-red-400' : 'text-green-400'}`}>
+                        {thoughtMsg}
+                      </span>
+                    )}
+                    <button
+                      onClick={postThought}
+                      disabled={thoughtSaving || !thoughtInput.trim() || remainingToday <= 0}
+                      className="px-4 py-1.5 bg-white text-black text-xs font-semibold rounded-lg disabled:opacity-40 transition"
+                    >
+                      {thoughtSaving ? 'Posting...' : 'Post'}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Posted thoughts list */}
+                {thoughts.length > 0 && (
+                  <div className="mt-4 space-y-2">
+                    <p className="text-[11px] text-white/20 uppercase tracking-wider font-medium">
+                      Active thoughts
+                    </p>
+                    {thoughts.map(t => {
+                      const expiresAt = new Date(t.created_at).getTime() + THOUGHT_TTL_MS;
+                      const minsLeft = Math.max(0, Math.round((expiresAt - Date.now()) / 60000));
+                      const hrsLeft = Math.floor(minsLeft / 60);
+                      const minRem = minsLeft % 60;
+                      const timeLabel = hrsLeft > 0 ? `${hrsLeft}h ${minRem}m` : `${minsLeft}m`;
+                      return (
+                        <div
+                          key={t.id}
+                          className="flex items-start space-x-3 p-3 bg-white/[0.04] rounded-lg border border-white/[0.05]"
+                        >
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm text-white/80 leading-relaxed">{t.content}</p>
+                            <p className="text-[10px] text-white/20 mt-1">
+                              Expires in {timeLabel}
+                            </p>
+                          </div>
+                          <button
+                            onClick={() => deleteThought(t.id)}
+                            disabled={deletingId === t.id}
+                            className="flex-shrink-0 w-7 h-7 flex items-center justify-center rounded-lg hover:bg-red-500/10 transition"
+                            title="Delete thought"
+                          >
+                            {deletingId === t.id
+                              ? <Loader className="w-3.5 h-3.5 animate-spin text-white/30" />
+                              : <Trash2 className="w-3.5 h-3.5 text-white/20 hover:text-red-400 transition" />
+                            }
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </TierGate>
+
+            <TrackUploadPanel />
+          </UploadGate>
+        )}
+
+        {/* ── Collabs Tab ── */}
         {activeTab === 'collabs' && <CollabRequests />}
 
-        {/* Analytics Tab â€" locked behind Pro tier */}
+        {/* ── Analytics Tab ── */}
         {activeTab === 'analytics' && (
           <TierGate feature="analytics">
             <style>{`.recharts-wrapper { overflow: visible !important; } .recharts-surface { overflow: visible !important; }`}</style>
             <div className="space-y-6">
               {loading ? (
-                <div className="flex justify-center py-16"><Loader className="w-6 h-6 animate-spin text-white/30" /></div>
+                <div className="flex justify-center py-16">
+                  <Loader className="w-6 h-6 animate-spin text-white/30" />
+                </div>
               ) : (
                 <>
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
@@ -218,13 +378,13 @@ if (!artist) {
                     ))}
                   </div>
 
-                  {/* Contact Export - Premium only */}
+                  {/* Contact Export — Premium only */}
                   <TierGate feature="advanced_analytics" inline>
                     <div className="bg-white/[0.03] rounded-xl p-4 border border-white/[0.06]">
                       <div className="flex items-center justify-between">
                         <div>
                           <p className="text-sm font-semibold text-white">Follower Contacts</p>
-                          <p className="text-xs text-white/30 mt-0.5">Export your followers\u2019 names and emails</p>
+                          <p className="text-xs text-white/30 mt-0.5">Export your followers' names and emails</p>
                         </div>
                         <ContactExportButton artist={artist} />
                       </div>
@@ -253,7 +413,9 @@ if (!artist) {
                           </div>
                         </div>
                       ))}
-                      {topTracks.length === 0 && <p className="text-center text-white/20 text-sm py-6">No tracks yet</p>}
+                      {topTracks.length === 0 && (
+                        <p className="text-center text-white/20 text-sm py-6">No tracks yet</p>
+                      )}
                     </div>
                   </div>
                 </>
@@ -261,9 +423,8 @@ if (!artist) {
             </div>
           </TierGate>
         )}
+
       </div>
     </div>
   );
 }
-
-
