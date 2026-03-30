@@ -1,3 +1,4 @@
+import { Helmet } from 'react-helmet-async';
 import React, { useState, useEffect } from 'react';
 import TrackActionSheet from '../components/TrackActionSheet';
 import { downloadTrack } from '../utils/downloadTrack';
@@ -15,6 +16,7 @@ import {
 } from 'lucide-react';
 
 const PAYPAL_CLIENT_ID = process.env.REACT_APP_PAYPAL_CLIENT_ID;
+const BASE_URL = 'https://www.feelzmachine.com';
 
 function formatDuration(s) {
   if (!s) return '';
@@ -50,7 +52,6 @@ export default function AlbumDetailPage() {
   const [showNewPlaylist, setShowNewPlaylist] = useState(false);
   const [newPlaylistName, setNewPlaylistName] = useState('');
   const [creatingPlaylist, setCreatingPlaylist] = useState(false);
-
   const [actionSheetTrack, setActionSheetTrack] = useState(null);
   const [purchaseTarget, setPurchaseTarget] = useState(null);
   const [paypalReady, setPaypalReady] = useState(false);
@@ -61,7 +62,6 @@ export default function AlbumDetailPage() {
   useEffect(() => { fetchAlbum(); }, [id]);
   useEffect(() => { if (user && showAddToPlaylist) fetchPlaylists(); }, [showAddToPlaylist, user]);
 
-  // Load PayPal when purchase modal opens — only for paid items
   useEffect(() => {
     if (!purchaseTarget) return;
     if (!purchaseTarget.price || purchaseTarget.price <= 0) return;
@@ -83,7 +83,6 @@ export default function AlbumDetailPage() {
     const container = document.getElementById('paypal-album-container');
     if (!container) return;
     container.innerHTML = '';
-
     window.paypal.Buttons({
       style: { layout: 'vertical', color: 'gold', shape: 'rect', label: 'pay' },
       createOrder: async () => {
@@ -112,7 +111,6 @@ export default function AlbumDetailPage() {
           });
           const captureData = await res.json();
           if (!captureData.success) throw new Error('Payment capture failed');
-
           if (purchaseTarget.type === 'album') {
             for (const t of tracks) {
               await supabase.from('downloads')
@@ -132,14 +130,10 @@ export default function AlbumDetailPage() {
               body: JSON.stringify({ track_id: purchaseTarget.track.id, transaction_id: captureData.captureId, total_amount: purchaseTarget.price, buyer_user_id: user.id }),
             }).catch(() => {});
           }
-
           setPurchaseSuccess(true); setPurchasing(false);
           setTimeout(async () => {
-            if (purchaseTarget.type === 'album') {
-              await triggerAlbumDownload();
-            } else {
-              await triggerDownload(purchaseTarget.track);
-            }
+            if (purchaseTarget.type === 'album') { await triggerAlbumDownload(); }
+            else { await triggerDownload(purchaseTarget.track); }
             setPurchaseTarget(null); setPurchaseSuccess(false);
           }, 1500);
         } catch (err) { setPurchaseError(err.message); setPurchasing(false); }
@@ -155,15 +149,13 @@ export default function AlbumDetailPage() {
       const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
       let albumData = null;
       if (isUUID) {
-        const { data } = await supabase
-          .from('albums')
+        const { data } = await supabase.from('albums')
           .select('*, artists(id, artist_name, slug, profile_image_url, is_verified)')
           .eq('id', id).maybeSingle();
         albumData = data;
       }
       if (!albumData) {
-        const { data: bySlug } = await supabase
-          .from('albums')
+        const { data: bySlug } = await supabase.from('albums')
           .select('*, artists(id, artist_name, slug, profile_image_url, is_verified)')
           .eq('slug', id).maybeSingle();
         albumData = bySlug;
@@ -171,8 +163,7 @@ export default function AlbumDetailPage() {
       if (!albumData) { navigate('/browse'); return; }
       setAlbum(albumData);
       setArtist(albumData.artists);
-      const { data: trackData } = await supabase
-        .from('tracks').select('*')
+      const { data: trackData } = await supabase.from('tracks').select('*')
         .eq('album_id', albumData.id).eq('is_published', true)
         .order('track_number', { ascending: true });
       setTracks(trackData || []);
@@ -238,16 +229,13 @@ export default function AlbumDetailPage() {
     return 0;
   };
 
-  // Triggers download — backend handles purchase record via upsert for free tracks
   const triggerDownload = async (track) => {
     setDownloading(track.id);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) throw new Error('Not authenticated');
       await downloadTrack(track.id, track.title, session.access_token);
-    } catch (err) {
-      console.error('Download failed:', err.message);
-    }
+    } catch (err) { console.error('Download failed:', err.message); }
     setDownloading(null);
   };
 
@@ -259,10 +247,8 @@ export default function AlbumDetailPage() {
       if (track.file_url) {
         try {
           await downloadTrack(track.id, track.title, session.access_token);
-          await new Promise(r => setTimeout(r, 800)); // stagger downloads
-        } catch (err) {
-          console.error(`Failed to download ${track.title}:`, err.message);
-        }
+          await new Promise(r => setTimeout(r, 800));
+        } catch (err) { console.error(`Failed to download ${track.title}:`, err.message); }
       }
     }
     setDownloadingAll(false);
@@ -272,21 +258,15 @@ export default function AlbumDetailPage() {
     e.stopPropagation();
     if (!user) { navigate('/login'); return; }
     const price = getTrackPrice(track);
-    if (price > 0) {
-      setPurchaseTarget({ type: 'track', track, price, label: track.title });
-    } else {
-      triggerDownload(track);
-    }
+    if (price > 0) { setPurchaseTarget({ type: 'track', track, price, label: track.title }); }
+    else { triggerDownload(track); }
   };
 
   const handleAlbumDownload = () => {
     if (!user) { navigate('/login'); return; }
     const price = album?.price || 0;
-    if (price > 0) {
-      setPurchaseTarget({ type: 'album', price, label: `${album.title} (Full Album)` });
-    } else {
-      triggerAlbumDownload();
-    }
+    if (price > 0) { setPurchaseTarget({ type: 'album', price, label: `${album.title} (Full Album)` }); }
+    else { triggerAlbumDownload(); }
   };
 
   const handleAddToPlaylist = async (playlistId, trackId) => {
@@ -305,24 +285,18 @@ export default function AlbumDetailPage() {
     const name = newPlaylistName.trim();
     if (!name || creatingPlaylist) return;
     setCreatingPlaylist(true);
-    const { data, error } = await supabase
-      .from('playlists')
-      .insert({ name, user_id: user.id })
-      .select('id, name')
-      .single();
+    const { data, error } = await supabase.from('playlists').insert({ name, user_id: user.id }).select('id, name').single();
     if (!error && data) {
       setPlaylists(prev => [...prev, data]);
       await handleAddToPlaylist(data.id, trackId);
     }
-    setNewPlaylistName('');
-    setShowNewPlaylist(false);
-    setCreatingPlaylist(false);
+    setNewPlaylistName(''); setShowNewPlaylist(false); setCreatingPlaylist(false);
   };
 
-  const totalDuration = tracks.reduce((sum, t) => sum + (t.duration || 0), 0);
-  const totalMins = Math.round(totalDuration / 60);
+  const totalDuration   = tracks.reduce((sum, t) => sum + (t.duration || 0), 0);
+  const totalMins       = Math.round(totalDuration / 60);
   const allDownloadable = tracks.some(t => t.is_downloadable);
-  const albumPrice = album?.price || 0;
+  const albumPrice      = album?.price || 0;
 
   if (loading) return (
     <div className="min-h-screen bg-black flex items-center justify-center">
@@ -332,8 +306,32 @@ export default function AlbumDetailPage() {
 
   if (!album) return null;
 
+  const pageUrl   = `${BASE_URL}/album/${id}`;
+  const ogImage   = album.cover_artwork_url || `${BASE_URL}/og-default.png`;
+  const pageTitle = `${album.title} by ${artist?.artist_name} · Feelz Machine`;
+  const pageDesc  = album.description
+    ? `${album.description.slice(0, 120)}${album.description.length > 120 ? '...' : ''}`
+    : `Stream ${album.title} by ${artist?.artist_name} on Feelz Machine.`;
+
   return (
     <div className="min-h-screen bg-black text-white pb-32">
+
+      {/* ── Dynamic head tags ── */}
+      <Helmet>
+        <title>{pageTitle}</title>
+        <meta name="description" content={pageDesc} />
+        <link rel="canonical" href={pageUrl} />
+        <meta property="og:title" content={pageTitle} />
+        <meta property="og:description" content={pageDesc} />
+        <meta property="og:url" content={pageUrl} />
+        <meta property="og:image" content={ogImage} />
+        <meta property="og:type" content="music.album" />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content={pageTitle} />
+        <meta name="twitter:description" content={pageDesc} />
+        <meta name="twitter:image" content={ogImage} />
+      </Helmet>
+
       {/* Header */}
       <div className="relative">
         <div className="relative h-64 overflow-hidden">
@@ -388,15 +386,9 @@ export default function AlbumDetailPage() {
             style={{ backgroundColor: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.8)' }}>
             {downloadingAll
               ? <Loader className="w-4 h-4 animate-spin" />
-              : albumPrice > 0
-                ? <ShoppingCart className="w-4 h-4" />
-                : <Download className="w-4 h-4" />}
+              : albumPrice > 0 ? <ShoppingCart className="w-4 h-4" /> : <Download className="w-4 h-4" />}
             <span>
-              {downloadingAll
-                ? 'Downloading...'
-                : albumPrice > 0
-                  ? `Buy Album · $${albumPrice.toFixed(2)}`
-                  : 'Download All'}
+              {downloadingAll ? 'Downloading...' : albumPrice > 0 ? `Buy Album · $${albumPrice.toFixed(2)}` : 'Download All'}
             </span>
           </button>
         )}
@@ -416,7 +408,6 @@ export default function AlbumDetailPage() {
           const isActive = currentTrack?.id === track.id;
           const isTrackPlaying = isActive && isPlaying;
           const trackPrice = getTrackPrice(track);
-
           return (
             <div key={track.id} className="relative">
               <div className={`flex items-center space-x-3 px-2 py-3 rounded-xl transition ${isActive ? 'bg-white/[0.06]' : 'hover:bg-white/[0.03]'}`}>
@@ -456,17 +447,13 @@ export default function AlbumDetailPage() {
                       style={{ backgroundColor: 'rgba(255,255,255,0.06)' }}>
                       {downloading === track.id
                         ? <Loader className="w-3.5 h-3.5 animate-spin text-white/40" />
-                        : trackPrice > 0
-                          ? <ShoppingCart className="w-3.5 h-3.5 text-white/50" />
-                          : <Download className="w-3.5 h-3.5 text-white/50" />}
+                        : trackPrice > 0 ? <ShoppingCart className="w-3.5 h-3.5 text-white/50" /> : <Download className="w-3.5 h-3.5 text-white/50" />}
                       {trackPrice > 0 && <span className="text-[11px] font-semibold text-white/60">${trackPrice.toFixed(2)}</span>}
                     </button>
                   )}
                 </div>
               </div>
-              <TrackVersions
-                track={track}
-                albumPrice={albumPrice}
+              <TrackVersions track={track} albumPrice={albumPrice}
                 onPlayVersion={(version) => playTrack(
                   { ...version, artist_name: artist?.artist_name },
                   tracks.map(t => ({ ...t, artist_name: artist?.artist_name }))
@@ -474,15 +461,10 @@ export default function AlbumDetailPage() {
                 onPurchaseRequired={(t) => {
                   const price = getTrackPrice(t);
                   if (price > 0) setPurchaseTarget({ type: 'track', track: t, price, label: t.title });
-                }}
-              />
-
-              {/* Add to playlist dropdown */}
+                }} />
               {showAddToPlaylist === track.id && (
-                <div
-                  className="absolute right-4 z-50 w-64 bg-zinc-900 border border-white/[0.08] rounded-xl shadow-2xl overflow-hidden"
-                  style={{ top: '100%', marginTop: '4px' }}
-                >
+                <div className="absolute right-4 z-50 w-64 bg-zinc-900 border border-white/[0.08] rounded-xl shadow-2xl overflow-hidden"
+                  style={{ top: '100%', marginTop: '4px' }}>
                   <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.06]">
                     <p className="text-xs font-semibold text-white/60">Add to Playlist</p>
                     <button onClick={() => { setShowAddToPlaylist(null); setShowNewPlaylist(false); setNewPlaylistName(''); }}>
@@ -491,8 +473,7 @@ export default function AlbumDetailPage() {
                   </div>
                   {showNewPlaylist ? (
                     <div className="flex items-center space-x-2 px-3 py-2 border-b border-white/[0.05]">
-                      <input
-                        autoFocus type="text" value={newPlaylistName}
+                      <input autoFocus type="text" value={newPlaylistName}
                         onChange={e => setNewPlaylistName(e.target.value)}
                         onKeyDown={e => {
                           if (e.key === 'Enter') handleCreatePlaylist(track.id);
@@ -500,37 +481,26 @@ export default function AlbumDetailPage() {
                         }}
                         placeholder="Playlist name"
                         className="flex-1 bg-white/[0.06] text-white text-xs rounded-lg px-2.5 py-1.5 outline-none placeholder:text-white/25 border border-white/[0.08] focus:border-white/20"
-                        maxLength={60}
-                      />
-                      <button
-                        onClick={() => handleCreatePlaylist(track.id)}
+                        maxLength={60} />
+                      <button onClick={() => handleCreatePlaylist(track.id)}
                         disabled={!newPlaylistName.trim() || creatingPlaylist}
-                        className="px-2.5 py-1.5 rounded-lg text-xs font-semibold text-black bg-white disabled:opacity-40 flex-shrink-0"
-                      >
+                        className="px-2.5 py-1.5 rounded-lg text-xs font-semibold text-black bg-white disabled:opacity-40 flex-shrink-0">
                         {creatingPlaylist ? <Loader className="w-3 h-3 animate-spin" /> : 'Create'}
                       </button>
                     </div>
                   ) : (
-                    <button
-                      onClick={() => setShowNewPlaylist(true)}
-                      className="w-full flex items-center space-x-2 px-4 py-2.5 hover:bg-white/[0.04] transition text-left border-b border-white/[0.05]"
-                    >
+                    <button onClick={() => setShowNewPlaylist(true)}
+                      className="w-full flex items-center space-x-2 px-4 py-2.5 hover:bg-white/[0.04] transition text-left border-b border-white/[0.05]">
                       <span className="text-xs text-white/50">+ New playlist</span>
                     </button>
                   )}
                   {playlists.length === 0 && !showNewPlaylist ? (
-                    <div className="px-4 py-3">
-                      <p className="text-xs text-white/30">No playlists yet — create one above</p>
-                    </div>
+                    <div className="px-4 py-3"><p className="text-xs text-white/30">No playlists yet — create one above</p></div>
                   ) : playlists.map(pl => {
                     const key = `${pl.id}-${track.id}`;
                     return (
-                      <button
-                        key={pl.id}
-                        onClick={() => handleAddToPlaylist(pl.id, track.id)}
-                        disabled={addingTo === pl.id}
-                        className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-white/[0.04] transition text-left"
-                      >
+                      <button key={pl.id} onClick={() => handleAddToPlaylist(pl.id, track.id)} disabled={addingTo === pl.id}
+                        className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-white/[0.04] transition text-left">
                         <span className="text-sm text-white/70 truncate">{pl.name}</span>
                         {addedTo[key] && <Check className="w-3.5 h-3.5 text-green-400 flex-shrink-0" />}
                       </button>
@@ -543,19 +513,13 @@ export default function AlbumDetailPage() {
         })}
       </div>
 
-      {/* Collaborator credits */}
       {tracks.some(t => t.id) && (
         <div className="px-4 mt-2 space-y-3">
-          {tracks.map(track => (
-            <TrackCredits key={track.id} trackId={track.id} />
-          ))}
+          {tracks.map(track => <TrackCredits key={track.id} trackId={track.id} />)}
         </div>
       )}
 
-      <PaidPlayGate
-        track={limitedTrack}
-        artist={artist}
-        onClose={() => setLimitedTrack(null)}
+      <PaidPlayGate track={limitedTrack} artist={artist} onClose={() => setLimitedTrack(null)}
         onPurchaseComplete={(t) => {
           resetPlayCount(t.id);
           playTrack(
@@ -563,10 +527,8 @@ export default function AlbumDetailPage() {
             tracks.map(tr => ({ ...tr, artist_name: artist?.artist_name }))
           );
           setLimitedTrack(null);
-        }}
-      />
+        }} />
 
-      {/* Purchase modal */}
       {purchaseTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
           style={{ backgroundColor: 'rgba(0,0,0,0.85)' }}
