@@ -4,14 +4,11 @@ import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import {
   BarChart3, Download, Music, Loader,
-  Upload, ChevronLeft, Headphones, Heart, TrendingUp, Users, Trash2
+  Upload, ChevronLeft, Headphones, Heart, TrendingUp, Users
 } from 'lucide-react';
 import TrackUploadPanel from './TrackUploadPanel';
 import CollabRequests, { CollabBadge } from '../components/CollabRequests';
 import TierGate, { UploadGate, TierBadge } from '../components/TierGate';
-
-const MAX_DAILY_THOUGHTS = 3;
-const THOUGHT_TTL_MS = 24 * 60 * 60 * 1000;
 
 function ContactExportButton({ artist }) {
   const [exporting, setExporting] = React.useState(false);
@@ -66,79 +63,6 @@ export default function ArtistDashboard() {
   const [topTracks, setTopTracks] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  // ── Thought of the Day ──────────────────────────────────────────────────────
-  const [thoughts, setThoughts] = useState([]);       // active thoughts (< 24h old)
-  const [thoughtInput, setThoughtInput] = useState('');
-  const [thoughtSaving, setThoughtSaving] = useState(false);
-  const [thoughtMsg, setThoughtMsg] = useState('');
-  const [deletingId, setDeletingId] = useState(null);
-
-  // How many thoughts posted so far today
-  const todayCount = thoughts.filter(t => {
-    const posted = new Date(t.created_at);
-    const now = new Date();
-    return (
-      posted.getFullYear() === now.getFullYear() &&
-      posted.getMonth() === now.getMonth() &&
-      posted.getDate() === now.getDate()
-    );
-  }).length;
-
-  const remainingToday = MAX_DAILY_THOUGHTS - todayCount;
-  // ────────────────────────────────────────────────────────────────────────────
-
-  // ── Fetch active thoughts (< 24 h old) for this artist ──────────────────────
-  const fetchThoughts = useCallback(async () => {
-    if (!artist) return;
-    const cutoff = new Date(Date.now() - THOUGHT_TTL_MS).toISOString();
-    const { data, error } = await supabase
-      .from('artist_thoughts')
-      .select('id, content, created_at')
-      .eq('artist_id', artist.id)
-      .gte('created_at', cutoff)
-      .order('created_at', { ascending: false });
-    if (!error) setThoughts(data || []);
-  }, [artist]);
-
-  useEffect(() => {
-    if (artist) fetchThoughts();
-  }, [artist, fetchThoughts]);
-
-  // ── Post a new thought ───────────────────────────────────────────────────────
-  const postThought = async () => {
-    if (!thoughtInput.trim() || !artist) return;
-    if (remainingToday <= 0) {
-      setThoughtMsg('Daily limit reached (3/3). Come back tomorrow!');
-      setTimeout(() => setThoughtMsg(''), 3000);
-      return;
-    }
-    setThoughtSaving(true);
-    const expiresAt = new Date(Date.now() + THOUGHT_TTL_MS).toISOString();
-    const { error } = await supabase.from('artist_thoughts').insert({
-      artist_id: artist.id,
-      content: thoughtInput.trim(),
-      created_at: new Date().toISOString(),
-      expires_at: expiresAt,
-    });
-    setThoughtSaving(false);
-    if (error) {
-      setThoughtMsg('Failed to post');
-    } else {
-      setThoughtInput('');
-      setThoughtMsg('Posted!');
-      fetchThoughts();
-    }
-    setTimeout(() => setThoughtMsg(''), 2500);
-  };
-
-  // ── Delete a thought ─────────────────────────────────────────────────────────
-  const deleteThought = async (id) => {
-    setDeletingId(id);
-    await supabase.from('artist_thoughts').delete().eq('id', id);
-    setThoughts(prev => prev.filter(t => t.id !== id));
-    setDeletingId(null);
-  };
-
   // ── Analytics ────────────────────────────────────────────────────────────────
   const fetchStats = useCallback(async () => {
     if (!artist) return;
@@ -153,7 +77,7 @@ export default function ArtistDashboard() {
         const { data: streamData } = await supabase
           .from('tracks').select('stream_count, download_count').eq('artist_id', artist.id);
         streamCount = (streamData || []).reduce((s, t) => s + (t.stream_count || 0), 0);
-        dlCount = (streamData || []).reduce((s, t) => s + (t.download_count || 0), 0);
+        dlCount     = (streamData || []).reduce((s, t) => s + (t.download_count || 0), 0);
       }
 
       const { count: followCount } = await supabase
@@ -202,7 +126,7 @@ export default function ArtistDashboard() {
   }
 
   const statCards = [
-    { icon: Headphones, label: 'Total Streams', value: stats.streams, color: 'text-purple-400' },
+    { icon: Headphones, label: 'Total Streams', value: stats.streams,   color: 'text-purple-400' },
     { icon: Download,   label: 'Downloads',     value: stats.downloads, color: 'text-blue-400' },
     { icon: Users,      label: 'Followers',     value: stats.followers, color: 'text-pink-400' },
     { icon: Music,      label: 'Tracks',        value: stats.tracks,    color: 'text-green-400' },
@@ -260,94 +184,6 @@ export default function ArtistDashboard() {
         {/* ── Upload Tab ── */}
         {activeTab === 'upload' && (
           <UploadGate>
-            <TierGate feature="daily_thought">
-              <div className="bg-white/[0.03] rounded-xl p-4 border border-white/[0.06] mb-5">
-
-                {/* Section header */}
-                <div className="flex items-center justify-between mb-1">
-                  <p className="text-sm font-semibold text-white">💭 Thought of the Day</p>
-                  <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                    remainingToday === 0
-                      ? 'bg-red-500/10 text-red-400'
-                      : 'bg-white/[0.06] text-white/30'
-                  }`}>
-                    {remainingToday}/{MAX_DAILY_THOUGHTS} left today
-                  </span>
-                </div>
-                <p className="text-xs text-white/30 mb-3">
-                  Share what's on your mind — appears in the community feed for 24 hours
-                </p>
-
-                {/* Composer */}
-                <textarea
-                  rows={3}
-                  maxLength={280}
-                  value={thoughtInput}
-                  onChange={e => setThoughtInput(e.target.value)}
-                  placeholder="What's on your mind today?"
-                  disabled={remainingToday <= 0}
-                  className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none resize-none placeholder-white/20 disabled:opacity-40"
-                />
-                <div className="flex items-center justify-between mt-2">
-                  <span className="text-xs text-white/20">{thoughtInput.length}/280</span>
-                  <div className="flex items-center space-x-3">
-                    {thoughtMsg && (
-                      <span className={`text-xs ${thoughtMsg.includes('Failed') || thoughtMsg.includes('limit') ? 'text-red-400' : 'text-green-400'}`}>
-                        {thoughtMsg}
-                      </span>
-                    )}
-                    <button
-                      onClick={postThought}
-                      disabled={thoughtSaving || !thoughtInput.trim() || remainingToday <= 0}
-                      className="px-4 py-1.5 bg-white text-black text-xs font-semibold rounded-lg disabled:opacity-40 transition"
-                    >
-                      {thoughtSaving ? 'Posting...' : 'Post'}
-                    </button>
-                  </div>
-                </div>
-
-                {/* Posted thoughts list */}
-                {thoughts.length > 0 && (
-                  <div className="mt-4 space-y-2">
-                    <p className="text-[11px] text-white/20 uppercase tracking-wider font-medium">
-                      Active thoughts
-                    </p>
-                    {thoughts.map(t => {
-                      const expiresAt = new Date(t.created_at).getTime() + THOUGHT_TTL_MS;
-                      const minsLeft = Math.max(0, Math.round((expiresAt - Date.now()) / 60000));
-                      const hrsLeft = Math.floor(minsLeft / 60);
-                      const minRem = minsLeft % 60;
-                      const timeLabel = hrsLeft > 0 ? `${hrsLeft}h ${minRem}m` : `${minsLeft}m`;
-                      return (
-                        <div
-                          key={t.id}
-                          className="flex items-start space-x-3 p-3 bg-white/[0.04] rounded-lg border border-white/[0.05]"
-                        >
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm text-white/80 leading-relaxed">{t.content}</p>
-                            <p className="text-[10px] text-white/20 mt-1">
-                              Expires in {timeLabel}
-                            </p>
-                          </div>
-                          <button
-                            onClick={() => deleteThought(t.id)}
-                            disabled={deletingId === t.id}
-                            className="flex-shrink-0 w-7 h-7 flex items-center justify-center rounded-lg hover:bg-red-500/10 transition"
-                            title="Delete thought"
-                          >
-                            {deletingId === t.id
-                              ? <Loader className="w-3.5 h-3.5 animate-spin text-white/30" />
-                              : <Trash2 className="w-3.5 h-3.5 text-white/20 hover:text-red-400 transition" />
-                            }
-                          </button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            </TierGate>
-
             <TrackUploadPanel />
           </UploadGate>
         )}
