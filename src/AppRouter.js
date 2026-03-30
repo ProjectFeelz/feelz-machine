@@ -37,14 +37,17 @@ import AlbumDetailPage from './pages/AlbumDetailPage';
 import AdminUserBehaviorPage from './pages/AdminUserBehaviorPage';
 
 export default function AppRouter() {
-      return (
-              <BrowserRouter>
-                <AuthProvider>
-                  <PlayerProvider>
-                    <Routes>
-      {/* Legacy /player/* redirects for any old bookmarks/links */}
-                      <Route path="/player" element={<Navigate to="/" replace />} />
+  return (
+    <BrowserRouter>
+      <AuthProvider>
+        <PlayerProvider>
+          <Routes>
+            {/* Legacy /player/* redirects */}
+            <Route path="/player" element={<Navigate to="/" replace />} />
             <Route path="/player/*" element={<Navigate to="/" replace />} />
+
+            {/* Fix: /terms was broken — redirect to correct route */}
+            <Route path="/terms" element={<Navigate to="/terms-of-use" replace />} />
 
             <Route path="/login" element={<LoginPage />} />
             <Route path="/setup" element={<ProfileSetup />} />
@@ -53,8 +56,9 @@ export default function AppRouter() {
             <Route path="/chat/:roomId" element={<ChatRoomView />} />
             <Route path="/privacy-policy" element={<PrivacyPolicy />} />
             <Route path="/terms-of-use" element={<TermsOfUse />} />
+
             <Route element={<AppLayout />}>
-                  <Route path="/" element={<HomePage />} />
+              <Route path="/" element={<HomePage />} />
               <Route path="/browse" element={<BrowsePage />} />
               <Route path="/library" element={<LibraryPage />} />
               <Route path="/library/likes" element={<LikedSongsPage />} />
@@ -80,10 +84,13 @@ export default function AppRouter() {
               <Route path="/admin/boost" element={<AdminBoost />} />
               <Route path="/admin/broadcast" element={<AdminBroadcast />} />
               <Route path="/admin/behavior" element={<AdminUserBehaviorPage />} />
-    </Route>
-    </Routes>
-    </PlayerProvider>
-    </AuthProvider>
+
+              {/* Catch-all: unknown routes redirect home instead of blank screen */}
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Route>
+          </Routes>
+        </PlayerProvider>
+      </AuthProvider>
     </BrowserRouter>
   );
 }
