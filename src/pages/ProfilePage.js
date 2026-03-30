@@ -1,3 +1,4 @@
+import { Helmet } from 'react-helmet-async';
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
@@ -219,6 +220,11 @@ export default function ProfilePage() {
 
   return (
     <div className="pt-12 md:pt-0 pb-8 px-4 md:px-0">
+      <Helmet>
+        <title>Profile · Feelz Machine</title>
+        <meta name="description" content="Manage your Feelz Machine artist profile, theme, social links and payments." />
+        <link rel="canonical" href="https://www.feelzmachine.com/profile" />
+      </Helmet>
 
       <h1 className="text-2xl font-bold text-white mb-5 sticky top-0 z-20
         bg-black/90 backdrop-blur-sm md:relative md:top-auto md:bg-transparent
