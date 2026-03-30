@@ -25,7 +25,6 @@ export default function TierGate({ feature, children, inline = false, fallback }
   const navigate = useNavigate();
   const { hasFeature, getFeatureInfo, tierSlug, tierLoading } = useTier();
 
-  // While tier is still loading, render children optimistically to avoid flash
   if (tierLoading) return <>{children}</>;
 
   const unlocked = hasFeature(feature);
