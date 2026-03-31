@@ -89,6 +89,18 @@ const FEATURE_LABELS = {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [artist?.id, isAdmin]);
 
+  // Re-check tier when user returns from Safari (iOS PayPal hop)
+  useEffect(() => {
+    if (!artist?.id || isAdmin) return;
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        fetchTier(artist.id);
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, [artist?.id, isAdmin]);
+
   const fetchTier = async (artistId) => {
     if (!artistId) return;
     try {
