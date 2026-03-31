@@ -41,6 +41,24 @@ export default function TrackPage() {
   const [downloading, setDownloading] = useState(false);
   const [copied, setCopied]         = useState(false);
   const [showActionSheet, setShowActionSheet] = useState(false);
+  const [alreadyPurchased, setAlreadyPurchased] = useState(false);
+
+  const checkExistingPurchase = async (trackId) => {
+    if (!user) return;
+    const { data } = await supabase.from('downloads').select('id')
+      .eq('user_id', user.id).eq('track_id', trackId).maybeSingle();
+    if (data) setAlreadyPurchased(true);
+  };
+
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible' && track && user) {
+        checkExistingPurchase(track.id);
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, [user, track]);
 
   const isActive  = currentTrack?.id === track?.id;
   const isCurrentPlaying = isActive && isPlaying;
@@ -73,6 +91,7 @@ export default function TrackPage() {
           .eq('user_id', user.id)
           .maybeSingle();
         setLiked(!!likeData);
+      await checkExistingPurchase(trackData.id);
       }
 
       // Fetch full artist discography for queue
@@ -305,15 +324,28 @@ export default function TrackPage() {
 
         {/* Download */}
         {track.is_downloadable && (
-          <button
-            onClick={handleDownload}
-            disabled={downloading}
-            className="w-11 h-11 flex items-center justify-center rounded-full bg-white/[0.06] hover:bg-white/[0.1] transition active:scale-90 disabled:opacity-40"
-          >
-            {downloading
-              ? <Loader className="w-5 h-5 animate-spin text-white/40" />
-              : <Download className="w-5 h-5 text-white/40" />}
-          </button>
+          alreadyPurchased ? (
+            <button
+              onClick={handleDownload}
+              disabled={downloading}
+              className="flex items-center space-x-1.5 px-4 py-2.5 rounded-full bg-white/[0.06] hover:bg-white/[0.1] transition active:scale-90 disabled:opacity-40 text-sm text-white/60 font-medium"
+            >
+              {downloading
+                ? <Loader className="w-4 h-4 animate-spin text-white/40" />
+                : <Download className="w-4 h-4 text-white/40" />}
+              <span>Download</span>
+            </button>
+          ) : (
+            <button
+              onClick={handleDownload}
+              disabled={downloading}
+              className="w-11 h-11 flex items-center justify-center rounded-full bg-white/[0.06] hover:bg-white/[0.1] transition active:scale-90 disabled:opacity-40"
+            >
+              {downloading
+                ? <Loader className="w-5 h-5 animate-spin text-white/40" />
+                : <Download className="w-5 h-5 text-white/40" />}
+            </button>
+          )
         )}
 
         {/* View artist */}
