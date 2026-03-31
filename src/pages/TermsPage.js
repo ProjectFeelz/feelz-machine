@@ -3,20 +3,24 @@ import { Helmet } from 'react-helmet-async';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, ChevronDown, ChevronUp } from 'lucide-react';
 
-const BASE_URL       = 'https://www.feelzmachine.com';
-const LAST_UPDATED   = 'March 2026';
-const PLATFORM_NAME  = 'Feelz Machine';
-const COMPANY        = 'Project Feelz';
-const CONTACT_EMAIL  = 'legal@projectfeelz.com';
+const BASE_URL      = 'https://www.feelzmachine.com';
+const LAST_UPDATED  = 'March 2026';
+const PLATFORM_NAME = 'Feelz Machine';
+const COMPANY       = 'Project Feelz';
+const CONTACT_EMAIL = 'legal@projectfeelz.com';
 
 function Section({ title, children }) {
   const [open, setOpen] = useState(true);
   return (
     <div className="border border-white/[0.06] rounded-xl overflow-hidden mb-3">
-      <button onClick={() => setOpen(p => !p)}
-        className="w-full flex items-center justify-between px-5 py-4 hover:bg-white/[0.02] transition text-left">
+      <button
+        onClick={() => setOpen(p => !p)}
+        className="w-full flex items-center justify-between px-5 py-4 hover:bg-white/[0.02] transition text-left"
+      >
         <h2 className="text-sm font-semibold text-white">{title}</h2>
-        {open ? <ChevronUp className="w-4 h-4 text-white/30 flex-shrink-0" /> : <ChevronDown className="w-4 h-4 text-white/30 flex-shrink-0" />}
+        {open
+          ? <ChevronUp className="w-4 h-4 text-white/30 flex-shrink-0" />
+          : <ChevronDown className="w-4 h-4 text-white/30 flex-shrink-0" />}
       </button>
       {open && (
         <div className="px-5 pb-5 text-sm text-white/50 leading-relaxed space-y-3">
@@ -27,7 +31,7 @@ function Section({ title, children }) {
   );
 }
 
-export default function TermsPage() {
+export default function TermsOfUse() {
   const navigate = useNavigate();
 
   return (
@@ -41,6 +45,8 @@ export default function TermsPage() {
       </Helmet>
 
       <div className="max-w-2xl mx-auto px-4">
+
+        {/* Header */}
         <div className="flex items-center space-x-3 py-6 mb-2">
           <button onClick={() => navigate(-1)} className="p-2 -ml-2 hover:bg-white/[0.05] rounded-lg transition">
             <ArrowLeft className="w-5 h-5 text-white/40" />
@@ -51,6 +57,7 @@ export default function TermsPage() {
           </div>
         </div>
 
+        {/* Intro */}
         <div className="rounded-xl p-4 mb-6 border border-white/[0.05]" style={{ backgroundColor: 'rgba(255,255,255,0.02)' }}>
           <p className="text-sm text-white/50 leading-relaxed">
             By accessing or using {PLATFORM_NAME} ("the Platform") you agree to these Terms of Service. If you do not agree, do not use the Platform.
@@ -169,13 +176,17 @@ export default function TermsPage() {
           <p>We reserve the right to update these Terms at any time. Changes will be posted on this page with an updated date. Continued use of the Platform after changes constitutes acceptance of the revised Terms.</p>
         </Section>
 
+        {/* Footer */}
         <div className="mt-8 py-6 border-t border-white/[0.06] text-center">
           <p className="text-xs text-white/20">
             Questions about these terms? Contact us at{' '}
-            <a href={`mailto:${CONTACT_EMAIL}`} className="text-white/40 hover:text-white/60 transition">{CONTACT_EMAIL}</a>
+            <a href={`mailto:${CONTACT_EMAIL}`} className="text-white/40 hover:text-white/60 transition">
+              {CONTACT_EMAIL}
+            </a>
           </p>
           <p className="text-xs text-white/15 mt-2">© {new Date().getFullYear()} {COMPANY}. All rights reserved.</p>
         </div>
+
       </div>
     </div>
   );
