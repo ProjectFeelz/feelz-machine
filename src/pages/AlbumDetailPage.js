@@ -58,6 +58,31 @@ export default function AlbumDetailPage() {
   const [purchasing, setPurchasing] = useState(false);
   const [purchaseSuccess, setPurchaseSuccess] = useState(false);
   const [purchaseError, setPurchaseError] = useState('');
+  const [purchasedTracks, setPurchasedTracks] = useState({});
+
+  const checkExistingPurchases = async () => {
+    if (!user || !tracks.length) return;
+    const trackIds = tracks.map(t => t.id);
+    const { data } = await supabase.from('downloads').select('track_id')
+      .eq('user_id', user.id).in('track_id', trackIds);
+    const map = {};
+    (data || []).forEach(d => { map[d.track_id] = true; });
+    setPurchasedTracks(map);
+  };
+
+  useEffect(() => {
+    if (tracks.length > 0 && user) checkExistingPurchases();
+  }, [tracks, user]);
+
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible' && user && tracks.length > 0) {
+        checkExistingPurchases();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, [user, tracks]);
 
   useEffect(() => { fetchAlbum(); }, [id]);
   useEffect(() => { if (user && showAddToPlaylist) fetchPlaylists(); }, [showAddToPlaylist, user]);
@@ -442,14 +467,25 @@ export default function AlbumDetailPage() {
                     <ListMusic className="w-4 h-4 text-white/25 hover:text-white/60 transition" />
                   </button>
                   {track.is_downloadable && (
-                    <button onClick={(e) => handleTrackDownload(track, e)} disabled={downloading === track.id}
-                      className="flex items-center space-x-1 px-2.5 py-1.5 rounded-lg transition active:scale-95 disabled:opacity-30"
-                      style={{ backgroundColor: 'rgba(255,255,255,0.06)' }}>
-                      {downloading === track.id
-                        ? <Loader className="w-3.5 h-3.5 animate-spin text-white/40" />
-                        : trackPrice > 0 ? <ShoppingCart className="w-3.5 h-3.5 text-white/50" /> : <Download className="w-3.5 h-3.5 text-white/50" />}
-                      {trackPrice > 0 && <span className="text-[11px] font-semibold text-white/60">${trackPrice.toFixed(2)}</span>}
-                    </button>
+                    purchasedTracks[track.id] ? (
+                      <button onClick={(e) => { e.stopPropagation(); triggerDownload(track); }} disabled={downloading === track.id}
+                        className="flex items-center space-x-1 px-2.5 py-1.5 rounded-lg transition active:scale-95 disabled:opacity-30"
+                        style={{ backgroundColor: 'rgba(255,255,255,0.06)' }}>
+                        {downloading === track.id
+                          ? <Loader className="w-3.5 h-3.5 animate-spin text-white/40" />
+                          : <Download className="w-3.5 h-3.5 text-white/50" />}
+                        <span className="text-[11px] font-semibold text-white/60">Download</span>
+                      </button>
+                    ) : (
+                      <button onClick={(e) => handleTrackDownload(track, e)} disabled={downloading === track.id}
+                        className="flex items-center space-x-1 px-2.5 py-1.5 rounded-lg transition active:scale-95 disabled:opacity-30"
+                        style={{ backgroundColor: 'rgba(255,255,255,0.06)' }}>
+                        {downloading === track.id
+                          ? <Loader className="w-3.5 h-3.5 animate-spin text-white/40" />
+                          : trackPrice > 0 ? <ShoppingCart className="w-3.5 h-3.5 text-white/50" /> : <Download className="w-3.5 h-3.5 text-white/50" />}
+                        {trackPrice > 0 && <span className="text-[11px] font-semibold text-white/60">${trackPrice.toFixed(2)}</span>}
+                      </button>
+                    )
                   )}
                 </div>
               </div>
