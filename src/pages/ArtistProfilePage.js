@@ -373,6 +373,31 @@ export default function ArtistProfilePage() {
   const [similarArtists, setSimilarArtists] = useState([]);
   const [thoughts, setThoughts] = useState([]);
   const [highlightedTrackId, setHighlightedTrackId] = useState(null);
+  const [purchasedTracks, setPurchasedTracks] = useState({});
+
+  const checkExistingPurchases = async () => {
+    if (!user || !tracks.length) return;
+    const trackIds = tracks.map(t => t.id);
+    const { data } = await supabase.from('downloads').select('track_id')
+      .eq('user_id', user.id).in('track_id', trackIds);
+    const map = {};
+    (data || []).forEach(d => { map[d.track_id] = true; });
+    setPurchasedTracks(map);
+  };
+
+  useEffect(() => {
+    if (tracks.length > 0 && user) checkExistingPurchases();
+  }, [tracks, user]);
+
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible' && user && tracks.length > 0) {
+        checkExistingPurchases();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, [user, tracks]);
 
   useEffect(() => { if (slug) fetchArtist(); }, [slug]);
 
@@ -1014,16 +1039,25 @@ export default function ArtistProfilePage() {
                       )}
                     </div>
                     {track.is_downloadable && (
-                      <button onClick={(e) => handleDownload(track, e)} disabled={downloading === track.id}
-                        className="flex-shrink-0 flex items-center space-x-1 px-2.5 py-1.5 rounded-lg transition-all active:scale-95 disabled:opacity-50"
-                        style={{ backgroundColor: `${secondaryColor}20`, color: secondaryColor }}>
-                        {downloading === track.id ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
-                        {track.pay_what_you_want
-                          ? <span className="text-[11px] font-semibold">PWYW</span>
-                          : getEffectivePrice(track) > 0 && <span className="text-[11px] font-semibold">${getEffectivePrice(track)}</span>
-                        }
-                      </button>
-                    )}
+                      purchasedTracks[track.id] ? (
+                        <button onClick={(e) => { e.stopPropagation(); triggerDownload(track); }} disabled={downloading === track.id}
+                          className="flex-shrink-0 flex items-center space-x-1 px-2.5 py-1.5 rounded-lg transition-all active:scale-95 disabled:opacity-50"
+                          style={{ backgroundColor: `${secondaryColor}20`, color: secondaryColor }}>
+                          {downloading === track.id ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                          <span className="text-[11px] font-semibold">Download</span>
+                        </button>
+                      ) : (
+                        <button onClick={(e) => handleDownload(track, e)} disabled={downloading === track.id}
+                          className="flex-shrink-0 flex items-center space-x-1 px-2.5 py-1.5 rounded-lg transition-all active:scale-95 disabled:opacity-50"
+                          style={{ backgroundColor: `${secondaryColor}20`, color: secondaryColor }}>
+                          {downloading === track.id ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                          {track.pay_what_you_want
+                            ? <span className="text-[11px] font-semibold">PWYW</span>
+                            : getEffectivePrice(track) > 0 && <span className="text-[11px] font-semibold">${getEffectivePrice(track)}</span>
+                          }
+                        </button>
+                      )
+                    )} 
                   </div>
                   <TrackVersions track={track} albumPrice={track.albums?.price || 0}
                     onPlayVersion={(version) => {
