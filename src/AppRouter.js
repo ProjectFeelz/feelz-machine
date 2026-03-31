@@ -37,6 +37,7 @@ import UserProfilePage from './pages/UserProfilePage';
 import AlbumDetailPage from './pages/AlbumDetailPage';
 import AdminUserBehaviorPage from './pages/AdminUserBehaviorPage';
 import { Helmet } from 'react-helmet-async';
+import TrackPage from './pages/TrackPage';
 
 // ── Wrapper to set page title for standalone pages outside AppLayout ─────────
 function PageTitle({ title, children }) {
@@ -102,6 +103,7 @@ export default function AppRouter() {
                 <Route path="/about" element={<AboutPage />} />
                 <Route path="/album/:id" element={<AlbumDetailPage />} />
                 <Route path="/artist/:slug" element={<ArtistProfilePage />} />
+                <Route path="/track/:slug" element={<TrackPage />} />
                 <Route path="/admin" element={<AdminDashboard />} />
                 <Route path="/admin/artists" element={<AdminArtists />} />
                 <Route path="/admin/analytics" element={<AdminAnalytics />} />
