@@ -147,6 +147,24 @@ export default function TierUpgradePage() {
     if (artist) fetchCurrentTier();
   }, [artist]);
 
+  // Re-check tier when user returns from Safari after PayPal payment
+  useEffect(() => {
+    if (!artist) return;
+    const handleVisibility = async () => {
+      if (document.visibilityState === 'visible') {
+        const prevTier = currentTier;
+        await fetchCurrentTier();
+        // If tier changed while they were in Safari, show success
+        if (prevTier && prevTier !== currentTier && currentTier !== 'free') {
+          setSuccess(`Welcome to ${currentTier === 'pro' ? 'Pro' : 'Premium'}! Your new features are active.`);
+          refreshProfile();
+        }
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, [artist, currentTier]);
+
   const fetchCurrentTier = async () => {
     try {
       const { data: sub } = await supabase
