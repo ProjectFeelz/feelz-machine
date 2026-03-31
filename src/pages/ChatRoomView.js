@@ -440,7 +440,7 @@ export default function ChatRoomView() {
                 <p className="text-sm font-semibold text-white">{room.name}</p>
                 {room.is_subscribers_only && <Lock className="w-3 h-3 text-yellow-400" />}
               </div>
-              <p className="text-[10px] text-white/30">{room.artists?.artist_name} Â· {room.member_count} members</p>
+              <p className="text-[10px] text-white/30">{room.artists?.artist_name} · {room.member_count} members</p>
             </div>
           </button>
         </div>
@@ -472,7 +472,7 @@ export default function ChatRoomView() {
               ? <img src={room.artists.profile_image_url} alt="" className="w-7 h-7 object-cover" />
               : <span className="text-xs font-bold text-white/30">{room.artists?.artist_name?.[0]}</span>}
           </div>
-          <p className="text-xs text-white/30 flex-1">{room.name} Â· Created by {room.artists?.artist_name}</p>
+          <p className="text-xs text-white/30 flex-1">{room.name} · Created by {room.artists?.artist_name}</p>
           <Shield className="w-3 h-3 text-white/15" />
           <span className="text-[10px] text-white/15">Moderated</span>
         </div>
@@ -509,7 +509,7 @@ export default function ChatRoomView() {
                   <div className="flex items-center space-x-1.5 mb-0.5">
                     <span className={`text-xs font-semibold ${isRoomOwner ? 'text-purple-400' : 'text-white'}`}>{msg.artist?.artist_name || 'User'}</span>
                     {isRoomOwner && <span className="text-[9px] px-1.5 py-0.5 bg-purple-500/10 text-purple-400 rounded font-medium">HOST</span>}
-                    {msg.artist?.is_verified && <span className="text-[9px] text-blue-400">â</span>}
+                    {msg.artist?.is_verified && <span className="text-[9px] text-blue-400">✓</span>}
                     {msg.is_pinned && <span className="flex items-center space-x-0.5 text-[9px] text-purple-400 font-medium"><Pin className="w-2.5 h-2.5" /><span>Pinned</span></span>}
                     <span className="text-[10px] text-white/15">{timeAgo(msg.created_at)}</span>
                   </div>
