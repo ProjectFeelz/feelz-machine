@@ -54,10 +54,25 @@ export default function ProfileSetup() {
     setImagePreview(URL.createObjectURL(file));
   };
 
+  // Save terms + age acceptance to DB — called once when user picks account type
+  const saveTermsAcceptance = async () => {
+    if (!user) return;
+    try {
+      await supabase.from('user_profiles').upsert({
+        user_id: user.id,
+        terms_accepted_at: new Date().toISOString(),
+        age_confirmed: true,
+      }, { onConflict: 'user_id' });
+    } catch (err) {
+      console.warn('Terms save error:', err.message);
+    }
+  };
+
   const handleChooseType = (type) => {
     if (!ageConfirmed) { setAgeError(true); return; }
     setAgeError(false);
     setAccountType(type);
+    saveTermsAcceptance(); // fire and forget — non-blocking
     setStep(type === 'artist' ? 1 : 2);
   };
 
