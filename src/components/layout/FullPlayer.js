@@ -281,7 +281,7 @@ export default function FullPlayer() {
             </div>
 
             {/* Track info + controls */}
-            <div className="px-8 pb-10 flex-shrink-0">
+            <div className="px-8 flex-shrink-0" style={{ paddingBottom: 'max(40px, calc(env(safe-area-inset-bottom) + 24px))' }}>
               {/* Title + Like */}
               <div className="flex items-center justify-between mb-5 mt-2">
                 <div className="min-w-0 flex-1">
