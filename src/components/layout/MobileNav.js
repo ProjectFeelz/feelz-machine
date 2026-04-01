@@ -32,7 +32,7 @@ export default function MobileNav() {
 
   return (
     <nav
-      className="md:hidden fixed bottom-0 left-0 right-0 z-50 border-t border-white/[0.06] bg-black/95 backdrop-blur-xl"
+      className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-black/95 backdrop-blur-xl"
       style={{ paddingBottom: 'var(--safe-area-bottom, 0px)' }}
     >
       <div className="flex items-center justify-around h-14 w-full mx-auto px-1">
