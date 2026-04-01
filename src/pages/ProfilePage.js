@@ -7,7 +7,7 @@ import {
   LogOut, ChevronRight, User, Music, Globe, Shield,
   Instagram, Twitter, Youtube, MessageCircle, Loader,
   Save, Palette, ExternalLink, DollarSign, Camera,
-  Link, Zap, Crown, Star, Trash2, AlertTriangle
+  Link, Zap, Crown, Star, Trash2, AlertTriangle, Plus
 } from 'lucide-react';
 import ThemeEditor from '../components/ThemeEditor';
 import PaymentSettings from '../components/PaymentSettings';
@@ -34,6 +34,7 @@ const SOCIALS = [
 const PROFILE_IMAGE_BUCKET = 'artist-images';
 const MAX_DAILY_THOUGHTS   = 3;
 const THOUGHT_TTL_MS       = 24 * 60 * 60 * 1000;
+const BIO_MAX              = 300;
 
 const ARTIST_TABS = [
   { key: 'profile',  label: 'Profile',  icon: User },
@@ -50,30 +51,29 @@ export default function ProfilePage() {
   } = useAuth();
   const { tierSlug } = useTier();
 
-  const [activeTab, setActiveTab]           = useState('profile');
-  const [editing, setEditing]               = useState(false);
-  const [saving, setSaving]                 = useState(false);
-  const [msg, setMsg]                       = useState('');
-  const [profileImgFile, setProfileImgFile] = useState(null);
-  const [previewUrl, setPreviewUrl]         = useState(null);
+  const [activeTab, setActiveTab]             = useState('profile');
+  const [editing, setEditing]                 = useState(false);
+  const [saving, setSaving]                   = useState(false);
+  const [avatarUploading, setAvatarUploading] = useState(false);
+  const [msg, setMsg]                         = useState('');
+  const [profileImgFile, setProfileImgFile]   = useState(null);
+  const [previewUrl, setPreviewUrl]           = useState(null);
   const [form, setForm] = useState({
     artist_name: '', bio: '',
     instagram: '', twitter: '', youtube: '',
     tiktok: '', facebook: '', discord: '', website: '',
   });
 
-  // ── Delete account state ─────────────────────────────────────────────────
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
   const [deleting, setDeleting]                   = useState(false);
   const [deleteError, setDeleteError]             = useState('');
 
-  // ── Thought of the Day state ─────────────────────────────────────────────
-  const [thoughts, setThoughts]           = useState([]);
-  const [thoughtInput, setThoughtInput]   = useState('');
+  const [thoughts, setThoughts]         = useState([]);
+  const [thoughtInput, setThoughtInput] = useState('');
   const [thoughtSaving, setThoughtSaving] = useState(false);
-  const [thoughtMsg, setThoughtMsg]       = useState('');
-  const [deletingId, setDeletingId]       = useState(null);
+  const [thoughtMsg, setThoughtMsg]     = useState('');
+  const [deletingId, setDeletingId]     = useState(null);
 
   const tierConfig = {
     premium: { label: 'Premium', color: '#F59E0B', bg: 'rgba(245,158,11,0.08)', icon: Crown },
@@ -83,16 +83,12 @@ export default function ProfilePage() {
   const tier     = tierConfig[tierSlug] || tierConfig.free;
   const TierIcon = tier.icon;
 
-  // ── Thought of the Day logic ─────────────────────────────────────────────
   const fetchThoughts = useCallback(async () => {
     if (!artist) return;
     const cutoff = new Date(Date.now() - THOUGHT_TTL_MS).toISOString();
-    const { data, error } = await supabase
-      .from('artist_thoughts')
-      .select('id, content, created_at')
-      .eq('artist_id', artist.id)
-      .gte('created_at', cutoff)
-      .order('created_at', { ascending: false });
+    const { data, error } = await supabase.from('artist_thoughts')
+      .select('id, content, created_at').eq('artist_id', artist.id)
+      .gte('created_at', cutoff).order('created_at', { ascending: false });
     if (!error) setThoughts(data || []);
   }, [artist]);
 
@@ -106,18 +102,16 @@ export default function ProfilePage() {
     if (!thoughtInput.trim() || !artist) return;
     if (remainingToday <= 0) {
       setThoughtMsg('Daily limit reached (3/3). Come back tomorrow!');
-      setTimeout(() => setThoughtMsg(''), 3000);
-      return;
+      setTimeout(() => setThoughtMsg(''), 3000); return;
     }
     setThoughtSaving(true);
     const { error } = await supabase.from('artist_thoughts').insert({
-      artist_id:  artist.id,
-      content:    thoughtInput.trim(),
+      artist_id: artist.id, content: thoughtInput.trim(),
       created_at: new Date().toISOString(),
       expires_at: new Date(Date.now() + THOUGHT_TTL_MS).toISOString(),
     });
     setThoughtSaving(false);
-    if (error) { setThoughtMsg('Failed to post'); }
+    if (error) setThoughtMsg('Failed to post');
     else { setThoughtInput(''); setThoughtMsg('Posted!'); fetchThoughts(); }
     setTimeout(() => setThoughtMsg(''), 2500);
   };
@@ -135,15 +129,10 @@ export default function ProfilePage() {
     if (artist) {
       const s = artist.social_links || {};
       setForm({
-        artist_name: artist.artist_name || '',
-        bio:         artist.bio         || '',
-        instagram:   s.instagram        || '',
-        twitter:     s.twitter          || '',
-        youtube:     s.youtube          || '',
-        tiktok:      s.tiktok           || '',
-        facebook:    s.facebook         || '',
-        discord:     s.discord          || '',
-        website:     s.website          || '',
+        artist_name: artist.artist_name || '', bio: artist.bio || '',
+        instagram: s.instagram || '', twitter: s.twitter || '',
+        youtube: s.youtube || '', tiktok: s.tiktok || '',
+        facebook: s.facebook || '', discord: s.discord || '', website: s.website || '',
       });
     }
   }, [artist]);
@@ -175,9 +164,7 @@ export default function ProfilePage() {
         artist_name: form.artist_name, bio: form.bio,
         social_links: sl, updated_at: new Date().toISOString(),
       };
-      if (profileImgFile) {
-        updateData.profile_image_url = await uploadFile(profileImgFile, 'profile-images/');
-      }
+      if (profileImgFile) updateData.profile_image_url = await uploadFile(profileImgFile, 'profile-images/');
       const { error } = await supabase.from('artists').update(updateData).eq('id', artist.id);
       if (error) throw error;
       setMsg('Saved!'); setEditing(false); setProfileImgFile(null); setPreviewUrl(null);
@@ -195,13 +182,8 @@ export default function ProfilePage() {
   const handleDeleteAccount = async () => {
     if (deleteConfirmText !== 'DELETE') return;
     setDeleting(true); setDeleteError('');
-    try {
-      await deleteAccount();
-      nav('/login');
-    } catch (e) {
-      setDeleteError(e.message || 'Something went wrong. Please try again.');
-      setDeleting(false);
-    }
+    try { await deleteAccount(); nav('/login'); }
+    catch (e) { setDeleteError(e.message || 'Something went wrong.'); setDeleting(false); }
   };
 
   if (!user) {
@@ -217,6 +199,7 @@ export default function ProfilePage() {
 
   const avatarSrc    = previewUrl || artist?.profile_image_url;
   const avatarLetter = (artist?.artist_name || profile?.display_name || user.email)?.[0]?.toUpperCase();
+  const hasAnyLinks  = SOCIALS.some(p => form[p.key]);
 
   return (
     <div className="pt-12 md:pt-0 pb-8 px-4 md:px-0">
@@ -231,9 +214,9 @@ export default function ProfilePage() {
         md:backdrop-blur-none pt-2 pb-2 -mx-4 px-4">Profile</h1>
 
       {msg && (
-        <div className={`mb-4 p-3 rounded-lg text-sm ${
-          msg.startsWith('Error') ? 'bg-red-500/10 text-red-400' : 'bg-green-500/10 text-green-400'
-        }`}>{msg}</div>
+        <div className={`mb-4 p-3 rounded-lg text-sm ${msg.startsWith('Error') ? 'bg-red-500/10 text-red-400' : 'bg-green-500/10 text-green-400'}`}>
+          {msg}
+        </div>
       )}
 
       {/* ── Hero card ── */}
@@ -250,20 +233,27 @@ export default function ProfilePage() {
                   ? <img src={avatarSrc} alt="" className="w-16 h-16 object-cover" />
                   : <div className="w-full h-full flex items-center justify-center">
                       <span className="text-2xl font-bold text-white">{avatarLetter}</span>
-                    </div>
-                }
+                    </div>}
+                {/* Upload spinner overlay */}
+                {avatarUploading && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/60 rounded-2xl">
+                    <Loader className="w-5 h-5 animate-spin text-white" />
+                  </div>
+                )}
               </div>
               {isArtist && (
-                <label className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-white flex items-center justify-center cursor-pointer shadow-lg hover:bg-white/90 transition">
+                <label className={`absolute -bottom-1 -right-1 w-6 h-6 rounded-full flex items-center justify-center cursor-pointer shadow-lg transition ${
+                  avatarUploading ? 'bg-white/40 cursor-not-allowed' : 'bg-white hover:bg-white/90'
+                }`}>
                   <Camera className="w-3 h-3 text-black" />
                   <input type="file" accept=".jpg,.jpeg,.png,.webp" className="hidden"
+                    disabled={avatarUploading}
                     onChange={async (e) => {
                       const file = e.target.files[0];
                       if (!file) return;
                       setProfileImgFile(file);
                       setPreviewUrl(URL.createObjectURL(file));
-                      // Auto-save the image immediately without requiring Edit mode
-                      setSaving(true); setMsg('');
+                      setAvatarUploading(true); setMsg('');
                       try {
                         const url = await uploadFile(file, 'profile-images/');
                         const { error } = await supabase.from('artists')
@@ -274,7 +264,7 @@ export default function ProfilePage() {
                         await refreshProfile();
                         setTimeout(() => setMsg(''), 3000);
                       } catch (err) { setMsg('Error: ' + err.message); }
-                      setSaving(false);
+                      setAvatarUploading(false);
                     }} />
                 </label>
               )}
@@ -357,8 +347,13 @@ export default function ProfilePage() {
                           className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none border border-white/[0.06] focus:border-white/20 transition" />
                       </div>
                       <div>
-                        <label className="block text-xs text-white/40 mb-1">Bio</label>
-                        <textarea rows={3} value={form.bio}
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="text-xs text-white/40">Bio</label>
+                          <span className={`text-xs transition ${form.bio.length > BIO_MAX * 0.9 ? 'text-yellow-400' : 'text-white/20'}`}>
+                            {form.bio.length}/{BIO_MAX}
+                          </span>
+                        </div>
+                        <textarea rows={3} value={form.bio} maxLength={BIO_MAX}
                           onChange={e => setForm({ ...form, bio: e.target.value })}
                           className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none resize-none border border-white/[0.06] focus:border-white/20 transition" />
                       </div>
@@ -465,9 +460,13 @@ export default function ProfilePage() {
             <div className="rounded-2xl border border-white/[0.06] overflow-hidden mb-4" style={{ background: 'rgba(255,255,255,0.02)' }}>
               <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.05]">
                 <p className="text-sm font-semibold text-white">Social Links</p>
-                {!editing && (
+                {!editing && hasAnyLinks && (
                   <button onClick={() => setEditing(true)}
                     className="text-xs text-white/40 hover:text-white/60 transition px-2 py-1 rounded-lg hover:bg-white/[0.04]">Edit</button>
+                )}
+                {editing && (
+                  <button onClick={() => { setEditing(false); setMsg(''); }}
+                    className="text-xs text-white/40 hover:text-white/60 transition px-2 py-1 rounded-lg hover:bg-white/[0.04]">Cancel</button>
                 )}
               </div>
               <div className="p-4">
@@ -497,7 +496,7 @@ export default function ProfilePage() {
                       </button>
                     </div>
                   </div>
-                ) : (
+                ) : hasAnyLinks ? (
                   <div className="space-y-2">
                     {SOCIALS.filter(p => form[p.key]).map(({ key, label, icon: Icon }) => (
                       <div key={key} className="flex items-center space-x-3 py-1.5">
@@ -510,9 +509,20 @@ export default function ProfilePage() {
                         </div>
                       </div>
                     ))}
-                    {!SOCIALS.some(p => form[p.key]) && (
-                      <p className="text-xs text-white/20 italic py-2">No links added yet — tap Edit to add your socials</p>
-                    )}
+                  </div>
+                ) : (
+                  /* Better empty state */
+                  <div className="py-6 text-center">
+                    <div className="w-10 h-10 rounded-xl bg-white/[0.04] flex items-center justify-center mx-auto mb-3 border border-white/[0.06]">
+                      <Link className="w-4 h-4 text-white/20" />
+                    </div>
+                    <p className="text-sm text-white/40 mb-1">No social links yet</p>
+                    <p className="text-xs text-white/20 mb-4">Add your socials so fans can find you everywhere</p>
+                    <button onClick={() => setEditing(true)}
+                      className="inline-flex items-center space-x-1.5 px-4 py-2 rounded-lg bg-white/[0.06] hover:bg-white/[0.1] transition text-sm text-white/60 font-medium">
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Add Links</span>
+                    </button>
                   </div>
                 )}
               </div>
@@ -585,8 +595,7 @@ export default function ProfilePage() {
             <div>
               <p className="text-sm font-semibold text-red-400 mb-1">Delete your account?</p>
               <p className="text-xs text-white/40 leading-relaxed">
-                This permanently deletes your profile, tracks, followers and all associated data.
-                This action cannot be undone.
+                This permanently deletes your profile, tracks, followers and all associated data. This action cannot be undone.
               </p>
             </div>
           </div>
@@ -601,9 +610,7 @@ export default function ProfilePage() {
           {deleteError && <p className="text-xs text-red-400 mb-3">{deleteError}</p>}
           <div className="flex space-x-2">
             <button onClick={() => { setShowDeleteConfirm(false); setDeleteConfirmText(''); setDeleteError(''); }}
-              className="flex-1 py-2.5 rounded-xl text-sm text-white/40 border border-white/[0.08] hover:bg-white/[0.04] transition">
-              Cancel
-            </button>
+              className="flex-1 py-2.5 rounded-xl text-sm text-white/40 border border-white/[0.08] hover:bg-white/[0.04] transition">Cancel</button>
             <button onClick={handleDeleteAccount}
               disabled={deleteConfirmText !== 'DELETE' || deleting}
               className="flex-1 py-2.5 rounded-xl text-sm font-semibold bg-red-500 text-white
@@ -622,8 +629,7 @@ export default function ProfilePage() {
 function NavRow({ icon: Icon, label, iconColor = 'text-white/30', onClick, border = false }) {
   return (
     <button onClick={onClick}
-      className={`w-full flex items-center justify-between p-4 hover:bg-white/[0.03] transition
-        ${border ? 'border-t border-white/[0.04]' : ''}`}>
+      className={`w-full flex items-center justify-between p-4 hover:bg-white/[0.03] transition ${border ? 'border-t border-white/[0.04]' : ''}`}>
       <div className="flex items-center space-x-3">
         <Icon className={`w-5 h-5 ${iconColor}`} /><span className="text-sm text-white">{label}</span>
       </div>
