@@ -3,7 +3,7 @@ import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import {
   Upload, Trash2, Loader, Plus, Save, Music,
-  Edit, Search, X, Zap, Disc, AlertCircle
+  Edit, Search, X, Zap, Disc, AlertCircle, Youtube,
 } from 'lucide-react';
 import CollaboratorSearch from '../components/CollaboratorSearch';
 import TierGate from '../components/TierGate';
@@ -49,6 +49,7 @@ const BLANK_TRACK = {
   pay_what_you_want: false, minimum_price: '0',
   is_preorder: false, release_date: null,
   track_number: '1', audio_file: null, cover_file: null, has_versions: false,
+  youtube_url: '',
 };
 
 const BLANK_RELEASE = {
@@ -110,6 +111,30 @@ function FSelect({ children, className = '', ...props }) {
       className={`w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none ${className}`}>
       {children}
     </select>
+  );
+}
+
+// ─── YouTube URL field ────────────────────────────────────────────────────────
+
+function YoutubeField({ value, onChange }) {
+  return (
+    <div>
+      <FieldLabel>
+        <span className="flex items-center space-x-1.5">
+          <Youtube className="w-3 h-3 text-red-400" />
+          <span>YouTube Video URL <span className="text-white/20">(optional)</span></span>
+        </span>
+      </FieldLabel>
+      <FInput
+        type="url"
+        value={value || ''}
+        onChange={e => onChange(e.target.value)}
+        placeholder="https://youtube.com/watch?v=..."
+      />
+      <p className="text-[10px] text-white/20 mt-1">
+        Plays as a visual backdrop in the full player when listeners tap the Video toggle. Vertical videos work best.
+      </p>
+    </div>
   );
 }
 
@@ -342,6 +367,7 @@ export default function TrackUploadPanel() {
         minimum_price:     parseFloat(trackForm.minimum_price) > 0 ? parseFloat(trackForm.minimum_price) : null,
         is_preorder:       trackForm.is_preorder || false,
         release_date:      trackForm.is_preorder && trackForm.release_date ? trackForm.release_date : null,
+        youtube_url:       trackForm.youtube_url?.trim() || null,
       }]).select();
       if (error) throw error;
       const trackId = data[0].id;
@@ -425,6 +451,7 @@ export default function TrackUploadPanel() {
       album_id: track.album_id || '', track_number: track.track_number || 1,
       is_preorder: track.is_preorder || false, release_date: track.release_date || null,
       has_versions: track.has_versions || false, cover_artwork_url: track.cover_artwork_url || '',
+      youtube_url: track.youtube_url || '',
     });
     const { data } = await supabase.from('collaborations')
       .select('*, artists(artist_name, profile_image_url)').eq('track_id', track.id);
@@ -463,6 +490,7 @@ export default function TrackUploadPanel() {
         is_preorder: editForm.is_preorder || false,
         release_date: editForm.is_preorder && editForm.release_date ? editForm.release_date : null,
         has_versions: editForm.has_versions || false,
+        youtube_url: editForm.youtube_url?.trim() || null,
         updated_at: new Date().toISOString(),
       }).eq('id', id);
       if (error) throw error;
@@ -511,8 +539,8 @@ export default function TrackUploadPanel() {
       {/* Tab bar */}
       <div className="flex space-x-1 bg-white/[0.03] rounded-lg p-1">
         {[
-          { key: 'upload', label: 'Upload',        icon: Upload },
-          { key: 'manage', label: 'Manage Tracks',  icon: Edit },
+          { key: 'upload', label: 'Upload',       icon: Upload },
+          { key: 'manage', label: 'Manage Tracks', icon: Edit },
         ].map(({ key, label, icon: Icon }) => (
           <button key={key} type="button" onClick={() => setActiveTab(key)}
             className={`flex-1 flex items-center justify-center space-x-2 py-2.5 rounded-md text-sm font-medium transition ${
@@ -548,7 +576,7 @@ export default function TrackUploadPanel() {
             </div>
           </div>
 
-          {/* Step 2: Album details (multi-track, not yet created) */}
+          {/* Step 2: Album details */}
           {isAlbumRelease && !sessionAlbumId && (
             <div className="bg-white/[0.03] rounded-xl p-5 border border-white/[0.06] space-y-4">
               <div className="flex items-center space-x-2">
@@ -626,7 +654,7 @@ export default function TrackUploadPanel() {
             </div>
           )}
 
-          {/* Add another / Done controls (after first track of album) */}
+          {/* Add another / Done controls */}
           {isAlbumRelease && albumTrackQueue.length > 0 && !addingAnother ? (
             <div className="space-y-2">
               <button type="button" onClick={() => {
@@ -656,7 +684,6 @@ export default function TrackUploadPanel() {
                   <FInput type="text" required value={trackForm.title}
                     onChange={(e) => setTrackForm({ ...trackForm, title: e.target.value })} />
                 </div>
-                {/* Single: show optional album dropdown */}
                 {!isAlbumRelease && (
                   <div>
                     <FieldLabel>Add to Existing Album (optional)</FieldLabel>
@@ -753,6 +780,12 @@ export default function TrackUploadPanel() {
                     className="w-full text-sm text-white/60 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:bg-white/[0.06] file:text-white/60 file:text-sm hover:file:bg-white/[0.1]" />
                 </div>
               </div>
+
+              {/* YouTube URL — upload form */}
+              <YoutubeField
+                value={trackForm.youtube_url}
+                onChange={(val) => setTrackForm({ ...trackForm, youtube_url: val })}
+              />
 
               <div className="flex flex-wrap gap-4">
                 {[
@@ -875,6 +908,7 @@ export default function TrackUploadPanel() {
                             : <span className="text-[10px] px-1.5 py-0.5 bg-white/[0.06] text-white/30 rounded">Draft</span>}
                           {track.featured   && <span className="text-[10px] px-1.5 py-0.5 bg-yellow-500/10 text-yellow-400 rounded">Featured</span>}
                           {track.is_explicit && <span className="text-[10px] px-1.5 py-0.5 bg-white/[0.06] text-white/30 rounded">E</span>}
+                          {track.youtube_url && <span className="text-[10px] px-1.5 py-0.5 bg-red-500/10 text-red-400 rounded flex items-center space-x-0.5"><Youtube className="w-2.5 h-2.5" /><span>Video</span></span>}
                           <span className="text-[10px] text-white/20">{track.stream_count || 0} streams</span>
                         </div>
                       </div>
@@ -964,6 +998,12 @@ export default function TrackUploadPanel() {
                           className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none resize-none" />
                       </div>
 
+                      {/* YouTube URL — edit form */}
+                      <YoutubeField
+                        value={editForm.youtube_url}
+                        onChange={(val) => setEditForm({ ...editForm, youtube_url: val })}
+                      />
+
                       <div className="flex flex-wrap gap-3">
                         {[
                           { key: 'is_published',    label: 'Published' },
@@ -996,9 +1036,7 @@ export default function TrackUploadPanel() {
                         <div>
                           <FieldLabel>Cover Artwork</FieldLabel>
                           <div className="flex items-center gap-3">
-                            {(editCoverFile
-                              ? URL.createObjectURL(editCoverFile)
-                              : editForm.cover_artwork_url) && (
+                            {(editCoverFile ? URL.createObjectURL(editCoverFile) : editForm.cover_artwork_url) && (
                               <img
                                 src={editCoverFile ? URL.createObjectURL(editCoverFile) : editForm.cover_artwork_url}
                                 alt="cover" className="w-12 h-12 rounded-lg object-cover flex-shrink-0" />
