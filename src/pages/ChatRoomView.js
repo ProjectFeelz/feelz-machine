@@ -398,6 +398,12 @@ export default function ChatRoomView() {
     catch (err) { console.error('Delete error:', err); }
   };
 
+  const refreshMessages = useCallback(async () => {
+    await Promise.all([fetchMessages(), fetchPolls()]);
+  }, []);
+
+  const { pullProps, pullProgress, isRefreshing } = usePullToRefresh(refreshMessages);
+  
   const isRoomAdmin = room?.artists?.user_id === user?.id || myMembership?.role === 'admin' || myMembership?.role === 'moderator';
 
   const timeline = [
@@ -447,9 +453,6 @@ export default function ChatRoomView() {
           </button>
         </div>
         <div className="flex items-center space-x-2">
-          <button onClick={fetchMessages} className="w-9 h-9 flex items-center justify-center rounded-full bg-white/[0.06]">
-            <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 text-white/50" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
-          </button>
           <button onClick={() => setShowMembers(!showMembers)} className="w-9 h-9 flex items-center justify-center rounded-full bg-white/[0.06]">
             <Users className="w-4 h-4 text-white/50" />
           </button>
@@ -467,7 +470,8 @@ export default function ChatRoomView() {
       )}
 
       {/* Timeline */}
-      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-1">
+      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-1" {...pullProps}>
+        <PullToRefreshIndicator pullProgress={pullProgress} isRefreshing={isRefreshing} />
         <div className="flex items-center space-x-2 px-2 py-2 mb-2 border-b border-white/[0.04]">
           <div className="w-7 h-7 rounded-lg overflow-hidden bg-gradient-to-br from-purple-600/20 to-blue-600/10 flex items-center justify-center flex-shrink-0">
             {room.artists?.profile_image_url
