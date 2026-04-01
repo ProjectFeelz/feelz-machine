@@ -3,10 +3,11 @@ import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import {
   Upload, Trash2, Loader, Plus, Save, Music,
-  Edit, Search, ChevronDown, ChevronUp, X, ArrowLeft
+  Edit, Search, ChevronDown, ChevronUp, X, ArrowLeft, Zap
 } from 'lucide-react';
 import CollaboratorSearch from '../components/CollaboratorSearch';
 import TierGate from '../components/TierGate';
+import { useAudioConverter } from '../hooks/useAudioConverter';
 
 const GENRES = [
   'Hip Hop', 'Trap', 'Drill', 'Boom Bap', 'Lo-Fi', 'R&B', 'Neo Soul', 'Pop',
@@ -26,15 +27,15 @@ const MOODS = [
 ];
 
 const VERSION_TYPES = [
-  { value: 'original', label: 'Original Mix' },
+  { value: 'original',   label: 'Original Mix' },
   { value: 'radio_edit', label: 'Radio Edit' },
-  { value: 'acoustic', label: 'Acoustic' },
-  { value: 'live', label: 'Live Performance' },
-  { value: 'remix', label: 'Remix' },
+  { value: 'acoustic',   label: 'Acoustic' },
+  { value: 'live',       label: 'Live Performance' },
+  { value: 'remix',      label: 'Remix' },
   { value: 'instrumental', label: 'Instrumental' },
-  { value: 'acapella', label: 'Acapella' },
-  { value: 'extended', label: 'Extended Version' },
-  { value: 'clean', label: 'Clean Version' },
+  { value: 'acapella',   label: 'Acapella' },
+  { value: 'extended',   label: 'Extended Version' },
+  { value: 'clean',      label: 'Clean Version' },
 ];
 
 function slugify(text) {
@@ -58,7 +59,6 @@ const BLANK_ALBUM = {
   release_date: '', is_published: false, price: '0', cover_file: null,
 };
 
-// Reusable toggle component
 function Toggle({ value, onChange }) {
   return (
     <div
@@ -70,7 +70,59 @@ function Toggle({ value, onChange }) {
   );
 }
 
-// Single unified track form
+// ── Conversion progress bar ───────────────────────────────────────────────────
+function ConversionBanner({ progress }) {
+  return (
+    <div className="rounded-lg p-3 bg-purple-500/10 border border-purple-500/20 space-y-2">
+      <div className="flex items-center space-x-2">
+        <Zap className="w-3.5 h-3.5 text-purple-400 flex-shrink-0" />
+        <p className="text-xs text-purple-400 font-medium">
+          Converting WAV to MP3 (320kbps)… {progress}%
+        </p>
+      </div>
+      <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
+        <div
+          className="h-full bg-purple-400 rounded-full transition-all duration-300"
+          style={{ width: `${progress}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+// ── Audio file field — shows WAV→MP3 notice ───────────────────────────────────
+function AudioFileField({ form, setForm, showMessage }) {
+  const isWav = form.audio_file?.name?.toLowerCase().endsWith('.wav');
+  return (
+    <div>
+      <label className="block text-xs text-white/40 mb-1.5">Audio File * (.mp3, .wav, .flac)</label>
+      <input
+        type="file"
+        accept=".wav,.mp3,.flac,.m4a,.ogg"
+        onChange={(e) => {
+          const f = e.target.files[0];
+          if (f && f.size > 500 * 1024 * 1024) { showMessage('error', 'File too large! Max 500MB'); return; }
+          setForm({ ...form, audio_file: f });
+        }}
+        className="w-full text-sm text-white/60 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:bg-white/[0.06] file:text-white/60 file:text-sm hover:file:bg-white/[0.1]"
+      />
+      {form.audio_file && (
+        <div className="mt-1 space-y-1">
+          <p className="text-xs text-white/30">
+            {form.audio_file.name} ({(form.audio_file.size / (1024 * 1024)).toFixed(1)}MB)
+          </p>
+          {isWav && (
+            <p className="text-xs text-purple-400/70 flex items-center space-x-1">
+              <Zap className="w-3 h-3" />
+              <span>WAV detected — will be converted to MP3 at 320kbps before upload</span>
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function TrackFormFields({ form, setForm, albums, showMessage }) {
   return (
     <div className="space-y-4">
@@ -148,19 +200,8 @@ function TrackFormFields({ form, setForm, albums, showMessage }) {
       </TierGate>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <label className="block text-xs text-white/40 mb-1.5">Audio File * (.mp3, .wav, .flac)</label>
-          <input type="file" accept=".wav,.mp3,.flac,.m4a,.ogg"
-            onChange={(e) => {
-              const f = e.target.files[0];
-              if (f && f.size > 500 * 1024 * 1024) { showMessage('error', 'File too large! Max 500MB'); return; }
-              setForm({ ...form, audio_file: f });
-            }}
-            className="w-full text-sm text-white/60 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:bg-white/[0.06] file:text-white/60 file:text-sm hover:file:bg-white/[0.1]" />
-          {form.audio_file && (
-            <p className="text-xs text-white/30 mt-1">{form.audio_file.name} ({(form.audio_file.size / (1024 * 1024)).toFixed(1)}MB)</p>
-          )}
-        </div>
+        {/* Audio file field with WAV notice */}
+        <AudioFileField form={form} setForm={setForm} showMessage={showMessage} />
         <div>
           <label className="block text-xs text-white/40 mb-1.5">Cover Artwork (.jpg, .png)</label>
           <input type="file" accept=".jpg,.jpeg,.png,.webp"
@@ -171,11 +212,11 @@ function TrackFormFields({ form, setForm, albums, showMessage }) {
 
       <div className="flex flex-wrap gap-4">
         {[
-          { key: 'is_published', label: 'Published' },
-          { key: 'featured', label: 'Featured' },
-          { key: 'is_explicit', label: 'Explicit' },
+          { key: 'is_published',   label: 'Published' },
+          { key: 'featured',       label: 'Featured' },
+          { key: 'is_explicit',    label: 'Explicit' },
           { key: 'is_downloadable', label: 'Downloadable' },
-          { key: 'has_versions', label: 'Has Versions' },
+          { key: 'has_versions',   label: 'Has Versions' },
         ].map(({ key, label }) => (
           <label key={key} className="flex items-center space-x-2 cursor-pointer">
             <Toggle value={form[key]} onChange={() => setForm({ ...form, [key]: !form[key] })} />
@@ -212,14 +253,11 @@ function TrackFormFields({ form, setForm, albums, showMessage }) {
   );
 }
 
-// Reusable versions editor
 function VersionsEditor({ versions, setVersions }) {
-  const add = () => setVersions([...versions, { version_name: '', version_type: 'remix', file: null }]);
+  const add    = () => setVersions([...versions, { version_name: '', version_type: 'remix', file: null }]);
   const remove = (i) => setVersions(versions.filter((_, idx) => idx !== i));
   const update = (i, field, val) => {
-    const next = [...versions];
-    next[i][field] = val;
-    setVersions(next);
+    const next = [...versions]; next[i][field] = val; setVersions(next);
   };
   if (!versions.length) return (
     <button type="button" onClick={add}
@@ -258,34 +296,34 @@ function VersionsEditor({ versions, setVersions }) {
 
 export default function TrackUploadPanel() {
   const { artist } = useAuth();
-  const [activeTab, setActiveTab] = useState('upload');
-  const [albums, setAlbums] = useState([]);
-  const [tracks, setTracks] = useState([]);
-  const [filteredTracks, setFilteredTracks] = useState([]);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [editingId, setEditingId] = useState(null);
-  const [editForm, setEditForm] = useState({});
-  const [editCollaborators, setEditCollaborators] = useState([]);
-  const [editCoverFile, setEditCoverFile] = useState(null);
-  const [editAudioFile, setEditAudioFile] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [message, setMessage] = useState({ type: '', text: '' });
+  const { convert, converting, progress: convProgress, error: convError } = useAudioConverter();
 
-  // Single track upload form (used for both standalone + album quick-upload)
-  const [trackForm, setTrackForm] = useState(BLANK_TRACK);
+  const [activeTab, setActiveTab]           = useState('upload');
+  const [albums, setAlbums]                 = useState([]);
+  const [tracks, setTracks]                 = useState([]);
+  const [filteredTracks, setFilteredTracks] = useState([]);
+  const [searchTerm, setSearchTerm]         = useState('');
+  const [editingId, setEditingId]           = useState(null);
+  const [editForm, setEditForm]             = useState({});
+  const [editCollaborators, setEditCollaborators] = useState([]);
+  const [editCoverFile, setEditCoverFile]   = useState(null);
+  const [editAudioFile, setEditAudioFile]   = useState(null);
+  const [loading, setLoading]               = useState(false);
+  const [uploading, setUploading]           = useState(false);
+  const [message, setMessage]               = useState({ type: '', text: '' });
+
+  const [trackForm, setTrackForm]   = useState(BLANK_TRACK);
   const [versionFiles, setVersionFiles] = useState([]);
   const [collaborators, setCollaborators] = useState([]);
 
-  // Album state
-  const [albumForm, setAlbumForm] = useState(BLANK_ALBUM);
-  const [albumStep, setAlbumStep] = useState('list'); // 'list' | 'create' | 'tracks'
-  const [activeAlbum, setActiveAlbum] = useState(null);
+  const [albumForm, setAlbumForm]           = useState(BLANK_ALBUM);
+  const [albumStep, setAlbumStep]           = useState('list');
+  const [activeAlbum, setActiveAlbum]       = useState(null);
   const [albumCollaborators, setAlbumCollaborators] = useState([]);
   const [editingAlbumId, setEditingAlbumId] = useState(null);
-  const [editAlbumForm, setEditAlbumForm] = useState({});
+  const [editAlbumForm, setEditAlbumForm]   = useState({});
   const [editAlbumCollaborators, setEditAlbumCollaborators] = useState([]);
-  const [albumTracks, setAlbumTracks] = useState([]);
+  const [albumTracks, setAlbumTracks]       = useState([]);
   const [unassignedTracks, setUnassignedTracks] = useState([]);
   const [loadingAlbumTracks, setLoadingAlbumTracks] = useState(false);
   const [showQuickUpload, setShowQuickUpload] = useState(false);
@@ -334,7 +372,7 @@ export default function TrackUploadPanel() {
   };
 
   const uploadFile = async (file, folder = '', retries = 3) => {
-    const fileExt = file.name.split('.').pop();
+    const fileExt  = file.name.split('.').pop();
     const fileName = `${folder}${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
     for (let attempt = 1; attempt <= retries; attempt++) {
       const { error } = await supabase.storage.from('feelz-samples').upload(fileName, file);
@@ -346,6 +384,25 @@ export default function TrackUploadPanel() {
       if (attempt < retries && is503) { await new Promise(r => setTimeout(r, 1500 * attempt)); continue; }
       throw new Error(is503 ? 'Upload service temporarily unavailable. Please try again.' : error.message);
     }
+  };
+
+  /**
+   * convertAndUploadAudio
+   *
+   * If the file is a WAV, convert it to MP3 first then upload the MP3.
+   * All other formats upload directly.
+   */
+  const convertAndUploadAudio = async (file, folder = 'tracks/') => {
+    const ext = file.name.split('.').pop().toLowerCase();
+    if (ext === 'wav') {
+      showMessage('info', 'Converting WAV to MP3 (320kbps)…');
+      const mp3 = await convert(file);
+      if (!mp3) throw new Error('Audio conversion failed. Please try again.');
+      showMessage('info', 'Uploading MP3…');
+      return uploadFile(mp3, folder);
+    }
+    showMessage('info', 'Uploading audio…');
+    return uploadFile(file, folder);
   };
 
   const saveCollaborations = async (trackId, collabArr) => {
@@ -366,35 +423,43 @@ export default function TrackUploadPanel() {
   };
 
   // ==================== TRACK UPLOAD ====================
-  // One handler for both standalone uploads and quick album uploads
   const handleTrackUpload = async (e, albumId = null) => {
     e.preventDefault();
     if (!trackForm.audio_file) { showMessage('error', 'Audio file is required'); return; }
     if (!artist) { showMessage('error', 'No artist profile found'); return; }
     setUploading(true);
     try {
-      showMessage('info', 'Uploading audio...');
-      const fileUrl = await uploadFile(trackForm.audio_file, 'tracks/');
+      // Convert WAV → MP3 if needed, then upload
+      const fileUrl = await convertAndUploadAudio(trackForm.audio_file, 'tracks/');
+
       let coverUrl = null;
       if (trackForm.cover_file) {
-        showMessage('info', 'Uploading cover artwork...');
+        showMessage('info', 'Uploading cover artwork…');
         coverUrl = await uploadFile(trackForm.cover_file, 'covers/');
       }
-      showMessage('info', 'Saving track...');
+
+      showMessage('info', 'Saving track…');
       const { data, error } = await supabase.from('tracks').insert([{
-        artist_id: artist.id,
-        album_id: albumId || trackForm.album_id || null,
-        title: trackForm.title, slug: slugify(trackForm.title),
-        genre: trackForm.genre, mood: trackForm.mood, lyrics: trackForm.lyrics || null,
-        file_url: fileUrl, cover_artwork_url: coverUrl,
+        artist_id:    artist.id,
+        album_id:     albumId || trackForm.album_id || null,
+        title:        trackForm.title,
+        slug:         slugify(trackForm.title),
+        genre:        trackForm.genre,
+        mood:         trackForm.mood,
+        lyrics:       trackForm.lyrics || null,
+        file_url:     fileUrl,
+        cover_artwork_url: coverUrl,
         track_number: parseInt(trackForm.track_number) || 1,
-        is_explicit: trackForm.is_explicit, is_downloadable: trackForm.is_downloadable,
-        is_published: trackForm.is_published, is_premium: trackForm.is_premium,
+        is_explicit:  trackForm.is_explicit,
+        is_downloadable: trackForm.is_downloadable,
+        is_published: trackForm.is_published,
+        is_premium:   trackForm.is_premium,
         download_price: parseFloat(trackForm.download_price) || 0,
-        featured: trackForm.featured, has_versions: trackForm.has_versions,
+        featured:     trackForm.featured,
+        has_versions: trackForm.has_versions,
         pay_what_you_want: trackForm.pay_what_you_want || false,
         minimum_price: parseFloat(trackForm.minimum_price) > 0 ? parseFloat(trackForm.minimum_price) : null,
-        is_preorder: trackForm.is_preorder || false,
+        is_preorder:  trackForm.is_preorder || false,
         release_date: trackForm.is_preorder && trackForm.release_date ? trackForm.release_date : null,
       }]).select();
       if (error) throw error;
@@ -403,8 +468,8 @@ export default function TrackUploadPanel() {
       if (trackForm.has_versions && versionFiles.length > 0) {
         for (const ver of versionFiles) {
           if (ver.file) {
-            showMessage('info', `Uploading ${ver.version_name}...`);
-            const verUrl = await uploadFile(ver.file, 'versions/');
+            showMessage('info', `Uploading ${ver.version_name}…`);
+            const verUrl = await convertAndUploadAudio(ver.file, 'versions/');
             await supabase.from('track_versions').insert([{
               track_id: trackId, version_name: ver.version_name,
               version_type: ver.version_type, file_url: verUrl,
@@ -412,13 +477,16 @@ export default function TrackUploadPanel() {
           }
         }
       }
+
       if (collaborators.length > 0) {
-        showMessage('info', 'Sending collab requests...');
+        showMessage('info', 'Sending collab requests…');
         await saveCollaborations(trackId, collaborators);
       }
+
       if (trackForm.is_published) {
         try {
-          const { data: followers } = await supabase.from('follows').select('follower_id').eq('artist_id', artist.id);
+          const { data: followers } = await supabase.from('follows')
+            .select('follower_id').eq('artist_id', artist.id);
           if (followers?.length > 0) {
             await supabase.from('notifications').insert(followers.map(f => ({
               user_id: f.follower_id, artist_id: artist.id, type: 'new_track',
@@ -429,6 +497,7 @@ export default function TrackUploadPanel() {
           }
         } catch {}
       }
+
       showMessage('success', 'Track uploaded successfully!');
       setTrackForm(BLANK_TRACK);
       setVersionFiles([]);
@@ -450,7 +519,7 @@ export default function TrackUploadPanel() {
     try {
       let coverUrl = null;
       if (albumForm.cover_file) {
-        showMessage('info', 'Uploading album artwork...');
+        showMessage('info', 'Uploading album artwork…');
         coverUrl = await uploadFile(albumForm.cover_file, 'album-covers/');
       }
       const { data, error } = await supabase.from('albums').insert([{
@@ -553,9 +622,7 @@ export default function TrackUploadPanel() {
       showMessage('success', 'Album deleted');
       fetchAlbums();
       if (activeAlbum?.id === id) { setActiveAlbum(null); setAlbumStep('list'); }
-    } catch (err) {
-      showMessage('error', 'Failed: ' + err.message);
-    }
+    } catch (err) { showMessage('error', 'Failed: ' + err.message); }
   };
 
   const removeTrackFromAlbum = async (trackId) => {
@@ -597,7 +664,8 @@ export default function TrackUploadPanel() {
       let coverUrl = editForm.cover_artwork_url || '';
       let audioUrl = null;
       if (editCoverFile) coverUrl = await uploadFile(editCoverFile, 'covers/');
-      if (editAudioFile) audioUrl = await uploadFile(editAudioFile, 'tracks/');
+      // Convert audio if it's a WAV replacement
+      if (editAudioFile) audioUrl = await convertAndUploadAudio(editAudioFile, 'tracks/');
       if (editCollaborators.length > 0) {
         await supabase.from('collaborations').delete().eq('track_id', id);
         for (const collab of editCollaborators) {
@@ -640,9 +708,7 @@ export default function TrackUploadPanel() {
       if (error) throw error;
       showMessage('success', 'Track deleted');
       fetchTracks();
-    } catch (err) {
-      showMessage('error', 'Failed: ' + err.message);
-    }
+    } catch (err) { showMessage('error', 'Failed: ' + err.message); }
   };
 
   if (!artist) return (
@@ -654,19 +720,25 @@ export default function TrackUploadPanel() {
 
   const tabs = [
     { key: 'upload', label: 'Upload Track', icon: Upload },
-    { key: 'albums', label: 'Albums', icon: Music },
+    { key: 'albums', label: 'Albums',       icon: Music },
     { key: 'manage', label: 'Manage Tracks', icon: Edit },
   ];
+
+  const isWorking = uploading || converting;
 
   return (
     <div className="space-y-6">
       {message.text && (
         <div className={`p-3 rounded-lg text-sm ${
           message.type === 'success' ? 'bg-green-500/10 border border-green-500/20 text-green-400'
-          : message.type === 'info' ? 'bg-blue-500/10 border border-blue-500/20 text-blue-400'
+          : message.type === 'info'    ? 'bg-blue-500/10 border border-blue-500/20 text-blue-400'
           : 'bg-red-500/10 border border-red-500/20 text-red-400'
         }`}>{message.text}</div>
       )}
+
+      {/* Conversion progress banner — shown whenever ffmpeg is running */}
+      {converting && <ConversionBanner progress={convProgress} />}
+      {convError   && <div className="p-3 rounded-lg text-sm bg-red-500/10 border border-red-500/20 text-red-400">{convError}</div>}
 
       <div className="flex space-x-1 bg-white/[0.03] rounded-lg p-1">
         {tabs.map(({ key, label, icon: Icon }) => (
@@ -694,10 +766,12 @@ export default function TrackUploadPanel() {
                 <VersionsEditor versions={versionFiles} setVersions={setVersionFiles} />
               </div>
             )}
-            <button type="submit" disabled={uploading}
+            <button type="submit" disabled={isWorking}
               className="w-full py-3 bg-white text-black font-semibold rounded-lg hover:bg-white/90 disabled:opacity-50 transition flex items-center justify-center space-x-2">
-              {uploading ? <Loader className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-              <span>{uploading ? 'Uploading...' : 'Upload Track'}</span>
+              {isWorking ? <Loader className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+              <span>
+                {converting ? `Converting… ${convProgress}%` : uploading ? 'Uploading…' : 'Upload Track'}
+              </span>
             </button>
           </div>
         </form>
@@ -707,7 +781,6 @@ export default function TrackUploadPanel() {
       {activeTab === 'albums' && (
         <div className="space-y-6">
 
-          {/* STEP: TRACKS */}
           {albumStep === 'tracks' && activeAlbum && (
             <div className="space-y-4">
               <div className="flex items-center space-x-3">
@@ -726,7 +799,6 @@ export default function TrackUploadPanel() {
                 </div>
               </div>
 
-              {/* Tracks in album */}
               <div className="bg-white/[0.03] rounded-xl p-4 border border-white/[0.06] space-y-3">
                 <p className="text-xs text-white/40 font-medium">Tracks in this album ({albumTracks.length})</p>
                 {loadingAlbumTracks ? (
@@ -753,7 +825,6 @@ export default function TrackUploadPanel() {
                 )}
               </div>
 
-              {/* Existing singles to add */}
               {unassignedTracks.length > 0 && (
                 <div className="bg-white/[0.03] rounded-xl p-4 border border-white/[0.06] space-y-3">
                   <p className="text-xs text-white/40 font-medium">Add from your existing singles</p>
@@ -776,7 +847,6 @@ export default function TrackUploadPanel() {
                 </div>
               )}
 
-              {/* Quick upload new track to album */}
               <div className="bg-white/[0.03] rounded-xl border border-white/[0.06] overflow-hidden">
                 <button type="button" onClick={() => {
                   setShowQuickUpload(p => !p);
@@ -804,10 +874,10 @@ export default function TrackUploadPanel() {
                         <VersionsEditor versions={versionFiles} setVersions={setVersionFiles} />
                       </div>
                     )}
-                    <button type="submit" disabled={uploading}
+                    <button type="submit" disabled={isWorking}
                       className="w-full py-3 bg-white text-black font-semibold rounded-lg hover:bg-white/90 disabled:opacity-50 transition flex items-center justify-center space-x-2">
-                      {uploading ? <Loader className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-                      <span>{uploading ? 'Uploading...' : 'Upload to Album'}</span>
+                      {isWorking ? <Loader className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                      <span>{converting ? `Converting… ${convProgress}%` : uploading ? 'Uploading…' : 'Upload to Album'}</span>
                     </button>
                   </form>
                 )}
@@ -815,7 +885,6 @@ export default function TrackUploadPanel() {
             </div>
           )}
 
-          {/* STEP: CREATE */}
           {albumStep === 'create' && (
             <div className="space-y-4">
               <div className="flex items-center space-x-3 mb-2">
@@ -877,16 +946,15 @@ export default function TrackUploadPanel() {
                     <CollaboratorSearch collaborators={albumCollaborators} setCollaborators={setAlbumCollaborators} currentArtistId={artist.id} />
                   </div>
                 </TierGate>
-                <button type="submit" disabled={uploading}
+                <button type="submit" disabled={isWorking}
                   className="w-full py-3 bg-white text-black font-semibold rounded-lg hover:bg-white/90 disabled:opacity-50 transition flex items-center justify-center space-x-2">
-                  {uploading ? <Loader className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-                  <span>{uploading ? 'Creating...' : 'Create Album & Add Tracks →'}</span>
+                  {isWorking ? <Loader className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                  <span>{uploading ? 'Creating…' : 'Create Album & Add Tracks →'}</span>
                 </button>
               </form>
             </div>
           )}
 
-          {/* STEP: LIST */}
           {albumStep === 'list' && (
             <div className="space-y-4">
               <button type="button" onClick={() => setAlbumStep('create')}
@@ -926,8 +994,6 @@ export default function TrackUploadPanel() {
                           </button>
                         </div>
                       </div>
-
-                      {/* Inline album edit */}
                       {editingAlbumId === album.id && (
                         <div className="border-t border-white/[0.06] p-4 space-y-4">
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -983,9 +1049,9 @@ export default function TrackUploadPanel() {
                             </div>
                           </TierGate>
                           <div className="flex space-x-2">
-                            <button type="button" onClick={() => saveAlbumEdit(album.id)} disabled={uploading}
+                            <button type="button" onClick={() => saveAlbumEdit(album.id)} disabled={isWorking}
                               className="px-4 py-2 bg-white text-black rounded-lg text-sm font-medium flex items-center space-x-1 disabled:opacity-50">
-                              {uploading ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                              {isWorking ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
                               <span>Save</span>
                             </button>
                             <button type="button" onClick={() => setEditingAlbumId(null)}
@@ -1082,13 +1148,11 @@ export default function TrackUploadPanel() {
                           )}
                         </div>
                       </div>
-
                       <div>
                         <label className="block text-xs text-white/40 mb-1">Lyrics</label>
                         <textarea rows={2} value={editForm.lyrics} onChange={(e) => setEditForm({ ...editForm, lyrics: e.target.value })}
                           className="w-full px-3 py-2 bg-white/[0.06] rounded text-white text-sm outline-none resize-none" />
                       </div>
-
                       <div className="flex flex-wrap gap-3">
                         {['is_published', 'featured', 'is_explicit', 'is_downloadable', 'is_premium', 'has_versions'].map(key => (
                           <label key={key} className="flex items-center space-x-1.5 text-xs text-white/40 cursor-pointer">
@@ -1105,7 +1169,6 @@ export default function TrackUploadPanel() {
                           <span>Pre-order</span>
                         </label>
                       </div>
-
                       {editForm.is_preorder && (
                         <div>
                           <label className="block text-xs text-white/40 mb-1">Release Date</label>
@@ -1115,7 +1178,6 @@ export default function TrackUploadPanel() {
                             className="w-full px-3 py-2 bg-white/[0.06] rounded text-white text-sm outline-none" />
                         </div>
                       )}
-
                       <div>
                         <label className="block text-xs text-white/40 mb-1">Cover Artwork</label>
                         <div className="flex items-center gap-3">
@@ -1128,25 +1190,27 @@ export default function TrackUploadPanel() {
                           </label>
                         </div>
                       </div>
-
                       <div>
                         <label className="block text-xs text-white/40 mb-1">Replace Audio File</label>
                         <label className="cursor-pointer text-xs px-3 py-1.5 bg-white/10 rounded hover:bg-white/20 text-white/70">
                           {editAudioFile ? editAudioFile.name : 'Choose new audio file…'}
                           <input type="file" accept="audio/*" className="hidden" onChange={(e) => setEditAudioFile(e.target.files[0])} />
                         </label>
+                        {editAudioFile?.name?.toLowerCase().endsWith('.wav') && (
+                          <p className="text-xs text-purple-400/70 mt-1 flex items-center space-x-1">
+                            <Zap className="w-3 h-3" /><span>Will be converted to MP3 at 320kbps</span>
+                          </p>
+                        )}
                       </div>
-
                       <div>
                         <label className="block text-xs text-white/40 mb-2">Collaborators</label>
                         <CollaboratorSearch collaborators={editCollaborators} setCollaborators={setEditCollaborators} currentArtistId={artist.id} />
                       </div>
-
                       <div className="flex space-x-2">
-                        <button type="button" onClick={() => saveEdit(track.id)} disabled={uploading}
+                        <button type="button" onClick={() => saveEdit(track.id)} disabled={isWorking}
                           className="px-4 py-2 bg-white text-black rounded-lg text-sm font-medium flex items-center space-x-1 disabled:opacity-50">
-                            {uploading ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-                          <span>Save</span>
+                          {isWorking ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                          <span>{converting ? `Converting… ${convProgress}%` : 'Save'}</span>
                         </button>
                         <button type="button" onClick={() => setEditingId(null)}
                           className="px-4 py-2 bg-white/[0.06] text-white/60 rounded-lg text-sm flex items-center space-x-1">
