@@ -4,35 +4,35 @@ import { useAuth } from '../contexts/AuthContext';
 import { useHaptics } from '../hooks/useHaptics';
 import {
   Send, Loader, Check, X, Radio,
-  Mic2, Headphones, PenLine, Shuffle, Blend, MoreHorizontal,
+  Mic2, Headphones, PenLine, Shuffle, Sliders, MoreHorizontal,
   ChevronRight, Verified,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 const TYPE_LABELS = {
-  featured:  { label: 'Featured',   icon: Mic2 },
-  beat:      { label: 'Beat',       icon: Headphones },
-  'co-write':{ label: 'Co-write',   icon: PenLine },
-  remix:     { label: 'Remix',      icon: Shuffle },
-  mix:       { label: 'Mix/Master', icon: Blend },
-  other:     { label: 'Other',      icon: MoreHorizontal },
+  featured:   { label: 'Featured',   icon: Mic2 },
+  beat:       { label: 'Beat',       icon: Headphones },
+  'co-write': { label: 'Co-write',   icon: PenLine },
+  remix:      { label: 'Remix',      icon: Shuffle },
+  mix:        { label: 'Mix/Master', icon: Sliders },
+  other:      { label: 'Other',      icon: MoreHorizontal },
 };
 
 function timeAgo(date) {
   const s = Math.floor((Date.now() - new Date(date)) / 1000);
-  if (s < 60)   return 'now';
-  if (s < 3600) return `${Math.floor(s / 60)}m`;
+  if (s < 60)    return 'now';
+  if (s < 3600)  return `${Math.floor(s / 60)}m`;
   if (s < 86400) return `${Math.floor(s / 3600)}h`;
   return new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
-// ── Single collab request card (incoming or outgoing) ────────────────────────
+// ── Request card ──────────────────────────────────────────────────────────────
 function RequestCard({ request, myArtistId, onRespond, onClick, isSelected }) {
-  const isMine     = request.from_artist_id === myArtistId;
-  const other      = isMine ? request.to_artist   : request.from_artist;
-  const TypeIcon   = TYPE_LABELS[request.collab_type]?.icon || MoreHorizontal;
-  const typeLabel  = TYPE_LABELS[request.collab_type]?.label || 'Collab';
-  const { tap }    = useHaptics();
+  const isMine    = request.from_artist_id === myArtistId;
+  const other     = isMine ? request.to_artist : request.from_artist;
+  const TypeIcon  = TYPE_LABELS[request.collab_type]?.icon || MoreHorizontal;
+  const typeLabel = TYPE_LABELS[request.collab_type]?.label || 'Collab';
+  const { tap }   = useHaptics();
 
   const statusColor = {
     pending:  'text-yellow-400 bg-yellow-400/10 border-yellow-400/20',
@@ -50,7 +50,6 @@ function RequestCard({ request, myArtistId, onRespond, onClick, isSelected }) {
       }`}
     >
       <div className="flex items-center space-x-3 p-3.5">
-        {/* Avatar */}
         <div className="w-11 h-11 rounded-xl overflow-hidden bg-white/[0.06] flex-shrink-0">
           {other?.profile_image_url
             ? <img src={other.profile_image_url} alt="" className="w-full h-full object-cover" loading="lazy" />
@@ -76,27 +75,21 @@ function RequestCard({ request, myArtistId, onRespond, onClick, isSelected }) {
           <span className={`text-[9px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full border ${statusColor}`}>
             {isMine ? (request.status === 'pending' ? 'Sent' : request.status) : request.status}
           </span>
-          {request.status === 'accepted' && (
-            <ChevronRight className="w-3.5 h-3.5 text-white/20" />
-          )}
+          {request.status === 'accepted' && <ChevronRight className="w-3.5 h-3.5 text-white/20" />}
         </div>
       </div>
 
-      {/* Pitch snippet */}
       {request.message && (
         <p className="px-3.5 pb-3 text-xs text-white/30 truncate">"{request.message}"</p>
       )}
 
-      {/* Respond buttons — only show on incoming pending */}
       {!isMine && request.status === 'pending' && (
         <div className="flex space-x-2 px-3.5 pb-3.5" onClick={e => e.stopPropagation()}>
-          <button
-            onClick={() => onRespond(request.id, 'accepted')}
+          <button onClick={() => onRespond(request.id, 'accepted')}
             className="flex-1 py-2 rounded-xl bg-green-500/15 text-green-400 border border-green-500/20 text-xs font-semibold flex items-center justify-center space-x-1.5 transition active:scale-95">
             <Check className="w-3.5 h-3.5" /><span>Accept</span>
           </button>
-          <button
-            onClick={() => onRespond(request.id, 'declined')}
+          <button onClick={() => onRespond(request.id, 'declined')}
             className="flex-1 py-2 rounded-xl bg-white/[0.04] text-white/30 border border-white/[0.06] text-xs font-semibold flex items-center justify-center space-x-1.5 transition active:scale-95">
             <X className="w-3.5 h-3.5" /><span>Decline</span>
           </button>
@@ -106,7 +99,7 @@ function RequestCard({ request, myArtistId, onRespond, onClick, isSelected }) {
   );
 }
 
-// ── Message thread for an accepted request ───────────────────────────────────
+// ── Message thread ────────────────────────────────────────────────────────────
 function MessageThread({ request, myArtistId }) {
   const [messages, setMessages] = useState([]);
   const [input, setInput]       = useState('');
@@ -115,21 +108,18 @@ function MessageThread({ request, myArtistId }) {
   const { tap }                 = useHaptics();
   const navigate                = useNavigate();
 
-  const isMine = request.from_artist_id === myArtistId;
-  const other  = isMine ? request.to_artist : request.from_artist;
+  const isMine   = request.from_artist_id === myArtistId;
+  const other    = isMine ? request.to_artist : request.from_artist;
   const TypeIcon = TYPE_LABELS[request.collab_type]?.icon || MoreHorizontal;
 
   useEffect(() => {
     fetchMessages();
-    // Realtime subscription
     const channel = supabase.channel(`collab-${request.id}`)
       .on('postgres_changes', {
         event: 'INSERT', schema: 'public',
         table: 'collab_messages',
         filter: `request_id=eq.${request.id}`,
-      }, (payload) => {
-        fetchSingleMessage(payload.new.id);
-      })
+      }, (payload) => { fetchSingleMessage(payload.new.id); })
       .subscribe();
     return () => supabase.removeChannel(channel);
   }, [request.id]);
@@ -169,12 +159,10 @@ function MessageThread({ request, myArtistId }) {
 
   return (
     <div className="flex flex-col h-full">
-      {/* Thread header */}
+      {/* Header */}
       <div className="flex items-center space-x-3 p-4 border-b border-white/[0.06] flex-shrink-0">
-        <button
-          onClick={() => { tap(); navigate(`/artist/${other?.slug}`); }}
-          className="w-10 h-10 rounded-xl overflow-hidden bg-white/[0.06] flex-shrink-0"
-        >
+        <button onClick={() => { tap(); navigate(`/artist/${other?.slug}`); }}
+          className="w-10 h-10 rounded-xl overflow-hidden bg-white/[0.06] flex-shrink-0">
           {other?.profile_image_url
             ? <img src={other.profile_image_url} alt="" className="w-full h-full object-cover" />
             : <div className="w-full h-full flex items-center justify-center">
@@ -190,7 +178,7 @@ function MessageThread({ request, myArtistId }) {
         </div>
       </div>
 
-      {/* Original pitch as first message */}
+      {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
         {request.message && (
           <div className="flex justify-start">
@@ -206,9 +194,7 @@ function MessageThread({ request, myArtistId }) {
           return (
             <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
               <div className={`max-w-[80%] rounded-2xl px-4 py-2.5 ${
-                isMe
-                  ? 'bg-purple-600 rounded-tr-sm'
-                  : 'bg-white/[0.06] rounded-tl-sm'
+                isMe ? 'bg-purple-600 rounded-tr-sm' : 'bg-white/[0.06] rounded-tl-sm'
               }`}>
                 <p className="text-sm text-white leading-relaxed">{msg.content}</p>
                 <p className={`text-[9px] mt-1 ${isMe ? 'text-purple-200/50' : 'text-white/20'}`}>
@@ -224,24 +210,19 @@ function MessageThread({ request, myArtistId }) {
             <p className="text-sm text-white/20">No messages yet — start the conversation</p>
           </div>
         )}
-
         <div ref={endRef} />
       </div>
 
       {/* Input */}
       <div className="flex items-center space-x-2 p-4 border-t border-white/[0.06] flex-shrink-0">
         <input
-          type="text"
-          value={input}
+          type="text" value={input}
           onChange={e => setInput(e.target.value.slice(0, 500))}
           onKeyDown={e => e.key === 'Enter' && !e.shiftKey && handleSend()}
-          placeholder="Send a message…"
-          maxLength={500}
+          placeholder="Send a message…" maxLength={500}
           className="flex-1 bg-white/[0.06] rounded-xl px-4 py-2.5 text-sm text-white placeholder-white/20 outline-none border border-white/[0.06] focus:border-white/20 transition"
         />
-        <button
-          onClick={handleSend}
-          disabled={!input.trim() || sending}
+        <button onClick={handleSend} disabled={!input.trim() || sending}
           className="w-10 h-10 flex items-center justify-center rounded-xl bg-purple-600 disabled:opacity-30 transition active:scale-95">
           {sending ? <Loader className="w-4 h-4 animate-spin text-white" /> : <Send className="w-4 h-4 text-white" />}
         </button>
@@ -250,15 +231,15 @@ function MessageThread({ request, myArtistId }) {
   );
 }
 
-// ── Main CollabThread hub section ─────────────────────────────────────────────
+// ── Main CollabThread ─────────────────────────────────────────────────────────
 export default function CollabThread() {
-  const { user, artist }          = useAuth();
-  const [requests, setRequests]   = useState([]);
-  const [loading, setLoading]     = useState(true);
-  const [selected, setSelected]   = useState(null);
-  const [filter, setFilter]       = useState('all'); // 'all' | 'incoming' | 'sent' | 'active'
-  const { tap, success }          = useHaptics();
-  const navigate                  = useNavigate();
+  const { user, artist }        = useAuth();
+  const [requests, setRequests] = useState([]);
+  const [loading, setLoading]   = useState(true);
+  const [selected, setSelected] = useState(null);
+  const [filter, setFilter]     = useState('all');
+  const { tap, success }        = useHaptics();
+  const navigate                = useNavigate();
 
   useEffect(() => { if (artist) fetchRequests(); }, [artist?.id]);
 
@@ -282,15 +263,13 @@ export default function CollabThread() {
   const handleRespond = async (requestId, status) => {
     tap();
     try {
-      await supabase
-        .from('collab_requests')
+      await supabase.from('collab_requests')
         .update({ status, responded_at: new Date().toISOString() })
         .eq('id', requestId);
 
       const req = requests.find(r => r.id === requestId);
       if (req && status === 'accepted') {
         success();
-        // Notify the sender
         await supabase.from('notifications').insert({
           artist_id:      req.from_artist_id,
           type:           'collab_accepted',
@@ -300,10 +279,7 @@ export default function CollabThread() {
           metadata:       { request_id: requestId },
         });
       }
-
-      setRequests(prev => prev.map(r =>
-        r.id === requestId ? { ...r, status } : r
-      ));
+      setRequests(prev => prev.map(r => r.id === requestId ? { ...r, status } : r));
     } catch (err) { console.error(err); }
   };
 
@@ -325,12 +301,10 @@ export default function CollabThread() {
     </div>
   );
 
-  // Mobile: show thread full-screen when selected
   if (selected?.status === 'accepted') {
     return (
       <div className="flex flex-col" style={{ height: 'calc(100vh - 200px)' }}>
-        <button
-          onClick={() => { tap(); setSelected(null); }}
+        <button onClick={() => { tap(); setSelected(null); }}
           className="flex items-center space-x-2 px-4 py-3 text-white/40 hover:text-white/70 transition flex-shrink-0">
           <span className="text-sm">← All collabs</span>
         </button>
@@ -343,7 +317,6 @@ export default function CollabThread() {
 
   return (
     <div className="space-y-4">
-      {/* Header row */}
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-2">
           <Radio className="w-4 h-4 text-purple-400" />
@@ -354,14 +327,12 @@ export default function CollabThread() {
             </span>
           )}
         </div>
-        <button
-          onClick={() => { tap(); navigate('/collab-radar'); }}
+        <button onClick={() => { tap(); navigate('/collab-radar'); }}
           className="text-[11px] text-purple-400 hover:text-purple-300 transition font-medium">
           Find matches →
         </button>
       </div>
 
-      {/* Filter pills */}
       <div className="flex space-x-2 overflow-x-auto scrollbar-hide">
         {[
           { key: 'all',      label: 'All' },
@@ -369,8 +340,7 @@ export default function CollabThread() {
           { key: 'sent',     label: 'Sent' },
           { key: 'active',   label: 'Active' },
         ].map(({ key, label }) => (
-          <button key={key}
-            onClick={() => { tap(); setFilter(key); }}
+          <button key={key} onClick={() => { tap(); setFilter(key); }}
             className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition ${
               filter === key ? 'bg-white text-black' : 'bg-white/[0.06] text-white/40 hover:text-white/60'
             }`}>
@@ -379,7 +349,6 @@ export default function CollabThread() {
         ))}
       </div>
 
-      {/* List */}
       {loading ? (
         <div className="flex justify-center py-8">
           <Loader className="w-5 h-5 animate-spin text-white/20" />
@@ -387,8 +356,7 @@ export default function CollabThread() {
       ) : filtered.length === 0 ? (
         <div className="py-8 text-center">
           <p className="text-sm text-white/20">No {filter !== 'all' ? filter : ''} requests yet</p>
-          <button
-            onClick={() => { tap(); navigate('/collab-radar'); }}
+          <button onClick={() => { tap(); navigate('/collab-radar'); }}
             className="mt-3 text-xs text-purple-400 hover:text-purple-300 transition">
             Scan for matches →
           </button>
@@ -396,14 +364,9 @@ export default function CollabThread() {
       ) : (
         <div className="space-y-3">
           {filtered.map(req => (
-            <RequestCard
-              key={req.id}
-              request={req}
-              myArtistId={artist.id}
-              onRespond={handleRespond}
-              onClick={setSelected}
-              isSelected={selected?.id === req.id}
-            />
+            <RequestCard key={req.id} request={req} myArtistId={artist.id}
+              onRespond={handleRespond} onClick={setSelected}
+              isSelected={selected?.id === req.id} />
           ))}
         </div>
       )}
