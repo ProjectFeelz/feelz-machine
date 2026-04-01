@@ -1,31 +1,35 @@
 import React, { createContext, useContext, useState, useRef, useCallback, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
+import { useMediaSession } from '../hooks/useMediaSession';
 
 const PlayerContext = createContext({});
 
+// ── Inner component that has access to state for Media Session ────────────────
+function PlayerProviderInner({ children, value, isPlaying, togglePlay, playNext, playPrev, currentTrack }) {
+  useMediaSession({ currentTrack, isPlaying, togglePlay, playNext, playPrev });
+  return <PlayerContext.Provider value={value}>{children}</PlayerContext.Provider>;
+}
+
 export function PlayerProvider({ children }) {
   const [currentTrack, setCurrentTrack] = useState(null);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [duration, setDuration] = useState(0);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [volume, setVolume] = useState(1);
-  const [queue, setQueue] = useState([]);
-  const [queueIndex, setQueueIndex] = useState(-1);
-  const [shuffle, setShuffle] = useState(false);
-  const [repeat, setRepeat] = useState('none');
-  const [isMinimized, setIsMinimized] = useState(true);
+  const [isPlaying, setIsPlaying]       = useState(false);
+  const [duration, setDuration]         = useState(0);
+  const [currentTime, setCurrentTime]   = useState(0);
+  const [volume, setVolume]             = useState(1);
+  const [queue, setQueue]               = useState([]);
+  const [queueIndex, setQueueIndex]     = useState(-1);
+  const [shuffle, setShuffle]           = useState(false);
+  const [repeat, setRepeat]             = useState('none');
+  const [isMinimized, setIsMinimized]   = useState(true);
 
-  const audioRef = useRef(new Audio());
-  const streamLoggedRef = useRef(false);
+  const audioRef          = useRef(new Audio());
+  const streamLoggedRef   = useRef(false);
+  const queueRef          = useRef([]);
+  const queueIndexRef     = useRef(-1);
+  const shuffleRef        = useRef(false);
+  const repeatRef         = useRef('none');
+  const volumeRef         = useRef(1);
 
-  // Refs to always have latest values inside audio event listeners
-  const queueRef = useRef([]);
-  const queueIndexRef = useRef(-1);
-  const shuffleRef = useRef(false);
-  const repeatRef = useRef('none');
-  const volumeRef = useRef(1);
-
-  // Keep refs in sync with state
   useEffect(() => { queueRef.current = queue; }, [queue]);
   useEffect(() => { queueIndexRef.current = queueIndex; }, [queueIndex]);
   useEffect(() => { shuffleRef.current = shuffle; }, [shuffle]);
@@ -33,7 +37,7 @@ export function PlayerProvider({ children }) {
   useEffect(() => { volumeRef.current = volume; }, [volume]);
 
   const playNextFromRef = useCallback(() => {
-    const q = queueRef.current;
+    const q   = queueRef.current;
     const idx = queueIndexRef.current;
     const isShuffled = shuffleRef.current;
     const rep = repeatRef.current;
@@ -61,9 +65,9 @@ export function PlayerProvider({ children }) {
 
   useEffect(() => {
     const audio = audioRef.current;
-    const onTimeUpdate = () => setCurrentTime(audio.currentTime);
-    const onDurationChange = () => setDuration(audio.duration || 0);
-    const onEnded = () => {
+    const onTimeUpdate      = () => setCurrentTime(audio.currentTime);
+    const onDurationChange  = () => setDuration(audio.duration || 0);
+    const onEnded           = () => {
       if (repeatRef.current === 'one') {
         audio.currentTime = 0;
         audio.play().catch(console.error);
@@ -71,19 +75,19 @@ export function PlayerProvider({ children }) {
         playNextFromRef();
       }
     };
-    const onPlay = () => setIsPlaying(true);
+    const onPlay  = () => setIsPlaying(true);
     const onPause = () => setIsPlaying(false);
-    audio.addEventListener('timeupdate', onTimeUpdate);
+    audio.addEventListener('timeupdate',     onTimeUpdate);
     audio.addEventListener('durationchange', onDurationChange);
-    audio.addEventListener('ended', onEnded);
-    audio.addEventListener('play', onPlay);
-    audio.addEventListener('pause', onPause);
+    audio.addEventListener('ended',          onEnded);
+    audio.addEventListener('play',           onPlay);
+    audio.addEventListener('pause',          onPause);
     return () => {
-      audio.removeEventListener('timeupdate', onTimeUpdate);
+      audio.removeEventListener('timeupdate',     onTimeUpdate);
       audio.removeEventListener('durationchange', onDurationChange);
-      audio.removeEventListener('ended', onEnded);
-      audio.removeEventListener('play', onPlay);
-      audio.removeEventListener('pause', onPause);
+      audio.removeEventListener('ended',          onEnded);
+      audio.removeEventListener('play',           onPlay);
+      audio.removeEventListener('pause',          onPause);
       audio.pause();
     };
   }, [playNextFromRef]);
@@ -109,14 +113,10 @@ export function PlayerProvider({ children }) {
       const { data: track } = await supabase.from('tracks').select('stream_count, artist_id').eq('id', trackId).single();
       if (track) {
         await supabase.from('tracks').update({ stream_count: (track.stream_count || 0) + 1 }).eq('id', trackId);
-        // Update main artist streams
         const { data: art } = await supabase.from('artists').select('total_streams').eq('id', track.artist_id).single();
         if (art) await supabase.from('artists').update({ total_streams: (art.total_streams || 0) + 1 }).eq('id', track.artist_id);
-        // Update collab artist streams
         const { data: collabs } = await supabase.from('collaborations')
-          .select('artist_id')
-          .eq('track_id', trackId)
-          .eq('status', 'accepted');
+          .select('artist_id').eq('track_id', trackId).eq('status', 'accepted');
         if (collabs?.length) {
           for (const collab of collabs) {
             if (collab.artist_id === track.artist_id) continue;
@@ -125,9 +125,7 @@ export function PlayerProvider({ children }) {
           }
         }
       }
-    } catch (err) {
-      console.error('Failed to log stream:', err);
-    }
+    } catch (err) { console.error('Failed to log stream:', err); }
   };
 
   const playTrack = useCallback((track, trackList = []) => {
@@ -170,9 +168,7 @@ export function PlayerProvider({ children }) {
     volumeRef.current = v;
   }, []);
 
-  const playNext = useCallback(() => {
-    playNextFromRef();
-  }, [playNextFromRef]);
+  const playNext = useCallback(() => { playNextFromRef(); }, [playNextFromRef]);
 
   const playPrev = useCallback(() => {
     if (audioRef.current.currentTime > 3) {
@@ -180,7 +176,7 @@ export function PlayerProvider({ children }) {
       setCurrentTime(0);
       return;
     }
-    const q = queueRef.current;
+    const q   = queueRef.current;
     const idx = queueIndexRef.current;
     if (q.length === 0) return;
     let prevIndex = idx - 1;
@@ -200,13 +196,11 @@ export function PlayerProvider({ children }) {
     }
   }, []);
 
-  const addToQueue = useCallback((track) => { setQueue(prev => [...prev, track]); }, []);
-
+  const addToQueue      = useCallback((track) => { setQueue(prev => [...prev, track]); }, []);
   const removeFromQueue = useCallback((index) => {
     setQueue(prev => prev.filter((_, i) => i !== index));
     setQueueIndex(prev => index < prev ? prev - 1 : prev);
   }, []);
-
   const moveInQueue = useCallback((from, to) => {
     setQueue(prev => {
       const next = [...prev];
@@ -215,7 +209,6 @@ export function PlayerProvider({ children }) {
       return next;
     });
   }, []);
-
   const playNextInQueue = useCallback((track) => {
     setQueue(prev => {
       const next = [...prev];
@@ -223,13 +216,12 @@ export function PlayerProvider({ children }) {
       return next;
     });
   }, []);
-
-  const clearQueue = useCallback(() => { setQueue([]); setQueueIndex(-1); }, []);
+  const clearQueue    = useCallback(() => { setQueue([]); setQueueIndex(-1); }, []);
   const toggleShuffle = useCallback(() => setShuffle(prev => !prev), []);
-  const toggleRepeat = useCallback(() => {
+  const toggleRepeat  = useCallback(() => {
     setRepeat(prev => {
       if (prev === 'none') return 'all';
-      if (prev === 'all') return 'one';
+      if (prev === 'all')  return 'one';
       return 'none';
     });
   }, []);
@@ -237,11 +229,22 @@ export function PlayerProvider({ children }) {
   const value = {
     currentTrack, isPlaying, duration, currentTime, volume, queue, queueIndex,
     shuffle, repeat, isMinimized, setIsMinimized, playTrack, togglePlay, seek,
-    setVolume: setVolumeLevel, playNext, playPrev, addToQueue, removeFromQueue,
-    moveInQueue, playNextInQueue, clearQueue, toggleShuffle, toggleRepeat,
+    setVolume: setVolumeLevel, setVolumeLevel, playNext, playPrev, addToQueue,
+    removeFromQueue, moveInQueue, playNextInQueue, clearQueue, toggleShuffle, toggleRepeat,
   };
 
-  return <PlayerContext.Provider value={value}>{children}</PlayerContext.Provider>;
+  return (
+    <PlayerProviderInner
+      value={value}
+      currentTrack={currentTrack}
+      isPlaying={isPlaying}
+      togglePlay={togglePlay}
+      playNext={playNext}
+      playPrev={playPrev}
+    >
+      {children}
+    </PlayerProviderInner>
+  );
 }
 
 export const usePlayer = () => useContext(PlayerContext);
