@@ -3,11 +3,12 @@ import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import {
   Upload, Trash2, Loader, Plus, Save, Music,
-  Edit, Search, X, Zap, Disc, AlertCircle, Youtube,
+  Edit, Search, X, Zap, Disc, AlertCircle, Youtube, HelpCircle,
 } from 'lucide-react';
 import CollaboratorSearch from '../components/CollaboratorSearch';
 import TierGate from '../components/TierGate';
 import { useAudioConverter } from '../hooks/useAudioConverter';
+import UploadHelpPanel from '../components/UploadHelpPanel';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -66,6 +67,19 @@ function slugify(text) {
   const base = text.toString().toLowerCase().trim()
     .replace(/\s+/g, '-').replace(/[^\w\-]+/g, '').replace(/\-\-+/g, '-');
   return `${base}-${Date.now().toString(36)}`;
+}
+
+// ── Title case normaliser ─────────────────────────────────────────────────────
+// Only transforms strings where every letter is uppercase (e.g. "GAS (MIDNIGHT)")
+// Mixed case like "LoFi Vibes" or "xO Tour Life" is left untouched
+function normaliseTitleCase(str) {
+  if (!str) return str;
+  const letters = str.replace(/[^a-zA-Z]/g, '');
+  if (letters.length === 0) return str;
+  if (letters !== letters.toUpperCase()) return str; // already mixed — leave it
+  return str
+    .toLowerCase()
+    .replace(/(?:^|\s|\(|-)[a-z]/g, c => c.toUpperCase());
 }
 
 // ─── Small reusable components ────────────────────────────────────────────────
@@ -188,6 +202,7 @@ export default function TrackUploadPanel() {
   const { convert, converting, progress: convProgress, error: convError } = useAudioConverter();
 
   const [activeTab, setActiveTab]   = useState('upload');
+  const [showHelp, setShowHelp]     = useState(false);
   const [albums, setAlbums]         = useState([]);
   const [tracks, setTracks]         = useState([]);
   const [filteredTracks, setFilteredTracks] = useState([]);
@@ -522,6 +537,9 @@ export default function TrackUploadPanel() {
   return (
     <div className="space-y-5">
 
+      {/* Help panel */}
+      {showHelp && <UploadHelpPanel onClose={() => setShowHelp(false)} />}
+
       {/* Toast */}
       {message.text && (
         <div className={`p-3 rounded-lg text-sm flex items-start space-x-2 ${
@@ -536,19 +554,31 @@ export default function TrackUploadPanel() {
       {converting && <ConversionBanner progress={convProgress} />}
       {convError   && <div className="p-3 rounded-lg text-sm bg-red-500/10 border border-red-500/20 text-red-400">{convError}</div>}
 
-      {/* Tab bar */}
-      <div className="flex space-x-1 bg-white/[0.03] rounded-lg p-1">
-        {[
-          { key: 'upload', label: 'Upload',       icon: Upload },
-          { key: 'manage', label: 'Manage Tracks', icon: Edit },
-        ].map(({ key, label, icon: Icon }) => (
-          <button key={key} type="button" onClick={() => setActiveTab(key)}
-            className={`flex-1 flex items-center justify-center space-x-2 py-2.5 rounded-md text-sm font-medium transition ${
-              activeTab === key ? 'bg-white text-black' : 'text-white/50 hover:text-white/70'
-            }`}>
-            <Icon className="w-4 h-4" /><span>{label}</span>
-          </button>
-        ))}
+      {/* Tab bar with help link */}
+      <div className="flex items-center space-x-2">
+        <div className="flex flex-1 space-x-1 bg-white/[0.03] rounded-lg p-1">
+          {[
+            { key: 'upload', label: 'Upload',       icon: Upload },
+            { key: 'manage', label: 'Manage Tracks', icon: Edit },
+          ].map(({ key, label, icon: Icon }) => (
+            <button key={key} type="button" onClick={() => setActiveTab(key)}
+              className={`flex-1 flex items-center justify-center space-x-2 py-2.5 rounded-md text-sm font-medium transition ${
+                activeTab === key ? 'bg-white text-black' : 'text-white/50 hover:text-white/70'
+              }`}>
+              <Icon className="w-4 h-4" /><span>{label}</span>
+            </button>
+          ))}
+        </div>
+        {/* Help button */}
+        <button
+          type="button"
+          onClick={() => setShowHelp(true)}
+          className="flex items-center space-x-1.5 px-3 py-2.5 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] transition text-white/40 hover:text-white/70 text-xs font-medium flex-shrink-0"
+          title="Upload guide"
+        >
+          <HelpCircle className="w-4 h-4" />
+          <span className="hidden sm:inline">How to upload</span>
+        </button>
       </div>
 
       {/* ══════════════════ UPLOAD TAB ══════════════════ */}
@@ -588,7 +618,8 @@ export default function TrackUploadPanel() {
                   <FieldLabel>{release.release_type.charAt(0).toUpperCase() + release.release_type.slice(1)} Title *</FieldLabel>
                   <FInput type="text" required value={release.album_title}
                     placeholder={`Enter ${release.release_type} title…`}
-                    onChange={(e) => setRelease({ ...release, album_title: e.target.value })} />
+                    onChange={(e) => setRelease({ ...release, album_title: e.target.value })}
+                    onBlur={(e) => setRelease(prev => ({ ...prev, album_title: normaliseTitleCase(e.target.value) }))} />
                 </div>
                 <div>
                   <FieldLabel>Release Date</FieldLabel>
@@ -670,7 +701,6 @@ export default function TrackUploadPanel() {
               </button>
             </div>
           ) : (
-            /* ── Track form ── */
             <div className="bg-white/[0.03] rounded-xl p-5 border border-white/[0.06] space-y-4">
               <h3 className="text-sm font-semibold text-white">
                 {isAlbumRelease
@@ -682,7 +712,8 @@ export default function TrackUploadPanel() {
                 <div>
                   <FieldLabel>Track Title *</FieldLabel>
                   <FInput type="text" required value={trackForm.title}
-                    onChange={(e) => setTrackForm({ ...trackForm, title: e.target.value })} />
+                    onChange={(e) => setTrackForm({ ...trackForm, title: e.target.value })}
+                    onBlur={(e) => setTrackForm(prev => ({ ...prev, title: normaliseTitleCase(e.target.value) }))} />
                 </div>
                 {!isAlbumRelease && (
                   <div>
@@ -781,7 +812,6 @@ export default function TrackUploadPanel() {
                 </div>
               </div>
 
-              {/* YouTube URL — upload form */}
               <YoutubeField
                 value={trackForm.youtube_url}
                 onChange={(val) => setTrackForm({ ...trackForm, youtube_url: val })}
@@ -891,7 +921,6 @@ export default function TrackUploadPanel() {
             <div className="space-y-2">
               {filteredTracks.map(track => (
                 <div key={track.id} className="bg-white/[0.03] rounded-xl border border-white/[0.06] overflow-hidden">
-
                   {editingId !== track.id ? (
                     <div className="flex items-center space-x-3 p-3">
                       {track.cover_artwork_url
@@ -937,7 +966,8 @@ export default function TrackUploadPanel() {
                         <div>
                           <FieldLabel>Title</FieldLabel>
                           <FInput type="text" value={editForm.title}
-                            onChange={(e) => setEditForm({ ...editForm, title: e.target.value })} />
+                            onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
+                            onBlur={(e) => setEditForm(prev => ({ ...prev, title: normaliseTitleCase(e.target.value) }))} />
                         </div>
                         <div>
                           <FieldLabel>Album</FieldLabel>
@@ -998,7 +1028,6 @@ export default function TrackUploadPanel() {
                           className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none resize-none" />
                       </div>
 
-                      {/* YouTube URL — edit form */}
                       <YoutubeField
                         value={editForm.youtube_url}
                         onChange={(val) => setEditForm({ ...editForm, youtube_url: val })}
