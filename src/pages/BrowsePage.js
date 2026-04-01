@@ -7,7 +7,7 @@ import { usePlayer } from '../contexts/PlayerContext';
 import { useAuth } from '../contexts/AuthContext';
 import {
   Search, Flame, TrendingUp, Play, Pause, Music, Crown,
-  Loader, Verified, Disc3, Star, Sparkles
+  Loader, Verified, Disc3, Star, Sparkles, Clock,
 } from 'lucide-react';
 
 function formatNumber(n) {
@@ -29,7 +29,26 @@ const GENRE_TAGS = [
   'Latin', 'Soul', 'Jazz', 'Indie', 'Lo-Fi', 'Drill', 'Trap', 'House',
 ];
 
-// ── Section label — small, spaced, dimmer than content ───────────────────────
+// ── Search history helpers ────────────────────────────────────────────────────
+const SEARCH_HISTORY_KEY = 'fm_search_history';
+
+function getSearchHistory() {
+  try { return JSON.parse(localStorage.getItem(SEARCH_HISTORY_KEY) || '[]'); }
+  catch { return []; }
+}
+
+function addToSearchHistory(term) {
+  if (!term.trim()) return;
+  const history = getSearchHistory().filter(h => h !== term);
+  history.unshift(term);
+  localStorage.setItem(SEARCH_HISTORY_KEY, JSON.stringify(history.slice(0, 8)));
+}
+
+function clearSearchHistory() {
+  localStorage.removeItem(SEARCH_HISTORY_KEY);
+}
+
+// ── Section label ─────────────────────────────────────────────────────────────
 function SectionLabel({ icon: Icon, title, subtitle }) {
   return (
     <div className="flex items-center space-x-2.5 mb-4">
@@ -56,22 +75,24 @@ export default function BrowsePage() {
     if (user === null) navigate('/login');
   }, [user]);
 
-  const [query, setQuery] = useState('');
+  const [query, setQuery]                     = useState('');
+  const [searchFocused, setSearchFocused]     = useState(false);
+  const [searchHistory, setSearchHistory]     = useState(() => getSearchHistory());
   const [actionSheetTrack, setActionSheetTrack] = useState(null);
-  const [activeTab, setActiveTab] = useState(() => {
+  const [activeTab, setActiveTab]             = useState(() => {
     const params = new URLSearchParams(window.location.search);
     return params.get('tab') || 'trending';
   });
-  const [selectedGenre, setSelectedGenre] = useState('All');
-  const [trending, setTrending]           = useState([]);
-  const [featured, setFeatured]           = useState([]);
-  const [newReleases, setNewReleases]     = useState([]);
-  const [allTracks, setAllTracks]         = useState([]);
-  const [artists, setArtists]             = useState([]);
-  const [albums, setAlbums]               = useState([]);
-  const [loading, setLoading]             = useState(true);
-  const [searchResults, setSearchResults] = useState(null);
-  const [recommended, setRecommended]     = useState([]);
+  const [selectedGenre, setSelectedGenre]     = useState('All');
+  const [trending, setTrending]               = useState([]);
+  const [featured, setFeatured]               = useState([]);
+  const [newReleases, setNewReleases]         = useState([]);
+  const [allTracks, setAllTracks]             = useState([]);
+  const [artists, setArtists]                 = useState([]);
+  const [albums, setAlbums]                   = useState([]);
+  const [loading, setLoading]                 = useState(true);
+  const [searchResults, setSearchResults]     = useState(null);
+  const [recommended, setRecommended]         = useState([]);
 
   useEffect(() => { if (user) fetchAll(); }, [user]);
 
@@ -110,9 +131,15 @@ export default function BrowsePage() {
     } catch (err) { console.error('Browse recs error:', err); }
   };
 
+  // Search effect — save history when searching
   useEffect(() => {
-    if (query.trim().length >= 2) searchAll(query.trim());
-    else setSearchResults(null);
+    if (query.trim().length >= 2) {
+      searchAll(query.trim());
+      addToSearchHistory(query.trim());
+      setSearchHistory(getSearchHistory());
+    } else {
+      setSearchResults(null);
+    }
   }, [query]);
 
   useEffect(() => {
@@ -167,7 +194,6 @@ export default function BrowsePage() {
 
       const allNorm    = norm(tracksRaw);
       const albumsNorm = normAlbums(albumsRaw);
-
       const merged = [
         ...allNorm.map(t => ({ ...t, _isAlbum: false, _date: t.created_at })),
         ...albumsNorm.map(a => ({ ...a, _isAlbum: true, _date: a.release_date || a.created_at })),
@@ -228,9 +254,8 @@ export default function BrowsePage() {
         <meta property="og:url" content="https://www.feelzmachine.com/browse" />
       </Helmet>
 
-      {/* ── Sticky header zone — search + tabs only ── */}
+      {/* ── Sticky header ── */}
       <div className="sticky top-0 z-20 bg-black/95 backdrop-blur-xl pt-12 md:pt-4 pb-3 px-6 md:px-0 border-b border-white/[0.04]">
-
         {/* Search */}
         <div className="relative mb-3">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
@@ -238,6 +263,8 @@ export default function BrowsePage() {
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
+            onFocus={() => setSearchFocused(true)}
+            onBlur={() => setTimeout(() => setSearchFocused(false), 150)}
             placeholder="Search tracks, artists, albums…"
             aria-label="Search tracks, artists, albums"
             className="w-full pl-10 pr-10 py-2.5 bg-white/[0.06] rounded-xl text-sm text-white placeholder-white/30 outline-none focus:bg-white/[0.1] transition"
@@ -249,6 +276,28 @@ export default function BrowsePage() {
             </button>
           )}
         </div>
+
+        {/* Search history dropdown */}
+        {searchFocused && !query && searchHistory.length > 0 && (
+          <div className="mb-3 bg-white/[0.03] rounded-xl border border-white/[0.06] overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-2.5 border-b border-white/[0.04]">
+              <p className="text-[10px] uppercase tracking-widest text-white/25 font-semibold">Recent searches</p>
+              <button
+                onClick={() => { clearSearchHistory(); setSearchHistory([]); }}
+                className="text-[10px] text-white/25 hover:text-white/50 transition">
+                Clear
+              </button>
+            </div>
+            {searchHistory.map((term) => (
+              <button key={term}
+                onClick={() => setQuery(term)}
+                className="w-full flex items-center space-x-3 px-4 py-2.5 hover:bg-white/[0.04] transition text-left">
+                <Clock className="w-3.5 h-3.5 text-white/20 flex-shrink-0" />
+                <span className="text-sm text-white/60 truncate">{term}</span>
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* Tab bar */}
         <div role="tablist" className="flex space-x-1 overflow-x-auto scrollbar-hide bg-white/[0.03] rounded-xl p-1">
@@ -272,11 +321,9 @@ export default function BrowsePage() {
         {searchResults && (
           <div className="mb-6">
             <p className="section-label mb-4">Results for "{query}"</p>
-
             {searchResults.artists.length > 0 && (
               <div className="mb-5">
                 <p className="section-label mb-3">Artists</p>
-               
                 <div className="flex space-x-3 overflow-x-auto scrollbar-hide">
                   {searchResults.artists.map(a => (
                     <button key={a.id} onClick={() => navigate(`/artist/${a.slug}`)}
@@ -294,11 +341,9 @@ export default function BrowsePage() {
                 </div>
               </div>
             )}
-
             {searchResults.tracks.length > 0 && (
               <div className="mb-5">
                 <p className="section-label mb-3">Tracks</p>
-              
                 {searchResults.tracks.slice(0, 5).map((track, i) => (
                   <TrackRow key={track.id} track={track} index={i}
                     currentTrack={currentTrack} isPlaying={isPlaying}
@@ -308,11 +353,9 @@ export default function BrowsePage() {
                 ))}
               </div>
             )}
-
             {searchResults.albums.length > 0 && (
               <div className="mb-5">
                 <p className="section-label mb-3">Albums</p>
-                
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                   {searchResults.albums.slice(0, 4).map(album => (
                     <AlbumTile key={album.id} album={album} navigate={navigate} />
@@ -320,20 +363,17 @@ export default function BrowsePage() {
                 </div>
               </div>
             )}
-
             {searchResults.tracks.length === 0 && searchResults.artists.length === 0 && searchResults.albums.length === 0 && (
               <p className="text-center text-white/20 text-sm py-8">No results found</p>
             )}
-
             <div className="border-b border-white/[0.06] mb-5" />
           </div>
         )}
 
-        {/* ── FEATURED ── */}
+        {/* FEATURED */}
         {activeTab === 'featured' && (
           <div>
             <SectionLabel icon={Star} title="Featured" subtitle="Hand-picked tracks from our team" />
-           
             {featured.length > 0 ? (
               <>
                 <div className="hidden md:grid md:grid-cols-2 lg:grid-cols-3 gap-3 mb-4">
@@ -364,11 +404,10 @@ export default function BrowsePage() {
           </div>
         )}
 
-        {/* ── NEW RELEASES ── */}
+        {/* NEW RELEASES */}
         {activeTab === 'new' && (
           <div>
             <SectionLabel icon={Sparkles} title="New Releases" subtitle="Latest tracks and albums" />
-          
             {newReleases.length > 0 ? (
               <>
                 <div className="hidden md:grid md:grid-cols-2 lg:grid-cols-3 gap-3 mb-4">
@@ -414,11 +453,10 @@ export default function BrowsePage() {
           </div>
         )}
 
-        {/* ── TRENDING ── */}
+        {/* TRENDING */}
         {activeTab === 'trending' && (
           <div>
             <SectionLabel icon={Flame} title="Trending Now" subtitle="Based on streams, likes, saves & playlist adds" />
-        
             {trending.length > 0 ? (
               <>
                 <div className="hidden md:grid md:grid-cols-2 lg:grid-cols-3 gap-3 mb-4">
@@ -457,14 +495,12 @@ export default function BrowsePage() {
           </div>
         )}
 
-        {/* ── TRACKS ── */}
+        {/* TRACKS */}
         {activeTab === 'tracks' && (
           <div>
-            {/* Recommended strip */}
             {selectedGenre === 'All' && recommended.length > 0 && (
               <div className="mb-6">
                 <SectionLabel icon={Sparkles} title="Recommended For You" />
-            
                 <div className="flex space-x-3 overflow-x-auto scrollbar-hide -mx-6 px-6">
                   {recommended.map(track => (
                     <div key={track.id} className="flex-shrink-0 w-32 cursor-pointer group"
@@ -482,8 +518,6 @@ export default function BrowsePage() {
                 </div>
               </div>
             )}
-
-            {/* Genre filter */}
             <p className="section-label mb-3">Filter by Genre</p>
             <div className="flex space-x-2 overflow-x-auto scrollbar-hide mb-5 -mx-1 px-1">
               {GENRE_TAGS.map(genre => (
@@ -495,9 +529,6 @@ export default function BrowsePage() {
                 </button>
               ))}
             </div>
-
-         
-
             {filteredTracks.length > 0 ? (
               <>
                 <div className="hidden md:grid md:grid-cols-2 lg:grid-cols-3 gap-3 mb-4">
@@ -527,11 +558,10 @@ export default function BrowsePage() {
           </div>
         )}
 
-        {/* ── ARTISTS ── */}
+        {/* ARTISTS */}
         {activeTab === 'artists' && (
           <div>
             <SectionLabel icon={Crown} title="Artists" subtitle="Sorted by total streams" />
-           
             {artists.length > 0 ? (
               <div className="grid grid-cols-3 md:grid-cols-5 gap-4">
                 {artists.map(a => (
@@ -549,9 +579,7 @@ export default function BrowsePage() {
                       <p className="text-sm font-medium text-white truncate">{a.artist_name}</p>
                       {a.is_verified && <Verified className="w-3 h-3 text-blue-400 flex-shrink-0" />}
                     </div>
-                    <p className="text-[10px] text-white/25">
-                      {formatNumber(a.follower_count)} followers
-                    </p>
+                    <p className="text-[10px] text-white/25">{formatNumber(a.follower_count)} followers</p>
                   </button>
                 ))}
               </div>
@@ -561,11 +589,10 @@ export default function BrowsePage() {
           </div>
         )}
 
-        {/* ── ALBUMS ── */}
+        {/* ALBUMS */}
         {activeTab === 'albums' && (
           <div>
             <SectionLabel icon={Disc3} title="Albums & EPs" subtitle="Latest releases" />
-          
             {albums.length > 0 ? (
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 {albums.map(album => (
@@ -579,7 +606,6 @@ export default function BrowsePage() {
         )}
       </div>
 
-      {/* Action sheet */}
       {actionSheetTrack && (
         <TrackActionSheet
           track={actionSheetTrack}
@@ -591,7 +617,7 @@ export default function BrowsePage() {
   );
 }
 
-/* ── Sub components ────────────────────────────────────────────────────────── */
+/* ── Sub components ──────────────────────────────────────────────────────────*/
 
 function TrackCard({ track, rank, currentTrack, isPlaying, onPlay, onMore, onArtist }) {
   const isActive       = currentTrack?.id === track.id;
@@ -607,9 +633,7 @@ function TrackCard({ track, rank, currentTrack, isPlaying, onPlay, onMore, onArt
           ? <img src={track.cover_artwork_url} alt="" className="w-full h-full object-cover" loading="lazy" />
           : <div className="w-full h-full flex items-center justify-center"><Music className="w-5 h-5 text-white/15" /></div>}
         <div className="absolute inset-0 flex items-center justify-center bg-black/30">
-          {isTrackPlaying
-            ? <Pause className="w-4 h-4 text-white" fill="white" />
-            : <Play className="w-4 h-4 text-white" fill="white" />}
+          {isTrackPlaying ? <Pause className="w-4 h-4 text-white" fill="white" /> : <Play className="w-4 h-4 text-white" fill="white" />}
         </div>
       </div>
       <div className="flex-1 min-w-0">
@@ -666,8 +690,7 @@ function TrendingRow({ track, rank, currentTrack, isPlaying, onPlay, onMore, onA
       </div>
       <div className="flex-1 min-w-0">
         <p className={`text-sm font-medium truncate ${isActive ? 'text-purple-400' : 'text-white'}`}>{track.title}</p>
-        <button onClick={(e) => { e.stopPropagation(); onArtist(); }}
-          className="flex items-center space-x-1">
+        <button onClick={(e) => { e.stopPropagation(); onArtist(); }} className="flex items-center space-x-1">
           <span className="text-xs text-white/40 truncate hover:text-white/60 transition">{track.artist_name}</span>
           {track.artists?.is_verified && <Verified className="w-2.5 h-2.5 text-blue-400 flex-shrink-0" />}
         </button>
