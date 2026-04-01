@@ -41,11 +41,11 @@ export default function MiniPlayer() {
   return (
     <div
       className="md:hidden fixed left-0 right-0 z-50"
-      style={{ bottom: 'calc(68px + var(--safe-area-bottom, 0px))' }}
+      style={{ bottom: '56px' }}
     >
       {/* Draggable progress bar — tall touch target */}
       <div
-        className="h-6 flex items-center cursor-pointer"
+        className="h-1 flex items-center cursor-pointer"
         onTouchStart={(e) => e.stopPropagation()}
         onTouchMove={(e) => { e.stopPropagation(); handleProgressSeek(e); }}
         onTouchEnd={(e) => { e.stopPropagation(); handleProgressSeek(e); }}
