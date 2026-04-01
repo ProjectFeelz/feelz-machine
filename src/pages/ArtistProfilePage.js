@@ -14,6 +14,7 @@ import {
   MoreHorizontal, DollarSign, MessageCircle, ChevronDown,
   ChevronUp, Send, Trash2
 } from 'lucide-react';
+import { ArtistProfileSkeleton } from '../components/SkeletonLoader';
 
 const PAYPAL_CLIENT_ID = process.env.REACT_APP_PAYPAL_CLIENT_ID;
 const EMOJI_REACTIONS = ['🔥', '❤️', '👏', '😮', '😂', '🎵'];
@@ -782,13 +783,7 @@ export default function ArtistProfilePage() {
     }
   }, [theme?.body_font, theme?.heading_font]);
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-black flex items-center justify-center">
-        <Loader className="w-6 h-6 animate-spin text-white/30" />
-      </div>
-    );
-  }
+  if (loading) return <ArtistProfileSkeleton />;
 
   if (!artist) {
     return (
