@@ -253,11 +253,29 @@ export default function ProfilePage() {
                     </div>
                 }
               </div>
-              {editing && (
-                <label className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-white flex items-center justify-center cursor-pointer shadow-lg">
+              {isArtist && (
+                <label className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-white flex items-center justify-center cursor-pointer shadow-lg hover:bg-white/90 transition">
                   <Camera className="w-3 h-3 text-black" />
                   <input type="file" accept=".jpg,.jpeg,.png,.webp" className="hidden"
-                    onChange={e => setProfileImgFile(e.target.files[0])} />
+                    onChange={async (e) => {
+                      const file = e.target.files[0];
+                      if (!file) return;
+                      setProfileImgFile(file);
+                      setPreviewUrl(URL.createObjectURL(file));
+                      // Auto-save the image immediately without requiring Edit mode
+                      setSaving(true); setMsg('');
+                      try {
+                        const url = await uploadFile(file, 'profile-images/');
+                        const { error } = await supabase.from('artists')
+                          .update({ profile_image_url: url, updated_at: new Date().toISOString() })
+                          .eq('id', artist.id);
+                        if (error) throw error;
+                        setMsg('Photo updated!');
+                        await refreshProfile();
+                        setTimeout(() => setMsg(''), 3000);
+                      } catch (err) { setMsg('Error: ' + err.message); }
+                      setSaving(false);
+                    }} />
                 </label>
               )}
             </div>
