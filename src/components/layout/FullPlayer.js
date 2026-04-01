@@ -145,7 +145,7 @@ export default function FullPlayer() {
       initial={{ y: '100%' }}
       animate={{ y: 0 }}
       exit={{ y: '100%' }}
-      transition={{ type: 'spring', damping: 30, stiffness: 300 }}
+      transition={{ type: 'tween', duration: 0.28, ease: [0.32, 0.72, 0, 1] }}
       className="fixed inset-0 z-[100] bg-black flex flex-col"
     >
       {/* Drag handle */}
