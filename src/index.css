@@ -7,6 +7,8 @@
   margin: 0;
   padding: 0;
   box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 }
 
 body {
@@ -14,6 +16,8 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
 }
 
 #root {
@@ -137,6 +141,24 @@ html, body, #root {
 /* Hide scrollbars site-wide */
 * { scrollbar-width: none; -ms-overflow-style: none; }
 *::-webkit-scrollbar { display: none; }
+
+/* Native-feel mobile scrolling */
+#root {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+}
+
+/* Horizontal carousels */
+.scrollbar-hide {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+}
+
+/* GPU-accelerate carousel children */
+.scrollbar-hide > * {
+  will-change: transform;
+  transform: translateZ(0);
+}
 
 @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
 .animate-slide-up { animation: slideUp 0.25s ease-out; }
