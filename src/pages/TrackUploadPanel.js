@@ -3,46 +3,44 @@ import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import {
   Upload, Trash2, Loader, Plus, Save, Music,
-  Edit, Search, ChevronDown, ChevronUp, X, ArrowLeft, Zap
+  Edit, Search, X, Zap, Disc, AlertCircle
 } from 'lucide-react';
 import CollaboratorSearch from '../components/CollaboratorSearch';
 import TierGate from '../components/TierGate';
 import { useAudioConverter } from '../hooks/useAudioConverter';
 
+// ─── Constants ────────────────────────────────────────────────────────────────
+
 const GENRES = [
-  'Hip Hop', 'Trap', 'Drill', 'Boom Bap', 'Lo-Fi', 'R&B', 'Neo Soul', 'Pop',
-  'Electronic', 'House', 'Deep House', 'Tech House', 'Techno', 'Dubstep',
-  'Drum & Bass', 'Ambient', 'Downtempo', 'Future Bass', 'Jersey Club',
-  'Jazz', 'Funk', 'Soul', 'Rock', 'Metal', 'Indie', 'Alternative',
-  'Afrobeat', 'Amapiano', 'Reggae', 'Dancehall', 'Latin', 'Reggaeton',
-  'Country', 'EDM', 'Trance', 'Hardstyle', 'UK Garage', 'Grime',
-  'Experimental', 'Vaporwave', 'Synthwave', 'Other'
+  'Hip Hop','Trap','Drill','Boom Bap','Lo-Fi','R&B','Neo Soul','Pop',
+  'Electronic','House','Deep House','Tech House','Techno','Dubstep',
+  'Drum & Bass','Ambient','Downtempo','Future Bass','Jersey Club',
+  'Jazz','Funk','Soul','Rock','Metal','Indie','Alternative',
+  'Afrobeat','Amapiano','Reggae','Dancehall','Latin','Reggaeton',
+  'Country','EDM','Trance','Hardstyle','UK Garage','Grime',
+  'Experimental','Vaporwave','Synthwave','Other',
 ];
 
 const MOODS = [
-  'Dark', 'Happy', 'Sad', 'Aggressive', 'Chill', 'Energetic', 'Melancholic',
-  'Uplifting', 'Mysterious', 'Peaceful', 'Intense', 'Dreamy', 'Romantic',
-  'Angry', 'Hopeful', 'Nostalgic', 'Epic', 'Smooth', 'Bouncy', 'Atmospheric',
-  'Moody', 'Vibey', 'Hard', 'Soft', 'Ethereal', 'Groovy', 'Other'
+  'Dark','Happy','Sad','Aggressive','Chill','Energetic','Melancholic',
+  'Uplifting','Mysterious','Peaceful','Intense','Dreamy','Romantic',
+  'Angry','Hopeful','Nostalgic','Epic','Smooth','Bouncy','Atmospheric',
+  'Moody','Vibey','Hard','Soft','Ethereal','Groovy','Other',
 ];
 
 const VERSION_TYPES = [
-  { value: 'original',   label: 'Original Mix' },
-  { value: 'radio_edit', label: 'Radio Edit' },
-  { value: 'acoustic',   label: 'Acoustic' },
-  { value: 'live',       label: 'Live Performance' },
-  { value: 'remix',      label: 'Remix' },
+  { value: 'original',     label: 'Original Mix' },
+  { value: 'radio_edit',   label: 'Radio Edit' },
+  { value: 'acoustic',     label: 'Acoustic' },
+  { value: 'live',         label: 'Live Performance' },
+  { value: 'remix',        label: 'Remix' },
   { value: 'instrumental', label: 'Instrumental' },
-  { value: 'acapella',   label: 'Acapella' },
-  { value: 'extended',   label: 'Extended Version' },
-  { value: 'clean',      label: 'Clean Version' },
+  { value: 'acapella',     label: 'Acapella' },
+  { value: 'extended',     label: 'Extended Version' },
+  { value: 'clean',        label: 'Clean Version' },
 ];
 
-function slugify(text) {
-  const base = text.toString().toLowerCase().trim()
-    .replace(/\s+/g, '-').replace(/[^\w\-]+/g, '').replace(/\-\-+/g, '-');
-  return `${base}-${Date.now().toString(36)}`;
-}
+const ALBUM_TYPES = ['ep', 'album', 'mixtape', 'live', 'compilation'];
 
 const BLANK_TRACK = {
   title: '', genre: '', mood: '', lyrics: '',
@@ -50,215 +48,78 @@ const BLANK_TRACK = {
   is_premium: false, download_price: '0', featured: false,
   pay_what_you_want: false, minimum_price: '0',
   is_preorder: false, release_date: null,
-  album_id: '', track_number: '1',
-  audio_file: null, cover_file: null, has_versions: false,
+  track_number: '1', audio_file: null, cover_file: null, has_versions: false,
 };
 
-const BLANK_ALBUM = {
-  title: '', description: '', release_type: 'album',
-  release_date: '', is_published: false, price: '0', cover_file: null,
+const BLANK_RELEASE = {
+  release_type: 'single',
+  album_title: '',
+  album_description: '',
+  album_cover_file: null,
+  album_release_date: '',
+  album_price: '0',
+  album_is_published: true,
 };
+
+function slugify(text) {
+  const base = text.toString().toLowerCase().trim()
+    .replace(/\s+/g, '-').replace(/[^\w\-]+/g, '').replace(/\-\-+/g, '-');
+  return `${base}-${Date.now().toString(36)}`;
+}
+
+// ─── Small reusable components ────────────────────────────────────────────────
 
 function Toggle({ value, onChange }) {
   return (
     <div
       className={`w-8 h-5 rounded-full transition-colors flex items-center px-0.5 cursor-pointer ${value ? 'bg-white' : 'bg-white/10'}`}
-      onClick={onChange}
-    >
+      onClick={onChange}>
       <div className={`w-4 h-4 rounded-full transition-transform ${value ? 'translate-x-3 bg-black' : 'translate-x-0 bg-white/30'}`} />
     </div>
   );
 }
 
-// ── Conversion progress bar ───────────────────────────────────────────────────
 function ConversionBanner({ progress }) {
   return (
     <div className="rounded-lg p-3 bg-purple-500/10 border border-purple-500/20 space-y-2">
       <div className="flex items-center space-x-2">
         <Zap className="w-3.5 h-3.5 text-purple-400 flex-shrink-0" />
-        <p className="text-xs text-purple-400 font-medium">
-          Converting WAV to MP3 (320kbps)… {progress}%
-        </p>
+        <p className="text-xs text-purple-400 font-medium">Converting WAV to MP3 (320kbps)… {progress}%</p>
       </div>
       <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
-        <div
-          className="h-full bg-purple-400 rounded-full transition-all duration-300"
-          style={{ width: `${progress}%` }}
-        />
+        <div className="h-full bg-purple-400 rounded-full transition-all duration-300" style={{ width: `${progress}%` }} />
       </div>
     </div>
   );
 }
 
-// ── Audio file field — shows WAV→MP3 notice ───────────────────────────────────
-function AudioFileField({ form, setForm, showMessage }) {
-  const isWav = form.audio_file?.name?.toLowerCase().endsWith('.wav');
+function FieldLabel({ children }) {
+  return <label className="block text-xs text-white/40 mb-1.5">{children}</label>;
+}
+
+function FInput({ className = '', ...props }) {
   return (
-    <div>
-      <label className="block text-xs text-white/40 mb-1.5">Audio File * (.mp3, .wav, .flac)</label>
-      <input
-        type="file"
-        accept=".wav,.mp3,.flac,.m4a,.ogg"
-        onChange={(e) => {
-          const f = e.target.files[0];
-          if (f && f.size > 500 * 1024 * 1024) { showMessage('error', 'File too large! Max 500MB'); return; }
-          setForm({ ...form, audio_file: f });
-        }}
-        className="w-full text-sm text-white/60 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:bg-white/[0.06] file:text-white/60 file:text-sm hover:file:bg-white/[0.1]"
-      />
-      {form.audio_file && (
-        <div className="mt-1 space-y-1">
-          <p className="text-xs text-white/30">
-            {form.audio_file.name} ({(form.audio_file.size / (1024 * 1024)).toFixed(1)}MB)
-          </p>
-          {isWav && (
-            <p className="text-xs text-purple-400/70 flex items-center space-x-1">
-              <Zap className="w-3 h-3" />
-              <span>WAV detected — will be converted to MP3 at 320kbps before upload</span>
-            </p>
-          )}
-        </div>
-      )}
-    </div>
+    <input {...props}
+      className={`w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none focus:bg-white/[0.1] transition ${className}`} />
   );
 }
 
-function TrackFormFields({ form, setForm, albums, showMessage }) {
+function FSelect({ children, className = '', ...props }) {
   return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <label className="block text-xs text-white/40 mb-1.5">Track Title *</label>
-          <input type="text" required value={form.title}
-            onChange={(e) => setForm({ ...form, title: e.target.value })}
-            className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none focus:bg-white/[0.1] transition" />
-        </div>
-        <div>
-          <label className="block text-xs text-white/40 mb-1.5">Album (optional)</label>
-          <select value={form.album_id} onChange={(e) => setForm({ ...form, album_id: e.target.value })}
-            className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none">
-            <option value="">No Album (Single)</option>
-            {albums.map(a => <option key={a.id} value={a.id}>{a.title}</option>)}
-          </select>
-        </div>
-        <div>
-          <label className="block text-xs text-white/40 mb-1.5">Genre</label>
-          <select value={form.genre} onChange={(e) => setForm({ ...form, genre: e.target.value })}
-            className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none">
-            <option value="">Select genre...</option>
-            {GENRES.map(g => <option key={g} value={g}>{g}</option>)}
-          </select>
-        </div>
-        <div>
-          <label className="block text-xs text-white/40 mb-1.5">Mood</label>
-          <select value={form.mood} onChange={(e) => setForm({ ...form, mood: e.target.value })}
-            className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none">
-            <option value="">Select mood...</option>
-            {MOODS.map(m => <option key={m} value={m}>{m}</option>)}
-          </select>
-        </div>
-        <div>
-          <label className="block text-xs text-white/40 mb-1.5">Track Number</label>
-          <input type="number" min="1" value={form.track_number}
-            onChange={(e) => setForm({ ...form, track_number: e.target.value })}
-            className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none" />
-        </div>
-        <TierGate feature="download_sales" inline>
-          <div>
-            <label className="block text-xs text-white/40 mb-1.5">Download Price (USD)</label>
-            <input type="number" min="0" step="0.01" value={form.download_price}
-              onChange={(e) => setForm({ ...form, download_price: e.target.value })}
-              className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none" />
-          </div>
-        </TierGate>
-        {form.is_downloadable && parseFloat(form.download_price) > 0 && (
-          <div>
-            <label className="block text-xs text-white/40 mb-1.5">Pay What You Want</label>
-            <div className="flex items-center space-x-3">
-              <Toggle value={form.pay_what_you_want} onChange={() => setForm({ ...form, pay_what_you_want: !form.pay_what_you_want })} />
-              <span className="text-xs text-white/50">Let fans choose their price</span>
-            </div>
-            {form.pay_what_you_want && (
-              <div className="mt-2">
-                <label className="block text-xs text-white/40 mb-1.5">Minimum Price (0 = free)</label>
-                <input type="number" min="0" step="0.01" value={form.minimum_price}
-                  onChange={(e) => setForm({ ...form, minimum_price: e.target.value })}
-                  className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none" />
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      <TierGate feature="lyrics" inline>
-        <div>
-          <label className="block text-xs text-white/40 mb-1.5">Lyrics (optional)</label>
-          <textarea rows={3} value={form.lyrics} onChange={(e) => setForm({ ...form, lyrics: e.target.value })}
-            placeholder="Paste lyrics here..."
-            className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none resize-none" />
-        </div>
-      </TierGate>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Audio file field with WAV notice */}
-        <AudioFileField form={form} setForm={setForm} showMessage={showMessage} />
-        <div>
-          <label className="block text-xs text-white/40 mb-1.5">Cover Artwork (.jpg, .png)</label>
-          <input type="file" accept=".jpg,.jpeg,.png,.webp"
-            onChange={(e) => setForm({ ...form, cover_file: e.target.files[0] })}
-            className="w-full text-sm text-white/60 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:bg-white/[0.06] file:text-white/60 file:text-sm hover:file:bg-white/[0.1]" />
-        </div>
-      </div>
-
-      <div className="flex flex-wrap gap-4">
-        {[
-          { key: 'is_published',   label: 'Published' },
-          { key: 'featured',       label: 'Featured' },
-          { key: 'is_explicit',    label: 'Explicit' },
-          { key: 'is_downloadable', label: 'Downloadable' },
-          { key: 'has_versions',   label: 'Has Versions' },
-        ].map(({ key, label }) => (
-          <label key={key} className="flex items-center space-x-2 cursor-pointer">
-            <Toggle value={form[key]} onChange={() => setForm({ ...form, [key]: !form[key] })} />
-            <span className="text-xs text-white/50">{label}</span>
-          </label>
-        ))}
-        <TierGate feature="download_sales" inline>
-          <label className="flex items-center space-x-2 cursor-pointer">
-            <Toggle value={form.is_premium} onChange={() => setForm({ ...form, is_premium: !form.is_premium })} />
-            <span className="text-xs text-white/50">Premium</span>
-          </label>
-        </TierGate>
-      </div>
-
-      <div className="flex flex-wrap gap-4">
-        <label className="flex items-center space-x-2 cursor-pointer">
-          <input type="checkbox" checked={form.is_preorder || false}
-            onChange={() => setForm({ ...form, is_preorder: !form.is_preorder })}
-            className="rounded border-white/20" />
-          <span className="text-xs text-white/50">Pre-order</span>
-        </label>
-      </div>
-
-      {form.is_preorder && (
-        <div>
-          <label className="block text-xs text-white/40 mb-1.5">Release Date</label>
-          <input type="datetime-local"
-            value={form.release_date ? form.release_date.substring(0, 16) : ''}
-            onChange={(e) => setForm({ ...form, release_date: e.target.value })}
-            className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none" />
-        </div>
-      )}
-    </div>
+    <select {...props}
+      className={`w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none ${className}`}>
+      {children}
+    </select>
   );
 }
+
+// ─── Versions editor ──────────────────────────────────────────────────────────
 
 function VersionsEditor({ versions, setVersions }) {
   const add    = () => setVersions([...versions, { version_name: '', version_type: 'remix', file: null }]);
   const remove = (i) => setVersions(versions.filter((_, idx) => idx !== i));
-  const update = (i, field, val) => {
-    const next = [...versions]; next[i][field] = val; setVersions(next);
-  };
+  const update = (i, field, val) => { const n = [...versions]; n[i][field] = val; setVersions(n); };
+
   if (!versions.length) return (
     <button type="button" onClick={add}
       className="flex items-center space-x-1 px-3 py-1.5 bg-white/[0.06] rounded-lg text-xs text-white/60 hover:bg-white/[0.1] transition">
@@ -277,7 +138,8 @@ function VersionsEditor({ versions, setVersions }) {
             {VERSION_TYPES.map(v => <option key={v.value} value={v.value}>{v.label}</option>)}
           </select>
           <div className="flex items-center space-x-2">
-            <input type="file" accept=".wav,.mp3,.flac,.m4a" onChange={(e) => update(i, 'file', e.target.files[0])}
+            <input type="file" accept=".wav,.mp3,.flac,.m4a"
+              onChange={(e) => update(i, 'file', e.target.files[0])}
               className="flex-1 text-xs text-white/40 file:mr-2 file:py-1.5 file:px-2 file:rounded file:border-0 file:bg-white/[0.06] file:text-white/50 file:text-xs" />
             <button type="button" onClick={() => remove(i)}
               className="p-1.5 bg-red-500/10 rounded hover:bg-red-500/20 transition">
@@ -294,39 +156,40 @@ function VersionsEditor({ versions, setVersions }) {
   );
 }
 
+// ─── Main component ───────────────────────────────────────────────────────────
+
 export default function TrackUploadPanel() {
   const { artist } = useAuth();
   const { convert, converting, progress: convProgress, error: convError } = useAudioConverter();
 
-  const [activeTab, setActiveTab]           = useState('upload');
-  const [albums, setAlbums]                 = useState([]);
-  const [tracks, setTracks]                 = useState([]);
+  const [activeTab, setActiveTab]   = useState('upload');
+  const [albums, setAlbums]         = useState([]);
+  const [tracks, setTracks]         = useState([]);
   const [filteredTracks, setFilteredTracks] = useState([]);
-  const [searchTerm, setSearchTerm]         = useState('');
-  const [editingId, setEditingId]           = useState(null);
-  const [editForm, setEditForm]             = useState({});
-  const [editCollaborators, setEditCollaborators] = useState([]);
-  const [editCoverFile, setEditCoverFile]   = useState(null);
-  const [editAudioFile, setEditAudioFile]   = useState(null);
-  const [loading, setLoading]               = useState(false);
-  const [uploading, setUploading]           = useState(false);
-  const [message, setMessage]               = useState({ type: '', text: '' });
+  const [searchTerm, setSearchTerm] = useState('');
+  const [loading, setLoading]       = useState(false);
+  const [uploading, setUploading]   = useState(false);
+  const [message, setMessage]       = useState({ type: '', text: '' });
 
-  const [trackForm, setTrackForm]   = useState(BLANK_TRACK);
-  const [versionFiles, setVersionFiles] = useState([]);
-  const [collaborators, setCollaborators] = useState([]);
-
-  const [albumForm, setAlbumForm]           = useState(BLANK_ALBUM);
-  const [albumStep, setAlbumStep]           = useState('list');
-  const [activeAlbum, setActiveAlbum]       = useState(null);
+  // Upload state
+  const [release, setRelease]                   = useState(BLANK_RELEASE);
+  const [trackForm, setTrackForm]               = useState(BLANK_TRACK);
+  const [versionFiles, setVersionFiles]         = useState([]);
+  const [collaborators, setCollaborators]       = useState([]);
   const [albumCollaborators, setAlbumCollaborators] = useState([]);
-  const [editingAlbumId, setEditingAlbumId] = useState(null);
-  const [editAlbumForm, setEditAlbumForm]   = useState({});
-  const [editAlbumCollaborators, setEditAlbumCollaborators] = useState([]);
-  const [albumTracks, setAlbumTracks]       = useState([]);
-  const [unassignedTracks, setUnassignedTracks] = useState([]);
-  const [loadingAlbumTracks, setLoadingAlbumTracks] = useState(false);
-  const [showQuickUpload, setShowQuickUpload] = useState(false);
+  const [albumTrackQueue, setAlbumTrackQueue]   = useState([]);
+  const [sessionAlbumId, setSessionAlbumId]     = useState(null);
+  const [addingAnother, setAddingAnother]       = useState(false);
+
+  // Edit state
+  const [editingId, setEditingId]               = useState(null);
+  const [editForm, setEditForm]                 = useState({});
+  const [editCollaborators, setEditCollaborators] = useState([]);
+  const [editCoverFile, setEditCoverFile]       = useState(null);
+  const [editAudioFile, setEditAudioFile]       = useState(null);
+
+  const isAlbumRelease = ALBUM_TYPES.includes(release.release_type);
+  const isWorking      = uploading || converting;
 
   useEffect(() => { if (artist) fetchAlbums(); }, [artist]);
   useEffect(() => { if (activeTab === 'manage') fetchTracks(); }, [activeTab]);
@@ -340,7 +203,7 @@ export default function TrackUploadPanel() {
 
   const showMessage = (type, text) => {
     setMessage({ type, text });
-    setTimeout(() => setMessage({ type: '', text: '' }), 4000);
+    setTimeout(() => setMessage({ type: '', text: '' }), 5000);
   };
 
   const fetchAlbums = async () => {
@@ -357,20 +220,6 @@ export default function TrackUploadPanel() {
     setLoading(false);
   };
 
-  const fetchAlbumTracks = async (albumId) => {
-    if (!albumId) { setAlbumTracks([]); setUnassignedTracks([]); return; }
-    setLoadingAlbumTracks(true);
-    const [{ data: inAlbum }, { data: available }] = await Promise.all([
-      supabase.from('tracks').select('id, title, cover_artwork_url, track_number')
-        .eq('album_id', albumId).order('track_number', { ascending: true }),
-      supabase.from('tracks').select('id, title, cover_artwork_url')
-        .eq('artist_id', artist.id).is('album_id', null),
-    ]);
-    setAlbumTracks(inAlbum || []);
-    setUnassignedTracks(available || []);
-    setLoadingAlbumTracks(false);
-  };
-
   const uploadFile = async (file, folder = '', retries = 3) => {
     const fileExt  = file.name.split('.').pop();
     const fileName = `${folder}${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
@@ -380,18 +229,12 @@ export default function TrackUploadPanel() {
         const { data: { publicUrl } } = supabase.storage.from('feelz-samples').getPublicUrl(fileName);
         return publicUrl;
       }
-      const is503 = error?.statusCode === 503 || error?.message?.includes('503') || error?.message?.toLowerCase().includes('service unavailable');
+      const is503 = error?.statusCode === 503 || error?.message?.includes('503');
       if (attempt < retries && is503) { await new Promise(r => setTimeout(r, 1500 * attempt)); continue; }
-      throw new Error(is503 ? 'Upload service temporarily unavailable. Please try again.' : error.message);
+      throw new Error(is503 ? 'Upload service temporarily unavailable.' : error.message);
     }
   };
 
-  /**
-   * convertAndUploadAudio
-   *
-   * If the file is a WAV, convert it to MP3 first then upload the MP3.
-   * All other formats upload directly.
-   */
   const convertAndUploadAudio = async (file, folder = 'tracks/') => {
     const ext = file.name.split('.').pop().toLowerCase();
     if (ext === 'wav') {
@@ -422,16 +265,54 @@ export default function TrackUploadPanel() {
     }
   };
 
-  // ==================== TRACK UPLOAD ====================
-  const handleTrackUpload = async (e, albumId = null) => {
+  const ensureAlbum = async () => {
+    if (sessionAlbumId) return sessionAlbumId;
+    if (!release.album_title.trim()) throw new Error('Album title is required');
+    showMessage('info', 'Creating album…');
+    let coverUrl = null;
+    if (release.album_cover_file) coverUrl = await uploadFile(release.album_cover_file, 'album-covers/');
+    const { data, error } = await supabase.from('albums').insert([{
+      artist_id:         artist.id,
+      title:             release.album_title.trim(),
+      slug:              slugify(release.album_title),
+      description:       release.album_description || null,
+      cover_artwork_url: coverUrl,
+      release_date:      release.album_release_date || null,
+      release_type:      release.release_type,
+      is_published:      release.album_is_published,
+      price:             parseFloat(release.album_price) || 0,
+    }]).select().single();
+    if (error) throw error;
+    if (albumCollaborators.length > 0) {
+      for (const collab of albumCollaborators) {
+        try {
+          const { data: cd } = await supabase.from('collaborations').insert([{
+            album_id: data.id, artist_id: collab.artist_id, role: collab.role,
+            split_percent: collab.split_percent, status: 'pending', invited_by: artist.id,
+          }]).select().single();
+          await supabase.from('collab_requests').insert([{
+            collaboration_id: cd.id, from_artist_id: artist.id,
+            to_artist_id: collab.artist_id, message: collab.message || null, status: 'pending',
+          }]);
+        } catch {}
+      }
+    }
+    setSessionAlbumId(data.id);
+    await fetchAlbums();
+    return data.id;
+  };
+
+  const handleUpload = async (e) => {
     e.preventDefault();
     if (!trackForm.audio_file) { showMessage('error', 'Audio file is required'); return; }
+    if (!trackForm.title.trim()) { showMessage('error', 'Track title is required'); return; }
     if (!artist) { showMessage('error', 'No artist profile found'); return; }
     setUploading(true);
     try {
-      // Convert WAV → MP3 if needed, then upload
-      const fileUrl = await convertAndUploadAudio(trackForm.audio_file, 'tracks/');
+      let albumId = null;
+      if (isAlbumRelease) albumId = await ensureAlbum();
 
+      const fileUrl = await convertAndUploadAudio(trackForm.audio_file, 'tracks/');
       let coverUrl = null;
       if (trackForm.cover_file) {
         showMessage('info', 'Uploading cover artwork…');
@@ -440,27 +321,27 @@ export default function TrackUploadPanel() {
 
       showMessage('info', 'Saving track…');
       const { data, error } = await supabase.from('tracks').insert([{
-        artist_id:    artist.id,
-        album_id:     albumId || trackForm.album_id || null,
-        title:        trackForm.title,
-        slug:         slugify(trackForm.title),
-        genre:        trackForm.genre,
-        mood:         trackForm.mood,
-        lyrics:       trackForm.lyrics || null,
-        file_url:     fileUrl,
+        artist_id:         artist.id,
+        album_id:          albumId,
+        title:             trackForm.title.trim(),
+        slug:              slugify(trackForm.title),
+        genre:             trackForm.genre,
+        mood:              trackForm.mood,
+        lyrics:            trackForm.lyrics || null,
+        file_url:          fileUrl,
         cover_artwork_url: coverUrl,
-        track_number: parseInt(trackForm.track_number) || 1,
-        is_explicit:  trackForm.is_explicit,
-        is_downloadable: trackForm.is_downloadable,
-        is_published: trackForm.is_published,
-        is_premium:   trackForm.is_premium,
-        download_price: parseFloat(trackForm.download_price) || 0,
-        featured:     trackForm.featured,
-        has_versions: trackForm.has_versions,
+        track_number:      parseInt(trackForm.track_number) || (albumTrackQueue.length + 1),
+        is_explicit:       trackForm.is_explicit,
+        is_downloadable:   trackForm.is_downloadable,
+        is_published:      trackForm.is_published,
+        is_premium:        trackForm.is_premium,
+        download_price:    parseFloat(trackForm.download_price) || 0,
+        featured:          trackForm.featured,
+        has_versions:      trackForm.has_versions,
         pay_what_you_want: trackForm.pay_what_you_want || false,
-        minimum_price: parseFloat(trackForm.minimum_price) > 0 ? parseFloat(trackForm.minimum_price) : null,
-        is_preorder:  trackForm.is_preorder || false,
-        release_date: trackForm.is_preorder && trackForm.release_date ? trackForm.release_date : null,
+        minimum_price:     parseFloat(trackForm.minimum_price) > 0 ? parseFloat(trackForm.minimum_price) : null,
+        is_preorder:       trackForm.is_preorder || false,
+        release_date:      trackForm.is_preorder && trackForm.release_date ? trackForm.release_date : null,
       }]).select();
       if (error) throw error;
       const trackId = data[0].id;
@@ -468,7 +349,7 @@ export default function TrackUploadPanel() {
       if (trackForm.has_versions && versionFiles.length > 0) {
         for (const ver of versionFiles) {
           if (ver.file) {
-            showMessage('info', `Uploading ${ver.version_name}…`);
+            showMessage('info', `Uploading version: ${ver.version_name}…`);
             const verUrl = await convertAndUploadAudio(ver.file, 'versions/');
             await supabase.from('track_versions').insert([{
               track_id: trackId, version_name: ver.version_name,
@@ -498,12 +379,19 @@ export default function TrackUploadPanel() {
         } catch {}
       }
 
-      showMessage('success', 'Track uploaded successfully!');
-      setTrackForm(BLANK_TRACK);
-      setVersionFiles([]);
-      setCollaborators([]);
-      setShowQuickUpload(false);
-      if (albumId) fetchAlbumTracks(albumId);
+      if (isAlbumRelease) {
+        setAlbumTrackQueue(prev => [...prev, {
+          id: trackId, title: trackForm.title,
+          cover_artwork_url: coverUrl, _uploaded: true,
+        }]);
+        showMessage('success', `"${trackForm.title}" added!`);
+        setTrackForm({ ...BLANK_TRACK, track_number: String(albumTrackQueue.length + 2) });
+        setVersionFiles([]); setCollaborators([]);
+        setAddingAnother(false);
+      } else {
+        showMessage('success', 'Track uploaded successfully!');
+        resetAll();
+      }
       fetchTracks();
     } catch (err) {
       showMessage('error', 'Upload failed: ' + err.message);
@@ -511,131 +399,19 @@ export default function TrackUploadPanel() {
     setUploading(false);
   };
 
-  // ==================== ALBUM CREATE ====================
-  const handleAlbumCreate = async (e) => {
-    e.preventDefault();
-    if (!artist) return;
-    setUploading(true);
-    try {
-      let coverUrl = null;
-      if (albumForm.cover_file) {
-        showMessage('info', 'Uploading album artwork…');
-        coverUrl = await uploadFile(albumForm.cover_file, 'album-covers/');
-      }
-      const { data, error } = await supabase.from('albums').insert([{
-        artist_id: artist.id, title: albumForm.title, slug: slugify(albumForm.title),
-        description: albumForm.description, cover_artwork_url: coverUrl,
-        release_date: albumForm.release_date || null, release_type: albumForm.release_type,
-        is_published: albumForm.is_published, price: parseFloat(albumForm.price) || 0,
-      }]).select().single();
-      if (error) throw error;
-      if (albumCollaborators.length > 0) {
-        for (const collab of albumCollaborators) {
-          try {
-            const { data: cd } = await supabase.from('collaborations').insert([{
-              album_id: data.id, artist_id: collab.artist_id, role: collab.role,
-              split_percent: collab.split_percent, status: 'pending', invited_by: artist.id,
-            }]).select().single();
-            await supabase.from('collab_requests').insert([{
-              collaboration_id: cd.id, from_artist_id: artist.id,
-              to_artist_id: collab.artist_id, message: collab.message || null, status: 'pending',
-            }]);
-          } catch {}
-        }
-      }
-      showMessage('success', 'Album created! Now add tracks.');
-      setAlbumForm(BLANK_ALBUM);
-      setAlbumCollaborators([]);
-      await fetchAlbums();
-      setActiveAlbum(data);
-      setTrackForm({ ...BLANK_TRACK, album_id: data.id });
-      fetchAlbumTracks(data.id);
-      setAlbumStep('tracks');
-    } catch (err) {
-      showMessage('error', 'Failed: ' + err.message);
-    }
-    setUploading(false);
+  const resetAll = () => {
+    setRelease(BLANK_RELEASE);
+    setTrackForm(BLANK_TRACK);
+    setVersionFiles([]); setCollaborators([]);
+    setAlbumCollaborators([]); setAlbumTrackQueue([]);
+    setSessionAlbumId(null); setAddingAnother(false);
   };
 
-  // ==================== ALBUM EDIT ====================
-  const startEditAlbum = async (album) => {
-    setEditingAlbumId(album.id);
-    setEditAlbumForm({
-      title: album.title, description: album.description || '',
-      release_type: album.release_type || 'album',
-      release_date: album.release_date?.split('T')[0] || '',
-      is_published: album.is_published,
-      price: album.price?.toString() || '0',
-      cover_file: null,
-    });
-    const { data } = await supabase.from('collaborations')
-      .select('*, artists(artist_name, profile_image_url)').eq('album_id', album.id);
-    setEditAlbumCollaborators((data || []).map(c => ({
-      artist_id: c.artist_id, artist_name: c.artists?.artist_name,
-      role: c.role, split_percent: c.split_percent,
-    })));
+  const finishAlbum = () => {
+    showMessage('success', `${release.release_type.toUpperCase()} published with ${albumTrackQueue.length} track${albumTrackQueue.length !== 1 ? 's' : ''}!`);
+    resetAll();
   };
 
-  const saveAlbumEdit = async (albumId) => {
-    setUploading(true);
-    try {
-      let coverUrl = null;
-      if (editAlbumForm.cover_file) coverUrl = await uploadFile(editAlbumForm.cover_file, 'album-covers/');
-      const updateData = {
-        title: editAlbumForm.title, description: editAlbumForm.description,
-        release_type: editAlbumForm.release_type,
-        release_date: editAlbumForm.release_date || null,
-        is_published: editAlbumForm.is_published,
-        price: parseFloat(editAlbumForm.price) || 0,
-        updated_at: new Date().toISOString(),
-      };
-      if (coverUrl) updateData.cover_artwork_url = coverUrl;
-      const { error } = await supabase.from('albums').update(updateData).eq('id', albumId);
-      if (error) throw error;
-      await supabase.from('collaborations').delete().eq('album_id', albumId);
-      for (const collab of editAlbumCollaborators) {
-        try {
-          const { data: cd } = await supabase.from('collaborations').insert([{
-            album_id: albumId, artist_id: collab.artist_id, role: collab.role,
-            split_percent: collab.split_percent, status: 'pending', invited_by: artist.id,
-          }]).select().single();
-          await supabase.from('collab_requests').insert([{
-            collaboration_id: cd.id, from_artist_id: artist.id,
-            to_artist_id: collab.artist_id, message: collab.message || null, status: 'pending',
-          }]);
-        } catch {}
-      }
-      showMessage('success', 'Album updated!');
-      setEditingAlbumId(null);
-      fetchAlbums();
-    } catch (err) {
-      showMessage('error', 'Failed: ' + err.message);
-    }
-    setUploading(false);
-  };
-
-  const deleteAlbum = async (id, title) => {
-    if (!window.confirm(`Delete album "${title}"? Tracks won't be deleted but will be unlinked.`)) return;
-    try {
-      const { error } = await supabase.from('albums').delete().eq('id', id);
-      if (error) throw error;
-      showMessage('success', 'Album deleted');
-      fetchAlbums();
-      if (activeAlbum?.id === id) { setActiveAlbum(null); setAlbumStep('list'); }
-    } catch (err) { showMessage('error', 'Failed: ' + err.message); }
-  };
-
-  const removeTrackFromAlbum = async (trackId) => {
-    await supabase.from('tracks').update({ album_id: null }).eq('id', trackId);
-    fetchAlbumTracks(activeAlbum?.id);
-  };
-
-  const addTrackToAlbum = async (trackId) => {
-    await supabase.from('tracks').update({ album_id: activeAlbum?.id }).eq('id', trackId);
-    fetchAlbumTracks(activeAlbum?.id);
-  };
-
-  // ==================== TRACK EDIT ====================
   const startEdit = async (track) => {
     setEditingId(track.id);
     setEditCoverFile(null); setEditAudioFile(null);
@@ -664,7 +440,6 @@ export default function TrackUploadPanel() {
       let coverUrl = editForm.cover_artwork_url || '';
       let audioUrl = null;
       if (editCoverFile) coverUrl = await uploadFile(editCoverFile, 'covers/');
-      // Convert audio if it's a WAV replacement
       if (editAudioFile) audioUrl = await convertAndUploadAudio(editAudioFile, 'tracks/');
       if (editCollaborators.length > 0) {
         await supabase.from('collaborations').delete().eq('track_id', id);
@@ -696,9 +471,7 @@ export default function TrackUploadPanel() {
       fetchTracks();
     } catch (err) {
       showMessage('error', 'Failed: ' + err.message);
-    } finally {
-      setUploading(false);
-    }
+    } finally { setUploading(false); }
   };
 
   const deleteTrack = async (id, title) => {
@@ -714,35 +487,34 @@ export default function TrackUploadPanel() {
   if (!artist) return (
     <div className="text-center py-20">
       <Music className="w-12 h-12 mx-auto text-white/20 mb-4" />
-      <p className="text-white/40">No artist profile found. Create one first.</p>
+      <p className="text-white/40">No artist profile found.</p>
     </div>
   );
 
-  const tabs = [
-    { key: 'upload', label: 'Upload Track', icon: Upload },
-    { key: 'albums', label: 'Albums',       icon: Music },
-    { key: 'manage', label: 'Manage Tracks', icon: Edit },
-  ];
-
-  const isWorking = uploading || converting;
-
   return (
-    <div className="space-y-6">
-      {message.text && (
-        <div className={`p-3 rounded-lg text-sm ${
-          message.type === 'success' ? 'bg-green-500/10 border border-green-500/20 text-green-400'
-          : message.type === 'info'    ? 'bg-blue-500/10 border border-blue-500/20 text-blue-400'
-          : 'bg-red-500/10 border border-red-500/20 text-red-400'
-        }`}>{message.text}</div>
-      )}
+    <div className="space-y-5">
 
-      {/* Conversion progress banner — shown whenever ffmpeg is running */}
+      {/* Toast */}
+      {message.text && (
+        <div className={`p-3 rounded-lg text-sm flex items-start space-x-2 ${
+          message.type === 'success' ? 'bg-green-500/10 border border-green-500/20 text-green-400'
+          : message.type === 'info'  ? 'bg-blue-500/10 border border-blue-500/20 text-blue-400'
+          : 'bg-red-500/10 border border-red-500/20 text-red-400'
+        }`}>
+          {message.type === 'error' && <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />}
+          <span>{message.text}</span>
+        </div>
+      )}
       {converting && <ConversionBanner progress={convProgress} />}
       {convError   && <div className="p-3 rounded-lg text-sm bg-red-500/10 border border-red-500/20 text-red-400">{convError}</div>}
 
+      {/* Tab bar */}
       <div className="flex space-x-1 bg-white/[0.03] rounded-lg p-1">
-        {tabs.map(({ key, label, icon: Icon }) => (
-          <button type="button" key={key} onClick={() => setActiveTab(key)}
+        {[
+          { key: 'upload', label: 'Upload',        icon: Upload },
+          { key: 'manage', label: 'Manage Tracks',  icon: Edit },
+        ].map(({ key, label, icon: Icon }) => (
+          <button key={key} type="button" onClick={() => setActiveTab(key)}
             className={`flex-1 flex items-center justify-center space-x-2 py-2.5 rounded-md text-sm font-medium transition ${
               activeTab === key ? 'bg-white text-black' : 'text-white/50 hover:text-white/70'
             }`}>
@@ -751,334 +523,330 @@ export default function TrackUploadPanel() {
         ))}
       </div>
 
-      {/* ==================== UPLOAD TAB ==================== */}
+      {/* ══════════════════ UPLOAD TAB ══════════════════ */}
       {activeTab === 'upload' && (
-        <form onSubmit={(e) => handleTrackUpload(e)} className="space-y-4">
-          <div className="bg-white/[0.03] rounded-xl p-5 border border-white/[0.06] space-y-4">
-            <h3 className="text-base font-semibold text-white">Track Details</h3>
-            <TrackFormFields form={trackForm} setForm={setTrackForm} albums={albums} showMessage={showMessage} />
-            <TierGate feature="collaborations" inline>
-              <CollaboratorSearch collaborators={collaborators} setCollaborators={setCollaborators} currentArtistId={artist.id} />
-            </TierGate>
-            {trackForm.has_versions && (
-              <div className="bg-white/[0.02] rounded-lg p-4 border border-white/[0.06] space-y-3">
-                <h4 className="text-sm font-medium text-white">Alternate Versions</h4>
-                <VersionsEditor versions={versionFiles} setVersions={setVersionFiles} />
-              </div>
-            )}
-            <button type="submit" disabled={isWorking}
-              className="w-full py-3 bg-white text-black font-semibold rounded-lg hover:bg-white/90 disabled:opacity-50 transition flex items-center justify-center space-x-2">
-              {isWorking ? <Loader className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-              <span>
-                {converting ? `Converting… ${convProgress}%` : uploading ? 'Uploading…' : 'Upload Track'}
-              </span>
-            </button>
+        <form onSubmit={handleUpload} className="space-y-5">
+
+          {/* Step 1: Release type */}
+          <div className="bg-white/[0.03] rounded-xl p-5 border border-white/[0.06] space-y-3">
+            <h3 className="text-sm font-semibold text-white">What are you releasing?</h3>
+            <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+              {['single', 'ep', 'album', 'mixtape', 'live', 'compilation'].map(type => (
+                <button key={type} type="button"
+                  onClick={() => {
+                    setRelease({ ...release, release_type: type });
+                    if (sessionAlbumId && type !== release.release_type) {
+                      setSessionAlbumId(null); setAlbumTrackQueue([]);
+                    }
+                  }}
+                  className={`py-2 rounded-lg text-xs font-medium transition capitalize ${
+                    release.release_type === type ? 'bg-white text-black' : 'bg-white/[0.06] text-white/50 hover:bg-white/[0.1]'
+                  }`}>
+                  {type}
+                </button>
+              ))}
+            </div>
           </div>
+
+          {/* Step 2: Album details (multi-track, not yet created) */}
+          {isAlbumRelease && !sessionAlbumId && (
+            <div className="bg-white/[0.03] rounded-xl p-5 border border-white/[0.06] space-y-4">
+              <div className="flex items-center space-x-2">
+                <Disc className="w-4 h-4 text-white/40" />
+                <h3 className="text-sm font-semibold text-white capitalize">{release.release_type} Details</h3>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <FieldLabel>{release.release_type.charAt(0).toUpperCase() + release.release_type.slice(1)} Title *</FieldLabel>
+                  <FInput type="text" required value={release.album_title}
+                    placeholder={`Enter ${release.release_type} title…`}
+                    onChange={(e) => setRelease({ ...release, album_title: e.target.value })} />
+                </div>
+                <div>
+                  <FieldLabel>Release Date</FieldLabel>
+                  <FInput type="date" value={release.album_release_date}
+                    onChange={(e) => setRelease({ ...release, album_release_date: e.target.value })} />
+                </div>
+                <div>
+                  <FieldLabel>Price (USD, 0 = free)</FieldLabel>
+                  <FInput type="number" min="0" step="0.01" value={release.album_price}
+                    onChange={(e) => setRelease({ ...release, album_price: e.target.value })} />
+                </div>
+                <div>
+                  <FieldLabel>Cover Artwork</FieldLabel>
+                  <input type="file" accept=".jpg,.jpeg,.png,.webp"
+                    onChange={(e) => setRelease({ ...release, album_cover_file: e.target.files[0] })}
+                    className="w-full text-sm text-white/60 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:bg-white/[0.06] file:text-white/60 file:text-sm hover:file:bg-white/[0.1]" />
+                </div>
+              </div>
+              <div>
+                <FieldLabel>Description (optional)</FieldLabel>
+                <textarea rows={2} value={release.album_description}
+                  onChange={(e) => setRelease({ ...release, album_description: e.target.value })}
+                  className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none resize-none" />
+              </div>
+              <label className="flex items-center space-x-2 cursor-pointer">
+                <Toggle value={release.album_is_published}
+                  onChange={() => setRelease({ ...release, album_is_published: !release.album_is_published })} />
+                <span className="text-xs text-white/50">Published</span>
+              </label>
+              <TierGate feature="collaborations" inline>
+                <div>
+                  <FieldLabel>Album Collaborators</FieldLabel>
+                  <CollaboratorSearch collaborators={albumCollaborators}
+                    setCollaborators={setAlbumCollaborators} currentArtistId={artist.id} />
+                </div>
+              </TierGate>
+            </div>
+          )}
+
+          {/* Album session summary */}
+          {isAlbumRelease && sessionAlbumId && (
+            <div className="bg-white/[0.03] rounded-xl p-4 border border-white/[0.06] space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <Disc className="w-4 h-4 text-white/40" />
+                  <p className="text-sm font-medium text-white">{release.album_title}</p>
+                  <span className="text-[10px] px-1.5 py-0.5 bg-green-500/10 text-green-400 rounded capitalize">{release.release_type}</span>
+                </div>
+                <span className="text-xs text-white/30">{albumTrackQueue.length} track{albumTrackQueue.length !== 1 ? 's' : ''}</span>
+              </div>
+              {albumTrackQueue.map((t, i) => (
+                <div key={t.id} className="flex items-center space-x-3 p-2 bg-white/[0.03] rounded-lg">
+                  <span className="text-xs text-white/20 w-4 text-center">{i + 1}</span>
+                  <div className="w-7 h-7 rounded-md overflow-hidden bg-white/10 flex-shrink-0">
+                    {t.cover_artwork_url
+                      ? <img src={t.cover_artwork_url} alt="" className="w-full h-full object-cover" />
+                      : <div className="w-full h-full flex items-center justify-center"><Music className="w-3 h-3 text-white/20" /></div>}
+                  </div>
+                  <p className="text-sm text-white flex-1 truncate">{t.title}</p>
+                  <span className="text-[10px] text-green-400">✓</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Add another / Done controls (after first track of album) */}
+          {isAlbumRelease && albumTrackQueue.length > 0 && !addingAnother ? (
+            <div className="space-y-2">
+              <button type="button" onClick={() => {
+                setAddingAnother(true);
+                setTrackForm({ ...BLANK_TRACK, track_number: String(albumTrackQueue.length + 1) });
+              }}
+                className="w-full py-3 bg-white/[0.06] text-white/70 font-medium rounded-lg hover:bg-white/[0.1] transition flex items-center justify-center space-x-2">
+                <Plus className="w-4 h-4" /><span>Add Another Track</span>
+              </button>
+              <button type="button" onClick={finishAlbum}
+                className="w-full py-3 bg-white text-black font-semibold rounded-lg hover:bg-white/90 transition">
+                Done — Publish {release.release_type.toUpperCase()}
+              </button>
+            </div>
+          ) : (
+            /* ── Track form ── */
+            <div className="bg-white/[0.03] rounded-xl p-5 border border-white/[0.06] space-y-4">
+              <h3 className="text-sm font-semibold text-white">
+                {isAlbumRelease
+                  ? albumTrackQueue.length === 0 ? 'First Track' : `Track ${albumTrackQueue.length + 1}`
+                  : 'Track Details'}
+              </h3>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <FieldLabel>Track Title *</FieldLabel>
+                  <FInput type="text" required value={trackForm.title}
+                    onChange={(e) => setTrackForm({ ...trackForm, title: e.target.value })} />
+                </div>
+                {/* Single: show optional album dropdown */}
+                {!isAlbumRelease && (
+                  <div>
+                    <FieldLabel>Add to Existing Album (optional)</FieldLabel>
+                    <FSelect value={trackForm.album_id || ''}
+                      onChange={(e) => setTrackForm({ ...trackForm, album_id: e.target.value })}>
+                      <option value="">No Album (Single)</option>
+                      {albums.map(a => <option key={a.id} value={a.id}>{a.title}</option>)}
+                    </FSelect>
+                  </div>
+                )}
+                <div>
+                  <FieldLabel>Genre</FieldLabel>
+                  <FSelect value={trackForm.genre}
+                    onChange={(e) => setTrackForm({ ...trackForm, genre: e.target.value })}>
+                    <option value="">Select genre…</option>
+                    {GENRES.map(g => <option key={g} value={g}>{g}</option>)}
+                  </FSelect>
+                </div>
+                <div>
+                  <FieldLabel>Mood</FieldLabel>
+                  <FSelect value={trackForm.mood}
+                    onChange={(e) => setTrackForm({ ...trackForm, mood: e.target.value })}>
+                    <option value="">Select mood…</option>
+                    {MOODS.map(m => <option key={m} value={m}>{m}</option>)}
+                  </FSelect>
+                </div>
+                {isAlbumRelease && (
+                  <div>
+                    <FieldLabel>Track Number</FieldLabel>
+                    <FInput type="number" min="1" value={trackForm.track_number}
+                      onChange={(e) => setTrackForm({ ...trackForm, track_number: e.target.value })} />
+                  </div>
+                )}
+                <TierGate feature="download_sales" inline>
+                  <div>
+                    <FieldLabel>Download Price (USD)</FieldLabel>
+                    <FInput type="number" min="0" step="0.01" value={trackForm.download_price}
+                      onChange={(e) => setTrackForm({ ...trackForm, download_price: e.target.value })} />
+                  </div>
+                </TierGate>
+                {trackForm.is_downloadable && parseFloat(trackForm.download_price) > 0 && (
+                  <div className="md:col-span-2 space-y-2">
+                    <div className="flex items-center space-x-3">
+                      <Toggle value={trackForm.pay_what_you_want}
+                        onChange={() => setTrackForm({ ...trackForm, pay_what_you_want: !trackForm.pay_what_you_want })} />
+                      <span className="text-xs text-white/50">Pay What You Want</span>
+                    </div>
+                    {trackForm.pay_what_you_want && (
+                      <div>
+                        <FieldLabel>Minimum Price (0 = free)</FieldLabel>
+                        <FInput type="number" min="0" step="0.01" value={trackForm.minimum_price}
+                          onChange={(e) => setTrackForm({ ...trackForm, minimum_price: e.target.value })} />
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <TierGate feature="lyrics" inline>
+                <div>
+                  <FieldLabel>Lyrics (optional)</FieldLabel>
+                  <textarea rows={3} value={trackForm.lyrics}
+                    onChange={(e) => setTrackForm({ ...trackForm, lyrics: e.target.value })}
+                    placeholder="Paste lyrics here…"
+                    className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none resize-none" />
+                </div>
+              </TierGate>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <FieldLabel>Audio File * (.mp3, .wav, .flac)</FieldLabel>
+                  <input type="file" accept=".wav,.mp3,.flac,.m4a,.ogg"
+                    onChange={(e) => {
+                      const f = e.target.files[0];
+                      if (f && f.size > 500 * 1024 * 1024) { showMessage('error', 'File too large! Max 500MB'); return; }
+                      setTrackForm({ ...trackForm, audio_file: f });
+                    }}
+                    className="w-full text-sm text-white/60 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:bg-white/[0.06] file:text-white/60 file:text-sm hover:file:bg-white/[0.1]" />
+                  {trackForm.audio_file && (
+                    <div className="mt-1 space-y-0.5">
+                      <p className="text-xs text-white/30">{trackForm.audio_file.name} ({(trackForm.audio_file.size / (1024 * 1024)).toFixed(1)}MB)</p>
+                      {trackForm.audio_file.name.toLowerCase().endsWith('.wav') && (
+                        <p className="text-xs text-purple-400/70 flex items-center space-x-1">
+                          <Zap className="w-3 h-3" /><span>Will be converted to MP3 at 320kbps</span>
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <FieldLabel>Cover Artwork (.jpg, .png)</FieldLabel>
+                  <input type="file" accept=".jpg,.jpeg,.png,.webp"
+                    onChange={(e) => setTrackForm({ ...trackForm, cover_file: e.target.files[0] })}
+                    className="w-full text-sm text-white/60 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:bg-white/[0.06] file:text-white/60 file:text-sm hover:file:bg-white/[0.1]" />
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-4">
+                {[
+                  { key: 'is_published',    label: 'Published' },
+                  { key: 'featured',        label: 'Featured' },
+                  { key: 'is_explicit',     label: 'Explicit' },
+                  { key: 'is_downloadable', label: 'Downloadable' },
+                  { key: 'has_versions',    label: 'Has Versions' },
+                ].map(({ key, label }) => (
+                  <label key={key} className="flex items-center space-x-2 cursor-pointer">
+                    <Toggle value={trackForm[key]}
+                      onChange={() => setTrackForm({ ...trackForm, [key]: !trackForm[key] })} />
+                    <span className="text-xs text-white/50">{label}</span>
+                  </label>
+                ))}
+                <TierGate feature="download_sales" inline>
+                  <label className="flex items-center space-x-2 cursor-pointer">
+                    <Toggle value={trackForm.is_premium}
+                      onChange={() => setTrackForm({ ...trackForm, is_premium: !trackForm.is_premium })} />
+                    <span className="text-xs text-white/50">Premium</span>
+                  </label>
+                </TierGate>
+                <label className="flex items-center space-x-2 cursor-pointer">
+                  <input type="checkbox" checked={trackForm.is_preorder || false}
+                    onChange={() => setTrackForm({ ...trackForm, is_preorder: !trackForm.is_preorder })}
+                    className="rounded border-white/20" />
+                  <span className="text-xs text-white/50">Pre-order</span>
+                </label>
+              </div>
+
+              {trackForm.is_preorder && (
+                <div>
+                  <FieldLabel>Release Date</FieldLabel>
+                  <FInput type="datetime-local"
+                    value={trackForm.release_date ? trackForm.release_date.substring(0, 16) : ''}
+                    onChange={(e) => setTrackForm({ ...trackForm, release_date: e.target.value })} />
+                </div>
+              )}
+
+              {trackForm.has_versions && (
+                <div className="bg-white/[0.02] rounded-lg p-4 border border-white/[0.06] space-y-3">
+                  <h4 className="text-sm font-medium text-white">Alternate Versions</h4>
+                  <VersionsEditor versions={versionFiles} setVersions={setVersionFiles} />
+                </div>
+              )}
+
+              <TierGate feature="collaborations" inline>
+                <CollaboratorSearch collaborators={collaborators}
+                  setCollaborators={setCollaborators} currentArtistId={artist.id} />
+              </TierGate>
+
+              <button type="submit" disabled={isWorking}
+                className="w-full py-3 bg-white text-black font-semibold rounded-lg hover:bg-white/90 disabled:opacity-50 transition flex items-center justify-center space-x-2">
+                {isWorking ? <Loader className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                <span>
+                  {converting ? `Converting… ${convProgress}%`
+                    : uploading ? 'Uploading…'
+                    : isAlbumRelease
+                      ? albumTrackQueue.length === 0
+                        ? `Create ${release.release_type.toUpperCase()} & Add Track`
+                        : 'Add Track'
+                      : 'Upload Track'}
+                </span>
+              </button>
+
+              {addingAnother && (
+                <button type="button" onClick={() => setAddingAnother(false)}
+                  className="w-full py-2 text-xs text-white/30 hover:text-white/50 transition">
+                  Cancel — I'm done adding tracks
+                </button>
+              )}
+            </div>
+          )}
+
+          {isAlbumRelease && albumTrackQueue.length > 0 && (
+            <button type="button"
+              onClick={() => { if (window.confirm('Discard this session and start over?')) resetAll(); }}
+              className="w-full py-2 text-xs text-white/20 hover:text-red-400/60 transition">
+              Discard & start over
+            </button>
+          )}
         </form>
       )}
 
-      {/* ==================== ALBUMS TAB ==================== */}
-      {activeTab === 'albums' && (
-        <div className="space-y-6">
-
-          {albumStep === 'tracks' && activeAlbum && (
-            <div className="space-y-4">
-              <div className="flex items-center space-x-3">
-                <button type="button" onClick={() => { setAlbumStep('list'); setActiveAlbum(null); setShowQuickUpload(false); }}
-                  className="p-2 hover:bg-white/[0.06] rounded-lg transition">
-                  <ArrowLeft className="w-4 h-4 text-white/40" />
-                </button>
-                <div className="flex items-center space-x-3 flex-1 min-w-0">
-                  {activeAlbum.cover_artwork_url && (
-                    <img src={activeAlbum.cover_artwork_url} alt="" className="w-10 h-10 rounded-lg object-cover flex-shrink-0" />
-                  )}
-                  <div className="min-w-0">
-                    <h3 className="text-base font-semibold text-white truncate">{activeAlbum.title}</h3>
-                    <p className="text-xs text-white/40">{activeAlbum.release_type?.toUpperCase()}</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-white/[0.03] rounded-xl p-4 border border-white/[0.06] space-y-3">
-                <p className="text-xs text-white/40 font-medium">Tracks in this album ({albumTracks.length})</p>
-                {loadingAlbumTracks ? (
-                  <div className="flex justify-center py-4"><Loader className="w-4 h-4 animate-spin text-white/30" /></div>
-                ) : (
-                  <div className="space-y-1.5">
-                    {albumTracks.map((t, i) => (
-                      <div key={t.id} className="flex items-center space-x-3 p-2.5 bg-white/[0.03] rounded-lg">
-                        <span className="text-xs text-white/20 w-5 flex-shrink-0 text-center">{i + 1}</span>
-                        <div className="w-8 h-8 rounded-md overflow-hidden flex-shrink-0 bg-white/10">
-                          {t.cover_artwork_url
-                            ? <img src={t.cover_artwork_url} alt="" className="w-full h-full object-cover" />
-                            : <div className="w-full h-full flex items-center justify-center"><Music className="w-3 h-3 text-white/20" /></div>}
-                        </div>
-                        <p className="text-sm text-white flex-1 truncate">{t.title}</p>
-                        <button type="button" onClick={() => removeTrackFromAlbum(t.id)}
-                          className="p-1.5 bg-red-500/10 rounded hover:bg-red-500/20 transition">
-                          <X className="w-3.5 h-3.5 text-red-400" />
-                        </button>
-                      </div>
-                    ))}
-                    {albumTracks.length === 0 && <p className="text-xs text-white/20 text-center py-3">No tracks yet. Add some below.</p>}
-                  </div>
-                )}
-              </div>
-
-              {unassignedTracks.length > 0 && (
-                <div className="bg-white/[0.03] rounded-xl p-4 border border-white/[0.06] space-y-3">
-                  <p className="text-xs text-white/40 font-medium">Add from your existing singles</p>
-                  <div className="space-y-1.5">
-                    {unassignedTracks.map(t => (
-                      <div key={t.id} className="flex items-center space-x-3 p-2.5 bg-white/[0.03] rounded-lg">
-                        <div className="w-8 h-8 rounded-md overflow-hidden flex-shrink-0 bg-white/10">
-                          {t.cover_artwork_url
-                            ? <img src={t.cover_artwork_url} alt="" className="w-full h-full object-cover" />
-                            : <div className="w-full h-full flex items-center justify-center"><Music className="w-3 h-3 text-white/20" /></div>}
-                        </div>
-                        <p className="text-sm text-white flex-1 truncate">{t.title}</p>
-                        <button type="button" onClick={() => addTrackToAlbum(t.id)}
-                          className="p-1.5 bg-white/10 rounded hover:bg-white/20 transition">
-                          <Plus className="w-3.5 h-3.5 text-white/60" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <div className="bg-white/[0.03] rounded-xl border border-white/[0.06] overflow-hidden">
-                <button type="button" onClick={() => {
-                  setShowQuickUpload(p => !p);
-                  if (!showQuickUpload) setTrackForm({ ...BLANK_TRACK, album_id: activeAlbum.id });
-                }}
-                  className="w-full flex items-center justify-between px-5 py-4 hover:bg-white/[0.02] transition">
-                  <div className="flex items-center space-x-2">
-                    <Plus className="w-4 h-4 text-white/40" />
-                    <span className="text-sm font-medium text-white/70">Upload new track to this album</span>
-                  </div>
-                  {showQuickUpload ? <ChevronUp className="w-4 h-4 text-white/30" /> : <ChevronDown className="w-4 h-4 text-white/30" />}
-                </button>
-                {showQuickUpload && (
-                  <form onSubmit={(e) => handleTrackUpload(e, activeAlbum.id)}
-                    className="px-5 pb-5 space-y-4 border-t border-white/[0.06]">
-                    <div className="pt-4">
-                      <TrackFormFields form={trackForm} setForm={setTrackForm} albums={albums} showMessage={showMessage} />
-                    </div>
-                    <TierGate feature="collaborations" inline>
-                      <CollaboratorSearch collaborators={collaborators} setCollaborators={setCollaborators} currentArtistId={artist.id} />
-                    </TierGate>
-                    {trackForm.has_versions && (
-                      <div className="bg-white/[0.02] rounded-lg p-4 border border-white/[0.06] space-y-3">
-                        <h4 className="text-sm font-medium text-white">Alternate Versions</h4>
-                        <VersionsEditor versions={versionFiles} setVersions={setVersionFiles} />
-                      </div>
-                    )}
-                    <button type="submit" disabled={isWorking}
-                      className="w-full py-3 bg-white text-black font-semibold rounded-lg hover:bg-white/90 disabled:opacity-50 transition flex items-center justify-center space-x-2">
-                      {isWorking ? <Loader className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-                      <span>{converting ? `Converting… ${convProgress}%` : uploading ? 'Uploading…' : 'Upload to Album'}</span>
-                    </button>
-                  </form>
-                )}
-              </div>
-            </div>
-          )}
-
-          {albumStep === 'create' && (
-            <div className="space-y-4">
-              <div className="flex items-center space-x-3 mb-2">
-                <button type="button" onClick={() => setAlbumStep('list')}
-                  className="p-2 hover:bg-white/[0.06] rounded-lg transition">
-                  <ArrowLeft className="w-4 h-4 text-white/40" />
-                </button>
-                <h3 className="text-base font-semibold text-white">Create Album</h3>
-              </div>
-              <form onSubmit={handleAlbumCreate} className="bg-white/[0.03] rounded-xl p-5 border border-white/[0.06] space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs text-white/40 mb-1.5">Album Title *</label>
-                    <input type="text" required value={albumForm.title}
-                      onChange={(e) => setAlbumForm({ ...albumForm, title: e.target.value })}
-                      className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none focus:bg-white/[0.1] transition" />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-white/40 mb-1.5">Release Type</label>
-                    <select value={albumForm.release_type} onChange={(e) => setAlbumForm({ ...albumForm, release_type: e.target.value })}
-                      className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none">
-                      {['single', 'ep', 'album', 'mixtape', 'live', 'compilation'].map(t => (
-                        <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs text-white/40 mb-1.5">Release Date</label>
-                    <input type="date" value={albumForm.release_date}
-                      onChange={(e) => setAlbumForm({ ...albumForm, release_date: e.target.value })}
-                      className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none" />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-white/40 mb-1.5">Price (USD, 0 = free)</label>
-                    <input type="number" min="0" step="0.01" value={albumForm.price}
-                      onChange={(e) => setAlbumForm({ ...albumForm, price: e.target.value })}
-                      className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none" />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-xs text-white/40 mb-1.5">Description</label>
-                  <textarea rows={3} value={albumForm.description}
-                    onChange={(e) => setAlbumForm({ ...albumForm, description: e.target.value })}
-                    className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none resize-none" />
-                </div>
-                <div>
-                  <label className="block text-xs text-white/40 mb-1.5">Cover Artwork</label>
-                  <input type="file" accept=".jpg,.jpeg,.png,.webp"
-                    onChange={(e) => setAlbumForm({ ...albumForm, cover_file: e.target.files[0] })}
-                    className="w-full text-sm text-white/60 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:bg-white/[0.06] file:text-white/60 file:text-sm hover:file:bg-white/[0.1]" />
-                </div>
-                <label className="flex items-center space-x-2 cursor-pointer">
-                  <Toggle value={albumForm.is_published} onChange={() => setAlbumForm({ ...albumForm, is_published: !albumForm.is_published })} />
-                  <span className="text-xs text-white/50">Published</span>
-                </label>
-                <TierGate feature="collaborations" inline>
-                  <div>
-                    <label className="block text-xs text-white/40 mb-2">Album Collaborators</label>
-                    <CollaboratorSearch collaborators={albumCollaborators} setCollaborators={setAlbumCollaborators} currentArtistId={artist.id} />
-                  </div>
-                </TierGate>
-                <button type="submit" disabled={isWorking}
-                  className="w-full py-3 bg-white text-black font-semibold rounded-lg hover:bg-white/90 disabled:opacity-50 transition flex items-center justify-center space-x-2">
-                  {isWorking ? <Loader className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-                  <span>{uploading ? 'Creating…' : 'Create Album & Add Tracks →'}</span>
-                </button>
-              </form>
-            </div>
-          )}
-
-          {albumStep === 'list' && (
-            <div className="space-y-4">
-              <button type="button" onClick={() => setAlbumStep('create')}
-                className="w-full py-3 bg-white/[0.06] text-white/70 font-medium rounded-lg hover:bg-white/[0.1] transition flex items-center justify-center space-x-2">
-                <Plus className="w-4 h-4" /><span>Create New Album</span>
-              </button>
-              {albums.length === 0 ? (
-                <div className="text-center py-12">
-                  <Music className="w-10 h-10 mx-auto text-white/10 mb-3" />
-                  <p className="text-white/30 text-sm">No albums yet</p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {albums.map(album => (
-                    <div key={album.id} className="bg-white/[0.03] rounded-xl border border-white/[0.06] overflow-hidden">
-                      <div className="flex items-center space-x-3 p-3">
-                        {album.cover_artwork_url
-                          ? <img src={album.cover_artwork_url} alt={album.title} className="w-14 h-14 rounded-lg object-cover flex-shrink-0" />
-                          : <div className="w-14 h-14 rounded-lg bg-white/[0.06] flex items-center justify-center flex-shrink-0"><Music className="w-5 h-5 text-white/20" /></div>}
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-white truncate">{album.title}</p>
-                          <p className="text-xs text-white/40">{album.release_type?.toUpperCase()} · {album.is_published ? 'Live' : 'Draft'} · ${album.price || 0}</p>
-                        </div>
-                        <div className="flex items-center space-x-1 flex-shrink-0">
-                          <button
-                            onClick={() => { setActiveAlbum(album); fetchAlbumTracks(album.id); setTrackForm({ ...BLANK_TRACK, album_id: album.id }); setAlbumStep('tracks'); }}
-                            className="px-3 py-1.5 bg-white/[0.06] rounded-lg text-xs text-white/60 hover:bg-white/[0.1] transition">
-                            Tracks
-                          </button>
-                          <button type="button" onClick={() => editingAlbumId === album.id ? setEditingAlbumId(null) : startEditAlbum(album)}
-                            className="p-2 bg-white/[0.04] rounded-lg hover:bg-white/[0.08] transition">
-                            <Edit className="w-4 h-4 text-white/40" />
-                          </button>
-                          <button type="button" onClick={() => deleteAlbum(album.id, album.title)}
-                            className="p-2 bg-red-500/[0.06] rounded-lg hover:bg-red-500/[0.12] transition">
-                            <Trash2 className="w-4 h-4 text-red-400/60" />
-                          </button>
-                        </div>
-                      </div>
-                      {editingAlbumId === album.id && (
-                        <div className="border-t border-white/[0.06] p-4 space-y-4">
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div>
-                              <label className="block text-xs text-white/40 mb-1.5">Title</label>
-                              <input type="text" value={editAlbumForm.title}
-                                onChange={(e) => setEditAlbumForm({ ...editAlbumForm, title: e.target.value })}
-                                className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none focus:bg-white/[0.1]" />
-                            </div>
-                            <div>
-                              <label className="block text-xs text-white/40 mb-1.5">Release Type</label>
-                              <select value={editAlbumForm.release_type}
-                                onChange={(e) => setEditAlbumForm({ ...editAlbumForm, release_type: e.target.value })}
-                                className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none">
-                                {['single', 'ep', 'album', 'mixtape', 'live', 'compilation'].map(t => (
-                                  <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>
-                                ))}
-                              </select>
-                            </div>
-                            <div>
-                              <label className="block text-xs text-white/40 mb-1.5">Release Date</label>
-                              <input type="date" value={editAlbumForm.release_date}
-                                onChange={(e) => setEditAlbumForm({ ...editAlbumForm, release_date: e.target.value })}
-                                className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none" />
-                            </div>
-                            <div>
-                              <label className="block text-xs text-white/40 mb-1.5">Price (USD)</label>
-                              <input type="number" min="0" step="0.01" value={editAlbumForm.price}
-                                onChange={(e) => setEditAlbumForm({ ...editAlbumForm, price: e.target.value })}
-                                className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none" />
-                            </div>
-                          </div>
-                          <div>
-                            <label className="block text-xs text-white/40 mb-1.5">Description</label>
-                            <textarea rows={2} value={editAlbumForm.description}
-                              onChange={(e) => setEditAlbumForm({ ...editAlbumForm, description: e.target.value })}
-                              className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none resize-none" />
-                          </div>
-                          <div>
-                            <label className="block text-xs text-white/40 mb-1.5">Replace Artwork</label>
-                            <input type="file" accept=".jpg,.jpeg,.png,.webp"
-                              onChange={(e) => setEditAlbumForm({ ...editAlbumForm, cover_file: e.target.files[0] })}
-                              className="w-full text-sm text-white/60 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:bg-white/[0.06] file:text-white/60 file:text-sm hover:file:bg-white/[0.1]" />
-                          </div>
-                          <label className="flex items-center space-x-2 cursor-pointer">
-                            <Toggle value={editAlbumForm.is_published} onChange={() => setEditAlbumForm({ ...editAlbumForm, is_published: !editAlbumForm.is_published })} />
-                            <span className="text-xs text-white/50">Published</span>
-                          </label>
-                          <TierGate feature="collaborations" inline>
-                            <div>
-                              <label className="block text-xs text-white/40 mb-2">Album Collaborators</label>
-                              <CollaboratorSearch collaborators={editAlbumCollaborators} setCollaborators={setEditAlbumCollaborators} currentArtistId={artist.id} />
-                            </div>
-                          </TierGate>
-                          <div className="flex space-x-2">
-                            <button type="button" onClick={() => saveAlbumEdit(album.id)} disabled={isWorking}
-                              className="px-4 py-2 bg-white text-black rounded-lg text-sm font-medium flex items-center space-x-1 disabled:opacity-50">
-                              {isWorking ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-                              <span>Save</span>
-                            </button>
-                            <button type="button" onClick={() => setEditingAlbumId(null)}
-                              className="px-4 py-2 bg-white/[0.06] text-white/60 rounded-lg text-sm flex items-center space-x-1">
-                              <X className="w-3.5 h-3.5" /><span>Cancel</span>
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ==================== MANAGE TAB ==================== */}
+      {/* ══════════════════ MANAGE TAB ══════════════════ */}
       {activeTab === 'manage' && (
         <div className="space-y-4">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
             <input type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Search tracks..."
+              placeholder="Search by title or genre…"
               className="w-full pl-10 pr-4 py-2.5 bg-white/[0.06] rounded-lg text-sm text-white placeholder-white/30 outline-none" />
           </div>
+
           {loading ? (
             <div className="flex justify-center py-12"><Loader className="w-6 h-6 animate-spin text-white/30" /></div>
           ) : filteredTracks.length === 0 ? (
@@ -1089,157 +857,28 @@ export default function TrackUploadPanel() {
           ) : (
             <div className="space-y-2">
               {filteredTracks.map(track => (
-                <div key={track.id} className="bg-white/[0.03] rounded-lg p-4 border border-white/[0.06]">
-                  {editingId === track.id ? (
-                    <div className="space-y-3">
-                      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                        <div>
-                          <label className="block text-xs text-white/40 mb-1">Title</label>
-                          <input type="text" value={editForm.title} onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
-                            className="w-full px-3 py-2 bg-white/[0.06] rounded text-white text-sm outline-none" />
-                        </div>
-                        <div>
-                          <label className="block text-xs text-white/40 mb-1">Genre</label>
-                          <select value={editForm.genre} onChange={(e) => setEditForm({ ...editForm, genre: e.target.value })}
-                            className="w-full px-3 py-2 bg-white/[0.06] rounded text-white text-sm outline-none">
-                            <option value="">None</option>
-                            {GENRES.map(g => <option key={g} value={g}>{g}</option>)}
-                          </select>
-                        </div>
-                        <div>
-                          <label className="block text-xs text-white/40 mb-1">Mood</label>
-                          <select value={editForm.mood} onChange={(e) => setEditForm({ ...editForm, mood: e.target.value })}
-                            className="w-full px-3 py-2 bg-white/[0.06] rounded text-white text-sm outline-none">
-                            <option value="">None</option>
-                            {MOODS.map(m => <option key={m} value={m}>{m}</option>)}
-                          </select>
-                        </div>
-                        <div>
-                          <label className="block text-xs text-white/40 mb-1">Album</label>
-                          <select value={editForm.album_id} onChange={(e) => setEditForm({ ...editForm, album_id: e.target.value })}
-                            className="w-full px-3 py-2 bg-white/[0.06] rounded text-white text-sm outline-none">
-                            <option value="">No Album</option>
-                            {albums.map(a => <option key={a.id} value={a.id}>{a.title}</option>)}
-                          </select>
-                        </div>
-                        <div>
-                          <label className="block text-xs text-white/40 mb-1">Track #</label>
-                          <input type="number" min="1" value={editForm.track_number} onChange={(e) => setEditForm({ ...editForm, track_number: e.target.value })}
-                            className="w-full px-3 py-2 bg-white/[0.06] rounded text-white text-sm outline-none" />
-                        </div>
-                        <div>
-                          <label className="block text-xs text-white/40 mb-1">Price</label>
-                          <input type="number" min="0" step="0.01" value={editForm.download_price} onChange={(e) => setEditForm({ ...editForm, download_price: e.target.value })}
-                            className="w-full px-3 py-2 bg-white/[0.06] rounded text-white text-sm outline-none" />
-                        </div>
-                        <div>
-                          <label className="block text-xs text-white/40 mb-1">Pay What You Want</label>
-                          <div className="flex items-center space-x-2 mt-1">
-                            <Toggle value={editForm.pay_what_you_want} onChange={() => setEditForm({ ...editForm, pay_what_you_want: !editForm.pay_what_you_want })} />
-                            <span className="text-xs text-white/50">Fan chooses</span>
-                          </div>
-                          {editForm.pay_what_you_want && (
-                            <div className="mt-1">
-                              <label className="block text-xs text-white/40 mb-1">Min Price</label>
-                              <input type="number" min="0" step="0.01" value={editForm.minimum_price || '0'}
-                                onChange={(e) => setEditForm({ ...editForm, minimum_price: e.target.value })}
-                                className="w-full px-3 py-2 bg-white/[0.06] rounded text-white text-sm outline-none" />
-                            </div>
-                          )}
+                <div key={track.id} className="bg-white/[0.03] rounded-xl border border-white/[0.06] overflow-hidden">
+
+                  {editingId !== track.id ? (
+                    <div className="flex items-center space-x-3 p-3">
+                      {track.cover_artwork_url
+                        ? <img src={track.cover_artwork_url} alt="" className="w-12 h-12 rounded-lg object-cover flex-shrink-0" />
+                        : <div className="w-12 h-12 rounded-lg bg-white/[0.06] flex items-center justify-center flex-shrink-0"><Music className="w-5 h-5 text-white/20" /></div>}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-white truncate">{track.title}</p>
+                        <p className="text-xs text-white/40 truncate">
+                          {track.genre || 'No genre'} · {track.albums?.title || 'Single'}
+                        </p>
+                        <div className="flex items-center flex-wrap gap-1.5 mt-1">
+                          {track.is_published
+                            ? <span className="text-[10px] px-1.5 py-0.5 bg-green-500/10 text-green-400 rounded">Live</span>
+                            : <span className="text-[10px] px-1.5 py-0.5 bg-white/[0.06] text-white/30 rounded">Draft</span>}
+                          {track.featured   && <span className="text-[10px] px-1.5 py-0.5 bg-yellow-500/10 text-yellow-400 rounded">Featured</span>}
+                          {track.is_explicit && <span className="text-[10px] px-1.5 py-0.5 bg-white/[0.06] text-white/30 rounded">E</span>}
+                          <span className="text-[10px] text-white/20">{track.stream_count || 0} streams</span>
                         </div>
                       </div>
-                      <div>
-                        <label className="block text-xs text-white/40 mb-1">Lyrics</label>
-                        <textarea rows={2} value={editForm.lyrics} onChange={(e) => setEditForm({ ...editForm, lyrics: e.target.value })}
-                          className="w-full px-3 py-2 bg-white/[0.06] rounded text-white text-sm outline-none resize-none" />
-                      </div>
-                      <div className="flex flex-wrap gap-3">
-                        {['is_published', 'featured', 'is_explicit', 'is_downloadable', 'is_premium', 'has_versions'].map(key => (
-                          <label key={key} className="flex items-center space-x-1.5 text-xs text-white/40 cursor-pointer">
-                            <input type="checkbox" checked={editForm[key] || false}
-                              onChange={(e) => setEditForm({ ...editForm, [key]: e.target.checked })}
-                              className="rounded border-white/20" />
-                            <span>{key.replace('is_', '').replace(/_/g, ' ')}</span>
-                          </label>
-                        ))}
-                        <label className="flex items-center space-x-1.5 text-xs text-white/40 cursor-pointer">
-                          <input type="checkbox" checked={editForm.is_preorder || false}
-                            onChange={() => setEditForm({ ...editForm, is_preorder: !editForm.is_preorder })}
-                            className="rounded border-white/20" />
-                          <span>Pre-order</span>
-                        </label>
-                      </div>
-                      {editForm.is_preorder && (
-                        <div>
-                          <label className="block text-xs text-white/40 mb-1">Release Date</label>
-                          <input type="datetime-local"
-                            value={editForm.release_date ? editForm.release_date.substring(0, 16) : ''}
-                            onChange={(e) => setEditForm({ ...editForm, release_date: e.target.value })}
-                            className="w-full px-3 py-2 bg-white/[0.06] rounded text-white text-sm outline-none" />
-                        </div>
-                      )}
-                      <div>
-                        <label className="block text-xs text-white/40 mb-1">Cover Artwork</label>
-                        <div className="flex items-center gap-3">
-                          {(editCoverFile ? URL.createObjectURL(editCoverFile) : editForm.cover_artwork_url) && (
-                            <img src={editCoverFile ? URL.createObjectURL(editCoverFile) : editForm.cover_artwork_url} alt="cover" className="w-14 h-14 rounded object-cover" />
-                          )}
-                          <label className="cursor-pointer text-xs px-3 py-1.5 bg-white/10 rounded hover:bg-white/20 text-white/70">
-                            Replace Image
-                            <input type="file" accept="image/*" className="hidden" onChange={(e) => setEditCoverFile(e.target.files[0])} />
-                          </label>
-                        </div>
-                      </div>
-                      <div>
-                        <label className="block text-xs text-white/40 mb-1">Replace Audio File</label>
-                        <label className="cursor-pointer text-xs px-3 py-1.5 bg-white/10 rounded hover:bg-white/20 text-white/70">
-                          {editAudioFile ? editAudioFile.name : 'Choose new audio file…'}
-                          <input type="file" accept="audio/*" className="hidden" onChange={(e) => setEditAudioFile(e.target.files[0])} />
-                        </label>
-                        {editAudioFile?.name?.toLowerCase().endsWith('.wav') && (
-                          <p className="text-xs text-purple-400/70 mt-1 flex items-center space-x-1">
-                            <Zap className="w-3 h-3" /><span>Will be converted to MP3 at 320kbps</span>
-                          </p>
-                        )}
-                      </div>
-                      <div>
-                        <label className="block text-xs text-white/40 mb-2">Collaborators</label>
-                        <CollaboratorSearch collaborators={editCollaborators} setCollaborators={setEditCollaborators} currentArtistId={artist.id} />
-                      </div>
-                      <div className="flex space-x-2">
-                        <button type="button" onClick={() => saveEdit(track.id)} disabled={isWorking}
-                          className="px-4 py-2 bg-white text-black rounded-lg text-sm font-medium flex items-center space-x-1 disabled:opacity-50">
-                          {isWorking ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-                          <span>{converting ? `Converting… ${convProgress}%` : 'Save'}</span>
-                        </button>
-                        <button type="button" onClick={() => setEditingId(null)}
-                          className="px-4 py-2 bg-white/[0.06] text-white/60 rounded-lg text-sm flex items-center space-x-1">
-                          <X className="w-3.5 h-3.5" /><span>Cancel</span>
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-3 flex-1 min-w-0">
-                        {track.cover_artwork_url
-                          ? <img src={track.cover_artwork_url} alt={track.title} className="w-12 h-12 rounded-md object-cover flex-shrink-0" />
-                          : <div className="w-12 h-12 rounded-md bg-white/[0.06] flex items-center justify-center flex-shrink-0"><Music className="w-5 h-5 text-white/20" /></div>}
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium text-white truncate">{track.title}</p>
-                          <p className="text-xs text-white/40 truncate">
-                            {track.genre || 'No genre'} {track.albums?.title ? `on ${track.albums.title}` : '(Single)'}
-                          </p>
-                          <div className="flex items-center space-x-2 mt-1">
-                            {track.is_published
-                              ? <span className="text-[10px] px-1.5 py-0.5 bg-green-500/10 text-green-400 rounded">Live</span>
-                              : <span className="text-[10px] px-1.5 py-0.5 bg-white/[0.06] text-white/30 rounded">Draft</span>}
-                            {track.featured && <span className="text-[10px] px-1.5 py-0.5 bg-yellow-500/10 text-yellow-400 rounded">Featured</span>}
-                            {track.is_explicit && <span className="text-[10px] px-1.5 py-0.5 bg-white/[0.06] text-white/30 rounded">E</span>}
-                            <span className="text-[10px] text-white/20">{track.stream_count || 0} streams</span>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="flex items-center space-x-1 ml-2">
+                      <div className="flex items-center space-x-1 flex-shrink-0">
                         <button type="button" onClick={() => startEdit(track)}
                           className="p-2 bg-white/[0.04] rounded-lg hover:bg-white/[0.08] transition">
                           <Edit className="w-4 h-4 text-white/40" />
@@ -1247,6 +886,160 @@ export default function TrackUploadPanel() {
                         <button type="button" onClick={() => deleteTrack(track.id, track.title)}
                           className="p-2 bg-red-500/[0.06] rounded-lg hover:bg-red-500/[0.12] transition">
                           <Trash2 className="w-4 h-4 text-red-400/60" />
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-4 space-y-4">
+                      <div className="flex items-center justify-between">
+                        <p className="text-sm font-semibold text-white">Editing: {track.title}</p>
+                        <button type="button" onClick={() => setEditingId(null)}
+                          className="p-1.5 rounded-lg hover:bg-white/[0.06] transition">
+                          <X className="w-4 h-4 text-white/30" />
+                        </button>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div>
+                          <FieldLabel>Title</FieldLabel>
+                          <FInput type="text" value={editForm.title}
+                            onChange={(e) => setEditForm({ ...editForm, title: e.target.value })} />
+                        </div>
+                        <div>
+                          <FieldLabel>Album</FieldLabel>
+                          <FSelect value={editForm.album_id}
+                            onChange={(e) => setEditForm({ ...editForm, album_id: e.target.value })}>
+                            <option value="">No Album (Single)</option>
+                            {albums.map(a => <option key={a.id} value={a.id}>{a.title}</option>)}
+                          </FSelect>
+                        </div>
+                        <div>
+                          <FieldLabel>Genre</FieldLabel>
+                          <FSelect value={editForm.genre}
+                            onChange={(e) => setEditForm({ ...editForm, genre: e.target.value })}>
+                            <option value="">None</option>
+                            {GENRES.map(g => <option key={g} value={g}>{g}</option>)}
+                          </FSelect>
+                        </div>
+                        <div>
+                          <FieldLabel>Mood</FieldLabel>
+                          <FSelect value={editForm.mood}
+                            onChange={(e) => setEditForm({ ...editForm, mood: e.target.value })}>
+                            <option value="">None</option>
+                            {MOODS.map(m => <option key={m} value={m}>{m}</option>)}
+                          </FSelect>
+                        </div>
+                        <div>
+                          <FieldLabel>Track Number</FieldLabel>
+                          <FInput type="number" min="1" value={editForm.track_number}
+                            onChange={(e) => setEditForm({ ...editForm, track_number: e.target.value })} />
+                        </div>
+                        <div>
+                          <FieldLabel>Download Price (USD)</FieldLabel>
+                          <FInput type="number" min="0" step="0.01" value={editForm.download_price}
+                            onChange={(e) => setEditForm({ ...editForm, download_price: e.target.value })} />
+                        </div>
+                        {parseFloat(editForm.download_price) > 0 && (
+                          <div className="md:col-span-2 space-y-2">
+                            <div className="flex items-center space-x-3">
+                              <Toggle value={editForm.pay_what_you_want}
+                                onChange={() => setEditForm({ ...editForm, pay_what_you_want: !editForm.pay_what_you_want })} />
+                              <span className="text-xs text-white/50">Pay What You Want</span>
+                            </div>
+                            {editForm.pay_what_you_want && (
+                              <div>
+                                <FieldLabel>Minimum Price</FieldLabel>
+                                <FInput type="number" min="0" step="0.01" value={editForm.minimum_price || '0'}
+                                  onChange={(e) => setEditForm({ ...editForm, minimum_price: e.target.value })} />
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      <div>
+                        <FieldLabel>Lyrics</FieldLabel>
+                        <textarea rows={3} value={editForm.lyrics}
+                          onChange={(e) => setEditForm({ ...editForm, lyrics: e.target.value })}
+                          className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none resize-none" />
+                      </div>
+
+                      <div className="flex flex-wrap gap-3">
+                        {[
+                          { key: 'is_published',    label: 'Published' },
+                          { key: 'featured',        label: 'Featured' },
+                          { key: 'is_explicit',     label: 'Explicit' },
+                          { key: 'is_downloadable', label: 'Downloadable' },
+                          { key: 'is_premium',      label: 'Premium' },
+                          { key: 'has_versions',    label: 'Has Versions' },
+                          { key: 'is_preorder',     label: 'Pre-order' },
+                        ].map(({ key, label }) => (
+                          <label key={key} className="flex items-center space-x-1.5 text-xs text-white/40 cursor-pointer">
+                            <input type="checkbox" checked={editForm[key] || false}
+                              onChange={(e) => setEditForm({ ...editForm, [key]: e.target.checked })}
+                              className="rounded border-white/20" />
+                            <span>{label}</span>
+                          </label>
+                        ))}
+                      </div>
+
+                      {editForm.is_preorder && (
+                        <div>
+                          <FieldLabel>Release Date</FieldLabel>
+                          <FInput type="datetime-local"
+                            value={editForm.release_date ? editForm.release_date.substring(0, 16) : ''}
+                            onChange={(e) => setEditForm({ ...editForm, release_date: e.target.value })} />
+                        </div>
+                      )}
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <FieldLabel>Cover Artwork</FieldLabel>
+                          <div className="flex items-center gap-3">
+                            {(editCoverFile
+                              ? URL.createObjectURL(editCoverFile)
+                              : editForm.cover_artwork_url) && (
+                              <img
+                                src={editCoverFile ? URL.createObjectURL(editCoverFile) : editForm.cover_artwork_url}
+                                alt="cover" className="w-12 h-12 rounded-lg object-cover flex-shrink-0" />
+                            )}
+                            <label className="cursor-pointer text-xs px-3 py-1.5 bg-white/[0.06] rounded-lg hover:bg-white/[0.1] text-white/60 transition">
+                              Replace
+                              <input type="file" accept="image/*" className="hidden"
+                                onChange={(e) => setEditCoverFile(e.target.files[0])} />
+                            </label>
+                          </div>
+                        </div>
+                        <div>
+                          <FieldLabel>Audio File</FieldLabel>
+                          <label className="cursor-pointer text-xs px-3 py-1.5 bg-white/[0.06] rounded-lg hover:bg-white/[0.1] text-white/60 transition inline-block">
+                            {editAudioFile ? editAudioFile.name : 'Replace audio…'}
+                            <input type="file" accept="audio/*" className="hidden"
+                              onChange={(e) => setEditAudioFile(e.target.files[0])} />
+                          </label>
+                          {editAudioFile?.name?.toLowerCase().endsWith('.wav') && (
+                            <p className="text-xs text-purple-400/70 mt-1 flex items-center space-x-1">
+                              <Zap className="w-3 h-3" /><span>Will convert to MP3 at 320kbps</span>
+                            </p>
+                          )}
+                        </div>
+                      </div>
+
+                      <div>
+                        <FieldLabel>Collaborators</FieldLabel>
+                        <CollaboratorSearch collaborators={editCollaborators}
+                          setCollaborators={setEditCollaborators} currentArtistId={artist.id} />
+                      </div>
+
+                      <div className="flex space-x-2 pt-1">
+                        <button type="button" onClick={() => saveEdit(track.id)} disabled={isWorking}
+                          className="px-5 py-2.5 bg-white text-black rounded-lg text-sm font-semibold flex items-center space-x-1.5 disabled:opacity-50 transition">
+                          {isWorking ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                          <span>{converting ? `Converting… ${convProgress}%` : 'Save Changes'}</span>
+                        </button>
+                        <button type="button" onClick={() => setEditingId(null)}
+                          className="px-4 py-2.5 bg-white/[0.06] text-white/60 rounded-lg text-sm transition hover:bg-white/[0.1]">
+                          Cancel
                         </button>
                       </div>
                     </div>
