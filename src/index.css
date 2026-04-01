@@ -164,3 +164,60 @@ html, body, #root {
 .animate-slide-up { animation: slideUp 0.25s ease-out; }
 
 select, option { color-scheme: dark; background-color: #1a1a1a; color: white; }
+
+/* ── Mobile font size boost (10-20% larger) ─────────────────────────────────
+   Targets the elements that are hardest to read on mobile:
+   track titles, artist names, body text, nav labels.
+   Uses @media so desktop is completely unaffected.
+   ────────────────────────────────────────────────────────────────────────── */
+@media (max-width: 767px) {
+
+  /* Track titles in lists */
+  .text-sm {
+    font-size: 0.9375rem !important; /* 15px instead of 14px */
+    line-height: 1.4 !important;
+  }
+
+  /* Artist names, subtitles, metadata */
+  .text-xs {
+    font-size: 0.8125rem !important; /* 13px instead of 12px */
+    line-height: 1.4 !important;
+  }
+
+  /* Section headers */
+  .text-base {
+    font-size: 1.0625rem !important; /* 17px instead of 16px */
+  }
+
+  /* Page titles */
+  .text-lg {
+    font-size: 1.1875rem !important; /* 19px instead of 18px */
+  }
+
+  .text-xl {
+    font-size: 1.3125rem !important; /* 21px instead of 20px */
+  }
+
+  .text-2xl {
+    font-size: 1.625rem !important; /* 26px instead of 24px */
+  }
+
+  /* Nav labels */
+  .text-\[10px\] {
+    font-size: 0.75rem !important; /* 12px instead of 10px */
+  }
+
+  .text-\[11px\] {
+    font-size: 0.8125rem !important; /* 13px instead of 11px */
+  }
+
+  .text-\[12px\] {
+    font-size: 0.875rem !important; /* 14px instead of 12px */
+  }
+
+  /* Minimum touch target height for interactive rows */
+  .py-2\.5 {
+    padding-top: 0.75rem !important;
+    padding-bottom: 0.75rem !important;
+  }
+}
