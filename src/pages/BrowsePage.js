@@ -54,8 +54,48 @@ export default function BrowsePage() {
   const [albums, setAlbums] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchResults, setSearchResults] = useState(null);
+  const [recommended, setRecommended]     = useState([]);
 
   useEffect(() => { if (user) fetchAll(); }, [user]);
+
+  useEffect(() => {
+    if (user && allTracks.length > 0) fetchRecommended();
+  }, [user, allTracks]);
+
+  const fetchRecommended = async () => {
+    try {
+      // stream history first
+      const { data: streamData } = await supabase
+        .from('streams').select('track_id, tracks(genre, mood)')
+        .eq('user_id', user.id).limit(50);
+      let genreTags = [];
+      let listenedIds = [];
+      if (streamData && streamData.length > 0) {
+        const tagCounts = {};
+        streamData.forEach(s => {
+          const g = s.tracks?.genre; const m = s.tracks?.mood;
+          if (g) tagCounts[g] = (tagCounts[g] || 0) + 1;
+          if (m) tagCounts[m] = (tagCounts[m] || 0) + 1;
+        });
+        listenedIds = streamData.map(s => s.track_id).filter(Boolean);
+        genreTags = Object.entries(tagCounts).sort((a, b) => b[1] - a[1]).slice(0, 3).map(e => e[0]);
+      }
+      // fall back to stored genre preferences
+      if (genreTags.length === 0) {
+        const { data: prefData } = await supabase
+          .from('user_profiles').select('genre_preferences')
+          .eq('user_id', user.id).maybeSingle();
+        genreTags = prefData?.genre_preferences || [];
+      }
+      if (genreTags.length === 0) return;
+      // filter from already-loaded allTracks — no extra network call
+      const recFromLocal = allTracks.filter(t =>
+        !listenedIds.includes(t.id) &&
+        (genreTags.includes(t.genre) || genreTags.includes(t.mood))
+      ).slice(0, 8);
+      setRecommended(recFromLocal);
+    } catch (err) { console.error('Browse recs error:', err); }
+  };
 
   useEffect(() => {
     if (query.trim().length >= 2) searchAll(query.trim());
@@ -434,6 +474,29 @@ export default function BrowsePage() {
       {/* ========== TRACKS TAB ========== */}
       {activeTab === 'tracks' && (
         <div>
+          {/* Recommended strip — only when genre filter is All */}
+          {selectedGenre === 'All' && recommended.length > 0 && (
+            <div className="mb-5">
+              <div className="flex items-center space-x-2 mb-3">
+                <Sparkles className="w-4 h-4 text-purple-400" />
+                <p className="text-sm font-semibold text-white">Recommended For You</p>
+              </div>
+              <div className="flex space-x-3 overflow-x-auto scrollbar-hide -mx-6 px-6">
+                {recommended.map(track => (
+                  <div key={track.id} className="flex-shrink-0 w-32 cursor-pointer group"
+                    onClick={() => handlePlayTrack(track, recommended)}>
+                    <div className="aspect-square rounded-xl overflow-hidden mb-1.5 bg-white/[0.06]">
+                      {track.cover_artwork_url
+                        ? <img src={track.cover_artwork_url} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                        : <div className="w-full h-full flex items-center justify-center"><Music className="w-6 h-6 text-white/15" /></div>}
+                    </div>
+                    <p className="text-xs font-medium text-white truncate">{track.title}</p>
+                    <p className="text-[10px] text-white/30 truncate">{track.artist_name}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           <div className="flex space-x-2 overflow-x-auto scrollbar-hide mb-4 -mx-1 px-1">
             {GENRE_TAGS.map(genre => (
               <button key={genre} onClick={() => setSelectedGenre(genre)}
