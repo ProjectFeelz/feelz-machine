@@ -22,12 +22,12 @@ function Section({ title, icon: Icon, onSeeAll, children }) {
     <div className="mb-8">
       <div className="flex items-center justify-between mb-3 px-6">
         <div className="flex items-center space-x-2">
-          {Icon && <Icon className="w-4 h-4 text-white/40" />}
-          <h2 className="text-base font-bold text-white">{title}</h2>
+          {Icon && <Icon className="w-3.5 h-3.5 text-white/30" />}
+          <span className="section-label">{title}</span>
         </div>
         {onSeeAll && (
-          <button onClick={onSeeAll} className="flex items-center text-xs text-white/30 hover:text-white/50 transition">
-            See All <ChevronRight className="w-3.5 h-3.5 ml-0.5" />
+          <button onClick={onSeeAll} className="text-[10px] text-white/25 hover:text-white/50 transition uppercase tracking-wider font-semibold">
+            See All →
           </button>
         )}
       </div>
@@ -257,7 +257,8 @@ export default function HomePage() {
 
       <PullToRefreshIndicator pullProgress={pullProgress} isRefreshing={isRefreshing} />
 
-      <div className="px-6 mb-4 pt-2">
+      <div className="greeting-hero px-6 pt-2">
+        <p className="section-label mb-1">{new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</p>
         <h1 className="text-2xl font-bold text-white">
           {user ? greeting() : 'Feelz Machine'}
         </h1>
