@@ -38,6 +38,10 @@ import AlbumDetailPage from './pages/AlbumDetailPage';
 import AdminUserBehaviorPage from './pages/AdminUserBehaviorPage';
 import { Helmet } from 'react-helmet-async';
 import TrackPage from './pages/TrackPage';
+import CollabRadarPage from './pages/CollabRadarPage';
+
+// Inside your routes:
+<Route path="/collab-radar" element={<CollabRadarPage />} />
 
 // ── Wrapper to set page title for standalone pages outside AppLayout ─────────
 function PageTitle({ title, children }) {
