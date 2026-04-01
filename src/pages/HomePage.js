@@ -6,6 +6,9 @@ import { usePlayer } from '../contexts/PlayerContext';
 import { ChevronRight, Flame, Play, Pause, Music, Verified, MoreHorizontal, Disc, Sparkles } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import TrackActionSheet from '../components/TrackActionSheet';
+import { usePullToRefresh } from '../hooks/usePullToRefresh';
+import PullToRefreshIndicator from '../components/PullToRefreshIndicator';
+import { HomeSkeleton } from '../components/SkeletonLoader';
 
 function formatNumber(n) {
   if (!n) return '0';
@@ -37,6 +40,7 @@ function SquareCard({ item, itemList = [], isAlbum = false, onPlay, currentTrack
   const navigate = useNavigate();
   const menuRef = useRef(null);
   const [showActionSheet, setShowActionSheet] = useState(false);
+  const [imgLoaded, setImgLoaded] = useState(false);
   const isActive = !isAlbum && currentTrack?.id === item.id;
   const isCurrentPlaying = isActive && isPlaying;
 
@@ -50,13 +54,34 @@ function SquareCard({ item, itemList = [], isAlbum = false, onPlay, currentTrack
 
   return (
     <div className="flex-shrink-0 w-40 md:w-52 cursor-pointer group relative">
-      <div className="aspect-square rounded-xl overflow-hidden bg-white/[0.06] mb-2 relative"
+      <div
+        className="aspect-square rounded-xl overflow-hidden bg-white/[0.06] mb-2 relative"
         onClick={() => isAlbum ? navigate(`/album/${item.slug || item.id}`) : onPlay(item, itemList)}>
-        {item.cover_artwork_url
-          ? <img src={item.cover_artwork_url} alt={item.title ? item.title.trim() : ''} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
-          : <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-white/10 to-white/5">
-              {isAlbum ? <Disc className="w-8 h-8 text-white/20" /> : <Music className="w-8 h-8 text-white/20" />}
-            </div>}
+        {item.cover_artwork_url ? (
+          <>
+            {!imgLoaded && (
+              <div className="absolute inset-0 bg-white/[0.06]">
+                <div className="absolute inset-0" style={{
+                  background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.04) 50%, transparent 100%)',
+                  animation: 'skeleton-shimmer 1.4s infinite',
+                }} />
+              </div>
+            )}
+            <img
+              src={item.cover_artwork_url}
+              alt={item.title ? item.title.trim() : ''}
+              loading="lazy"
+              decoding="async"
+              onLoad={() => setImgLoaded(true)}
+              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+              style={{ opacity: imgLoaded ? 1 : 0, transition: 'opacity 0.3s ease' }}
+            />
+          </>
+        ) : (
+          <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-white/10 to-white/5">
+            {isAlbum ? <Disc className="w-8 h-8 text-white/20" /> : <Music className="w-8 h-8 text-white/20" />}
+          </div>
+        )}
         <div className={`absolute inset-0 flex items-center justify-center bg-black/40 transition rounded-xl ${isCurrentPlaying ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
           <div className="w-10 h-10 rounded-full bg-white/20 backdrop-blur flex items-center justify-center">
             {isCurrentPlaying ? <Pause className="w-5 h-5 text-white" /> : <Play className="w-5 h-5 text-white ml-0.5" />}
@@ -95,14 +120,12 @@ export default function HomePage() {
   const { user, artist } = useAuth();
   const { playTrack, currentTrack, isPlaying, togglePlay } = usePlayer();
   const navigate = useNavigate();
-  const [featuredTracks, setFeaturedTracks]     = useState([]);
-  const [newReleases, setNewReleases]           = useState([]);
-  const [trending, setTrending]                 = useState([]);
-  const [topArtists, setTopArtists]             = useState([]);
-  const [recommended, setRecommended]           = useState([]);
-  const [loading, setLoading]                   = useState(true);
-
-  useEffect(() => { fetchData(); }, [user]);
+  const [featuredTracks, setFeaturedTracks] = useState([]);
+  const [newReleases, setNewReleases]       = useState([]);
+  const [trending, setTrending]             = useState([]);
+  const [topArtists, setTopArtists]         = useState([]);
+  const [recommended, setRecommended]       = useState([]);
+  const [loading, setLoading]               = useState(true);
 
   const fetchData = async () => {
     try {
@@ -132,15 +155,12 @@ export default function HomePage() {
       ]);
 
       const normTrack = (list) => (list || []).map(t => ({
-        ...t,
-        artist_name: t.artists?.artist_name || 'Unknown Artist',
+        ...t, artist_name: t.artists?.artist_name || 'Unknown Artist',
         artist_slug: t.artists?.slug || t.artist_slug || null,
       }));
       const normAlbum = (list) => (list || []).map(a => ({
-        ...a,
-        artist_name: a.artists?.artist_name || 'Unknown Artist',
-        artist_slug: a.artists?.slug || null,
-        _isAlbum: true,
+        ...a, artist_name: a.artists?.artist_name || 'Unknown Artist',
+        artist_slug: a.artists?.slug || null, _isAlbum: true,
       }));
 
       const merged = [
@@ -150,25 +170,20 @@ export default function HomePage() {
 
       const trendingBoosted = (trendingRaw || [])
         .map(t => ({
-          ...t,
-          artist_name: t.artists?.artist_name || 'Unknown Artist',
+          ...t, artist_name: t.artists?.artist_name || 'Unknown Artist',
           artist_slug: t.artists?.slug || t.artist_slug || null,
           _boosted: (t.engagement_score || 0) * (
             t.artists?.tier === 'premium' ? 1.5 : t.artists?.tier === 'pro' ? 1.2 : 1
           ),
         }))
-        .sort((a, b) => b._boosted - a._boosted)
-        .slice(0, 8);
+        .sort((a, b) => b._boosted - a._boosted).slice(0, 8);
 
       setFeaturedTracks(normTrack(featured));
       setNewReleases(merged);
       setTrending(trendingBoosted);
       setTopArtists(artists || []);
 
-      // ── Recommendations: stream history first, then genre preferences ──
-      if (user) {
-        await fetchRecommendations(normTrack(recentTracks));
-      }
+      if (user) await fetchRecommendations();
     } catch (err) {
       console.error('Failed to fetch:', err);
     } finally {
@@ -176,17 +191,13 @@ export default function HomePage() {
     }
   };
 
-  const fetchRecommendations = async (allTracksNorm) => {
+  const fetchRecommendations = async () => {
     try {
-      // Step 1: check stream history
       const { data: streamData } = await supabase
         .from('streams').select('track_id, tracks(genre, mood)')
         .eq('user_id', user.id).limit(50);
-
-      let genreTags = [];
-      let listenedIds = [];
-
-      if (streamData && streamData.length > 0) {
+      let genreTags = [], listenedIds = [];
+      if (streamData?.length > 0) {
         const tagCounts = {};
         streamData.forEach(s => {
           const g = s.tracks?.genre; const m = s.tracks?.mood;
@@ -196,37 +207,27 @@ export default function HomePage() {
         listenedIds = streamData.map(s => s.track_id).filter(Boolean);
         genreTags = Object.entries(tagCounts).sort((a, b) => b[1] - a[1]).slice(0, 3).map(e => e[0]);
       }
-
-      // Step 2: fall back to stored genre preferences if no stream history
       if (genreTags.length === 0) {
         const { data: prefData } = await supabase
-          .from('user_profiles').select('genre_preferences')
-          .eq('user_id', user.id).maybeSingle();
+          .from('user_profiles').select('genre_preferences').eq('user_id', user.id).maybeSingle();
         genreTags = prefData?.genre_preferences || [];
       }
-
-      if (genreTags.length === 0) return; // no data to recommend from
-
+      if (genreTags.length === 0) return;
       const orFilter = genreTags.map(t => `genre.eq.${t},mood.eq.${t}`).join(',');
       let query = supabase.from('tracks')
         .select('*, artists(artist_name, slug, profile_image_url)')
         .eq('is_published', true).or(orFilter)
         .order('engagement_score', { ascending: false }).limit(10);
-
-      if (listenedIds.length > 0) {
-        query = query.not('id', 'in', `(${listenedIds.join(',')})`);
-      }
-
+      if (listenedIds.length > 0) query = query.not('id', 'in', `(${listenedIds.join(',')})`);
       const { data: recData } = await query;
       setRecommended((recData || []).map(t => ({
-        ...t,
-        artist_name: t.artists?.artist_name || 'Unknown Artist',
+        ...t, artist_name: t.artists?.artist_name || 'Unknown Artist',
         artist_slug: t.artists?.slug || null,
       })));
-    } catch (err) {
-      console.error('Recommendations error:', err);
-    }
+    } catch (err) { console.error('Recommendations error:', err); }
   };
+
+  useEffect(() => { fetchData(); }, [user]);
 
   const handlePlay = (track, list) => {
     if (currentTrack?.id === track.id) { togglePlay(); return; }
@@ -240,16 +241,12 @@ export default function HomePage() {
     return 'Good Evening';
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="w-6 h-6 border-2 border-white/20 border-t-white rounded-full animate-spin" />
-      </div>
-    );
-  }
+  const { pullProps, pullProgress, isRefreshing } = usePullToRefresh(fetchData);
+
+  if (loading) return <HomeSkeleton />;
 
   return (
-    <div className="pt-12 md:pt-0 pb-4">
+    <div className="pt-12 md:pt-0 pb-4" {...pullProps}>
       <Helmet>
         <title>Home · Feelz Machine</title>
         <meta name="description" content="Discover independent music, trending tracks and artists on Feelz Machine." />
@@ -257,6 +254,8 @@ export default function HomePage() {
         <meta property="og:title" content="Home · Feelz Machine" />
         <meta property="og:url" content="https://www.feelzmachine.com/" />
       </Helmet>
+
+      <PullToRefreshIndicator pullProgress={pullProgress} isRefreshing={isRefreshing} />
 
       <div className="px-6 mb-4 pt-2">
         <h1 className="text-2xl font-bold text-white">
@@ -267,7 +266,6 @@ export default function HomePage() {
         </p>
       </div>
 
-      {/* ── Recommended For You — shown when we have data ── */}
       {recommended.length > 0 && (
         <Section title="Recommended For You" icon={Sparkles} onSeeAll={() => navigate('/browse?tab=tracks')}>
           <div className="flex space-x-3 overflow-x-auto px-6 scrollbar-hide">
@@ -323,7 +321,9 @@ export default function HomePage() {
                 className="flex-shrink-0 w-40 md:w-52 text-center group">
                 <div className="w-40 h-40 md:w-52 md:h-52 rounded-full overflow-hidden bg-white/[0.06] mb-2 mx-auto">
                   {a.profile_image_url
-                    ? <img src={a.profile_image_url} alt={a.artist_name || ''} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                    ? <img src={a.profile_image_url} alt={a.artist_name || ''}
+                        loading="lazy" decoding="async"
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
                     : <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-purple-600/30 to-blue-600/20">
                         <span className="text-3xl font-bold text-white/40">{a.artist_name?.[0]}</span>
                       </div>}
@@ -338,6 +338,13 @@ export default function HomePage() {
           </div>
         </Section>
       )}
+
+      <style>{`
+        @keyframes skeleton-shimmer {
+          0%   { transform: translateX(-100%); }
+          100% { transform: translateX(100%); }
+        }
+      `}</style>
     </div>
   );
 }
