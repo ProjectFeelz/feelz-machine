@@ -6,22 +6,21 @@ import { useAuth } from '../contexts/AuthContext';
 import { useHaptics } from '../hooks/useHaptics';
 import {
   Radio, Loader, Verified, Send, Check,
-  Music, Mic2, Headphones, PenLine, Shuffle, Blend, MoreHorizontal,
+  Music, Mic2, Headphones, PenLine, Shuffle, Sliders, MoreHorizontal,
   ChevronRight, Zap,
 } from 'lucide-react';
 
 // ── Collab type options ───────────────────────────────────────────────────────
 const COLLAB_TYPES = [
-  { key: 'featured', label: 'Featured',  icon: Mic2,       desc: 'Guest verse or hook' },
-  { key: 'beat',     label: 'Beat',      icon: Headphones, desc: 'I need a beat / I make beats' },
-  { key: 'co-write', label: 'Co-write',  icon: PenLine,    desc: 'Write together' },
-  { key: 'remix',    label: 'Remix',     icon: Shuffle,    desc: 'Remix one of my tracks' },
-  { key: 'mix',      label: 'Mix/Master',icon: Blend,      desc: 'Audio engineering' },
-  { key: 'other',    label: 'Other',     icon: MoreHorizontal, desc: 'Something else' },
+  { key: 'featured', label: 'Featured',   icon: Mic2,           desc: 'Guest verse or hook' },
+  { key: 'beat',     label: 'Beat',       icon: Headphones,     desc: 'I need a beat / I make beats' },
+  { key: 'co-write', label: 'Co-write',   icon: PenLine,        desc: 'Write together' },
+  { key: 'remix',    label: 'Remix',      icon: Shuffle,        desc: 'Remix one of my tracks' },
+  { key: 'mix',      label: 'Mix/Master', icon: Sliders,        desc: 'Audio engineering' },
+  { key: 'other',    label: 'Other',      icon: MoreHorizontal, desc: 'Something else' },
 ];
 
 // ── Match scoring ─────────────────────────────────────────────────────────────
-// Compares two artists and returns 0–100 compatibility score + shared tags
 function scoreMatch(me, them) {
   const myGenres   = (me.genre   ? [me.genre]   : []).concat(me.tags   || []);
   const myMoods    = (me.mood    ? [me.mood]     : []).concat(me.moods  || []);
@@ -32,14 +31,12 @@ function scoreMatch(me, them) {
   const sharedMoods  = myMoods.filter(m => themMoods.includes(m));
   const shared       = [...new Set([...sharedGenres, ...sharedMoods])];
 
-  // Score components
-  const genreScore    = sharedGenres.length * 25;   // up to ~75 for 3 shared genres
-  const moodScore     = sharedMoods.length  * 15;   // up to ~30 for 2 shared moods
+  const genreScore    = sharedGenres.length * 25;
+  const moodScore     = sharedMoods.length  * 15;
   const tierBonus     = them.tier === 'premium' ? 5 : them.tier === 'pro' ? 3 : 0;
   const followerBonus = Math.min(Math.log10((them.follower_count || 1) + 1) * 3, 10);
-
-  const raw   = genreScore + moodScore + tierBonus + followerBonus;
-  const score = Math.min(Math.round(raw), 99); // cap at 99 — 100 is reserved
+  const raw           = genreScore + moodScore + tierBonus + followerBonus;
+  const score         = Math.min(Math.round(raw), 99);
 
   return { score, shared };
 }
@@ -85,7 +82,6 @@ function SendRequestModal({ target, onClose, onSent, myArtistId }) {
     if (!pitch.trim()) { setError('Add a short pitch so they know what you have in mind'); return; }
     setSending(true);
     try {
-      // Insert the collab request
       const { data: req, error: reqErr } = await supabase
         .from('collab_requests')
         .insert({
@@ -100,7 +96,6 @@ function SendRequestModal({ target, onClose, onSent, myArtistId }) {
 
       if (reqErr) throw reqErr;
 
-      // Fire a notification to the receiving artist
       await supabase.from('notifications').insert({
         artist_id:      target.id,
         type:           'collab_request',
@@ -153,7 +148,7 @@ function SendRequestModal({ target, onClose, onSent, myArtistId }) {
               What are you looking for?
             </p>
             <div className="grid grid-cols-3 gap-2">
-              {COLLAB_TYPES.map(({ key, label, icon: Icon, desc }) => (
+              {COLLAB_TYPES.map(({ key, label, icon: Icon }) => (
                 <button key={key}
                   onClick={() => { tap(); setCollabType(key); }}
                   className={`flex flex-col items-center p-2.5 rounded-xl border text-center transition-all ${
@@ -184,9 +179,7 @@ function SendRequestModal({ target, onClose, onSent, myArtistId }) {
               className="w-full bg-white/[0.06] rounded-xl px-4 py-3 text-sm text-white placeholder-white/20 outline-none resize-none border border-white/[0.06] focus:border-white/20 transition leading-relaxed"
             />
             <div className="flex items-center justify-between mt-1">
-              {error
-                ? <p className="text-xs text-red-400">{error}</p>
-                : <span />}
+              {error ? <p className="text-xs text-red-400">{error}</p> : <span />}
               <span className={`text-[10px] tabular-nums ${pitch.length > MAX_PITCH * 0.9 ? 'text-orange-400' : 'text-white/20'}`}>
                 {pitch.length}/{MAX_PITCH}
               </span>
@@ -197,15 +190,13 @@ function SendRequestModal({ target, onClose, onSent, myArtistId }) {
           <button
             onClick={handleSend}
             disabled={sending || !pitch.trim()}
-            className="w-full py-3.5 rounded-xl font-bold text-sm flex items-center justify-center space-x-2 transition-all active:scale-98 disabled:opacity-40 bg-purple-600 hover:bg-purple-500 text-white"
+            className="w-full py-3.5 rounded-xl font-bold text-sm flex items-center justify-center space-x-2 transition-all active:scale-95 disabled:opacity-40 bg-purple-600 hover:bg-purple-500 text-white"
           >
             {sending
               ? <Loader className="w-4 h-4 animate-spin" />
               : <><Send className="w-4 h-4" /><span>Send Request</span></>}
           </button>
         </div>
-
-        {/* Safe area */}
         <div className="h-5" />
       </div>
     </div>
@@ -214,10 +205,10 @@ function SendRequestModal({ target, onClose, onSent, myArtistId }) {
 
 // ── Artist match card ─────────────────────────────────────────────────────────
 function MatchCard({ match, myArtistId, alreadySent, onRequestSent }) {
-  const navigate = useNavigate();
-  const { tap }  = useHaptics();
+  const navigate        = useNavigate();
+  const { tap }         = useHaptics();
   const [showModal, setShowModal] = useState(false);
-  const [sent, setSent]          = useState(alreadySent);
+  const [sent, setSent]           = useState(alreadySent);
 
   const handleSent = () => {
     setSent(true);
@@ -228,7 +219,6 @@ function MatchCard({ match, myArtistId, alreadySent, onRequestSent }) {
   return (
     <>
       <div className="bg-white/[0.03] rounded-2xl border border-white/[0.06] overflow-hidden">
-        {/* Top: avatar + name + match score */}
         <div className="flex items-center space-x-3 p-4 pb-3">
           <button
             onClick={() => { tap(); navigate(`/artist/${match.slug}`); }}
@@ -251,30 +241,26 @@ function MatchCard({ match, myArtistId, alreadySent, onRequestSent }) {
             <SharedTags tags={match._shared} />
           </div>
 
-          {/* Profile arrow */}
           <button onClick={() => { tap(); navigate(`/artist/${match.slug}`); }}
             className="w-8 h-8 flex items-center justify-center text-white/20 hover:text-white/50 transition">
             <ChevronRight className="w-4 h-4" />
           </button>
         </div>
 
-        {/* Stats row */}
         <div className="flex items-center space-x-3 px-4 pb-3 text-[10px] text-white/25 uppercase tracking-wider">
           <span>{match.total_streams ? `${(match.total_streams / 1000).toFixed(1)}K streams` : '—'}</span>
           <span>·</span>
           <span>{match.follower_count ? `${match.follower_count} followers` : '—'}</span>
           {match.tier && match.tier !== 'free' && (
-            <><span>·</span>
-            <span className="text-purple-400 capitalize">{match.tier}</span></>
+            <><span>·</span><span className="text-purple-400 capitalize">{match.tier}</span></>
           )}
         </div>
 
-        {/* CTA */}
         <div className="px-4 pb-4">
           <button
             onClick={() => { if (!sent) { tap(); setShowModal(true); } }}
             disabled={sent}
-            className={`w-full py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center space-x-2 transition-all active:scale-98 ${
+            className={`w-full py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center space-x-2 transition-all active:scale-95 ${
               sent
                 ? 'bg-green-500/10 text-green-400 border border-green-500/20 cursor-default'
                 : 'bg-purple-600 hover:bg-purple-500 text-white'
@@ -305,26 +291,23 @@ export default function CollabRadarPage() {
   const navigate         = useNavigate();
   const { tap }          = useHaptics();
 
-  const [matches, setMatches]       = useState([]);
-  const [loading, setLoading]       = useState(true);
-  const [sentIds, setSentIds]       = useState(new Set()); // artist IDs we've already sent to
+  const [matches, setMatches]         = useState([]);
+  const [loading, setLoading]         = useState(true);
+  const [sentIds, setSentIds]         = useState(new Set());
   const [genreFilter, setGenreFilter] = useState('all');
-  const [genres, setGenres]         = useState([]);
+  const [genres, setGenres]           = useState([]);
 
-  // ── Load matches ────────────────────────────────────────────────────────────
   const loadMatches = useCallback(async () => {
     if (!artist) return;
     setLoading(true);
     try {
-      // Fetch all pro/premium artists except myself
-      const { data: artists } = await supabase
+      const { data: artistList } = await supabase
         .from('artists')
         .select('id, artist_name, slug, profile_image_url, is_verified, genre, mood, tags, moods, tier, follower_count, total_streams')
         .in('tier', ['pro', 'premium'])
         .neq('id', artist.id)
         .limit(100);
 
-      // Fetch requests I've already sent
       const { data: sent } = await supabase
         .from('collab_requests')
         .select('to_artist_id')
@@ -333,24 +316,14 @@ export default function CollabRadarPage() {
       const alreadySent = new Set((sent || []).map(r => r.to_artist_id));
       setSentIds(alreadySent);
 
-      // Score and sort
-      const scored = (artists || [])
-        .map(a => {
-          const { score, shared } = scoreMatch(artist, a);
-          return { ...a, _score: score, _shared: shared };
-        })
-        .filter(a => a._score > 0) // only show artists with at least something in common
+      const scored = (artistList || [])
+        .map(a => { const { score, shared } = scoreMatch(artist, a); return { ...a, _score: score, _shared: shared }; })
+        .filter(a => a._score > 0)
         .sort((a, b) => b._score - a._score);
 
       setMatches(scored);
-
-      // Build genre filter list from results
-      const allGenres = [...new Set(scored.map(a => a.genre).filter(Boolean))];
-      setGenres(allGenres.slice(0, 6));
-
-    } catch (err) {
-      console.error('CollabRadar load error:', err);
-    }
+      setGenres([...new Set(scored.map(a => a.genre).filter(Boolean))].slice(0, 6));
+    } catch (err) { console.error('CollabRadar load error:', err); }
     setLoading(false);
   }, [artist]);
 
@@ -360,9 +333,7 @@ export default function CollabRadarPage() {
     setSentIds(prev => new Set([...prev, artistId]));
   };
 
-  // Guard: only pro/premium artists can send requests
-  const canSend = artist?.tier === 'pro' || artist?.tier === 'premium';
-
+  const canSend  = artist?.tier === 'pro' || artist?.tier === 'premium';
   const filtered = genreFilter === 'all'
     ? matches
     : matches.filter(m => m.genre === genreFilter || (m._shared || []).includes(genreFilter));
@@ -379,9 +350,7 @@ export default function CollabRadarPage() {
 
   return (
     <div className="min-h-screen pb-32">
-      <Helmet>
-        <title>Collab Radar · Feelz Machine</title>
-      </Helmet>
+      <Helmet><title>Collab Radar · Feelz Machine</title></Helmet>
 
       {/* Header */}
       <div className="px-6 pt-12 md:pt-6 pb-6">
@@ -391,11 +360,8 @@ export default function CollabRadarPage() {
           </div>
           <h1 className="text-2xl font-bold text-white">Collab Radar</h1>
         </div>
-        <p className="text-sm text-white/30 ml-11">
-          Artists who vibe with your sound
-        </p>
+        <p className="text-sm text-white/30 ml-11">Artists who vibe with your sound</p>
 
-        {/* Tier gate notice */}
         {!canSend && (
           <div className="mt-4 p-3 rounded-xl bg-yellow-500/10 border border-yellow-500/20 flex items-start space-x-2.5">
             <Zap className="w-4 h-4 text-yellow-400 flex-shrink-0 mt-0.5" />
@@ -410,43 +376,33 @@ export default function CollabRadarPage() {
         )}
       </div>
 
-      {/* Genre filter pills */}
+      {/* Genre filter */}
       {genres.length > 0 && (
         <div className="flex space-x-2 overflow-x-auto scrollbar-hide px-6 pb-4">
-          <button
-            onClick={() => { tap(); setGenreFilter('all'); }}
+          <button onClick={() => { tap(); setGenreFilter('all'); }}
             className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition ${
               genreFilter === 'all' ? 'bg-white text-black' : 'bg-white/[0.06] text-white/40 hover:text-white/70'
-            }`}>
-            All
-          </button>
+            }`}>All</button>
           {genres.map(g => (
-            <button key={g}
-              onClick={() => { tap(); setGenreFilter(g); }}
+            <button key={g} onClick={() => { tap(); setGenreFilter(g); }}
               className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition capitalize ${
                 genreFilter === g ? 'bg-white text-black' : 'bg-white/[0.06] text-white/40 hover:text-white/70'
-              }`}>
-              {g}
-            </button>
+              }`}>{g}</button>
           ))}
         </div>
       )}
 
       {/* Results */}
       {loading ? (
-        <div className="flex justify-center py-20">
-          <div className="flex flex-col items-center space-y-3">
-            <Radio className="w-8 h-8 text-purple-400 animate-pulse" />
-            <p className="text-sm text-white/30">Scanning for matches…</p>
-          </div>
+        <div className="flex flex-col items-center space-y-3 py-20">
+          <Radio className="w-8 h-8 text-purple-400 animate-pulse" />
+          <p className="text-sm text-white/30">Scanning for matches…</p>
         </div>
       ) : filtered.length === 0 ? (
         <div className="text-center py-20 px-6">
           <Music className="w-12 h-12 mx-auto text-white/10 mb-3" />
           <p className="text-sm text-white/30">No matches yet</p>
-          <p className="text-xs text-white/15 mt-1">
-            Add genres and moods to your profile to improve matching
-          </p>
+          <p className="text-xs text-white/15 mt-1">Add genres and moods to your profile to improve matching</p>
           <button onClick={() => navigate('/profile/edit')}
             className="mt-4 text-xs text-purple-400 hover:text-purple-300 transition">
             Update your profile →
@@ -458,13 +414,8 @@ export default function CollabRadarPage() {
             {filtered.length} artist{filtered.length !== 1 ? 's' : ''} found
           </p>
           {filtered.map(match => (
-            <MatchCard
-              key={match.id}
-              match={match}
-              myArtistId={artist.id}
-              alreadySent={sentIds.has(match.id)}
-              onRequestSent={handleRequestSent}
-            />
+            <MatchCard key={match.id} match={match} myArtistId={artist.id}
+              alreadySent={sentIds.has(match.id)} onRequestSent={handleRequestSent} />
           ))}
         </div>
       )}
