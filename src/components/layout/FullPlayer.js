@@ -14,7 +14,7 @@ import { useHaptics } from '../../hooks/useHaptics';
 import VinylRecord from '../VinylRecord';
 
 // Lazy-load ReactPlayer to avoid bundle bloat for users who never see video
-import ReactPlayer from 'react-player/youtube';
+import ReactPlayer from 'react-player';
 
 function formatTime(secs) {
   if (!secs || isNaN(secs)) return '0:00';
