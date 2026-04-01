@@ -40,9 +40,6 @@ import { Helmet } from 'react-helmet-async';
 import TrackPage from './pages/TrackPage';
 import CollabRadarPage from './pages/CollabRadarPage';
 
-// Inside your routes:
-<Route path="/collab-radar" element={<CollabRadarPage />} />
-
 // ── Wrapper to set page title for standalone pages outside AppLayout ─────────
 function PageTitle({ title, children }) {
   return (
@@ -108,6 +105,7 @@ export default function AppRouter() {
                 <Route path="/album/:id" element={<AlbumDetailPage />} />
                 <Route path="/artist/:slug" element={<ArtistProfilePage />} />
                 <Route path="/track/:slug" element={<TrackPage />} />
+                <Route path="/collab-radar" element={<CollabRadarPage />} />
                 <Route path="/admin" element={<AdminDashboard />} />
                 <Route path="/admin/artists" element={<AdminArtists />} />
                 <Route path="/admin/analytics" element={<AdminAnalytics />} />
