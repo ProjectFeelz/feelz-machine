@@ -45,7 +45,8 @@ export default function FullPlayer() {
 
   const handleSeek = (e) => {
     const rect = e.currentTarget.getBoundingClientRect();
-    const pct = (e.clientX - rect.left) / rect.width;
+    const clientX = e.touches ? e.touches[0]?.clientX ?? e.changedTouches[0]?.clientX : e.clientX;
+    const pct = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
     seek(pct * duration);
   };
 
@@ -171,9 +172,18 @@ export default function FullPlayer() {
 
             {/* Progress bar */}
             <div className="mb-2">
-              <div className="h-1 bg-white/10 rounded-full cursor-pointer group" onClick={handleSeek}>
-                <div className="h-full bg-white rounded-full relative" style={{ width: `${progress}%` }}>
-                  <div className="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-white opacity-0 group-hover:opacity-100 transition" />
+              <div
+                className="h-8 flex items-center cursor-pointer group -mx-1 px-1"
+                onClick={handleSeek}
+                onTouchStart={(e) => e.stopPropagation()}
+                onTouchMove={(e) => { e.stopPropagation(); handleSeek(e); }}
+                onTouchEnd={(e) => { e.stopPropagation(); handleSeek(e); }}
+                style={{ touchAction: 'none' }}
+              >
+                <div className="w-full h-1 bg-white/10 rounded-full relative">
+                  <div className="h-full bg-white rounded-full relative" style={{ width: `${progress}%` }}>
+                    <div className="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-white shadow-lg opacity-0 group-active:opacity-100 transition" />
+                  </div>
                 </div>
               </div>
               <div className="flex justify-between mt-1.5">
