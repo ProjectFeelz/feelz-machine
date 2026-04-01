@@ -204,7 +204,15 @@ export default function BrowsePage() {
       setNewReleases(merged);
       setAllTracks(allNorm);
       setAlbums(albumsNorm);
-      setArtists(artistsData || []);
+      // Artists with images first, imageless ones pushed to the end
+      const sortedArtists = (artistsData || []).sort((a, b) => {
+        const aHasImg = !!(a.profile_image_url);
+        const bHasImg = !!(b.profile_image_url);
+        if (aHasImg && !bHasImg) return -1;
+        if (!aHasImg && bHasImg) return 1;
+        return 0;
+      });
+      setArtists(sortedArtists);
     } catch (err) { console.error('Browse fetch error:', err); }
     setLoading(false);
   };
