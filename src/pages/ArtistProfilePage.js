@@ -833,7 +833,7 @@ export default function ArtistProfilePage() {
       </Helmet>
 
       {/* BANNER */}
-      <div className="relative w-full" style={{ height: '160px' }}>
+      <div className="relative w-full" style={{ height: '220px' }}>
         {artist.banner_image_url || theme?.banner_image_url ? (
           <img src={artist.banner_image_url || theme?.banner_image_url} alt="" className="absolute inset-0 w-full h-full object-cover" />
         ) : (
@@ -857,8 +857,8 @@ export default function ArtistProfilePage() {
               : <Share2 className="w-4 h-4" style={{ color: textColor }} />}
           </button>
         </div>
-        <div className="absolute -bottom-14 left-1/2 -translate-x-1/2 z-10">
-          <div className="w-28 h-28 rounded-2xl overflow-hidden border-4 shadow-2xl"
+        <div className="absolute -bottom-16 left-1/2 -translate-x-1/2 z-10">
+          <div className="w-32 h-32 rounded-2xl overflow-hidden border-4 shadow-2xl"
             style={{ borderColor: bgColor, backgroundColor: `${secondaryColor}30` }}>
             {artist.profile_image_url ? (
               <img src={artist.profile_image_url} alt={artist.artist_name} className="w-full h-full object-cover" />
@@ -873,9 +873,9 @@ export default function ArtistProfilePage() {
       </div>
 
       {/* ARTIST INFO */}
-      <div className="px-6 pt-20 flex flex-col items-center text-center">
+      <div className="px-6 pt-24 flex flex-col items-center text-center">
         <div className="flex items-center space-x-2 mb-1">
-          <h1 className="text-2xl font-bold" style={{ fontFamily: `"${headingFont}", sans-serif`, color: textColor }}>{artist.artist_name}</h1>
+          <h1 className="text-3xl font-bold" style={{ fontFamily: `"${headingFont}", sans-serif`, color: textColor }}>{artist.artist_name}</h1>
           {artist.is_verified && (
             <div className="w-5 h-5 rounded-full flex items-center justify-center" style={{ backgroundColor: accentColor }}>
               <Verified className="w-3 h-3" style={{ color: bgColor }} />
