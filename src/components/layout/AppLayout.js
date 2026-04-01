@@ -170,7 +170,7 @@ export default function AppLayout() {
       <MobileBellButton />
       <main
         className="w-full md:w-[calc(100%-256px)] md:ml-64"
-        style={{ paddingBottom: mobilePaddingBottom }}
+        style={{ paddingBottom: mobilePaddingBottom, WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain' }}
       >
         <style>{`
           @media (min-width: 768px) {
