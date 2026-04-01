@@ -47,11 +47,6 @@ function SectionLabel({ icon: Icon, title, subtitle }) {
   );
 }
 
-// ── Divider between section header and list content ───────────────────────────
-function SectionDivider() {
-  return <div className="h-px bg-white/[0.04] mb-4" />;
-}
-
 export default function BrowsePage() {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -281,7 +276,7 @@ export default function BrowsePage() {
             {searchResults.artists.length > 0 && (
               <div className="mb-5">
                 <p className="section-label mb-3">Artists</p>
-                <SectionDivider />
+               
                 <div className="flex space-x-3 overflow-x-auto scrollbar-hide">
                   {searchResults.artists.map(a => (
                     <button key={a.id} onClick={() => navigate(`/artist/${a.slug}`)}
@@ -303,7 +298,7 @@ export default function BrowsePage() {
             {searchResults.tracks.length > 0 && (
               <div className="mb-5">
                 <p className="section-label mb-3">Tracks</p>
-                <SectionDivider />
+              
                 {searchResults.tracks.slice(0, 5).map((track, i) => (
                   <TrackRow key={track.id} track={track} index={i}
                     currentTrack={currentTrack} isPlaying={isPlaying}
@@ -317,7 +312,7 @@ export default function BrowsePage() {
             {searchResults.albums.length > 0 && (
               <div className="mb-5">
                 <p className="section-label mb-3">Albums</p>
-                <SectionDivider />
+                
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                   {searchResults.albums.slice(0, 4).map(album => (
                     <AlbumTile key={album.id} album={album} navigate={navigate} />
@@ -338,7 +333,7 @@ export default function BrowsePage() {
         {activeTab === 'featured' && (
           <div>
             <SectionLabel icon={Star} title="Featured" subtitle="Hand-picked tracks from our team" />
-            <SectionDivider />
+           
             {featured.length > 0 ? (
               <>
                 <div className="hidden md:grid md:grid-cols-2 lg:grid-cols-3 gap-3 mb-4">
@@ -373,7 +368,7 @@ export default function BrowsePage() {
         {activeTab === 'new' && (
           <div>
             <SectionLabel icon={Sparkles} title="New Releases" subtitle="Latest tracks and albums" />
-            <SectionDivider />
+          
             {newReleases.length > 0 ? (
               <>
                 <div className="hidden md:grid md:grid-cols-2 lg:grid-cols-3 gap-3 mb-4">
@@ -423,7 +418,7 @@ export default function BrowsePage() {
         {activeTab === 'trending' && (
           <div>
             <SectionLabel icon={Flame} title="Trending Now" subtitle="Based on streams, likes, saves & playlist adds" />
-            <SectionDivider />
+        
             {trending.length > 0 ? (
               <>
                 <div className="hidden md:grid md:grid-cols-2 lg:grid-cols-3 gap-3 mb-4">
@@ -469,7 +464,7 @@ export default function BrowsePage() {
             {selectedGenre === 'All' && recommended.length > 0 && (
               <div className="mb-6">
                 <SectionLabel icon={Sparkles} title="Recommended For You" />
-                <SectionDivider />
+            
                 <div className="flex space-x-3 overflow-x-auto scrollbar-hide -mx-6 px-6">
                   {recommended.map(track => (
                     <div key={track.id} className="flex-shrink-0 w-32 cursor-pointer group"
@@ -501,7 +496,7 @@ export default function BrowsePage() {
               ))}
             </div>
 
-            <SectionDivider />
+         
 
             {filteredTracks.length > 0 ? (
               <>
@@ -536,7 +531,7 @@ export default function BrowsePage() {
         {activeTab === 'artists' && (
           <div>
             <SectionLabel icon={Crown} title="Artists" subtitle="Sorted by total streams" />
-            <SectionDivider />
+           
             {artists.length > 0 ? (
               <div className="grid grid-cols-3 md:grid-cols-5 gap-4">
                 {artists.map(a => (
@@ -570,7 +565,7 @@ export default function BrowsePage() {
         {activeTab === 'albums' && (
           <div>
             <SectionLabel icon={Disc3} title="Albums & EPs" subtitle="Latest releases" />
-            <SectionDivider />
+          
             {albums.length > 0 ? (
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 {albums.map(album => (
