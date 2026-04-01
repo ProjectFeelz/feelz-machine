@@ -6,6 +6,7 @@ import {
   Music, Headphones, Upload, Loader, User,
   ArrowRight, ArrowLeft, Check, Sparkles
 } from 'lucide-react';
+import ArtistFollowPrompt from '../components/ArtistFollowPrompt';
 
 const PROFILE_IMAGE_BUCKET = 'artist-images';
 
@@ -27,20 +28,21 @@ export default function ProfileSetup() {
 
   // step: 0 = choose type, 1 = artist setup, 2 = listener name,
   //       3 = listener genres, 4 = listener done
-  const [step, setStep]             = useState(0);
+  const [step, setStep]               = useState(0);
   const [accountType, setAccountType] = useState(null);
   const [ageConfirmed, setAgeConfirmed] = useState(false);
-  const [ageError, setAgeError]     = useState(false);
+  const [ageError, setAgeError]       = useState(false);
+  const [showFollowPrompt, setShowFollowPrompt] = useState(false);
 
   // Artist fields
-  const [artistName, setArtistName] = useState('');
-  const [bio, setBio]               = useState('');
-  const [imageFile, setImageFile]   = useState(null);
+  const [artistName, setArtistName]     = useState('');
+  const [bio, setBio]                   = useState('');
+  const [imageFile, setImageFile]       = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
 
   // Listener fields
-  const [displayName, setDisplayName]           = useState('');
-  const [selectedGenres, setSelectedGenres]     = useState([]);
+  const [displayName, setDisplayName]       = useState('');
+  const [selectedGenres, setSelectedGenres] = useState([]);
 
   const [saving, setSaving] = useState(false);
   const [error, setError]   = useState('');
@@ -92,7 +94,8 @@ export default function ProfileSetup() {
       });
       if (insertErr) throw insertErr;
       await refreshProfile();
-      navigate('/hub');
+      // Show the follow prompt — new artists pick artists to follow before landing on Hub
+      setShowFollowPrompt(true);
     } catch (err) { setError(err.message); }
     setSaving(false);
   };
@@ -136,7 +139,12 @@ export default function ProfileSetup() {
     );
   }
 
-  // ── Step 0 — Choose type ───────────────────────────────────────────────────
+  // ── Artist follow prompt — shown after artist profile is created ──────────
+  if (showFollowPrompt) {
+    return <ArtistFollowPrompt onDone={() => navigate('/hub')} />;
+  }
+
+  // ── Step 0 — Choose type ──────────────────────────────────────────────────
   if (step === 0) {
     return (
       <div className="min-h-screen bg-black flex flex-col items-center justify-center px-6 py-12">
@@ -149,7 +157,6 @@ export default function ProfileSetup() {
             <p className="text-sm text-white/40">How do you want to use the platform?</p>
           </div>
 
-          {/* Age confirmation */}
           <label className={`flex items-start space-x-3 mb-5 cursor-pointer group p-3 rounded-xl border transition ${
             ageError ? 'border-red-500/40 bg-red-500/5' : 'border-white/[0.06] hover:border-white/[0.12]'
           }`}>
@@ -164,9 +171,7 @@ export default function ProfileSetup() {
               </div>
             </div>
             <span className={`text-xs leading-relaxed transition ${ageError ? 'text-red-400' : 'text-white/40'}`}>
-              {ageError
-                ? 'Please confirm your age to continue'
-                : 'I confirm that I am 13 years of age or older'}
+              {ageError ? 'Please confirm your age to continue' : 'I confirm that I am 13 years of age or older'}
             </span>
           </label>
 
@@ -204,7 +209,7 @@ export default function ProfileSetup() {
     );
   }
 
-  // ── Step 1 — Artist setup ──────────────────────────────────────────────────
+  // ── Step 1 — Artist setup ─────────────────────────────────────────────────
   if (step === 1) {
     return (
       <div className="min-h-screen bg-black flex flex-col items-center justify-center px-6 py-12">
@@ -263,7 +268,7 @@ export default function ProfileSetup() {
     );
   }
 
-  // ── Step 2 — Listener name ─────────────────────────────────────────────────
+  // ── Step 2 — Listener name ────────────────────────────────────────────────
   if (step === 2) {
     return (
       <div className="min-h-screen bg-black flex flex-col items-center justify-center px-6 py-12">
@@ -306,7 +311,7 @@ export default function ProfileSetup() {
     );
   }
 
-  // ── Step 3 — Genre preferences ─────────────────────────────────────────────
+  // ── Step 3 — Genre preferences ────────────────────────────────────────────
   if (step === 3) {
     return (
       <div className="min-h-screen bg-black flex flex-col items-center justify-center px-6 py-12">
@@ -318,7 +323,6 @@ export default function ProfileSetup() {
             <h1 className="text-2xl font-bold text-white mb-2">What do you vibe with?</h1>
             <p className="text-sm text-white/40">Step 2 of 2 · Pick your genres for better recommendations</p>
           </div>
-
           <div className="flex flex-wrap gap-2 mb-8">
             {GENRE_OPTIONS.map(genre => {
               const selected = selectedGenres.includes(genre);
@@ -335,7 +339,6 @@ export default function ProfileSetup() {
               );
             })}
           </div>
-
           <button onClick={handleGenreSubmit} disabled={saving}
             className="w-full py-3.5 bg-white text-black rounded-xl font-semibold text-sm flex items-center justify-center space-x-2 disabled:opacity-30 hover:bg-white/90 transition active:scale-[0.98]">
             {saving ? <Loader className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4" />}
@@ -346,7 +349,7 @@ export default function ProfileSetup() {
     );
   }
 
-  // ── Step 4 — Listener welcome / guidance ───────────────────────────────────
+  // ── Step 4 — Listener welcome ─────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-black flex flex-col items-center justify-center px-6 py-12">
       <div className="w-full max-w-md">
@@ -357,12 +360,11 @@ export default function ProfileSetup() {
           <h1 className="text-2xl font-bold text-white mb-2">You're all set!</h1>
           <p className="text-sm text-white/40">Here's how to get the most out of Feelz Machine</p>
         </div>
-
         <div className="space-y-3 mb-8">
           {[
-            { icon: Music,      color: 'bg-purple-500/20 text-purple-400', title: 'Browse music',        desc: 'Explore featured tracks, new releases and trending music', path: '/browse' },
-            { icon: Headphones, color: 'bg-blue-500/20 text-blue-400',     title: 'Follow artists',      desc: 'Follow your favourites to get notified when they drop new music', path: '/browse?tab=artists' },
-            { icon: Sparkles,   color: 'bg-yellow-500/20 text-yellow-400', title: 'Discover your feed',  desc: 'See posts and updates from artists you follow', path: '/community' },
+            { icon: Music,      color: 'bg-purple-500/20 text-purple-400', title: 'Browse music',       desc: 'Explore featured tracks, new releases and trending music',         path: '/browse' },
+            { icon: Headphones, color: 'bg-blue-500/20 text-blue-400',     title: 'Follow artists',     desc: 'Follow your favourites to get notified when they drop new music', path: '/browse?tab=artists' },
+            { icon: Sparkles,   color: 'bg-yellow-500/20 text-yellow-400', title: 'Discover your feed', desc: 'See posts and updates from artists you follow',                    path: '/community' },
           ].map(({ icon: Icon, color, title, desc, path }) => (
             <button key={title} onClick={() => navigate(path)}
               className="w-full flex items-center space-x-4 p-4 rounded-2xl bg-white/[0.03] border border-white/[0.06] hover:bg-white/[0.06] transition text-left group">
@@ -377,7 +379,6 @@ export default function ProfileSetup() {
             </button>
           ))}
         </div>
-
         <button onClick={() => navigate('/')}
           className="w-full py-3.5 bg-white text-black rounded-xl font-semibold text-sm hover:bg-white/90 transition active:scale-[0.98]">
           Go to Home
