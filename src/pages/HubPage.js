@@ -4,14 +4,13 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useTier } from '../contexts/useTier';
 import CollabThread from '../components/CollabThread';
+import ProfileCompletionBanner from '../components/ProfileCompletionBanner';
 import {
   Shield, Users, BarChart3, AlertTriangle, Music,
   Upload, HeartHandshake, Bell, Palette, MessageCircle,
   ChevronRight, Crown, Zap, Star, Mic2, LayoutDashboard,
   User, LogOut, DollarSign, Megaphone, Radio,
 } from 'lucide-react';
-
-// ── Reusable components ───────────────────────────────────────────────────────
 
 function LinkCard({ icon: Icon, label, description, path, color, onClick }) {
   const navigate = useNavigate();
@@ -50,14 +49,10 @@ function Section({ title, icon: Icon, children }) {
   );
 }
 
-// ── Hub tabs (artist only) ────────────────────────────────────────────────────
-
 const ARTIST_TABS = [
-  { key: 'home',   label: 'Home' },
+  { key: 'home',    label: 'Home' },
   { key: 'collabs', label: 'Collabs' },
 ];
-
-// ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function HubPage() {
   const navigate = useNavigate();
@@ -97,7 +92,7 @@ export default function HubPage() {
         <meta property="og:url" content="https://www.feelzmachine.com/hub" />
       </Helmet>
 
-      {/* ── Header ── */}
+      {/* Header */}
       <div className="mb-6 sticky top-0 z-20 bg-black/90 backdrop-blur-sm md:relative md:top-auto md:bg-transparent md:backdrop-blur-none pt-2 -mx-4 px-4">
         <div className="flex items-center space-x-3 mb-1">
           <LayoutDashboard className="w-6 h-6 text-white/60" />
@@ -105,19 +100,13 @@ export default function HubPage() {
         </div>
         <p className="text-sm text-white/40 ml-9">Your control center</p>
 
-        {/* Tab bar — artists only */}
         {isArtist && (
           <div className="flex space-x-1 mt-4 bg-white/[0.03] rounded-lg p-1">
             {ARTIST_TABS.map(({ key, label }) => (
-              <button
-                key={key}
-                onClick={() => setActiveTab(key)}
+              <button key={key} onClick={() => setActiveTab(key)}
                 className={`flex-1 py-2 rounded-md text-sm font-medium transition ${
-                  activeTab === key
-                    ? 'bg-white text-black'
-                    : 'text-white/40 hover:text-white/70'
-                }`}
-              >
+                  activeTab === key ? 'bg-white text-black' : 'text-white/40 hover:text-white/70'
+                }`}>
                 {label}
               </button>
             ))}
@@ -125,17 +114,20 @@ export default function HubPage() {
         )}
       </div>
 
-      {/* ── Collabs tab ── */}
+      {/* Collabs tab */}
       {isArtist && activeTab === 'collabs' && (
         <div className="space-y-4">
           <CollabThread />
         </div>
       )}
 
-      {/* ── Home tab (default) ── */}
+      {/* Home tab */}
       {(!isArtist || activeTab === 'home') && (
         <>
-          {/* Tier card — artists only */}
+          {/* Profile completion banner — artists only, shown before tier card */}
+          {isArtist && <ProfileCompletionBanner />}
+
+          {/* Tier card */}
           {isArtist && !tierLoading && (
             <button
               onClick={() => navigate('/upgrade')}
@@ -154,52 +146,46 @@ export default function HubPage() {
             </button>
           )}
 
-          {/* Admin Section */}
+          {/* Admin */}
           {isAdmin && (
             <Section title="Admin" icon={Shield}>
-              <LinkCard icon={Users}         label="User Management"     description="Manage artists, roles, and permissions"       path="/admin"              color="bg-yellow-500/20" />
-              <LinkCard icon={Mic2}          label="All Artists"         description="Browse and manage all artist profiles"         path="/admin/artists"      color="bg-purple-500/20" />
-              <LinkCard icon={BarChart3}     label="Platform Analytics"  description="Streams, signups, engagement metrics"          path="/admin/analytics"    color="bg-blue-500/20" />
-              <LinkCard icon={AlertTriangle} label="Content Moderation"  description="Flagged tracks, reports, and reviews"          path="/admin/moderation"   color="bg-red-500/20" />
-              <LinkCard icon={Megaphone}     label="Broadcast & APK"     description="Send updates to all users · Manage APK link"   path="/admin/broadcast"    color="bg-purple-500/20" />
-              <LinkCard icon={Zap}           label="Boost Manager"       description="Boost and feature artist content"              path="/admin/boost"        color="bg-amber-500/20" />
-              <LinkCard icon={BarChart3}     label="User Behavior"       description="Streams, downloads, logins, activity export"   path="/admin/behavior"     color="bg-cyan-500/20" />
+              <LinkCard icon={Users}         label="User Management"     description="Manage artists, roles, and permissions"      path="/admin"              color="bg-yellow-500/20" />
+              <LinkCard icon={Mic2}          label="All Artists"         description="Browse and manage all artist profiles"        path="/admin/artists"      color="bg-purple-500/20" />
+              <LinkCard icon={BarChart3}     label="Platform Analytics"  description="Streams, signups, engagement metrics"         path="/admin/analytics"    color="bg-blue-500/20" />
+              <LinkCard icon={AlertTriangle} label="Content Moderation"  description="Flagged tracks, reports, and reviews"         path="/admin/moderation"   color="bg-red-500/20" />
+              <LinkCard icon={Megaphone}     label="Broadcast & APK"     description="Send updates to all users · Manage APK link"  path="/admin/broadcast"    color="bg-purple-500/20" />
+              <LinkCard icon={Zap}           label="Boost Manager"       description="Boost and feature artist content"             path="/admin/boost"        color="bg-amber-500/20" />
+              <LinkCard icon={BarChart3}     label="User Behavior"       description="Streams, downloads, logins, activity export"  path="/admin/behavior"     color="bg-cyan-500/20" />
             </Section>
           )}
 
-          {/* Listener Section */}
+          {/* Listener */}
           {!isArtist && (
             <Section title="Discover" icon={Music}>
-              <LinkCard icon={Music}          label="Browse Music"     description="Find new tracks and artists"    path="/browse"              color="bg-purple-500/20" />
-              <LinkCard icon={Mic2}           label="Discover Artists" description="Find and follow new artists"    path="/browse?tab=artists"  color="bg-indigo-500/20" />
-              <LinkCard icon={Users}          label="Following"        description="Artists you follow"             path="/library/following"   color="bg-cyan-500/20" />
-              <LinkCard icon={MessageCircle}  label="Community"        description="Feed and chat rooms"            path="/community"           color="bg-teal-500/20" />
-              <LinkCard icon={Star}           label="Liked Songs"      description="Your saved tracks"              path="/library/likes"       color="bg-pink-500/20" />
+              <LinkCard icon={Music}         label="Browse Music"     description="Find new tracks and artists"   path="/browse"             color="bg-purple-500/20" />
+              <LinkCard icon={Mic2}          label="Discover Artists" description="Find and follow new artists"   path="/browse?tab=artists" color="bg-indigo-500/20" />
+              <LinkCard icon={Users}         label="Following"        description="Artists you follow"            path="/library/following"  color="bg-cyan-500/20" />
+              <LinkCard icon={MessageCircle} label="Community"        description="Feed and chat rooms"           path="/community"          color="bg-teal-500/20" />
+              <LinkCard icon={Star}          label="Liked Songs"      description="Your saved tracks"             path="/library/likes"      color="bg-pink-500/20" />
             </Section>
           )}
 
           {/* Artist Tools */}
           {isArtist && (
             <Section title="Artist Tools" icon={Music}>
-              <LinkCard icon={Upload}          label="Upload Track"    description="Upload and publish new music"             path="/dashboard?tab=upload"   color="bg-green-500/20" />
-              <LinkCard
-                icon={Radio}
-                label="Collab Radar"
-                description="Find artists who vibe with your sound"
-                onClick={() => navigate('/collab-radar')}
-                color="bg-purple-500/20"
-              />
-              <LinkCard icon={HeartHandshake}  label="Collaborations"  description="Manage collab requests and credits"       onClick={() => setActiveTab('collabs')} color="bg-cyan-500/20" />
-              <LinkCard icon={BarChart3}       label="Analytics"       description="Track performance and stream data"        path="/dashboard?tab=analytics" color="bg-indigo-500/20" />
-              <LinkCard icon={MessageCircle}   label="Chat Rooms"      description="Community conversations"                  path="/chat"                   color="bg-violet-500/20" />
-              <LinkCard icon={Users}           label="Community Feed"  description="Posts, updates and activity"              path="/community"              color="bg-teal-500/20" />
+              <LinkCard icon={Upload}         label="Upload Track"    description="Upload and publish new music"           path="/dashboard?tab=upload"    color="bg-green-500/20" />
+              <LinkCard icon={Radio}          label="Collab Radar"    description="Find artists who vibe with your sound"  onClick={() => navigate('/collab-radar')} color="bg-purple-500/20" />
+              <LinkCard icon={HeartHandshake} label="Collaborations"  description="Manage collab requests and credits"     onClick={() => setActiveTab('collabs')}   color="bg-cyan-500/20" />
+              <LinkCard icon={BarChart3}      label="Analytics"       description="Track performance and stream data"      path="/dashboard?tab=analytics" color="bg-indigo-500/20" />
+              <LinkCard icon={MessageCircle}  label="Chat Rooms"      description="Community conversations"                path="/chat"                    color="bg-violet-500/20" />
+              <LinkCard icon={Users}          label="Community Feed"  description="Posts, updates and activity"            path="/community"               color="bg-teal-500/20" />
             </Section>
           )}
 
           {/* Account */}
           <Section title="Account" icon={User}>
-            <LinkCard icon={Palette} label="Profile & Appearance" description="Edit bio, socials, and theme"        path="/profile"        color="bg-pink-500/20" />
-            <LinkCard icon={Bell}    label="Notifications"         description="Collabs, followers, milestones"      path="/notifications"  color="bg-orange-500/20" />
+            <LinkCard icon={Palette}    label="Profile & Appearance" description="Edit bio, socials, and theme"     path="/profile"       color="bg-pink-500/20" />
+            <LinkCard icon={Bell}       label="Notifications"         description="Collabs, followers, milestones"   path="/notifications"  color="bg-orange-500/20" />
             {isArtist && (
               <LinkCard icon={DollarSign} label="Payments" description="PayPal settings and earnings" path="/profile" color="bg-emerald-500/20" />
             )}
