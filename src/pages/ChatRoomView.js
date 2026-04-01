@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
+import { usePullToRefresh } from '../hooks/usePullToRefresh';
+import PullToRefreshIndicator from '../components/PullToRefreshIndicator';
 import {
   ArrowLeft, Send, Loader, Users, Shield,
   AlertTriangle, Trash2, VolumeX, Lock, X, CornerDownRight, BarChart2, Plus, Check, Pin
