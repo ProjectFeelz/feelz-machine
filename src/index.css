@@ -161,7 +161,29 @@ html, body, #root {
 }
 
 @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+
 .animate-slide-up { animation: slideUp 0.25s ease-out; }
 
 select, option { color-scheme: dark; background-color: #1a1a1a; color: white; }
 
+/* ── Section label hierarchy ────────────────────────────────────────────────
+   Section headers (Featured, Trending, New Releases etc.) get a subtle
+   uppercase tracking treatment so they read as labels not content.
+   Applied via a shared .section-label class added to Section components.
+   ────────────────────────────────────────────────────────────────────────── */
+.section-label {
+  font-size: 0.6875rem;   /* 11px */
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.35);
+}
+
+/* ── Greeting hero ──────────────────────────────────────────────────────────
+   Subtle top border glow so the greeting area reads as a distinct zone.
+   ────────────────────────────────────────────────────────────────────────── */
+.greeting-hero {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  margin-bottom: 1.5rem;
+  padding-bottom: 1rem;
+}
