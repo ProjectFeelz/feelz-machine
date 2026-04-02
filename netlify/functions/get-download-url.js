@@ -90,10 +90,14 @@ exports.handler = async (event) => {
 
   const storagePath = storagePathMatch[1];
 
+  const safeTitle = (track.title || 'track').replace(/[^a-z0-9\s-]/gi, '').trim() || 'track';
+
   const { data: signedData, error: signedError } = await adminClient
     .storage
     .from('feelz-samples')
-    .createSignedUrl(storagePath, 60);
+    .createSignedUrl(storagePath, 60, {
+      download: safeTitle + '.mp3',
+    });
 
   if (signedError || !signedData?.signedUrl) {
     console.error('Signed URL error:', signedError);
