@@ -785,6 +785,8 @@ export default function ArtistProfilePage() {
     }
   }, [theme?.body_font, theme?.heading_font]);
 
+  const { pullProps, pullProgress, isRefreshing } = usePullToRefresh(fetchArtist);
+
   if (loading) return <ArtistProfileSkeleton />;
 
   if (!artist) {
@@ -809,8 +811,6 @@ export default function ArtistProfilePage() {
   const pageDesc       = artist.bio
     ? `${artist.bio.slice(0, 120)}${artist.bio.length > 120 ? '...' : ''}`
     : `Stream music by ${artist.artist_name} on Feelz Machine — independent music platform.`;
-
-  const { pullProps, pullProgress, isRefreshing } = usePullToRefresh(fetchArtist);
 
   return (
     <div className="min-h-screen pb-32" style={{ backgroundColor: bgColor, color: textColor, fontFamily: `"${bodyFont}", sans-serif`, ...themeStyles }} {...pullProps}>
