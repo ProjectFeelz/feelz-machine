@@ -668,7 +668,7 @@ export default function ArtistProfilePage() {
   const handleShare = async () => {
     const url = window.location.href;
     if (navigator.share) {
-      try { await navigator.share({ title: artist.artist_name, text: `Check out ${artist.artist_name} on Feelz Machine`, url }); } catch (e) {}
+      try { await navigator.share({ title: artist.artist_name, url }); } catch (e) {}
     } else {
       await navigator.clipboard.writeText(url);
       setCopied(true);
