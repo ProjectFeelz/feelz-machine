@@ -40,4 +40,4 @@ export async function downloadTrack(trackId, title, authToken) {
   a.style.display = 'none';
   document.body.appendChild(a);
   a.click();
-  document.body.removeChild(a); }
+  document.body.removeChild(a);
