@@ -4,9 +4,9 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import {
-  LogOut, ChevronRight, User, Music, Globe, Shield, Radio,
+  LogOut, ChevronRight, User, Music, Globe, Shield,
   Instagram, Twitter, Youtube, MessageCircle, Loader,
-  Save, Palette, ExternalLink, DollarSign, Camera,
+  Save, Palette, ExternalLink, DollarSign, Camera, Check,
   Link, Zap, Crown, Star, Trash2, AlertTriangle, Plus
 } from 'lucide-react';
 import ThemeEditor from '../components/ThemeEditor';
@@ -31,6 +31,23 @@ const SOCIALS = [
   { key: 'website',   label: 'Website',     icon: Globe,         ph: 'https://yourwebsite.com' },
 ];
 
+const GENRES = [
+  'Hip Hop','Trap','Drill','Boom Bap','Lo-Fi','R&B','Neo Soul','Pop',
+  'Electronic','House','Deep House','Tech House','Techno','Dubstep',
+  'Drum & Bass','Ambient','Downtempo','Future Bass','Jersey Club',
+  'Jazz','Funk','Soul','Rock','Metal','Indie','Alternative',
+  'Afrobeat','Amapiano','Reggae','Dancehall','Latin','Reggaeton',
+  'Country','EDM','Trance','Hardstyle','UK Garage','Grime',
+  'Experimental','Vaporwave','Synthwave','Other',
+];
+
+const MOODS = [
+  'Dark','Happy','Sad','Aggressive','Chill','Energetic','Melancholic',
+  'Uplifting','Mysterious','Peaceful','Intense','Dreamy','Romantic',
+  'Angry','Hopeful','Nostalgic','Epic','Smooth','Bouncy','Atmospheric',
+  'Moody','Vibey','Hard','Soft','Ethereal','Groovy','Other',
+];
+
 const PROFILE_IMAGE_BUCKET = 'artist-images';
 const MAX_DAILY_THOUGHTS   = 3;
 const THOUGHT_TTL_MS       = 24 * 60 * 60 * 1000;
@@ -42,6 +59,27 @@ const ARTIST_TABS = [
   { key: 'links',    label: 'Links',    icon: Link },
   { key: 'payments', label: 'Payments', icon: DollarSign },
 ];
+
+function PillSelect({ options, selected, onToggle, multi = false }) {
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {options.map(opt => {
+        const isSelected = multi ? selected.includes(opt) : selected === opt;
+        return (
+          <button key={opt} type="button" onClick={() => onToggle(opt)}
+            className={`flex items-center space-x-1 px-2.5 py-1 rounded-full text-xs font-medium transition active:scale-95 ${
+              isSelected
+                ? 'bg-white text-black'
+                : 'bg-white/[0.06] text-white/40 hover:bg-white/[0.1] hover:text-white/60'
+            }`}>
+            {isSelected && <Check className="w-2.5 h-2.5" strokeWidth={3} />}
+            <span>{opt}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 
 export default function ProfilePage() {
   const nav = useNavigate();
@@ -59,7 +97,7 @@ export default function ProfilePage() {
   const [profileImgFile, setProfileImgFile]   = useState(null);
   const [previewUrl, setPreviewUrl]           = useState(null);
   const [form, setForm] = useState({
-    artist_name: '', bio: '',
+    artist_name: '', bio: '', genre: '', mood: '',
     instagram: '', twitter: '', youtube: '',
     tiktok: '', facebook: '', discord: '', website: '',
   });
@@ -92,7 +130,7 @@ export default function ProfilePage() {
     if (!error) setThoughts(data || []);
   }, [artist]);
 
-  const todayCount = thoughts.filter(t => {
+  const todayCount     = thoughts.filter(t => {
     const p = new Date(t.created_at), n = new Date();
     return p.getFullYear() === n.getFullYear() && p.getMonth() === n.getMonth() && p.getDate() === n.getDate();
   }).length;
@@ -129,10 +167,14 @@ export default function ProfilePage() {
     if (artist) {
       const s = artist.social_links || {};
       setForm({
-        artist_name: artist.artist_name || '', bio: artist.bio || '',
-        instagram: s.instagram || '', twitter: s.twitter || '',
-        youtube: s.youtube || '', tiktok: s.tiktok || '',
-        facebook: s.facebook || '', discord: s.discord || '', website: s.website || '',
+        artist_name: artist.artist_name || '',
+        bio:         artist.bio || '',
+        genre:       artist.genre || '',
+        mood:        artist.mood || '',
+        instagram:   s.instagram || '', twitter:   s.twitter  || '',
+        youtube:     s.youtube   || '', tiktok:    s.tiktok   || '',
+        facebook:    s.facebook  || '', discord:   s.discord  || '',
+        website:     s.website   || '',
       });
     }
   }, [artist]);
@@ -161,8 +203,12 @@ export default function ProfilePage() {
       const sl = {};
       SOCIALS.forEach(p => { if (form[p.key]?.trim()) sl[p.key] = form[p.key].trim(); });
       const updateData = {
-        artist_name: form.artist_name, bio: form.bio,
-        social_links: sl, updated_at: new Date().toISOString(),
+        artist_name:  form.artist_name,
+        bio:          form.bio,
+        genre:        form.genre || null,
+        mood:         form.mood  || null,
+        social_links: sl,
+        updated_at:   new Date().toISOString(),
       };
       if (profileImgFile) updateData.profile_image_url = await uploadFile(profileImgFile, 'profile-images/');
       const { error } = await supabase.from('artists').update(updateData).eq('id', artist.id);
@@ -331,23 +377,7 @@ export default function ProfilePage() {
           {/* ── Profile tab ── */}
           {activeTab === 'profile' && (
             <>
-              {/* Listener Preferences — links to genre/mood for Collab Radar */}
-              <button onClick={() => nav('/profile/edit')}
-                className="w-full flex items-center justify-between p-4 rounded-2xl border border-white/[0.06] mb-4 hover:bg-white/[0.03] transition"
-                style={{ background: 'rgba(255,255,255,0.02)' }}>
-                <div className="flex items-center space-x-3">
-                  <div className="w-8 h-8 rounded-lg bg-purple-500/20 flex items-center justify-center">
-                    <Radio className="w-4 h-4 text-purple-400" />
-                  </div>
-                  <div className="text-left">
-                    <p className="text-sm font-medium text-white">My Sound</p>
-                    <p className="text-xs text-white/30">Set your genres & mood · improves Collab Radar matches</p>
-                  </div>
-                </div>
-                <ChevronRight className="w-4 h-4 text-white/20" />
-              </button>
-
-              {/* Artist Info card */}
+              {/* Artist Info card — includes genre + mood */}
               <div className="rounded-2xl border border-white/[0.06] overflow-hidden mb-4"
                 style={{ background: 'rgba(255,255,255,0.02)' }}>
                 <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.05]">
@@ -359,13 +389,16 @@ export default function ProfilePage() {
                 </div>
                 <div className="p-4">
                   {editing ? (
-                    <div className="space-y-3">
+                    <div className="space-y-4">
+                      {/* Artist Name */}
                       <div>
                         <label className="block text-xs text-white/40 mb-1">Artist Name</label>
                         <input type="text" value={form.artist_name}
                           onChange={e => setForm({ ...form, artist_name: e.target.value })}
                           className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none border border-white/[0.06] focus:border-white/20 transition" />
                       </div>
+
+                      {/* Bio */}
                       <div>
                         <div className="flex items-center justify-between mb-1">
                           <label className="text-xs text-white/40">Bio</label>
@@ -377,11 +410,37 @@ export default function ProfilePage() {
                           onChange={e => setForm({ ...form, bio: e.target.value })}
                           className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none resize-none border border-white/[0.06] focus:border-white/20 transition" />
                       </div>
+
+                      {/* Genre */}
+                      <div>
+                        <label className="block text-xs text-white/40 mb-2">
+                          Genre <span className="text-white/20">· used for Collab Radar matching</span>
+                        </label>
+                        <PillSelect
+                          options={GENRES}
+                          selected={form.genre}
+                          onToggle={(g) => setForm(prev => ({ ...prev, genre: prev.genre === g ? '' : g }))}
+                        />
+                      </div>
+
+                      {/* Mood */}
+                      <div>
+                        <label className="block text-xs text-white/40 mb-2">
+                          Mood <span className="text-white/20">· helps listeners find your vibe</span>
+                        </label>
+                        <PillSelect
+                          options={MOODS}
+                          selected={form.mood}
+                          onToggle={(m) => setForm(prev => ({ ...prev, mood: prev.mood === m ? '' : m }))}
+                        />
+                      </div>
+
                       {profileImgFile && (
                         <p className="text-xs text-green-400 flex items-center space-x-1">
                           <Camera className="w-3 h-3" /><span>{profileImgFile.name} selected</span>
                         </p>
                       )}
+
                       <button onClick={save} disabled={saving}
                         className="w-full py-2.5 bg-white text-black rounded-xl font-semibold text-sm flex items-center justify-center space-x-2 disabled:opacity-50 transition active:scale-[0.98]">
                         {saving ? <Loader className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
@@ -393,6 +452,23 @@ export default function ProfilePage() {
                       {form.bio
                         ? <p className="text-sm text-white/60 leading-relaxed">{form.bio}</p>
                         : <p className="text-xs text-white/20 italic">No bio yet — tap Edit to add one</p>}
+                      {(form.genre || form.mood) && (
+                        <div className="flex flex-wrap gap-1.5 pt-1">
+                          {form.genre && (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-purple-500/10 text-purple-400 border border-purple-500/20">
+                              {form.genre}
+                            </span>
+                          )}
+                          {form.mood && (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                              {form.mood}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                      {!form.genre && !form.mood && (
+                        <p className="text-xs text-white/20 italic">No genre or mood set — tap Edit to add</p>
+                      )}
                     </div>
                   )}
                 </div>
@@ -540,8 +616,7 @@ export default function ProfilePage() {
                     <p className="text-xs text-white/20 mb-4">Add your socials so fans can find you everywhere</p>
                     <button onClick={() => setEditing(true)}
                       className="inline-flex items-center space-x-1.5 px-4 py-2 rounded-lg bg-white/[0.06] hover:bg-white/[0.1] transition text-sm text-white/60 font-medium">
-                      <Plus className="w-3.5 h-3.5" />
-                      <span>Add Links</span>
+                      <Plus className="w-3.5 h-3.5" /><span>Add Links</span>
                     </button>
                   </div>
                 )}
