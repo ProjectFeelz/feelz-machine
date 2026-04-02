@@ -102,6 +102,20 @@ const SECTIONS = [
 
 export default function UploadHelpPanel({ onClose }) {
   const [activeSection, setActiveSection] = useState(0);
+  const touchStartX = React.useRef(null);
+
+  const handleTouchStart = (e) => {
+    touchStartX.current = e.touches[0].clientX;
+  };
+
+  const handleTouchEnd = (e) => {
+    if (touchStartX.current === null) return;
+    const diff = touchStartX.current - e.changedTouches[0].clientX;
+    if (Math.abs(diff) < 50) return;
+    if (diff > 0) setActiveSection(i => Math.min(SECTIONS.length - 1, i + 1));
+    else setActiveSection(i => Math.max(0, i - 1));
+    touchStartX.current = null;
+  };
   const section = SECTIONS[activeSection];
   const Icon = section.icon;
 
@@ -159,7 +173,8 @@ export default function UploadHelpPanel({ onClose }) {
         </div>
 
         {/* Content */}
-        <div className="overflow-y-auto" style={{ maxHeight: 'calc(90vh - 200px)' }}>
+        <div className="overflow-y-auto" style={{ maxHeight: 'calc(90vh - 200px)' }}
+          onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
           {/* Section header */}
           <div className="px-5 pt-5 pb-4 flex items-center space-x-3">
             <div
