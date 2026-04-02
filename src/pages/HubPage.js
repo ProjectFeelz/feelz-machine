@@ -124,7 +124,8 @@ export default function HubPage() {
       {/* Home tab */}
       {(!isArtist || activeTab === 'home') && (
         <>
-          {/* Profile completion banner — artists only, shown before tier card */}
+          {/* Profile completion banner — artists only */}
+          {/* Banner "Update profile" navigates to /profile (Profile tab) for artists */}
           {isArtist && <ProfileCompletionBanner />}
 
           {/* Tier card */}
