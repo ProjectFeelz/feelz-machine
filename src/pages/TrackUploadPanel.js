@@ -941,15 +941,17 @@ export default function TrackUploadPanel() {
                           <span className="text-[10px] text-white/20">{track.stream_count || 0} streams</span>
                         </div>
                       </div>
-                      <div className="flex items-center space-x-1 flex-shrink-0">
-                        <button type="button" onClick={() => startEdit(track)}
-                          className="p-2 bg-white/[0.04] rounded-lg hover:bg-white/[0.08] transition">
-                          <Edit className="w-4 h-4 text-white/40" />
-                        </button>
-                        <button type="button" onClick={() => deleteTrack(track.id, track.title)}
-                          className="p-2 bg-red-500/[0.06] rounded-lg hover:bg-red-500/[0.12] transition">
-                          <Trash2 className="w-4 h-4 text-red-400/60" />
-                        </button>
+                      <div className="flex flex-col items-end space-y-1 flex-shrink-0">
+                        <div className="flex items-center space-x-1">
+                          <button type="button" onClick={() => startEdit(track)}
+                            className="p-2 bg-white/[0.04] rounded-lg hover:bg-white/[0.08] transition">
+                            <Edit className="w-4 h-4 text-white/40" />
+                          </button>
+                          <button type="button" onClick={() => deleteTrack(track.id, track.title)}
+                            className="p-2 bg-red-500/[0.06] rounded-lg hover:bg-red-500/[0.12] transition">
+                            <Trash2 className="w-4 h-4 text-red-400/60" />
+                          </button>
+                        </div>
                       </div>
                     </div>
                   ) : (
