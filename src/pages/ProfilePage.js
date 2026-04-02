@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import {
-  LogOut, ChevronRight, User, Music, Globe, Shield,
+  LogOut, ChevronRight, User, Music, Globe, Shield, Radio,
   Instagram, Twitter, Youtube, MessageCircle, Loader,
   Save, Palette, ExternalLink, DollarSign, Camera,
   Link, Zap, Crown, Star, Trash2, AlertTriangle, Plus
@@ -328,10 +328,21 @@ export default function ProfilePage() {
           {/* Profile tab */}
           {activeTab === 'profile' && (
             <>
-              <div className="rounded-2xl border border-white/[0.06] overflow-hidden mb-4"
+              {/* Listener preferences — genre/mood for Collab Radar matching */}
+              <button onClick={() => nav('/profile/edit')}
+                className="w-full flex items-center justify-between p-4 rounded-2xl border border-white/[0.06] mb-4 hover:bg-white/[0.03] transition"
                 style={{ background: 'rgba(255,255,255,0.02)' }}>
-                <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.05]">
-                  <p className="text-sm font-semibold text-white">Artist Info</p>
+                <div className="flex items-center space-x-3">
+                  <div className="w-8 h-8 rounded-lg bg-purple-500/20 flex items-center justify-center">
+                    <Radio className="w-4 h-4 text-purple-400" />
+                  </div>
+                  <div className="text-left">
+                    <p className="text-sm font-medium text-white">Listener Preferences</p>
+                    <p className="text-xs text-white/30">Genre & mood — used for Collab Radar matching</p>
+                  </div>
+                </div>
+                <ChevronRight className="w-4 h-4 text-white/20" />
+              </button>
                   <button onClick={() => { setEditing(!editing); setMsg(''); }}
                     className="text-xs text-white/40 hover:text-white/60 transition px-2 py-1 rounded-lg hover:bg-white/[0.04]">
                     {editing ? 'Cancel' : 'Edit'}
