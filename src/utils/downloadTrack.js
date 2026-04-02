@@ -33,23 +33,11 @@ export async function downloadTrack(trackId, title, authToken) {
   const { signedUrl } = await response.json();
   const ext = signedUrl.split('?')[0].split('.').pop() || 'mp3';
 
-  // Fetch the actual file using the signed URL and trigger download
-  try {
-    const fileResponse = await fetch(signedUrl);
-    if (!fileResponse.ok) throw new Error('File fetch failed');
-    const blob = await fileResponse.blob();
-    const typedBlob = new Blob([blob], { type: ext === 'wav' ? 'audio/wav' : 'audio/mpeg' });
-    const blobUrl = URL.createObjectURL(typedBlob);
-    const a = document.createElement('a');
-    a.href = blobUrl;
-    a.download = cleanName + '.' + ext;
-    a.style.display = 'none';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    setTimeout(() => URL.revokeObjectURL(blobUrl), 30000);
-  } catch {
-    // Fallback: open signed URL in new tab
-    window.open(signedUrl, '_blank');
-  }
-}
+  // On iOS Safari, fetch+blob is blocked by CORS. Use direct anchor with signed URL instead.
+  const a = document.createElement('a');
+  a.href = signedUrl;
+  a.download = cleanName + '.' + ext;
+  a.style.display = 'none';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
