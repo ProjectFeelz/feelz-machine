@@ -97,7 +97,7 @@ export function PlayerProvider({ children }) {
       streamLoggedRef.current = true;
       logStream(currentTrack.id);
     }
-  }, [currentTime, currentTrack?.id]);
+  }, [currentTime, currentTrack]);
 
   const logStream = async (trackId) => {
     try {
