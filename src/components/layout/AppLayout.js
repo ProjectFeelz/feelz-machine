@@ -180,8 +180,8 @@ export default function AppLayout() {
 
       {/* First-time onboarding tour — only shows once, after splash is done */}
       {showTour && splashDone && !loading && hasProfile && (
-  <AppTour isArtist={isArtist} onDone={dismissTour} />
-)}
+        <AppTour isArtist={isArtist} onDone={dismissTour} />
+      )}
     </div>
   );
 }
