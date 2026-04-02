@@ -126,7 +126,7 @@ export default function FullPlayer() {
         dragConstraints={{ top: 0, bottom: window.innerHeight }}
         dragElastic={{ top: 0, bottom: 0.3 }}
         onDragEnd={handleDragEnd}
-        initial={{ y: '100%' }}
+        initial={false}
         animate={{ y: 0 }}
         exit={{ y: '100%' }}
         transition={{ type: 'tween', duration: 0.28, ease: [0.32, 0.72, 0, 1] }}
