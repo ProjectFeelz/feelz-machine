@@ -14,6 +14,7 @@ import {
   ArrowLeft, Play, Pause, Music, Loader, Download,
   Heart, Share2, Check, ListMusic, ShoppingCart, X
 } from 'lucide-react';
+import ShareCard from '../components/ShareCard';
 
 const PAYPAL_CLIENT_ID = process.env.REACT_APP_PAYPAL_CLIENT_ID;
 const BASE_URL = 'https://www.feelzmachine.com';
@@ -43,6 +44,7 @@ export default function AlbumDetailPage() {
   const [loading, setLoading] = useState(true);
   const [likedTracks, setLikedTracks] = useState({});
   const [copied, setCopied] = useState(false);
+  const [showShareCard, setShowShareCard] = useState(false);
   const [downloading, setDownloading] = useState(null);
   const [downloadingAll, setDownloadingAll] = useState(false);
   const [showAddToPlaylist, setShowAddToPlaylist] = useState(null);
@@ -238,14 +240,8 @@ export default function AlbumDetailPage() {
     }
   };
 
-  const handleShare = async () => {
-    const url = window.location.href;
-    if (navigator.share) {
-      try { await navigator.share({ title: `${album.title} by ${artist?.artist_name}`, url }); } catch {}
-    } else {
-      await navigator.clipboard.writeText(url);
-      setCopied(true); setTimeout(() => setCopied(false), 2000);
-    }
+  const handleShare = () => {
+    setShowShareCard(true);
   };
 
   const getTrackPrice = (track) => {
@@ -618,6 +614,12 @@ export default function AlbumDetailPage() {
       )}
 
       <TrackActionSheet track={actionSheetTrack} artist={artist} onClose={() => setActionSheetTrack(null)} />
+      {showShareCard && (
+        <ShareCard
+          track={{ title: album.title, artist_name: artist?.artist_name, cover_artwork_url: album.cover_artwork_url }}
+          onClose={() => setShowShareCard(false)}
+        />
+      )}
     </div>
   );
 }
