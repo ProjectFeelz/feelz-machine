@@ -5,7 +5,6 @@ exports.handler = async (event) => {
     return { statusCode: 405, body: 'Method Not Allowed' };
   }
 
-  // Verify auth token from request header
   const authHeader = event.headers['authorization'] || '';
   const token = authHeader.replace('Bearer ', '').trim();
   if (!token) {
@@ -25,17 +24,13 @@ exports.handler = async (event) => {
 
   const supabaseUrl = process.env.SUPABASE_URL;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-  // Admin client to bypass RLS for purchase check
   const adminClient = createClient(supabaseUrl, serviceKey);
 
-  // Verify the JWT and get the user
   const { data: { user }, error: authError } = await adminClient.auth.getUser(token);
   if (authError || !user) {
     return { statusCode: 401, body: JSON.stringify({ error: 'Invalid or expired token' }) };
   }
 
-  // Get the track's file path, price, and pre-order info from the tracks table
   const { data: track, error: trackError } = await adminClient
     .from('tracks')
     .select('file_url, title, is_preorder, release_date, download_price')
@@ -46,7 +41,6 @@ exports.handler = async (event) => {
     return { statusCode: 404, body: JSON.stringify({ error: 'Track not found' }) };
   }
 
-  // Pre-order check: if track is a pre-order and release date is in the future, block download
   if (track.is_preorder && track.release_date) {
     const now = new Date();
     const releaseDate = new Date(track.release_date);
@@ -62,11 +56,9 @@ exports.handler = async (event) => {
     }
   }
 
-  // Determine if this is truly a free track (price is 0 or null)
   const trackIsFree = !track.download_price || track.download_price <= 0;
 
   if (trackIsFree) {
-    // Free track: record the download if not already recorded, then proceed
     await adminClient
       .from('downloads')
       .upsert(
@@ -74,7 +66,6 @@ exports.handler = async (event) => {
         { onConflict: 'user_id,track_id', ignoreDuplicates: true }
       );
   } else {
-    // Paid track: check purchase record in downloads table
     const { data: purchase, error: purchaseError } = await adminClient
       .from('downloads')
       .select('id')
@@ -92,8 +83,6 @@ exports.handler = async (event) => {
     }
   }
 
-  // Extract the storage path from the file_url
-  // file_url format: https://<project>.supabase.co/storage/v1/object/public/feelz-samples/tracks/filename.mp3
   const storagePathMatch = track.file_url.match(/\/object\/public\/feelz-samples\/(.+)/);
   if (!storagePathMatch) {
     return { statusCode: 400, body: JSON.stringify({ error: 'Invalid file URL format' }) };
@@ -101,7 +90,6 @@ exports.handler = async (event) => {
 
   const storagePath = storagePathMatch[1];
 
-  // Generate a signed URL valid for 60 seconds
   const { data: signedData, error: signedError } = await adminClient
     .storage
     .from('feelz-samples')
