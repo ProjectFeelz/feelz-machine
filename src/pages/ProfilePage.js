@@ -340,8 +340,8 @@ export default function ProfilePage() {
                     <Radio className="w-4 h-4 text-purple-400" />
                   </div>
                   <div className="text-left">
-                    <p className="text-sm font-medium text-white">Listener Preferences</p>
-                    <p className="text-xs text-white/30">Genre & mood · used for Collab Radar matching</p>
+                    <p className="text-sm font-medium text-white">My Sound</p>
+                    <p className="text-xs text-white/30">Set your genres & mood · improves Collab Radar matches</p>
                   </div>
                 </div>
                 <ChevronRight className="w-4 h-4 text-white/20" />
