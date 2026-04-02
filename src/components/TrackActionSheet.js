@@ -13,7 +13,6 @@ import {
     X, Share2, ListMusic, Download, Heart, Play, Music, Loader, Check,
     ChevronLeft, ShoppingCart, Lock, PlusCircle, DollarSign, Clock,
 } from 'lucide-react';
-import ShareCard from './ShareCard';
 
 const PAYPAL_CLIENT_ID = process.env.REACT_APP_PAYPAL_CLIENT_ID;
 
