@@ -9,10 +9,6 @@ import {
     ChevronLeft, ShoppingCart, Lock, PlusCircle, DollarSign, Clock,
 } from 'lucide-react';
 import ShareCard from './ShareCard';
-import {
-    X, Share2, ListMusic, Download, Heart, Play, Music, Loader, Check,
-    ChevronLeft, ShoppingCart, Lock, PlusCircle, DollarSign, Clock,
-}
 
 const PAYPAL_CLIENT_ID = process.env.REACT_APP_PAYPAL_CLIENT_ID;
 
@@ -32,7 +28,6 @@ export default function TrackActionSheet({ track, artist, onClose }) {
     const [addedTo, setAddedTo] = useState({});
     const [shared, setShared] = useState(false);
     const [showShareCard, setShowShareCard] = useState(false);
-    const [showShareCard, setShowShareCard] = useState(false);
     const [downloading, setDownloading] = useState(false);
     const [liked, setLiked] = useState(false);
     const [downloadError, setDownloadError] = useState(null);
@@ -50,19 +45,15 @@ export default function TrackActionSheet({ track, artist, onClose }) {
     const isPWYW = track?.pay_what_you_want === true;
     const minimumPrice = track?.minimum_price != null ? parseFloat(track.minimum_price) : 0;
 
-    // Effective download price: track's own price, or album price if joined
     const basePrice = track?.download_price > 0
         ? track.download_price
         : (track?.albums?.price || track?.album_price || 0);
 
-    // For PWYW: fan-entered amount (initialised to base price or minimum)
     const [fanPrice, setFanPrice] = useState('');
     const [fanPriceError, setFanPriceError] = useState('');
 
-    // The actual amount we'll charge
     const effectivePrice = isPWYW ? (parseFloat(fanPrice) || 0) : basePrice;
 
-    // Pre-order state
     const isPreorder = track?.is_preorder === true;
     const releaseDate = track?.release_date || null;
     const isNotYetReleased = isPreorder && releaseDate && new Date(releaseDate) > new Date();
@@ -80,10 +71,8 @@ export default function TrackActionSheet({ track, artist, onClose }) {
         }
     }, [track?.id]);
 
-    // Load PayPal when purchase view opens
     useEffect(() => {
         if (view !== 'purchase' || !track) return;
-        // Don't load PayPal at all for free non-PWYW tracks
         if (!isPWYW && effectivePrice <= 0) return;
         setPaypalReady(false);
         setPurchaseError('');
@@ -98,11 +87,9 @@ export default function TrackActionSheet({ track, artist, onClose }) {
         document.head.appendChild(script);
     }, [view, track?.id]);
 
-    // Render PayPal button once SDK is ready
     useEffect(() => {
         if (!paypalReady || view !== 'purchase' || !window.paypal || !track) return;
         if (isPWYW && !validateFanPrice()) return;
-        // Never render PayPal for $0
         if (effectivePrice <= 0) return;
         const container = document.getElementById('paypal-tas-container');
         if (!container) return;
@@ -144,13 +131,11 @@ export default function TrackActionSheet({ track, artist, onClose }) {
                     const captureData = await res.json();
                     if (!captureData.success) throw new Error('Payment capture failed');
 
-                    // Record purchase in downloads table
                     await supabase
                         .from('downloads')
                         .insert({ user_id: user.id, track_id: track.id, amount_paid: effectivePrice })
                         .catch(() => {});
 
-                    // Fire split payout
                     await fetch('/.netlify/functions/process-split-payout', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -263,7 +248,7 @@ export default function TrackActionSheet({ track, artist, onClose }) {
     };
 
     const handleShare = () => {
-      setShowShareCard(true);
+        setShowShareCard(true);
     };
 
     const handleQueue = () => {
@@ -430,7 +415,6 @@ export default function TrackActionSheet({ track, artist, onClose }) {
                                 </div>
                             ) : (
                                 <>
-                                    {/* Pre-order info banner */}
                                     {isPreorder && isNotYetReleased && (
                                         <div className="flex items-center gap-2 rounded-xl p-3 bg-yellow-400/10 border border-yellow-400/20">
                                             <Clock className="w-4 h-4 text-yellow-300 flex-shrink-0" />
@@ -508,7 +492,6 @@ export default function TrackActionSheet({ track, artist, onClose }) {
                                                     : 'High-quality MP3 delivered instantly after payment'}
                                             </p>
                                             {purchaseError && <p className="text-xs text-red-400 text-center">{purchaseError}</p>}
-                                            {/* FREE: show direct download button, never send $0 to PayPal */}
                                             {effectivePrice <= 0 ? (
                                                 <button onClick={async () => {
                                                     try {
@@ -553,8 +536,8 @@ export default function TrackActionSheet({ track, artist, onClose }) {
                                 <span className="text-sm text-white/70">Add to Playlist</span>
                             </button>
                             <button onClick={handleShare} className="w-full flex items-center space-x-4 px-5 py-3.5 active:bg-white/[0.04] transition">
-                                {shared ? <Check className="w-5 h-5 text-green-400" /> : <Share2 className="w-5 h-5 text-white/40" />}
-                                <span className="text-sm text-white/70">{shared ? 'Copied!' : 'Share'}</span>
+                                <Share2 className="w-5 h-5 text-white/40" />
+                                <span className="text-sm text-white/70">Share</span>
                             </button>
                             {track.is_downloadable && track.id && (
                                 <>
@@ -598,44 +581,39 @@ export default function TrackActionSheet({ track, artist, onClose }) {
                                 <Music className="w-5 h-5 text-white/40" />
                                 <span className="text-sm text-white/70">View Artist</span>
                             </button>
-                        <button onClick={async () => {
+                            <button onClick={async () => {
                                 const slug = artist?.slug || track?.artist_slug;
                                 const artistId = artist?.id || track?.artist_id;
                                 if (!artistId) return;
                                 const { data } = await supabase.from('tracks')
-                                  .select('id, title, file_url, cover_artwork_url, duration, artist_id')
-                                  .eq('artist_id', artistId).eq('is_published', true)
-                                  .order('engagement_score', { ascending: false }).limit(20);
+                                    .select('id, title, file_url, cover_artwork_url, duration, artist_id')
+                                    .eq('artist_id', artistId).eq('is_published', true)
+                                    .order('engagement_score', { ascending: false }).limit(20);
                                 if (data?.length) {
-                                  const queue = data.map(t => ({ ...t, artist_name: artist?.artist_name || track?.artist_name, artist_slug: slug }));
-                                  playTrack(queue[0], queue);
+                                    const queue = data.map(t => ({ ...t, artist_name: artist?.artist_name || track?.artist_name, artist_slug: slug }));
+                                    playTrack(queue[0], queue);
                                 }
                                 onClose();
-                              }}
-                              className="w-full flex items-center space-x-4 px-5 py-3.5 active:bg-white/[0.04] transition">
-                              <Play className="w-5 h-5 text-white/40" />
-                              <span className="text-sm text-white/70">Play Artist Radio</span>
+                            }}
+                                className="w-full flex items-center space-x-4 px-5 py-3.5 active:bg-white/[0.04] transition">
+                                <Play className="w-5 h-5 text-white/40" />
+                                <span className="text-sm text-white/70">Play Artist Radio</span>
                             </button>
                         </>
                     )}
                 </div>
 
-                {/* Safe area padding */}
                 <div className="h-6" />
             </div>
+
             <style>{`
                 @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
                 .animate-slide-up { animation: slideUp 0.25s ease-out; }
             `}</style>
-      {showShareCard && (
-        <ShareCard track={track} onClose={() => setShowShareCard(false)} />
-      )}
-      {showShareCard && (
-        <ShareCard
-          track={track}
-          onClose={() => setShowShareCard(false)}
-        />
-      )}
+
+            {showShareCard && (
+                <ShareCard track={track} onClose={() => setShowShareCard(false)} />
+            )}
         </div>
     );
 }
