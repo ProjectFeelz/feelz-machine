@@ -16,7 +16,6 @@ import {
 } from 'lucide-react';
 import { ArtistProfileSkeleton } from '../components/SkeletonLoader';
 import ShareCard from '../components/ShareCard';
-import ShareCard from '../components/ShareCard';
 import { usePullToRefresh } from '../hooks/usePullToRefresh';
 import PullToRefreshIndicator from '../components/PullToRefreshIndicator';
 
