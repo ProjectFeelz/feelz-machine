@@ -204,6 +204,7 @@ function SpotlightOverlay({ targetSelector, onSkip }) {
 
   useEffect(() => {
     if (!targetSelector) { setRect(null); return; }
+    const t = setTimeout(() => {}, 0); // flush paint
     const el = document.querySelector(targetSelector);
     if (!el) { setRect(null); return; }
     const r = el.getBoundingClientRect();
@@ -318,10 +319,9 @@ export default function AppTour({ isArtist, onDone }) {
   // Recalculate card position when step changes
   useEffect(() => {
     if (current.target) {
-      // Small delay to let DOM settle
       const t = setTimeout(() => {
         setCardStyle(getCardStyle(current.target, current.cardPosition));
-      }, 50);
+      }, 200);
       return () => clearTimeout(t);
     } else {
       setCardStyle({});
