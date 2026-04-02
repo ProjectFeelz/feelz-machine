@@ -4,7 +4,6 @@ import { useMediaSession } from '../hooks/useMediaSession';
 
 const PlayerContext = createContext({});
 
-// ── Inner component that has access to state for Media Session ────────────────
 function PlayerProviderInner({ children, value, isPlaying, togglePlay, playNext, playPrev, currentTrack }) {
   useMediaSession({ currentTrack, isPlaying, togglePlay, playNext, playPrev });
   return <PlayerContext.Provider value={value}>{children}</PlayerContext.Provider>;
@@ -20,15 +19,16 @@ export function PlayerProvider({ children }) {
   const [queueIndex, setQueueIndex]     = useState(-1);
   const [shuffle, setShuffle]           = useState(false);
   const [repeat, setRepeat]             = useState('none');
-  const [isMinimized, setIsMinimized]   = useState(true);
+  // Start minimized=false so first play opens full player
+  const [isMinimized, setIsMinimized]   = useState(false);
 
-  const audioRef          = useRef(new Audio());
-  const streamLoggedRef   = useRef(false);
-  const queueRef          = useRef([]);
-  const queueIndexRef     = useRef(-1);
-  const shuffleRef        = useRef(false);
-  const repeatRef         = useRef('none');
-  const volumeRef         = useRef(1);
+  const audioRef        = useRef(new Audio());
+  const streamLoggedRef = useRef(false);
+  const queueRef        = useRef([]);
+  const queueIndexRef   = useRef(-1);
+  const shuffleRef      = useRef(false);
+  const repeatRef       = useRef('none');
+  const volumeRef       = useRef(1);
 
   useEffect(() => { queueRef.current = queue; }, [queue]);
   useEffect(() => { queueIndexRef.current = queueIndex; }, [queueIndex]);
@@ -133,6 +133,8 @@ export function PlayerProvider({ children }) {
     const audio = audioRef.current;
     if (currentTrack?.id === track.id) {
       if (isPlaying) { audio.pause(); } else { audio.play().catch(console.error); }
+      // If same track tapped again, open full player
+      setIsMinimized(false);
       return;
     }
     streamLoggedRef.current = false;
@@ -141,7 +143,8 @@ export function PlayerProvider({ children }) {
     audio.play().catch(console.error);
     setCurrentTrack(track);
     setCurrentTime(0);
-    setIsMinimized(true);
+    // Always open full player when a new track starts
+    setIsMinimized(false);
     if (trackList.length > 0) {
       setQueue(trackList);
       const idx = trackList.findIndex(t => t.id === track.id);
