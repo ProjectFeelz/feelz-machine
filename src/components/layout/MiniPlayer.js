@@ -64,7 +64,7 @@ export default function MiniPlayer() {
 
       {/* Player bar */}
       <div
-        className="bg-[#111]/95 backdrop-blur-xl border-t border-white/[0.06] px-3 py-2.5 cursor-pointer"
+        className="bg-[#111] border-t border-white/[0.06] px-3 py-2.5 cursor-pointer"
         onClick={handleExpand}
       >
         <div className="flex items-center justify-between max-w-lg mx-auto">
