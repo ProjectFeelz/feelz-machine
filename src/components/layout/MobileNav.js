@@ -6,20 +6,20 @@ import { useHaptics } from '../../hooks/useHaptics';
 import useNotifications from '../../contexts/useNotifications';
 
 const navItems = [
-  { path: '/',          icon: Home,            label: 'Home' },
-  { path: '/browse',    icon: Search,          label: 'Browse' },
-  { path: '/community', icon: Users,           label: 'Community' },
-  { path: '/library',   icon: Library,         label: 'Library' },
-  { path: '/hub',       icon: LayoutDashboard, label: 'Hub' },
-  { path: '/profile',   icon: User,            label: 'Profile' },
+  { path: '/',          icon: Home,            label: 'Home',      tourKey: 'nav-home' },
+  { path: '/browse',    icon: Search,          label: 'Browse',    tourKey: 'nav-browse' },
+  { path: '/community', icon: Users,           label: 'Community', tourKey: 'nav-community' },
+  { path: '/library',   icon: Library,         label: 'Library',   tourKey: 'nav-library' },
+  { path: '/hub',       icon: LayoutDashboard, label: 'Hub',       tourKey: 'nav-hub' },
+  { path: '/profile',   icon: User,            label: 'Profile',   tourKey: 'nav-profile' },
 ];
 
 export default function MobileNav() {
-  const navigate            = useNavigate();
-  const location            = useLocation();
-  const { user }            = useAuth();
-  const { tap }             = useHaptics();
-  const { unreadCount }     = useNotifications();
+  const navigate        = useNavigate();
+  const location        = useLocation();
+  const { user }        = useAuth();
+  const { tap }         = useHaptics();
+  const { unreadCount } = useNotifications();
 
   const handleNav = (path) => {
     tap();
@@ -38,14 +38,15 @@ export default function MobileNav() {
       style={{ paddingBottom: 'var(--safe-area-bottom, 0px)' }}
     >
       <div className="flex items-center justify-around h-14 w-full mx-auto px-1">
-        {navItems.map(({ path, icon: Icon, label }) => {
-          const isActive   = location.pathname === path ||
+        {navItems.map(({ path, icon: Icon, label, tourKey }) => {
+          const isActive  = location.pathname === path ||
             (path !== '/' && location.pathname.startsWith(path));
-          const showBadge  = path === '/hub' && unreadCount > 0;
+          const showBadge = path === '/hub' && unreadCount > 0;
 
           return (
             <button
               key={path}
+              data-tour={tourKey}
               onClick={() => handleNav(path)}
               className="flex flex-col items-center justify-center flex-1 h-full transition-all active:scale-90"
             >
