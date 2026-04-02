@@ -69,11 +69,11 @@ export default function ProfilePage() {
   const [deleting, setDeleting]                   = useState(false);
   const [deleteError, setDeleteError]             = useState('');
 
-  const [thoughts, setThoughts]         = useState([]);
-  const [thoughtInput, setThoughtInput] = useState('');
+  const [thoughts, setThoughts]           = useState([]);
+  const [thoughtInput, setThoughtInput]   = useState('');
   const [thoughtSaving, setThoughtSaving] = useState(false);
-  const [thoughtMsg, setThoughtMsg]     = useState('');
-  const [deletingId, setDeletingId]     = useState(null);
+  const [thoughtMsg, setThoughtMsg]       = useState('');
+  const [deletingId, setDeletingId]       = useState(null);
 
   const tierConfig = {
     premium: { label: 'Premium', color: '#F59E0B', bg: 'rgba(245,158,11,0.08)', icon: Crown },
@@ -92,7 +92,7 @@ export default function ProfilePage() {
     if (!error) setThoughts(data || []);
   }, [artist]);
 
-  const todayCount     = thoughts.filter(t => {
+  const todayCount = thoughts.filter(t => {
     const p = new Date(t.created_at), n = new Date();
     return p.getFullYear() === n.getFullYear() && p.getMonth() === n.getMonth() && p.getDate() === n.getDate();
   }).length;
@@ -234,7 +234,6 @@ export default function ProfilePage() {
                   : <div className="w-full h-full flex items-center justify-center">
                       <span className="text-2xl font-bold text-white">{avatarLetter}</span>
                     </div>}
-                {/* Upload spinner overlay */}
                 {avatarUploading && (
                   <div className="absolute inset-0 flex items-center justify-center bg-black/60 rounded-2xl">
                     <Loader className="w-5 h-5 animate-spin text-white" />
@@ -269,6 +268,7 @@ export default function ProfilePage() {
                 </label>
               )}
             </div>
+
             <div className="flex-1 min-w-0">
               <p className="text-base font-semibold text-white truncate">
                 {artist?.artist_name || profile?.display_name || user.email}
@@ -281,6 +281,7 @@ export default function ProfilePage() {
                 <TierBadge size="xs" />
               </div>
             </div>
+
             {isArtist && (
               <button onClick={() => nav('/upgrade')}
                 className="flex-shrink-0 flex items-center space-x-1.5 px-3 py-1.5 rounded-xl border transition hover:brightness-110"
@@ -290,6 +291,7 @@ export default function ProfilePage() {
               </button>
             )}
           </div>
+
           {isArtist && artist?.slug && (
             <div className="flex items-center justify-between mt-4 pt-3 border-t border-white/[0.05]">
               <button onClick={() => nav(`/artist/${artist.slug}`)}
@@ -300,6 +302,7 @@ export default function ProfilePage() {
                 className="text-xs text-white/20 hover:text-white/40 transition">Copy link</button>
             </div>
           )}
+
           {!isArtist && (
             <div className="mt-3 pt-3 border-t border-white/[0.05]">
               <button onClick={() => nav('/profile/edit')}
@@ -325,10 +328,10 @@ export default function ProfilePage() {
             ))}
           </div>
 
-          {/* Profile tab */}
+          {/* ── Profile tab ── */}
           {activeTab === 'profile' && (
             <>
-              {/* Listener preferences — genre/mood for Collab Radar matching */}
+              {/* Listener Preferences — links to genre/mood for Collab Radar */}
               <button onClick={() => nav('/profile/edit')}
                 className="w-full flex items-center justify-between p-4 rounded-2xl border border-white/[0.06] mb-4 hover:bg-white/[0.03] transition"
                 style={{ background: 'rgba(255,255,255,0.02)' }}>
@@ -338,11 +341,17 @@ export default function ProfilePage() {
                   </div>
                   <div className="text-left">
                     <p className="text-sm font-medium text-white">Listener Preferences</p>
-                    <p className="text-xs text-white/30">Genre & mood — used for Collab Radar matching</p>
+                    <p className="text-xs text-white/30">Genre & mood · used for Collab Radar matching</p>
                   </div>
                 </div>
                 <ChevronRight className="w-4 h-4 text-white/20" />
               </button>
+
+              {/* Artist Info card */}
+              <div className="rounded-2xl border border-white/[0.06] overflow-hidden mb-4"
+                style={{ background: 'rgba(255,255,255,0.02)' }}>
+                <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.05]">
+                  <p className="text-sm font-semibold text-white">Artist Info</p>
                   <button onClick={() => { setEditing(!editing); setMsg(''); }}
                     className="text-xs text-white/40 hover:text-white/60 transition px-2 py-1 rounded-lg hover:bg-white/[0.04]">
                     {editing ? 'Cancel' : 'Edit'}
@@ -389,6 +398,7 @@ export default function ProfilePage() {
                 </div>
               </div>
 
+              {/* Thought of the Day */}
               <TierGate feature="daily_thought">
                 <div className="rounded-2xl border border-white/[0.06] overflow-hidden mb-4"
                   style={{ background: 'rgba(255,255,255,0.02)' }}>
@@ -451,7 +461,7 @@ export default function ProfilePage() {
             </>
           )}
 
-          {/* Theme tab */}
+          {/* ── Theme tab ── */}
           {activeTab === 'theme' && (
             <div className="mb-4">
               <TierGate feature="custom_theme">
@@ -466,7 +476,7 @@ export default function ProfilePage() {
             </div>
           )}
 
-          {/* Links tab */}
+          {/* ── Links tab ── */}
           {activeTab === 'links' && (
             <div className="rounded-2xl border border-white/[0.06] overflow-hidden mb-4" style={{ background: 'rgba(255,255,255,0.02)' }}>
               <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.05]">
@@ -522,7 +532,6 @@ export default function ProfilePage() {
                     ))}
                   </div>
                 ) : (
-                  /* Better empty state */
                   <div className="py-6 text-center">
                     <div className="w-10 h-10 rounded-xl bg-white/[0.04] flex items-center justify-center mx-auto mb-3 border border-white/[0.06]">
                       <Link className="w-4 h-4 text-white/20" />
@@ -540,7 +549,7 @@ export default function ProfilePage() {
             </div>
           )}
 
-          {/* Payments tab */}
+          {/* ── Payments tab ── */}
           {activeTab === 'payments' && (
             <div className="rounded-2xl border border-white/[0.06] overflow-hidden mb-4" style={{ background: 'rgba(255,255,255,0.02)' }}>
               <div className="flex items-center space-x-2 px-4 py-3 border-b border-white/[0.05]">
@@ -567,9 +576,9 @@ export default function ProfilePage() {
           <p className="text-[10px] uppercase tracking-wider text-white/25 font-semibold mb-3">View As</p>
           <div className="flex flex-wrap gap-2">
             {[
-              { key: null, label: 'Default' },
-              ...(rawIsAdmin  ? [{ key: 'admin',    label: 'Admin' }]  : []),
-              ...(rawIsArtist ? [{ key: 'artist',   label: 'Artist' }] : []),
+              { key: null,       label: 'Default'  },
+              ...(rawIsAdmin  ? [{ key: 'admin',   label: 'Admin'   }] : []),
+              ...(rawIsArtist ? [{ key: 'artist',  label: 'Artist'  }] : []),
               { key: 'listener', label: 'Listener' },
             ].map(opt => (
               <button key={opt.key || 'default'} onClick={() => setViewAs(opt.key)}
