@@ -15,6 +15,7 @@ import {
   ChevronUp, Send, Trash2, Shuffle
 } from 'lucide-react';
 import { ArtistProfileSkeleton } from '../components/SkeletonLoader';
+import ShareCard from '../components/ShareCard';
 import { usePullToRefresh } from '../hooks/usePullToRefresh';
 import PullToRefreshIndicator from '../components/PullToRefreshIndicator';
 
@@ -355,6 +356,7 @@ export default function ArtistProfilePage() {
   const [showAllTracks, setShowAllTracks] = useState(false);
   const [actionSheetTrack, setActionSheetTrack] = useState(null);
   const [copied, setCopied] = useState(false);
+  const [showShareCard, setShowShareCard] = useState(false);
   const [downloading, setDownloading] = useState(null);
   const [purchaseTrack, setPurchaseTrack] = useState(null);
   const [purchasing, setPurchasing] = useState(false);
@@ -665,15 +667,8 @@ export default function ArtistProfilePage() {
     }
   };
 
-  const handleShare = async () => {
-    const url = window.location.href;
-    if (navigator.share) {
-      try { await navigator.share({ title: artist.artist_name, url }); } catch (e) {}
-    } else {
-      await navigator.clipboard.writeText(url);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    }
+  const handleShare = () => {
+    setShowShareCard(true);
   };
 
   const handleLike = async (track, e) => {
@@ -1326,6 +1321,12 @@ export default function ArtistProfilePage() {
       )}
 
       <TrackActionSheet track={actionSheetTrack} artist={artist} onClose={() => setActionSheetTrack(null)} />
+      {showShareCard && (
+        <ShareCard
+          artist={artist}
+          onClose={() => setShowShareCard(false)}
+        />
+      )}
       {purchaseTrack && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
           style={{ backgroundColor: 'rgba(0,0,0,0.8)' }}
