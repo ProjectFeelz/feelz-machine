@@ -9,6 +9,8 @@
   box-sizing: border-box;
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
+  -webkit-transform: translateZ(0);
+  -webkit-backface-visibility: hidden;
 }
 
 body {
