@@ -1,7 +1,3 @@
-// Downloads a track by proxying file bytes through the Netlify function.
-// The backend verifies auth + purchase, fetches from Supabase storage,
-// and returns the file directly with Content-Disposition headers.
-// This approach works on iOS Safari which ignores a.download on cross-origin URLs.
 export async function downloadTrack(trackId, title, authToken) {
   if (!authToken) throw new Error('Not authenticated');
   if (!trackId) throw new Error('No track ID provided');
@@ -25,20 +21,23 @@ export async function downloadTrack(trackId, title, authToken) {
 
   if (!response.ok) {
     const err = await response.json().catch(() => ({}));
-    throw new Error(err.error || 'Failed to download track');
+    throw new Error(err.error || 'Failed to get download URL');
   }
 
-  // Response is now the file itself, not JSON
-  const blob = await response.blob();
-  const blobUrl = URL.createObjectURL(blob);
+  const { signedUrl } = await response.json();
 
-  const a = document.createElement('a');
-  a.href = blobUrl;
-  a.download = cleanName + '.mp3';
-  a.style.display = 'none';
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-
-  setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+  // On desktop: use anchor download
+  // On iOS: open in new tab — user taps Share > Save to Files
+  const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+  if (isIOS) {
+    window.open(signedUrl, '_blank');
+  } else {
+    const a = document.createElement('a');
+    a.href = signedUrl;
+    a.download = cleanName + '.mp3';
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  }
 }
