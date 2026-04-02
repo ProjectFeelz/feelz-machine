@@ -145,7 +145,7 @@ export default function AppLayout() {
   if (!splashDone) return <SplashScreen />;
 
   return (
-    <div className="bg-black text-white">
+    <div className="min-h-screen bg-black text-white">
       {/* Offline detection — fixed banner, renders above everything */}
       <OfflineBanner />
 
@@ -180,8 +180,8 @@ export default function AppLayout() {
 
       {/* First-time onboarding tour — only shows once, after splash is done */}
       {showTour && splashDone && !loading && hasProfile && (
-        <AppTour isArtist={isArtist} onDone={dismissTour} />
-      )}
+  <AppTour isArtist={isArtist} onDone={dismissTour} />
+)}
     </div>
   );
 }
