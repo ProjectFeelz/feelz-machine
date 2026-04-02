@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import { usePlayer } from '../contexts/PlayerContext';
-import { Flame, Play, Pause, Music, Verified, MoreHorizontal, Disc, Sparkles } from 'lucide-react';
+import { Flame, Play, Pause, Music, Verified, MoreHorizontal, Disc, Sparkles, Users } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import TrackActionSheet from '../components/TrackActionSheet';
 import { usePullToRefresh } from '../hooks/usePullToRefresh';
@@ -26,8 +26,7 @@ function Section({ title, icon: Icon, onSeeAll, children }) {
           <span className="section-label">{title}</span>
         </div>
         {onSeeAll && (
-          <button onClick={onSeeAll}
-            className="text-[10px] text-white/25 hover:text-white/50 transition uppercase tracking-wider font-semibold">
+          <button onClick={onSeeAll} className="text-[10px] text-white/25 hover:text-white/50 transition uppercase tracking-wider font-semibold">
             See All →
           </button>
         )}
@@ -37,10 +36,9 @@ function Section({ title, icon: Icon, onSeeAll, children }) {
   );
 }
 
-// SquareCard — no local action sheet state; calls onMore(item) up to page
 function SquareCard({ item, itemList = [], isAlbum = false, onPlay, onMore, currentTrack, isPlaying }) {
   const navigate = useNavigate();
-  const [imgLoaded, setImgLoaded]   = useState(false);
+  const [imgLoaded, setImgLoaded] = useState(false);
   const isActive         = !isAlbum && currentTrack?.id === item.id;
   const isCurrentPlaying = isActive && isPlaying;
 
@@ -76,7 +74,6 @@ function SquareCard({ item, itemList = [], isAlbum = false, onPlay, onMore, curr
           </div>
         )}
 
-        {/* Play/pause overlay */}
         <div className={`absolute inset-0 flex items-center justify-center bg-black/40 transition rounded-xl ${
           isCurrentPlaying ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
         }`}>
@@ -87,14 +84,12 @@ function SquareCard({ item, itemList = [], isAlbum = false, onPlay, onMore, curr
           </div>
         </div>
 
-        {/* Album badge */}
         {isAlbum && (
           <div className="absolute top-2 left-2 px-1.5 py-0.5 rounded text-[9px] font-bold bg-black/60 text-white/60 backdrop-blur">
             {item.release_type?.toUpperCase() || 'ALBUM'}
           </div>
         )}
 
-        {/* 3-dot — calls onMore at page level, opens TrackActionSheet */}
         <button
           onClick={(e) => { e.stopPropagation(); onMore(item); }}
           className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/60 backdrop-blur flex items-center justify-center opacity-0 group-hover:opacity-100 transition"
@@ -120,13 +115,14 @@ export default function HomePage() {
   const { playTrack, currentTrack, isPlaying, togglePlay } = usePlayer();
   const navigate = useNavigate();
 
-  const [featuredTracks, setFeaturedTracks]     = useState([]);
-  const [newReleases, setNewReleases]           = useState([]);
-  const [trending, setTrending]                 = useState([]);
-  const [topArtists, setTopArtists]             = useState([]);
-  const [recommended, setRecommended]           = useState([]);
-  const [loading, setLoading]                   = useState(true);
-  const [actionSheetTrack, setActionSheetTrack] = useState(null);
+  const [featuredTracks, setFeaturedTracks]         = useState([]);
+  const [newReleases, setNewReleases]               = useState([]);
+  const [trending, setTrending]                     = useState([]);
+  const [topArtists, setTopArtists]                 = useState([]);
+  const [recommended, setRecommended]               = useState([]);
+  const [followedReleases, setFollowedReleases]     = useState([]);
+  const [loading, setLoading]                       = useState(true);
+  const [actionSheetTrack, setActionSheetTrack]     = useState(null);
 
   const fetchData = async () => {
     try {
@@ -158,15 +154,12 @@ export default function HomePage() {
       ]);
 
       const normTrack = (list) => (list || []).map(t => ({
-        ...t,
-        artist_name: t.artists?.artist_name || 'Unknown Artist',
+        ...t, artist_name: t.artists?.artist_name || 'Unknown Artist',
         artist_slug: t.artists?.slug || t.artist_slug || null,
       }));
       const normAlbum = (list) => (list || []).map(a => ({
-        ...a,
-        artist_name: a.artists?.artist_name || 'Unknown Artist',
-        artist_slug: a.artists?.slug || null,
-        _isAlbum: true,
+        ...a, artist_name: a.artists?.artist_name || 'Unknown Artist',
+        artist_slug: a.artists?.slug || null, _isAlbum: true,
       }));
 
       const merged = [
@@ -176,8 +169,7 @@ export default function HomePage() {
 
       const trendingBoosted = (trendingRaw || [])
         .map(t => ({
-          ...t,
-          artist_name: t.artists?.artist_name || 'Unknown Artist',
+          ...t, artist_name: t.artists?.artist_name || 'Unknown Artist',
           artist_slug: t.artists?.slug || t.artist_slug || null,
           _boosted: (t.engagement_score || 0) * (
             t.artists?.tier === 'premium' ? 1.5 : t.artists?.tier === 'pro' ? 1.2 : 1
@@ -190,12 +182,40 @@ export default function HomePage() {
       setTrending(trendingBoosted);
       setTopArtists(artists || []);
 
-      if (user) await fetchRecommendations();
+      if (user) {
+        await Promise.all([fetchRecommendations(), fetchFollowedReleases()]);
+      }
     } catch (err) {
       console.error('Failed to fetch:', err);
     } finally {
       setLoading(false);
     }
+  };
+
+  const fetchFollowedReleases = async () => {
+    try {
+      // Get artist IDs the user follows
+      const { data: follows } = await supabase
+        .from('follows').select('artist_id').eq('follower_id', user.id);
+      if (!follows?.length) return;
+
+      const artistIds = follows.map(f => f.artist_id);
+
+      // Get recent tracks from those artists
+      const { data: tracks } = await supabase
+        .from('tracks')
+        .select('*, artists(artist_name, slug, profile_image_url)')
+        .eq('is_published', true)
+        .in('artist_id', artistIds)
+        .order('created_at', { ascending: false })
+        .limit(12);
+
+      setFollowedReleases((tracks || []).map(t => ({
+        ...t,
+        artist_name: t.artists?.artist_name || 'Unknown Artist',
+        artist_slug: t.artists?.slug || null,
+      })));
+    } catch (err) { console.error('Followed releases error:', err); }
   };
 
   const fetchRecommendations = async () => {
@@ -228,8 +248,7 @@ export default function HomePage() {
       if (listenedIds.length > 0) query = query.not('id', 'in', `(${listenedIds.join(',')})`);
       const { data: recData } = await query;
       setRecommended((recData || []).map(t => ({
-        ...t,
-        artist_name: t.artists?.artist_name || 'Unknown Artist',
+        ...t, artist_name: t.artists?.artist_name || 'Unknown Artist',
         artist_slug: t.artists?.slug || null,
       })));
     } catch (err) { console.error('Recommendations error:', err); }
@@ -242,7 +261,6 @@ export default function HomePage() {
     playTrack(track, list || [track]);
   };
 
-  // Albums navigate directly — only tracks get the action sheet
   const handleMore = (item) => {
     if (item._isAlbum) return;
     setActionSheetTrack(item);
@@ -272,22 +290,32 @@ export default function HomePage() {
       <PullToRefreshIndicator pullProgress={pullProgress} isRefreshing={isRefreshing} />
 
       <div className="greeting-hero px-6 pt-2">
-        <p className="section-label mb-1">
-          {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
-        </p>
+        <p className="section-label mb-1">{new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</p>
         <h1 className="text-2xl font-bold text-white">
           {user ? greeting() : 'Feelz Machine'}
         </h1>
         <p className="text-sm text-white/40 mt-1">
-          {user
-            ? `Welcome back${artist ? ', ' + artist.artist_name : ''}`
-            : 'Discover music from independent artists'}
+          {user ? `Welcome back${artist ? ', ' + artist.artist_name : ''}` : 'Discover music from independent artists'}
         </p>
       </div>
 
+      {/* New from artists you follow */}
+      {followedReleases.length > 0 && (
+        <Section title="From Artists You Follow" icon={Users} onSeeAll={() => navigate('/browse?tab=new')}>
+          <div className="flex space-x-3 overflow-x-auto px-6 scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
+            {followedReleases.map(track => (
+              <SquareCard key={track.id} item={track} itemList={followedReleases}
+                onPlay={handlePlay} onMore={handleMore}
+                currentTrack={currentTrack} isPlaying={isPlaying} />
+            ))}
+          </div>
+        </Section>
+      )}
+
+      {/* Recommended */}
       {recommended.length > 0 && (
         <Section title="Recommended For You" icon={Sparkles} onSeeAll={() => navigate('/browse?tab=tracks')}>
-          <div className="flex space-x-3 overflow-x-auto px-6 scrollbar-hide">
+          <div className="flex space-x-3 overflow-x-auto px-6 scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
             {recommended.map(track => (
               <SquareCard key={track.id} item={track} itemList={recommended}
                 onPlay={handlePlay} onMore={handleMore}
@@ -297,9 +325,10 @@ export default function HomePage() {
         </Section>
       )}
 
+      {/* Featured */}
       {featuredTracks.length > 0 && (
         <Section title="Featured">
-          <div className="flex space-x-3 overflow-x-auto px-6 scrollbar-hide">
+          <div className="flex space-x-3 overflow-x-auto px-6 scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
             {featuredTracks.map(track => (
               <SquareCard key={track.id} item={track} itemList={featuredTracks}
                 onPlay={handlePlay} onMore={handleMore}
@@ -309,9 +338,10 @@ export default function HomePage() {
         </Section>
       )}
 
+      {/* New Releases */}
       {newReleases.length > 0 && (
         <Section title="New Releases" onSeeAll={() => navigate('/browse?tab=new')}>
-          <div className="flex space-x-3 overflow-x-auto px-6 scrollbar-hide">
+          <div className="flex space-x-3 overflow-x-auto px-6 scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
             {newReleases.map(item => (
               <SquareCard
                 key={`${item._isAlbum ? 'album' : 'track'}-${item.id}`}
@@ -323,9 +353,10 @@ export default function HomePage() {
         </Section>
       )}
 
+      {/* Trending */}
       {trending.length > 0 && (
         <Section title="Trending" icon={Flame} onSeeAll={() => navigate('/browse?tab=trending')}>
-          <div className="flex space-x-3 overflow-x-auto px-6 scrollbar-hide">
+          <div className="flex space-x-3 overflow-x-auto px-6 scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
             {trending.map(track => (
               <SquareCard key={track.id} item={track} itemList={trending}
                 onPlay={handlePlay} onMore={handleMore}
@@ -335,20 +366,17 @@ export default function HomePage() {
         </Section>
       )}
 
+      {/* Artists to Follow */}
       {topArtists.length > 0 && (
         <Section title="Artists to Follow" onSeeAll={() => navigate('/browse?tab=artists')}>
-          <div className="flex space-x-3 overflow-x-auto px-6 scrollbar-hide">
+          <div className="flex space-x-3 overflow-x-auto px-6 scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
             {topArtists.map(a => (
               <button key={a.id} onClick={() => navigate(`/artist/${a.slug}`)}
                 className="flex-shrink-0 w-40 md:w-52 text-center group">
                 <div className="w-40 h-40 md:w-52 md:h-52 rounded-full overflow-hidden bg-white/[0.06] mb-2 mx-auto">
-                  {a.profile_image_url
-                    ? <img src={a.profile_image_url} alt={a.artist_name || ''}
-                        loading="lazy" decoding="async"
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
-                    : <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-purple-600/30 to-blue-600/20">
-                        <span className="text-3xl font-bold text-white/40">{a.artist_name?.[0]}</span>
-                      </div>}
+                  <img src={a.profile_image_url} alt={a.artist_name || ''}
+                    loading="lazy" decoding="async"
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
                 </div>
                 <div className="flex items-center justify-center space-x-1">
                   <p className="text-sm font-medium text-white truncate max-w-[140px]">{a.artist_name}</p>
@@ -361,7 +389,6 @@ export default function HomePage() {
         </Section>
       )}
 
-      {/* Single TrackActionSheet instance at page level */}
       {actionSheetTrack && (
         <TrackActionSheet
           track={actionSheetTrack}
