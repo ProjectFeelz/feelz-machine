@@ -30,13 +30,13 @@ export async function downloadTrack(trackId, title, authToken) {
     throw new Error(err.error || 'Failed to get download URL');
   }
 
-  const { signedUrl } = await response.json();
+  const { signedUrl, filename } = await response.json();
   const ext = signedUrl.split('?')[0].split('.').pop() || 'mp3';
 
   // On iOS Safari, fetch+blob is blocked by CORS. Use direct anchor with signed URL instead.
   const a = document.createElement('a');
   a.href = signedUrl;
-  a.download = cleanName + '.' + ext;
+  a.download = filename || (cleanName + '.' + ext);
   a.style.display = 'none';
   document.body.appendChild(a);
   a.click();
