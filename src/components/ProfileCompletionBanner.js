@@ -50,7 +50,7 @@ export default function ProfileCompletionBanner() {
             Adding your {missing.join(' and ')} helps fans discover you and improves Collab Radar matching.
           </p>
           <button
-            onClick={() => navigate('/profile/edit')}
+            onClick={() => navigate('/profile')}
             className="mt-2.5 text-xs font-semibold text-purple-400 hover:text-purple-300 transition"
           >
             Update profile →
