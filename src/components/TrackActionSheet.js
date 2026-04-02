@@ -9,6 +9,11 @@ import {
     ChevronLeft, ShoppingCart, Lock, PlusCircle, DollarSign, Clock,
 } from 'lucide-react';
 import ShareCard from './ShareCard';
+import {
+    X, Share2, ListMusic, Download, Heart, Play, Music, Loader, Check,
+    ChevronLeft, ShoppingCart, Lock, PlusCircle, DollarSign, Clock,
+} from 'lucide-react';
+import ShareCard from './ShareCard';
 
 const PAYPAL_CLIENT_ID = process.env.REACT_APP_PAYPAL_CLIENT_ID;
 
@@ -27,6 +32,7 @@ export default function TrackActionSheet({ track, artist, onClose }) {
     const [addingTo, setAddingTo] = useState(null);
     const [addedTo, setAddedTo] = useState({});
     const [shared, setShared] = useState(false);
+    const [showShareCard, setShowShareCard] = useState(false);
     const [showShareCard, setShowShareCard] = useState(false);
     const [downloading, setDownloading] = useState(false);
     const [liked, setLiked] = useState(false);
@@ -622,6 +628,9 @@ export default function TrackActionSheet({ track, artist, onClose }) {
                 @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
                 .animate-slide-up { animation: slideUp 0.25s ease-out; }
             `}</style>
+      {showShareCard && (
+        <ShareCard track={track} onClose={() => setShowShareCard(false)} />
+      )}
       {showShareCard && (
         <ShareCard
           track={track}
