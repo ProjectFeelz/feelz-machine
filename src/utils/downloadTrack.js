@@ -1,15 +1,13 @@
-// Downloads a track via the secure get-download-url netlify function.
-// Requires the user's auth token and track ID — the backend verifies
-// a purchase record exists before issuing a short-lived signed URL.
-// For free tracks, the backend handles recording the download automatically.
-
+// Downloads a track by proxying file bytes through the Netlify function.
+// The backend verifies auth + purchase, fetches from Supabase storage,
+// and returns the file directly with Content-Disposition headers.
+// This approach works on iOS Safari which ignores a.download on cross-origin URLs.
 export async function downloadTrack(trackId, title, authToken) {
   if (!authToken) throw new Error('Not authenticated');
   if (!trackId) throw new Error('No track ID provided');
 
   const cleanName = (title || 'track').replace(/[^a-z0-9\s-]/gi, '').trim() || 'track';
 
-  // Request a signed URL from the backend (verifies purchase server-side)
   const response = await fetch('/.netlify/functions/get-download-url', {
     method: 'POST',
     headers: {
@@ -27,18 +25,20 @@ export async function downloadTrack(trackId, title, authToken) {
 
   if (!response.ok) {
     const err = await response.json().catch(() => ({}));
-    throw new Error(err.error || 'Failed to get download URL');
+    throw new Error(err.error || 'Failed to download track');
   }
 
-  const { signedUrl, filename } = await response.json();
-  const ext = signedUrl.split('?')[0].split('.').pop() || 'mp3';
+  // Response is now the file itself, not JSON
+  const blob = await response.blob();
+  const blobUrl = URL.createObjectURL(blob);
 
-  // On iOS Safari, fetch+blob is blocked by CORS. Use direct anchor with signed URL instead.
   const a = document.createElement('a');
-  a.href = signedUrl;
-  a.download = filename || (cleanName + '.' + ext);
+  a.href = blobUrl;
+  a.download = cleanName + '.mp3';
   a.style.display = 'none';
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
+
+  setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
 }
