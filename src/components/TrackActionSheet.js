@@ -20,7 +20,7 @@ function formatReleaseDate(dateStr) {
 export default function TrackActionSheet({ track, artist, onClose }) {
     const navigate = useNavigate();
     const { user } = useAuth();
-    const { addToQueue } = usePlayer();
+    const { addToQueue, playTrack } = usePlayer();
     const [view, setView] = useState('main');
     const [playlists, setPlaylists] = useState([]);
     const [addingTo, setAddingTo] = useState(null);
@@ -260,7 +260,7 @@ export default function TrackActionSheet({ track, artist, onClose }) {
       ? window.location.origin + '/track/' + track.slug
       : window.location.origin + '/artist/' + (artist?.slug || track?.artist_slug || '');
         if (navigator.share) {
-            try { await navigator.share({ title: track.title, text: track.title + ' by ' + (artist?.artist_name || track.artist_name), url }); } catch {}
+            try { await navigator.share({ title: `${track.title} by ${artist?.artist_name || track.artist_name}`, url }); } catch {}
         } else {
             await navigator.clipboard.writeText(url);
         }
@@ -610,7 +610,7 @@ export default function TrackActionSheet({ track, artist, onClose }) {
                                   .order('engagement_score', { ascending: false }).limit(20);
                                 if (data?.length) {
                                   const queue = data.map(t => ({ ...t, artist_name: artist?.artist_name || track?.artist_name, artist_slug: slug }));
-                                  addToQueue(...queue);
+                                  playTrack(queue[0], queue);
                                 }
                                 onClose();
                               }}
