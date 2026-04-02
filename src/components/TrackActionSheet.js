@@ -8,6 +8,7 @@ import {
     X, Share2, ListMusic, Download, Heart, Play, Music, Loader, Check,
     ChevronLeft, ShoppingCart, Lock, PlusCircle, DollarSign, Clock,
 } from 'lucide-react';
+import ShareCard from './ShareCard';
 
 const PAYPAL_CLIENT_ID = process.env.REACT_APP_PAYPAL_CLIENT_ID;
 
@@ -26,6 +27,7 @@ export default function TrackActionSheet({ track, artist, onClose }) {
     const [addingTo, setAddingTo] = useState(null);
     const [addedTo, setAddedTo] = useState({});
     const [shared, setShared] = useState(false);
+    const [showShareCard, setShowShareCard] = useState(false);
     const [downloading, setDownloading] = useState(false);
     const [liked, setLiked] = useState(false);
     const [downloadError, setDownloadError] = useState(null);
@@ -255,17 +257,8 @@ export default function TrackActionSheet({ track, artist, onClose }) {
         setAddingTo(null);
     };
 
-    const handleShare = async () => {
-    const url = track?.slug
-      ? window.location.origin + '/track/' + track.slug
-      : window.location.origin + '/artist/' + (artist?.slug || track?.artist_slug || '');
-        if (navigator.share) {
-            try { await navigator.share({ title: `${track.title} by ${artist?.artist_name || track.artist_name}`, url }); } catch {}
-        } else {
-            await navigator.clipboard.writeText(url);
-        }
-        setShared(true);
-        setTimeout(() => { setShared(false); onClose(); }, 1000);
+    const handleShare = () => {
+      setShowShareCard(true);
     };
 
     const handleQueue = () => {
@@ -629,6 +622,12 @@ export default function TrackActionSheet({ track, artist, onClose }) {
                 @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
                 .animate-slide-up { animation: slideUp 0.25s ease-out; }
             `}</style>
+      {showShareCard && (
+        <ShareCard
+          track={track}
+          onClose={() => setShowShareCard(false)}
+        />
+      )}
         </div>
     );
 }
