@@ -152,6 +152,8 @@ export default function HomePage() {
           .eq('is_published', true).order('engagement_score', { ascending: false }).limit(20),
         supabase.from('artists')
           .select('id, artist_name, slug, profile_image_url, is_verified, follower_count, total_streams, tier')
+          .not('profile_image_url', 'is', null)
+          .neq('profile_image_url', '')
           .order('follower_count', { ascending: false }).limit(10),
       ]);
 
