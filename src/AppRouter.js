@@ -1,5 +1,5 @@
-import React from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import React, { useEffect } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { HelmetProvider } from 'react-helmet-async';
 import { AuthProvider } from './contexts/AuthContext';
 import { PlayerProvider } from './contexts/PlayerContext';
@@ -41,6 +41,12 @@ import TrackPage from './pages/TrackPage';
 import CollabRadarPage from './pages/CollabRadarPage';
 
 // ── Wrapper to set page title for standalone pages outside AppLayout ─────────
+function ScrollToTop() {
+  const { pathname } = useLocation();
+  useEffect(() => { window.scrollTo(0, 0); }, [pathname]);
+  return null;
+}
+
 function PageTitle({ title, children }) {
   return (
     <>
@@ -56,6 +62,7 @@ export default function AppRouter() {
   return (
     <HelmetProvider>
       <BrowserRouter>
+        <ScrollToTop />
         <AuthProvider>
           <PlayerProvider>
             <Routes>
