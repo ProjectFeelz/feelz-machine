@@ -112,11 +112,9 @@ exports.handler = async (event) => {
     return { statusCode: 500, body: JSON.stringify({ error: 'Could not generate download URL' }) };
   }
 
-  const safeTitle = (track.title || 'track').replace(/[^a-z0-9\s-]/gi, '').trim() || 'track';
-
   return {
     statusCode: 200,
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ signedUrl: signedData.signedUrl, title: track.title, filename: safeTitle + '.mp3' }),
+    body: JSON.stringify({ signedUrl: signedData.signedUrl, title: track.title }),
   };
 };
