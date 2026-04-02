@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { ArtistProfileSkeleton } from '../components/SkeletonLoader';
 import ShareCard from '../components/ShareCard';
+import ShareCard from '../components/ShareCard';
 import { usePullToRefresh } from '../hooks/usePullToRefresh';
 import PullToRefreshIndicator from '../components/PullToRefreshIndicator';
 
@@ -356,6 +357,7 @@ export default function ArtistProfilePage() {
   const [showAllTracks, setShowAllTracks] = useState(false);
   const [actionSheetTrack, setActionSheetTrack] = useState(null);
   const [copied, setCopied] = useState(false);
+  const [showShareCard, setShowShareCard] = useState(false);
   const [showShareCard, setShowShareCard] = useState(false);
   const [downloading, setDownloading] = useState(null);
   const [purchaseTrack, setPurchaseTrack] = useState(null);
