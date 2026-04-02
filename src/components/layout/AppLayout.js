@@ -179,9 +179,9 @@ export default function AppLayout() {
       <MobileNav />
 
       {/* First-time onboarding tour — only shows once, after splash is done */}
-      {showTour && splashDone && !loading && (
-        <AppTour isArtist={isArtist} onDone={dismissTour} />
-      )}
+      {showTour && splashDone && !loading && hasProfile && (
+  <AppTour isArtist={isArtist} onDone={dismissTour} />
+)}
     </div>
   );
 }
