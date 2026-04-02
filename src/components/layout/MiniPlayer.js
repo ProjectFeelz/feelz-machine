@@ -46,7 +46,7 @@ export default function MiniPlayer() {
   return (
     <div
       className="md:hidden fixed left-0 right-0 z-50"
-      style={{ bottom: '56px' }}
+      style={{ bottom: '56px', willChange: 'transform', WebkitTransform: 'translateZ(0)' }}
     >
       {/* Draggable progress bar */}
       <div
