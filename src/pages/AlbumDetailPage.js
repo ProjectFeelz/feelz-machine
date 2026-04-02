@@ -241,7 +241,7 @@ export default function AlbumDetailPage() {
   const handleShare = async () => {
     const url = window.location.href;
     if (navigator.share) {
-      try { await navigator.share({ title: album.title, text: `${album.title} by ${artist?.artist_name} on Feelz Machine`, url }); } catch {}
+      try { await navigator.share({ title: `${album.title} by ${artist?.artist_name}`, url }); } catch {}
     } else {
       await navigator.clipboard.writeText(url);
       setCopied(true); setTimeout(() => setCopied(false), 2000);
