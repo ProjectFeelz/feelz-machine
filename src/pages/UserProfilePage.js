@@ -29,7 +29,34 @@ function FieldLabel({ children }) {
   );
 }
 
-function PillGrid({ options, selected, onToggle }) {
+// Multi-select pill grid
+function PillGrid({ options, selected = [], onToggle }) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      {options.map(opt => {
+        const isSelected = selected.includes(opt);
+        return (
+          <button
+            key={opt}
+            type="button"
+            onClick={() => onToggle(opt)}
+            className={`flex items-center space-x-1 px-3 py-1.5 rounded-full text-xs font-medium transition active:scale-95 ${
+              isSelected
+                ? 'bg-white text-black'
+                : 'bg-white/[0.06] text-white/50 hover:bg-white/[0.1] hover:text-white/70'
+            }`}
+          >
+            {isSelected && <Check className="w-3 h-3" strokeWidth={3} />}
+            <span>{opt}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// Single-select pill grid (for mood)
+function SinglePillGrid({ options, selected, onToggle }) {
   return (
     <div className="flex flex-wrap gap-2">
       {options.map(opt => {
@@ -39,14 +66,14 @@ function PillGrid({ options, selected, onToggle }) {
             key={opt}
             type="button"
             onClick={() => onToggle(opt)}
-            className={`px-3 py-1.5 rounded-full text-xs font-medium transition active:scale-95 ${
+            className={`flex items-center space-x-1 px-3 py-1.5 rounded-full text-xs font-medium transition active:scale-95 ${
               isSelected
                 ? 'bg-white text-black'
                 : 'bg-white/[0.06] text-white/50 hover:bg-white/[0.1] hover:text-white/70'
             }`}
           >
-            {isSelected && <span className="mr-1">✓</span>}
-            {opt}
+            {isSelected && <Check className="w-3 h-3" strokeWidth={3} />}
+            <span>{opt}</span>
           </button>
         );
       })}
@@ -59,30 +86,34 @@ export default function UserProfilePage() {
   const { user, refreshProfile } = useAuth();
   const fileRef = useRef(null);
 
-  const [displayName, setDisplayName] = useState('');
-  const [bio, setBio]                 = useState('');
-  const [genre, setGenre]             = useState('');
-  const [mood, setMood]               = useState('');
-  const [avatarUrl, setAvatarUrl]     = useState('');
-  const [avatarFile, setAvatarFile]   = useState(null);
+  const [displayName, setDisplayName]     = useState('');
+  const [bio, setBio]                     = useState('');
+  const [genres, setGenres]               = useState([]); // multi-select array
+  const [mood, setMood]                   = useState('');
+  const [avatarUrl, setAvatarUrl]         = useState('');
+  const [avatarFile, setAvatarFile]       = useState(null);
   const [avatarPreview, setAvatarPreview] = useState('');
-  const [saving, setSaving]           = useState(false);
-  const [saved, setSaved]             = useState(false);
-  const [error, setError]             = useState('');
-  const [loading, setLoading]         = useState(true);
+  const [saving, setSaving]               = useState(false);
+  const [saved, setSaved]                 = useState(false);
+  const [error, setError]                 = useState('');
+  const [loading, setLoading]             = useState(true);
 
   useEffect(() => {
     if (!user) return;
     const fetchProfile = async () => {
       const { data } = await supabase
         .from('user_profiles')
-        .select('name, avatar_url, genre, mood, bio')
+        .select('name, avatar_url, genre, genre_preferences, mood, bio')
         .eq('user_id', user.id)
-        .single();
+        .maybeSingle();
       if (data) {
         setDisplayName(data.name || '');
         setBio(data.bio || '');
-        setGenre(data.genre || '');
+        // Support both old single genre and new multi-genre
+        const savedGenres = data.genre_preferences?.length
+          ? data.genre_preferences
+          : data.genre ? [data.genre] : [];
+        setGenres(savedGenres);
         setMood(data.mood || '');
         setAvatarUrl(data.avatar_url || user.user_metadata?.avatar_url || user.user_metadata?.picture || '');
       } else {
@@ -98,6 +129,12 @@ export default function UserProfilePage() {
     if (!file) return;
     setAvatarFile(file);
     setAvatarPreview(URL.createObjectURL(file));
+  };
+
+  const toggleGenre = (g) => {
+    setGenres(prev =>
+      prev.includes(g) ? prev.filter(x => x !== g) : [...prev, g]
+    );
   };
 
   const handleSave = async () => {
@@ -117,17 +154,20 @@ export default function UserProfilePage() {
         newAvatarUrl = urlData.publicUrl;
       }
 
+      // Always upsert — handles both new and existing profiles
       const { error: upsertErr } = await supabase
         .from('user_profiles')
-        .update({
-          name:       displayName.trim() || user.email?.split('@')[0],
-          bio:        bio.trim() || null,
-          genre:      genre || null,
-          mood:       mood  || null,
-          avatar_url: newAvatarUrl,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('user_id', user.id);
+        .upsert({
+          user_id:          user.id,
+          name:             displayName.trim() || user.email?.split('@')[0],
+          bio:              bio.trim() || null,
+          genre:            genres[0] || null,       // keep single genre for backwards compat
+          genre_preferences: genres,                 // new multi-genre array
+          mood:             mood || null,
+          avatar_url:       newAvatarUrl,
+          updated_at:       new Date().toISOString(),
+        }, { onConflict: 'user_id' });
+
       if (upsertErr) throw upsertErr;
 
       setAvatarUrl(newAvatarUrl);
@@ -209,22 +249,31 @@ export default function UserProfilePage() {
               <p className="text-right text-[10px] text-white/20 mt-1">{bio.length}/200</p>
             </div>
 
-            {/* Genre */}
+            {/* Genre — multi select */}
             <div>
-              <FieldLabel>Favourite Genre</FieldLabel>
-              <p className="text-xs text-white/25 mb-3">Used to personalise your recommendations</p>
+              <FieldLabel>Favourite Genre{genres.length > 1 ? 's' : ''}</FieldLabel>
+              <p className="text-xs text-white/25 mb-3">Select all that apply — used to personalise your recommendations</p>
               <PillGrid
                 options={GENRES}
-                selected={genre}
-                onToggle={(g) => setGenre(prev => prev === g ? '' : g)}
+                selected={genres}
+                onToggle={toggleGenre}
               />
+              {genres.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setGenres([])}
+                  className="mt-2 text-[10px] text-white/20 hover:text-white/40 transition"
+                >
+                  Clear all
+                </button>
+              )}
             </div>
 
-            {/* Mood */}
+            {/* Mood — single select */}
             <div>
               <FieldLabel>Favourite Mood</FieldLabel>
               <p className="text-xs text-white/25 mb-3">Helps us find music that matches your vibe</p>
-              <PillGrid
+              <SinglePillGrid
                 options={MOODS}
                 selected={mood}
                 onToggle={(m) => setMood(prev => prev === m ? '' : m)}
