@@ -600,6 +600,24 @@ export default function TrackActionSheet({ track, artist, onClose }) {
                                 <Music className="w-5 h-5 text-white/40" />
                                 <span className="text-sm text-white/70">View Artist</span>
                             </button>
+                        <button onClick={async () => {
+                                const slug = artist?.slug || track?.artist_slug;
+                                const artistId = artist?.id || track?.artist_id;
+                                if (!artistId) return;
+                                const { data } = await supabase.from('tracks')
+                                  .select('id, title, file_url, cover_artwork_url, duration, artist_id')
+                                  .eq('artist_id', artistId).eq('is_published', true)
+                                  .order('engagement_score', { ascending: false }).limit(20);
+                                if (data?.length) {
+                                  const queue = data.map(t => ({ ...t, artist_name: artist?.artist_name || track?.artist_name, artist_slug: slug }));
+                                  addToQueue(...queue);
+                                }
+                                onClose();
+                              }}
+                              className="w-full flex items-center space-x-4 px-5 py-3.5 active:bg-white/[0.04] transition">
+                              <Play className="w-5 h-5 text-white/40" />
+                              <span className="text-sm text-white/70">Play Artist Radio</span>
+                            </button>
                         </>
                     )}
                 </div>
