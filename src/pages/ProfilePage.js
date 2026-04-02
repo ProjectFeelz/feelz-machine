@@ -149,8 +149,28 @@ export default function ProfilePage() {
       expires_at: new Date(Date.now() + THOUGHT_TTL_MS).toISOString(),
     });
     setThoughtSaving(false);
-    if (error) setThoughtMsg('Failed to post');
-    else { setThoughtInput(''); setThoughtMsg('Posted!'); fetchThoughts(); }
+    if (error) { setThoughtMsg('Failed to post'); }
+    else {
+      setThoughtInput(''); setThoughtMsg('Posted!'); fetchThoughts();
+      // Notify followers
+      try {
+        const { data: followers } = await supabase
+          .from('follows').select('follower_id').eq('artist_id', artist.id);
+        if (followers?.length > 0) {
+          await supabase.from('notifications').insert(
+            followers.map(f => ({
+              user_id:    f.follower_id,
+              artist_id:  artist.id,
+              type:       'artist_thought',
+              title:      `${artist.artist_name} posted a thought`,
+              message:    thoughtInput.trim().slice(0, 100),
+              from_artist_id: artist.id,
+              metadata:   { thought: true },
+            }))
+          );
+        }
+      } catch {}
+    }
     setTimeout(() => setThoughtMsg(''), 2500);
   };
 
