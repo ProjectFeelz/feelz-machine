@@ -1,3 +1,7 @@
+// Downloads a track via the secure get-download-url netlify function.
+// Requires the user's auth token and track ID — the backend verifies
+// a purchase record exists before issuing a short-lived signed URL.
+// For free tracks, the backend handles recording the download automatically.
 export async function downloadTrack(trackId, title, authToken) {
   if (!authToken) throw new Error('Not authenticated');
   if (!trackId) throw new Error('No track ID provided');
@@ -25,19 +29,13 @@ export async function downloadTrack(trackId, title, authToken) {
   }
 
   const { signedUrl } = await response.json();
+  const ext = signedUrl.split('?')[0].split('.').pop() || 'mp3';
 
-  // On desktop: use anchor download
-  // On iOS: open in new tab — user taps Share > Save to Files
-  const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
-  if (isIOS) {
-    window.open(signedUrl, '_blank');
-  } else {
-    const a = document.createElement('a');
-    a.href = signedUrl;
-    a.download = cleanName + '.mp3';
-    a.style.display = 'none';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-  }
+  const a = document.createElement('a');
+  a.href = signedUrl;
+  a.download = cleanName + '.' + ext;
+  a.style.display = 'none';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
 }
