@@ -63,9 +63,7 @@ export default function DesktopSidebar() {
         <aside
         className="hidden md:flex flex-col w-64 fixed left-0 top-0 bottom-0 z-40"
         style={{
-                  background: 'rgba(10,10,10,0.85)',
-                  backdropFilter: 'blur(24px)',
-                  WebkitBackdropFilter: 'blur(24px)',
+                  background: 'rgb(10,10,10)',
                   borderRight: '1px solid rgba(255,255,255,0.06)',
         }}>
 {/* Logo */}
@@ -93,7 +91,7 @@ export default function DesktopSidebar() {
                                           ? 'text-white'
                                           : 'text-white/40 hover:text-white/80 hover:bg-white/[0.04]'
                       }`}
-                                  style={isActive ? { background: 'rgba(255,255,255,0.08)', backdropFilter: 'blur(8px)' } : {}}>
+                                  style={isActive ? { background: 'rgba(255,255,255,0.08)' } : {}}>
               <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 transition-all ${
                                 isActive ? 'bg-white/10' : 'group-hover:bg-white/[0.04]'
       }`}>
