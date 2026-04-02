@@ -899,12 +899,24 @@ export default function ArtistProfilePage() {
             <span>{isFollowing ? 'Following' : 'Follow'}</span>
           </button>
           {tracks.length > 0 && (
-            <button onClick={() => handlePlayTrack(tracks[0])}
-              className="flex items-center space-x-2 px-5 py-2.5 rounded-full text-sm font-semibold transition-all active:scale-95"
-              style={{ backgroundColor: secondaryColor, color: textColor }}>
-              <Play className="w-4 h-4" fill={textColor} />
-              <span>Play</span>
-            </button>
+            <>
+              <button onClick={() => handlePlayTrack(tracks[0])}
+                className="flex items-center space-x-2 px-5 py-2.5 rounded-full text-sm font-semibold transition-all active:scale-95"
+                style={{ backgroundColor: secondaryColor, color: textColor }}>
+                <Play className="w-4 h-4" fill={textColor} />
+                <span>Play</span>
+              </button>
+              <button onClick={() => {
+                const shuffled = [...tracks].sort(() => Math.random() - 0.5);
+                const queue = shuffled.map(t => ({ ...t, artist_name: artist.artist_name, artist_slug: artist.slug }));
+                playTrack(queue[0], queue);
+              }}
+                className="flex items-center space-x-2 px-5 py-2.5 rounded-full text-sm font-semibold transition-all active:scale-95"
+                style={{ backgroundColor: `${secondaryColor}30`, color: textColor, border: `1px solid ${secondaryColor}40` }}>
+                <Shuffle className="w-4 h-4" />
+                <span>Shuffle</span>
+              </button>
+            </>
           )}
         </div>
         {artist.bio && (
