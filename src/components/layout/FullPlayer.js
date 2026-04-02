@@ -58,7 +58,7 @@ export default function FullPlayer() {
   const [displayMode, setDisplayMode]         = useState('artwork');
   const [videoMuted, setVideoMuted]           = useState(true);
 
-  const y       = useMotionValue(0);
+  const y       = useMotionValue(window.innerHeight);
   const opacity = useTransform(y, [0, 300], [1, 0]);
 
   const hasVideo       = !!currentTrack?.youtube_url;
