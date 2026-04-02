@@ -346,7 +346,8 @@ export default function AppTour({ isArtist, onDone }) {
     exit:   (d) => ({ x: d > 0 ? -30 : 30, opacity: 0 }),
   };
 
-  const hasTarget  = !!current.target;
+  const isMobile   = window.innerWidth < 768;
+  const hasTarget  = !!current.target && isMobile;
   const isCenter   = !hasTarget;
 
   return (
