@@ -357,7 +357,6 @@ export default function ArtistProfilePage() {
   const [actionSheetTrack, setActionSheetTrack] = useState(null);
   const [copied, setCopied] = useState(false);
   const [showShareCard, setShowShareCard] = useState(false);
-  const [showShareCard, setShowShareCard] = useState(false);
   const [downloading, setDownloading] = useState(null);
   const [purchaseTrack, setPurchaseTrack] = useState(null);
   const [purchasing, setPurchasing] = useState(false);
