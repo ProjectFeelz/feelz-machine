@@ -15,6 +15,8 @@ import {
   ChevronUp, Send, Trash2
 } from 'lucide-react';
 import { ArtistProfileSkeleton } from '../components/SkeletonLoader';
+import { usePullToRefresh } from '../hooks/usePullToRefresh';
+import PullToRefreshIndicator from '../components/PullToRefreshIndicator';
 
 const PAYPAL_CLIENT_ID = process.env.REACT_APP_PAYPAL_CLIENT_ID;
 const EMOJI_REACTIONS = ['🔥', '❤️', '👏', '😮', '😂', '🎵'];
@@ -808,8 +810,11 @@ export default function ArtistProfilePage() {
     ? `${artist.bio.slice(0, 120)}${artist.bio.length > 120 ? '...' : ''}`
     : `Stream music by ${artist.artist_name} on Feelz Machine — independent music platform.`;
 
+  const { pullProps, pullProgress, isRefreshing } = usePullToRefresh(fetchArtist);
+
   return (
-    <div className="min-h-screen pb-32" style={{ backgroundColor: bgColor, color: textColor, fontFamily: `"${bodyFont}", sans-serif`, ...themeStyles }}>
+    <div className="min-h-screen pb-32" style={{ backgroundColor: bgColor, color: textColor, fontFamily: `"${bodyFont}", sans-serif`, ...themeStyles }} {...pullProps}>
+      <PullToRefreshIndicator pullProgress={pullProgress} isRefreshing={isRefreshing} />
 
       {/* ── Dynamic head tags ── */}
       <Helmet>
