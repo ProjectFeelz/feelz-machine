@@ -1,13 +1,15 @@
 // Downloads a track via the secure get-download-url netlify function.
-// Requires the user's auth token and track ID — the backend verifies
-// a purchase record exists before issuing a short-lived signed URL.
-// For free tracks, the backend handles recording the download automatically.
+// Backend verifies auth + purchase and returns a signed URL with proper
+// Content-Disposition headers. We then fetch the file client-side as a
+// blob and trigger a named download — works on desktop and Android.
+// iOS Safari will open the file in browser (tap Share > Save to Files).
 export async function downloadTrack(trackId, title, authToken) {
   if (!authToken) throw new Error('Not authenticated');
   if (!trackId) throw new Error('No track ID provided');
 
   const cleanName = (title || 'track').replace(/[^a-z0-9\s-]/gi, '').trim() || 'track';
 
+  // Step 1: get signed URL from backend (verifies purchase server-side)
   const response = await fetch('/.netlify/functions/get-download-url', {
     method: 'POST',
     headers: {
@@ -29,13 +31,26 @@ export async function downloadTrack(trackId, title, authToken) {
   }
 
   const { signedUrl } = await response.json();
-  const ext = signedUrl.split('?')[0].split('.').pop() || 'mp3';
 
-  const a = document.createElement('a');
-  a.href = signedUrl;
-  a.download = cleanName + '.' + ext;
-  a.style.display = 'none';
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
+  // Step 2: fetch the file as a blob from the signed URL.
+  // This bypasses the cross-origin a.download restriction on desktop browsers.
+  try {
+    const fileResponse = await fetch(signedUrl);
+    if (!fileResponse.ok) throw new Error('File fetch failed');
+    const blob = await fileResponse.blob();
+    const ext = signedUrl.split('?')[0].split('.').pop() || 'mp3';
+    const blobUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = blobUrl;
+    a.download = cleanName + '.' + ext;
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+  } catch {
+    // Fallback for iOS Safari — open signed URL directly.
+    // User taps Share > Save to Files.
+    window.open(signedUrl, '_blank');
+  }
 }
