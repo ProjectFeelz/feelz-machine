@@ -21,7 +21,7 @@ import ArtistProfilePage from './pages/ArtistProfilePage';
 import TierUpgradePage from './pages/TierUpgradePage';
 import ChatRoomsPage from './pages/ChatRoomsPage';
 import ChatRoomView from './pages/ChatRoomView';
-import PrivacyPolicy from './PrivacyPolicy';
+import PrivacyPolicy from './pages/PrivacyPolicy';
 import TermsOfUse from './pages/TermsOfUse';
 import NotificationsPage from './pages/NotificationsPage';
 import HubPage from './pages/HubPage';
