@@ -176,14 +176,15 @@ const ARTIST_TOUR = [
 const STORAGE_KEY_LISTENER = 'fm_tour_listener_done';
 const STORAGE_KEY_ARTIST   = 'fm_tour_artist_done';
 
-export function useTourState(isArtist) {
+export function useTourState(isArtist, authReady = true) {
   const key = isArtist ? STORAGE_KEY_ARTIST : STORAGE_KEY_LISTENER;
   const [show, setShow] = useState(false);
 
   useEffect(() => {
+    if (!authReady) return;
     const done = localStorage.getItem(key);
     if (!done) setShow(true);
-  }, [key]);
+  }, [key, authReady]);
 
   const dismiss = () => {
     localStorage.setItem(key, '1');
