@@ -599,6 +599,7 @@ export default function ArtistProfilePage() {
   const handleFollow = async () => {
     if (!user) { navigate('/login'); return; }
     if (!artist) return;
+    if (user.id === artist.user_id) return;
     try {
       if (isFollowing) {
         await supabase.from('follows').delete().eq('artist_id', artist.id).eq('follower_id', user.id);
