@@ -780,7 +780,7 @@ export default function ArtistProfilePage() {
     }
   }, [theme?.body_font, theme?.heading_font]);
 
-  const { pullProgress, isRefreshing } = usePullToRefresh(fetchArtist);
+  const { pullProps, pullProgress, isRefreshing } = usePullToRefresh(fetchArtist);
 
   if (loading) return <ArtistProfileSkeleton />;
 
@@ -808,7 +808,7 @@ export default function ArtistProfilePage() {
     : `Stream music by ${artist.artist_name} on Feelz Machine — independent music platform.`;
 
   return (
-    <div className="min-h-screen pb-32" style={{ backgroundColor: bgColor, color: textColor, fontFamily: `"${bodyFont}", sans-serif`, ...themeStyles }}>
+    <div className="min-h-screen pb-32" style={{ backgroundColor: bgColor, color: textColor, fontFamily: `"${bodyFont}", sans-serif`, ...themeStyles }} {...pullProps}>
       <PullToRefreshIndicator pullProgress={pullProgress} isRefreshing={isRefreshing} />
 
       {/* ── Dynamic head tags ── */}
