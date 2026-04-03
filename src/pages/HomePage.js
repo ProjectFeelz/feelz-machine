@@ -289,7 +289,7 @@ export default function HomePage() {
 
       <PullToRefreshIndicator pullProgress={pullProgress} isRefreshing={isRefreshing} />
 
-      <div className="greeting-hero px-6 pt-6 pb-2">
+      <div className="greeting-hero px-6 pt-6 pb-6">
         <p className="section-label mb-1">{new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</p>
         <h1 className="text-2xl font-bold text-white">
           {user ? greeting() : 'Feelz Machine'}
