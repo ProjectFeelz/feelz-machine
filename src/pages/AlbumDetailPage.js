@@ -241,6 +241,7 @@ export default function AlbumDetailPage() {
   };
 
   const handleShare = () => {
+    console.log('share clicked', showShareCard);
     setShowShareCard(true);
   };
 
