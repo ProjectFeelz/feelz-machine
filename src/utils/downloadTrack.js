@@ -38,7 +38,7 @@ export async function downloadTrack(trackId, title, authToken) {
     const fileResponse = await fetch(signedUrl);
     if (!fileResponse.ok) throw new Error('File fetch failed');
     const blob = await fileResponse.blob();
-    const ext = signedUrl.split('?')[0].split('.').pop() || 'mp3';
+    const ext = 'mp3';
     const blobUrl = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = blobUrl;
