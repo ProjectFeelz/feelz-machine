@@ -115,7 +115,7 @@ export default function AppLayout() {
   const [splashDone, setSplashDone] = useState(false);
 
   // Tour — fires once per account type after first sign-up
-  const { show: showTour, dismiss: dismissTour } = useTourState(!loading && isArtist);
+  const { show: showTour, dismiss: dismissTour } = useTourState(isArtist, !loading);
 
   // Splash: wait for auth, then small buffer to avoid flash
   useEffect(() => {
