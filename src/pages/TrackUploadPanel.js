@@ -812,24 +812,38 @@ export default function TrackUploadPanel() {
                 </div>
               </div>
 
-              <YoutubeField
-                value={trackForm.youtube_url}
-                onChange={(val) => setTrackForm({ ...trackForm, youtube_url: val })}
-              />
+              {!isAlbumRelease && (
+                <TierGate feature="download_sales" inline>
+                  <YoutubeField
+                    value={trackForm.youtube_url}
+                    onChange={(val) => setTrackForm({ ...trackForm, youtube_url: val })}
+                  />
+                </TierGate>
+              )}
 
               <div className="flex flex-wrap gap-4">
                 {[
                   { key: 'is_published',    label: 'Published' },
-                  { key: 'featured',        label: 'Featured' },
+                  { key: 'featured',        label: 'Featured', premiumOnly: true },
                   { key: 'is_explicit',     label: 'Explicit' },
                   { key: 'is_downloadable', label: 'Downloadable' },
                   { key: 'has_versions',    label: 'Has Versions' },
-                ].map(({ key, label }) => (
-                  <label key={key} className="flex items-center space-x-2 cursor-pointer">
-                    <Toggle value={trackForm[key]}
-                      onChange={() => setTrackForm({ ...trackForm, [key]: !trackForm[key] })} />
-                    <span className="text-xs text-white/50">{label}</span>
-                  </label>
+                ].map(({ key, label, premiumOnly }) => (
+                  premiumOnly ? (
+                    <TierGate key={key} feature="download_sales" inline>
+                      <label className="flex items-center space-x-2 cursor-pointer">
+                        <Toggle value={trackForm[key]}
+                          onChange={() => setTrackForm({ ...trackForm, [key]: !trackForm[key] })} />
+                        <span className="text-xs text-white/50">{label}</span>
+                      </label>
+                    </TierGate>
+                  ) : (
+                    <label key={key} className="flex items-center space-x-2 cursor-pointer">
+                      <Toggle value={trackForm[key]}
+                        onChange={() => setTrackForm({ ...trackForm, [key]: !trackForm[key] })} />
+                      <span className="text-xs text-white/50">{label}</span>
+                    </label>
+                  )
                 ))}
                 <TierGate feature="download_sales" inline>
                   <label className="flex items-center space-x-2 cursor-pointer">
@@ -838,12 +852,14 @@ export default function TrackUploadPanel() {
                     <span className="text-xs text-white/50">Premium</span>
                   </label>
                 </TierGate>
-                <label className="flex items-center space-x-2 cursor-pointer">
-                  <input type="checkbox" checked={trackForm.is_preorder || false}
-                    onChange={() => setTrackForm({ ...trackForm, is_preorder: !trackForm.is_preorder })}
-                    className="rounded border-white/20" />
-                  <span className="text-xs text-white/50">Pre-order</span>
-                </label>
+                <TierGate feature="collaborations" inline>
+                  <label className="flex items-center space-x-2 cursor-pointer">
+                    <input type="checkbox" checked={trackForm.is_preorder || false}
+                      onChange={() => setTrackForm({ ...trackForm, is_preorder: !trackForm.is_preorder })}
+                      className="rounded border-white/20" />
+                    <span className="text-xs text-white/50">Pre-order</span>
+                  </label>
+                </TierGate>
               </div>
 
               {trackForm.is_preorder && (
@@ -1030,10 +1046,12 @@ export default function TrackUploadPanel() {
                           className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none resize-none" />
                       </div>
 
-                      <YoutubeField
-                        value={editForm.youtube_url}
-                        onChange={(val) => setEditForm({ ...editForm, youtube_url: val })}
-                      />
+                      <TierGate feature="download_sales" inline>
+                        <YoutubeField
+                          value={editForm.youtube_url}
+                          onChange={(val) => setEditForm({ ...editForm, youtube_url: val })}
+                        />
+                      </TierGate>
 
                       <div className="flex flex-wrap gap-3">
                         {[

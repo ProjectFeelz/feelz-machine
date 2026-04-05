@@ -2,10 +2,21 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
-import PAYPAL_CONFIG, { getPayPalScriptUrl } from '../paypalConfig';
 import {
   ArrowLeft, Check, X, Crown, Zap, Star, Loader, Shield, AlertCircle
 } from 'lucide-react';
+
+// ── PayPal config — read from environment variables ──────────────────────────
+const PAYPAL_CLIENT_ID = process.env.REACT_APP_PAYPAL_CLIENT_ID || '';
+const PLAN_IDS = {
+  pro:     process.env.REACT_APP_PAYPAL_PRO_PLAN_ID     || '',
+  premium: process.env.REACT_APP_PAYPAL_PREMIUM_PLAN_ID || '',
+};
+const isConfigured = !!PAYPAL_CLIENT_ID && PAYPAL_CLIENT_ID !== 'YOUR_PAYPAL_CLIENT_ID_HERE';
+
+function getPayPalScriptUrl() {
+  return `https://www.paypal.com/sdk/js?client-id=${PAYPAL_CLIENT_ID}&vault=true&intent=subscription`;
+}
 
 const TIER_FEATURES = {
   free: {
@@ -44,9 +55,10 @@ const TIER_FEATURES = {
       { text: 'Analytics dashboard', included: true },
       { text: 'Collaboration & splits', included: true },
       { text: 'Community posting (1/day)', included: true },
+      { text: 'Pre-order releases', included: true },
       { text: 'Priority in browse/trending', included: false },
       { text: 'Download sales', included: false },
-      { text: 'Contact downloads', included: false },
+      { text: 'YouTube video backdrop', included: false },
       { text: 'Advanced analytics & export', included: false },
     ],
   },
@@ -67,6 +79,9 @@ const TIER_FEATURES = {
       { text: 'Collaboration & splits', included: true },
       { text: 'Priority in browse/trending', included: true },
       { text: 'Download sales', included: true },
+      { text: 'Pre-order releases', included: true },
+      { text: 'YouTube video backdrop', included: true },
+      { text: 'Featured track placement', included: true },
     ],
   },
 };
@@ -76,57 +91,24 @@ function PayPalButton({ planId, tierSlug, onSuccess, onError }) {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    // Check if PayPal SDK is loaded
-    if (window.paypal) {
-      setReady(true);
-      return;
-    }
-
-    // Load PayPal SDK
+    if (window.paypal) { setReady(true); return; }
     const script = document.createElement('script');
     script.src = getPayPalScriptUrl();
     script.async = true;
     script.onload = () => setReady(true);
     script.onerror = () => onError('Failed to load PayPal. Please try again.');
     document.head.appendChild(script);
-
-    return () => {
-      // Cleanup if needed
-    };
   }, []);
 
   useEffect(() => {
     if (!ready || !buttonRef.current || !window.paypal) return;
-
-    // Clear any existing buttons
     buttonRef.current.innerHTML = '';
-
     window.paypal.Buttons({
-      style: {
-        shape: 'pill',
-        color: 'white',
-        layout: 'vertical',
-        label: 'subscribe',
-      },
-      createSubscription: (data, actions) => {
-        return actions.subscription.create({
-          plan_id: planId,
-        });
-      },
-      onApprove: (data) => {
-        onSuccess({
-          subscriptionId: data.subscriptionID,
-          orderId: data.orderID,
-          tierSlug,
-        });
-      },
-      onError: (err) => {
-        console.error('PayPal error:', err);
-        onError('Payment failed. Please try again.');
-      },
-      onCancel: () => {
-        // User cancelled - no action needed
-      },
+      style: { shape: 'pill', color: 'white', layout: 'vertical', label: 'subscribe' },
+      createSubscription: (data, actions) => actions.subscription.create({ plan_id: planId }),
+      onApprove: (data) => onSuccess({ subscriptionId: data.subscriptionID, tierSlug }),
+      onError: (err) => { console.error('PayPal error:', err); onError('Payment failed. Please try again.'); },
+      onCancel: () => {},
     }).render(buttonRef.current);
   }, [ready, planId]);
 
@@ -137,51 +119,43 @@ export default function TierUpgradePage() {
   const navigate = useNavigate();
   const { user, artist, refreshProfile } = useAuth();
   const [currentTier, setCurrentTier] = useState(null);
+  const [activeSubId, setActiveSubId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [selectedTier, setSelectedTier] = useState(null);
 
-  useEffect(() => {
-    if (artist) fetchCurrentTier();
-  }, [artist]);
+  useEffect(() => { if (artist) fetchCurrentTier(); }, [artist]);
 
-  // Re-check tier when user returns from Safari after PayPal payment
   useEffect(() => {
     if (!artist) return;
     const handleVisibility = async () => {
       if (document.visibilityState === 'visible') {
-        const prevTier = currentTier;
         await fetchCurrentTier();
-        // If tier changed while they were in Safari, show success
-        if (prevTier && prevTier !== currentTier && currentTier !== 'free') {
-          setSuccess(`Welcome to ${currentTier === 'pro' ? 'Pro' : 'Premium'}! Your new features are active.`);
-          refreshProfile();
-        }
       }
     };
     document.addEventListener('visibilitychange', handleVisibility);
     return () => document.removeEventListener('visibilitychange', handleVisibility);
-  }, [artist, currentTier]);
+  }, [artist]);
 
   const fetchCurrentTier = async () => {
     try {
       const { data: sub } = await supabase
         .from('artist_tier_subscriptions')
-        .select('tier_id')
+        .select('tier_id, paypal_subscription_id')
         .eq('artist_id', artist.id)
         .eq('status', 'active')
         .maybeSingle();
+
       if (sub?.tier_id) {
+        setActiveSubId(sub.paypal_subscription_id || null);
         const { data: tierRow } = await supabase
-          .from('platform_tiers')
-          .select('slug')
-          .eq('id', sub.tier_id)
-          .maybeSingle();
+          .from('platform_tiers').select('slug').eq('id', sub.tier_id).maybeSingle();
         if (tierRow) { setCurrentTier(tierRow.slug); setLoading(false); return; }
       }
-      // Fallback to artist.tier
+      setActiveSubId(null);
       const { data: artistRow } = await supabase
         .from('artists').select('tier').eq('id', artist.id).maybeSingle();
       setCurrentTier(artistRow?.tier || 'free');
@@ -195,23 +169,15 @@ export default function TierUpgradePage() {
     setProcessing(true);
     setError('');
     try {
-      // Get the tier record
       const { data: tier } = await supabase
-        .from('platform_tiers')
-        .select('id')
-        .eq('slug', tierSlug)
-        .single();
-
+        .from('platform_tiers').select('id').eq('slug', tierSlug).single();
       if (!tier) throw new Error('Tier not found');
 
-      // Deactivate any existing subscription
       await supabase
         .from('artist_tier_subscriptions')
         .update({ status: 'cancelled', updated_at: new Date().toISOString() })
-        .eq('artist_id', artist.id)
-        .eq('status', 'active');
+        .eq('artist_id', artist.id).eq('status', 'active');
 
-      // Create new subscription record
       const { error: insertErr } = await supabase
         .from('artist_tier_subscriptions')
         .insert({
@@ -222,13 +188,10 @@ export default function TierUpgradePage() {
           started_at: new Date().toISOString(),
           expires_at: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
         });
-
       if (insertErr) throw insertErr;
 
-      // Update artist's current tier
-      await supabase
-        .from('artists')
-        .update({ current_tier_id: tier.id, updated_at: new Date().toISOString() })
+      await supabase.from('artists')
+        .update({ current_tier_id: tier.id, tier: tierSlug, updated_at: new Date().toISOString() })
         .eq('id', artist.id);
 
       setCurrentTier(tierSlug);
@@ -239,6 +202,30 @@ export default function TierUpgradePage() {
       setError('Failed to activate subscription: ' + err.message);
     }
     setProcessing(false);
+  };
+
+  const handleCancel = async () => {
+    if (!window.confirm('Cancel your subscription? You will return to the Free plan.')) return;
+    setCancelling(true);
+    setError('');
+    try {
+      await supabase
+        .from('artist_tier_subscriptions')
+        .update({ status: 'cancelled', updated_at: new Date().toISOString() })
+        .eq('artist_id', artist.id).eq('status', 'active');
+
+      await supabase.from('artists')
+        .update({ tier: 'free', current_tier_id: null, updated_at: new Date().toISOString() })
+        .eq('id', artist.id);
+
+      setCurrentTier('free');
+      setActiveSubId(null);
+      setSuccess('Subscription cancelled. You are now on the Free plan.');
+      refreshProfile();
+    } catch (err) {
+      setError('Failed to cancel subscription: ' + err.message);
+    }
+    setCancelling(false);
   };
 
   if (!user || !artist) {
@@ -260,8 +247,6 @@ export default function TierUpgradePage() {
       </div>
     );
   }
-
-  const isConfigured = PAYPAL_CONFIG.clientId !== 'YOUR_PAYPAL_CLIENT_ID_HERE';
 
   return (
     <div className="min-h-screen bg-black pb-32">
@@ -287,23 +272,31 @@ export default function TierUpgradePage() {
         </div>
       )}
 
-      {/* Not configured warning */}
       {!isConfigured && (
         <div className="mx-6 mb-4 p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/20">
           <p className="text-sm text-yellow-400">
-            PayPal is not configured yet. Add your PayPal Client ID and Plan IDs to <code className="text-yellow-300">paypalConfig.js</code> or set them as environment variables.
+            PayPal is not configured. Set <code className="text-yellow-300">REACT_APP_PAYPAL_CLIENT_ID</code>, <code className="text-yellow-300">REACT_APP_PAYPAL_PRO_PLAN_ID</code> and <code className="text-yellow-300">REACT_APP_PAYPAL_PREMIUM_PLAN_ID</code> in your Netlify environment variables.
           </p>
         </div>
       )}
 
       {/* Current plan badge */}
-      <div className="px-6 mb-6">
+      <div className="px-6 mb-6 flex items-center justify-between">
         <div className="inline-flex items-center space-x-2 px-3 py-1.5 rounded-full bg-white/[0.06]">
           <div className="w-2 h-2 rounded-full bg-green-400" />
           <span className="text-xs text-white/60">
             Current plan: <span className="font-semibold text-white capitalize">{currentTier}</span>
           </span>
         </div>
+        {currentTier !== 'free' && (
+          <button
+            onClick={handleCancel}
+            disabled={cancelling}
+            className="flex items-center space-x-1.5 px-3 py-1.5 rounded-full text-xs text-red-400/70 hover:text-red-400 hover:bg-red-500/10 transition disabled:opacity-40">
+            {cancelling ? <Loader className="w-3 h-3 animate-spin" /> : null}
+            <span>{cancelling ? 'Cancelling...' : 'Cancel subscription'}</span>
+          </button>
+        )}
       </div>
 
       {/* Tier cards */}
@@ -320,12 +313,11 @@ export default function TierUpgradePage() {
                 isCurrent
                   ? 'border-white/20 bg-white/[0.04]'
                   : selectedTier === slug
-                    ? `bg-white/[0.03]`
+                    ? 'bg-white/[0.03]'
                     : 'border-white/[0.06] bg-white/[0.02]'
               }`}
               style={selectedTier === slug ? { borderColor: `${tier.color}40` } : {}}
             >
-              {/* Popular badge */}
               {tier.popular && (
                 <div className="absolute top-0 right-0 px-3 py-1 rounded-bl-xl text-[10px] font-bold"
                   style={{ backgroundColor: tier.color, color: '#000' }}>
@@ -334,7 +326,6 @@ export default function TierUpgradePage() {
               )}
 
               <div className="p-5">
-                {/* Tier header */}
                 <div className="flex items-center space-x-3 mb-3">
                   <div className="w-10 h-10 rounded-xl flex items-center justify-center"
                     style={{ backgroundColor: `${tier.color}20` }}>
@@ -349,15 +340,12 @@ export default function TierUpgradePage() {
                   </div>
                 </div>
 
-                {/* Features */}
                 <div className="space-y-2 mb-4">
                   {tier.features.map((feature, i) => (
                     <div key={i} className="flex items-center space-x-2.5">
-                      {feature.included ? (
-                        <Check className="w-4 h-4 flex-shrink-0" style={{ color: tier.color }} />
-                      ) : (
-                        <X className="w-4 h-4 text-white/15 flex-shrink-0" />
-                      )}
+                      {feature.included
+                        ? <Check className="w-4 h-4 flex-shrink-0" style={{ color: tier.color }} />
+                        : <X className="w-4 h-4 text-white/15 flex-shrink-0" />}
                       <span className={`text-sm ${feature.included ? 'text-white/70' : 'text-white/25'}`}>
                         {feature.text}
                       </span>
@@ -365,15 +353,13 @@ export default function TierUpgradePage() {
                   ))}
                 </div>
 
-                {/* Action area */}
                 {isCurrent ? (
                   <div className="py-2.5 text-center text-sm font-medium text-white/40 bg-white/[0.04] rounded-lg">
                     Current Plan
                   </div>
                 ) : slug === 'free' ? (
-                  // Can't downgrade to free via button (need to cancel subscription)
                   currentTier !== 'free' ? (
-                    <p className="text-xs text-white/20 text-center py-2">Cancel your subscription to return to Free</p>
+                    <p className="text-xs text-white/20 text-center py-2">Use "Cancel subscription" above to return to Free</p>
                   ) : null
                 ) : isDowngrade ? (
                   <p className="text-xs text-white/20 text-center py-2">You're on a higher plan</p>
@@ -386,14 +372,14 @@ export default function TierUpgradePage() {
                       </div>
                     ) : isConfigured ? (
                       <PayPalButton
-                        planId={PAYPAL_CONFIG.planIds[slug]}
+                        planId={PLAN_IDS[slug]}
                         tierSlug={slug}
                         onSuccess={handleSubscriptionSuccess}
                         onError={(msg) => setError(msg)}
                       />
                     ) : (
                       <div className="space-y-2">
-                        <p className="text-xs text-white/30 text-center">PayPal not configured — use manual activation for testing:</p>
+                        <p className="text-xs text-white/30 text-center">PayPal not configured — test mode:</p>
                         <button
                           onClick={() => handleSubscriptionSuccess({ subscriptionId: `test_${Date.now()}`, tierSlug: slug })}
                           className="w-full py-2.5 rounded-lg text-sm font-medium transition"
@@ -421,10 +407,9 @@ export default function TierUpgradePage() {
         })}
       </div>
 
-      {/* Disclaimer */}
       <div className="px-6 mt-6">
         <p className="text-[11px] text-white/20 text-center leading-relaxed">
-          Subscriptions renew yearly via PayPal. Cancel anytime from your PayPal account.
+          Subscriptions renew yearly via PayPal. Cancel anytime using the button above.
           Feelz Machine is a distribution platform — we do not handle copyright claims.
           By subscribing you agree to our Terms of Use.
         </p>

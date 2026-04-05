@@ -7,6 +7,7 @@ import {
   Loader, Music, Flame, MessageCircle
 } from 'lucide-react';
 import PostComposer from '../components/PostComposer';
+import TierGate from '../components/TierGate';
 import PostCard from '../components/PostCard';
 import { usePullToRefresh } from '../hooks/usePullToRefresh';
 import PullToRefreshIndicator from '../components/PullToRefreshIndicator';
@@ -186,7 +187,11 @@ export default function FeedPage() {
       </div>
 
       {/* Post composer */}
-      {user && artist && <PostComposer onPostCreated={() => {}} />}
+      {user && artist && (
+        <TierGate feature="community_posting" inline>
+          <PostComposer onPostCreated={() => {}} />
+        </TierGate>
+      )}
       {user && !artist && (
         <div className="bg-white/[0.03] rounded-xl border border-white/[0.06] p-4 mb-4 text-center">
           <p className="text-sm text-white/40">Sign up as an artist to post in the community</p>
