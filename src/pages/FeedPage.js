@@ -188,7 +188,7 @@ export default function FeedPage() {
 
       {/* Post composer */}
       {user && artist && (
-        <TierGate feature="community_posting" inline>
+        <TierGate feature="community_post" inline>
           <PostComposer onPostCreated={() => {}} />
         </TierGate>
       )}
