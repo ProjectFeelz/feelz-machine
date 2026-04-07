@@ -103,7 +103,7 @@ export function PlayerProvider({ children }) {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const userId = session?.user?.id || null;
-      await supabase.from('streams').insert({
+      const { data: streamData, error: streamError } = await supabase.from('streams').insert({
         track_id: trackId,
         user_id: userId,
         duration_played: Math.floor(audioRef.current.currentTime),
@@ -111,6 +111,7 @@ export function PlayerProvider({ children }) {
         platform: 'web',
         device_type: /Mobi|Android/i.test(navigator.userAgent) ? 'mobile' : 'desktop',
       });
+      console.log('Stream insert result:', { streamData, streamError });
       const { data: track } = await supabase.from('tracks').select('stream_count, artist_id').eq('id', trackId).single();
       if (track) {
         await supabase.from('tracks').update({ stream_count: (track.stream_count || 0) + 1 }).eq('id', trackId);
