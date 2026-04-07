@@ -102,9 +102,10 @@ export function PlayerProvider({ children }) {
   const logStream = async (trackId) => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
+      const userId = session?.user?.id || null;
       await supabase.from('streams').insert({
         track_id: trackId,
-        user_id: session?.user?.id || null,
+        user_id: userId,
         duration_played: Math.floor(audioRef.current.currentTime),
         completed: true,
         platform: 'web',
