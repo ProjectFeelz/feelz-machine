@@ -50,6 +50,12 @@ export default function RecentlyPlayedPage() {
     if (user) fetchStreams();
   }, [user, filter]);
 
+  useEffect(() => {
+    const handleFocus = () => { if (user) fetchStreams(); };
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, [user, filter]);
+
   const fetchStreams = async () => {
     setLoading(true);
     try {

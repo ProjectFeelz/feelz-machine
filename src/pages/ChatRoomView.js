@@ -566,7 +566,7 @@ export default function ChatRoomView() {
               {replyingTo && (
                 <div className="flex items-center justify-between mb-2 px-3 py-1.5 bg-purple-500/10 rounded-lg">
                   <span className="text-[11px] text-purple-400">Replying to @{replyingTo.artist_name}</span>
-                  <button onClick={() => { setReplyingTo(null); setInput(''); }} className="text-white/30 hover:text-white/60 text-sm leading-none">Ã</button>
+                  <button onClick={() => { setReplyingTo(null); setInput(''); }} className="text-white/30 hover:text-white/60 text-sm leading-none">×</button>
                 </div>
               )}
               <div className="flex items-center space-x-2">
@@ -598,7 +598,7 @@ export default function ChatRoomView() {
                                                                             <p className="text-sm font-semibold text-white mb-1">Supporter Access Required</p>
                                                                                             <p className="text-xs text-white/40 mb-3">
                                                                                                               This is a subscriber-only room. Purchase at least <span className="text-white font-semibold">$5</span> of music
-                                                                                                                                from <span className="text-white">{room?.artists?.artist_name}</span> to join â a single, multiple singles, or an album all count.
+                                                                                                                                from <span className="text-white">{room?.artists?.artist_name}</span> to join — a single, multiple singles, or an album all count.
                                                                                                                                                 </p>
                                                                                                                                                                 <button
                                                                                                                                                                                   onClick={() => navigate(`/artist/${room?.artists?.slug}`)}
