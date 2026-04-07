@@ -23,6 +23,9 @@ export default function ShareCard({ track, artist, onClose }) {
   const title      = track?.title || artist?.artist_name || 'Feelz Machine';
   const subtitle   = track?.artist_name || (artist ? 'Artist Profile' : '');
   const artworkUrl = track?.cover_artwork_url || artist?.profile_image_url || null;
+  const displayUrl = shareUrl
+    ? shareUrl.replace('https://www.', '').replace('https://', '')
+    : 'feelzmachine.com';
 
   const draw = useCallback(async () => {
     const canvas = canvasRef.current;
@@ -96,7 +99,7 @@ export default function ShareCard({ track, artist, onClose }) {
     ctx.fillStyle = 'rgba(255,255,255,0.25)';
     ctx.font = '32px -apple-system, BlinkMacSystemFont, sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('feelzmachine.com', W / 2, H - 60);
+    ctx.fillText(displayUrl, W / 2, H - 60);
 
     // Small dot before and after
     ctx.fillStyle = 'rgba(139,92,246,0.7)';
@@ -134,7 +137,7 @@ export default function ShareCard({ track, artist, onClose }) {
             files: [file],
             title,
             text: `Listen to ${title}${subtitle ? ` by ${subtitle}` : ''} on Feelz Machine`,
-            url: window.location.href,
+            url: shareUrl || window.location.href,
           });
         } else {
           handleDownload();
