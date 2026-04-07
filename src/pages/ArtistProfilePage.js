@@ -1325,6 +1325,7 @@ export default function ArtistProfilePage() {
       {showShareCard && (
         <ShareCard
           artist={artist}
+          shareUrl={pageUrl}
           onClose={() => setShowShareCard(false)}
         />
       )}
