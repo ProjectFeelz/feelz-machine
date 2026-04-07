@@ -103,7 +103,6 @@ export function PlayerProvider({ children }) {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const userId = session?.user?.id || null;
-      // Skip logging if no valid session
       if (!userId) return;
       await supabase.from('streams').insert({
         track_id: trackId,
