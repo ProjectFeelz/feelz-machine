@@ -15,7 +15,7 @@ import { Download, Share2, X, Loader } from 'lucide-react';
  * Usage:
  *   <ShareCard track={currentTrack} onClose={() => setShowShare(false)} />
  */
-export default function ShareCard({ track, artist, onClose }) {
+export default function ShareCard({ track, artist, shareUrl, onClose }) {
   const canvasRef          = useRef(null);
   const [ready, setReady]  = useState(false);
   const [sharing, setSharing] = useState(false);
