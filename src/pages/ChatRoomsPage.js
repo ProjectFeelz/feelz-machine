@@ -343,7 +343,7 @@ export default function ChatRoomsPage() {
           </div>
           <p className="text-[11px] text-white/25 leading-relaxed">
             Chat rooms are created by artists on Pro or Premium plans.
-            Follow your favorite artists to join their rooms and connect with the community.
+            Follow your favorite artists to join — their rooms and connect with the community.
           </p>
         </div>
       )}
