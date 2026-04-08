@@ -118,8 +118,18 @@ export default function ArtistDashboard() {
       <div className="min-h-screen bg-black flex items-center justify-center px-6">
         <div className="text-center">
           <Music className="w-12 h-12 mx-auto text-white/20 mb-4" />
-          <h2 className="text-lg font-semibold text-white mb-2">No Artist Profile</h2>
-          <p className="text-sm text-white/40">You need an artist profile to access the dashboard.</p>
+          <h2 className="text-lg font-semibold text-white mb-2">Artist Dashboard</h2>
+          <p className="text-sm text-white/40 mb-6">This area is for artists. Browse music or check your library instead.</p>
+          <div className="flex flex-col space-y-3 items-center">
+            <button onClick={() => navigate('/')}
+              className="px-6 py-2.5 bg-white text-black rounded-xl text-sm font-semibold transition hover:bg-white/90">
+              Go Home
+            </button>
+            <button onClick={() => navigate('/library')}
+              className="px-6 py-2.5 bg-white/[0.06] text-white/60 rounded-xl text-sm transition hover:bg-white/[0.1]">
+              Your Library
+            </button>
+          </div>
         </div>
       </div>
     );
