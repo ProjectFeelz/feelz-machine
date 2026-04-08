@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, useMotionValue, useTransform, animate } from 'framer-motion';
 import {
   Play, Pause, SkipBack, SkipForward, ChevronDown,
   Shuffle, Repeat, Repeat1, Heart, Share2, ListMusic, Check,
-  Volume2, VolumeX, X, MoreHorizontal,
+  Volume2, VolumeX, X, MoreHorizontal, Music2,
 } from 'lucide-react';
 import { usePlayer } from '../../contexts/PlayerContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -20,6 +20,31 @@ function formatTime(secs) {
   return `${Math.floor(secs / 60)}:${Math.floor(secs % 60).toString().padStart(2, '0')}`;
 }
 
+// ── LRC timestamp parser ──────────────────────────────────────────────────────
+// Parses [mm:ss.xx] or [mm:ss] prefixed lines
+// Returns array of { time: seconds, text: string } or null if not LRC format
+function parseLRC(raw) {
+  if (!raw) return null;
+  const lines = raw.split('\n');
+  const parsed = [];
+  const LRC_RE = /^\[(\d{1,2}):(\d{2})(?:[.:](\d{1,3}))?\]\s*(.*)$/;
+  let matched = 0;
+  for (const line of lines) {
+    const m = line.match(LRC_RE);
+    if (m) {
+      matched++;
+      const mins = parseInt(m[1], 10);
+      const secs = parseInt(m[2], 10);
+      const ms   = m[3] ? parseInt(m[3].padEnd(3, '0'), 10) : 0;
+      const text = m[4].trim();
+      parsed.push({ time: mins * 60 + secs + ms / 1000, text });
+    }
+  }
+  // Only treat as LRC if at least 2 timestamped lines found
+  return matched >= 2 ? parsed.sort((a, b) => a.time - b.time) : null;
+}
+
+// ── Icon components ───────────────────────────────────────────────────────────
 const IconImage = () => (
   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
     <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/>
@@ -36,9 +61,150 @@ const IconVideo = () => (
     <polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
   </svg>
 );
+const IconLyrics = () => (
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
+  </svg>
+);
 
-const ALL_MODES = ['artwork', 'vinyl', 'video'];
+const ALL_MODES = ['artwork', 'vinyl', 'video', 'lyrics'];
 
+// ── Lyrics display component ──────────────────────────────────────────────────
+function LyricsDisplay({ lyrics, currentTime, duration, isPlaying }) {
+  const scrollRef      = useRef(null);
+  const userScrollRef  = useRef(false);
+  const resumeTimer    = useRef(null);
+  const lineRefs       = useRef([]);
+
+  const lrcLines = parseLRC(lyrics);
+  const isLRC    = !!lrcLines;
+
+  // Find active line index for LRC
+  const activeLine = isLRC
+    ? lrcLines.reduce((best, line, i) => {
+        return line.time <= currentTime ? i : best;
+      }, -1)
+    : -1;
+
+  // Auto-scroll to active line
+  useEffect(() => {
+    if (!isLRC || activeLine < 0 || userScrollRef.current) return;
+    const el = lineRefs.current[activeLine];
+    if (el && scrollRef.current) {
+      const container = scrollRef.current;
+      const elTop     = el.offsetTop;
+      const elHeight  = el.offsetHeight;
+      const target    = elTop - container.clientHeight / 2 + elHeight / 2;
+      container.scrollTo({ top: Math.max(0, target), behavior: 'smooth' });
+    }
+  }, [activeLine, isLRC]);
+
+  // Plain text position-based scroll
+  useEffect(() => {
+    if (isLRC || userScrollRef.current || !duration || !scrollRef.current) return;
+    const container = scrollRef.current;
+    const maxScroll  = container.scrollHeight - container.clientHeight;
+    if (maxScroll <= 0) return;
+    const target = (currentTime / duration) * maxScroll * 0.85;
+    container.scrollTo({ top: target, behavior: 'smooth' });
+  }, [Math.floor(currentTime / 3), isLRC, duration]); // only update every 3 seconds
+
+  const handleScroll = () => {
+    userScrollRef.current = true;
+    clearTimeout(resumeTimer.current);
+    resumeTimer.current = setTimeout(() => { userScrollRef.current = false; }, 3000);
+  };
+
+  // Reset on track change
+  useEffect(() => {
+    userScrollRef.current = false;
+    if (scrollRef.current) scrollRef.current.scrollTop = 0;
+  }, [lyrics]);
+
+  if (!lyrics) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center text-center px-8 space-y-3">
+        <div className="w-14 h-14 rounded-2xl bg-white/[0.05] flex items-center justify-center">
+          <Music2 className="w-6 h-6 text-white/20" />
+        </div>
+        <p className="text-sm text-white/30">No lyrics for this track</p>
+        <p className="text-xs text-white/15">Artists can add lyrics when uploading</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex-1 relative min-h-0">
+      {/* Top fade */}
+      <div className="absolute top-0 left-0 right-0 h-12 bg-gradient-to-b from-black to-transparent z-10 pointer-events-none" />
+
+      <div
+        ref={scrollRef}
+        onScroll={handleScroll}
+        className="h-full overflow-y-auto px-8 py-12 scrollbar-hide"
+        style={{ scrollBehavior: 'smooth' }}
+      >
+        {isLRC ? (
+          // LRC mode — line by line with highlight
+          <div className="space-y-5 pb-32">
+            {lrcLines.map((line, i) => {
+              const isActive  = i === activeLine;
+              const isPast    = i < activeLine;
+              const isEmpty   = !line.text.trim();
+              if (isEmpty) return <div key={i} className="h-4" />;
+              return (
+                <p
+                  key={i}
+                  ref={el => { lineRefs.current[i] = el; }}
+                  className="text-left leading-snug transition-all duration-300"
+                  style={{
+                    fontSize: isActive ? '1.35rem' : '1.1rem',
+                    fontWeight: isActive ? 700 : 400,
+                    color: isActive
+                      ? 'rgba(255,255,255,1)'
+                      : isPast
+                        ? 'rgba(255,255,255,0.25)'
+                        : 'rgba(255,255,255,0.45)',
+                    transform: isActive ? 'translateX(4px)' : 'translateX(0)',
+                  }}
+                >
+                  {line.text}
+                </p>
+              );
+            })}
+          </div>
+        ) : (
+          // Plain text mode
+          <div className="pb-32">
+            {lyrics.split('\n').map((line, i) => (
+              <p
+                key={i}
+                className="text-white/70 leading-relaxed mb-1"
+                style={{ fontSize: '1.05rem', minHeight: line.trim() ? undefined : '1rem' }}
+              >
+                {line.trim() || '\u00A0'}
+              </p>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Bottom fade */}
+      <div className="absolute bottom-0 left-0 right-0 h-20 bg-gradient-to-t from-black to-transparent pointer-events-none" />
+
+      {/* LRC badge */}
+      {isLRC && (
+        <div className="absolute top-3 right-4 z-20">
+          <span className="text-[9px] font-bold uppercase tracking-widest text-white/20 bg-white/[0.05] px-2 py-0.5 rounded-full border border-white/[0.08]">
+            Synced
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Main FullPlayer ───────────────────────────────────────────────────────────
 export default function FullPlayer() {
   const navigate = useNavigate();
   const {
@@ -57,15 +223,38 @@ export default function FullPlayer() {
   const [showActionSheet, setShowActionSheet] = useState(false);
   const [displayMode, setDisplayMode]         = useState('artwork');
   const [videoMuted, setVideoMuted]           = useState(true);
+  const [lyrics, setLyrics]                   = useState(null);
+  const [lyricsLoading, setLyricsLoading]     = useState(false);
 
   const y       = useMotionValue(window.innerHeight);
   const opacity = useTransform(y, [0, 300], [1, 0]);
 
-  const hasVideo       = !!currentTrack?.youtube_url;
-  const availableModes = hasVideo ? ALL_MODES : ALL_MODES.filter(m => m !== 'video');
+  const hasVideo   = !!currentTrack?.youtube_url;
+  const hasLyrics  = !!lyrics;
 
+  // Reset video mode if track has no video
   useEffect(() => {
     if (!hasVideo && displayMode === 'video') setDisplayMode('artwork');
+  }, [currentTrack?.id]);
+
+  // Fetch lyrics when track changes or lyrics mode is entered
+  useEffect(() => {
+    if (!currentTrack?.id) { setLyrics(null); return; }
+    // Fetch lyrics — only if the track object doesn't already have them
+    if (currentTrack.lyrics !== undefined) {
+      setLyrics(currentTrack.lyrics || null);
+      return;
+    }
+    setLyricsLoading(true);
+    supabase
+      .from('tracks')
+      .select('lyrics')
+      .eq('id', currentTrack.id)
+      .maybeSingle()
+      .then(({ data }) => {
+        setLyrics(data?.lyrics || null);
+        setLyricsLoading(false);
+      });
   }, [currentTrack?.id]);
 
   useEffect(() => {
@@ -117,6 +306,8 @@ export default function FullPlayer() {
   };
 
   const setMode = (m) => { tap(); setDisplayMode(m); };
+
+  const isLyricsMode = displayMode === 'lyrics';
 
   return (
     <>
@@ -187,204 +378,248 @@ export default function FullPlayer() {
 
         ) : (
           <>
-            {/* Main display area */}
-            <div className="flex-1 relative flex flex-col items-center justify-center px-8 min-h-0 overflow-hidden">
+            {/* ── Lyrics mode — full height scrollable ── */}
+            {isLyricsMode ? (
+              <LyricsDisplay
+                lyrics={lyrics}
+                currentTime={currentTime}
+                duration={duration}
+                isPlaying={isPlaying}
+              />
+            ) : (
+              /* ── Main display area (artwork / vinyl / video) ── */
+              <div className="flex-1 relative flex flex-col items-center justify-center px-8 min-h-0 overflow-hidden">
 
-              {/* Video layer */}
-              {displayMode === 'video' && hasVideo && (
-                <div className="absolute inset-0">
-                  <ReactPlayer
-                    url={currentTrack.youtube_url}
-                    playing={isPlaying}
-                    muted={videoMuted}
-                    loop
-                    width="100%"
-                    height="100%"
-                    style={{ position: 'absolute', top: 0, left: 0 }}
-                    config={{
-                      youtube: {
-                        playerVars: {
-                          controls: 0, modestbranding: 1, rel: 0,
-                          showinfo: 0, iv_load_policy: 3, playsinline: 1,
-                        },
-                      },
-                    }}
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/60" />
-                </div>
-              )}
-
-              {/* Artwork mode */}
-              {displayMode === 'artwork' && (
-                <div className="w-full max-w-[300px] aspect-square rounded-2xl overflow-hidden shadow-2xl shadow-black/60">
-                  {coverArt
-                    ? <img src={coverArt} alt={currentTrack.title} className="w-full h-full object-cover" loading="eager" />
-                    : <div className="w-full h-full bg-gradient-to-br from-white/10 to-white/5 flex items-center justify-center">
-                        <span className="text-6xl text-white/20">♪</span>
-                      </div>}
-                </div>
-              )}
-
-              {/* Vinyl mode */}
-              {displayMode === 'vinyl' && (
-                <VinylRecord
-                  coverUrl={coverArt}
-                  isPlaying={isPlaying}
-                  size={Math.min(300, window.innerWidth - 80)}
-                />
-              )}
-
-              {/* Video unavailable fallback */}
-              {displayMode === 'video' && !hasVideo && (
-                <div className="text-center space-y-2">
-                  <div className="w-14 h-14 rounded-2xl bg-white/[0.06] flex items-center justify-center mx-auto">
-                    <IconVideo />
-                  </div>
-                  <p className="text-sm text-white/30">No video for this track</p>
-                  <p className="text-xs text-white/15">Artists can add a YouTube URL when uploading</p>
-                </div>
-              )}
-
-              {/* Mode toggle */}
-              <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center bg-black/60 backdrop-blur-xl rounded-full border border-white/[0.08] overflow-hidden">
-                {[
-                  { key: 'artwork', Icon: IconImage, label: 'Art' },
-                  { key: 'vinyl',   Icon: IconVinyl, label: 'Vinyl' },
-                  { key: 'video',   Icon: IconVideo, label: 'Video' },
-                ].map(({ key, Icon, label }) => {
-                  const disabled = key === 'video' && !hasVideo;
-                  const active   = displayMode === key;
-                  return (
-                    <button key={key} onClick={() => !disabled && setMode(key)}
-                      className={`flex items-center space-x-1.5 px-4 py-2 text-[10px] font-semibold uppercase tracking-wider transition-all ${
-                        active
-                          ? 'bg-white text-black'
-                          : disabled
-                            ? 'text-white/15 cursor-default'
-                            : 'text-white/40 hover:text-white/70 active:bg-white/10'
-                      }`}>
-                      <Icon />
-                      <span>{label}</span>
-                    </button>
-                  );
-                })}
+                {/* Video layer */}
                 {displayMode === 'video' && hasVideo && (
-                  <>
-                    <div className="w-px h-5 bg-white/10 mx-0.5" />
-                    <button onClick={() => { tap(); setVideoMuted(m => !m); }}
-                      className="px-3 py-2 text-white/40 hover:text-white/70 transition">
-                      {videoMuted ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
-                    </button>
-                  </>
+                  <div className="absolute inset-0">
+                    <ReactPlayer
+                      url={currentTrack.youtube_url}
+                      playing={isPlaying}
+                      muted={videoMuted}
+                      loop
+                      width="100%"
+                      height="100%"
+                      style={{ position: 'absolute', top: 0, left: 0 }}
+                      config={{
+                        youtube: {
+                          playerVars: {
+                            controls: 0, modestbranding: 1, rel: 0,
+                            showinfo: 0, iv_load_policy: 3, playsinline: 1,
+                          },
+                        },
+                      }}
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/60" />
+                  </div>
                 )}
-              </div>
-            </div>
 
-            {/* Track info + controls */}
-            <div className="px-8 flex-shrink-0" style={{ paddingBottom: 'max(40px, calc(env(safe-area-inset-bottom) + 24px))' }}>
-              {/* Title + Like */}
-              <div className="flex items-center justify-between mb-5 mt-2">
-                <div className="min-w-0 flex-1">
-                  <h2 className="text-xl font-bold text-white truncate">{currentTrack.title}</h2>
-                  <button
-                    onClick={() => {
-                      tap();
-                      const slug = currentTrack.artist_slug || currentTrack.artists?.slug;
-                      if (slug) navigate(`/artist/${slug}`);
-                    }}
-                    className="text-base text-white/50 truncate hover:text-white/80 transition text-left">
-                    {currentTrack.artist_name || 'Unknown Artist'}
+                {/* Artwork mode */}
+                {displayMode === 'artwork' && (
+                  <div className="w-full max-w-[300px] aspect-square rounded-2xl overflow-hidden shadow-2xl shadow-black/60">
+                    {coverArt
+                      ? <img src={coverArt} alt={currentTrack.title} className="w-full h-full object-cover" loading="eager" />
+                      : <div className="w-full h-full bg-gradient-to-br from-white/10 to-white/5 flex items-center justify-center">
+                          <span className="text-6xl text-white/20">♪</span>
+                        </div>}
+                  </div>
+                )}
+
+                {/* Vinyl mode */}
+                {displayMode === 'vinyl' && (
+                  <VinylRecord
+                    coverUrl={coverArt}
+                    isPlaying={isPlaying}
+                    size={Math.min(300, window.innerWidth - 80)}
+                  />
+                )}
+
+                {/* Video unavailable fallback */}
+                {displayMode === 'video' && !hasVideo && (
+                  <div className="text-center space-y-2">
+                    <div className="w-14 h-14 rounded-2xl bg-white/[0.06] flex items-center justify-center mx-auto">
+                      <IconVideo />
+                    </div>
+                    <p className="text-sm text-white/30">No video for this track</p>
+                    <p className="text-xs text-white/15">Artists can add a YouTube URL when uploading</p>
+                  </div>
+                )}
+
+                {/* Mode toggle — only shown in non-lyrics modes */}
+                <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center bg-black/60 backdrop-blur-xl rounded-full border border-white/[0.08] overflow-hidden">
+                  {[
+                    { key: 'artwork', Icon: IconImage, label: 'Art' },
+                    { key: 'vinyl',   Icon: IconVinyl, label: 'Vinyl' },
+                    { key: 'video',   Icon: IconVideo, label: 'Video' },
+                    { key: 'lyrics',  Icon: IconLyrics, label: 'Lyrics' },
+                  ].map(({ key, Icon, label }) => {
+                    const disabled = key === 'video' && !hasVideo;
+                    const active   = displayMode === key;
+                    return (
+                      <button key={key} onClick={() => !disabled && setMode(key)}
+                        className={`flex items-center space-x-1.5 px-3.5 py-2 text-[10px] font-semibold uppercase tracking-wider transition-all ${
+                          active
+                            ? 'bg-white text-black'
+                            : disabled
+                              ? 'text-white/15 cursor-default'
+                              : 'text-white/40 hover:text-white/70 active:bg-white/10'
+                        }`}>
+                        <Icon />
+                        <span>{label}</span>
+                      </button>
+                    );
+                  })}
+                  {displayMode === 'video' && hasVideo && (
+                    <>
+                      <div className="w-px h-5 bg-white/10 mx-0.5" />
+                      <button onClick={() => { tap(); setVideoMuted(m => !m); }}
+                        className="px-3 py-2 text-white/40 hover:text-white/70 transition">
+                        {videoMuted ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* ── Track info + controls (shared between all modes) ── */}
+            <div className="flex-shrink-0" style={{ paddingBottom: 'max(40px, calc(env(safe-area-inset-bottom) + 24px))' }}>
+
+              {/* Mode toggle for lyrics mode — shown above track info */}
+              {isLyricsMode && (
+                <div className="flex justify-center mb-3 px-8">
+                  <div className="flex items-center bg-black/60 backdrop-blur-xl rounded-full border border-white/[0.08] overflow-hidden">
+                    {[
+                      { key: 'artwork', Icon: IconImage, label: 'Art' },
+                      { key: 'vinyl',   Icon: IconVinyl, label: 'Vinyl' },
+                      { key: 'video',   Icon: IconVideo, label: 'Video' },
+                      { key: 'lyrics',  Icon: IconLyrics, label: 'Lyrics' },
+                    ].map(({ key, Icon, label }) => {
+                      const disabled = key === 'video' && !hasVideo;
+                      const active   = displayMode === key;
+                      return (
+                        <button key={key} onClick={() => !disabled && setMode(key)}
+                          className={`flex items-center space-x-1.5 px-3.5 py-2 text-[10px] font-semibold uppercase tracking-wider transition-all ${
+                            active
+                              ? 'bg-white text-black'
+                              : disabled
+                                ? 'text-white/15 cursor-default'
+                                : 'text-white/40 hover:text-white/70 active:bg-white/10'
+                          }`}>
+                          <Icon />
+                          <span>{label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              <div className="px-8">
+                {/* Title + Like */}
+                <div className="flex items-center justify-between mb-5 mt-2">
+                  <div className="min-w-0 flex-1">
+                    <h2 className="text-xl font-bold text-white truncate">{currentTrack.title}</h2>
+                    <button
+                      onClick={() => {
+                        tap();
+                        const slug = currentTrack.artist_slug || currentTrack.artists?.slug;
+                        if (slug) navigate(`/artist/${slug}`);
+                      }}
+                      className="text-base text-white/50 truncate hover:text-white/80 transition text-left">
+                      {currentTrack.artist_name || 'Unknown Artist'}
+                    </button>
+                  </div>
+                  <button onClick={handleLike}
+                    className="ml-4 w-12 h-12 flex items-center justify-center active:scale-90 transition-transform">
+                    <Heart className="w-6 h-6 transition"
+                      fill={liked ? '#ef4444' : 'none'}
+                      color={liked ? '#ef4444' : 'rgba(255,255,255,0.5)'} />
                   </button>
                 </div>
-                <button onClick={handleLike}
-                  className="ml-4 w-12 h-12 flex items-center justify-center active:scale-90 transition-transform">
-                  <Heart className="w-6 h-6 transition"
-                    fill={liked ? '#ef4444' : 'none'}
-                    color={liked ? '#ef4444' : 'rgba(255,255,255,0.5)'} />
-                </button>
-              </div>
 
-              {/* Seeker */}
-              <div className="mb-2">
-                <div
-                  className="h-10 flex items-center cursor-pointer group -mx-2 px-2"
-                  onClick={handleSeek}
-                  onTouchStart={(e) => e.stopPropagation()}
-                  onTouchMove={(e) => { e.stopPropagation(); handleSeek(e); }}
-                  onTouchEnd={(e) => { e.stopPropagation(); handleSeek(e); }}
-                  style={{ touchAction: 'none' }}
-                >
-                  <div className="w-full h-1.5 bg-white/10 rounded-full">
-                    <div className="h-full bg-white rounded-full relative transition-none" style={{ width: `${progress}%` }}>
-                      <div className="absolute right-0 top-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-white shadow-lg scale-0 group-active:scale-100 transition-transform" />
+                {/* Seeker */}
+                <div className="mb-2">
+                  <div
+                    className="h-10 flex items-center cursor-pointer group -mx-2 px-2"
+                    onClick={handleSeek}
+                    onTouchStart={(e) => e.stopPropagation()}
+                    onTouchMove={(e) => { e.stopPropagation(); handleSeek(e); }}
+                    onTouchEnd={(e) => { e.stopPropagation(); handleSeek(e); }}
+                    style={{ touchAction: 'none' }}
+                  >
+                    <div className="w-full h-1.5 bg-white/10 rounded-full">
+                      <div className="h-full bg-white rounded-full relative transition-none" style={{ width: `${progress}%` }}>
+                        <div className="absolute right-0 top-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-white shadow-lg scale-0 group-active:scale-100 transition-transform" />
+                      </div>
                     </div>
                   </div>
+                  <div className="flex justify-between -mt-1">
+                    <span className="text-[11px] text-white/40 tabular-nums">{formatTime(currentTime)}</span>
+                    <span className="text-[11px] text-white/40 tabular-nums">{formatTime(duration)}</span>
+                  </div>
                 </div>
-                <div className="flex justify-between -mt-1">
-                  <span className="text-[11px] text-white/40 tabular-nums">{formatTime(currentTime)}</span>
-                  <span className="text-[11px] text-white/40 tabular-nums">{formatTime(duration)}</span>
+
+                {/* Playback controls */}
+                <div className="flex items-center justify-between mt-4">
+                  <button onClick={() => { tap(); toggleShuffle(); }}
+                    className={`w-12 h-12 flex items-center justify-center ${shuffle ? 'text-white' : 'text-white/30'}`}>
+                    <Shuffle className="w-5 h-5" />
+                  </button>
+                  <button onClick={() => { heavy(); playPrev(); }}
+                    className="w-14 h-14 flex items-center justify-center active:scale-95 transition-transform">
+                    <SkipBack className="w-7 h-7 text-white" fill="white" />
+                  </button>
+                  <button onClick={() => { heavy(); togglePlay(); }}
+                    className="w-16 h-16 flex items-center justify-center rounded-full bg-white active:scale-95 transition-transform shadow-lg">
+                    {isPlaying
+                      ? <Pause className="w-8 h-8 text-black" fill="black" />
+                      : <Play className="w-8 h-8 text-black ml-1" fill="black" />}
+                  </button>
+                  <button onClick={() => { heavy(); playNext(); }}
+                    className="w-14 h-14 flex items-center justify-center active:scale-95 transition-transform">
+                    <SkipForward className="w-7 h-7 text-white" fill="white" />
+                  </button>
+                  <button onClick={() => { tap(); toggleRepeat(); }}
+                    className={`w-12 h-12 flex items-center justify-center ${repeat !== 'none' ? 'text-white' : 'text-white/30'}`}>
+                    {repeat === 'one' ? <Repeat1 className="w-5 h-5" /> : <Repeat className="w-5 h-5" />}
+                  </button>
                 </div>
-              </div>
 
-              {/* Playback controls */}
-              <div className="flex items-center justify-between mt-4">
-                <button onClick={() => { tap(); toggleShuffle(); }}
-                  className={`w-12 h-12 flex items-center justify-center ${shuffle ? 'text-white' : 'text-white/30'}`}>
-                  <Shuffle className="w-5 h-5" />
-                </button>
-                <button onClick={() => { heavy(); playPrev(); }}
-                  className="w-14 h-14 flex items-center justify-center active:scale-95 transition-transform">
-                  <SkipBack className="w-7 h-7 text-white" fill="white" />
-                </button>
-                <button onClick={() => { heavy(); togglePlay(); }}
-                  className="w-16 h-16 flex items-center justify-center rounded-full bg-white active:scale-95 transition-transform shadow-lg">
-                  {isPlaying
-                    ? <Pause className="w-8 h-8 text-black" fill="black" />
-                    : <Play className="w-8 h-8 text-black ml-1" fill="black" />}
-                </button>
-                <button onClick={() => { heavy(); playNext(); }}
-                  className="w-14 h-14 flex items-center justify-center active:scale-95 transition-transform">
-                  <SkipForward className="w-7 h-7 text-white" fill="white" />
-                </button>
-                <button onClick={() => { tap(); toggleRepeat(); }}
-                  className={`w-12 h-12 flex items-center justify-center ${repeat !== 'none' ? 'text-white' : 'text-white/30'}`}>
-                  {repeat === 'one' ? <Repeat1 className="w-5 h-5" /> : <Repeat className="w-5 h-5" />}
-                </button>
-              </div>
+                {/* Volume — desktop only */}
+                <div className="hidden md:flex items-center space-x-3 mt-4 px-2">
+                  <button onClick={() => setVolumeLevel(volume > 0 ? 0 : 1)} className="text-white/40">
+                    {volume === 0 ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+                  </button>
+                  <input type="range" min="0" max="1" step="0.01" value={volume}
+                    onChange={(e) => setVolumeLevel(parseFloat(e.target.value))}
+                    className="flex-1 h-1 rounded-full appearance-none bg-white/10"
+                    style={{ accentColor: 'white' }} />
+                </div>
 
-              {/* Volume — desktop only */}
-              <div className="hidden md:flex items-center space-x-3 mt-4 px-2">
-                <button onClick={() => setVolumeLevel(volume > 0 ? 0 : 1)} className="text-white/40">
-                  {volume === 0 ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
-                </button>
-                <input type="range" min="0" max="1" step="0.01" value={volume}
-                  onChange={(e) => setVolumeLevel(parseFloat(e.target.value))}
-                  className="flex-1 h-1 rounded-full appearance-none bg-white/10"
-                  style={{ accentColor: 'white' }} />
-              </div>
+                {/* Share / More */}
+                <div className="flex items-center justify-center mt-5 space-x-8">
+                  <button
+                    onClick={() => { tap(); setShowShareCard(true); }}
+                    className="flex flex-col items-center space-y-1 text-white/40 hover:text-white/70 transition active:scale-95">
+                    <Share2 className="w-5 h-5" />
+                    <span className="text-[10px]">Share</span>
+                  </button>
+                  <button onClick={() => { tap(); setShowActionSheet(true); }}
+                    className="flex flex-col items-center space-y-1 text-white/40 hover:text-white/70 transition active:scale-95">
+                    <MoreHorizontal className="w-5 h-5" />
+                    <span className="text-[10px]">More</span>
+                  </button>
+                </div>
 
-              {/* Share / More */}
-              <div className="flex items-center justify-center mt-5 space-x-8">
-                <button
-                  onClick={() => { tap(); setShowShareCard(true); }}
-                  className="flex flex-col items-center space-y-1 text-white/40 hover:text-white/70 transition active:scale-95">
-                  <Share2 className="w-5 h-5" />
-                  <span className="text-[10px]">Share</span>
-                </button>
-                <button onClick={() => { tap(); setShowActionSheet(true); }}
-                  className="flex flex-col items-center space-y-1 text-white/40 hover:text-white/70 transition active:scale-95">
-                  <MoreHorizontal className="w-5 h-5" />
-                  <span className="text-[10px]">More</span>
-                </button>
+                {showActionSheet && (
+                  <TrackActionSheet
+                    track={currentTrack}
+                    artist={{ artist_name: currentTrack.artist_name, slug: currentTrack.artist_slug || currentTrack.artists?.slug }}
+                    onClose={() => setShowActionSheet(false)}
+                  />
+                )}
               </div>
-
-              {showActionSheet && (
-                <TrackActionSheet
-                  track={currentTrack}
-                  artist={{ artist_name: currentTrack.artist_name, slug: currentTrack.artist_slug || currentTrack.artists?.slug }}
-                  onClose={() => setShowActionSheet(false)}
-                />
-              )}
             </div>
           </>
         )}
