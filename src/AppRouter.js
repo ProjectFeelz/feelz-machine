@@ -3,6 +3,8 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-route
 import { HelmetProvider } from 'react-helmet-async';
 import { AuthProvider } from './contexts/AuthContext';
 import { PlayerProvider } from './contexts/PlayerContext';
+import { useSessionRefresh } from './useSessionRefresh';
+import { useActivityPing } from './useActivityPing';
 import AppLayout from './components/layout/AppLayout';
 import AboutPage from './pages/AboutPage';
 import HomePage from './pages/HomePage';
@@ -40,6 +42,13 @@ import { Helmet } from 'react-helmet-async';
 import TrackPage from './pages/TrackPage';
 import CollabRadarPage from './pages/CollabRadarPage';
 
+// ── Session keepalive — refreshes token + listens for activity ───────────────
+function SessionManager() {
+  useSessionRefresh();
+  useActivityPing();
+  return null;
+}
+
 // ── Wrapper to set page title for standalone pages outside AppLayout ─────────
 function ScrollToTop() {
   const { pathname } = useLocation();
@@ -63,6 +72,7 @@ export default function AppRouter() {
     <HelmetProvider>
       <BrowserRouter>
         <ScrollToTop />
+        <SessionManager />
         <AuthProvider>
           <PlayerProvider>
             <Routes>
