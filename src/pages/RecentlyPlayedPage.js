@@ -57,6 +57,7 @@ export default function RecentlyPlayedPage() {
   }, [user, filter]);
 
   const fetchStreams = async () => {
+    if (!user?.id) return;
     setLoading(true);
     try {
       let query = supabase
@@ -70,7 +71,7 @@ export default function RecentlyPlayedPage() {
         `)
         .eq('user_id', user.id)
         .order('created_at', { ascending: false })
-        .limit(100);
+        .limit(200);
 
       if (filter === 'today') {
         const start = new Date();
@@ -86,7 +87,7 @@ export default function RecentlyPlayedPage() {
       // Deduplicate — keep most recent play per track, but preserve all for stats
       const seen = new Set();
       const deduped = (data || []).filter(s => {
-        if (!s.track) return false;
+        if (!s.track?.id) return false;
         if (seen.has(s.track.id)) return false;
         seen.add(s.track.id);
         return true;
