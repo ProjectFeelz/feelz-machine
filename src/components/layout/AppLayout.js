@@ -10,7 +10,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { Bell } from 'lucide-react';
 import useNotifications from '../../contexts/useNotifications';
 import { OfflineBanner } from '../../hooks/useOffline';
-import ErrorBoundary from '../ErrorBoundary';
+import ErrorBoundary from './ErrorBoundary';
 import AppTour, { useTourState } from '../AppTour';
 
 const NAV_HEIGHT         = 64;
