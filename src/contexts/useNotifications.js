@@ -21,30 +21,11 @@ export async function createNotification({ artistId, type, title, message, fromA
   }
 }
 
-// Milestone thresholds
-const MILESTONES = [
-  { count: 100, type: 'milestone_100', label: '100 streams' },
-  { count: 500, type: 'milestone_500', label: '500 streams' },
-  { count: 1000, type: 'milestone_1k', label: '1K streams' },
-  { count: 10000, type: 'milestone_10k', label: '10K streams' },
-];
-
+// Milestone thresholds — NOTE: stream milestones are now handled by SQL triggers.
+// checkStreamMilestone is kept for backwards compatibility but is a no-op.
 export async function checkStreamMilestone(trackId, trackTitle, artistId, currentCount) {
-  for (const ms of MILESTONES) {
-    if (currentCount >= ms.count) {
-      // Check if this milestone notification already exists
-      // Milestones now handled by SQL triggers - skip client-side check
-      if (currentCount === ms.count) {
-        await createNotification({
-          artistId,
-          type: ms.type,
-          title: `${trackTitle} hit ${ms.label}!`,
-          message: `Your track just reached ${ms.label}. Keep it going!`,
-          trackId,
-        });
-      }
-    }
-  }
+  // No-op: milestone notifications are now inserted by the check_stream_milestones
+  // database trigger to prevent double-firing.
 }
 
 export default function useNotifications() {
