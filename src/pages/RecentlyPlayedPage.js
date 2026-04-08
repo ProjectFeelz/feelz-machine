@@ -93,6 +93,7 @@ export default function RecentlyPlayedPage() {
         return true;
       });
 
+      console.log('raw streams:', data?.length, 'deduped:', deduped.length);
       setStreams(deduped);
     } catch (err) {
       console.error('Recently played error:', err);
