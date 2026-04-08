@@ -10,6 +10,22 @@ import { usePullToRefresh } from '../hooks/usePullToRefresh';
 import PullToRefreshIndicator from '../components/PullToRefreshIndicator';
 import { HomeSkeleton } from '../components/SkeletonLoader';
 
+function getArtistLimit(totalArtists) {
+  if (totalArtists < 10) return 3;
+  if (totalArtists < 50) return 2;
+  return 1;
+}
+
+function limitPerArtist(items, totalArtists) {
+  const max = getArtistLimit(totalArtists);
+  const counts = {};
+  return items.filter(item => {
+    const key = item.artist_slug || item.artist_name || 'unknown';
+    counts[key] = (counts[key] || 0) + 1;
+    return counts[key] <= max;
+  });
+}
+
 function formatNumber(n) {
   if (!n) return '0';
   if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
@@ -177,9 +193,10 @@ export default function HomePage() {
         }))
         .sort((a, b) => b._boosted - a._boosted).slice(0, 8);
 
-      setFeaturedTracks(normTrack(featured));
-      setNewReleases(merged);
-      setTrending(trendingBoosted);
+      const artistCount = (artists || []).length;
+      setFeaturedTracks(limitPerArtist(normTrack(featured), artistCount));
+      setNewReleases(limitPerArtist(merged, artistCount));
+      setTrending(limitPerArtist(trendingBoosted, artistCount));
       setTopArtists(artists || []);
 
       if (user) {
@@ -210,11 +227,11 @@ export default function HomePage() {
         .order('created_at', { ascending: false })
         .limit(12);
 
-      setFollowedReleases((tracks || []).map(t => ({
+      setFollowedReleases(limitPerArtist((tracks || []).map(t => ({
         ...t,
         artist_name: t.artists?.artist_name || 'Unknown Artist',
         artist_slug: t.artists?.slug || null,
-      })));
+      })), topArtists.length));
     } catch (err) { console.error('Followed releases error:', err); }
   };
 
@@ -247,10 +264,10 @@ export default function HomePage() {
         .order('engagement_score', { ascending: false }).limit(10);
       if (listenedIds.length > 0) query = query.not('id', 'in', `(${listenedIds.join(',')})`);
       const { data: recData } = await query;
-      setRecommended((recData || []).map(t => ({
+      setRecommended(limitPerArtist((recData || []).map(t => ({
         ...t, artist_name: t.artists?.artist_name || 'Unknown Artist',
         artist_slug: t.artists?.slug || null,
-      })));
+      })), topArtists.length));
     } catch (err) { console.error('Recommendations error:', err); }
   };
 
