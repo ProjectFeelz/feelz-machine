@@ -127,9 +127,19 @@ export default function NotificationsPage() {
     const type = notif.type;
     const meta = notif.metadata || {};
 
-    // FIX: new_post and mention now deep-link to the specific post via ?post= param
     if (type === 'new_post' && meta.post_id) {
       navigate(`/feed?post=${meta.post_id}`);
+      return;
+    }
+    // New track notification for listeners — go to artist page or track
+    if (type === 'new_post' && !meta.post_id) {
+      if (notif.track_id) {
+        navigate(notif.from_artist_id
+          ? `/artist/${meta.artist_slug || ''}`
+          : '/browse');
+      } else {
+        navigate('/browse');
+      }
       return;
     }
     if (type === 'mention' && meta.post_id) {
@@ -171,21 +181,26 @@ export default function NotificationsPage() {
       return;
     }
 
-    // Download notification -> dashboard
+    // Download notification -> dashboard (artists) or library (listeners)
     if (type === 'download') {
-      navigate('/dashboard?tab=analytics');
+      navigate(artist ? '/dashboard?tab=analytics' : '/library');
       return;
     }
 
-    // Collab notifications -> dashboard
+    // Collab notifications -> dashboard (artists only)
     if (type?.startsWith('collab_')) {
-      navigate('/dashboard?tab=collabs');
+      navigate(artist ? '/dashboard?tab=collabs' : '/');
       return;
     }
 
-    // Milestone -> dashboard analytics
+    // Milestone -> dashboard (artists) or home (listeners)
     if (type?.startsWith('milestone_')) {
-      navigate('/dashboard?tab=analytics');
+      if (artist) {
+        navigate('/dashboard?tab=analytics');
+      } else {
+        // Listener milestone — just stay on notifications, nothing to navigate to
+        return;
+      }
       return;
     }
 
