@@ -41,7 +41,7 @@ export default function MobileNav() {
         {navItems.map(({ path, icon: Icon, label, tourKey }) => {
           const isActive  = location.pathname === path ||
             (path !== '/' && location.pathname.startsWith(path));
-          const showBadge = path === '/hub' && unreadCount > 0;
+          const showBadge = path === '/profile' && unreadCount > 0;
 
           return (
             <button
