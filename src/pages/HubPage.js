@@ -1,209 +1,874 @@
-import { Helmet } from 'react-helmet-async';
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext';
-import { useTier } from '../contexts/useTier';
-import CollabThread from '../components/CollabThread';
-import ProfileCompletionBanner from '../components/ProfileCompletionBanner';
+import { motion, useMotionValue, useTransform, animate } from 'framer-motion';
 import {
-  Shield, Users, BarChart3, AlertTriangle, Music,
-  Upload, HeartHandshake, Bell, Palette, MessageCircle,
-  ChevronRight, Crown, Zap, Star, Mic2, LayoutDashboard,
-  User, LogOut, DollarSign, Trophy, Brain, Megaphone, Radio,
+  Play, Pause, SkipBack, SkipForward, ChevronDown,
+  Shuffle, Repeat, Repeat1, Heart, Share2, ListMusic, Check,
+  Volume2, VolumeX, X, MoreHorizontal, Music2,
 } from 'lucide-react';
+import { usePlayer } from '../../contexts/PlayerContext';
+import { useAuth } from '../../contexts/AuthContext';
+import { supabase } from '../../supabaseClient';
+import TrackActionSheet from '../TrackActionSheet';
+import { useHaptics } from '../../hooks/useHaptics';
+import VinylRecord from '../VinylRecord';
+import ShareCard from '../ShareCard';
+import ReactPlayer from 'react-player';
 
-function LinkCard({ icon: Icon, label, description, path, color, onClick }) {
-  const navigate = useNavigate();
-  return (
-    <button
-      onClick={() => onClick ? onClick() : navigate(path)}
-      className="w-full flex items-center space-x-4 p-4 bg-white/[0.03] rounded-xl border border-white/[0.06] hover:bg-white/[0.06] active:bg-white/[0.08] transition text-left group"
-    >
-      <div className={`w-11 h-11 rounded-lg ${color} flex items-center justify-center flex-shrink-0`}>
-        <Icon className="w-5 h-5 text-white" />
-      </div>
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-white">{label}</p>
-        {description && <p className="text-[11px] text-white/30 mt-0.5">{description}</p>}
-      </div>
-      <ChevronRight className="w-4 h-4 text-white/15 group-hover:text-white/30 transition flex-shrink-0" />
-    </button>
-  );
+function formatTime(secs) {
+  if (!secs || isNaN(secs)) return '0:00';
+  return `${Math.floor(secs / 60)}:${Math.floor(secs % 60).toString().padStart(2, '0')}`;
 }
 
-function SectionHeader({ title, icon: Icon }) {
+// ── LRC timestamp parser ──────────────────────────────────────────────────────
+// Parses [mm:ss.xx] or [mm:ss] prefixed lines
+// Returns array of { time: seconds, text: string } or null if not LRC format
+function parseLRC(raw) {
+  if (!raw) return null;
+  const lines = raw.split('\n');
+  const parsed = [];
+  const LRC_RE = /^\[(\d{1,2}):(\d{2})(?:[.:](\d{1,3}))?\]\s*(.*)$/;
+  let matched = 0;
+  for (const line of lines) {
+    const m = line.match(LRC_RE);
+    if (m) {
+      matched++;
+      const mins = parseInt(m[1], 10);
+      const secs = parseInt(m[2], 10);
+      const ms   = m[3] ? parseInt(m[3].padEnd(3, '0'), 10) : 0;
+      const text = m[4].trim();
+      parsed.push({ time: mins * 60 + secs + ms / 1000, text });
+    }
+  }
+  // Only treat as LRC if at least 2 timestamped lines found
+  return matched >= 2 ? parsed.sort((a, b) => a.time - b.time) : null;
+}
+
+// ── Icon components ───────────────────────────────────────────────────────────
+const IconImage = () => (
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/>
+    <polyline points="21 15 16 10 5 21"/>
+  </svg>
+);
+const IconVinyl = () => (
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/>
+  </svg>
+);
+const IconVideo = () => (
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
+  </svg>
+);
+const IconLyrics = () => (
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
+  </svg>
+);
+const IconCassette = () => (
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <rect x="2" y="5" width="20" height="14" rx="2"/>
+    <circle cx="8" cy="12" r="2"/><circle cx="16" cy="12" r="2"/>
+    <path d="M8 14h8"/><path d="M6 19v-2"/><path d="M18 19v-2"/>
+  </svg>
+);
+
+const ALL_MODES = ['artwork', 'vinyl', 'cassette', 'video', 'lyrics'];
+
+
+// ── Cassette Tape Visualizer ──────────────────────────────────────────────────
+function CassetteVisualizer({ isPlaying, currentTime, duration, coverUrl }) {
+  const canvasRef = React.useRef(null);
+  const animRef   = React.useRef(null);
+  const angleRef  = React.useRef(0);
+  const tapeRef   = React.useRef(0);
+  const frameRef  = React.useRef(0);
+  const imgRef    = React.useRef(null);
+
+  React.useEffect(() => {
+    tapeRef.current = duration > 0 ? currentTime / duration : 0;
+  }, [currentTime, duration]);
+
+  React.useEffect(() => {
+    if (!coverUrl) { imgRef.current = null; return; }
+    const img = new window.Image();
+    img.crossOrigin = 'anonymous';
+    img.onload  = () => { imgRef.current = img; };
+    img.onerror = () => { imgRef.current = null; };
+    img.src = coverUrl;
+  }, [coverUrl]);
+
+  React.useEffect(() => {
+    const cv  = canvasRef.current;
+    if (!cv) return;
+    const ctx = cv.getContext('2d');
+    const W = 320, H = 206;
+
+    const BAR_N  = 28;
+    const phases = Array.from({ length: BAR_N }, () => Math.random() * Math.PI * 2);
+    const speeds = Array.from({ length: BAR_N }, () => 0.8 + Math.random() * 2);
+
+    function screw(x, y, r) {
+      ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fillStyle = '#2a2a2a'; ctx.fill();
+      ctx.strokeStyle = '#555'; ctx.lineWidth = 0.7; ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(x - r * 0.55, y); ctx.lineTo(x + r * 0.55, y);
+      ctx.moveTo(x, y - r * 0.55); ctx.lineTo(x, y + r * 0.55);
+      ctx.strokeStyle = '#666'; ctx.lineWidth = 0.6; ctx.stroke();
+    }
+
+    function reel(cx, cy, outerR, fillRatio, ang) {
+      ctx.beginPath(); ctx.arc(cx, cy, outerR, 0, Math.PI * 2);
+      ctx.fillStyle = '#1a1a1a'; ctx.fill();
+      ctx.strokeStyle = '#555'; ctx.lineWidth = 1; ctx.stroke();
+
+      const inner = 8;
+      const tapeR = inner + (outerR - inner) * Math.max(0.04, fillRatio);
+      ctx.beginPath(); ctx.arc(cx, cy, tapeR, 0, Math.PI * 2);
+      ctx.fillStyle = '#4a2e1a'; ctx.fill();
+      ctx.strokeStyle = '#5a3820'; ctx.lineWidth = 0.8; ctx.stroke();
+
+      ctx.beginPath(); ctx.arc(cx, cy, inner + 0.5, 0, Math.PI * 2);
+      ctx.fillStyle = '#d8d8d8'; ctx.fill();
+      ctx.strokeStyle = '#bbb'; ctx.lineWidth = 0.7; ctx.stroke();
+
+      for (let i = 0; i < 5; i++) {
+        const a = ang + (i * Math.PI * 2) / 5;
+        ctx.beginPath();
+        ctx.moveTo(cx + Math.cos(a) * 3, cy + Math.sin(a) * 3);
+        ctx.lineTo(cx + Math.cos(a) * (inner - 0.5), cy + Math.sin(a) * (inner - 0.5));
+        ctx.strokeStyle = '#888'; ctx.lineWidth = 1.2; ctx.stroke();
+      }
+      ctx.beginPath(); ctx.arc(cx, cy, 2.5, 0, Math.PI * 2);
+      ctx.fillStyle = '#333'; ctx.fill();
+    }
+
+    function render() {
+      ctx.clearRect(0, 0, W, H);
+
+      const BX = 20, BY = 18, BW = 280, BH = 146, BR = 10;
+      ctx.beginPath(); ctx.roundRect(BX, BY, BW, BH, BR);
+      ctx.fillStyle = '#1c1c1c'; ctx.fill();
+      ctx.strokeStyle = '#3a3a3a'; ctx.lineWidth = 1.2; ctx.stroke();
+
+      // label — album art if loaded, cream fallback otherwise
+      const LX = 46, LY = 27, LW = 228, LH = 86, LR = 5;
+      ctx.save();
+      ctx.beginPath(); ctx.roundRect(LX, LY, LW, LH, LR); ctx.clip();
+      if (imgRef.current) {
+        // object-fit: cover — scale to fill, centre
+        const img = imgRef.current;
+        const scale = Math.max(LW / img.width, LH / img.height);
+        const dw = img.width * scale, dh = img.height * scale;
+        ctx.drawImage(img, LX + (LW - dw) / 2, LY + (LH - dh) / 2, dw, dh);
+      } else {
+        // cream fallback with stripes
+        ctx.fillStyle = '#e8e0cc'; ctx.fillRect(LX, LY, LW, LH);
+        const stripes = ['#e63946','#f4a261','#e9c46a','#2a9d8f','#457b9d','#9b5de5'];
+        const sw = LW / 6;
+        stripes.forEach((c, i) => {
+          ctx.fillStyle = c;
+          ctx.fillRect(LX + i * sw, LY + LH - 16, sw + 0.5, 16);
+        });
+        ctx.fillStyle = '#1a1a1a'; ctx.textAlign = 'left';
+        ctx.font = 'bold 7px sans-serif'; ctx.fillText('SIDE B', LX + 7, LY + 12);
+        ctx.font = 'bold 9px sans-serif'; ctx.textAlign = 'right';
+        ctx.fillText('90', LX + LW - 7, LY + 12);
+      }
+      ctx.restore();
+
+      // gloss shine over label
+      ctx.save();
+      ctx.beginPath(); ctx.roundRect(LX, LY, LW, LH, LR); ctx.clip();
+      const shineG = ctx.createLinearGradient(LX, LY, LX, LY + LH * 0.5);
+      shineG.addColorStop(0,   'rgba(255,255,255,0.22)');
+      shineG.addColorStop(0.5, 'rgba(255,255,255,0.04)');
+      shineG.addColorStop(1,   'rgba(255,255,255,0)');
+      ctx.fillStyle = shineG; ctx.fillRect(LX, LY, LW, LH);
+      // top edge highlight
+      const edgeG = ctx.createLinearGradient(LX, LY, LX, LY + 4);
+      edgeG.addColorStop(0, 'rgba(255,255,255,0.45)');
+      edgeG.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = edgeG; ctx.fillRect(LX, LY, LW, 5);
+      ctx.restore();
+
+      // label border
+      ctx.beginPath(); ctx.roundRect(LX, LY, LW, LH, LR);
+      ctx.strokeStyle = 'rgba(0,0,0,0.5)'; ctx.lineWidth = 1; ctx.stroke();
+
+      // tape window — perfectly centred on body centre X=160
+      // Equal padding: 18px L/R, 10px T/B
+      // Guide line sits between reel edges (not stretched to window edges)
+      const WX = 90, WY = 40, WW = 140, WH = 60, WR = 6;
+      ctx.beginPath(); ctx.roundRect(WX, WY, WW, WH, WR);
+      ctx.fillStyle = '#0d0d0d'; ctx.fill();
+      ctx.strokeStyle = '#444'; ctx.lineWidth = 1; ctx.stroke();
+
+      const LCX = 128, RCX = 192, reelCY = 70;  // reelCY = WY + WH/2 = 40+30
+
+      // guide line strictly between reel edges, at reel centre height
+      const guideY = reelCY;
+      const guideX1 = LCX + 20;  // right edge of left reel
+      const guideX2 = RCX - 20;  // left edge of right reel
+
+      ctx.beginPath();
+      ctx.moveTo(guideX1, guideY - 1.5); ctx.lineTo(guideX2, guideY - 1.5);
+      ctx.strokeStyle = '#3d1f0a'; ctx.lineWidth = 4; ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(guideX1, guideY + 1.5); ctx.lineTo(guideX2, guideY + 1.5);
+      ctx.strokeStyle = '#5a2e0f'; ctx.lineWidth = 0.8; ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(guideX1, guideY - 2.5); ctx.lineTo(guideX2, guideY - 2.5);
+      ctx.strokeStyle = 'rgba(255,200,100,0.18)'; ctx.lineWidth = 1; ctx.stroke();
+
+      // guide posts at each end of the tape strip
+      [guideX1, guideX2].forEach(px => {
+        ctx.beginPath(); ctx.arc(px, guideY, 2.8, 0, Math.PI * 2);
+        ctx.fillStyle = '#555'; ctx.fill();
+        ctx.strokeStyle = '#777'; ctx.lineWidth = 0.6; ctx.stroke();
+      });
+
+      if (isPlaying) angleRef.current += 0.038;
+      reel(LCX, reelCY, 20, 1 - tapeRef.current, -angleRef.current);
+      reel(RCX, reelCY, 20,     tapeRef.current,   angleRef.current);
+
+      // bottom mechanics strip
+      ctx.beginPath(); ctx.roundRect(BX + 6, BY + BH - 36, BW - 12, 30, 4);
+      ctx.fillStyle = '#141414'; ctx.fill();
+      ctx.strokeStyle = '#333'; ctx.lineWidth = 0.8; ctx.stroke();
+
+      // notch holes
+      [BX + 26, BX + BW / 2 - 8, BX + BW - 26 - 16].forEach(hx => {
+        ctx.beginPath(); ctx.roundRect(hx, BY + BH - 30, 16, 18, 2);
+        ctx.fillStyle = '#0a0a0a'; ctx.fill();
+        ctx.strokeStyle = '#3a3a3a'; ctx.lineWidth = 0.7; ctx.stroke();
+      });
+
+      // corner screws
+      [[BX+12,BY+12],[BX+BW-12,BY+12],[BX+12,BY+BH-12],[BX+BW-12,BY+BH-12]]
+        .forEach(([sx,sy]) => screw(sx, sy, 5));
+
+      // side edge indents
+      [[BX,BY+40,6,40],[BX+BW-6,BY+40,6,40]].forEach(([rx,ry,rw,rh])=>{
+        ctx.beginPath(); ctx.roundRect(rx,ry,rw,rh,2);
+        ctx.fillStyle='#252525'; ctx.fill();
+        ctx.strokeStyle='#3a3a3a'; ctx.lineWidth=0.7; ctx.stroke();
+      });
+
+      // frequency bars
+      const barW = 4, gap = 2;
+      const totalBW = BAR_N * (barW + gap) - gap;
+      const bx0  = (W - totalBW) / 2;
+      const baseY = H - 8, maxBarH = 24;
+      phases.forEach((ph, i) => {
+        const h = isPlaying
+          ? (0.08 + 0.92 * Math.abs(Math.sin(frameRef.current * speeds[i] * 0.042 + ph))) * maxBarH
+          : 3;
+        const r = Math.min(255, 160 + i * 3);
+        const g = Math.min(255, 60  + i * 5);
+        const b = Math.min(255, 230 - i * 4);
+        ctx.fillStyle = `rgba(${r},${g},${b},0.85)`;
+        ctx.beginPath();
+        ctx.roundRect(bx0 + i * (barW + gap), baseY - h, barW, h, 1);
+        ctx.fill();
+      });
+
+      frameRef.current++;
+      animRef.current = requestAnimationFrame(render);
+    }
+
+    render();
+    return () => cancelAnimationFrame(animRef.current);
+  }, [isPlaying]);
+
   return (
-    <div className="flex items-center space-x-2 mb-3 px-1">
-      <Icon className="w-4 h-4 text-white/30" />
-      <h2 className="text-xs uppercase tracking-wider text-white/30 font-semibold">{title}</h2>
+    <div className="flex flex-col items-center justify-center w-full px-4">
+      <canvas
+        ref={canvasRef}
+        width={320}
+        height={206}
+        className="w-full max-w-[320px]"
+      />
     </div>
   );
 }
 
-function Section({ title, icon: Icon, children }) {
-  return (
-    <div className="mb-6">
-      <SectionHeader title={title} icon={Icon} />
-      <div className="space-y-2">{children}</div>
-    </div>
-  );
-}
 
-const ARTIST_TABS = [
-  { key: 'home',    label: 'Home' },
-  { key: 'collabs', label: 'Collabs' },
-];
+// ── Lyrics display component ──────────────────────────────────────────────────
+function LyricsDisplay({ lyrics, currentTime, duration, isPlaying }) {
+  const scrollRef      = useRef(null);
+  const userScrollRef  = useRef(false);
+  const resumeTimer    = useRef(null);
+  const lineRefs       = useRef([]);
 
-export default function HubPage() {
-  const navigate = useNavigate();
-  const { user, artist, isAdmin, isArtist, signOut } = useAuth();
-  const { tierSlug, tierLoading } = useTier();
-  const [activeTab, setActiveTab] = useState('home');
+  const lrcLines = parseLRC(lyrics);
+  const isLRC    = !!lrcLines;
 
-  const tierConfig = {
-    premium: { label: 'Premium', color: 'text-yellow-400', bg: 'bg-yellow-500/10', icon: Crown },
-    pro:     { label: 'Pro',     color: 'text-purple-400', bg: 'bg-purple-500/10', icon: Zap },
-    free:    { label: 'Free',    color: 'text-white/30',   bg: 'bg-white/[0.04]',  icon: Star },
+  // Find active line index for LRC
+  const activeLine = isLRC
+    ? lrcLines.reduce((best, line, i) => {
+        return line.time <= currentTime ? i : best;
+      }, -1)
+    : -1;
+
+  // Auto-scroll to active line
+  useEffect(() => {
+    if (!isLRC || activeLine < 0 || userScrollRef.current) return;
+    const el = lineRefs.current[activeLine];
+    if (el && scrollRef.current) {
+      const container = scrollRef.current;
+      const elTop     = el.offsetTop;
+      const elHeight  = el.offsetHeight;
+      const target    = elTop - container.clientHeight / 2 + elHeight / 2;
+      container.scrollTo({ top: Math.max(0, target), behavior: 'smooth' });
+    }
+  }, [activeLine, isLRC]);
+
+  // Plain text position-based scroll
+  useEffect(() => {
+    if (isLRC || userScrollRef.current || !duration || !scrollRef.current) return;
+    const container = scrollRef.current;
+    const maxScroll  = container.scrollHeight - container.clientHeight;
+    if (maxScroll <= 0) return;
+    const target = (currentTime / duration) * maxScroll * 0.85;
+    container.scrollTo({ top: target, behavior: 'smooth' });
+  }, [Math.floor(currentTime / 3), isLRC, duration]); // only update every 3 seconds
+
+  const handleScroll = () => {
+    userScrollRef.current = true;
+    clearTimeout(resumeTimer.current);
+    resumeTimer.current = setTimeout(() => { userScrollRef.current = false; }, 3000);
   };
-  const tier     = tierConfig[tierSlug] || tierConfig.free;
-  const TierIcon = tier.icon;
 
-  if (!user) {
+  // Reset on track change
+  useEffect(() => {
+    userScrollRef.current = false;
+    if (scrollRef.current) scrollRef.current.scrollTop = 0;
+  }, [lyrics]);
+
+  if (!lyrics) {
     return (
-      <div className="min-h-screen bg-black flex flex-col items-center justify-center px-6">
-        <User className="w-12 h-12 text-white/10 mb-4" />
-        <h2 className="text-lg font-semibold text-white mb-2">Sign in to continue</h2>
-        <p className="text-sm text-white/30 mb-4">Access your dashboard, library and more</p>
-        <button onClick={() => navigate('/login')}
-          className="px-6 py-2.5 bg-white text-black rounded-lg font-medium text-sm">
-          Sign In
-        </button>
+      <div className="flex-1 flex flex-col items-center justify-center text-center px-8 space-y-3">
+        <div className="w-14 h-14 rounded-2xl bg-white/[0.05] flex items-center justify-center">
+          <Music2 className="w-6 h-6 text-white/20" />
+        </div>
+        <p className="text-sm text-white/30">No lyrics for this track</p>
+        <p className="text-xs text-white/15">Artists can add lyrics when uploading</p>
       </div>
     );
   }
 
   return (
-    <div className="pt-14 md:pt-0 pb-32 px-4 md:px-0">
-      <Helmet>
-        <title>Hub · Feelz Machine</title>
-        <meta name="description" content="Your Feelz Machine control center — access your dashboard, library, community and settings." />
-        <link rel="canonical" href="https://www.feelzmachine.com/hub" />
-        <meta property="og:title" content="Hub · Feelz Machine" />
-        <meta property="og:url" content="https://www.feelzmachine.com/hub" />
-      </Helmet>
+    <div className="flex-1 relative min-h-0">
+      {/* Top fade */}
+      <div className="absolute top-0 left-0 right-0 h-12 bg-gradient-to-b from-black to-transparent z-10 pointer-events-none" />
 
-      {/* Header */}
-      <div className="mb-6 sticky top-0 z-20 bg-black/90 backdrop-blur-sm md:relative md:top-auto md:bg-transparent md:backdrop-blur-none pt-2 -mx-4 px-4">
-        <div className="flex items-center space-x-3 mb-1">
-          <LayoutDashboard className="w-6 h-6 text-white/60" />
-          <h1 className="text-2xl font-bold text-white">Hub</h1>
-        </div>
-        <p className="text-sm text-white/40 ml-9">Your control center</p>
-
-        {isArtist && (
-          <div className="flex space-x-1 mt-4 bg-white/[0.03] rounded-lg p-1">
-            {ARTIST_TABS.map(({ key, label }) => (
-              <button key={key} onClick={() => setActiveTab(key)}
-                className={`flex-1 py-2 rounded-md text-sm font-medium transition ${
-                  activeTab === key ? 'bg-white text-black' : 'text-white/40 hover:text-white/70'
-                }`}>
-                {label}
-              </button>
+      <div
+        ref={scrollRef}
+        onScroll={handleScroll}
+        className="h-full overflow-y-auto px-8 py-12 scrollbar-hide"
+        style={{ scrollBehavior: 'smooth' }}
+      >
+        {isLRC ? (
+          // LRC mode — line by line with highlight
+          <div className="space-y-5 pb-32">
+            {lrcLines.map((line, i) => {
+              const isActive  = i === activeLine;
+              const isPast    = i < activeLine;
+              const isEmpty   = !line.text.trim();
+              if (isEmpty) return <div key={i} className="h-4" />;
+              return (
+                <p
+                  key={i}
+                  ref={el => { lineRefs.current[i] = el; }}
+                  className="text-left leading-snug transition-all duration-300"
+                  style={{
+                    fontSize: isActive ? '1.35rem' : '1.1rem',
+                    fontWeight: isActive ? 700 : 400,
+                    color: isActive
+                      ? 'rgba(255,255,255,1)'
+                      : isPast
+                        ? 'rgba(255,255,255,0.25)'
+                        : 'rgba(255,255,255,0.45)',
+                    transform: isActive ? 'translateX(4px)' : 'translateX(0)',
+                  }}
+                >
+                  {line.text}
+                </p>
+              );
+            })}
+          </div>
+        ) : (
+          // Plain text mode
+          <div className="pb-32">
+            {lyrics.split('\n').map((line, i) => (
+              <p
+                key={i}
+                className="text-white/70 leading-relaxed mb-1"
+                style={{ fontSize: '1.05rem', minHeight: line.trim() ? undefined : '1rem' }}
+              >
+                {line.trim() || '\u00A0'}
+              </p>
             ))}
           </div>
         )}
       </div>
 
-      {/* Collabs tab */}
-      {isArtist && activeTab === 'collabs' && (
-        <div className="space-y-4">
-          <CollabThread />
+      {/* Bottom fade */}
+      <div className="absolute bottom-0 left-0 right-0 h-20 bg-gradient-to-t from-black to-transparent pointer-events-none" />
+
+      {/* LRC badge */}
+      {isLRC && (
+        <div className="absolute top-3 right-4 z-20">
+          <span className="text-[9px] font-bold uppercase tracking-widest text-white/20 bg-white/[0.05] px-2 py-0.5 rounded-full border border-white/[0.08]">
+            Synced
+          </span>
         </div>
       )}
+    </div>
+  );
+}
 
-      {/* Home tab */}
-      {(!isArtist || activeTab === 'home') && (
-        <>
-          {/* Profile completion banner — artists only */}
-          {/* Banner "Update profile" navigates to /profile (Profile tab) for artists */}
-          {isArtist && <ProfileCompletionBanner />}
+// ── Main FullPlayer ───────────────────────────────────────────────────────────
+export default function FullPlayer() {
+  const navigate = useNavigate();
+  const {
+    currentTrack, isPlaying, togglePlay,
+    playNext, playPrev, seek, duration, currentTime,
+    shuffle, repeat, toggleShuffle, toggleRepeat,
+    isMinimized, setIsMinimized, queue, volume, setVolumeLevel,
+    removeFromQueue,
+  } = usePlayer();
+  const { user } = useAuth();
+  const { tap, success, heavy } = useHaptics();
 
-          {/* Tier card */}
-          {isArtist && !tierLoading && (
-            <button
-              onClick={() => navigate('/upgrade')}
-              className={`w-full flex items-center justify-between p-4 rounded-xl border border-white/[0.06] ${tier.bg} mb-6 transition hover:brightness-110`}
-            >
-              <div className="flex items-center space-x-3">
-                <TierIcon className={`w-5 h-5 ${tier.color}`} />
-                <div className="text-left">
-                  <p className={`text-sm font-semibold ${tier.color}`}>{tier.label} Plan</p>
-                  <p className="text-[11px] text-white/30">
-                    {tierSlug === 'free' ? 'Upgrade to unlock more features' : 'Manage your subscription'}
-                  </p>
+  const [liked, setLiked]                     = useState(false);
+  const [showShareCard, setShowShareCard]      = useState(false);
+  const [showQueue, setShowQueue]             = useState(false);
+  const [showActionSheet, setShowActionSheet] = useState(false);
+  const [displayMode, setDisplayMode]         = useState('artwork');
+  const [videoMuted, setVideoMuted]           = useState(true);
+  const [lyrics, setLyrics]                   = useState(null);
+  const [lyricsLoading, setLyricsLoading]     = useState(false);
+
+  const y       = useMotionValue(window.innerHeight);
+  const opacity = useTransform(y, [0, 300], [1, 0]);
+
+  const hasVideo   = !!currentTrack?.youtube_url;
+  const hasLyrics  = !!lyrics;
+
+  // Reset video mode if track has no video
+  useEffect(() => {
+    if (!hasVideo && displayMode === 'video') setDisplayMode('artwork');
+  }, [currentTrack?.id]);
+
+  // Fetch lyrics when track changes or lyrics mode is entered
+  useEffect(() => {
+    if (!currentTrack?.id) { setLyrics(null); return; }
+    // Fetch lyrics — only if the track object doesn't already have them
+    if (currentTrack.lyrics !== undefined) {
+      setLyrics(currentTrack.lyrics || null);
+      return;
+    }
+    setLyricsLoading(true);
+    supabase
+      .from('tracks')
+      .select('lyrics')
+      .eq('id', currentTrack.id)
+      .maybeSingle()
+      .then(({ data }) => {
+        setLyrics(data?.lyrics || null);
+        setLyricsLoading(false);
+      });
+  }, [currentTrack?.id]);
+
+  useEffect(() => {
+    if (!currentTrack || !user) { setLiked(false); return; }
+    supabase.from('track_likes')
+      .select('id').eq('track_id', currentTrack.id).eq('user_id', user.id)
+      .maybeSingle().then(({ data }) => setLiked(!!data));
+  }, [currentTrack?.id, user?.id]);
+
+  useEffect(() => {
+    if (!isMinimized) animate(y, 0, { type: 'spring', damping: 30, stiffness: 300 });
+  }, [isMinimized]);
+
+  if (!currentTrack || isMinimized) return null;
+
+  const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
+  const coverArt = currentTrack.cover_artwork_url;
+
+  const handleSeek = (e) => {
+    const rect    = e.currentTarget.getBoundingClientRect();
+    const clientX = e.touches
+      ? (e.touches[0]?.clientX ?? e.changedTouches[0]?.clientX)
+      : e.clientX;
+    const pct = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
+    seek(pct * duration);
+    tap();
+  };
+
+  const handleLike = async () => {
+    if (!user) return;
+    success();
+    setLiked(prev => !prev);
+    if (liked) {
+      await supabase.from('track_likes').delete().eq('track_id', currentTrack.id).eq('user_id', user.id);
+    } else {
+      await supabase.from('track_likes').insert({ track_id: currentTrack.id, user_id: user.id });
+    }
+  };
+
+  const handleDragEnd = (_, info) => {
+    if (info.offset.y > 120 || info.velocity.y > 500) {
+      animate(y, window.innerHeight, { duration: 0.25 }).then(() => {
+        setIsMinimized(true);
+        animate(y, 0, { duration: 0 });
+      });
+    } else {
+      animate(y, 0, { type: 'spring', damping: 30, stiffness: 300 });
+    }
+  };
+
+  const setMode = (m) => { tap(); setDisplayMode(m); };
+
+  const isLyricsMode   = displayMode === 'lyrics';
+  const isCassetteMode = displayMode === 'cassette';
+
+  return (
+    <>
+      <motion.div
+        style={{ y, opacity }}
+        drag="y"
+        dragConstraints={{ top: 0, bottom: window.innerHeight }}
+        dragElastic={{ top: 0, bottom: 0.3 }}
+        onDragEnd={handleDragEnd}
+        initial={false}
+        animate={{ y: 0 }}
+        exit={{ y: '100%' }}
+        transition={{ type: 'tween', duration: 0.28, ease: [0.32, 0.72, 0, 1] }}
+        className="fixed inset-0 z-[100] bg-black flex flex-col"
+      >
+        {/* Drag handle */}
+        <div className="flex justify-center pt-3 pb-1 cursor-grab active:cursor-grabbing flex-shrink-0">
+          <div className="w-10 h-1 rounded-full bg-white/20" />
+        </div>
+
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 pt-4 pb-2 flex-shrink-0">
+          <button onClick={() => { tap(); setIsMinimized(true); }}
+            className="w-10 h-10 flex items-center justify-center">
+            <ChevronDown className="w-6 h-6 text-white" />
+          </button>
+          <p className="text-xs text-white/50 uppercase tracking-widest font-medium">Now Playing</p>
+          <button onClick={() => { tap(); setShowQueue(p => !p); }}
+            className="w-10 h-10 flex items-center justify-center">
+            <ListMusic className={`w-5 h-5 ${showQueue ? 'text-white' : 'text-white/50'}`} />
+          </button>
+        </div>
+
+        {/* Queue view */}
+        {showQueue ? (
+          <div className="flex-1 overflow-y-auto px-5 pb-10">
+            <p className="text-xs uppercase tracking-wider text-white/30 font-semibold mb-3">Up Next</p>
+            {(queue || []).length === 0 ? (
+              <p className="text-sm text-white/20 text-center py-12">No tracks in queue</p>
+            ) : (queue || []).map((track, i) => (
+              <div key={track.id}
+                className={`flex items-center space-x-3 py-3 border-b border-white/[0.04] ${track.id === currentTrack.id ? 'opacity-100' : 'opacity-50'}`}>
+                <div className="w-10 h-10 rounded-lg overflow-hidden bg-white/[0.06] flex-shrink-0">
+                  {track.cover_artwork_url
+                    ? <img src={track.cover_artwork_url} alt="" className="w-full h-full object-cover" loading="lazy" />
+                    : <div className="w-full h-full flex items-center justify-center text-white/20">♪</div>}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className={`text-sm font-medium truncate ${track.id === currentTrack.id ? 'text-white' : 'text-white/60'}`}>{track.title}</p>
+                  <p className="text-xs text-white/30 truncate">{track.artist_name}</p>
+                </div>
+                {track.id === currentTrack.id ? (
+                  <div className="flex items-end space-x-0.5 h-4 flex-shrink-0">
+                    {[100, 60, 80].map((h, i) => (
+                      <div key={i} className="w-0.5 bg-white rounded-full animate-pulse"
+                        style={{ height: `${h}%`, animationDelay: `${i * 0.15}s` }} />
+                    ))}
+                  </div>
+                ) : (
+                  <button onClick={() => { tap(); removeFromQueue(i); }}
+                    className="p-1.5 rounded-full hover:bg-white/10 flex-shrink-0">
+                    <X className="w-3.5 h-3.5 text-white/30" />
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+
+        ) : (
+          <>
+            {/* ── Lyrics mode — full height scrollable ── */}
+            {isLyricsMode ? (
+              <LyricsDisplay
+                lyrics={lyrics}
+                currentTime={currentTime}
+                duration={duration}
+                isPlaying={isPlaying}
+              />
+            ) : (
+              /* ── Main display area (artwork / vinyl / video) ── */
+              <div className="flex-1 relative flex flex-col items-center justify-center px-8 min-h-0 overflow-hidden">
+
+                {/* Video layer */}
+                {displayMode === 'video' && hasVideo && (
+                  <div className="absolute inset-0">
+                    <ReactPlayer
+                      url={currentTrack.youtube_url}
+                      playing={isPlaying}
+                      muted={videoMuted}
+                      loop
+                      width="100%"
+                      height="100%"
+                      style={{ position: 'absolute', top: 0, left: 0 }}
+                      config={{
+                        youtube: {
+                          playerVars: {
+                            controls: 0, modestbranding: 1, rel: 0,
+                            showinfo: 0, iv_load_policy: 3, playsinline: 1,
+                          },
+                        },
+                      }}
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/60" />
+                  </div>
+                )}
+
+                {/* Artwork mode */}
+                {displayMode === 'artwork' && (
+                  <div className="w-full max-w-[300px] aspect-square rounded-2xl overflow-hidden shadow-2xl shadow-black/60">
+                    {coverArt
+                      ? <img src={coverArt} alt={currentTrack.title} className="w-full h-full object-cover" loading="eager" />
+                      : <div className="w-full h-full bg-gradient-to-br from-white/10 to-white/5 flex items-center justify-center">
+                          <span className="text-6xl text-white/20">♪</span>
+                        </div>}
+                  </div>
+                )}
+
+                {/* Vinyl mode */}
+                {displayMode === 'vinyl' && (
+                  <VinylRecord
+                    coverUrl={coverArt}
+                    isPlaying={isPlaying}
+                    size={Math.min(300, window.innerWidth - 80)}
+                  />
+                )}
+
+                {/* Cassette mode */}
+                {displayMode === 'cassette' && (
+                  <CassetteVisualizer
+                    isPlaying={isPlaying}
+                    currentTime={currentTime}
+                    duration={duration}
+                    coverUrl={coverArt}
+                  />
+                )}
+
+                {/* Video unavailable fallback */}
+                {displayMode === 'video' && !hasVideo && (
+                  <div className="text-center space-y-2">
+                    <div className="w-14 h-14 rounded-2xl bg-white/[0.06] flex items-center justify-center mx-auto">
+                      <IconVideo />
+                    </div>
+                    <p className="text-sm text-white/30">No video for this track</p>
+                    <p className="text-xs text-white/15">Artists can add a YouTube URL when uploading</p>
+                  </div>
+                )}
+
+                {/* Mode toggle — only shown in non-lyrics modes */}
+                <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center bg-black/60 backdrop-blur-xl rounded-full border border-white/[0.08] overflow-hidden">
+                  {[
+                    { key: 'artwork',  Icon: IconImage,   label: 'Art'     },
+                    { key: 'vinyl',    Icon: IconVinyl,   label: 'Vinyl'   },
+                    { key: 'cassette', Icon: IconCassette, label: 'Tape'   },
+                    { key: 'video',    Icon: IconVideo,   label: 'Video'   },
+                    { key: 'lyrics',   Icon: IconLyrics,  label: 'Lyrics'  },
+                  ].map(({ key, Icon, label }) => {
+                    const disabled = key === 'video' && !hasVideo;
+                    const active   = displayMode === key;
+                    return (
+                      <button key={key} onClick={() => !disabled && setMode(key)}
+                        title={label}
+                        className={`w-9 h-8 flex items-center justify-center transition-all ${
+                          active
+                            ? 'bg-white text-black'
+                            : disabled
+                              ? 'text-white/15 cursor-default'
+                              : 'text-white/40 hover:text-white/70 active:bg-white/10'
+                        }`}>
+                        <Icon />
+                      </button>
+                    );
+                  })}
+                  {displayMode === 'video' && hasVideo && (
+                    <>
+                      <div className="w-px h-5 bg-white/10 mx-0.5" />
+                      <button onClick={() => { tap(); setVideoMuted(m => !m); }}
+                        className="px-3 py-2 text-white/40 hover:text-white/70 transition">
+                        {videoMuted ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
-              <ChevronRight className="w-4 h-4 text-white/20" />
-            </button>
-          )}
-
-          {/* Admin */}
-          {isAdmin && (
-            <Section title="Admin" icon={Shield}>
-              <LinkCard icon={Users}         label="User Management"     description="Manage artists, roles, and permissions"      path="/admin"              color="bg-yellow-500/20" />
-              <LinkCard icon={Mic2}          label="All Artists"         description="Browse and manage all artist profiles"        path="/admin/artists"      color="bg-purple-500/20" />
-              <LinkCard icon={BarChart3}     label="Platform Analytics"  description="Streams, signups, engagement metrics"         path="/admin/analytics"    color="bg-blue-500/20" />
-              <LinkCard icon={AlertTriangle} label="Content Moderation"  description="Flagged tracks, reports, and reviews"         path="/admin/moderation"   color="bg-red-500/20" />
-              <LinkCard icon={Megaphone}     label="Broadcast & APK"     description="Send updates to all users · Manage APK link"  path="/admin/broadcast"    color="bg-purple-500/20" />
-              <LinkCard icon={Zap}           label="Boost Manager"       description="Boost and feature artist content"             path="/admin/boost"        color="bg-amber-500/20" />
-              <LinkCard icon={BarChart3}     label="User Behavior"       description="Streams, downloads, logins, activity export"  path="/admin/behavior"     color="bg-cyan-500/20" />
-              <LinkCard icon={Trophy}       label="Competitions"       description="Create and manage artist competitions"          path="/admin/competitions" color="bg-yellow-500/20" />
-              <LinkCard icon={Brain}        label="Engagement Drip"    description="AI messaging · segment settings · send stats"   path="/admin/engagement"   color="bg-violet-500/20" />
-            </Section>
-          )}
-
-          {/* Listener */}
-          {!isArtist && (
-            <Section title="Discover" icon={Music}>
-              <LinkCard icon={Music}         label="Browse Music"     description="Find new tracks and artists"   path="/browse"             color="bg-purple-500/20" />
-              <LinkCard icon={Mic2}          label="Discover Artists" description="Find and follow new artists"   path="/browse?tab=artists" color="bg-indigo-500/20" />
-              <LinkCard icon={Users}         label="Following"        description="Artists you follow"            path="/library/following"  color="bg-cyan-500/20" />
-              <LinkCard icon={MessageCircle} label="Community"        description="Feed and chat rooms"           path="/community"          color="bg-teal-500/20" />
-              <LinkCard icon={Star}          label="Liked Songs"      description="Your saved tracks"             path="/library/likes"      color="bg-pink-500/20" />
-            </Section>
-          )}
-
-          {/* Artist Tools */}
-          {isArtist && (
-            <Section title="Artist Tools" icon={Music}>
-              <LinkCard icon={Upload}         label="Upload Track"    description="Upload and publish new music"           path="/dashboard?tab=upload"    color="bg-green-500/20" />
-              <LinkCard icon={Radio}          label="Collab Radar"    description="Find artists who vibe with your sound"  onClick={() => navigate('/collab-radar')} color="bg-purple-500/20" />
-              <LinkCard icon={HeartHandshake} label="Collaborations"  description="Manage collab requests and credits"     onClick={() => setActiveTab('collabs')}   color="bg-cyan-500/20" />
-              <LinkCard icon={BarChart3}      label="Analytics"       description="Track performance and stream data"      path="/dashboard?tab=analytics" color="bg-indigo-500/20" />
-              <LinkCard icon={MessageCircle}  label="Chat Rooms"      description="Community conversations"                path="/chat"                    color="bg-violet-500/20" />
-              <LinkCard icon={Users}          label="Community Feed"  description="Posts, updates and activity"            path="/community"               color="bg-teal-500/20" />
-            </Section>
-          )}
-
-          {/* Account */}
-          <Section title="Account" icon={User}>
-            <LinkCard icon={Palette}    label="Profile & Appearance" description="Edit bio, socials, and theme"     path="/profile"       color="bg-pink-500/20" />
-            <LinkCard icon={Bell}       label="Notifications"         description="Collabs, followers, milestones"   path="/notifications"  color="bg-orange-500/20" />
-            {isArtist && (
-              <LinkCard icon={DollarSign} label="Payments" description="PayPal settings and earnings" path="/profile" color="bg-emerald-500/20" />
             )}
-          </Section>
 
-          {/* Sign out */}
-          <button
-            onClick={async () => { await signOut(); navigate('/'); }}
-            className="w-full flex items-center justify-center space-x-2 py-3 rounded-xl bg-red-500/10 text-red-400 text-sm font-medium hover:bg-red-500/15 transition mt-2"
-          >
-            <LogOut className="w-4 h-4" />
-            <span>Sign Out</span>
-          </button>
-        </>
+            {/* ── Track info + controls (shared between all modes) ── */}
+            <div className="flex-shrink-0" style={{ paddingBottom: 'max(40px, calc(env(safe-area-inset-bottom) + 24px))' }}>
+
+              {/* Mode toggle for lyrics mode — shown above track info */}
+              {isLyricsMode && (
+                <div className="flex justify-center mb-3 px-8">
+                  <div className="flex items-center bg-black/60 backdrop-blur-xl rounded-full border border-white/[0.08] overflow-hidden">
+                    {[
+                      { key: 'artwork',  Icon: IconImage,    label: 'Art'   },
+                      { key: 'vinyl',    Icon: IconVinyl,    label: 'Vinyl' },
+                      { key: 'cassette', Icon: IconCassette, label: 'Tape'  },
+                      { key: 'video',    Icon: IconVideo,    label: 'Video' },
+                      { key: 'lyrics',   Icon: IconLyrics,   label: 'Lyrics'},
+                    ].map(({ key, Icon, label }) => {
+                      const disabled = key === 'video' && !hasVideo;
+                      const active   = displayMode === key;
+                      return (
+                        <button key={key} onClick={() => !disabled && setMode(key)}
+                          title={label}
+                          className={`w-9 h-8 flex items-center justify-center transition-all ${
+                            active
+                              ? 'bg-white text-black'
+                              : disabled
+                                ? 'text-white/15 cursor-default'
+                                : 'text-white/40 hover:text-white/70 active:bg-white/10'
+                          }`}>
+                          <Icon />
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              <div className="px-8">
+                {/* Title + Like */}
+                <div className="flex items-center justify-between mb-5 mt-2">
+                  <div className="min-w-0 flex-1">
+                    <h2 className="text-xl font-bold text-white truncate">{currentTrack.title}</h2>
+                    <button
+                      onClick={() => {
+                        tap();
+                        const slug = currentTrack.artist_slug || currentTrack.artists?.slug;
+                        if (slug) navigate(`/artist/${slug}`);
+                      }}
+                      className="text-base text-white/50 truncate hover:text-white/80 transition text-left">
+                      {currentTrack.artist_name || 'Unknown Artist'}
+                    </button>
+                  </div>
+                  <button onClick={handleLike}
+                    className="ml-4 w-12 h-12 flex items-center justify-center active:scale-90 transition-transform">
+                    <Heart className="w-6 h-6 transition"
+                      fill={liked ? '#ef4444' : 'none'}
+                      color={liked ? '#ef4444' : 'rgba(255,255,255,0.5)'} />
+                  </button>
+                </div>
+
+                {/* Seeker */}
+                <div className="mb-2">
+                  <div
+                    className="h-10 flex items-center cursor-pointer group -mx-2 px-2"
+                    onClick={handleSeek}
+                    onTouchStart={(e) => e.stopPropagation()}
+                    onTouchMove={(e) => { e.stopPropagation(); handleSeek(e); }}
+                    onTouchEnd={(e) => { e.stopPropagation(); handleSeek(e); }}
+                    style={{ touchAction: 'none' }}
+                  >
+                    <div className="w-full h-1.5 bg-white/10 rounded-full">
+                      <div className="h-full bg-white rounded-full relative transition-none" style={{ width: `${progress}%` }}>
+                        <div className="absolute right-0 top-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-white shadow-lg scale-0 group-active:scale-100 transition-transform" />
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex justify-between -mt-1">
+                    <span className="text-[11px] text-white/40 tabular-nums">{formatTime(currentTime)}</span>
+                    <span className="text-[11px] text-white/40 tabular-nums">{formatTime(duration)}</span>
+                  </div>
+                </div>
+
+                {/* Playback controls */}
+                <div className="flex items-center justify-between mt-4">
+                  <button onClick={() => { tap(); toggleShuffle(); }}
+                    className={`w-12 h-12 flex items-center justify-center ${shuffle ? 'text-white' : 'text-white/30'}`}>
+                    <Shuffle className="w-5 h-5" />
+                  </button>
+                  <button onClick={() => { heavy(); playPrev(); }}
+                    className="w-14 h-14 flex items-center justify-center active:scale-95 transition-transform">
+                    <SkipBack className="w-7 h-7 text-white" fill="white" />
+                  </button>
+                  <button onClick={() => { heavy(); togglePlay(); }}
+                    className="w-16 h-16 flex items-center justify-center rounded-full bg-white active:scale-95 transition-transform shadow-lg">
+                    {isPlaying
+                      ? <Pause className="w-8 h-8 text-black" fill="black" />
+                      : <Play className="w-8 h-8 text-black ml-1" fill="black" />}
+                  </button>
+                  <button onClick={() => { heavy(); playNext(); }}
+                    className="w-14 h-14 flex items-center justify-center active:scale-95 transition-transform">
+                    <SkipForward className="w-7 h-7 text-white" fill="white" />
+                  </button>
+                  <button onClick={() => { tap(); toggleRepeat(); }}
+                    className={`w-12 h-12 flex items-center justify-center ${repeat !== 'none' ? 'text-white' : 'text-white/30'}`}>
+                    {repeat === 'one' ? <Repeat1 className="w-5 h-5" /> : <Repeat className="w-5 h-5" />}
+                  </button>
+                </div>
+
+                {/* Volume — desktop only */}
+                <div className="hidden md:flex items-center space-x-3 mt-4 px-2">
+                  <button onClick={() => setVolumeLevel(volume > 0 ? 0 : 1)} className="text-white/40">
+                    {volume === 0 ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+                  </button>
+                  <input type="range" min="0" max="1" step="0.01" value={volume}
+                    onChange={(e) => setVolumeLevel(parseFloat(e.target.value))}
+                    className="flex-1 h-1 rounded-full appearance-none bg-white/10"
+                    style={{ accentColor: 'white' }} />
+                </div>
+
+                {/* Share / More */}
+                <div className="flex items-center justify-center mt-5 space-x-8">
+                  <button
+                    onClick={() => { tap(); setShowShareCard(true); }}
+                    className="flex flex-col items-center space-y-1 text-white/40 hover:text-white/70 transition active:scale-95">
+                    <Share2 className="w-5 h-5" />
+                    <span className="text-[10px]">Share</span>
+                  </button>
+                  <button onClick={() => { tap(); setShowActionSheet(true); }}
+                    className="flex flex-col items-center space-y-1 text-white/40 hover:text-white/70 transition active:scale-95">
+                    <MoreHorizontal className="w-5 h-5" />
+                    <span className="text-[10px]">More</span>
+                  </button>
+                </div>
+
+                {showActionSheet && (
+                  <TrackActionSheet
+                    track={currentTrack}
+                    artist={{ artist_name: currentTrack.artist_name, slug: currentTrack.artist_slug || currentTrack.artists?.slug }}
+                    onClose={() => setShowActionSheet(false)}
+                  />
+                )}
+              </div>
+            </div>
+          </>
+        )}
+      </motion.div>
+
+      {/* ShareCard — rendered outside the player motion div to avoid z-index conflicts */}
+      {showShareCard && (
+        <ShareCard track={currentTrack} onClose={() => setShowShareCard(false)} />
       )}
-    </div>
+    </>
   );
 }
