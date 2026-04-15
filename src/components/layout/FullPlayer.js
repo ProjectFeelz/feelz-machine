@@ -272,7 +272,7 @@ function CassetteVisualizer({ isPlaying, currentTime, duration, coverUrl }) {
       });
 
       if (isPlaying) angleRef.current += 0.038;
-      reel(LCX, reelCY, 20, 1 - tapeRef.current, -angleRef.current);
+      reel(LCX, reelCY, 20, 1 - tapeRef.current, angleRef.current);
       reel(RCX, reelCY, 20,     tapeRef.current,   angleRef.current);
 
       // bottom mechanics strip
