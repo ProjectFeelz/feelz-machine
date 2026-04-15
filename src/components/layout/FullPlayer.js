@@ -266,8 +266,8 @@ function CassetteVisualizer({ isPlaying, currentTime, duration, coverUrl }) {
 
       // reels drawn larger so edges bleed past window bounds — only visible portion shows through
       if (isPlaying) angleRef.current += 0.038;
-      reel(LCX, reelCY, 26, 1 - tapeRef.current, -angleRef.current);
-      reel(RCX, reelCY, 26,     tapeRef.current,   angleRef.current);
+      reel(LCX, reelCY, 34, 1 - tapeRef.current, -angleRef.current);
+      reel(RCX, reelCY, 34,     tapeRef.current,   angleRef.current);
 
       ctx.restore();
 
@@ -282,11 +282,28 @@ function CassetteVisualizer({ isPlaying, currentTime, duration, coverUrl }) {
       depthShade.addColorStop(0, 'rgba(0,0,0,0.75)');
       depthShade.addColorStop(1, 'rgba(0,0,0,0)');
       ctx.fillStyle = depthShade; ctx.fillRect(WX, WY, WW, WH);
-      const glare = ctx.createLinearGradient(WX, WY, WX + WW * 0.6, WY + WH * 0.5);
-      glare.addColorStop(0,   'rgba(255,255,255,0.07)');
-      glare.addColorStop(0.4, 'rgba(255,255,255,0.02)');
+      // strong top-edge specular line
+      const specular = ctx.createLinearGradient(WX, WY, WX, WY + 4);
+      specular.addColorStop(0, 'rgba(255,255,255,0.55)');
+      specular.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = specular; ctx.fillRect(WX, WY, WW, 4);
+
+      // broad gloss sweep across top half
+      const glare = ctx.createLinearGradient(WX, WY, WX, WY + WH * 0.6);
+      glare.addColorStop(0,   'rgba(255,255,255,0.28)');
+      glare.addColorStop(0.4, 'rgba(255,255,255,0.08)');
       glare.addColorStop(1,   'rgba(255,255,255,0)');
       ctx.fillStyle = glare; ctx.fillRect(WX, WY, WW, WH);
+
+      // diagonal glare streak for that curved-plastic look
+      ctx.save();
+      ctx.globalAlpha = 0.12;
+      const streak = ctx.createLinearGradient(WX, WY, WX + WW * 0.4, WY + WH);
+      streak.addColorStop(0,   'rgba(255,255,255,0.9)');
+      streak.addColorStop(0.3, 'rgba(255,255,255,0.3)');
+      streak.addColorStop(1,   'rgba(255,255,255,0)');
+      ctx.fillStyle = streak; ctx.fillRect(WX, WY, WW, WH);
+      ctx.restore();
       ctx.restore();
 
       // bottom mechanics strip
