@@ -15,7 +15,9 @@ export function useActivityPing() {
     await supabase.auth.getSession();
 
     // Update last_seen_at via DB function (updates both artists + listeners)
-    await supabase.rpc('update_last_seen', { p_user_id: session.user.id }).catch(() => {});
+    try {
+      await supabase.rpc('update_last_seen', { p_user_id: session.user.id });
+    } catch (_) {}
   }, []);
 
   useEffect(() => {
