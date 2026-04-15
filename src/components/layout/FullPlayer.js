@@ -146,15 +146,47 @@ function CassetteVisualizer({ isPlaying, currentTime, duration, coverUrl }) {
       ctx.beginPath(); ctx.arc(cx, cy, outerR, 0, Math.PI * 2);
       ctx.strokeStyle = 'rgba(0,0,0,0.8)'; ctx.lineWidth = 1.5; ctx.stroke();
 
-      // ── tape spool with gradient depth ──
+      // ── tape spool with gradient depth + texture ──
       const inner = 10;
       const tapeR = inner + (outerR - inner) * Math.max(0.05, fillRatio);
+
+      // base radial gradient
       const tapeG = ctx.createRadialGradient(cx - 3, cy - 3, 1, cx, cy, tapeR);
       tapeG.addColorStop(0,   '#6b3f1f');
       tapeG.addColorStop(0.5, '#4a2e1a');
       tapeG.addColorStop(1,   '#2a1608');
       ctx.beginPath(); ctx.arc(cx, cy, tapeR, 0, Math.PI * 2);
       ctx.fillStyle = tapeG; ctx.fill();
+
+      // concentric ring texture — real tape has layered wind lines
+      ctx.save();
+      ctx.beginPath(); ctx.arc(cx, cy, tapeR, 0, Math.PI * 2); ctx.clip();
+      const ringCount = Math.floor((tapeR - inner) / 2.2);
+      for (let r = 0; r < ringCount; r++) {
+        const rr = inner + r * 2.2;
+        ctx.beginPath(); ctx.arc(cx, cy, rr, 0, Math.PI * 2);
+        const alpha = 0.06 + (r % 3 === 0 ? 0.08 : 0);
+        ctx.strokeStyle = `rgba(0,0,0,${alpha})`;
+        ctx.lineWidth = 0.7; ctx.stroke();
+      }
+      // subtle radial grain lines
+      for (let i = 0; i < 18; i++) {
+        const a = (i / 18) * Math.PI * 2;
+        ctx.beginPath();
+        ctx.moveTo(cx + Math.cos(a) * inner, cy + Math.sin(a) * inner);
+        ctx.lineTo(cx + Math.cos(a) * tapeR,  cy + Math.sin(a) * tapeR);
+        ctx.strokeStyle = 'rgba(0,0,0,0.07)';
+        ctx.lineWidth = 0.5; ctx.stroke();
+      }
+      // edge wear highlight
+      const edgeG = ctx.createRadialGradient(cx, cy, tapeR - 2, cx, cy, tapeR);
+      edgeG.addColorStop(0, 'rgba(255,255,255,0)');
+      edgeG.addColorStop(1, 'rgba(255,255,255,0.12)');
+      ctx.beginPath(); ctx.arc(cx, cy, tapeR, 0, Math.PI * 2);
+      ctx.fillStyle = edgeG; ctx.fill();
+      ctx.restore();
+
+      ctx.beginPath(); ctx.arc(cx, cy, tapeR, 0, Math.PI * 2);
       ctx.strokeStyle = '#5a3820'; ctx.lineWidth = 0.8; ctx.stroke();
 
       // ── spokes with lit/shadow sides ──
@@ -295,7 +327,7 @@ function CassetteVisualizer({ isPlaying, currentTime, duration, coverUrl }) {
       ctx.fillStyle = winShade; ctx.fillRect(WX, WY, WW, WH);
       ctx.restore();
 
-      const LCX = 127, RCX = 193, reelCY = 81;
+      const LCX = 118, RCX = 202, reelCY = 81;
       const guideY = reelCY + 18;
 
       // ── Everything inside the tape window is clipped ──
@@ -777,6 +809,7 @@ export default function FullPlayer() {
                 {displayMode === 'video' && hasVideo && (
                   <div className="absolute inset-0">
                     <ReactPlayer
+                      key={currentTrack.youtube_url}
                       url={currentTrack.youtube_url}
                       playing={isPlaying}
                       muted={videoMuted}
