@@ -78,16 +78,26 @@ const ALL_MODES = ['artwork', 'vinyl', 'cassette', 'video', 'lyrics'];
 
 
 // ── Cassette Tape Visualizer ──────────────────────────────────────────────────
-function CassetteVisualizer({ isPlaying, currentTime, duration }) {
+function CassetteVisualizer({ isPlaying, currentTime, duration, coverUrl }) {
   const canvasRef = React.useRef(null);
   const animRef   = React.useRef(null);
   const angleRef  = React.useRef(0);
   const tapeRef   = React.useRef(0);
   const frameRef  = React.useRef(0);
+  const imgRef    = React.useRef(null);
 
   React.useEffect(() => {
     tapeRef.current = duration > 0 ? currentTime / duration : 0;
   }, [currentTime, duration]);
+
+  React.useEffect(() => {
+    if (!coverUrl) { imgRef.current = null; return; }
+    const img = new window.Image();
+    img.crossOrigin = 'anonymous';
+    img.onload  = () => { imgRef.current = img; };
+    img.onerror = () => { imgRef.current = null; };
+    img.src = coverUrl;
+  }, [coverUrl]);
 
   React.useEffect(() => {
     const cv  = canvasRef.current;
@@ -139,46 +149,130 @@ function CassetteVisualizer({ isPlaying, currentTime, duration }) {
       ctx.clearRect(0, 0, W, H);
 
       const BX = 20, BY = 18, BW = 280, BH = 146, BR = 10;
+
+      // outer drop shadow
+      ctx.save();
+      ctx.shadowColor = 'rgba(0,0,0,0.85)';
+      ctx.shadowBlur = 22;
+      ctx.shadowOffsetY = 10;
       ctx.beginPath(); ctx.roundRect(BX, BY, BW, BH, BR);
       ctx.fillStyle = '#1c1c1c'; ctx.fill();
-      ctx.strokeStyle = '#3a3a3a'; ctx.lineWidth = 1.2; ctx.stroke();
-
-      // cream label
-      const LX = 46, LY = 27, LW = 228, LH = 86, LR = 5;
-      ctx.beginPath(); ctx.roundRect(LX, LY, LW, LH, LR);
-      ctx.fillStyle = '#e8e0cc'; ctx.fill();
-      ctx.strokeStyle = '#c8bfa8'; ctx.lineWidth = 0.8; ctx.stroke();
-
-      // rainbow stripes at bottom of label
-      const stripes = ['#e63946','#f4a261','#e9c46a','#2a9d8f','#457b9d','#9b5de5'];
-      const sw = LW / 6;
-      ctx.save(); ctx.beginPath(); ctx.roundRect(LX, LY, LW, LH, LR); ctx.clip();
-      stripes.forEach((c, i) => {
-        ctx.fillStyle = c;
-        ctx.fillRect(LX + i * sw, LY + LH - 16, sw + 0.5, 16);
-      });
       ctx.restore();
 
-      ctx.fillStyle = '#1a1a1a'; ctx.textAlign = 'left';
-      ctx.font = 'bold 7px sans-serif'; ctx.fillText('SIDE B', LX + 7, LY + 12);
-      ctx.font = 'bold 9px sans-serif'; ctx.textAlign = 'right';
-      ctx.fillText('90', LX + LW - 7, LY + 12);
+      // body gradient — slightly lighter top edge for depth
+      const bodyG = ctx.createLinearGradient(BX, BY, BX, BY + BH);
+      bodyG.addColorStop(0,    '#2c2c2c');
+      bodyG.addColorStop(0.12, '#1c1c1c');
+      bodyG.addColorStop(0.88, '#181818');
+      bodyG.addColorStop(1,    '#111');
+      ctx.beginPath(); ctx.roundRect(BX, BY, BW, BH, BR);
+      ctx.fillStyle = bodyG; ctx.fill();
+      ctx.strokeStyle = '#3a3a3a'; ctx.lineWidth = 1.2; ctx.stroke();
 
-      // tape window
-      const WX = 93, WY = 35, WW = 134, WH = 58, WR = 6;
+      // top edge specular — thin bright line
+      ctx.save();
+      ctx.beginPath(); ctx.roundRect(BX, BY, BW, BH, BR); ctx.clip();
+      const topEdge = ctx.createLinearGradient(BX, BY, BX, BY + 5);
+      topEdge.addColorStop(0, 'rgba(255,255,255,0.18)');
+      topEdge.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = topEdge; ctx.fillRect(BX, BY, BW, 5);
+      // gloss sweep across top half
+      const gloss = ctx.createLinearGradient(BX, BY, BX, BY + BH * 0.45);
+      gloss.addColorStop(0,   'rgba(255,255,255,0.07)');
+      gloss.addColorStop(0.5, 'rgba(255,255,255,0.02)');
+      gloss.addColorStop(1,   'rgba(255,255,255,0)');
+      ctx.fillStyle = gloss; ctx.fillRect(BX, BY, BW, BH);
+      ctx.restore();
+
+      // label — album art if loaded, cream fallback otherwise
+      const LX = 46, LY = 27, LW = 228, LH = 86, LR = 5;
+      ctx.save();
+      ctx.beginPath(); ctx.roundRect(LX, LY, LW, LH, LR); ctx.clip();
+      if (imgRef.current) {
+        // object-fit: cover — scale to fill, centre
+        const img = imgRef.current;
+        const scale = Math.max(LW / img.width, LH / img.height);
+        const dw = img.width * scale, dh = img.height * scale;
+        ctx.drawImage(img, LX + (LW - dw) / 2, LY + (LH - dh) / 2, dw, dh);
+      } else {
+        // cream fallback with stripes
+        ctx.fillStyle = '#e8e0cc'; ctx.fillRect(LX, LY, LW, LH);
+        const stripes = ['#e63946','#f4a261','#e9c46a','#2a9d8f','#457b9d','#9b5de5'];
+        const sw = LW / 6;
+        stripes.forEach((c, i) => {
+          ctx.fillStyle = c;
+          ctx.fillRect(LX + i * sw, LY + LH - 16, sw + 0.5, 16);
+        });
+        ctx.fillStyle = '#1a1a1a'; ctx.textAlign = 'left';
+        ctx.font = 'bold 7px sans-serif'; ctx.fillText('SIDE B', LX + 7, LY + 12);
+        ctx.font = 'bold 9px sans-serif'; ctx.textAlign = 'right';
+        ctx.fillText('90', LX + LW - 7, LY + 12);
+      }
+      ctx.restore();
+
+      // gloss shine over label
+      ctx.save();
+      ctx.beginPath(); ctx.roundRect(LX, LY, LW, LH, LR); ctx.clip();
+      const shineG = ctx.createLinearGradient(LX, LY, LX, LY + LH * 0.5);
+      shineG.addColorStop(0,   'rgba(255,255,255,0.22)');
+      shineG.addColorStop(0.5, 'rgba(255,255,255,0.04)');
+      shineG.addColorStop(1,   'rgba(255,255,255,0)');
+      ctx.fillStyle = shineG; ctx.fillRect(LX, LY, LW, LH);
+      // top edge highlight
+      const edgeG = ctx.createLinearGradient(LX, LY, LX, LY + 4);
+      edgeG.addColorStop(0, 'rgba(255,255,255,0.45)');
+      edgeG.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = edgeG; ctx.fillRect(LX, LY, LW, 5);
+      ctx.restore();
+
+      // label border
+      ctx.beginPath(); ctx.roundRect(LX, LY, LW, LH, LR);
+      ctx.strokeStyle = 'rgba(0,0,0,0.5)'; ctx.lineWidth = 1; ctx.stroke();
+
+      // tape window: wider for reel separation, reels in upper half, guide below
+      const WX = 84, WY = 48, WW = 152, WH = 54, WR = 6;
+      ctx.save();
+      ctx.shadowColor = 'rgba(0,0,0,0.9)';
+      ctx.shadowBlur = 10;
+      ctx.shadowOffsetY = 3;
       ctx.beginPath(); ctx.roundRect(WX, WY, WW, WH, WR);
-      ctx.fillStyle = '#0d0d0d'; ctx.fill();
-      ctx.strokeStyle = '#444'; ctx.lineWidth = 1; ctx.stroke();
+      ctx.fillStyle = '#0a0a0a'; ctx.fill();
+      ctx.restore();
+      ctx.beginPath(); ctx.roundRect(WX, WY, WW, WH, WR);
+      ctx.strokeStyle = '#3a3a3a'; ctx.lineWidth = 1; ctx.stroke();
+      // inner top edge shadow for recessed look
+      ctx.save(); ctx.beginPath(); ctx.roundRect(WX, WY, WW, WH, WR); ctx.clip();
+      const winShade = ctx.createLinearGradient(WX, WY, WX, WY + 10);
+      winShade.addColorStop(0, 'rgba(0,0,0,0.6)');
+      winShade.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = winShade; ctx.fillRect(WX, WY, WW, WH);
+      ctx.restore();
 
-      const LCX = 127, RCX = 193, reelCY = 70;
-      const guideY = reelCY + 18;
+      // reels in upper portion, guide tape sits below them separately
+      const LCX = 118, RCX = 202, reelCY = 76;
+      const guideY  = 96;
+      const guideX1 = LCX + 20;
+      const guideX2 = RCX - 20;
 
+      // tape strip — below the reels, not touching them
       ctx.beginPath();
-      ctx.moveTo(LCX + 14, guideY); ctx.lineTo(RCX - 14, guideY);
-      ctx.strokeStyle = '#6b7a2e'; ctx.lineWidth = 12; ctx.stroke();
+      ctx.moveTo(guideX1, guideY - 1.5); ctx.lineTo(guideX2, guideY - 1.5);
+      ctx.strokeStyle = '#3d1f0a'; ctx.lineWidth = 4; ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(guideX1, guideY + 1.5); ctx.lineTo(guideX2, guideY + 1.5);
+      ctx.strokeStyle = '#5a2e0f'; ctx.lineWidth = 0.8; ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(guideX1, guideY - 2.5); ctx.lineTo(guideX2, guideY - 2.5);
+      ctx.strokeStyle = 'rgba(255,200,100,0.22)'; ctx.lineWidth = 1; ctx.stroke();
+
+      [guideX1, guideX2].forEach(px => {
+        ctx.beginPath(); ctx.arc(px, guideY, 2.8, 0, Math.PI * 2);
+        ctx.fillStyle = '#555'; ctx.fill();
+        ctx.strokeStyle = '#777'; ctx.lineWidth = 0.6; ctx.stroke();
+      });
 
       if (isPlaying) angleRef.current += 0.038;
-      reel(LCX, reelCY, 20, 1 - tapeRef.current, -angleRef.current);
+      reel(LCX, reelCY, 20, 1 - tapeRef.current, angleRef.current);
       reel(RCX, reelCY, 20,     tapeRef.current,   angleRef.current);
 
       // bottom mechanics strip
@@ -615,6 +709,7 @@ export default function FullPlayer() {
                     isPlaying={isPlaying}
                     currentTime={currentTime}
                     duration={duration}
+                    coverUrl={coverArt}
                   />
                 )}
 
