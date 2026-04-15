@@ -105,7 +105,7 @@ function CassetteVisualizer({ isPlaying, currentTime, duration, coverUrl }) {
     const cv  = canvasRef.current;
     if (!cv) return;
     const ctx = cv.getContext('2d');
-    const W = 320, H = 206;
+    const W = 320, H = 246;
 
     const BAR_N  = 28;
     const phases = Array.from({ length: BAR_N }, () => Math.random() * Math.PI * 2);
@@ -285,9 +285,9 @@ function CassetteVisualizer({ isPlaying, currentTime, duration, coverUrl }) {
 
       // frequency bars
       const barW = 4, gap = 2;
-      const totalBW = BAR_N * (barW + gap) - gap;
-      const bx0  = (W - totalBW) / 2;
-      const baseY = H - 8, maxBarH = 24;
+const totalBW = BAR_N * (barW + gap) - gap;
+const bx0  = (W - totalBW) / 2;
+const baseY = H - 14, maxBarH = 28;
       phases.forEach((ph, i) => {
         const h = isPlaying
           ? (0.08 + 0.92 * Math.abs(Math.sin(frameRef.current * speeds[i] * 0.042 + ph))) * maxBarH
@@ -312,11 +312,11 @@ function CassetteVisualizer({ isPlaying, currentTime, duration, coverUrl }) {
   return (
     <div className="flex flex-col items-center justify-center w-full px-4">
       <canvas
-        ref={canvasRef}
-        width={320}
-        height={206}
-        className="w-full max-w-[320px]"
-      />
+  ref={canvasRef}
+  width={320}
+  height={246}
+  className="w-full max-w-[336px]"
+/>
     </div>
   );
 }
