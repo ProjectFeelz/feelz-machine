@@ -9,7 +9,7 @@ import {
   Shield, Users, BarChart3, AlertTriangle, Music,
   Upload, HeartHandshake, Bell, Palette, MessageCircle,
   ChevronRight, Crown, Zap, Star, Mic2, LayoutDashboard,
-  User, LogOut, DollarSign, Megaphone, Radio, Trophy, Brain,
+  User, LogOut, DollarSign, Megaphone, Radio, Trophy, Brain, Copy,
 } from 'lucide-react';
 
 function LinkCard({ icon: Icon, label, description, path, color, onClick }) {
@@ -159,6 +159,7 @@ export default function HubPage() {
               <LinkCard icon={BarChart3}     label="User Behavior"       description="Streams, downloads, logins, activity export"  path="/admin/behavior"     color="bg-cyan-500/20" />
               <LinkCard icon={Trophy}       label="Competitions"       description="Create and manage artist competitions"          path="/admin/competitions" color="bg-yellow-500/20" />
               <LinkCard icon={Brain}        label="Engagement Drip"    description="AI messaging · segment settings · send stats"   path="/admin/engagement"   color="bg-violet-500/20" />
+              <LinkCard icon={Copy}         label="Duplicate Artists"  description="Find and remove duplicate artist profiles"      path="/admin/duplicates"   color="bg-red-500/20" />
             </Section>
           )}
 
