@@ -350,12 +350,12 @@ function CassetteVisualizer({ isPlaying, currentTime, duration, coverUrl }) {
       ctx.fillRect(WX, WY, WW, WH);
 
       // primary gloss sweep — curved highlight across top half
-      const gloss = ctx.createLinearGradient(WX, WY, WX, WY + WH * 0.55);
-      gloss.addColorStop(0,    'rgba(255,255,255,0.32)');
-      gloss.addColorStop(0.25, 'rgba(255,255,255,0.10)');
-      gloss.addColorStop(0.6,  'rgba(255,255,255,0.02)');
-      gloss.addColorStop(1,    'rgba(255,255,255,0)');
-      ctx.fillStyle = gloss; ctx.fillRect(WX, WY, WW, WH);
+      const glassSweep = ctx.createLinearGradient(WX, WY, WX, WY + WH * 0.55);
+      glassSweep.addColorStop(0,    'rgba(255,255,255,0.32)');
+      glassSweep.addColorStop(0.25, 'rgba(255,255,255,0.10)');
+      glassSweep.addColorStop(0.6,  'rgba(255,255,255,0.02)');
+      glassSweep.addColorStop(1,    'rgba(255,255,255,0)');
+      ctx.fillStyle = glassSweep; ctx.fillRect(WX, WY, WW, WH);
 
       // sharp top-edge specular line — the brightest point of the glass
       const topSpec = ctx.createLinearGradient(WX, WY, WX, WY + 3);
