@@ -41,6 +41,7 @@ import AdminUserBehaviorPage from './pages/AdminUserBehaviorPage';
 import { Helmet } from 'react-helmet-async';
 import TrackPage from './pages/TrackPage';
 import CollabRadarPage from './pages/CollabRadarPage';
+import AdminDuplicates from './pages/AdminDuplicates';
 import CompetitionRoomPage from './pages/CompetitionRoomPage';
 import AdminCompetitions from './pages/AdminCompetitions';
 import AdminEngagement from './pages/AdminEngagement';
@@ -134,6 +135,7 @@ export default function AppRouter() {
                 <Route path="/admin/boost" element={<AdminBoost />} />
                 <Route path="/admin/broadcast" element={<AdminBroadcast />} />
                 <Route path="/admin/behavior" element={<AdminUserBehaviorPage />} />
+                <Route path="/admin/duplicates" element={<AdminDuplicates />} />
                 <Route path="/admin/competitions" element={<AdminCompetitions />} />
                 <Route path="/admin/engagement" element={<AdminEngagement />} />
 
