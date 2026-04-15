@@ -102,6 +102,21 @@ export default function ProfileSetup() {
       const { data: existing } = await supabase.from('artists')
         .select('slug').eq('slug', slug).maybeSingle();
       if (existing) slug = `${slug}-${Date.now().toString(36)}`;
+
+      // Duplicate name check — block names too similar to existing artists
+      const { data: similarNames } = await supabase.from('artists')
+        .select('artist_name')
+        .ilike('artist_name', `%${artistName.trim().replace(/\s+/g, '%')}%`);
+      if (similarNames && similarNames.length > 0) {
+        const exact = similarNames.find(a =>
+          a.artist_name.toLowerCase().replace(/\s+/g,'') ===
+          artistName.trim().toLowerCase().replace(/\s+/g,'')
+        );
+        if (exact) {
+          throw new Error(`An artist named "${exact.artist_name}" already exists. Please choose a different name.`);
+        }
+      }
+
       const { error: insertErr } = await supabase.from('artists').insert({
         user_id: user.id, artist_name: artistName.trim(), slug,
         bio: bio.trim() || null, profile_image_url: profileImageUrl,
