@@ -82,8 +82,8 @@ function CassetteVisualizer({ isPlaying, currentTime, duration, coverUrl }) {
   const canvasRef = React.useRef(null);
   const animRef   = React.useRef(null);
   const angleRef  = React.useRef(0);
-  const frameRef  = React.useRef(0);
   const tapeRef   = React.useRef(0);
+  const frameRef  = React.useRef(0);
   const imgRef    = React.useRef(null);
 
   React.useEffect(() => {
@@ -100,194 +100,169 @@ function CassetteVisualizer({ isPlaying, currentTime, duration, coverUrl }) {
   }, [coverUrl]);
 
   React.useEffect(() => {
-    const cv = canvasRef.current;
+    const cv  = canvasRef.current;
     if (!cv) return;
     const ctx = cv.getContext('2d');
-    const W = 480, H = 310;
-    const BAR_N = 32;
+    const W = 320, H = 206;
+
+    const BAR_N  = 28;
     const phases = Array.from({ length: BAR_N }, () => Math.random() * Math.PI * 2);
-    const speeds  = Array.from({ length: BAR_N }, () => 0.7 + Math.random() * 2.2);
+    const speeds = Array.from({ length: BAR_N }, () => 0.8 + Math.random() * 2);
 
-    // cassette body
-    const BX=28, BY=26, BW=424, BH=196, BR=15;
-    // label — same proportions as cream original, art fills the same area
-    const LX=62, LY=36, LW=300, LH=108, LR=7;
-    // tape window — centred in label
-    const WX=140, WY=48, WW=160, WH=72, WR=8;
-    const LCX=186, RCX=264, RCY=WY+WH/2+2, guideY=WY+WH/2+26;
-
-    function rr(x,y,w,h,r){ ctx.beginPath(); ctx.roundRect(x,y,w,h,r); }
-    function addShine(x,y,w,h,r,a){
-      const g=ctx.createLinearGradient(x,y,x,y+h*0.5);
-      g.addColorStop(0,`rgba(255,255,255,${a})`);
-      g.addColorStop(0.5,`rgba(255,255,255,${a*0.2})`);
-      g.addColorStop(1,'rgba(255,255,255,0)');
-      ctx.save(); rr(x,y,w,h,r); ctx.clip(); ctx.fillStyle=g; ctx.fill(); ctx.restore();
-    }
-    function edgeLight(x,y,w,h,r){
-      ctx.save(); rr(x,y,w,h,r); ctx.clip();
-      const g=ctx.createLinearGradient(x,y,x,y+5);
-      g.addColorStop(0,'rgba(255,255,255,0.4)'); g.addColorStop(1,'rgba(255,255,255,0)');
-      ctx.fillStyle=g; ctx.fillRect(x,y,w,6); ctx.restore();
-    }
-    function screw(x,y,r){
-      ctx.save(); ctx.shadowColor='rgba(0,0,0,0.5)'; ctx.shadowBlur=4; ctx.shadowOffsetY=1;
-      ctx.beginPath(); ctx.arc(x,y,r+1.5,0,Math.PI*2); ctx.fillStyle='rgba(0,0,0,0.35)'; ctx.fill(); ctx.restore();
-      const rg=ctx.createRadialGradient(x-r*0.3,y-r*0.3,0.5,x,y,r);
-      rg.addColorStop(0,'#4a4a4a'); rg.addColorStop(1,'#1a1a1a');
-      ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2);
-      ctx.fillStyle=rg; ctx.fill(); ctx.strokeStyle='#666'; ctx.lineWidth=0.6; ctx.stroke();
+    function screw(x, y, r) {
+      ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fillStyle = '#2a2a2a'; ctx.fill();
+      ctx.strokeStyle = '#555'; ctx.lineWidth = 0.7; ctx.stroke();
       ctx.beginPath();
-      ctx.moveTo(x-r*0.55,y); ctx.lineTo(x+r*0.55,y);
-      ctx.moveTo(x,y-r*0.55); ctx.lineTo(x,y+r*0.55);
-      ctx.strokeStyle='rgba(0,0,0,0.7)'; ctx.lineWidth=1; ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(x-r*0.5,y-0.5); ctx.lineTo(x+r*0.5,y-0.5);
-      ctx.strokeStyle='rgba(255,255,255,0.22)'; ctx.lineWidth=0.5; ctx.stroke();
+      ctx.moveTo(x - r * 0.55, y); ctx.lineTo(x + r * 0.55, y);
+      ctx.moveTo(x, y - r * 0.55); ctx.lineTo(x, y + r * 0.55);
+      ctx.strokeStyle = '#666'; ctx.lineWidth = 0.6; ctx.stroke();
     }
-    function reel(cx,cy,outerR,fillR,angle){
-      ctx.save(); ctx.shadowColor='rgba(0,0,0,0.55)'; ctx.shadowBlur=6; ctx.shadowOffsetY=2;
-      ctx.beginPath(); ctx.arc(cx,cy,outerR,0,Math.PI*2); ctx.fillStyle='#111'; ctx.fill(); ctx.restore();
-      const og=ctx.createRadialGradient(cx-outerR*0.3,cy-outerR*0.3,1,cx,cy,outerR);
-      og.addColorStop(0,'#3a3a3a'); og.addColorStop(1,'#111');
-      ctx.beginPath(); ctx.arc(cx,cy,outerR,0,Math.PI*2);
-      ctx.fillStyle=og; ctx.fill(); ctx.strokeStyle='#555'; ctx.lineWidth=1; ctx.stroke();
-      const inner=10, tapeR=inner+(outerR-inner)*Math.max(0.04,fillR);
-      const tg=ctx.createRadialGradient(cx,cy,inner,cx,cy,tapeR);
-      tg.addColorStop(0,'#6b3a1f'); tg.addColorStop(1,'#3d1a08');
-      ctx.beginPath(); ctx.arc(cx,cy,tapeR,0,Math.PI*2);
-      ctx.fillStyle=tg; ctx.fill(); ctx.strokeStyle='#5a2e0f'; ctx.lineWidth=0.8; ctx.stroke();
-      const hg=ctx.createRadialGradient(cx-3,cy-3,0.5,cx,cy,inner+1);
-      hg.addColorStop(0,'#f0f0f0'); hg.addColorStop(1,'#b8b8b8');
-      ctx.beginPath(); ctx.arc(cx,cy,inner+1,0,Math.PI*2);
-      ctx.fillStyle=hg; ctx.fill(); ctx.strokeStyle='#999'; ctx.lineWidth=0.7; ctx.stroke();
-      for(let i=0;i<5;i++){
-        const a=angle+(i*Math.PI*2/5);
+
+    function reel(cx, cy, outerR, fillRatio, ang) {
+      ctx.beginPath(); ctx.arc(cx, cy, outerR, 0, Math.PI * 2);
+      ctx.fillStyle = '#1a1a1a'; ctx.fill();
+      ctx.strokeStyle = '#555'; ctx.lineWidth = 1; ctx.stroke();
+
+      const inner = 8;
+      const tapeR = inner + (outerR - inner) * Math.max(0.04, fillRatio);
+      ctx.beginPath(); ctx.arc(cx, cy, tapeR, 0, Math.PI * 2);
+      ctx.fillStyle = '#4a2e1a'; ctx.fill();
+      ctx.strokeStyle = '#5a3820'; ctx.lineWidth = 0.8; ctx.stroke();
+
+      ctx.beginPath(); ctx.arc(cx, cy, inner + 0.5, 0, Math.PI * 2);
+      ctx.fillStyle = '#d8d8d8'; ctx.fill();
+      ctx.strokeStyle = '#bbb'; ctx.lineWidth = 0.7; ctx.stroke();
+
+      for (let i = 0; i < 5; i++) {
+        const a = ang + (i * Math.PI * 2) / 5;
         ctx.beginPath();
-        ctx.moveTo(cx+Math.cos(a)*3.5,cy+Math.sin(a)*3.5);
-        ctx.lineTo(cx+Math.cos(a)*(inner-0.5),cy+Math.sin(a)*(inner-0.5));
-        ctx.strokeStyle='#707070'; ctx.lineWidth=1.4; ctx.stroke();
-        ctx.beginPath();
-        ctx.moveTo(cx+Math.cos(a)*3.5,cy+Math.sin(a)*3.5);
-        ctx.lineTo(cx+Math.cos(a)*(inner-0.5),cy+Math.sin(a)*(inner-0.5));
-        ctx.strokeStyle='rgba(255,255,255,0.14)'; ctx.lineWidth=0.5; ctx.stroke();
+        ctx.moveTo(cx + Math.cos(a) * 3, cy + Math.sin(a) * 3);
+        ctx.lineTo(cx + Math.cos(a) * (inner - 0.5), cy + Math.sin(a) * (inner - 0.5));
+        ctx.strokeStyle = '#888'; ctx.lineWidth = 1.2; ctx.stroke();
       }
-      ctx.beginPath(); ctx.arc(cx,cy,3,0,Math.PI*2); ctx.fillStyle='#222'; ctx.fill();
-      ctx.beginPath(); ctx.arc(cx-0.8,cy-0.8,1,0,Math.PI*2);
-      ctx.fillStyle='rgba(255,255,255,0.28)'; ctx.fill();
+      ctx.beginPath(); ctx.arc(cx, cy, 2.5, 0, Math.PI * 2);
+      ctx.fillStyle = '#333'; ctx.fill();
     }
 
     function render() {
-      ctx.clearRect(0,0,W,H);
+      ctx.clearRect(0, 0, W, H);
 
-      // body shadow + fill
-      ctx.save(); ctx.shadowColor='rgba(0,0,0,0.7)'; ctx.shadowBlur=22; ctx.shadowOffsetY=9;
-      rr(BX,BY,BW,BH,BR); ctx.fillStyle='#1c1c1c'; ctx.fill(); ctx.restore();
-      const bg=ctx.createLinearGradient(BX,BY,BX,BY+BH);
-      bg.addColorStop(0,'#2e2e2e'); bg.addColorStop(0.15,'#1c1c1c');
-      bg.addColorStop(0.85,'#181818'); bg.addColorStop(1,'#111');
-      rr(BX,BY,BW,BH,BR); ctx.fillStyle=bg; ctx.fill();
-      ctx.strokeStyle='#3d3d3d'; ctx.lineWidth=1.2; ctx.stroke();
+      const BX = 20, BY = 18, BW = 280, BH = 146, BR = 10;
+      ctx.beginPath(); ctx.roundRect(BX, BY, BW, BH, BR);
+      ctx.fillStyle = '#1c1c1c'; ctx.fill();
+      ctx.strokeStyle = '#3a3a3a'; ctx.lineWidth = 1.2; ctx.stroke();
 
-      // label — art if available, else cream fallback
-      ctx.save(); rr(LX,LY,LW,LH,LR); ctx.clip();
+      // label — album art if loaded, cream fallback otherwise
+      const LX = 46, LY = 27, LW = 228, LH = 86, LR = 5;
+      ctx.save();
+      ctx.beginPath(); ctx.roundRect(LX, LY, LW, LH, LR); ctx.clip();
       if (imgRef.current) {
-        // cover art fills label — object-fit:cover behaviour
+        // object-fit: cover — scale to fill, centre
         const img = imgRef.current;
-        const scale = Math.max(LW/img.width, LH/img.height);
-        const dw = img.width*scale, dh = img.height*scale;
-        const dx = LX+(LW-dw)/2, dy = LY+(LH-dh)/2;
-        ctx.drawImage(img, dx, dy, dw, dh);
+        const scale = Math.max(LW / img.width, LH / img.height);
+        const dw = img.width * scale, dh = img.height * scale;
+        ctx.drawImage(img, LX + (LW - dw) / 2, LY + (LH - dh) / 2, dw, dh);
       } else {
-        // cream fallback — identical to original design
-        ctx.fillStyle='#e8e0cc'; ctx.fillRect(LX,LY,LW,LH);
-        const stripes=['#e63946','#f4a261','#e9c46a','#2a9d8f','#457b9d','#9b5de5'];
-        const sw=LW/6;
-        stripes.forEach((c,i)=>{ ctx.fillStyle=c; ctx.fillRect(LX+i*sw,LY+LH-20,sw+0.5,20); });
-        ctx.fillStyle='#1a1a1a';
-        ctx.font='bold 10px sans-serif'; ctx.textAlign='left'; ctx.fillText('SIDE B',LX+10,LY+15);
-        ctx.font='bold 11px sans-serif'; ctx.textAlign='right'; ctx.fillText('90',LX+LW-10,LY+15);
-        ctx.font='8px sans-serif'; ctx.textAlign='left'; ctx.fillStyle='#666';
-        ctx.fillText('INDEX',LX+10,LY+LH-26);
-        ctx.strokeStyle='#bbb'; ctx.lineWidth=0.5;
-        for(let i=0;i<3;i++){
-          ctx.beginPath(); ctx.moveTo(LX+38,LY+LH-22+i*3); ctx.lineTo(LX+LW-10,LY+LH-22+i*3); ctx.stroke();
-        }
+        // cream fallback with stripes
+        ctx.fillStyle = '#e8e0cc'; ctx.fillRect(LX, LY, LW, LH);
+        const stripes = ['#e63946','#f4a261','#e9c46a','#2a9d8f','#457b9d','#9b5de5'];
+        const sw = LW / 6;
+        stripes.forEach((c, i) => {
+          ctx.fillStyle = c;
+          ctx.fillRect(LX + i * sw, LY + LH - 16, sw + 0.5, 16);
+        });
+        ctx.fillStyle = '#1a1a1a'; ctx.textAlign = 'left';
+        ctx.font = 'bold 7px sans-serif'; ctx.fillText('SIDE B', LX + 7, LY + 12);
+        ctx.font = 'bold 9px sans-serif'; ctx.textAlign = 'right';
+        ctx.fillText('90', LX + LW - 7, LY + 12);
       }
       ctx.restore();
-      rr(LX,LY,LW,LH,LR); ctx.strokeStyle='rgba(0,0,0,0.55)'; ctx.lineWidth=1.1; ctx.stroke();
+
+      // gloss shine over label
+      ctx.save();
+      ctx.beginPath(); ctx.roundRect(LX, LY, LW, LH, LR); ctx.clip();
+      const shineG = ctx.createLinearGradient(LX, LY, LX, LY + LH * 0.5);
+      shineG.addColorStop(0,   'rgba(255,255,255,0.22)');
+      shineG.addColorStop(0.5, 'rgba(255,255,255,0.04)');
+      shineG.addColorStop(1,   'rgba(255,255,255,0)');
+      ctx.fillStyle = shineG; ctx.fillRect(LX, LY, LW, LH);
+      // top edge highlight
+      const edgeG = ctx.createLinearGradient(LX, LY, LX, LY + 4);
+      edgeG.addColorStop(0, 'rgba(255,255,255,0.45)');
+      edgeG.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = edgeG; ctx.fillRect(LX, LY, LW, 5);
+      ctx.restore();
+
+      // label border
+      ctx.beginPath(); ctx.roundRect(LX, LY, LW, LH, LR);
+      ctx.strokeStyle = 'rgba(0,0,0,0.5)'; ctx.lineWidth = 1; ctx.stroke();
 
       // tape window
-      ctx.save(); ctx.shadowColor='rgba(0,0,0,0.95)'; ctx.shadowBlur=14; ctx.shadowOffsetY=4;
-      rr(WX,WY,WW,WH,WR); ctx.fillStyle='#060606'; ctx.fill(); ctx.restore();
-      ctx.strokeStyle='#3a3a3a'; ctx.lineWidth=1.2; ctx.stroke();
-      const wg=ctx.createLinearGradient(WX,WY,WX,WY+WH);
-      wg.addColorStop(0,'rgba(80,80,80,0.18)'); wg.addColorStop(0.12,'rgba(0,0,0,0)');
-      ctx.save(); rr(WX,WY,WW,WH,WR); ctx.clip(); ctx.fillStyle=wg; ctx.fill(); ctx.restore();
+      const WX = 93, WY = 35, WW = 134, WH = 58, WR = 6;
+      ctx.beginPath(); ctx.roundRect(WX, WY, WW, WH, WR);
+      ctx.fillStyle = '#0d0d0d'; ctx.fill();
+      ctx.strokeStyle = '#444'; ctx.lineWidth = 1; ctx.stroke();
 
-      // tape strip
-      ctx.beginPath(); ctx.moveTo(LCX+14,guideY-2); ctx.lineTo(RCX-14,guideY-2);
-      ctx.strokeStyle='#3d1f0a'; ctx.lineWidth=5; ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(LCX+14,guideY+2); ctx.lineTo(RCX-14,guideY+2);
-      ctx.strokeStyle='#6b3a1f'; ctx.lineWidth=0.8; ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(LCX+14,guideY-1.5); ctx.lineTo(RCX-14,guideY-1.5);
-      ctx.strokeStyle='rgba(255,200,120,0.13)'; ctx.lineWidth=0.7; ctx.stroke();
-      [LCX+14,RCX-14].forEach(px=>{
-        const pg=ctx.createRadialGradient(px-1,guideY-1,0.3,px,guideY,3.5);
-        pg.addColorStop(0,'#777'); pg.addColorStop(1,'#333');
-        ctx.beginPath(); ctx.arc(px,guideY,3.5,0,Math.PI*2);
-        ctx.fillStyle=pg; ctx.fill(); ctx.strokeStyle='#888'; ctx.lineWidth=0.6; ctx.stroke();
+      const LCX = 127, RCX = 193, reelCY = 70;
+      const guideY = reelCY + 18;
+
+      ctx.beginPath();
+      ctx.moveTo(LCX + 14, guideY - 1.5); ctx.lineTo(RCX - 14, guideY - 1.5);
+      ctx.strokeStyle = '#3d1f0a'; ctx.lineWidth = 4; ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(LCX + 14, guideY + 1.5); ctx.lineTo(RCX - 14, guideY + 1.5);
+      ctx.strokeStyle = '#5a2e0f'; ctx.lineWidth = 0.8; ctx.stroke();
+
+      [LCX + 14, RCX - 14].forEach(px => {
+        ctx.beginPath(); ctx.arc(px, guideY, 2.8, 0, Math.PI * 2);
+        ctx.fillStyle = '#555'; ctx.fill();
+        ctx.strokeStyle = '#777'; ctx.lineWidth = 0.6; ctx.stroke();
       });
 
-      if(isPlaying) angleRef.current+=0.038;
-      reel(LCX,RCY,22,1-tapeRef.current,-angleRef.current);
-      reel(RCX,RCY,22,tapeRef.current,   angleRef.current);
+      if (isPlaying) angleRef.current += 0.038;
+      reel(LCX, reelCY, 20, 1 - tapeRef.current, -angleRef.current);
+      reel(RCX, reelCY, 20,     tapeRef.current,   angleRef.current);
 
-      // gloss over label
-      addShine(LX,LY,LW,LH,LR,0.18);
-      edgeLight(LX,LY,LW,LH,LR);
+      // bottom mechanics strip
+      ctx.beginPath(); ctx.roundRect(BX + 6, BY + BH - 36, BW - 12, 30, 4);
+      ctx.fillStyle = '#141414'; ctx.fill();
+      ctx.strokeStyle = '#333'; ctx.lineWidth = 0.8; ctx.stroke();
 
-      // bottom mechanics
-      const MX=BX+9,MY=BY+BH-44,MW=BW-18,MH=36;
-      const mg=ctx.createLinearGradient(MX,MY,MX,MY+MH);
-      mg.addColorStop(0,'#1a1a1a'); mg.addColorStop(1,'#0e0e0e');
-      rr(MX,MY,MW,MH,5); ctx.fillStyle=mg; ctx.fill();
-      ctx.strokeStyle='#2e2e2e'; ctx.lineWidth=0.8; ctx.stroke();
-      [BX+38,BX+BW/2-13,BX+BW-38-26].forEach(hx=>{
-        ctx.save(); ctx.shadowColor='rgba(0,0,0,0.8)'; ctx.shadowBlur=4; ctx.shadowOffsetY=1;
-        rr(hx,MY+7,26,22,3); ctx.fillStyle='#080808'; ctx.fill(); ctx.restore();
-        ctx.strokeStyle='#333'; ctx.lineWidth=0.7; ctx.stroke();
+      // notch holes
+      [BX + 26, BX + BW / 2 - 8, BX + BW - 26 - 16].forEach(hx => {
+        ctx.beginPath(); ctx.roundRect(hx, BY + BH - 30, 16, 18, 2);
+        ctx.fillStyle = '#0a0a0a'; ctx.fill();
+        ctx.strokeStyle = '#3a3a3a'; ctx.lineWidth = 0.7; ctx.stroke();
       });
-      [BX+96,BX+BW-96-20].forEach(tx=>{
-        const tg2=ctx.createLinearGradient(tx,MY+10,tx,MY+24);
-        tg2.addColorStop(0,'#303030'); tg2.addColorStop(1,'#1a1a1a');
-        rr(tx,MY+10,20,14,2); ctx.fillStyle=tg2; ctx.fill();
-        ctx.strokeStyle='#444'; ctx.lineWidth=0.7; ctx.stroke();
-      });
-      [[BX,BY+48,8,54],[BX+BW-8,BY+48,8,54]].forEach(([ex,ey,ew,eh])=>{
-        const eg=ctx.createLinearGradient(ex,ey,ex+ew,ey);
-        eg.addColorStop(0,'#222'); eg.addColorStop(1,'#2a2a2a');
-        rr(ex,ey,ew,eh,3); ctx.fillStyle=eg; ctx.fill();
-        ctx.strokeStyle='#333'; ctx.lineWidth=0.7; ctx.stroke();
-      });
-      [[BX+17,BY+17],[BX+BW-17,BY+17],[BX+17,BY+BH-17],[BX+BW-17,BY+BH-17]]
-        .forEach(([sx,sy])=>screw(sx,sy,7));
 
-      // body gloss
-      addShine(BX,BY,BW,BH,BR,0.09);
-      edgeLight(BX,BY,BW,BH,BR);
-      ctx.save();
-      const specG=ctx.createLinearGradient(BX,BY,BX+10,BY);
-      specG.addColorStop(0,'rgba(255,255,255,0.11)'); specG.addColorStop(1,'rgba(255,255,255,0)');
-      rr(BX,BY,BW,BH,BR); ctx.clip(); ctx.fillStyle=specG; ctx.fillRect(BX,BY,10,BH); ctx.restore();
+      // corner screws
+      [[BX+12,BY+12],[BX+BW-12,BY+12],[BX+12,BY+BH-12],[BX+BW-12,BY+BH-12]]
+        .forEach(([sx,sy]) => screw(sx, sy, 5));
+
+      // side edge indents
+      [[BX,BY+40,6,40],[BX+BW-6,BY+40,6,40]].forEach(([rx,ry,rw,rh])=>{
+        ctx.beginPath(); ctx.roundRect(rx,ry,rw,rh,2);
+        ctx.fillStyle='#252525'; ctx.fill();
+        ctx.strokeStyle='#3a3a3a'; ctx.lineWidth=0.7; ctx.stroke();
+      });
 
       // frequency bars
-      const barW=5,gap=2.5,barBaseY=H-12,maxBarH=32,totalBW=BAR_N*(barW+gap)-gap,bx0=(W-totalBW)/2;
-      phases.forEach((ph,i)=>{
-        const h=isPlaying?(0.06+0.94*Math.abs(Math.sin(frameRef.current*speeds[i]*0.042+ph)))*maxBarH:4;
-        ctx.fillStyle=`hsla(${200+i*5},80%,65%,0.9)`;
-        ctx.beginPath(); ctx.roundRect(bx0+i*(barW+gap),barBaseY-h,barW,h,1.5); ctx.fill();
-        ctx.fillStyle=`hsla(${200+i*5},80%,85%,0.3)`;
-        ctx.beginPath(); ctx.roundRect(bx0+i*(barW+gap),barBaseY-h,barW*0.4,h*0.5,1); ctx.fill();
+      const barW = 4, gap = 2;
+      const totalBW = BAR_N * (barW + gap) - gap;
+      const bx0  = (W - totalBW) / 2;
+      const baseY = H - 8, maxBarH = 24;
+      phases.forEach((ph, i) => {
+        const h = isPlaying
+          ? (0.08 + 0.92 * Math.abs(Math.sin(frameRef.current * speeds[i] * 0.042 + ph))) * maxBarH
+          : 3;
+        const r = Math.min(255, 160 + i * 3);
+        const g = Math.min(255, 60  + i * 5);
+        const b = Math.min(255, 230 - i * 4);
+        ctx.fillStyle = `rgba(${r},${g},${b},0.85)`;
+        ctx.beginPath();
+        ctx.roundRect(bx0 + i * (barW + gap), baseY - h, barW, h, 1);
+        ctx.fill();
       });
 
       frameRef.current++;
@@ -300,7 +275,12 @@ function CassetteVisualizer({ isPlaying, currentTime, duration, coverUrl }) {
 
   return (
     <div className="flex flex-col items-center justify-center w-full px-4">
-      <canvas ref={canvasRef} width={480} height={310} className="w-full max-w-[360px]" />
+      <canvas
+        ref={canvasRef}
+        width={320}
+        height={206}
+        className="w-full max-w-[320px]"
+      />
     </div>
   );
 }
