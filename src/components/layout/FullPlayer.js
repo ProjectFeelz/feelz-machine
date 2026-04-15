@@ -84,14 +84,16 @@ function CassetteVisualizer({ isPlaying, currentTime, duration, coverUrl }) {
   const angleRef  = React.useRef(0);
   const tapeRef   = React.useRef(0);
   const frameRef  = React.useRef(0);
-  const imgRef    = React.useRef(null);
+  const imgRef     = React.useRef(null);
+  const imgOpacity = React.useRef(0);
 
   React.useEffect(() => {
     tapeRef.current = duration > 0 ? currentTime / duration : 0;
   }, [currentTime, duration]);
 
   React.useEffect(() => {
-    if (!coverUrl) { imgRef.current = null; return; }
+    if (!coverUrl) { imgRef.current = null; imgOpacity.current = 0; return; }
+    imgOpacity.current = 0;
     const img = new window.Image();
     img.crossOrigin = 'anonymous';
     img.onload  = () => { imgRef.current = img; };
@@ -148,9 +150,9 @@ function CassetteVisualizer({ isPlaying, currentTime, duration, coverUrl }) {
     function render() {
       ctx.clearRect(0, 0, W, H);
 
-      const BX = 20, BY = 18, BW = 280, BH = 146, BR = 10;
+      const BX = 20, BY = 8, BW = 280, BH = 166, BR = 10;
 
-      // outer drop shadow
+      // ── outer drop shadow (from block 1) ──
       ctx.save();
       ctx.shadowColor = 'rgba(0,0,0,0.85)';
       ctx.shadowBlur = 22;
@@ -159,7 +161,7 @@ function CassetteVisualizer({ isPlaying, currentTime, duration, coverUrl }) {
       ctx.fillStyle = '#1c1c1c'; ctx.fill();
       ctx.restore();
 
-      // body gradient — slightly lighter top edge for depth
+      // ── body gradient with lighter top edge for depth (from block 1) ──
       const bodyG = ctx.createLinearGradient(BX, BY, BX, BY + BH);
       bodyG.addColorStop(0,    '#2c2c2c');
       bodyG.addColorStop(0.12, '#1c1c1c');
@@ -169,7 +171,7 @@ function CassetteVisualizer({ isPlaying, currentTime, duration, coverUrl }) {
       ctx.fillStyle = bodyG; ctx.fill();
       ctx.strokeStyle = '#3a3a3a'; ctx.lineWidth = 1.2; ctx.stroke();
 
-      // top edge specular — thin bright line
+      // ── top edge specular line + gloss sweep (from block 1) ──
       ctx.save();
       ctx.beginPath(); ctx.roundRect(BX, BY, BW, BH, BR); ctx.clip();
       const topEdge = ctx.createLinearGradient(BX, BY, BX, BY + 5);
@@ -184,33 +186,23 @@ function CassetteVisualizer({ isPlaying, currentTime, duration, coverUrl }) {
       ctx.fillStyle = gloss; ctx.fillRect(BX, BY, BW, BH);
       ctx.restore();
 
-      // label — album art if loaded, cream fallback otherwise
-      const LX = 46, LY = 27, LW = 228, LH = 86, LR = 5;
+      // ── label — black base, art fades in (block 2 mechanic kept) ──
+      const LX = 46, LY = 27, LW = 228, LH = 100, LR = 5;
       ctx.save();
       ctx.beginPath(); ctx.roundRect(LX, LY, LW, LH, LR); ctx.clip();
+      ctx.fillStyle = '#0a0a0a'; ctx.fillRect(LX, LY, LW, LH);
       if (imgRef.current) {
-        // object-fit: cover — scale to fill, centre
+        if (imgOpacity.current < 1) imgOpacity.current = Math.min(1, imgOpacity.current + 0.04);
         const img = imgRef.current;
         const scale = Math.max(LW / img.width, LH / img.height);
         const dw = img.width * scale, dh = img.height * scale;
+        ctx.globalAlpha = imgOpacity.current;
         ctx.drawImage(img, LX + (LW - dw) / 2, LY + (LH - dh) / 2, dw, dh);
-      } else {
-        // cream fallback with stripes
-        ctx.fillStyle = '#e8e0cc'; ctx.fillRect(LX, LY, LW, LH);
-        const stripes = ['#e63946','#f4a261','#e9c46a','#2a9d8f','#457b9d','#9b5de5'];
-        const sw = LW / 6;
-        stripes.forEach((c, i) => {
-          ctx.fillStyle = c;
-          ctx.fillRect(LX + i * sw, LY + LH - 16, sw + 0.5, 16);
-        });
-        ctx.fillStyle = '#1a1a1a'; ctx.textAlign = 'left';
-        ctx.font = 'bold 7px sans-serif'; ctx.fillText('SIDE B', LX + 7, LY + 12);
-        ctx.font = 'bold 9px sans-serif'; ctx.textAlign = 'right';
-        ctx.fillText('90', LX + LW - 7, LY + 12);
+        ctx.globalAlpha = 1;
       }
       ctx.restore();
 
-      // gloss shine over label
+      // ── label gloss shine + top edge highlight (from block 1) ──
       ctx.save();
       ctx.beginPath(); ctx.roundRect(LX, LY, LW, LH, LR); ctx.clip();
       const shineG = ctx.createLinearGradient(LX, LY, LX, LY + LH * 0.5);
@@ -225,18 +217,18 @@ function CassetteVisualizer({ isPlaying, currentTime, duration, coverUrl }) {
       ctx.fillStyle = edgeG; ctx.fillRect(LX, LY, LW, 5);
       ctx.restore();
 
-      // label border
+      // ── label border ──
       ctx.beginPath(); ctx.roundRect(LX, LY, LW, LH, LR);
       ctx.strokeStyle = 'rgba(0,0,0,0.5)'; ctx.lineWidth = 1; ctx.stroke();
 
-      // tape window: wider for reel separation, reels in upper half, guide below
-      const WX = 84, WY = 48, WW = 152, WH = 54, WR = 6;
+      // ── tape window with drop shadow + recessed inner shade (from block 1) ──
+      const WX = 93, WY = 52, WW = 134, WH = 58, WR = 6;
       ctx.save();
       ctx.shadowColor = 'rgba(0,0,0,0.9)';
       ctx.shadowBlur = 10;
       ctx.shadowOffsetY = 3;
       ctx.beginPath(); ctx.roundRect(WX, WY, WW, WH, WR);
-      ctx.fillStyle = '#0a0a0a'; ctx.fill();
+      ctx.fillStyle = '#0d0d0d'; ctx.fill();
       ctx.restore();
       ctx.beginPath(); ctx.roundRect(WX, WY, WW, WH, WR);
       ctx.strokeStyle = '#3a3a3a'; ctx.lineWidth = 1; ctx.stroke();
@@ -248,31 +240,24 @@ function CassetteVisualizer({ isPlaying, currentTime, duration, coverUrl }) {
       ctx.fillStyle = winShade; ctx.fillRect(WX, WY, WW, WH);
       ctx.restore();
 
-      // reels in upper portion, guide tape sits below them separately
-      const LCX = 118, RCX = 202, reelCY = 76;
-      const guideY  = 96;
-      const guideX1 = LCX + 20;
-      const guideX2 = RCX - 20;
+      const LCX = 127, RCX = 193, reelCY = 81;
+      const guideY = reelCY + 18;
 
-      // tape strip — below the reels, not touching them
       ctx.beginPath();
-      ctx.moveTo(guideX1, guideY - 1.5); ctx.lineTo(guideX2, guideY - 1.5);
+      ctx.moveTo(LCX + 14, guideY - 1.5); ctx.lineTo(RCX - 14, guideY - 1.5);
       ctx.strokeStyle = '#3d1f0a'; ctx.lineWidth = 4; ctx.stroke();
       ctx.beginPath();
-      ctx.moveTo(guideX1, guideY + 1.5); ctx.lineTo(guideX2, guideY + 1.5);
+      ctx.moveTo(LCX + 14, guideY + 1.5); ctx.lineTo(RCX - 14, guideY + 1.5);
       ctx.strokeStyle = '#5a2e0f'; ctx.lineWidth = 0.8; ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(guideX1, guideY - 2.5); ctx.lineTo(guideX2, guideY - 2.5);
-      ctx.strokeStyle = 'rgba(255,200,100,0.22)'; ctx.lineWidth = 1; ctx.stroke();
 
-      [guideX1, guideX2].forEach(px => {
+      [LCX + 14, RCX - 14].forEach(px => {
         ctx.beginPath(); ctx.arc(px, guideY, 2.8, 0, Math.PI * 2);
         ctx.fillStyle = '#555'; ctx.fill();
         ctx.strokeStyle = '#777'; ctx.lineWidth = 0.6; ctx.stroke();
       });
 
       if (isPlaying) angleRef.current += 0.038;
-      reel(LCX, reelCY, 20, 1 - tapeRef.current, angleRef.current);
+      reel(LCX, reelCY, 20, 1 - tapeRef.current, -angleRef.current);
       reel(RCX, reelCY, 20,     tapeRef.current,   angleRef.current);
 
       // bottom mechanics strip
