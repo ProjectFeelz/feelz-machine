@@ -122,29 +122,84 @@ function CassetteVisualizer({ isPlaying, currentTime, duration, coverUrl }) {
     }
 
     function reel(cx, cy, outerR, fillRatio, ang) {
+      // ── drop shadow beneath reel ──
+      ctx.save();
+      ctx.shadowColor = 'rgba(0,0,0,0.9)';
+      ctx.shadowBlur = 10;
+      ctx.shadowOffsetX = 2;
+      ctx.shadowOffsetY = 4;
       ctx.beginPath(); ctx.arc(cx, cy, outerR, 0, Math.PI * 2);
-      ctx.fillStyle = '#1a1a1a'; ctx.fill();
-      ctx.strokeStyle = '#555'; ctx.lineWidth = 1; ctx.stroke();
+      ctx.fillStyle = '#111'; ctx.fill();
+      ctx.restore();
 
-      const inner = 8;
-      const tapeR = inner + (outerR - inner) * Math.max(0.04, fillRatio);
+      // ── outer rim with radial gradient for dome effect ──
+      const rimG = ctx.createRadialGradient(cx - outerR * 0.3, cy - outerR * 0.3, outerR * 0.1, cx, cy, outerR);
+      rimG.addColorStop(0,   '#3a3a3a');
+      rimG.addColorStop(0.6, '#1a1a1a');
+      rimG.addColorStop(1,   '#0a0a0a');
+      ctx.beginPath(); ctx.arc(cx, cy, outerR, 0, Math.PI * 2);
+      ctx.fillStyle = rimG; ctx.fill();
+
+      // ── rim highlight ring ──
+      ctx.beginPath(); ctx.arc(cx, cy, outerR - 0.5, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(255,255,255,0.12)'; ctx.lineWidth = 1; ctx.stroke();
+      ctx.beginPath(); ctx.arc(cx, cy, outerR, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(0,0,0,0.8)'; ctx.lineWidth = 1.5; ctx.stroke();
+
+      // ── tape spool with gradient depth ──
+      const inner = 10;
+      const tapeR = inner + (outerR - inner) * Math.max(0.05, fillRatio);
+      const tapeG = ctx.createRadialGradient(cx - 3, cy - 3, 1, cx, cy, tapeR);
+      tapeG.addColorStop(0,   '#6b3f1f');
+      tapeG.addColorStop(0.5, '#4a2e1a');
+      tapeG.addColorStop(1,   '#2a1608');
       ctx.beginPath(); ctx.arc(cx, cy, tapeR, 0, Math.PI * 2);
-      ctx.fillStyle = '#4a2e1a'; ctx.fill();
+      ctx.fillStyle = tapeG; ctx.fill();
       ctx.strokeStyle = '#5a3820'; ctx.lineWidth = 0.8; ctx.stroke();
 
-      ctx.beginPath(); ctx.arc(cx, cy, inner + 0.5, 0, Math.PI * 2);
-      ctx.fillStyle = '#d8d8d8'; ctx.fill();
-      ctx.strokeStyle = '#bbb'; ctx.lineWidth = 0.7; ctx.stroke();
-
+      // ── spokes with lit/shadow sides ──
       for (let i = 0; i < 5; i++) {
         const a = ang + (i * Math.PI * 2) / 5;
+        const x1 = cx + Math.cos(a) * 3.5;
+        const y1 = cy + Math.sin(a) * 3.5;
+        const x2 = cx + Math.cos(a) * (inner - 1);
+        const y2 = cy + Math.sin(a) * (inner - 1);
+        // shadow side
         ctx.beginPath();
-        ctx.moveTo(cx + Math.cos(a) * 3, cy + Math.sin(a) * 3);
-        ctx.lineTo(cx + Math.cos(a) * (inner - 0.5), cy + Math.sin(a) * (inner - 0.5));
-        ctx.strokeStyle = '#888'; ctx.lineWidth = 1.2; ctx.stroke();
+        ctx.moveTo(x1 + 0.8, y1 + 1); ctx.lineTo(x2 + 0.8, y2 + 1);
+        ctx.strokeStyle = 'rgba(0,0,0,0.7)'; ctx.lineWidth = 2.5; ctx.stroke();
+        // lit side
+        ctx.beginPath();
+        ctx.moveTo(x1, y1); ctx.lineTo(x2, y2);
+        const spokeG = ctx.createLinearGradient(x1, y1, x2, y2);
+        spokeG.addColorStop(0, '#aaa');
+        spokeG.addColorStop(1, '#555');
+        ctx.strokeStyle = spokeG; ctx.lineWidth = 1.8; ctx.stroke();
       }
-      ctx.beginPath(); ctx.arc(cx, cy, 2.5, 0, Math.PI * 2);
-      ctx.fillStyle = '#333'; ctx.fill();
+
+      // ── hub plate with radial gradient ──
+      const hubG = ctx.createRadialGradient(cx - 2, cy - 2, 0.5, cx, cy, inner);
+      hubG.addColorStop(0,   '#e8e8e8');
+      hubG.addColorStop(0.4, '#c0c0c0');
+      hubG.addColorStop(0.8, '#888');
+      hubG.addColorStop(1,   '#555');
+      ctx.beginPath(); ctx.arc(cx, cy, inner, 0, Math.PI * 2);
+      ctx.fillStyle = hubG; ctx.fill();
+      ctx.strokeStyle = 'rgba(0,0,0,0.5)'; ctx.lineWidth = 0.8; ctx.stroke();
+
+      // ── hub specular dot ──
+      const specG = ctx.createRadialGradient(cx - 2.5, cy - 2.5, 0, cx - 2.5, cy - 2.5, 4);
+      specG.addColorStop(0, 'rgba(255,255,255,0.9)');
+      specG.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.beginPath(); ctx.arc(cx, cy, inner, 0, Math.PI * 2);
+      ctx.fillStyle = specG; ctx.fill();
+
+      // ── centre pin ──
+      const pinG = ctx.createRadialGradient(cx - 1, cy - 1, 0, cx, cy, 3.5);
+      pinG.addColorStop(0, '#555');
+      pinG.addColorStop(1, '#111');
+      ctx.beginPath(); ctx.arc(cx, cy, 3.5, 0, Math.PI * 2);
+      ctx.fillStyle = pinG; ctx.fill();
     }
 
     function render() {
@@ -275,36 +330,64 @@ function CassetteVisualizer({ isPlaying, currentTime, duration, coverUrl }) {
       ctx.beginPath(); ctx.roundRect(WX, WY, WW, WH, WR);
       ctx.strokeStyle = '#555'; ctx.lineWidth = 1.5; ctx.stroke();
 
-      // inner shadow + glass glare over the window
+      // ── glass layer over reels ──
       ctx.save();
       ctx.beginPath(); ctx.roundRect(WX, WY, WW, WH, WR); ctx.clip();
-      const depthShade = ctx.createLinearGradient(WX, WY, WX, WY + 14);
-      depthShade.addColorStop(0, 'rgba(0,0,0,0.75)');
-      depthShade.addColorStop(1, 'rgba(0,0,0,0)');
-      ctx.fillStyle = depthShade; ctx.fillRect(WX, WY, WW, WH);
-      // strong top-edge specular line
-      const specular = ctx.createLinearGradient(WX, WY, WX, WY + 4);
-      specular.addColorStop(0, 'rgba(255,255,255,0.55)');
-      specular.addColorStop(1, 'rgba(255,255,255,0)');
-      ctx.fillStyle = specular; ctx.fillRect(WX, WY, WW, 4);
 
-      // broad gloss sweep across top half
-      const glare = ctx.createLinearGradient(WX, WY, WX, WY + WH * 0.6);
-      glare.addColorStop(0,   'rgba(255,255,255,0.28)');
-      glare.addColorStop(0.4, 'rgba(255,255,255,0.08)');
-      glare.addColorStop(1,   'rgba(255,255,255,0)');
-      ctx.fillStyle = glare; ctx.fillRect(WX, WY, WW, WH);
+      // recessed inner shadow — top and left edges feel sunken
+      const recessTop = ctx.createLinearGradient(WX, WY, WX, WY + 18);
+      recessTop.addColorStop(0, 'rgba(0,0,0,0.85)');
+      recessTop.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = recessTop; ctx.fillRect(WX, WY, WW, WH);
 
-      // diagonal glare streak for that curved-plastic look
+      const recessLeft = ctx.createLinearGradient(WX, WY, WX + 14, WY);
+      recessLeft.addColorStop(0, 'rgba(0,0,0,0.4)');
+      recessLeft.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = recessLeft; ctx.fillRect(WX, WY, WW, WH);
+
+      // broad glass body tint — slightly blue-tinted like real smoked plastic
+      ctx.fillStyle = 'rgba(180,210,255,0.04)';
+      ctx.fillRect(WX, WY, WW, WH);
+
+      // primary gloss sweep — curved highlight across top half
+      const gloss = ctx.createLinearGradient(WX, WY, WX, WY + WH * 0.55);
+      gloss.addColorStop(0,    'rgba(255,255,255,0.32)');
+      gloss.addColorStop(0.25, 'rgba(255,255,255,0.10)');
+      gloss.addColorStop(0.6,  'rgba(255,255,255,0.02)');
+      gloss.addColorStop(1,    'rgba(255,255,255,0)');
+      ctx.fillStyle = gloss; ctx.fillRect(WX, WY, WW, WH);
+
+      // sharp top-edge specular line — the brightest point of the glass
+      const topSpec = ctx.createLinearGradient(WX, WY, WX, WY + 3);
+      topSpec.addColorStop(0, 'rgba(255,255,255,0.75)');
+      topSpec.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = topSpec; ctx.fillRect(WX + WR, WY, WW - WR * 2, 3);
+
+      // diagonal streak — off-centre so it looks like a curved surface catch
       ctx.save();
-      ctx.globalAlpha = 0.12;
-      const streak = ctx.createLinearGradient(WX, WY, WX + WW * 0.4, WY + WH);
-      streak.addColorStop(0,   'rgba(255,255,255,0.9)');
-      streak.addColorStop(0.3, 'rgba(255,255,255,0.3)');
-      streak.addColorStop(1,   'rgba(255,255,255,0)');
-      ctx.fillStyle = streak; ctx.fillRect(WX, WY, WW, WH);
+      ctx.translate(WX + WW * 0.15, WY);
+      ctx.rotate(0.18);
+      const streak = ctx.createLinearGradient(0, 0, WW * 0.45, WH * 1.1);
+      streak.addColorStop(0,    'rgba(255,255,255,0.18)');
+      streak.addColorStop(0.35, 'rgba(255,255,255,0.05)');
+      streak.addColorStop(1,    'rgba(255,255,255,0)');
+      ctx.fillStyle = streak;
+      ctx.fillRect(0, 0, WW * 0.45, WH * 1.4);
       ctx.restore();
+
+      // bottom inner glow — light bouncing back off the cassette body
+      const bottomBounce = ctx.createLinearGradient(WX, WY + WH, WX, WY + WH - 10);
+      bottomBounce.addColorStop(0, 'rgba(255,255,255,0.06)');
+      bottomBounce.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = bottomBounce; ctx.fillRect(WX, WY + WH - 10, WW, 10);
+
       ctx.restore();
+
+      // ── outer window bezel — drawn last so it frames everything ──
+      ctx.beginPath(); ctx.roundRect(WX, WY, WW, WH, WR);
+      ctx.strokeStyle = 'rgba(255,255,255,0.18)'; ctx.lineWidth = 1; ctx.stroke();
+      ctx.beginPath(); ctx.roundRect(WX + 1, WY + 1, WW - 2, WH - 2, WR - 1);
+      ctx.strokeStyle = 'rgba(0,0,0,0.7)'; ctx.lineWidth = 1; ctx.stroke();
 
       // bottom mechanics strip
       ctx.beginPath(); ctx.roundRect(BX + 6, BY + BH - 36, BW - 12, 30, 4);
