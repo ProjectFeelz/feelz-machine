@@ -9,7 +9,7 @@ import {
   Shield, Users, BarChart3, AlertTriangle, Music,
   Upload, HeartHandshake, Bell, Palette, MessageCircle,
   ChevronRight, Crown, Zap, Star, Mic2, LayoutDashboard,
-  User, LogOut, DollarSign, Megaphone, Radio,
+  User, LogOut, DollarSign, Trophy, Brain, Megaphone, Radio,
 } from 'lucide-react';
 
 function LinkCard({ icon: Icon, label, description, path, color, onClick }) {
@@ -157,6 +157,8 @@ export default function HubPage() {
               <LinkCard icon={Megaphone}     label="Broadcast & APK"     description="Send updates to all users · Manage APK link"  path="/admin/broadcast"    color="bg-purple-500/20" />
               <LinkCard icon={Zap}           label="Boost Manager"       description="Boost and feature artist content"             path="/admin/boost"        color="bg-amber-500/20" />
               <LinkCard icon={BarChart3}     label="User Behavior"       description="Streams, downloads, logins, activity export"  path="/admin/behavior"     color="bg-cyan-500/20" />
+              <LinkCard icon={Trophy}       label="Competitions"       description="Create and manage artist competitions"          path="/admin/competitions" color="bg-yellow-500/20" />
+              <LinkCard icon={Brain}        label="Engagement Drip"    description="AI messaging · segment settings · send stats"   path="/admin/engagement"   color="bg-violet-500/20" />
             </Section>
           )}
 
