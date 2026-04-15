@@ -1,0 +1,884 @@
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { motion, useMotionValue, useTransform, animate } from 'framer-motion';
+import {
+  Play, Pause, SkipBack, SkipForward, ChevronDown,
+  Shuffle, Repeat, Repeat1, Heart, Share2, ListMusic, Check,
+  Volume2, VolumeX, X, MoreHorizontal, Music2,
+} from 'lucide-react';
+import { usePlayer } from '../../contexts/PlayerContext';
+import { useAuth } from '../../contexts/AuthContext';
+import { supabase } from '../../supabaseClient';
+import TrackActionSheet from '../TrackActionSheet';
+import { useHaptics } from '../../hooks/useHaptics';
+import VinylRecord from '../VinylRecord';
+import ShareCard from '../ShareCard';
+import ReactPlayer from 'react-player';
+
+function formatTime(secs) {
+  if (!secs || isNaN(secs)) return '0:00';
+  return `${Math.floor(secs / 60)}:${Math.floor(secs % 60).toString().padStart(2, '0')}`;
+}
+
+// ── LRC timestamp parser ──────────────────────────────────────────────────────
+// Parses [mm:ss.xx] or [mm:ss] prefixed lines
+// Returns array of { time: seconds, text: string } or null if not LRC format
+function parseLRC(raw) {
+  if (!raw) return null;
+  const lines = raw.split('\n');
+  const parsed = [];
+  const LRC_RE = /^\[(\d{1,2}):(\d{2})(?:[.:](\d{1,3}))?\]\s*(.*)$/;
+  let matched = 0;
+  for (const line of lines) {
+    const m = line.match(LRC_RE);
+    if (m) {
+      matched++;
+      const mins = parseInt(m[1], 10);
+      const secs = parseInt(m[2], 10);
+      const ms   = m[3] ? parseInt(m[3].padEnd(3, '0'), 10) : 0;
+      const text = m[4].trim();
+      parsed.push({ time: mins * 60 + secs + ms / 1000, text });
+    }
+  }
+  // Only treat as LRC if at least 2 timestamped lines found
+  return matched >= 2 ? parsed.sort((a, b) => a.time - b.time) : null;
+}
+
+// ── Icon components ───────────────────────────────────────────────────────────
+const IconImage = () => (
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/>
+    <polyline points="21 15 16 10 5 21"/>
+  </svg>
+);
+const IconVinyl = () => (
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/>
+  </svg>
+);
+const IconVideo = () => (
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
+  </svg>
+);
+const IconLyrics = () => (
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
+  </svg>
+);
+const IconCassette = () => (
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <rect x="2" y="5" width="20" height="14" rx="2"/>
+    <circle cx="8" cy="12" r="2"/><circle cx="16" cy="12" r="2"/>
+    <path d="M8 14h8"/><path d="M6 19v-2"/><path d="M18 19v-2"/>
+  </svg>
+);
+
+const ALL_MODES = ['artwork', 'vinyl', 'cassette', 'video', 'lyrics'];
+
+
+// ── Cassette Tape Visualizer ──────────────────────────────────────────────────
+function CassetteVisualizer({ isPlaying, currentTime, duration, coverUrl }) {
+  const canvasRef = React.useRef(null);
+  const animRef   = React.useRef(null);
+  const angleRef  = React.useRef(0);
+  const frameRef  = React.useRef(0);
+  const tapeRef   = React.useRef(0);
+  const imgRef    = React.useRef(null);
+
+  React.useEffect(() => {
+    tapeRef.current = duration > 0 ? currentTime / duration : 0;
+  }, [currentTime, duration]);
+
+  React.useEffect(() => {
+    if (!coverUrl) { imgRef.current = null; return; }
+    const img = new window.Image();
+    img.crossOrigin = 'anonymous';
+    img.onload  = () => { imgRef.current = img; };
+    img.onerror = () => { imgRef.current = null; };
+    img.src = coverUrl;
+  }, [coverUrl]);
+
+  React.useEffect(() => {
+    const cv = canvasRef.current;
+    if (!cv) return;
+    const ctx = cv.getContext('2d');
+    const W = 480, H = 310;
+    const BAR_N = 32;
+    const phases = Array.from({ length: BAR_N }, () => Math.random() * Math.PI * 2);
+    const speeds  = Array.from({ length: BAR_N }, () => 0.7 + Math.random() * 2.2);
+
+    // cassette body
+    const BX=28, BY=26, BW=424, BH=196, BR=15;
+    // label — same proportions as cream original, art fills the same area
+    const LX=62, LY=36, LW=300, LH=108, LR=7;
+    // tape window — centred in label
+    const WX=140, WY=48, WW=160, WH=72, WR=8;
+    const LCX=186, RCX=264, RCY=WY+WH/2+2, guideY=WY+WH/2+26;
+
+    function rr(x,y,w,h,r){ ctx.beginPath(); ctx.roundRect(x,y,w,h,r); }
+    function addShine(x,y,w,h,r,a){
+      const g=ctx.createLinearGradient(x,y,x,y+h*0.5);
+      g.addColorStop(0,`rgba(255,255,255,${a})`);
+      g.addColorStop(0.5,`rgba(255,255,255,${a*0.2})`);
+      g.addColorStop(1,'rgba(255,255,255,0)');
+      ctx.save(); rr(x,y,w,h,r); ctx.clip(); ctx.fillStyle=g; ctx.fill(); ctx.restore();
+    }
+    function edgeLight(x,y,w,h,r){
+      ctx.save(); rr(x,y,w,h,r); ctx.clip();
+      const g=ctx.createLinearGradient(x,y,x,y+5);
+      g.addColorStop(0,'rgba(255,255,255,0.4)'); g.addColorStop(1,'rgba(255,255,255,0)');
+      ctx.fillStyle=g; ctx.fillRect(x,y,w,6); ctx.restore();
+    }
+    function screw(x,y,r){
+      ctx.save(); ctx.shadowColor='rgba(0,0,0,0.5)'; ctx.shadowBlur=4; ctx.shadowOffsetY=1;
+      ctx.beginPath(); ctx.arc(x,y,r+1.5,0,Math.PI*2); ctx.fillStyle='rgba(0,0,0,0.35)'; ctx.fill(); ctx.restore();
+      const rg=ctx.createRadialGradient(x-r*0.3,y-r*0.3,0.5,x,y,r);
+      rg.addColorStop(0,'#4a4a4a'); rg.addColorStop(1,'#1a1a1a');
+      ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2);
+      ctx.fillStyle=rg; ctx.fill(); ctx.strokeStyle='#666'; ctx.lineWidth=0.6; ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(x-r*0.55,y); ctx.lineTo(x+r*0.55,y);
+      ctx.moveTo(x,y-r*0.55); ctx.lineTo(x,y+r*0.55);
+      ctx.strokeStyle='rgba(0,0,0,0.7)'; ctx.lineWidth=1; ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x-r*0.5,y-0.5); ctx.lineTo(x+r*0.5,y-0.5);
+      ctx.strokeStyle='rgba(255,255,255,0.22)'; ctx.lineWidth=0.5; ctx.stroke();
+    }
+    function reel(cx,cy,outerR,fillR,angle){
+      ctx.save(); ctx.shadowColor='rgba(0,0,0,0.55)'; ctx.shadowBlur=6; ctx.shadowOffsetY=2;
+      ctx.beginPath(); ctx.arc(cx,cy,outerR,0,Math.PI*2); ctx.fillStyle='#111'; ctx.fill(); ctx.restore();
+      const og=ctx.createRadialGradient(cx-outerR*0.3,cy-outerR*0.3,1,cx,cy,outerR);
+      og.addColorStop(0,'#3a3a3a'); og.addColorStop(1,'#111');
+      ctx.beginPath(); ctx.arc(cx,cy,outerR,0,Math.PI*2);
+      ctx.fillStyle=og; ctx.fill(); ctx.strokeStyle='#555'; ctx.lineWidth=1; ctx.stroke();
+      const inner=10, tapeR=inner+(outerR-inner)*Math.max(0.04,fillR);
+      const tg=ctx.createRadialGradient(cx,cy,inner,cx,cy,tapeR);
+      tg.addColorStop(0,'#6b3a1f'); tg.addColorStop(1,'#3d1a08');
+      ctx.beginPath(); ctx.arc(cx,cy,tapeR,0,Math.PI*2);
+      ctx.fillStyle=tg; ctx.fill(); ctx.strokeStyle='#5a2e0f'; ctx.lineWidth=0.8; ctx.stroke();
+      const hg=ctx.createRadialGradient(cx-3,cy-3,0.5,cx,cy,inner+1);
+      hg.addColorStop(0,'#f0f0f0'); hg.addColorStop(1,'#b8b8b8');
+      ctx.beginPath(); ctx.arc(cx,cy,inner+1,0,Math.PI*2);
+      ctx.fillStyle=hg; ctx.fill(); ctx.strokeStyle='#999'; ctx.lineWidth=0.7; ctx.stroke();
+      for(let i=0;i<5;i++){
+        const a=angle+(i*Math.PI*2/5);
+        ctx.beginPath();
+        ctx.moveTo(cx+Math.cos(a)*3.5,cy+Math.sin(a)*3.5);
+        ctx.lineTo(cx+Math.cos(a)*(inner-0.5),cy+Math.sin(a)*(inner-0.5));
+        ctx.strokeStyle='#707070'; ctx.lineWidth=1.4; ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(cx+Math.cos(a)*3.5,cy+Math.sin(a)*3.5);
+        ctx.lineTo(cx+Math.cos(a)*(inner-0.5),cy+Math.sin(a)*(inner-0.5));
+        ctx.strokeStyle='rgba(255,255,255,0.14)'; ctx.lineWidth=0.5; ctx.stroke();
+      }
+      ctx.beginPath(); ctx.arc(cx,cy,3,0,Math.PI*2); ctx.fillStyle='#222'; ctx.fill();
+      ctx.beginPath(); ctx.arc(cx-0.8,cy-0.8,1,0,Math.PI*2);
+      ctx.fillStyle='rgba(255,255,255,0.28)'; ctx.fill();
+    }
+
+    function render() {
+      ctx.clearRect(0,0,W,H);
+
+      // body shadow + fill
+      ctx.save(); ctx.shadowColor='rgba(0,0,0,0.7)'; ctx.shadowBlur=22; ctx.shadowOffsetY=9;
+      rr(BX,BY,BW,BH,BR); ctx.fillStyle='#1c1c1c'; ctx.fill(); ctx.restore();
+      const bg=ctx.createLinearGradient(BX,BY,BX,BY+BH);
+      bg.addColorStop(0,'#2e2e2e'); bg.addColorStop(0.15,'#1c1c1c');
+      bg.addColorStop(0.85,'#181818'); bg.addColorStop(1,'#111');
+      rr(BX,BY,BW,BH,BR); ctx.fillStyle=bg; ctx.fill();
+      ctx.strokeStyle='#3d3d3d'; ctx.lineWidth=1.2; ctx.stroke();
+
+      // label — art if available, else cream fallback
+      ctx.save(); rr(LX,LY,LW,LH,LR); ctx.clip();
+      if (imgRef.current) {
+        // cover art fills label — object-fit:cover behaviour
+        const img = imgRef.current;
+        const scale = Math.max(LW/img.width, LH/img.height);
+        const dw = img.width*scale, dh = img.height*scale;
+        const dx = LX+(LW-dw)/2, dy = LY+(LH-dh)/2;
+        ctx.drawImage(img, dx, dy, dw, dh);
+      } else {
+        // cream fallback — identical to original design
+        ctx.fillStyle='#e8e0cc'; ctx.fillRect(LX,LY,LW,LH);
+        const stripes=['#e63946','#f4a261','#e9c46a','#2a9d8f','#457b9d','#9b5de5'];
+        const sw=LW/6;
+        stripes.forEach((c,i)=>{ ctx.fillStyle=c; ctx.fillRect(LX+i*sw,LY+LH-20,sw+0.5,20); });
+        ctx.fillStyle='#1a1a1a';
+        ctx.font='bold 10px sans-serif'; ctx.textAlign='left'; ctx.fillText('SIDE B',LX+10,LY+15);
+        ctx.font='bold 11px sans-serif'; ctx.textAlign='right'; ctx.fillText('90',LX+LW-10,LY+15);
+        ctx.font='8px sans-serif'; ctx.textAlign='left'; ctx.fillStyle='#666';
+        ctx.fillText('INDEX',LX+10,LY+LH-26);
+        ctx.strokeStyle='#bbb'; ctx.lineWidth=0.5;
+        for(let i=0;i<3;i++){
+          ctx.beginPath(); ctx.moveTo(LX+38,LY+LH-22+i*3); ctx.lineTo(LX+LW-10,LY+LH-22+i*3); ctx.stroke();
+        }
+      }
+      ctx.restore();
+      rr(LX,LY,LW,LH,LR); ctx.strokeStyle='rgba(0,0,0,0.55)'; ctx.lineWidth=1.1; ctx.stroke();
+
+      // tape window
+      ctx.save(); ctx.shadowColor='rgba(0,0,0,0.95)'; ctx.shadowBlur=14; ctx.shadowOffsetY=4;
+      rr(WX,WY,WW,WH,WR); ctx.fillStyle='#060606'; ctx.fill(); ctx.restore();
+      ctx.strokeStyle='#3a3a3a'; ctx.lineWidth=1.2; ctx.stroke();
+      const wg=ctx.createLinearGradient(WX,WY,WX,WY+WH);
+      wg.addColorStop(0,'rgba(80,80,80,0.18)'); wg.addColorStop(0.12,'rgba(0,0,0,0)');
+      ctx.save(); rr(WX,WY,WW,WH,WR); ctx.clip(); ctx.fillStyle=wg; ctx.fill(); ctx.restore();
+
+      // tape strip
+      ctx.beginPath(); ctx.moveTo(LCX+14,guideY-2); ctx.lineTo(RCX-14,guideY-2);
+      ctx.strokeStyle='#3d1f0a'; ctx.lineWidth=5; ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(LCX+14,guideY+2); ctx.lineTo(RCX-14,guideY+2);
+      ctx.strokeStyle='#6b3a1f'; ctx.lineWidth=0.8; ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(LCX+14,guideY-1.5); ctx.lineTo(RCX-14,guideY-1.5);
+      ctx.strokeStyle='rgba(255,200,120,0.13)'; ctx.lineWidth=0.7; ctx.stroke();
+      [LCX+14,RCX-14].forEach(px=>{
+        const pg=ctx.createRadialGradient(px-1,guideY-1,0.3,px,guideY,3.5);
+        pg.addColorStop(0,'#777'); pg.addColorStop(1,'#333');
+        ctx.beginPath(); ctx.arc(px,guideY,3.5,0,Math.PI*2);
+        ctx.fillStyle=pg; ctx.fill(); ctx.strokeStyle='#888'; ctx.lineWidth=0.6; ctx.stroke();
+      });
+
+      if(isPlaying) angleRef.current+=0.038;
+      reel(LCX,RCY,22,1-tapeRef.current,-angleRef.current);
+      reel(RCX,RCY,22,tapeRef.current,   angleRef.current);
+
+      // gloss over label
+      addShine(LX,LY,LW,LH,LR,0.18);
+      edgeLight(LX,LY,LW,LH,LR);
+
+      // bottom mechanics
+      const MX=BX+9,MY=BY+BH-44,MW=BW-18,MH=36;
+      const mg=ctx.createLinearGradient(MX,MY,MX,MY+MH);
+      mg.addColorStop(0,'#1a1a1a'); mg.addColorStop(1,'#0e0e0e');
+      rr(MX,MY,MW,MH,5); ctx.fillStyle=mg; ctx.fill();
+      ctx.strokeStyle='#2e2e2e'; ctx.lineWidth=0.8; ctx.stroke();
+      [BX+38,BX+BW/2-13,BX+BW-38-26].forEach(hx=>{
+        ctx.save(); ctx.shadowColor='rgba(0,0,0,0.8)'; ctx.shadowBlur=4; ctx.shadowOffsetY=1;
+        rr(hx,MY+7,26,22,3); ctx.fillStyle='#080808'; ctx.fill(); ctx.restore();
+        ctx.strokeStyle='#333'; ctx.lineWidth=0.7; ctx.stroke();
+      });
+      [BX+96,BX+BW-96-20].forEach(tx=>{
+        const tg2=ctx.createLinearGradient(tx,MY+10,tx,MY+24);
+        tg2.addColorStop(0,'#303030'); tg2.addColorStop(1,'#1a1a1a');
+        rr(tx,MY+10,20,14,2); ctx.fillStyle=tg2; ctx.fill();
+        ctx.strokeStyle='#444'; ctx.lineWidth=0.7; ctx.stroke();
+      });
+      [[BX,BY+48,8,54],[BX+BW-8,BY+48,8,54]].forEach(([ex,ey,ew,eh])=>{
+        const eg=ctx.createLinearGradient(ex,ey,ex+ew,ey);
+        eg.addColorStop(0,'#222'); eg.addColorStop(1,'#2a2a2a');
+        rr(ex,ey,ew,eh,3); ctx.fillStyle=eg; ctx.fill();
+        ctx.strokeStyle='#333'; ctx.lineWidth=0.7; ctx.stroke();
+      });
+      [[BX+17,BY+17],[BX+BW-17,BY+17],[BX+17,BY+BH-17],[BX+BW-17,BY+BH-17]]
+        .forEach(([sx,sy])=>screw(sx,sy,7));
+
+      // body gloss
+      addShine(BX,BY,BW,BH,BR,0.09);
+      edgeLight(BX,BY,BW,BH,BR);
+      ctx.save();
+      const specG=ctx.createLinearGradient(BX,BY,BX+10,BY);
+      specG.addColorStop(0,'rgba(255,255,255,0.11)'); specG.addColorStop(1,'rgba(255,255,255,0)');
+      rr(BX,BY,BW,BH,BR); ctx.clip(); ctx.fillStyle=specG; ctx.fillRect(BX,BY,10,BH); ctx.restore();
+
+      // frequency bars
+      const barW=5,gap=2.5,barBaseY=H-12,maxBarH=32,totalBW=BAR_N*(barW+gap)-gap,bx0=(W-totalBW)/2;
+      phases.forEach((ph,i)=>{
+        const h=isPlaying?(0.06+0.94*Math.abs(Math.sin(frameRef.current*speeds[i]*0.042+ph)))*maxBarH:4;
+        ctx.fillStyle=`hsla(${200+i*5},80%,65%,0.9)`;
+        ctx.beginPath(); ctx.roundRect(bx0+i*(barW+gap),barBaseY-h,barW,h,1.5); ctx.fill();
+        ctx.fillStyle=`hsla(${200+i*5},80%,85%,0.3)`;
+        ctx.beginPath(); ctx.roundRect(bx0+i*(barW+gap),barBaseY-h,barW*0.4,h*0.5,1); ctx.fill();
+      });
+
+      frameRef.current++;
+      animRef.current = requestAnimationFrame(render);
+    }
+
+    render();
+    return () => cancelAnimationFrame(animRef.current);
+  }, [isPlaying]);
+
+  return (
+    <div className="flex flex-col items-center justify-center w-full px-4">
+      <canvas ref={canvasRef} width={480} height={310} className="w-full max-w-[360px]" />
+    </div>
+  );
+}
+
+
+// ── Lyrics display component ──────────────────────────────────────────────────
+function LyricsDisplay({ lyrics, currentTime, duration, isPlaying }) {
+  const scrollRef      = useRef(null);
+  const userScrollRef  = useRef(false);
+  const resumeTimer    = useRef(null);
+  const lineRefs       = useRef([]);
+
+  const lrcLines = parseLRC(lyrics);
+  const isLRC    = !!lrcLines;
+
+  // Find active line index for LRC
+  const activeLine = isLRC
+    ? lrcLines.reduce((best, line, i) => {
+        return line.time <= currentTime ? i : best;
+      }, -1)
+    : -1;
+
+  // Auto-scroll to active line
+  useEffect(() => {
+    if (!isLRC || activeLine < 0 || userScrollRef.current) return;
+    const el = lineRefs.current[activeLine];
+    if (el && scrollRef.current) {
+      const container = scrollRef.current;
+      const elTop     = el.offsetTop;
+      const elHeight  = el.offsetHeight;
+      const target    = elTop - container.clientHeight / 2 + elHeight / 2;
+      container.scrollTo({ top: Math.max(0, target), behavior: 'smooth' });
+    }
+  }, [activeLine, isLRC]);
+
+  // Plain text position-based scroll
+  useEffect(() => {
+    if (isLRC || userScrollRef.current || !duration || !scrollRef.current) return;
+    const container = scrollRef.current;
+    const maxScroll  = container.scrollHeight - container.clientHeight;
+    if (maxScroll <= 0) return;
+    const target = (currentTime / duration) * maxScroll * 0.85;
+    container.scrollTo({ top: target, behavior: 'smooth' });
+  }, [Math.floor(currentTime / 3), isLRC, duration]); // only update every 3 seconds
+
+  const handleScroll = () => {
+    userScrollRef.current = true;
+    clearTimeout(resumeTimer.current);
+    resumeTimer.current = setTimeout(() => { userScrollRef.current = false; }, 3000);
+  };
+
+  // Reset on track change
+  useEffect(() => {
+    userScrollRef.current = false;
+    if (scrollRef.current) scrollRef.current.scrollTop = 0;
+  }, [lyrics]);
+
+  if (!lyrics) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center text-center px-8 space-y-3">
+        <div className="w-14 h-14 rounded-2xl bg-white/[0.05] flex items-center justify-center">
+          <Music2 className="w-6 h-6 text-white/20" />
+        </div>
+        <p className="text-sm text-white/30">No lyrics for this track</p>
+        <p className="text-xs text-white/15">Artists can add lyrics when uploading</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex-1 relative min-h-0">
+      {/* Top fade */}
+      <div className="absolute top-0 left-0 right-0 h-12 bg-gradient-to-b from-black to-transparent z-10 pointer-events-none" />
+
+      <div
+        ref={scrollRef}
+        onScroll={handleScroll}
+        className="h-full overflow-y-auto px-8 py-12 scrollbar-hide"
+        style={{ scrollBehavior: 'smooth' }}
+      >
+        {isLRC ? (
+          // LRC mode — line by line with highlight
+          <div className="space-y-5 pb-32">
+            {lrcLines.map((line, i) => {
+              const isActive  = i === activeLine;
+              const isPast    = i < activeLine;
+              const isEmpty   = !line.text.trim();
+              if (isEmpty) return <div key={i} className="h-4" />;
+              return (
+                <p
+                  key={i}
+                  ref={el => { lineRefs.current[i] = el; }}
+                  className="text-left leading-snug transition-all duration-300"
+                  style={{
+                    fontSize: isActive ? '1.35rem' : '1.1rem',
+                    fontWeight: isActive ? 700 : 400,
+                    color: isActive
+                      ? 'rgba(255,255,255,1)'
+                      : isPast
+                        ? 'rgba(255,255,255,0.25)'
+                        : 'rgba(255,255,255,0.45)',
+                    transform: isActive ? 'translateX(4px)' : 'translateX(0)',
+                  }}
+                >
+                  {line.text}
+                </p>
+              );
+            })}
+          </div>
+        ) : (
+          // Plain text mode
+          <div className="pb-32">
+            {lyrics.split('\n').map((line, i) => (
+              <p
+                key={i}
+                className="text-white/70 leading-relaxed mb-1"
+                style={{ fontSize: '1.05rem', minHeight: line.trim() ? undefined : '1rem' }}
+              >
+                {line.trim() || '\u00A0'}
+              </p>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Bottom fade */}
+      <div className="absolute bottom-0 left-0 right-0 h-20 bg-gradient-to-t from-black to-transparent pointer-events-none" />
+
+      {/* LRC badge */}
+      {isLRC && (
+        <div className="absolute top-3 right-4 z-20">
+          <span className="text-[9px] font-bold uppercase tracking-widest text-white/20 bg-white/[0.05] px-2 py-0.5 rounded-full border border-white/[0.08]">
+            Synced
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Main FullPlayer ───────────────────────────────────────────────────────────
+export default function FullPlayer() {
+  const navigate = useNavigate();
+  const {
+    currentTrack, isPlaying, togglePlay,
+    playNext, playPrev, seek, duration, currentTime,
+    shuffle, repeat, toggleShuffle, toggleRepeat,
+    isMinimized, setIsMinimized, queue, volume, setVolumeLevel,
+    removeFromQueue,
+  } = usePlayer();
+  const { user } = useAuth();
+  const { tap, success, heavy } = useHaptics();
+
+  const [liked, setLiked]                     = useState(false);
+  const [showShareCard, setShowShareCard]      = useState(false);
+  const [showQueue, setShowQueue]             = useState(false);
+  const [showActionSheet, setShowActionSheet] = useState(false);
+  const [displayMode, setDisplayMode]         = useState('artwork');
+  const [videoMuted, setVideoMuted]           = useState(true);
+  const [lyrics, setLyrics]                   = useState(null);
+  const [lyricsLoading, setLyricsLoading]     = useState(false);
+
+  const y       = useMotionValue(window.innerHeight);
+  const opacity = useTransform(y, [0, 300], [1, 0]);
+
+  const hasVideo   = !!currentTrack?.youtube_url;
+  const hasLyrics  = !!lyrics;
+
+  // Reset video mode if track has no video
+  useEffect(() => {
+    if (!hasVideo && displayMode === 'video') setDisplayMode('artwork');
+  }, [currentTrack?.id]);
+
+  // Fetch lyrics when track changes or lyrics mode is entered
+  useEffect(() => {
+    if (!currentTrack?.id) { setLyrics(null); return; }
+    // Fetch lyrics — only if the track object doesn't already have them
+    if (currentTrack.lyrics !== undefined) {
+      setLyrics(currentTrack.lyrics || null);
+      return;
+    }
+    setLyricsLoading(true);
+    supabase
+      .from('tracks')
+      .select('lyrics')
+      .eq('id', currentTrack.id)
+      .maybeSingle()
+      .then(({ data }) => {
+        setLyrics(data?.lyrics || null);
+        setLyricsLoading(false);
+      });
+  }, [currentTrack?.id]);
+
+  useEffect(() => {
+    if (!currentTrack || !user) { setLiked(false); return; }
+    supabase.from('track_likes')
+      .select('id').eq('track_id', currentTrack.id).eq('user_id', user.id)
+      .maybeSingle().then(({ data }) => setLiked(!!data));
+  }, [currentTrack?.id, user?.id]);
+
+  useEffect(() => {
+    if (!isMinimized) animate(y, 0, { type: 'spring', damping: 30, stiffness: 300 });
+  }, [isMinimized]);
+
+  if (!currentTrack || isMinimized) return null;
+
+  const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
+  const coverArt = currentTrack.cover_artwork_url;
+
+  const handleSeek = (e) => {
+    const rect    = e.currentTarget.getBoundingClientRect();
+    const clientX = e.touches
+      ? (e.touches[0]?.clientX ?? e.changedTouches[0]?.clientX)
+      : e.clientX;
+    const pct = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
+    seek(pct * duration);
+    tap();
+  };
+
+  const handleLike = async () => {
+    if (!user) return;
+    success();
+    setLiked(prev => !prev);
+    if (liked) {
+      await supabase.from('track_likes').delete().eq('track_id', currentTrack.id).eq('user_id', user.id);
+    } else {
+      await supabase.from('track_likes').insert({ track_id: currentTrack.id, user_id: user.id });
+    }
+  };
+
+  const handleDragEnd = (_, info) => {
+    if (info.offset.y > 120 || info.velocity.y > 500) {
+      animate(y, window.innerHeight, { duration: 0.25 }).then(() => {
+        setIsMinimized(true);
+        animate(y, 0, { duration: 0 });
+      });
+    } else {
+      animate(y, 0, { type: 'spring', damping: 30, stiffness: 300 });
+    }
+  };
+
+  const setMode = (m) => { tap(); setDisplayMode(m); };
+
+  const isLyricsMode   = displayMode === 'lyrics';
+  const isCassetteMode = displayMode === 'cassette';
+
+  return (
+    <>
+      <motion.div
+        style={{ y, opacity }}
+        drag="y"
+        dragConstraints={{ top: 0, bottom: window.innerHeight }}
+        dragElastic={{ top: 0, bottom: 0.3 }}
+        onDragEnd={handleDragEnd}
+        initial={false}
+        animate={{ y: 0 }}
+        exit={{ y: '100%' }}
+        transition={{ type: 'tween', duration: 0.28, ease: [0.32, 0.72, 0, 1] }}
+        className="fixed inset-0 z-[100] bg-black flex flex-col"
+      >
+        {/* Drag handle */}
+        <div className="flex justify-center pt-3 pb-1 cursor-grab active:cursor-grabbing flex-shrink-0">
+          <div className="w-10 h-1 rounded-full bg-white/20" />
+        </div>
+
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 pt-4 pb-2 flex-shrink-0">
+          <button onClick={() => { tap(); setIsMinimized(true); }}
+            className="w-10 h-10 flex items-center justify-center">
+            <ChevronDown className="w-6 h-6 text-white" />
+          </button>
+          <p className="text-xs text-white/50 uppercase tracking-widest font-medium">Now Playing</p>
+          <button onClick={() => { tap(); setShowQueue(p => !p); }}
+            className="w-10 h-10 flex items-center justify-center">
+            <ListMusic className={`w-5 h-5 ${showQueue ? 'text-white' : 'text-white/50'}`} />
+          </button>
+        </div>
+
+        {/* Queue view */}
+        {showQueue ? (
+          <div className="flex-1 overflow-y-auto px-5 pb-10">
+            <p className="text-xs uppercase tracking-wider text-white/30 font-semibold mb-3">Up Next</p>
+            {(queue || []).length === 0 ? (
+              <p className="text-sm text-white/20 text-center py-12">No tracks in queue</p>
+            ) : (queue || []).map((track, i) => (
+              <div key={track.id}
+                className={`flex items-center space-x-3 py-3 border-b border-white/[0.04] ${track.id === currentTrack.id ? 'opacity-100' : 'opacity-50'}`}>
+                <div className="w-10 h-10 rounded-lg overflow-hidden bg-white/[0.06] flex-shrink-0">
+                  {track.cover_artwork_url
+                    ? <img src={track.cover_artwork_url} alt="" className="w-full h-full object-cover" loading="lazy" />
+                    : <div className="w-full h-full flex items-center justify-center text-white/20">♪</div>}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className={`text-sm font-medium truncate ${track.id === currentTrack.id ? 'text-white' : 'text-white/60'}`}>{track.title}</p>
+                  <p className="text-xs text-white/30 truncate">{track.artist_name}</p>
+                </div>
+                {track.id === currentTrack.id ? (
+                  <div className="flex items-end space-x-0.5 h-4 flex-shrink-0">
+                    {[100, 60, 80].map((h, i) => (
+                      <div key={i} className="w-0.5 bg-white rounded-full animate-pulse"
+                        style={{ height: `${h}%`, animationDelay: `${i * 0.15}s` }} />
+                    ))}
+                  </div>
+                ) : (
+                  <button onClick={() => { tap(); removeFromQueue(i); }}
+                    className="p-1.5 rounded-full hover:bg-white/10 flex-shrink-0">
+                    <X className="w-3.5 h-3.5 text-white/30" />
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+
+        ) : (
+          <>
+            {/* ── Lyrics mode — full height scrollable ── */}
+            {isLyricsMode ? (
+              <LyricsDisplay
+                lyrics={lyrics}
+                currentTime={currentTime}
+                duration={duration}
+                isPlaying={isPlaying}
+              />
+            ) : (
+              /* ── Main display area (artwork / vinyl / video) ── */
+              <div className="flex-1 relative flex flex-col items-center justify-center px-8 min-h-0 overflow-hidden">
+
+                {/* Video layer */}
+                {displayMode === 'video' && hasVideo && (
+                  <div className="absolute inset-0">
+                    <ReactPlayer
+                      url={currentTrack.youtube_url}
+                      playing={isPlaying}
+                      muted={videoMuted}
+                      loop
+                      width="100%"
+                      height="100%"
+                      style={{ position: 'absolute', top: 0, left: 0 }}
+                      config={{
+                        youtube: {
+                          playerVars: {
+                            controls: 0, modestbranding: 1, rel: 0,
+                            showinfo: 0, iv_load_policy: 3, playsinline: 1,
+                          },
+                        },
+                      }}
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/60" />
+                  </div>
+                )}
+
+                {/* Artwork mode */}
+                {displayMode === 'artwork' && (
+                  <div className="w-full max-w-[300px] aspect-square rounded-2xl overflow-hidden shadow-2xl shadow-black/60">
+                    {coverArt
+                      ? <img src={coverArt} alt={currentTrack.title} className="w-full h-full object-cover" loading="eager" />
+                      : <div className="w-full h-full bg-gradient-to-br from-white/10 to-white/5 flex items-center justify-center">
+                          <span className="text-6xl text-white/20">♪</span>
+                        </div>}
+                  </div>
+                )}
+
+                {/* Vinyl mode */}
+                {displayMode === 'vinyl' && (
+                  <VinylRecord
+                    coverUrl={coverArt}
+                    isPlaying={isPlaying}
+                    size={Math.min(300, window.innerWidth - 80)}
+                  />
+                )}
+
+                {/* Cassette mode */}
+                {displayMode === 'cassette' && (
+                  <CassetteVisualizer
+                    isPlaying={isPlaying}
+                    currentTime={currentTime}
+                    duration={duration}
+                    coverUrl={coverArt}
+                  />
+                )}
+
+                {/* Video unavailable fallback */}
+                {displayMode === 'video' && !hasVideo && (
+                  <div className="text-center space-y-2">
+                    <div className="w-14 h-14 rounded-2xl bg-white/[0.06] flex items-center justify-center mx-auto">
+                      <IconVideo />
+                    </div>
+                    <p className="text-sm text-white/30">No video for this track</p>
+                    <p className="text-xs text-white/15">Artists can add a YouTube URL when uploading</p>
+                  </div>
+                )}
+
+                {/* Mode toggle — only shown in non-lyrics modes */}
+                <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center bg-black/60 backdrop-blur-xl rounded-full border border-white/[0.08] overflow-hidden">
+                  {[
+                    { key: 'artwork',  Icon: IconImage,   label: 'Art'     },
+                    { key: 'vinyl',    Icon: IconVinyl,   label: 'Vinyl'   },
+                    { key: 'cassette', Icon: IconCassette, label: 'Tape'   },
+                    { key: 'video',    Icon: IconVideo,   label: 'Video'   },
+                    { key: 'lyrics',   Icon: IconLyrics,  label: 'Lyrics'  },
+                  ].map(({ key, Icon, label }) => {
+                    const disabled = key === 'video' && !hasVideo;
+                    const active   = displayMode === key;
+                    return (
+                      <button key={key} onClick={() => !disabled && setMode(key)}
+                        title={label}
+                        className={`w-9 h-8 flex items-center justify-center transition-all ${
+                          active
+                            ? 'bg-white text-black'
+                            : disabled
+                              ? 'text-white/15 cursor-default'
+                              : 'text-white/40 hover:text-white/70 active:bg-white/10'
+                        }`}>
+                        <Icon />
+                      </button>
+                    );
+                  })}
+                  {displayMode === 'video' && hasVideo && (
+                    <>
+                      <div className="w-px h-5 bg-white/10 mx-0.5" />
+                      <button onClick={() => { tap(); setVideoMuted(m => !m); }}
+                        className="px-3 py-2 text-white/40 hover:text-white/70 transition">
+                        {videoMuted ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* ── Track info + controls (shared between all modes) ── */}
+            <div className="flex-shrink-0" style={{ paddingBottom: 'max(40px, calc(env(safe-area-inset-bottom) + 24px))' }}>
+
+              {/* Mode toggle for lyrics mode — shown above track info */}
+              {isLyricsMode && (
+                <div className="flex justify-center mb-3 px-8">
+                  <div className="flex items-center bg-black/60 backdrop-blur-xl rounded-full border border-white/[0.08] overflow-hidden">
+                    {[
+                      { key: 'artwork',  Icon: IconImage,    label: 'Art'   },
+                      { key: 'vinyl',    Icon: IconVinyl,    label: 'Vinyl' },
+                      { key: 'cassette', Icon: IconCassette, label: 'Tape'  },
+                      { key: 'video',    Icon: IconVideo,    label: 'Video' },
+                      { key: 'lyrics',   Icon: IconLyrics,   label: 'Lyrics'},
+                    ].map(({ key, Icon, label }) => {
+                      const disabled = key === 'video' && !hasVideo;
+                      const active   = displayMode === key;
+                      return (
+                        <button key={key} onClick={() => !disabled && setMode(key)}
+                          title={label}
+                          className={`w-9 h-8 flex items-center justify-center transition-all ${
+                            active
+                              ? 'bg-white text-black'
+                              : disabled
+                                ? 'text-white/15 cursor-default'
+                                : 'text-white/40 hover:text-white/70 active:bg-white/10'
+                          }`}>
+                          <Icon />
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              <div className="px-8">
+                {/* Title + Like */}
+                <div className="flex items-center justify-between mb-5 mt-2">
+                  <div className="min-w-0 flex-1">
+                    <h2 className="text-xl font-bold text-white truncate">{currentTrack.title}</h2>
+                    <button
+                      onClick={() => {
+                        tap();
+                        const slug = currentTrack.artist_slug || currentTrack.artists?.slug;
+                        if (slug) navigate(`/artist/${slug}`);
+                      }}
+                      className="text-base text-white/50 truncate hover:text-white/80 transition text-left">
+                      {currentTrack.artist_name || 'Unknown Artist'}
+                    </button>
+                  </div>
+                  <button onClick={handleLike}
+                    className="ml-4 w-12 h-12 flex items-center justify-center active:scale-90 transition-transform">
+                    <Heart className="w-6 h-6 transition"
+                      fill={liked ? '#ef4444' : 'none'}
+                      color={liked ? '#ef4444' : 'rgba(255,255,255,0.5)'} />
+                  </button>
+                </div>
+
+                {/* Seeker */}
+                <div className="mb-2">
+                  <div
+                    className="h-10 flex items-center cursor-pointer group -mx-2 px-2"
+                    onClick={handleSeek}
+                    onTouchStart={(e) => e.stopPropagation()}
+                    onTouchMove={(e) => { e.stopPropagation(); handleSeek(e); }}
+                    onTouchEnd={(e) => { e.stopPropagation(); handleSeek(e); }}
+                    style={{ touchAction: 'none' }}
+                  >
+                    <div className="w-full h-1.5 bg-white/10 rounded-full">
+                      <div className="h-full bg-white rounded-full relative transition-none" style={{ width: `${progress}%` }}>
+                        <div className="absolute right-0 top-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-white shadow-lg scale-0 group-active:scale-100 transition-transform" />
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex justify-between -mt-1">
+                    <span className="text-[11px] text-white/40 tabular-nums">{formatTime(currentTime)}</span>
+                    <span className="text-[11px] text-white/40 tabular-nums">{formatTime(duration)}</span>
+                  </div>
+                </div>
+
+                {/* Playback controls */}
+                <div className="flex items-center justify-between mt-4">
+                  <button onClick={() => { tap(); toggleShuffle(); }}
+                    className={`w-12 h-12 flex items-center justify-center ${shuffle ? 'text-white' : 'text-white/30'}`}>
+                    <Shuffle className="w-5 h-5" />
+                  </button>
+                  <button onClick={() => { heavy(); playPrev(); }}
+                    className="w-14 h-14 flex items-center justify-center active:scale-95 transition-transform">
+                    <SkipBack className="w-7 h-7 text-white" fill="white" />
+                  </button>
+                  <button onClick={() => { heavy(); togglePlay(); }}
+                    className="w-16 h-16 flex items-center justify-center rounded-full bg-white active:scale-95 transition-transform shadow-lg">
+                    {isPlaying
+                      ? <Pause className="w-8 h-8 text-black" fill="black" />
+                      : <Play className="w-8 h-8 text-black ml-1" fill="black" />}
+                  </button>
+                  <button onClick={() => { heavy(); playNext(); }}
+                    className="w-14 h-14 flex items-center justify-center active:scale-95 transition-transform">
+                    <SkipForward className="w-7 h-7 text-white" fill="white" />
+                  </button>
+                  <button onClick={() => { tap(); toggleRepeat(); }}
+                    className={`w-12 h-12 flex items-center justify-center ${repeat !== 'none' ? 'text-white' : 'text-white/30'}`}>
+                    {repeat === 'one' ? <Repeat1 className="w-5 h-5" /> : <Repeat className="w-5 h-5" />}
+                  </button>
+                </div>
+
+                {/* Volume — desktop only */}
+                <div className="hidden md:flex items-center space-x-3 mt-4 px-2">
+                  <button onClick={() => setVolumeLevel(volume > 0 ? 0 : 1)} className="text-white/40">
+                    {volume === 0 ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+                  </button>
+                  <input type="range" min="0" max="1" step="0.01" value={volume}
+                    onChange={(e) => setVolumeLevel(parseFloat(e.target.value))}
+                    className="flex-1 h-1 rounded-full appearance-none bg-white/10"
+                    style={{ accentColor: 'white' }} />
+                </div>
+
+                {/* Share / More */}
+                <div className="flex items-center justify-center mt-5 space-x-8">
+                  <button
+                    onClick={() => { tap(); setShowShareCard(true); }}
+                    className="flex flex-col items-center space-y-1 text-white/40 hover:text-white/70 transition active:scale-95">
+                    <Share2 className="w-5 h-5" />
+                    <span className="text-[10px]">Share</span>
+                  </button>
+                  <button onClick={() => { tap(); setShowActionSheet(true); }}
+                    className="flex flex-col items-center space-y-1 text-white/40 hover:text-white/70 transition active:scale-95">
+                    <MoreHorizontal className="w-5 h-5" />
+                    <span className="text-[10px]">More</span>
+                  </button>
+                </div>
+
+                {showActionSheet && (
+                  <TrackActionSheet
+                    track={currentTrack}
+                    artist={{ artist_name: currentTrack.artist_name, slug: currentTrack.artist_slug || currentTrack.artists?.slug }}
+                    onClose={() => setShowActionSheet(false)}
+                  />
+                )}
+              </div>
+            </div>
+          </>
+        )}
+      </motion.div>
+
+      {/* ShareCard — rendered outside the player motion div to avoid z-index conflicts */}
+      {showShareCard && (
+        <ShareCard track={currentTrack} onClose={() => setShowShareCard(false)} />
+      )}
+    </>
+  );
+}
