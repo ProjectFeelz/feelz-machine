@@ -150,13 +150,13 @@ function CassetteVisualizer({ isPlaying, currentTime, duration, coverUrl }) {
     function render() {
       ctx.clearRect(0, 0, W, H);
 
-      const BX = 20, BY = 18, BW = 280, BH = 146, BR = 10;
+      const BX = 20, BY = 8,  BW = 280, BH = 166, BR = 10;
       ctx.beginPath(); ctx.roundRect(BX, BY, BW, BH, BR);
       ctx.fillStyle = '#1c1c1c'; ctx.fill();
       ctx.strokeStyle = '#3a3a3a'; ctx.lineWidth = 1.2; ctx.stroke();
 
       // label — black base, art fades in
-      const LX = 46, LY = 27, LW = 228, LH = 86, LR = 5;
+      const LX = 46, LY = 27, LW = 228, LH = 100, LR = 5;
       ctx.save();
       ctx.beginPath(); ctx.roundRect(LX, LY, LW, LH, LR); ctx.clip();
       ctx.fillStyle = '#0a0a0a'; ctx.fillRect(LX, LY, LW, LH);
@@ -172,12 +172,12 @@ function CassetteVisualizer({ isPlaying, currentTime, duration, coverUrl }) {
       ctx.restore();
 
       // tape window
-      const WX = 93, WY = 35, WW = 134, WH = 58, WR = 6;
+      const WX = 93, WY = 52, WW = 134, WH = 58, WR = 6;
       ctx.beginPath(); ctx.roundRect(WX, WY, WW, WH, WR);
       ctx.fillStyle = '#0d0d0d'; ctx.fill();
       ctx.strokeStyle = '#444'; ctx.lineWidth = 1; ctx.stroke();
 
-      const LCX = 127, RCX = 193, reelCY = 70;
+      const LCX = 127, RCX = 193, reelCY = 81;
       const guideY = reelCY + 18;
 
       ctx.beginPath();
