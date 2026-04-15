@@ -206,7 +206,7 @@ function CassetteVisualizer({ isPlaying, currentTime, duration, coverUrl }) {
       ctx.strokeStyle = '#444'; ctx.lineWidth = 1; ctx.stroke();
 
       // reels vertically centred (reelCY = WY+22 puts reel top 2px below window top)
-      const LCX = 130, RCX = 190, reelCY = WY + 22;
+      const LCX = 118, RCX = 202, reelCY = WY + 22;
       const guideY = WY + WH - 11;
 
       // tape strip + gloss
