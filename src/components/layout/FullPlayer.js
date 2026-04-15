@@ -198,21 +198,27 @@ function CassetteVisualizer({ isPlaying, currentTime, duration, coverUrl }) {
       ctx.beginPath(); ctx.roundRect(LX, LY, LW, LH, LR);
       ctx.strokeStyle = 'rgba(0,0,0,0.5)'; ctx.lineWidth = 1; ctx.stroke();
 
-      // tape window
-      const WX = 93, WY = 35, WW = 134, WH = 58, WR = 6;
+      // tape window — moved down 8px, reels centred inside it
+      const WX = 93, WY = 43, WW = 134, WH = 58, WR = 6;
       ctx.beginPath(); ctx.roundRect(WX, WY, WW, WH, WR);
       ctx.fillStyle = '#0d0d0d'; ctx.fill();
       ctx.strokeStyle = '#444'; ctx.lineWidth = 1; ctx.stroke();
 
-      const LCX = 127, RCX = 193, reelCY = 70;
-      const guideY = reelCY + 18;
+      // reels centred in window, guide tape below reel centres but inside window
+      const LCX = 127, RCX = 193, reelCY = WY + 22;
+      const guideY = WY + WH - 12;
 
+      // tape strip with gloss
       ctx.beginPath();
       ctx.moveTo(LCX + 14, guideY - 1.5); ctx.lineTo(RCX - 14, guideY - 1.5);
       ctx.strokeStyle = '#3d1f0a'; ctx.lineWidth = 4; ctx.stroke();
       ctx.beginPath();
       ctx.moveTo(LCX + 14, guideY + 1.5); ctx.lineTo(RCX - 14, guideY + 1.5);
       ctx.strokeStyle = '#5a2e0f'; ctx.lineWidth = 0.8; ctx.stroke();
+      // tape gloss highlight
+      ctx.beginPath();
+      ctx.moveTo(LCX + 14, guideY - 2.5); ctx.lineTo(RCX - 14, guideY - 2.5);
+      ctx.strokeStyle = 'rgba(255,200,100,0.18)'; ctx.lineWidth = 1; ctx.stroke();
 
       [LCX + 14, RCX - 14].forEach(px => {
         ctx.beginPath(); ctx.arc(px, guideY, 2.8, 0, Math.PI * 2);
