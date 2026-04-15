@@ -198,29 +198,33 @@ function CassetteVisualizer({ isPlaying, currentTime, duration, coverUrl }) {
       ctx.beginPath(); ctx.roundRect(LX, LY, LW, LH, LR);
       ctx.strokeStyle = 'rgba(0,0,0,0.5)'; ctx.lineWidth = 1; ctx.stroke();
 
-      // tape window — centred on body (body centre X = BX+BW/2 = 160)
-      // WW=160 → WX=80. Reels ±30 from centre: LCX=130, RCX=190. Each has 10px clearance left/right.
-      const WX = 80, WY = 40, WW = 160, WH = 56, WR = 6;
+      // tape window — perfectly centred on body centre X=160
+      // Equal padding: 18px L/R, 10px T/B
+      // Guide line sits between reel edges (not stretched to window edges)
+      const WX = 90, WY = 40, WW = 140, WH = 60, WR = 6;
       ctx.beginPath(); ctx.roundRect(WX, WY, WW, WH, WR);
       ctx.fillStyle = '#0d0d0d'; ctx.fill();
       ctx.strokeStyle = '#444'; ctx.lineWidth = 1; ctx.stroke();
 
-      // reels vertically centred (reelCY = WY+22 puts reel top 2px below window top)
-      const LCX = 118, RCX = 202, reelCY = WY + 22;
-      const guideY = WY + WH - 11;
+      const LCX = 128, RCX = 192, reelCY = 70;  // reelCY = WY + WH/2 = 40+30
 
-      // tape strip + gloss
+      // guide line strictly between reel edges, at reel centre height
+      const guideY = reelCY;
+      const guideX1 = LCX + 20;  // right edge of left reel
+      const guideX2 = RCX - 20;  // left edge of right reel
+
       ctx.beginPath();
-      ctx.moveTo(LCX + 14, guideY - 1.5); ctx.lineTo(RCX - 14, guideY - 1.5);
+      ctx.moveTo(guideX1, guideY - 1.5); ctx.lineTo(guideX2, guideY - 1.5);
       ctx.strokeStyle = '#3d1f0a'; ctx.lineWidth = 4; ctx.stroke();
       ctx.beginPath();
-      ctx.moveTo(LCX + 14, guideY + 1.5); ctx.lineTo(RCX - 14, guideY + 1.5);
+      ctx.moveTo(guideX1, guideY + 1.5); ctx.lineTo(guideX2, guideY + 1.5);
       ctx.strokeStyle = '#5a2e0f'; ctx.lineWidth = 0.8; ctx.stroke();
       ctx.beginPath();
-      ctx.moveTo(LCX + 14, guideY - 2.5); ctx.lineTo(RCX - 14, guideY - 2.5);
+      ctx.moveTo(guideX1, guideY - 2.5); ctx.lineTo(guideX2, guideY - 2.5);
       ctx.strokeStyle = 'rgba(255,200,100,0.18)'; ctx.lineWidth = 1; ctx.stroke();
 
-      [LCX + 14, RCX - 14].forEach(px => {
+      // guide posts at each end of the tape strip
+      [guideX1, guideX2].forEach(px => {
         ctx.beginPath(); ctx.arc(px, guideY, 2.8, 0, Math.PI * 2);
         ctx.fillStyle = '#555'; ctx.fill();
         ctx.strokeStyle = '#777'; ctx.lineWidth = 0.6; ctx.stroke();
