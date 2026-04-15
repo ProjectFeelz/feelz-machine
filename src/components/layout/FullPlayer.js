@@ -230,7 +230,7 @@ function CassetteVisualizer({ isPlaying, currentTime, duration, coverUrl }) {
       ctx.strokeStyle = 'rgba(0,0,0,0.5)'; ctx.lineWidth = 1; ctx.stroke();
 
       // tape window: wider for reel separation, reels in upper half, guide below
-      const WX = 84, WY = 34, WW = 152, WH = 54, WR = 6;
+      const WX = 84, WY = 48, WW = 152, WH = 54, WR = 6;
       ctx.save();
       ctx.shadowColor = 'rgba(0,0,0,0.9)';
       ctx.shadowBlur = 10;
@@ -249,8 +249,8 @@ function CassetteVisualizer({ isPlaying, currentTime, duration, coverUrl }) {
       ctx.restore();
 
       // reels in upper portion, guide tape sits below them separately
-      const LCX = 118, RCX = 202, reelCY = 62;
-      const guideY  = 82;
+      const LCX = 118, RCX = 202, reelCY = 76;
+      const guideY  = 96;
       const guideX1 = LCX + 20;
       const guideX2 = RCX - 20;
 
