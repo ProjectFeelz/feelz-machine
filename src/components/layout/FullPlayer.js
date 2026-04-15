@@ -243,6 +243,13 @@ function CassetteVisualizer({ isPlaying, currentTime, duration, coverUrl }) {
       const LCX = 127, RCX = 193, reelCY = 81;
       const guideY = reelCY + 18;
 
+      // ── Everything inside the tape window is clipped ──
+      ctx.save();
+      ctx.beginPath();
+      ctx.roundRect(WX, WY, WW, WH, WR);
+      ctx.clip();
+
+      // tape strand
       ctx.beginPath();
       ctx.moveTo(LCX + 14, guideY - 1.5); ctx.lineTo(RCX - 14, guideY - 1.5);
       ctx.strokeStyle = '#3d1f0a'; ctx.lineWidth = 4; ctx.stroke();
@@ -250,15 +257,37 @@ function CassetteVisualizer({ isPlaying, currentTime, duration, coverUrl }) {
       ctx.moveTo(LCX + 14, guideY + 1.5); ctx.lineTo(RCX - 14, guideY + 1.5);
       ctx.strokeStyle = '#5a2e0f'; ctx.lineWidth = 0.8; ctx.stroke();
 
+      // guide pins
       [LCX + 14, RCX - 14].forEach(px => {
         ctx.beginPath(); ctx.arc(px, guideY, 2.8, 0, Math.PI * 2);
         ctx.fillStyle = '#555'; ctx.fill();
         ctx.strokeStyle = '#777'; ctx.lineWidth = 0.6; ctx.stroke();
       });
 
+      // reels drawn larger so edges bleed past window bounds — only visible portion shows through
       if (isPlaying) angleRef.current += 0.038;
-      reel(LCX, reelCY, 20, 1 - tapeRef.current, -angleRef.current);
-      reel(RCX, reelCY, 20,     tapeRef.current,   angleRef.current);
+      reel(LCX, reelCY, 26, 1 - tapeRef.current, -angleRef.current);
+      reel(RCX, reelCY, 26,     tapeRef.current,   angleRef.current);
+
+      ctx.restore();
+
+      // ── Window frame drawn ON TOP to sell the "glass panel" depth ──
+      ctx.beginPath(); ctx.roundRect(WX, WY, WW, WH, WR);
+      ctx.strokeStyle = '#555'; ctx.lineWidth = 1.5; ctx.stroke();
+
+      // inner shadow + glass glare over the window
+      ctx.save();
+      ctx.beginPath(); ctx.roundRect(WX, WY, WW, WH, WR); ctx.clip();
+      const depthShade = ctx.createLinearGradient(WX, WY, WX, WY + 14);
+      depthShade.addColorStop(0, 'rgba(0,0,0,0.75)');
+      depthShade.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = depthShade; ctx.fillRect(WX, WY, WW, WH);
+      const glare = ctx.createLinearGradient(WX, WY, WX + WW * 0.6, WY + WH * 0.5);
+      glare.addColorStop(0,   'rgba(255,255,255,0.07)');
+      glare.addColorStop(0.4, 'rgba(255,255,255,0.02)');
+      glare.addColorStop(1,   'rgba(255,255,255,0)');
+      ctx.fillStyle = glare; ctx.fillRect(WX, WY, WW, WH);
+      ctx.restore();
 
       // bottom mechanics strip
       ctx.beginPath(); ctx.roundRect(BX + 6, BY + BH - 36, BW - 12, 30, 4);
