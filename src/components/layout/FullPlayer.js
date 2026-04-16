@@ -248,12 +248,11 @@ function CassetteVisualizer({ isPlaying, currentTime, duration, coverUrl }) {
       ctx.fillStyle = '#1c1c1c'; ctx.fill();
       ctx.restore();
 
-      // ── body gradient with lighter top edge for depth (from block 1) ──
+      // ── body gradient matched to vinyl's near-black cool tones ──
       const bodyG = ctx.createLinearGradient(BX, BY, BX, BY + BH);
-      bodyG.addColorStop(0,    '#2c2c2c');
-      bodyG.addColorStop(0.12, '#1c1c1c');
-      bodyG.addColorStop(0.88, '#181818');
-      bodyG.addColorStop(1,    '#111');
+      bodyG.addColorStop(0,    '#1c1c1c');
+      bodyG.addColorStop(0.35, '#0e0e0e');
+      bodyG.addColorStop(1,    '#060606');
       ctx.beginPath(); ctx.roundRect(BX, BY, BW, BH, BR);
       ctx.fillStyle = bodyG; ctx.fill();
       ctx.strokeStyle = '#3a3a3a'; ctx.lineWidth = 1.2; ctx.stroke();
