@@ -919,6 +919,108 @@ export default function TrackUploadPanel() {
       {/* ══════════════════ MANAGE TAB ══════════════════ */}
       {activeTab === 'manage' && (
         <div className="space-y-4">
+          {/* Manage sub-tabs: Tracks / Albums */}
+          <div className="flex space-x-1 bg-white/[0.03] rounded-lg p-1">
+            {['tracks', 'albums'].map(t => (
+              <button key={t} type="button" onClick={() => setManageTab(t)}
+                className={`flex-1 py-2 rounded-md text-xs font-medium transition capitalize ${
+                  manageTab === t ? 'bg-white text-black' : 'text-white/40 hover:text-white/70'
+                }`}>{t}</button>
+            ))}
+          </div>
+
+          {manageTab === 'albums' ? (
+            <div className="space-y-2">
+              {albums.length === 0 ? (
+                <div className="text-center py-12">
+                  <Music className="w-10 h-10 mx-auto text-white/10 mb-3" />
+                  <p className="text-white/30 text-sm">No albums yet</p>
+                </div>
+              ) : albums.map(album => (
+                <div key={album.id} className="bg-white/[0.03] rounded-xl border border-white/[0.06] overflow-hidden">
+                  {editingAlbumId !== album.id ? (
+                    <div className="flex items-center space-x-3 p-3">
+                      {album.cover_url
+                        ? <img src={album.cover_url} alt="" className="w-12 h-12 rounded-lg object-cover flex-shrink-0" />
+                        : <div className="w-12 h-12 rounded-lg bg-white/[0.06] flex items-center justify-center flex-shrink-0"><Music className="w-5 h-5 text-white/20" /></div>}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-white truncate">{album.title}</p>
+                        <p className="text-xs text-white/40 capitalize">{album.release_type || 'album'}</p>
+                        <div className="flex gap-1.5 mt-1">
+                          {album.is_published
+                            ? <span className="text-[10px] px-1.5 py-0.5 bg-green-500/10 text-green-400 rounded">Live</span>
+                            : <span className="text-[10px] px-1.5 py-0.5 bg-white/[0.06] text-white/30 rounded">Draft</span>}
+                          {album.price > 0 && <span className="text-[10px] px-1.5 py-0.5 bg-white/[0.06] text-white/30 rounded">${album.price}</span>}
+                        </div>
+                      </div>
+                      <button type="button" onClick={() => { setEditingAlbumId(album.id); setEditAlbumForm({ title: album.title, description: album.description || '', release_type: album.release_type || 'album', release_date: album.release_date || '', price: album.price || 0, is_published: album.is_published ?? true }); }}
+                        className="p-2 bg-white/[0.04] rounded-lg hover:bg-white/[0.08] transition">
+                        <Edit className="w-4 h-4 text-white/40" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="p-4 space-y-4">
+                      <div className="flex items-center justify-between">
+                        <p className="text-sm font-semibold text-white">Editing: {album.title}</p>
+                        <button type="button" onClick={() => setEditingAlbumId(null)}
+                          className="p-1.5 rounded-lg hover:bg-white/[0.06] transition">
+                          <X className="w-4 h-4 text-white/30" />
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div>
+                          <FieldLabel>Title</FieldLabel>
+                          <FInput type="text" value={editAlbumForm.title}
+                            onChange={(e) => setEditAlbumForm({ ...editAlbumForm, title: e.target.value })} />
+                        </div>
+                        <div>
+                          <FieldLabel>Release Type</FieldLabel>
+                          <FSelect value={editAlbumForm.release_type}
+                            onChange={(e) => setEditAlbumForm({ ...editAlbumForm, release_type: e.target.value })}>
+                            {['single','ep','album','mixtape','live','compilation'].map(t => (
+                              <option key={t} value={t} className="capitalize">{t}</option>
+                            ))}
+                          </FSelect>
+                        </div>
+                        <div>
+                          <FieldLabel>Release Date</FieldLabel>
+                          <FInput type="date" value={editAlbumForm.release_date}
+                            onChange={(e) => setEditAlbumForm({ ...editAlbumForm, release_date: e.target.value })} />
+                        </div>
+                        <div>
+                          <FieldLabel>Price (USD)</FieldLabel>
+                          <FInput type="number" min="0" step="0.01" value={editAlbumForm.price}
+                            onChange={(e) => setEditAlbumForm({ ...editAlbumForm, price: e.target.value })} />
+                        </div>
+                      </div>
+                      <div>
+                        <FieldLabel>Description</FieldLabel>
+                        <textarea rows={2} value={editAlbumForm.description}
+                          onChange={(e) => setEditAlbumForm({ ...editAlbumForm, description: e.target.value })}
+                          className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none resize-none" />
+                      </div>
+                      <label className="flex items-center space-x-2 cursor-pointer">
+                        <input type="checkbox" checked={editAlbumForm.is_published}
+                          onChange={(e) => setEditAlbumForm({ ...editAlbumForm, is_published: e.target.checked })}
+                          className="rounded border-white/20" />
+                        <span className="text-xs text-white/50">Published</span>
+                      </label>
+                      <div className="flex space-x-2 pt-1">
+                        <button type="button" onClick={() => saveAlbum(album.id)}
+                          className="flex-1 py-2.5 rounded-xl bg-white text-black text-sm font-semibold hover:bg-white/90 transition">
+                          Save Album
+                        </button>
+                        <button type="button" onClick={() => setEditingAlbumId(null)}
+                          className="px-4 py-2.5 rounded-xl bg-white/[0.06] text-white/50 text-sm hover:bg-white/[0.1] transition">
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
             <input type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
