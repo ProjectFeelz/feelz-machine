@@ -33,12 +33,24 @@ exports.handler = async (event) => {
 
   const { data: track, error: trackError } = await adminClient
     .from('tracks')
-    .select('file_url, title, is_preorder, release_date, download_price')
+    .select('file_url, title, is_preorder, release_date, download_price, artist_id')
     .eq('id', trackId)
     .maybeSingle();
 
   if (trackError || !track) {
     return { statusCode: 404, body: JSON.stringify({ error: 'Track not found' }) };
+  }
+
+  // Block self-downloads from inflating counts
+  if (track.artist_id) {
+    const { data: trackArtist } = await adminClient
+      .from('artists')
+      .select('user_id')
+      .eq('id', track.artist_id)
+      .maybeSingle();
+    if (trackArtist?.user_id === user.id) {
+      return { statusCode: 403, body: JSON.stringify({ error: 'Artists cannot download their own tracks' }) };
+    }
   }
 
   if (track.is_preorder && track.release_date) {
