@@ -228,6 +228,7 @@ export default function TrackUploadPanel() {
   const [editCollaborators, setEditCollaborators] = useState([]);
   const [editCoverFile, setEditCoverFile]       = useState(null);
   const [editAudioFile, setEditAudioFile]       = useState(null);
+  const [editAlbumCoverFile, setEditAlbumCoverFile] = useState(null);
 
   const isAlbumRelease = ALBUM_TYPES.includes(release.release_type);
   const isWorking      = uploading || converting;
@@ -521,15 +522,21 @@ export default function TrackUploadPanel() {
   // ← FIX 2: saveAlbum function restored
   const saveAlbum = async (albumId) => {
     try {
+      let coverUrl = editAlbumForm.cover_artwork_url || null;
+      if (editAlbumCoverFile) {
+        coverUrl = await uploadFile(editAlbumCoverFile, 'album-covers/');
+      }
       await supabase.from('albums').update({
-        title:        editAlbumForm.title,
-        description:  editAlbumForm.description || null,
-        release_type: editAlbumForm.release_type,
-        release_date: editAlbumForm.release_date || null,
-        price:        parseFloat(editAlbumForm.price) || 0,
-        is_published: editAlbumForm.is_published,
+        title:             editAlbumForm.title,
+        description:       editAlbumForm.description || null,
+        release_type:      editAlbumForm.release_type,
+        release_date:      editAlbumForm.release_date || null,
+        price:             parseFloat(editAlbumForm.price) || 0,
+        is_published:      editAlbumForm.is_published,
+        cover_artwork_url: coverUrl,
       }).eq('id', albumId);
       setEditingAlbumId(null);
+      setEditAlbumCoverFile(null);
       fetchAlbums();
       showMessage('success', 'Album updated');
     } catch (err) {
@@ -960,8 +967,8 @@ export default function TrackUploadPanel() {
                 <div key={album.id} className="bg-white/[0.03] rounded-xl border border-white/[0.06] overflow-hidden">
                   {editingAlbumId !== album.id ? (
                     <div className="flex items-center space-x-3 p-3">
-                      {album.cover_url
-                        ? <img src={album.cover_url} alt="" className="w-12 h-12 rounded-lg object-cover flex-shrink-0" />
+                      {album.cover_artwork_url
+                        ? <img src={album.cover_artwork_url} alt="" className="w-12 h-12 rounded-lg object-cover flex-shrink-0" />
                         : <div className="w-12 h-12 rounded-lg bg-white/[0.06] flex items-center justify-center flex-shrink-0"><Music className="w-5 h-5 text-white/20" /></div>}
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-white truncate">{album.title}</p>
@@ -973,7 +980,7 @@ export default function TrackUploadPanel() {
                           {album.price > 0 && <span className="text-[10px] px-1.5 py-0.5 bg-white/[0.06] text-white/30 rounded">${album.price}</span>}
                         </div>
                       </div>
-                      <button type="button" onClick={() => { setEditingAlbumId(album.id); setEditAlbumForm({ title: album.title, description: album.description || '', release_type: album.release_type || 'album', release_date: album.release_date || '', price: album.price || 0, is_published: album.is_published ?? true }); }}
+                      <button type="button" onClick={() => { setEditingAlbumId(album.id); setEditAlbumCoverFile(null); setEditAlbumForm({ title: album.title, description: album.description || '', release_type: album.release_type || 'album', release_date: album.release_date || '', price: album.price || 0, is_published: album.is_published ?? true, cover_artwork_url: album.cover_artwork_url || '' }); }}
                         className="p-2 bg-white/[0.04] rounded-lg hover:bg-white/[0.08] transition">
                         <Edit className="w-4 h-4 text-white/40" />
                       </button>
@@ -986,6 +993,40 @@ export default function TrackUploadPanel() {
                           className="p-1.5 rounded-lg hover:bg-white/[0.06] transition">
                           <X className="w-4 h-4 text-white/30" />
                         </button>
+                      </div>
+                      {/* Cover artwork */}
+                      <div>
+                        <FieldLabel>Cover Artwork</FieldLabel>
+                        <div className="flex items-center space-x-3">
+                          {(editAlbumCoverFile ? URL.createObjectURL(editAlbumCoverFile) : editAlbumForm.cover_artwork_url) ? (
+                            <img
+                              src={editAlbumCoverFile ? URL.createObjectURL(editAlbumCoverFile) : editAlbumForm.cover_artwork_url}
+                              alt=""
+                              className="w-16 h-16 rounded-lg object-cover flex-shrink-0 border border-white/[0.08]"
+                            />
+                          ) : (
+                            <div className="w-16 h-16 rounded-lg bg-white/[0.06] flex items-center justify-center flex-shrink-0 border border-white/[0.08]">
+                              <Music className="w-6 h-6 text-white/20" />
+                            </div>
+                          )}
+                          <label className="flex-1 cursor-pointer">
+                            <div className="px-3 py-2 bg-white/[0.06] rounded-lg text-xs text-white/40 hover:bg-white/[0.1] transition text-center">
+                              {editAlbumCoverFile ? editAlbumCoverFile.name : 'Change cover…'}
+                            </div>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              className="hidden"
+                              onChange={(e) => setEditAlbumCoverFile(e.target.files[0] || null)}
+                            />
+                          </label>
+                          {editAlbumCoverFile && (
+                            <button type="button" onClick={() => setEditAlbumCoverFile(null)}
+                              className="p-1.5 rounded-lg hover:bg-white/[0.06] transition flex-shrink-0">
+                              <X className="w-3.5 h-3.5 text-white/30" />
+                            </button>
+                          )}
+                        </div>
                       </div>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                         <div>

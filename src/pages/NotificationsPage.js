@@ -22,6 +22,7 @@ const TYPE_CONFIG = {
   milestone_10k:    { icon: TrendingUp,    color: 'text-orange-400', bg: 'bg-orange-500/10', label: 'Milestone' },
   download:         { icon: Download,      color: 'text-green-400',  bg: 'bg-green-500/10',  label: 'Download' },
   announcement:     { icon: Megaphone,     color: 'text-yellow-400', bg: 'bg-yellow-500/10', label: 'Announcement' },
+  new_stream:       { icon: Music,         color: 'text-green-400',  bg: 'bg-green-500/10',  label: 'New Stream' },
   new_post:         { icon: Music,         color: 'text-green-400',  bg: 'bg-green-500/10',  label: 'New Post' },
   mention:          { icon: MessageCircle, color: 'text-purple-400', bg: 'bg-purple-500/10', label: 'Mention' },
   tier_granted:     { icon: TrendingUp,    color: 'text-yellow-400', bg: 'bg-yellow-500/10', label: 'Tier Update' },
@@ -41,7 +42,7 @@ const FILTERS = [
 function filterMatch(type, filter) {
   if (filter === 'all') return true;
   if (filter === 'collabs') return type?.startsWith('collab_');
-  if (filter === 'social') return ['new_follower', 'track_liked', 'playlist_add', 'track_commented', 'new_post', 'mention', 'engagement'].includes(type);
+  if (filter === 'social') return ['new_follower', 'track_liked', 'playlist_add', 'track_commented', 'new_post', 'new_stream', 'mention', 'engagement'].includes(type);
   if (filter === 'milestones') return type?.startsWith('milestone_');
   return true;
 }
@@ -129,6 +130,18 @@ export default function NotificationsPage() {
     if (!notif.read) markAsRead(notif.id);
     const type = notif.type;
     const meta = notif.metadata || {};
+
+    // Stream notification — go to the artist's analytics dashboard
+    if (type === 'new_stream') {
+      if (artist) {
+        navigate('/dashboard?tab=analytics');
+      } else if (meta.artist_slug) {
+        navigate('/artist/' + meta.artist_slug);
+      } else {
+        navigate('/browse');
+      }
+      return;
+    }
 
     if (type === 'new_post' && meta.post_id) {
       navigate(`/feed?post=${meta.post_id}`);

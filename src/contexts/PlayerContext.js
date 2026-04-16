@@ -104,7 +104,26 @@ export function PlayerProvider({ children }) {
       const userId = session?.user?.id || null;
       if (!userId) return;
 
-      // 1. Insert stream record
+      // 1. Fetch track + artist FIRST so we can gate on ownership before touching anything
+      const { data: track } = await supabase
+        .from('tracks')
+        .select('stream_count, artist_id, title')
+        .eq('id', trackId)
+        .single();
+
+      if (!track) return;
+
+      const { data: art } = await supabase
+        .from('artists')
+        .select('total_streams, user_id')
+        .eq('id', track.artist_id)
+        .single();
+
+      // STREAM GUARD: if the listener IS the track owner, bail out entirely —
+      // don't insert into streams, don't increment counts, don't fire milestones.
+      if (art?.user_id === userId) return;
+
+      // 2. Insert stream record (only for genuine third-party listeners)
       await supabase.from('streams').insert({
         track_id: trackId,
         user_id: userId,
@@ -114,52 +133,33 @@ export function PlayerProvider({ children }) {
         device_type: /Mobi|Android/i.test(navigator.userAgent) ? 'mobile' : 'desktop',
       });
 
-      // 2. Increment stream_count on the track
-      const { data: track } = await supabase
-        .from('tracks')
-        .select('stream_count, artist_id, title')
-        .eq('id', trackId)
-        .single();
-
-      if (!track) return;
-
-      // 3. Fetch artist to check ownership before counting anything
-      const { data: art } = await supabase
-        .from('artists')
-        .select('total_streams, user_id')
-        .eq('id', track.artist_id)
-        .single();
-
-      // Don't count self-streams — artist streaming their own track
-      if (art?.user_id === userId) return;
-
+      // 3. Increment stream_count on the track
       await supabase
         .from('tracks')
         .update({ stream_count: (track.stream_count || 0) + 1 })
         .eq('id', trackId);
 
-      if (art) {
-        // Don't count the artist streaming their own track
-        if (art.user_id === userId) return;
-        await supabase
-          .from('artists')
-          .update({ total_streams: (art.total_streams || 0) + 1 })
-          .eq('id', track.artist_id);
-      }
+      // 4. Increment artist total_streams
+      await supabase
+        .from('artists')
+        .update({ total_streams: (art.total_streams || 0) + 1 })
+        .eq('id', track.artist_id);
 
-      // 4. Stream milestone notifications are handled by the check_stream_milestones
+      // 5. Stream milestone notifications are handled by the check_stream_milestones
       //    DB trigger — no manual insert needed here.
 
-      // 5. Collab artists — also increment their total_streams
+      // 6. Collab artists — also increment their total_streams (skip if they're the listener)
       const { data: collabs } = await supabase
         .from('collaborations')
-        .select('artist_id')
+        .select('artist_id, artists!collaborations_artist_id_fkey(user_id)')
         .eq('track_id', trackId)
         .eq('status', 'accepted');
 
       if (collabs?.length) {
         for (const collab of collabs) {
           if (collab.artist_id === track.artist_id) continue;
+          // Also skip if this collab artist is the current listener
+          if (collab.artists?.user_id === userId) continue;
           const { data: collabArt } = await supabase
             .from('artists')
             .select('total_streams')
