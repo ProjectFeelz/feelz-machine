@@ -123,19 +123,24 @@ export function PlayerProvider({ children }) {
 
       if (!track) return;
 
-      await supabase
-        .from('tracks')
-        .update({ stream_count: (track.stream_count || 0) + 1 })
-        .eq('id', trackId);
-
-      // 3. Increment total_streams on the primary artist
+      // 3. Fetch artist to check ownership before counting anything
       const { data: art } = await supabase
         .from('artists')
         .select('total_streams, user_id')
         .eq('id', track.artist_id)
         .single();
 
+      // Don't count self-streams — artist streaming their own track
+      if (art?.user_id === userId) return;
+
+      await supabase
+        .from('tracks')
+        .update({ stream_count: (track.stream_count || 0) + 1 })
+        .eq('id', trackId);
+
       if (art) {
+        // Don't count the artist streaming their own track
+        if (art.user_id === userId) return;
         await supabase
           .from('artists')
           .update({ total_streams: (art.total_streams || 0) + 1 })
