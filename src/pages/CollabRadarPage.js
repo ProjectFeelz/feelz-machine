@@ -31,8 +31,11 @@ function scoreMatch(me, them) {
   const moodScore     = sharedMoods.length  * 15;
   const tierBonus     = them.tier === 'premium' ? 5 : them.tier === 'pro' ? 3 : 0;
   const followerBonus = Math.min(Math.log10((them.follower_count || 1) + 1) * 3, 10);
-  const raw           = genreScore + moodScore + tierBonus + followerBonus;
-  const score         = Math.min(Math.round(raw), 99);
+  // Give a base score so artists without genre overlap still appear;
+  // pure zero scores only happen when both sides have no genre/mood at all.
+  const base  = (myGenres.length === 0 || themGenres.length === 0) ? 10 : 0;
+  const raw   = base + genreScore + moodScore + tierBonus + followerBonus;
+  const score = Math.min(Math.round(raw), 99);
   return { score, shared };
 }
 
@@ -240,8 +243,8 @@ export default function CollabRadarPage() {
       const { data: artistList } = await supabase
         .from('artists')
         .select('id, artist_name, slug, profile_image_url, is_verified, genre, mood, tags, tier, follower_count')
-        .in('tier', ['pro', 'premium'])
         .neq('id', artist.id)
+        .not('artist_name', 'is', null)
         .limit(100);
       const { data: sent } = await supabase
         .from('collab_requests').select('to_artist_id').eq('from_artist_id', artist.id);
