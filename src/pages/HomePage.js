@@ -301,9 +301,75 @@ export default function HomePage() {
 
   useEffect(() => { fetchData(); }, [user]);
 
-  const handlePlay = (track, list) => {
+  // ── Smart radio queue ─────────────────────────────────────────────────────
+  // When a track is tapped on the Home page we build a "radio" queue of similar
+  // tracks (matching genre or mood) instead of using the raw section list.
+  // This lets listeners press play once and keep listening without interaction.
+  const buildRadioQueue = async (track) => {
+    try {
+      const filters = [];
+      if (track.genre) filters.push(`genre.eq.${track.genre}`);
+      if (track.mood)  filters.push(`mood.eq.${track.mood}`);
+
+      // Fall back to engagement-sorted tracks if no genre/mood metadata
+      if (filters.length === 0) {
+        const { data } = await supabase
+          .from('tracks')
+          .select('*, artists(artist_name, slug, profile_image_url)')
+          .eq('is_published', true)
+          .neq('id', track.id)
+          .order('engagement_score', { ascending: false })
+          .limit(20);
+        return normaliseTracks(data, track);
+      }
+
+      const { data } = await supabase
+        .from('tracks')
+        .select('*, artists(artist_name, slug, profile_image_url)')
+        .eq('is_published', true)
+        .neq('id', track.id)
+        .or(filters.join(','))
+        .order('engagement_score', { ascending: false })
+        .limit(20);
+
+      // If fewer than 3 similar tracks, pad with top engagement tracks
+      if (!data || data.length < 3) {
+        const existingIds = (data || []).map(t => t.id).concat(track.id);
+        const { data: padData } = await supabase
+          .from('tracks')
+          .select('*, artists(artist_name, slug, profile_image_url)')
+          .eq('is_published', true)
+          .not('id', 'in', `(${existingIds.join(',')})`)
+          .order('engagement_score', { ascending: false })
+          .limit(20 - (data?.length || 0));
+        return normaliseTracks([...(data || []), ...(padData || [])], track);
+      }
+
+      return normaliseTracks(data, track);
+    } catch (err) {
+      console.error('Radio queue error:', err);
+      return [track];
+    }
+  };
+
+  const normaliseTracks = (list, seedTrack) => {
+    const normalised = (list || []).map(t => ({
+      ...t,
+      artist_name: t.artists?.artist_name || t.artist_name || 'Unknown Artist',
+      artist_slug: t.artists?.slug || t.artist_slug || null,
+    }));
+    // Seed track always plays first
+    return [seedTrack, ...normalised.filter(t => t.id !== seedTrack.id)];
+  };
+
+  const handlePlay = async (track, _list) => {
+    // If same track — just toggle play/pause, don't rebuild queue
     if (currentTrack?.id === track.id) { togglePlay(); return; }
-    playTrack(track, list || [track]);
+    // Start the track immediately so there's no perceived lag,
+    // then silently swap in the full radio queue once fetched
+    playTrack(track, [track]);
+    const radioQueue = await buildRadioQueue(track);
+    playTrack(track, radioQueue);
   };
 
   const handleMore = (item) => {
