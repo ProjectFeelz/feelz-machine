@@ -7,6 +7,7 @@ import {
   ArrowRight, ArrowLeft, Check, Sparkles
 } from 'lucide-react';
 import ArtistFollowPrompt from '../components/ArtistFollowPrompt';
+import ArtistWelcomeTour from '../components/ArtistWelcomeTour';
 
 const PROFILE_IMAGE_BUCKET = 'artist-images';
 
@@ -33,6 +34,7 @@ export default function ProfileSetup() {
   const [ageConfirmed, setAgeConfirmed] = useState(false);
   const [ageError, setAgeError]       = useState(false);
   const [showFollowPrompt, setShowFollowPrompt] = useState(false);
+  const [showWelcomeTour, setShowWelcomeTour]   = useState(false);
 
   // Artist fields
   const [artistName, setArtistName]     = useState('');
@@ -169,9 +171,19 @@ export default function ProfileSetup() {
     );
   }
 
+  // ── Artist welcome tour — shown after follow prompt ───────────────────────
+  if (showWelcomeTour) {
+    return (
+      <ArtistWelcomeTour
+        artistName={artistName.trim()}
+        onDone={() => navigate('/hub')}
+      />
+    );
+  }
+
   // ── Artist follow prompt — shown after artist profile is created ──────────
   if (showFollowPrompt) {
-    return <ArtistFollowPrompt onDone={() => navigate('/hub')} />;
+    return <ArtistFollowPrompt onDone={() => setShowWelcomeTour(true)} />;
   }
 
   // ── Step 0 — Choose type ──────────────────────────────────────────────────
