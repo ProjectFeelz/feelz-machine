@@ -5,7 +5,8 @@ import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import {
   Bell, Users, Heart, MessageCircle, TrendingUp, UserPlus,
-  Check, X, ChevronLeft, Loader, CheckCheck, Trash2, Music, Download, Megaphone
+  Check, X, ChevronLeft, Loader, CheckCheck, Trash2, Music, Download, Megaphone,
+  Radio, FileText
 } from 'lucide-react';
 import useNotifications from '../contexts/useNotifications';
 
@@ -22,14 +23,17 @@ const TYPE_CONFIG = {
   milestone_10k:    { icon: TrendingUp,    color: 'text-orange-400', bg: 'bg-orange-500/10', label: 'Milestone' },
   download:         { icon: Download,      color: 'text-green-400',  bg: 'bg-green-500/10',  label: 'Download' },
   announcement:     { icon: Megaphone,     color: 'text-yellow-400', bg: 'bg-yellow-500/10', label: 'Announcement' },
-  new_stream:       { icon: Music,         color: 'text-green-400',  bg: 'bg-green-500/10',  label: 'New Stream' },
-  new_post:         { icon: Music,         color: 'text-green-400',  bg: 'bg-green-500/10',  label: 'New Post' },
+  new_stream:       { icon: Radio,         color: 'text-cyan-400',   bg: 'bg-cyan-500/10',   label: 'New Stream' },
+  new_post:         { icon: FileText,      color: 'text-indigo-400', bg: 'bg-indigo-500/10', label: 'New Post' },
   mention:          { icon: MessageCircle, color: 'text-purple-400', bg: 'bg-purple-500/10', label: 'Mention' },
   tier_granted:     { icon: TrendingUp,    color: 'text-yellow-400', bg: 'bg-yellow-500/10', label: 'Tier Update' },
   new_track:        { icon: Music,         color: 'text-purple-400', bg: 'bg-purple-500/10', label: 'New Track' },
   playlist_add:     { icon: Music,         color: 'text-blue-400',   bg: 'bg-blue-500/10',   label: 'Playlist Add' },
   competition_winner: { icon: TrendingUp,  color: 'text-yellow-400', bg: 'bg-yellow-500/10', label: 'Winner!' },
   engagement:       { icon: Bell,          color: 'text-purple-400', bg: 'bg-purple-500/10', label: 'For You' },
+  monthly_wrapped:  { icon: TrendingUp,    color: 'text-pink-400',   bg: 'bg-pink-500/10',   label: 'Monthly Wrapped' },
+  top_supporter:    { icon: Heart,         color: 'text-orange-400', bg: 'bg-orange-500/10', label: 'Top Supporter' },
+  streak:           { icon: Bell,          color: 'text-yellow-400', bg: 'bg-yellow-500/10', label: 'Streak' },
 };
 
 const FILTERS = [

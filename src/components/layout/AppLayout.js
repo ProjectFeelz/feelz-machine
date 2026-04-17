@@ -12,6 +12,7 @@ import useNotifications from '../../contexts/useNotifications';
 import { OfflineBanner } from '../../hooks/useOffline';
 import ErrorBoundary from '../ErrorBoundary';
 import AppTour, { useTourState } from '../AppTour';
+import { useStreak } from '../../hooks/useStreak';
 
 const NAV_HEIGHT         = 64;
 const MINI_PLAYER_HEIGHT = 64;
@@ -113,6 +114,9 @@ export default function AppLayout() {
   const navigate                    = useNavigate();
   const location                    = useLocation();
   const [splashDone, setSplashDone] = useState(false);
+
+  // Daily streak — fires once per day on app open
+  useStreak(user);
 
   // Tour — fires once per account type after first sign-up
   const { show: showTour, dismiss: dismissTour } = useTourState(isArtist, !loading);

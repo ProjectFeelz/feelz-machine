@@ -240,6 +240,15 @@ export default function CollabRadarPage() {
     if (!artist) return;
     setLoading(true);
     try {
+      // Re-fetch the current artist's latest data to ensure genre/mood are fresh
+      // (handles the case where profile was just saved and context may lag)
+      const { data: freshArtist } = await supabase
+        .from('artists')
+        .select('id, genre, mood, tags, tier')
+        .eq('id', artist.id)
+        .single();
+      const me = freshArtist || artist;
+
       const { data: artistList } = await supabase
         .from('artists')
         .select('id, artist_name, slug, profile_image_url, is_verified, genre, mood, tags, tier, follower_count')
@@ -251,7 +260,7 @@ export default function CollabRadarPage() {
       const alreadySent = new Set((sent || []).map(r => r.to_artist_id));
       setSentIds(alreadySent);
       const scored = (artistList || [])
-        .map(a => { const { score, shared } = scoreMatch(artist, a); return { ...a, _score: score, _shared: shared }; })
+        .map(a => { const { score, shared } = scoreMatch(me, a); return { ...a, _score: score, _shared: shared }; })
         .filter(a => a._score > 0)
         .sort((a, b) => b._score - a._score);
       setMatches(scored);
@@ -260,6 +269,7 @@ export default function CollabRadarPage() {
     setLoading(false);
   }, [artist]);
 
+  // Re-run whenever artist loads or their id changes (handles auth timing + post-profile-save)
   useEffect(() => { loadMatches(); }, [loadMatches]);
 
   const handleRequestSent = (artistId) => setSentIds(prev => new Set([...prev, artistId]));

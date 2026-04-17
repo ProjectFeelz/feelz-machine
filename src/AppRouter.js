@@ -116,9 +116,9 @@ export default function AppRouter() {
                 <Route path="/library/following" element={<FollowingPage />} />
                 <Route path="/library/playlists" element={<PlaylistsPage />} />
                 <Route path="/library/playlists/:id" element={<PlaylistDetailPage />} />
-                <Route path="/community" element={<FeedPage />} />
-                <Route path="/feed" element={<Navigate to="/community" replace />} />
-                <Route path="/chat" element={<ChatRoomsPage />} />
+                <Route path="/community" element={<ChatRoomsPage />} />
+                <Route path="/feed" element={<FeedPage />} />
+                <Route path="/chat" element={<Navigate to="/community" replace />} />
                 <Route path="/profile" element={<ProfilePage />} />
                 <Route path="/profile/edit" element={<UserProfilePage />} />
                 <Route path="/notifications" element={<NotificationsPage />} />

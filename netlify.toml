@@ -9,6 +9,10 @@
   name = "engagement-drip"
   schedule = "0 8 * * 1,4"
 
+[[scheduled_functions]]
+  name = "monthly-wrapped"
+  schedule = "0 9 1 * *"
+
       [[redirects]]
         from = "/.well-known/assetlinks.json"
           to = "/.well-known/assetlinks.json"

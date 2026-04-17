@@ -52,7 +52,27 @@ function Section({ title, icon: Icon, onSeeAll, children }) {
   );
 }
 
-function SquareCard({ item, itemList = [], isAlbum = false, onPlay, onMore, currentTrack, isPlaying }) {
+function NewReleaseBadge() {
+  return (
+    <span className="absolute top-2 left-2 px-1.5 py-0.5 rounded text-[9px] font-bold tracking-widest uppercase bg-purple-600/90 text-white backdrop-blur z-10">
+      NEW
+    </span>
+  );
+}
+
+function ReleaseDateBadge({ dateStr }) {
+  if (!dateStr) return null;
+  const d = new Date(dateStr);
+  const now = new Date();
+  const diffDays = Math.floor((now - d) / 86400000);
+  if (diffDays > 30) return null;
+  const label = diffDays === 0 ? 'Today' : diffDays === 1 ? 'Yesterday' : `${diffDays}d ago`;
+  return (
+    <span className="text-[9px] text-white/30 mt-0.5 block">{label}</span>
+  );
+}
+
+function SquareCard({ item, itemList = [], isAlbum = false, showNew = false, onPlay, onMore, currentTrack, isPlaying }) {
   const navigate = useNavigate();
   const [imgLoaded, setImgLoaded] = useState(false);
   const isActive         = !isAlbum && currentTrack?.id === item.id;
@@ -105,6 +125,7 @@ function SquareCard({ item, itemList = [], isAlbum = false, onPlay, onMore, curr
             {item.release_type?.toUpperCase() || 'ALBUM'}
           </div>
         )}
+        {showNew && !isAlbum && <NewReleaseBadge />}
 
         <button
           onClick={(e) => { e.stopPropagation(); onMore(item); }}
@@ -122,6 +143,7 @@ function SquareCard({ item, itemList = [], isAlbum = false, onPlay, onMore, curr
       >
         {item.artist_name}
       </button>
+      {showNew && <ReleaseDateBadge dateStr={item._date || item.created_at} />}
     </div>
   );
 }
@@ -316,7 +338,35 @@ export default function HomePage() {
         </p>
       </div>
 
-      {/* New from artists you follow */}
+      {/* Trending — highest social proof, works for every visitor */}
+      {trending.length > 0 && (
+        <Section title="Trending" icon={Flame} onSeeAll={() => navigate('/browse?tab=trending')}>
+          <div className="flex space-x-3 overflow-x-auto px-6 scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
+            {trending.map(track => (
+              <SquareCard key={track.id} item={track} itemList={trending}
+                onPlay={handlePlay} onMore={handleMore}
+                currentTrack={currentTrack} isPlaying={isPlaying} />
+            ))}
+          </div>
+        </Section>
+      )}
+
+      {/* New Releases — distinct card style with NEW badge + date */}
+      {newReleases.length > 0 && (
+        <Section title="New Releases" onSeeAll={() => navigate('/browse?tab=new')}>
+          <div className="flex space-x-3 overflow-x-auto px-6 scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
+            {newReleases.map(item => (
+              <SquareCard
+                key={`${item._isAlbum ? 'album' : 'track'}-${item.id}`}
+                item={item} itemList={newReleases.filter(i => !i._isAlbum)}
+                isAlbum={item._isAlbum} showNew onPlay={handlePlay} onMore={handleMore}
+                currentTrack={currentTrack} isPlaying={isPlaying} />
+            ))}
+          </div>
+        </Section>
+      )}
+
+      {/* From artists you follow — personal pull, logged-in users only */}
       {followedReleases.length > 0 && (
         <Section title="From Artists You Follow" icon={Users} onSeeAll={() => navigate('/browse?tab=new')}>
           <div className="flex space-x-3 overflow-x-auto px-6 scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
@@ -348,34 +398,6 @@ export default function HomePage() {
           <div className="flex space-x-3 overflow-x-auto px-6 scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
             {featuredTracks.map(track => (
               <SquareCard key={track.id} item={track} itemList={featuredTracks}
-                onPlay={handlePlay} onMore={handleMore}
-                currentTrack={currentTrack} isPlaying={isPlaying} />
-            ))}
-          </div>
-        </Section>
-      )}
-
-      {/* New Releases */}
-      {newReleases.length > 0 && (
-        <Section title="New Releases" onSeeAll={() => navigate('/browse?tab=new')}>
-          <div className="flex space-x-3 overflow-x-auto px-6 scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
-            {newReleases.map(item => (
-              <SquareCard
-                key={`${item._isAlbum ? 'album' : 'track'}-${item.id}`}
-                item={item} itemList={newReleases.filter(i => !i._isAlbum)}
-                isAlbum={item._isAlbum} onPlay={handlePlay} onMore={handleMore}
-                currentTrack={currentTrack} isPlaying={isPlaying} />
-            ))}
-          </div>
-        </Section>
-      )}
-
-      {/* Trending */}
-      {trending.length > 0 && (
-        <Section title="Trending" icon={Flame} onSeeAll={() => navigate('/browse?tab=trending')}>
-          <div className="flex space-x-3 overflow-x-auto px-6 scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
-            {trending.map(track => (
-              <SquareCard key={track.id} item={track} itemList={trending}
                 onPlay={handlePlay} onMore={handleMore}
                 currentTrack={currentTrack} isPlaying={isPlaying} />
             ))}
