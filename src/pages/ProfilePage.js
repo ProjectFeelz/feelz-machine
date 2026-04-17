@@ -14,6 +14,7 @@ import PaymentSettings from '../components/PaymentSettings';
 import TierGate from '../components/TierGate';
 import { TierBadge } from '../components/TierGate';
 import { useTier } from '../contexts/useTier';
+import ProfileCompletionBanner from '../components/ProfileCompletionBanner';
 
 const TikTokIcon = ({ className }) => (
   <svg className={className} viewBox="0 0 24 24" fill="currentColor">
@@ -281,6 +282,8 @@ export default function ProfilePage() {
       <h1 className="text-2xl font-bold text-white mb-5 sticky top-0 z-20
         bg-black/90 backdrop-blur-sm md:relative md:top-auto md:bg-transparent
         md:backdrop-blur-none pt-2 pb-2 -mx-4 px-4">Profile</h1>
+
+      <ProfileCompletionBanner compact />
 
       {msg && (
         <div className={`mb-4 p-3 rounded-lg text-sm ${msg.startsWith('Error') ? 'bg-red-500/10 text-red-400' : 'bg-green-500/10 text-green-400'}`}>

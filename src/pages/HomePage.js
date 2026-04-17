@@ -155,6 +155,7 @@ export default function HomePage() {
 
   const [featuredTracks, setFeaturedTracks]         = useState([]);
   const [newReleases, setNewReleases]               = useState([]);
+  const [newAlbums, setNewAlbums]                   = useState([]);
   const [trending, setTrending]                     = useState([]);
   const [topArtists, setTopArtists]                 = useState([]);
   const [recommended, setRecommended]               = useState([]);
@@ -180,7 +181,7 @@ export default function HomePage() {
           .eq('is_published', true).order('created_at', { ascending: false }).limit(8),
         supabase.from('albums')
           .select('*, artists(artist_name, slug, profile_image_url)')
-          .eq('is_published', true).order('created_at', { ascending: false }).limit(8),
+          .eq('is_published', true).order('created_at', { ascending: false }).limit(10),
         supabase.from('tracks')
           .select('*, albums(title, cover_artwork_url, price), artists(artist_name, slug, profile_image_url, is_verified, tier)')
           .eq('is_published', true).order('engagement_score', { ascending: false }).limit(20),
@@ -200,10 +201,14 @@ export default function HomePage() {
         artist_slug: a.artists?.slug || null, _isAlbum: true,
       }));
 
-      const merged = [
-        ...normTrack(recentTracks).map(t => ({ ...t, _isAlbum: false, _date: t.created_at })),
-        ...normAlbum(recentAlbums).map(a => ({ ...a, _date: a.release_date || a.created_at })),
-      ].sort((a, b) => new Date(b._date) - new Date(a._date)).slice(0, 10);
+      // Albums get their own dedicated row — no longer merged with singles
+      const albumList = normAlbum(recentAlbums);
+
+      // New Releases = tracks only, sorted by date
+      const trackList = normTrack(recentTracks)
+        .map(t => ({ ...t, _isAlbum: false, _date: t.created_at }))
+        .sort((a, b) => new Date(b._date) - new Date(a._date))
+        .slice(0, 10);
 
       const trendingBoosted = (trendingRaw || [])
         .map(t => ({
@@ -217,7 +222,8 @@ export default function HomePage() {
 
       const artistCount = (artists || []).length;
       setFeaturedTracks(limitPerArtist(normTrack(featured), artistCount));
-      setNewReleases(limitPerArtist(merged, artistCount));
+      setNewReleases(limitPerArtist(trackList, artistCount));
+      setNewAlbums(limitPerArtist(albumList, artistCount));
       setTrending(limitPerArtist(trendingBoosted, artistCount));
       setTopArtists(artists || []);
 
@@ -351,15 +357,30 @@ export default function HomePage() {
         </Section>
       )}
 
-      {/* New Releases — distinct card style with NEW badge + date */}
+      {/* New Releases — tracks only, with NEW badge + date */}
       {newReleases.length > 0 && (
-        <Section title="New Releases" onSeeAll={() => navigate('/browse?tab=new')}>
+        <Section title="New Singles" onSeeAll={() => navigate('/browse?tab=new')}>
           <div className="flex space-x-3 overflow-x-auto px-6 scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
             {newReleases.map(item => (
               <SquareCard
-                key={`${item._isAlbum ? 'album' : 'track'}-${item.id}`}
-                item={item} itemList={newReleases.filter(i => !i._isAlbum)}
-                isAlbum={item._isAlbum} showNew onPlay={handlePlay} onMore={handleMore}
+                key={`track-${item.id}`}
+                item={item} itemList={newReleases}
+                isAlbum={false} showNew onPlay={handlePlay} onMore={handleMore}
+                currentTrack={currentTrack} isPlaying={isPlaying} />
+            ))}
+          </div>
+        </Section>
+      )}
+
+      {/* Albums — dedicated row so they don't drown in singles */}
+      {newAlbums.length > 0 && (
+        <Section title="Albums & EPs" onSeeAll={() => navigate('/browse?tab=new')}>
+          <div className="flex space-x-3 overflow-x-auto px-6 scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
+            {newAlbums.map(album => (
+              <SquareCard
+                key={`album-${album.id}`}
+                item={album} itemList={[]}
+                isAlbum showNew={false} onPlay={handlePlay} onMore={handleMore}
                 currentTrack={currentTrack} isPlaying={isPlaying} />
             ))}
           </div>

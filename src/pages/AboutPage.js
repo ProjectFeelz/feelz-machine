@@ -185,58 +185,6 @@ export default function AboutPage() {
         </div>
       </div>
 
-      {/* Pricing */}
-      <div style={{ padding: '0 24px', maxWidth: 860, margin: '0 auto 64px', textAlign: 'center' }}>
-        <p style={{ fontSize: 11, fontWeight: 500, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#8CAB2E', marginBottom: 10 }}>
-          Plans
-        </p>
-        <h2 style={{ fontSize: 'clamp(22px, 3vw, 36px)', fontWeight: 800, letterSpacing: '-0.03em', marginBottom: 40 }}>
-          Simple, honest pricing.
-        </h2>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12, textAlign: 'left' }}>
-          {tiers.map(({ name, price, period, desc, featured, items }) => (
-            <div key={name} style={{
-              background: featured ? 'linear-gradient(160deg, rgba(140,171,46,0.08), #0a0a0a 60%)' : 'rgba(255,255,255,0.03)',
-              border: `1px solid ${featured ? 'rgba(140,171,46,0.3)' : 'rgba(255,255,255,0.06)'}`,
-              borderRadius: 14, padding: 24, position: 'relative',
-            }}>
-              {featured && (
-                <div style={{
-                  position: 'absolute', top: -11, left: '50%', transform: 'translateX(-50%)',
-                  background: '#8CAB2E', color: '#000', fontSize: 10, fontWeight: 600,
-                  letterSpacing: '0.06em', padding: '3px 12px', borderRadius: 100,
-                  textTransform: 'uppercase', whiteSpace: 'nowrap',
-                }}>Popular</div>
-              )}
-              <div style={{ fontWeight: 700, fontSize: 17, marginBottom: 4 }}>{name}</div>
-              <div style={{ fontSize: 28, fontWeight: 800, letterSpacing: '-0.04em', marginBottom: 4 }}>
-                {price} <span style={{ fontSize: 13, fontWeight: 300, color: 'rgba(255,255,255,0.35)' }}>{period}</span>
-              </div>
-              <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.25)', marginBottom: 16 }}>{desc}</div>
-              <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {items.map(item => (
-                  <li key={item} style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', display: 'flex', gap: 8 }}>
-                    <span style={{ color: '#8CAB2E', fontSize: 12, flexShrink: 0 }}>✓</span>{item}
-                  </li>
-                ))}
-              </ul>
-              <button
-                onClick={() => navigate('/upgrade')}
-                style={{
-                  marginTop: 20, width: '100%', padding: '10px 0',
-                  background: featured ? '#8CAB2E' : 'rgba(255,255,255,0.05)',
-                  color: featured ? '#000' : 'rgba(255,255,255,0.6)',
-                  border: featured ? 'none' : '1px solid rgba(255,255,255,0.08)',
-                  borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer',
-                }}
-              >
-                {name === 'Free' ? 'Get Started' : 'Upgrade'}
-              </button>
-            </div>
-          ))}
-        </div>
-      </div>
-
       {/* Legal links */}
       <div style={{ textAlign: 'center', paddingBottom: 16 }}>
         <div style={{ display: 'flex', gap: 24, justifyContent: 'center', flexWrap: 'wrap' }}>

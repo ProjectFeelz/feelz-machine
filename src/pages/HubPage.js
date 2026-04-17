@@ -6,10 +6,10 @@ import { useTier } from '../contexts/useTier';
 import CollabThread from '../components/CollabThread';
 import ProfileCompletionBanner from '../components/ProfileCompletionBanner';
 import {
-  Shield, Users, BarChart3, AlertTriangle, Music,
+  Shield, Users, BarChart3, Music,
   Upload, HeartHandshake, Bell, Palette, MessageCircle,
-  ChevronRight, Crown, Zap, Star, Mic2, LayoutDashboard,
-  User, LogOut, DollarSign, Megaphone, Radio, Trophy, Brain, Copy,
+  ChevronRight, Crown, Zap, Star, LayoutDashboard,
+  User, LogOut, DollarSign, Megaphone, Radio, Trophy, Brain,
 } from 'lucide-react';
 
 function LinkCard({ icon: Icon, label, description, path, color, onClick }) {
@@ -150,16 +150,12 @@ export default function HubPage() {
           {/* Admin */}
           {isAdmin && (
             <Section title="Admin" icon={Shield}>
-              <LinkCard icon={Users}         label="User Management"     description="Manage artists, roles, and permissions"      path="/admin"              color="bg-yellow-500/20" />
-              <LinkCard icon={Mic2}          label="All Artists"         description="Browse and manage all artist profiles"        path="/admin/artists"      color="bg-purple-500/20" />
-              <LinkCard icon={BarChart3}     label="Platform Analytics"  description="Streams, signups, engagement metrics"         path="/admin/analytics"    color="bg-blue-500/20" />
-              <LinkCard icon={AlertTriangle} label="Content Moderation"  description="Flagged tracks, reports, and reviews"         path="/admin/moderation"   color="bg-red-500/20" />
-              <LinkCard icon={Megaphone}     label="Broadcast & APK"     description="Send updates to all users · Manage APK link"  path="/admin/broadcast"    color="bg-purple-500/20" />
-              <LinkCard icon={Zap}           label="Boost Manager"       description="Boost and feature artist content"             path="/admin/boost"        color="bg-amber-500/20" />
-              <LinkCard icon={BarChart3}     label="User Behavior"       description="Streams, downloads, logins, activity export"  path="/admin/behavior"     color="bg-cyan-500/20" />
-              <LinkCard icon={Trophy}       label="Competitions"       description="Create and manage artist competitions"          path="/admin/competitions" color="bg-yellow-500/20" />
-              <LinkCard icon={Brain}        label="Engagement Drip"    description="AI messaging · segment settings · send stats"   path="/admin/engagement"   color="bg-violet-500/20" />
-              <LinkCard icon={Copy}         label="Duplicate Artists"  description="Find and remove duplicate artist profiles"      path="/admin/duplicates"   color="bg-red-500/20" />
+              <LinkCard icon={Shield}    label="Admin Panel"        description="Broadcast · Analytics · Moderation · Users"  path="/admin"              color="bg-yellow-500/20" />
+              <LinkCard icon={Megaphone} label="Broadcast"          description="Send messages to all users"                  path="/admin/broadcast"    color="bg-purple-500/20" />
+              <LinkCard icon={Brain}     label="Engagement Drip"    description="AI messaging · segment stats"               path="/admin/engagement"   color="bg-violet-500/20" />
+              <LinkCard icon={BarChart3} label="Platform Analytics" description="Streams, signups, engagement metrics"        path="/admin/analytics"    color="bg-blue-500/20" />
+              <LinkCard icon={Trophy}    label="Competitions"       description="Create and manage competitions"              path="/admin/competitions" color="bg-yellow-500/20" />
+              <LinkCard icon={Zap}       label="Boost Manager"      description="Feature and boost artist content"            path="/admin/boost"        color="bg-amber-500/20" />
             </Section>
           )}
 
