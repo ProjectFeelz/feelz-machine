@@ -203,7 +203,7 @@ export default function ArtistDashboard() {
     { key: 'upload',    label: 'Upload',    icon: Upload },
     { key: 'collabs',   label: 'Collabs',   icon: Users, hasBadge: true },
     { key: 'analytics', label: 'Analytics', icon: BarChart3 },
-    { key: 'memos',     label: 'Memos',     icon: Headphones },
+    // Memos tab hidden from nav bar — accessible via Profile page Voice Memo button (?tab=memos)
   ];
 
   return (

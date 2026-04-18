@@ -7,7 +7,7 @@ import {
   LogOut, ChevronRight, User, Music, Globe, Shield,
   Instagram, Twitter, Youtube, MessageCircle, Loader,
   Save, Palette, ExternalLink, DollarSign, Camera, Check,
-  Link, Zap, Crown, Star, Trash2, AlertTriangle, Plus
+  Link, Zap, Crown, Star, Trash2, AlertTriangle, Plus, Mic
 } from 'lucide-react';
 import ThemeEditor from '../components/ThemeEditor';
 import PaymentSettings from '../components/PaymentSettings';
@@ -529,6 +529,14 @@ export default function ProfilePage() {
                     <div className="flex items-center justify-between">
                       <span className="text-xs text-white/20">{thoughtInput.length}/280</span>
                       <div className="flex items-center space-x-3">
+                        <button
+                          onClick={() => nav('/dashboard?tab=memos')}
+                          title="Record a Voice Memo"
+                          className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-white/[0.06] border border-white/[0.06] hover:bg-white/[0.1] transition active:scale-95"
+                        >
+                          <Mic className="w-3.5 h-3.5 text-pink-400" />
+                          <span className="text-xs text-white/50">Voice Memo</span>
+                        </button>
                         {thoughtMsg && (
                           <span className={`text-xs ${thoughtMsg.includes('Failed') || thoughtMsg.includes('limit') ? 'text-red-400' : 'text-green-400'}`}>
                             {thoughtMsg}

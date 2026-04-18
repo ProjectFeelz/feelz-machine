@@ -20,10 +20,10 @@ const COLLAB_TYPES = [
 ];
 
 function scoreMatch(me, them) {
-  const myGenres   = (me.genre   ? [me.genre]   : []).concat(me.tags   || []);
-  const myMoods    = (me.mood    ? [me.mood]     : []).concat(me.moods  || []);
-  const themGenres = (them.genre ? [them.genre]  : []).concat(them.tags || []);
-  const themMoods  = (them.mood  ? [them.mood]   : []).concat(them.moods|| []);
+  const myGenres   = me.genre   ? [me.genre]   : [];
+  const myMoods    = me.mood    ? [me.mood]     : [];
+  const themGenres = them.genre ? [them.genre]  : [];
+  const themMoods  = them.mood  ? [them.mood]   : [];
   const sharedGenres = myGenres.filter(g => themGenres.includes(g));
   const sharedMoods  = myMoods.filter(m => themMoods.includes(m));
   const shared       = [...new Set([...sharedGenres, ...sharedMoods])];
@@ -244,14 +244,14 @@ export default function CollabRadarPage() {
       // (handles the case where profile was just saved and context may lag)
       const { data: freshArtist } = await supabase
         .from('artists')
-        .select('id, genre, mood, tags, tier')
+        .select('id, genre, mood, tier')
         .eq('id', artist.id)
         .single();
       const me = freshArtist || artist;
 
       const { data: artistList } = await supabase
         .from('artists')
-        .select('id, artist_name, slug, profile_image_url, is_verified, genre, mood, tags, tier, follower_count')
+        .select('id, artist_name, slug, profile_image_url, is_verified, genre, mood, tier, follower_count')
         .neq('id', artist.id)
         .not('artist_name', 'is', null)
         .limit(100);

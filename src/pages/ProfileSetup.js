@@ -386,6 +386,8 @@ export default function ListenerWelcomeTour({ displayName, onDone }) {
   const [visible, setVisible] = useState(false);
 
   const slide  = SLIDES[step];
+  // Safety: if step races past SLIDES length (re-render race on onDone), bail cleanly
+  if (!slide) return null;
   const isLast = step === SLIDES.length - 1;
 
   useEffect(() => {

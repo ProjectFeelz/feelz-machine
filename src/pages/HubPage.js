@@ -183,7 +183,6 @@ export default function HubPage() {
               <LinkCard icon={HeartHandshake} label="Collaborations"  description="Manage collab requests and credits"     onClick={() => setActiveTab('collabs')}   color="bg-cyan-500/20" />
               <LinkCard icon={BarChart3}      label="Analytics"       description="Track performance and stream data"      path="/dashboard?tab=analytics" color="bg-indigo-500/20" />
               <LinkCard icon={MessageCircle}  label="Chat Rooms"      description="Community conversations"                path="/chat"                    color="bg-violet-500/20" />
-              <LinkCard icon={Users}          label="Community Feed"  description="Posts, updates and activity"            path="/community"               color="bg-teal-500/20" />
             </Section>
           )}
 

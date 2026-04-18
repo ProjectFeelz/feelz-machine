@@ -172,6 +172,7 @@ export default function HomePage() {
   const [weeklyDiscoveries, setWeeklyDiscoveries]   = useState(0);
 
   const fetchData = async () => {
+    setLoading(true);
     try {
       const [
         { data: featured },
@@ -338,7 +339,12 @@ export default function HomePage() {
     } catch (err) { console.error('Recommendations error:', err); }
   };
 
-  useEffect(() => { fetchData(); }, [user]);
+  useEffect(() => {
+    fetchData();
+    // Safety: if fetchData hangs for any reason, release the skeleton after 8s
+    const safetyTimer = setTimeout(() => setLoading(false), 8000);
+    return () => clearTimeout(safetyTimer);
+  }, [user]);
 
   // ── Fetch daily spotlight artist ──────────────────────────────────────────
   useEffect(() => {
