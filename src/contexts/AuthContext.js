@@ -59,29 +59,48 @@ export function AuthProvider({ children }) {
   const loadUser = async (sessionUser) => {
     if (!sessionUser) return;
     setUser(sessionUser);
-    await Promise.all([
-      fetchProfile(sessionUser.id),
-      fetchArtist(sessionUser.id),
-      fetchListener(sessionUser.id),
-      checkAdmin(sessionUser.id),
-    ]);
+    try {
+      await Promise.all([
+        fetchProfile(sessionUser.id),
+        fetchArtist(sessionUser.id),
+        fetchListener(sessionUser.id),
+        checkAdmin(sessionUser.id),
+      ]);
+    } catch (err) {
+      console.error('Failed to load user profile data:', err);
+    }
   };
 
   useEffect(() => {
     supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (session?.user) await loadUser(session.user);
-      setLoading(false);
+      try {
+        if (session?.user) await loadUser(session.user);
+      } catch (err) {
+        console.error('Session load error:', err);
+      } finally {
+        setLoading(false);
+      }
     });
 
     const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_IN' && session?.user) {
-        await loadUser(session.user);
-        // Honour post-login redirect stored by LoginPage
-        const redirect = sessionStorage.getItem('post_login_redirect');
-        if (redirect) {
-          sessionStorage.removeItem('post_login_redirect');
-          window.location.replace(redirect);
-        }
+        // Supabase fires SIGNED_IN on every tab focus and token refresh, not just
+        // on actual logins. Guard against re-running loadUser (which triggers 4
+        // Supabase queries and causes every page to flicker/freeze) unless this is
+        // a genuinely new user session.
+        setUser(prev => {
+          if (!prev || prev.id !== session.user.id) {
+            // New user — load their profile data async, then handle redirect
+            loadUser(session.user).then(() => {
+              const redirect = sessionStorage.getItem('post_login_redirect');
+              if (redirect) {
+                sessionStorage.removeItem('post_login_redirect');
+                window.location.replace(redirect);
+              }
+            });
+          }
+          return prev?.id === session.user.id ? prev : session.user;
+        });
       }
       if (event === 'SIGNED_OUT') {
         setUser(null);

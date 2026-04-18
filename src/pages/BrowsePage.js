@@ -105,7 +105,7 @@ export default function BrowsePage() {
   const [searchResults, setSearchResults]     = useState(null);
   const [recommended, setRecommended]         = useState([]);
 
-  useEffect(() => { if (user) fetchAll(); }, [user]);
+  useEffect(() => { fetchAll(); }, [user]);
 
   useEffect(() => {
     if (user && allTracks.length > 0) fetchRecommended();
