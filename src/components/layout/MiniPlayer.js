@@ -1,20 +1,70 @@
-import React, { useState } from 'react';
-import { Play, Pause, SkipForward, ChevronUp } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Play, Pause, SkipForward, ChevronUp, Sparkles } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import TrackActionSheet from '../TrackActionSheet';
 import { usePlayer } from '../../contexts/PlayerContext';
+import { supabase } from '../../supabaseClient';
 import { useHaptics } from '../../hooks/useHaptics';
 
 export default function MiniPlayer() {
   const {
-    currentTrack, isPlaying, togglePlay, playNext,
+    currentTrack, isPlaying, togglePlay, playNext, playTrack,
     duration, currentTime, seek, setIsMinimized,
+    queue, queueIndex,
   } = usePlayer();
   const { user } = useAuth();
   const navigate = useNavigate();
   const { tap, heavy } = useHaptics();
   const [showActionSheet, setShowActionSheet] = useState(false);
+
+  const [radioSuggestions, setRadioSuggestions] = useState([]);
+  const [showRadioEnd, setShowRadioEnd]         = useState(false);
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+
+  const isQueueEnd = queue.length > 0 && queueIndex >= queue.length - 1 && !isPlaying && currentTime > 0 && duration > 0 && currentTime >= duration - 2;
+
+  useEffect(() => {
+    if (!isQueueEnd || !currentTrack) return;
+    if (radioSuggestions.length > 0) { setShowRadioEnd(true); return; }
+    setLoadingSuggestions(true);
+    const fetch = async () => {
+      try {
+        const filters = [];
+        if (currentTrack.genre) filters.push(`genre.eq.${currentTrack.genre}`);
+        if (currentTrack.mood)  filters.push(`mood.eq.${currentTrack.mood}`);
+        const playedIds = queue.map(t => t.id).join(',');
+        let query = supabase
+          .from('tracks')
+          .select('id, title, cover_artwork_url, artist_name, artist_slug, file_url, genre, mood, artists(artist_name, slug)')
+          .eq('is_published', true)
+          .not('id', 'in', `(${playedIds})`)
+          .order('engagement_score', { ascending: false })
+          .limit(4);
+        if (filters.length > 0) query = query.or(filters.join(','));
+        const { data } = await query;
+        const norm = (data || []).map(t => ({
+          ...t,
+          artist_name: t.artists?.artist_name || t.artist_name || 'Unknown',
+          artist_slug: t.artists?.slug || t.artist_slug || null,
+        }));
+        setRadioSuggestions(norm);
+        if (norm.length > 0) setShowRadioEnd(true);
+      } catch (err) { console.error('Radio end fetch:', err); }
+      setLoadingSuggestions(false);
+    };
+    fetch();
+  }, [isQueueEnd, currentTrack?.id]);
+
+  const handlePlaySuggestion = (track) => {
+    setShowRadioEnd(false);
+    setRadioSuggestions([]);
+    playTrack(track, radioSuggestions);
+  };
+
+  const handleDismissRadioEnd = () => {
+    setShowRadioEnd(false);
+  };
 
   if (!currentTrack) return null;
 
@@ -48,6 +98,39 @@ export default function MiniPlayer() {
       className="md:hidden fixed left-0 right-0 z-50"
       style={{ bottom: '56px' }}
     >
+      {/* End-of-queue: More like this */}
+      {showRadioEnd && radioSuggestions.length > 0 && (
+        <div className="bg-[#111]/98 backdrop-blur-xl border-t border-white/[0.06] px-4 pt-3 pb-2">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center space-x-1.5">
+              <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+              <span className="text-xs font-semibold text-white/60">More like this</span>
+            </div>
+            <button onClick={handleDismissRadioEnd} className="text-[10px] text-white/25 hover:text-white/50 transition">Dismiss</button>
+          </div>
+          <div className="flex space-x-2 overflow-x-auto scrollbar-hide pb-1">
+            {radioSuggestions.map(track => (
+              <button
+                key={track.id}
+                onClick={() => handlePlaySuggestion(track)}
+                className="flex-shrink-0 flex items-center space-x-2 px-2.5 py-2 rounded-xl bg-white/[0.05] border border-white/[0.07] hover:bg-white/[0.09] transition"
+              >
+                <div className="w-9 h-9 rounded-lg overflow-hidden bg-white/10 flex-shrink-0">
+                  {track.cover_artwork_url
+                    ? <img src={track.cover_artwork_url} alt="" className="w-full h-full object-cover" />
+                    : <div className="w-full h-full flex items-center justify-center text-white/20 text-sm">♪</div>}
+                </div>
+                <div className="text-left min-w-0">
+                  <p className="text-xs font-medium text-white truncate max-w-[90px]">{track.title}</p>
+                  <p className="text-[10px] text-white/40 truncate max-w-[90px]">{track.artist_name}</p>
+                </div>
+                <Play className="w-3 h-3 text-white/40 flex-shrink-0 ml-1" />
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Draggable progress bar */}
       <div
         className="h-1 flex items-center cursor-pointer"

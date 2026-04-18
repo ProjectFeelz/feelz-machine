@@ -17,6 +17,7 @@ export default function FeedPage() {
   const { user, artist } = useAuth();
   const [posts, setPosts] = useState([]);
   const [feedFilter, setFeedFilter] = useState('all');
+  const [feedFilterReady, setFeedFilterReady] = useState(false);
   const [followedArtistIds, setFollowedArtistIds] = useState([]);
   const [trending, setTrending] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -62,7 +63,13 @@ export default function FeedPage() {
   useEffect(() => {
     if (!user) return;
     supabase.from('follows').select('artist_id').eq('follower_id', user.id)
-      .then(({ data }) => setFollowedArtistIds((data || []).map(f => f.artist_id)));
+      .then(({ data }) => {
+        const ids = (data || []).map(f => f.artist_id);
+        setFollowedArtistIds(ids);
+        // Default to "Following" tab if user actually follows anyone
+        if (ids.length > 0 && !feedFilterReady) setFeedFilter('following');
+        setFeedFilterReady(true);
+      });
   }, [user]);
 
   useEffect(() => {

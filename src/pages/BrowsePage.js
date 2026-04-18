@@ -29,6 +29,16 @@ const GENRE_TAGS = [
   'Latin', 'Soul', 'Jazz', 'Indie', 'Lo-Fi', 'Drill', 'Trap', 'House',
 ];
 
+const MOOD_TAGS = [
+  { label: 'All Moods', value: null, emoji: '🎵' },
+  { label: 'Hype',      value: 'Hype',      emoji: '🔥' },
+  { label: 'Chill',     value: 'Chill',     emoji: '😌' },
+  { label: 'Late Night',value: 'Late Night', emoji: '🌙' },
+  { label: 'Workout',   value: 'Workout',   emoji: '💪' },
+  { label: 'Emotional', value: 'Emotional', emoji: '💔' },
+  { label: 'Vibes',     value: 'Vibes',     emoji: '✨' },
+];
+
 // ── Search history helpers ────────────────────────────────────────────────────
 const SEARCH_HISTORY_KEY = 'fm_search_history';
 
@@ -84,6 +94,7 @@ export default function BrowsePage() {
     return params.get('tab') || 'trending';
   });
   const [selectedGenre, setSelectedGenre]     = useState('All');
+  const [selectedMood, setSelectedMood]       = useState(null);
   const [trending, setTrending]               = useState([]);
   const [featured, setFeatured]               = useState([]);
   const [newReleases, setNewReleases]         = useState([]);
@@ -226,9 +237,9 @@ export default function BrowsePage() {
     });
   };
 
-  const filteredTracks = selectedGenre === 'All'
-    ? allTracks
-    : allTracks.filter(t => t.genre?.toLowerCase() === selectedGenre.toLowerCase());
+  const filteredTracks = allTracks
+    .filter(t => selectedGenre === 'All' || t.genre?.toLowerCase() === selectedGenre.toLowerCase())
+    .filter(t => !selectedMood || t.mood?.toLowerCase() === selectedMood.toLowerCase());
 
   const handlePlayTrack = (track, list) => {
     if (currentTrack?.id === track.id) togglePlay();
@@ -527,13 +538,25 @@ export default function BrowsePage() {
               </div>
             )}
             <p className="section-label mb-3">Filter by Genre</p>
-            <div className="flex space-x-2 overflow-x-auto scrollbar-hide mb-5 -mx-1 px-1">
+            <div className="flex space-x-2 overflow-x-auto scrollbar-hide mb-3 -mx-1 px-1">
               {GENRE_TAGS.map(genre => (
                 <button key={genre} onClick={() => setSelectedGenre(genre)}
                   className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition ${
                     selectedGenre === genre ? 'bg-white text-black' : 'bg-white/[0.06] text-white/40 hover:text-white/70'
                   }`}>
                   {genre}
+                </button>
+              ))}
+            </div>
+            <p className="section-label mb-2 mt-4">Filter by Mood</p>
+            <div className="flex space-x-2 overflow-x-auto scrollbar-hide mb-5 -mx-1 px-1">
+              {MOOD_TAGS.map(({ label, value, emoji }) => (
+                <button key={label} onClick={() => setSelectedMood(selectedMood === value ? null : value)}
+                  className={`flex-shrink-0 flex items-center space-x-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition ${
+                    selectedMood === value ? 'bg-white text-black' : 'bg-white/[0.06] text-white/40 hover:text-white/70'
+                  }`}>
+                  <span style={{fontSize:'11px'}}>{emoji}</span>
+                  <span>{label}</span>
                 </button>
               ))}
             </div>
@@ -560,7 +583,7 @@ export default function BrowsePage() {
               </>
             ) : (
               <p className="text-center text-white/20 text-sm py-12">
-                {selectedGenre === 'All' ? 'No tracks yet' : `No ${selectedGenre} tracks yet`}
+                {selectedGenre === 'All' && !selectedMood ? 'No tracks yet' : `No ${selectedMood || selectedGenre} tracks yet`}
               </p>
             )}
           </div>

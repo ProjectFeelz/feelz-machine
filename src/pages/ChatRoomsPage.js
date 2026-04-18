@@ -4,10 +4,19 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import {
-  MessageCircle, Plus, Loader, Lock, Users, Search, Zap, X, Pencil, Trash2, Trophy, Crown
+  MessageCircle, Plus, Loader, Lock, Users, Search, Zap, X, Pencil, Trash2, Trophy, Crown, Clock
 } from 'lucide-react';
 import TierGate from '../components/TierGate';
 import { useTier } from '../contexts/useTier';
+
+function timeAgo(date) {
+  if (!date) return null;
+  const s = Math.floor((Date.now() - new Date(date).getTime()) / 1000);
+  if (s < 60)    return 'just now';
+  if (s < 3600)  return `${Math.floor(s / 60)}m ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
+  return `${Math.floor(s / 86400)}d ago`;
+}
 
 export default function ChatRoomsPage() {
   const navigate = useNavigate();
@@ -17,6 +26,7 @@ export default function ChatRoomsPage() {
   const [rooms, setRooms] = useState([]);
   const [competitions, setCompetitions] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [lastMessages, setLastMessages] = useState({});
   const [query, setQuery] = useState('');
   const [error, setError] = useState('');
 
@@ -39,6 +49,26 @@ export default function ChatRoomsPage() {
     fetchCompetitions();
   }, []);
 
+  const fetchLastMessages = async (roomIds) => {
+    if (!roomIds?.length) return;
+    try {
+      // Fetch the latest message for each room in one query
+      const { data } = await supabase
+        .from('chat_messages')
+        .select('room_id, content, created_at')
+        .in('room_id', roomIds)
+        .eq('is_deleted', false)
+        .order('created_at', { ascending: false });
+      if (!data) return;
+      // Keep only the first (most recent) message per room
+      const map = {};
+      data.forEach(msg => {
+        if (!map[msg.room_id]) map[msg.room_id] = msg;
+      });
+      setLastMessages(map);
+    } catch (err) { console.error('Last messages error:', err); }
+  };
+
   const fetchCompetitions = async () => {
     const { data } = await supabase
       .from('competitions')
@@ -55,7 +85,9 @@ export default function ChatRoomsPage() {
         .from('chat_rooms')
         .select('*, artists(id, artist_name, slug, profile_image_url, is_verified)')
         .order('member_count', { ascending: false });
-      setRooms(data || []);
+      const roomData = data || [];
+      setRooms(roomData);
+      fetchLastMessages(roomData.map(r => r.id));
     } catch (err) {
       console.error('Fetch rooms error:', err);
     }
@@ -344,12 +376,25 @@ export default function ChatRoomsPage() {
                     <span className="text-[9px] text-blue-400">✓</span>
                   )}
                 </div>
+                {lastMessages[room.id]?.content && (
+                  <p className="text-[11px] text-white/20 truncate mt-0.5 max-w-[160px]">
+                    {lastMessages[room.id].content}
+                  </p>
+                )}
               </div>
 
-              {/* Member count + rename button */}
-              <div className="flex items-center space-x-2 flex-shrink-0">
-                <Users className="w-3 h-3 text-white/20" />
-                <span className="text-xs text-white/30">{room.member_count || 0}</span>
+              {/* Last message + member count */}
+              <div className="flex flex-col items-end space-y-1 flex-shrink-0">
+                {lastMessages[room.id] && (
+                  <div className="flex items-center space-x-1">
+                    <Clock className="w-2.5 h-2.5 text-white/20" />
+                    <span className="text-[10px] text-white/25">{timeAgo(lastMessages[room.id].created_at)}</span>
+                  </div>
+                )}
+                <div className="flex items-center space-x-1">
+                  <Users className="w-3 h-3 text-white/20" />
+                  <span className="text-xs text-white/30">{room.member_count || 0}</span>
+                </div>
                 {room.artist_id === artist?.id && editingRoomId !== room.id && (
                   <>
                     <button
@@ -374,7 +419,6 @@ export default function ChatRoomsPage() {
                 {editingRoomId === room.id && renaming && (
                   <Loader className="w-3 h-3 animate-spin text-white/30" />
                 )}
-              </div>
             </button>
           ))}
         </div>

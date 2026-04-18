@@ -2,8 +2,9 @@ import { Helmet } from 'react-helmet-async';
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
+import { useStreak } from '../hooks/useStreak';
 import { usePlayer } from '../contexts/PlayerContext';
-import { Flame, Play, Pause, Music, Verified, MoreHorizontal, Disc, Sparkles, Users } from 'lucide-react';
+import { Flame, Play, Pause, Music, Verified, MoreHorizontal, Disc, Sparkles, Users, Trophy } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import TrackActionSheet from '../components/TrackActionSheet';
 import { usePullToRefresh } from '../hooks/usePullToRefresh';
@@ -151,6 +152,7 @@ function SquareCard({ item, itemList = [], isAlbum = false, showNew = false, onP
 export default function HomePage() {
   const { user, artist } = useAuth();
   const { playTrack, currentTrack, isPlaying, togglePlay } = usePlayer();
+  const { streak } = useStreak(user);
   const navigate = useNavigate();
 
   const [featuredTracks, setFeaturedTracks]         = useState([]);
@@ -162,6 +164,8 @@ export default function HomePage() {
   const [followedReleases, setFollowedReleases]     = useState([]);
   const [loading, setLoading]                       = useState(true);
   const [actionSheetTrack, setActionSheetTrack]     = useState(null);
+  const [activeCompetitions, setActiveCompetitions] = useState([]);
+  const [wrappedNotif, setWrappedNotif]             = useState(null);
 
   const fetchData = async () => {
     try {
@@ -228,13 +232,44 @@ export default function HomePage() {
       setTopArtists(artists || []);
 
       if (user) {
-        await Promise.all([fetchRecommendations(), fetchFollowedReleases()]);
+        await Promise.all([fetchRecommendations(), fetchFollowedReleases(), fetchCompetitions(), fetchWrapped()]);
+      } else {
+        await fetchCompetitions();
       }
     } catch (err) {
       console.error('Failed to fetch:', err);
     } finally {
       setLoading(false);
     }
+  };
+
+  const fetchCompetitions = async () => {
+    try {
+      const { data } = await supabase
+        .from('competitions')
+        .select('id, title, status, brief, prize_description, entries_close_at, voting_close_at')
+        .in('status', ['open', 'voting'])
+        .order('created_at', { ascending: false })
+        .limit(2);
+      setActiveCompetitions(data || []);
+    } catch (err) { console.error('Competitions fetch error:', err); }
+  };
+
+  const fetchWrapped = async () => {
+    if (!user) return;
+    try {
+      const now = new Date();
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+      const { data } = await supabase
+        .from('notifications')
+        .select('id, title, message, created_at')
+        .eq('user_id', user.id)
+        .eq('type', 'monthly_wrapped')
+        .gte('created_at', startOfMonth)
+        .order('created_at', { ascending: false })
+        .limit(1);
+      if (data?.length > 0) setWrappedNotif(data[0]);
+    } catch (err) { console.error('Wrapped fetch error:', err); }
   };
 
   const fetchFollowedReleases = async () => {
@@ -401,7 +436,15 @@ export default function HomePage() {
       <PullToRefreshIndicator pullProgress={pullProgress} isRefreshing={isRefreshing} />
 
       <div className="greeting-hero px-6 pt-6 pb-6">
-        <p className="section-label mb-1">{new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</p>
+        <div className="flex items-center justify-between">
+          <p className="section-label mb-1">{new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</p>
+          {user && streak > 1 && (
+            <div className="flex items-center space-x-1 px-2.5 py-1 rounded-full bg-orange-500/10 border border-orange-500/20">
+              <Flame className="w-3 h-3 text-orange-400" />
+              <span className="text-xs font-bold text-orange-400">{streak}</span>
+            </div>
+          )}
+        </div>
         <h1 className="text-2xl font-bold text-white">
           {user ? greeting() : 'Feelz Machine'}
         </h1>
@@ -409,6 +452,54 @@ export default function HomePage() {
           {user ? `Welcome back${artist ? ', ' + artist.artist_name : ''}` : 'Discover music from independent artists'}
         </p>
       </div>
+
+      {/* Monthly Wrapped banner */}
+      {wrappedNotif && (
+        <div
+          className="mx-6 mb-6 p-4 rounded-2xl border border-pink-500/20 bg-gradient-to-r from-pink-500/10 to-purple-500/10 cursor-pointer"
+          onClick={() => navigate('/notifications')}
+        >
+          <div className="flex items-center space-x-3">
+            <div className="w-10 h-10 rounded-xl bg-pink-500/20 flex items-center justify-center flex-shrink-0 text-lg">🎁</div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-white">{wrappedNotif.title}</p>
+              <p className="text-xs text-white/40 truncate mt-0.5">{wrappedNotif.message}</p>
+            </div>
+            <span className="text-xs text-pink-400/70 flex-shrink-0">View →</span>
+          </div>
+        </div>
+      )}
+
+      {/* Active Competitions banner */}
+      {activeCompetitions.length > 0 && (
+        <div className="mb-6">
+          <div className="flex items-center justify-between mb-3 px-6">
+            <div className="flex items-center space-x-2">
+              <Trophy className="w-3.5 h-3.5 text-yellow-400/60" />
+              <span className="section-label">Competitions</span>
+            </div>
+            <button onClick={() => navigate('/chat')} className="text-[10px] text-white/25 hover:text-white/50 transition uppercase tracking-wider font-semibold">See All →</button>
+          </div>
+          <div className="flex space-x-3 overflow-x-auto px-6 scrollbar-hide">
+            {activeCompetitions.map(comp => (
+              <button
+                key={comp.id}
+                onClick={() => navigate(`/competition/${comp.id}`)}
+                className="flex-shrink-0 w-56 p-4 rounded-2xl border border-yellow-500/20 bg-gradient-to-br from-yellow-500/10 to-transparent text-left hover:border-yellow-500/35 transition"
+              >
+                <div className="w-9 h-9 rounded-xl bg-yellow-500/15 flex items-center justify-center mb-3">
+                  <Trophy className="w-4.5 h-4.5 text-yellow-400" />
+                </div>
+                <p className="text-sm font-semibold text-white truncate mb-1">{comp.title}</p>
+                {comp.brief && <p className="text-xs text-white/35 truncate mb-2">{comp.brief}</p>}
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${comp.status === 'voting' ? 'bg-blue-500/20 text-blue-400' : 'bg-green-500/20 text-green-400'}`}>
+                  {comp.status === 'voting' ? 'Vote Now' : 'Enter Now'}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Trending — highest social proof, works for every visitor */}
       {trending.length > 0 && (

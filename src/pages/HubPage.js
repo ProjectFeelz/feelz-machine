@@ -2,11 +2,12 @@ import { Helmet } from 'react-helmet-async';
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { useStreak } from '../hooks/useStreak';
 import { useTier } from '../contexts/useTier';
 import CollabThread from '../components/CollabThread';
 import ProfileCompletionBanner from '../components/ProfileCompletionBanner';
 import {
-  Shield, Users, BarChart3, Music,
+  Shield, Users, BarChart3, Music, Flame,
   Upload, HeartHandshake, Bell, Palette, MessageCircle,
   ChevronRight, Crown, Zap, Star, LayoutDashboard,
   User, LogOut, DollarSign, Megaphone, Radio, Trophy, Brain, Mic2,
@@ -58,6 +59,7 @@ export default function HubPage() {
   const navigate = useNavigate();
   const { user, artist, isAdmin, isArtist, signOut } = useAuth();
   const { tierSlug, tierLoading } = useTier();
+  const { streak } = useStreak(user);
   const [activeTab, setActiveTab] = useState('home');
 
   const tierConfig = {
@@ -99,6 +101,14 @@ export default function HubPage() {
           <h1 className="text-2xl font-bold text-white">Hub</h1>
         </div>
         <p className="text-sm text-white/40 ml-9">Your control center</p>
+
+        {streak > 1 && (
+          <div className="flex items-center space-x-1.5 mt-2 ml-9">
+            <Flame className="w-3.5 h-3.5 text-orange-400" />
+            <span className="text-xs font-semibold text-orange-400">{streak}-day streak</span>
+            {streak >= 7 && <span className="text-[10px] text-orange-400/50">🔥</span>}
+          </div>
+        )}
 
         {isArtist && (
           <div className="flex space-x-1 mt-4 bg-white/[0.03] rounded-lg p-1">

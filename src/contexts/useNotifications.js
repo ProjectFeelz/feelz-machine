@@ -111,13 +111,46 @@ export default function useNotifications() {
     setUnreadCount(0);
   }, [artist]);
 
-  // Initial fetch + poll every 20s for unread count
+  // Initial fetch + realtime subscription for instant badge updates
   useEffect(() => {
     if (!artist && !user) return;
     fetchNotifications();
-    pollRef.current = setInterval(fetchUnreadCount, 60000);
-    return () => { if (pollRef.current) clearInterval(pollRef.current); };
-  }, [artist, fetchNotifications, fetchUnreadCount]);
+
+    // Realtime: increment badge instantly on new notification insert
+    const filter = artist
+      ? `artist_id=eq.${artist.id}`
+      : `user_id=eq.${user.id}`;
+
+    const channel = supabase
+      .channel('notifications-realtime')
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'notifications',
+        filter,
+      }, (payload) => {
+        setNotifications(prev => [payload.new, ...prev]);
+        setUnreadCount(prev => prev + 1);
+      })
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'notifications',
+        filter,
+      }, () => {
+        // Re-fetch on updates (mark-read etc) to stay in sync
+        fetchUnreadCount();
+      })
+      .subscribe();
+
+    // Fallback poll every 2 minutes in case realtime misses something
+    pollRef.current = setInterval(fetchUnreadCount, 120000);
+
+    return () => {
+      supabase.removeChannel(channel);
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
+  }, [artist?.id, user?.id]);
 
   return {
     notifications,
