@@ -73,7 +73,16 @@ export function AuthProvider({ children }) {
       setLoading(false);
     });
 
-    const { data: authListener } = supabase.auth.onAuthStateChange((event) => {
+    const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_IN' && session?.user) {
+        await loadUser(session.user);
+        // Honour post-login redirect stored by LoginPage
+        const redirect = sessionStorage.getItem('post_login_redirect');
+        if (redirect) {
+          sessionStorage.removeItem('post_login_redirect');
+          window.location.replace(redirect);
+        }
+      }
       if (event === 'SIGNED_OUT') {
         setUser(null);
         setProfile(null);

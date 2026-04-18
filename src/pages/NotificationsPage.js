@@ -9,6 +9,7 @@ import {
   Radio, FileText
 } from 'lucide-react';
 import useNotifications from '../contexts/useNotifications';
+import WrappedCard from '../components/WrappedCard';
 
 const TYPE_CONFIG = {
   collab_request:   { icon: Users,         color: 'text-blue-400',   bg: 'bg-blue-500/10',   label: 'Collab Request' },
@@ -331,6 +332,15 @@ export default function NotificationsPage() {
                     const config = TYPE_CONFIG[notif.type] || TYPE_CONFIG.new_follower;
                     const Icon = config.icon;
                     const meta = notif.metadata || {};
+
+                    // Monthly wrapped — render rich card instead of generic row
+                    if (notif.type === 'monthly_wrapped') {
+                      return (
+                        <div key={notif.id} onClick={() => { if (!notif.read) markAsRead(notif.id); }}>
+                          <WrappedCard notification={notif} compact />
+                        </div>
+                      );
+                    }
 
                     return (
                       <button

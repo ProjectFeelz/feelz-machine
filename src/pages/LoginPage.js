@@ -1,13 +1,23 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { ArrowLeft } from 'lucide-react';
 
 export default function LoginPage() {
-  const { signInWithGoogle } = useAuth();
+  const { signInWithGoogle, user } = useAuth();
   const navigate = useNavigate();
-  const [error, setError]       = useState('');
+  const [searchParams] = useSearchParams();
+  const [error, setError]               = useState('');
   const [ageConfirmed, setAgeConfirmed] = useState(false);
+
+  const redirectTo = searchParams.get('redirect') || null;
+
+  // If user is already logged in (e.g. returned from OAuth), honour the redirect
+  useEffect(() => {
+    if (user) {
+      navigate(redirectTo || '/', { replace: true });
+    }
+  }, [user]);
 
   const handleGoogle = async () => {
     if (!ageConfirmed) {
@@ -15,6 +25,8 @@ export default function LoginPage() {
       return;
     }
     try {
+      // Store redirect destination so AuthContext can read it after OAuth callback
+      if (redirectTo) sessionStorage.setItem('post_login_redirect', redirectTo);
       await signInWithGoogle();
     } catch (err) {
       setError(err.message);

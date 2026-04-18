@@ -6,7 +6,7 @@ import TrackActionSheet from '../components/TrackActionSheet';
 import { usePlayer } from '../contexts/PlayerContext';
 import {
   ArrowLeft, Play, Pause, Music, Loader, Trash2,
-  Plus, Search, X, Globe, Lock, MoreVertical
+  Plus, Search, X, Globe, Lock, MoreVertical, Users
 } from 'lucide-react';
 
 function formatDuration(seconds) {
@@ -35,6 +35,9 @@ export default function PlaylistDetailPage() {
   const [editingName, setEditingName] = useState(false);
   const [newName, setNewName] = useState('');
   const [saving, setSaving] = useState(false);
+  const [isCollaborator, setIsCollaborator] = useState(false);
+  const [collaborators, setCollaborators] = useState([]);
+  const [copiedLink, setCopiedLink] = useState(false);
 
   useEffect(() => {
     if (id) fetchPlaylist();
@@ -67,6 +70,27 @@ export default function PlaylistDetailPage() {
       .order('position', { ascending: true });
 
     setTracks((ptData || []).filter(pt => pt.track));
+
+    // Check if current user is a collaborator
+    if (pl.is_shared && user && pl.user_id !== user.id) {
+      const { data: collabRow } = await supabase
+        .from('playlist_collaborators')
+        .select('can_edit')
+        .eq('playlist_id', id)
+        .eq('user_id', user.id)
+        .maybeSingle();
+      setIsCollaborator(!!collabRow?.can_edit);
+    }
+
+    // Fetch collaborator count
+    if (pl.is_shared) {
+      const { data: collabs } = await supabase
+        .from('playlist_collaborators')
+        .select('user_id')
+        .eq('playlist_id', id);
+      setCollaborators(collabs || []);
+    }
+
     setLoading(false);
   };
 
@@ -127,6 +151,13 @@ export default function PlaylistDetailPage() {
     setPlaylist(prev => ({ ...prev, is_public: newVal }));
   };
 
+  const copyShareLink = async () => {
+    const url = `${window.location.origin}/library/playlists/join/${playlist.share_token}`;
+    await navigator.clipboard.writeText(url).catch(() => {});
+    setCopiedLink(true);
+    setTimeout(() => setCopiedLink(false), 2000);
+  };
+
   const handlePlay = (track) => {
     if (currentTrack?.id === track.id) { togglePlay(); return; }
     playTrack(track, tracks.map(pt => pt.track));
@@ -137,7 +168,8 @@ export default function PlaylistDetailPage() {
     playTrack(tracks[0].track, tracks.map(pt => pt.track));
   };
 
-  const isOwner = playlist?.user_id === user?.id;
+  const isOwner  = playlist?.user_id === user?.id;
+  const canEdit  = isOwner || isCollaborator;
 
   if (loading) {
     return (
@@ -177,7 +209,7 @@ export default function PlaylistDetailPage() {
             </div>
           ) : (
             <div>
-              <button onClick={() => isOwner && setEditingName(true)}
+              <button onClick={() => canEdit && setEditingName(true)}
                 className="text-xl font-bold text-white hover:text-white/80 transition text-left">
                 {playlist?.name}
               </button>
@@ -187,13 +219,28 @@ export default function PlaylistDetailPage() {
         </div>
 
         {/* Controls */}
-        {isOwner && (
-          <div className="flex items-center space-x-2">
-            <button onClick={togglePublic}
-              className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-white/[0.06] text-xs text-white/50 hover:bg-white/[0.1] transition">
-              {playlist?.is_public ? <Globe className="w-3.5 h-3.5" /> : <Lock className="w-3.5 h-3.5" />}
-              <span>{playlist?.is_public ? 'Public' : 'Private'}</span>
-            </button>
+        {canEdit && (
+          <div className="flex items-center space-x-2 flex-wrap gap-y-2">
+            {isOwner && (
+              <button onClick={togglePublic}
+                className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-white/[0.06] text-xs text-white/50 hover:bg-white/[0.1] transition">
+                {playlist?.is_public ? <Globe className="w-3.5 h-3.5" /> : <Lock className="w-3.5 h-3.5" />}
+                <span>{playlist?.is_public ? 'Public' : 'Private'}</span>
+              </button>
+            )}
+            {playlist?.is_shared && isOwner && (
+              <button onClick={copyShareLink}
+                className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-blue-500/15 border border-blue-500/25 text-xs text-blue-400 hover:bg-blue-500/25 transition">
+                {copiedLink ? <span>✓ Copied!</span> : (
+                  <><Users className="w-3.5 h-3.5" /><span>Share · {collaborators.length} joined</span></>
+                )}
+              </button>
+            )}
+            {isCollaborator && (
+              <span className="flex items-center space-x-1 px-2 py-1 rounded-lg bg-blue-500/10 text-[10px] text-blue-400">
+                <Users className="w-3 h-3" /><span>Collaborator</span>
+              </span>
+            )}
           </div>
         )}
       </div>
@@ -207,7 +254,7 @@ export default function PlaylistDetailPage() {
             <span>Play All</span>
           </button>
         )}
-        {isOwner && (
+        {canEdit && (
           <button onClick={() => setShowAddTracks(!showAddTracks)}
             className="flex items-center space-x-2 px-4 py-2.5 bg-white/[0.06] text-white rounded-full text-sm font-medium hover:bg-white/[0.1] transition">
             <Plus className="w-4 h-4" />
@@ -276,7 +323,7 @@ export default function PlaylistDetailPage() {
         <div className="text-center py-20">
           <Music className="w-12 h-12 mx-auto text-white/10 mb-3" />
           <p className="text-white/30 text-sm">No tracks yet</p>
-          {isOwner && (
+          {canEdit && (
             <button onClick={() => setShowAddTracks(true)}
               className="mt-4 px-4 py-2 bg-white/[0.06] rounded-lg text-sm text-white/50 hover:bg-white/[0.1] transition">
               Add your first track
@@ -311,7 +358,7 @@ export default function PlaylistDetailPage() {
               {track.duration && (
                 <span className="text-xs text-white/20 flex-shrink-0">{formatDuration(track.duration)}</span>
               )}
-              {isOwner && (
+              {canEdit && (
                 <button onClick={(e) => removeTrack(track.id, e)} disabled={removing === track.id}
                   className="flex-shrink-0 p-1.5 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-red-500/10 transition">
                   {removing === track.id
@@ -328,6 +375,3 @@ export default function PlaylistDetailPage() {
     </div>
   );
 }
-
-
-

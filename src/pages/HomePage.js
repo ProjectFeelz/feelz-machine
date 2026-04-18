@@ -4,12 +4,13 @@ import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import { useStreak } from '../hooks/useStreak';
 import { usePlayer } from '../contexts/PlayerContext';
-import { Flame, Play, Pause, Music, Verified, MoreHorizontal, Disc, Sparkles, Users, Trophy } from 'lucide-react';
+import { Flame, Play, Pause, Music, Verified, MoreHorizontal, Disc, Sparkles, Users, Trophy, Compass, Headphones } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import TrackActionSheet from '../components/TrackActionSheet';
 import { usePullToRefresh } from '../hooks/usePullToRefresh';
 import PullToRefreshIndicator from '../components/PullToRefreshIndicator';
 import { HomeSkeleton } from '../components/SkeletonLoader';
+import WrappedCard from '../components/WrappedCard';
 
 function getArtistLimit(totalArtists) {
   if (totalArtists < 10) return 3;
@@ -152,7 +153,7 @@ function SquareCard({ item, itemList = [], isAlbum = false, showNew = false, onP
 export default function HomePage() {
   const { user, artist } = useAuth();
   const { playTrack, currentTrack, isPlaying, togglePlay } = usePlayer();
-  const { streak } = useStreak(user);
+  const { streak, discoveryStreak, recordDiscovery } = useStreak(user);
   const navigate = useNavigate();
 
   const [featuredTracks, setFeaturedTracks]         = useState([]);
@@ -166,6 +167,9 @@ export default function HomePage() {
   const [actionSheetTrack, setActionSheetTrack]     = useState(null);
   const [activeCompetitions, setActiveCompetitions] = useState([]);
   const [wrappedNotif, setWrappedNotif]             = useState(null);
+  const [spotlightArtist, setSpotlightArtist]       = useState(null);
+  const [unheardTracks, setUnheardTracks]           = useState([]);
+  const [weeklyDiscoveries, setWeeklyDiscoveries]   = useState(0);
 
   const fetchData = async () => {
     try {
@@ -336,6 +340,53 @@ export default function HomePage() {
 
   useEffect(() => { fetchData(); }, [user]);
 
+  // ── Fetch daily spotlight artist ──────────────────────────────────────────
+  useEffect(() => {
+    if (!user) return;
+    const fetchSpotlight = async () => {
+      const today = new Date().toISOString().split('T')[0];
+      const { data } = await supabase
+        .from('daily_artist_spotlight')
+        .select('artist_id, artists(id, artist_name, slug, profile_image_url, total_streams, follower_count, is_verified)')
+        .eq('user_id', user.id)
+        .eq('spotlight_date', today)
+        .maybeSingle();
+      if (data?.artists) setSpotlightArtist(data.artists);
+    };
+    fetchSpotlight();
+  }, [user]);
+
+  // ── Fetch "You haven't heard this yet" tracks ────────────────────────────
+  useEffect(() => {
+    if (!user) return;
+    const fetchUnheard = async () => {
+      try {
+        const { data: streamData } = await supabase
+          .from('streams').select('track_id').eq('user_id', user.id).limit(500);
+        const heardIds = (streamData || []).map(s => s.track_id).filter(Boolean);
+
+        let query = supabase
+          .from('tracks')
+          .select('*, artists(artist_name, slug, profile_image_url)')
+          .eq('is_published', true)
+          .order('engagement_score', { ascending: false })
+          .limit(heardIds.length > 0 ? 20 : 10);
+
+        if (heardIds.length > 0) {
+          query = query.not('id', 'in', `(${heardIds.join(',')})`);
+        }
+
+        const { data } = await query;
+        setUnheardTracks((data || []).slice(0, 10).map(t => ({
+          ...t,
+          artist_name: t.artists?.artist_name || 'Unknown Artist',
+          artist_slug: t.artists?.slug || null,
+        })));
+      } catch (err) { console.error('Unheard fetch error:', err); }
+    };
+    fetchUnheard();
+  }, [user]);
+
   // ── Smart radio queue ─────────────────────────────────────────────────────
   // When a track is tapped on the Home page we build a "radio" queue of similar
   // tracks (matching genre or mood) instead of using the raw section list.
@@ -398,13 +449,30 @@ export default function HomePage() {
   };
 
   const handlePlay = async (track, _list) => {
-    // If same track — just toggle play/pause, don't rebuild queue
     if (currentTrack?.id === track.id) { togglePlay(); return; }
-    // Start the track immediately so there's no perceived lag,
-    // then silently swap in the full radio queue once fetched
     playTrack(track, [track]);
     const radioQueue = await buildRadioQueue(track);
     playTrack(track, radioQueue);
+
+    // Check if this is a new artist for the user — if so, record discovery
+    if (user && track.artist_id) {
+      try {
+        const { data: prior } = await supabase
+          .from('streams')
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('track_id', track.id)
+          .limit(1);
+        // No prior streams of ANY track by this artist = new discovery
+        const { data: artistPrior } = await supabase
+          .from('streams')
+          .select('tracks!inner(artist_id)')
+          .eq('user_id', user.id)
+          .eq('tracks.artist_id', track.artist_id)
+          .limit(1);
+        if (!artistPrior?.length) recordDiscovery(track.artist_id);
+      } catch {}
+    }
   };
 
   const handleMore = (item) => {
@@ -436,14 +504,22 @@ export default function HomePage() {
       <PullToRefreshIndicator pullProgress={pullProgress} isRefreshing={isRefreshing} />
 
       <div className="greeting-hero px-6 pt-6 pb-6">
-        <div className="flex items-center justify-between">
-          <p className="section-label mb-1">{new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</p>
-          {user && streak > 1 && (
-            <div className="flex items-center space-x-1 px-2.5 py-1 rounded-full bg-orange-500/10 border border-orange-500/20">
-              <Flame className="w-3 h-3 text-orange-400" />
-              <span className="text-xs font-bold text-orange-400">{streak}</span>
-            </div>
-          )}
+        <div className="flex items-center justify-between mb-1">
+          <p className="section-label">{new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</p>
+          <div className="flex items-center space-x-2">
+            {user && discoveryStreak > 1 && (
+              <div className="flex items-center space-x-1 px-2 py-1 rounded-full bg-blue-500/10 border border-blue-500/20">
+                <Compass className="w-3 h-3 text-blue-400" />
+                <span className="text-xs font-bold text-blue-400">{discoveryStreak}</span>
+              </div>
+            )}
+            {user && streak > 1 && (
+              <div className="flex items-center space-x-1 px-2.5 py-1 rounded-full bg-orange-500/10 border border-orange-500/20">
+                <Flame className="w-3 h-3 text-orange-400" />
+                <span className="text-xs font-bold text-orange-400">{streak}</span>
+              </div>
+            )}
+          </div>
         </div>
         <h1 className="text-2xl font-bold text-white">
           {user ? greeting() : 'Feelz Machine'}
@@ -453,20 +529,10 @@ export default function HomePage() {
         </p>
       </div>
 
-      {/* Monthly Wrapped banner */}
+      {/* Monthly Wrapped card */}
       {wrappedNotif && (
-        <div
-          className="mx-6 mb-6 p-4 rounded-2xl border border-pink-500/20 bg-gradient-to-r from-pink-500/10 to-purple-500/10 cursor-pointer"
-          onClick={() => navigate('/notifications')}
-        >
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-xl bg-pink-500/20 flex items-center justify-center flex-shrink-0 text-lg">🎁</div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-white">{wrappedNotif.title}</p>
-              <p className="text-xs text-white/40 truncate mt-0.5">{wrappedNotif.message}</p>
-            </div>
-            <span className="text-xs text-pink-400/70 flex-shrink-0">View →</span>
-          </div>
+        <div className="mx-6 mb-6">
+          <WrappedCard notification={wrappedNotif} compact />
         </div>
       )}
 
@@ -499,6 +565,54 @@ export default function HomePage() {
             ))}
           </div>
         </div>
+      )}
+
+      {/* Artist of the Day — one undiscovered artist picked for this user */}
+      {user && spotlightArtist && (
+        <div className="mx-6 mb-6">
+          <div className="flex items-center space-x-2 mb-3">
+            <Compass className="w-3.5 h-3.5 text-blue-400/60" />
+            <span className="section-label">Artist of the Day</span>
+          </div>
+          <button
+            onClick={() => navigate(`/artist/${spotlightArtist.slug}`)}
+            className="w-full flex items-center space-x-4 p-4 rounded-2xl border border-blue-500/15 bg-gradient-to-r from-blue-500/8 to-transparent hover:border-blue-500/25 transition group"
+          >
+            <div className="w-16 h-16 rounded-2xl overflow-hidden bg-white/[0.06] flex-shrink-0">
+              {spotlightArtist.profile_image_url
+                ? <img src={spotlightArtist.profile_image_url} alt={spotlightArtist.artist_name || ''} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                : <div className="w-full h-full flex items-center justify-center"><Music className="w-6 h-6 text-white/20" /></div>
+              }
+            </div>
+            <div className="flex-1 min-w-0 text-left">
+              <div className="flex items-center space-x-1.5 mb-0.5">
+                <p className="text-base font-semibold text-white truncate">{spotlightArtist.artist_name}</p>
+                {spotlightArtist.is_verified && <Verified className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" />}
+              </div>
+              <p className="text-xs text-white/35">
+                {spotlightArtist.total_streams > 0
+                  ? `${formatNumber(spotlightArtist.total_streams)} streams · You haven't heard them yet`
+                  : 'An artist worth discovering'}
+              </p>
+              <span className="inline-block mt-2 text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-blue-500/15 text-blue-400">
+                Discover →
+              </span>
+            </div>
+          </button>
+        </div>
+      )}
+
+      {/* You haven't heard this yet */}
+      {user && unheardTracks.length > 0 && (
+        <Section title="You Haven't Heard This Yet" icon={Headphones}>
+          <div className="flex space-x-3 overflow-x-auto px-6 scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
+            {unheardTracks.map(track => (
+              <SquareCard key={track.id} item={track} itemList={unheardTracks}
+                onPlay={handlePlay} onMore={handleMore}
+                currentTrack={currentTrack} isPlaying={isPlaying} />
+            ))}
+          </div>
+        </Section>
       )}
 
       {/* Trending — highest social proof, works for every visitor */}

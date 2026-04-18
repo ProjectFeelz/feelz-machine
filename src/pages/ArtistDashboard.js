@@ -9,6 +9,7 @@ import {
 import TrackUploadPanel from './TrackUploadPanel';
 import CollabRequests, { CollabBadge } from '../components/CollabRequests';
 import TierGate, { UploadGate, TierBadge } from '../components/TierGate';
+import { VoiceMemoCard, VoiceMemoUpload } from '../components/VoiceMemo';
 
 function ContactExportButton({ artist }) {
   const [exporting, setExporting] = React.useState(false);
@@ -50,6 +51,43 @@ function ContactExportButton({ artist }) {
   );
 }
 
+function MemoTabPanel({ artist, memos, fetchMemos, deleteMemo }) {
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-base font-semibold text-white mb-1">Voice Memos</h2>
+        <p className="text-sm text-white/40 mb-4">
+          Record short audio updates for your followers — thoughts, teasers, behind-the-scenes.
+          They'll appear on your artist profile.
+        </p>
+        <VoiceMemoUpload artistId={artist?.id} onUploaded={fetchMemos} />
+      </div>
+
+      {memos.length > 0 && (
+        <div>
+          <p className="text-[10px] uppercase tracking-widest text-white/25 font-semibold mb-3">Your Memos</p>
+          <div className="space-y-2">
+            {memos.map(memo => (
+              <VoiceMemoCard
+                key={memo.id}
+                memo={memo}
+                canDelete
+                onDelete={deleteMemo}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {memos.length === 0 && (
+        <div className="text-center py-10 text-white/20">
+          <p className="text-sm">No memos yet. Record your first one above.</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function ArtistDashboard() {
   const navigate = useNavigate();
   const { artist, isMaster } = useAuth();
@@ -62,6 +100,23 @@ export default function ArtistDashboard() {
   });
   const [topTracks, setTopTracks] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [memos, setMemos] = useState([]);
+
+  const fetchMemos = useCallback(async () => {
+    if (!artist?.id) return;
+    const { data } = await supabase
+      .from('artist_voice_memos')
+      .select('*')
+      .eq('artist_id', artist.id)
+      .order('created_at', { ascending: false })
+      .limit(20);
+    setMemos(data || []);
+  }, [artist?.id]);
+
+  const deleteMemo = async (memoId) => {
+    await supabase.from('artist_voice_memos').delete().eq('id', memoId);
+    setMemos(prev => prev.filter(m => m.id !== memoId));
+  };
 
   // ── Analytics ────────────────────────────────────────────────────────────────
   const fetchStats = useCallback(async () => {
@@ -110,7 +165,8 @@ export default function ArtistDashboard() {
 
   useEffect(() => {
     if (activeTab === 'analytics' && artist) fetchStats();
-  }, [activeTab, artist, fetchStats]);
+    if (activeTab === 'memos' && artist) fetchMemos();
+  }, [activeTab, artist, fetchStats, fetchMemos]);
 
   // ── No artist guard ───────────────────────────────────────────────────────────
   if (!artist) {
@@ -147,6 +203,7 @@ export default function ArtistDashboard() {
     { key: 'upload',    label: 'Upload',    icon: Upload },
     { key: 'collabs',   label: 'Collabs',   icon: Users, hasBadge: true },
     { key: 'analytics', label: 'Analytics', icon: BarChart3 },
+    { key: 'memos',     label: 'Memos',     icon: Headphones },
   ];
 
   return (
@@ -200,6 +257,16 @@ export default function ArtistDashboard() {
 
         {/* ── Collabs Tab ── */}
         {activeTab === 'collabs' && <CollabRequests />}
+
+        {/* ── Voice Memos Tab ── */}
+        {activeTab === 'memos' && (
+          <MemoTabPanel
+            artist={artist}
+            memos={memos}
+            fetchMemos={fetchMemos}
+            deleteMemo={deleteMemo}
+          />
+        )}
 
         {/* ── Analytics Tab ── */}
         {activeTab === 'analytics' && (

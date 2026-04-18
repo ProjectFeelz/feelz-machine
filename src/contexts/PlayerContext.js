@@ -35,6 +35,47 @@ export function PlayerProvider({ children }) {
   useEffect(() => { repeatRef.current = repeat; }, [repeat]);
   useEffect(() => { volumeRef.current = volume; }, [volume]);
 
+  const fetchingSuggestionsRef = useRef(false);
+
+  // When we reach the last 2 tracks in the queue, silently fetch similar tracks and append
+  const extendQueueWithSuggestions = useCallback(async (currentTrack) => {
+    if (fetchingSuggestionsRef.current || !currentTrack) return;
+    fetchingSuggestionsRef.current = true;
+    try {
+      const filters = [];
+      if (currentTrack.genre) filters.push(`genre.eq.${currentTrack.genre}`);
+      if (currentTrack.mood)  filters.push(`mood.eq.${currentTrack.mood}`);
+
+      const existingIds = queueRef.current.map(t => t.id).filter(Boolean);
+
+      let query = supabase
+        .from('tracks')
+        .select('*, artists(artist_name, slug, profile_image_url)')
+        .eq('is_published', true)
+        .not('id', 'in', `(${existingIds.join(',')})`)
+        .order('engagement_score', { ascending: false })
+        .limit(10);
+
+      if (filters.length > 0) query = query.or(filters.join(','));
+
+      const { data } = await query;
+      if (!data?.length) return;
+
+      const normalised = data.map(t => ({
+        ...t,
+        artist_name: t.artists?.artist_name || t.artist_name || 'Unknown Artist',
+        artist_slug: t.artists?.slug || null,
+      }));
+
+      setQueue(prev => [...prev, ...normalised]);
+      queueRef.current = [...queueRef.current, ...normalised];
+    } catch (err) {
+      console.error('Queue suggestion error:', err);
+    } finally {
+      fetchingSuggestionsRef.current = false;
+    }
+  }, []);
+
   const playNextFromRef = useCallback(() => {
     const q   = queueRef.current;
     const idx = queueIndexRef.current;
@@ -59,8 +100,13 @@ export function PlayerProvider({ children }) {
       setCurrentTrack(nextTrack);
       setQueueIndex(nextIndex);
       setCurrentTime(0);
+
+      // When 2 or fewer tracks remain, extend queue silently
+      if (!shuffleRef.current && rep !== 'all' && q.length - nextIndex <= 2) {
+        extendQueueWithSuggestions(nextTrack);
+      }
     }
-  }, []);
+  }, [extendQueueWithSuggestions]);
 
   useEffect(() => {
     const audio = audioRef.current;

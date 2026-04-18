@@ -13,6 +13,10 @@
   name = "monthly-wrapped"
   schedule = "0 9 1 * *"
 
+[[scheduled_functions]]
+  name = "daily-spotlight"
+  schedule = "5 0 * * *"
+
       [[redirects]]
         from = "/.well-known/assetlinks.json"
           to = "/.well-known/assetlinks.json"

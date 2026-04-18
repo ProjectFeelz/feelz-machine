@@ -2,28 +2,37 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
-import { ListMusic, ArrowLeft, Loader, Plus, Music, Trash2 } from 'lucide-react';
+import { ListMusic, ArrowLeft, Loader, Plus, Music, Trash2, Users, Link, Check } from 'lucide-react';
 
 export default function PlaylistsPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const [playlists, setPlaylists] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [creating, setCreating] = useState(false);
-  const [newName, setNewName] = useState('');
-  const [saving, setSaving] = useState(false);
+  const [playlists, setPlaylists]         = useState([]);
+  const [sharedPlaylists, setSharedPlaylists] = useState([]);
+  const [loading, setLoading]             = useState(true);
+  const [creating, setCreating]           = useState(false);
+  const [newName, setNewName]             = useState('');
+  const [newShared, setNewShared]         = useState(false);
+  const [saving, setSaving]               = useState(false);
+  const [joinToken, setJoinToken]         = useState('');
+  const [joining, setJoining]             = useState(false);
+  const [joinError, setJoinError]         = useState('');
+  const [copiedId, setCopiedId]           = useState(null);
 
-  useEffect(() => {
-    if (user) fetchPlaylists();
-  }, [user]);
+  useEffect(() => { if (user) fetchPlaylists(); }, [user]);
 
   const fetchPlaylists = async () => {
-    const { data } = await supabase
-      .from('playlists')
-      .select('*, playlist_tracks(count)')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false });
-    setPlaylists(data || []);
+    const [{ data: mine }, { data: collab }] = await Promise.all([
+      supabase.from('playlists')
+        .select('*, playlist_tracks(count)')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false }),
+      supabase.from('playlist_collaborators')
+        .select('playlist_id, playlists(*, playlist_tracks(count))')
+        .eq('user_id', user.id),
+    ]);
+    setPlaylists(mine || []);
+    setSharedPlaylists((collab || []).map(c => c.playlists).filter(Boolean));
     setLoading(false);
   };
 
@@ -34,12 +43,9 @@ export default function PlaylistsPage() {
       user_id: user.id,
       name: newName.trim(),
       is_public: false,
+      is_shared: newShared,
     });
-    if (!error) {
-      setNewName('');
-      setCreating(false);
-      fetchPlaylists();
-    }
+    if (!error) { setNewName(''); setCreating(false); setNewShared(false); fetchPlaylists(); }
     setSaving(false);
   };
 
@@ -48,6 +54,81 @@ export default function PlaylistsPage() {
     await supabase.from('playlists').delete().eq('id', id);
     fetchPlaylists();
   };
+
+  const copyShareLink = async (playlist) => {
+    const url = `${window.location.origin}/library/playlists/join/${playlist.share_token}`;
+    await navigator.clipboard.writeText(url).catch(() => {});
+    setCopiedId(playlist.id);
+    setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  const joinPlaylist = async () => {
+    if (!joinToken.trim()) return;
+    setJoining(true);
+    setJoinError('');
+    try {
+      const token = joinToken.trim().split('/').pop(); // handle full URL or just token
+      const { data: playlist } = await supabase
+        .from('playlists')
+        .select('id, name, user_id')
+        .eq('share_token', token)
+        .eq('is_shared', true)
+        .maybeSingle();
+      if (!playlist) { setJoinError('Playlist not found. Check the link and try again.'); setJoining(false); return; }
+      if (playlist.user_id === user.id) { setJoinError("That's your own playlist."); setJoining(false); return; }
+      await supabase.from('playlist_collaborators').upsert(
+        { playlist_id: playlist.id, user_id: user.id, can_edit: true },
+        { onConflict: 'playlist_id,user_id' }
+      );
+      setJoinToken('');
+      fetchPlaylists();
+    } catch { setJoinError('Something went wrong. Try again.'); }
+    setJoining(false);
+  };
+
+  const PlaylistRow = ({ playlist, isCollab = false }) => (
+    <div
+      onClick={() => navigate(`/library/playlists/${playlist.id}`)}
+      className="flex items-center space-x-3 p-3 rounded-xl hover:bg-white/[0.04] transition group cursor-pointer"
+    >
+      <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-purple-600/30 to-blue-600/20 flex items-center justify-center flex-shrink-0 relative">
+        <Music className="w-5 h-5 text-white/30" />
+        {(playlist.is_shared || isCollab) && (
+          <div className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-blue-500/80 flex items-center justify-center">
+            <Users className="w-2.5 h-2.5 text-white" />
+          </div>
+        )}
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium text-white truncate">{playlist.name}</p>
+        <p className="text-xs text-white/30">
+          {playlist.playlist_tracks?.[0]?.count || 0} tracks
+          {isCollab ? ' · Collaborative' : playlist.is_shared ? ' · Shared' : playlist.is_public ? ' · Public' : ' · Private'}
+        </p>
+      </div>
+      <div className="flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition">
+        {playlist.is_shared && !isCollab && (
+          <button
+            onClick={e => { e.stopPropagation(); copyShareLink(playlist); }}
+            className="p-2 rounded-lg hover:bg-white/[0.08] transition"
+            title="Copy share link"
+          >
+            {copiedId === playlist.id
+              ? <Check className="w-3.5 h-3.5 text-green-400" />
+              : <Link className="w-3.5 h-3.5 text-white/40" />}
+          </button>
+        )}
+        {!isCollab && (
+          <button
+            onClick={e => { e.stopPropagation(); deletePlaylist(playlist.id, playlist.name); }}
+            className="p-2 rounded-lg hover:bg-red-500/10 transition"
+          >
+            <Trash2 className="w-3.5 h-3.5 text-red-400" />
+          </button>
+        )}
+      </div>
+    </div>
+  );
 
   return (
     <div className="pt-14 md:pt-0 pb-32 px-4 max-w-2xl">
@@ -58,7 +139,7 @@ export default function PlaylistsPage() {
           </button>
           <div>
             <h1 className="text-xl font-bold text-white">Playlists</h1>
-            <p className="text-xs text-white/30">{playlists.length} playlists</p>
+            <p className="text-xs text-white/30">{playlists.length + sharedPlaylists.length} playlists</p>
           </div>
         </div>
         <button onClick={() => setCreating(!creating)}
@@ -67,59 +148,76 @@ export default function PlaylistsPage() {
         </button>
       </div>
 
+      {/* Create form */}
       {creating && (
-        <div className="flex space-x-2 mb-4">
+        <div className="space-y-2 mb-4 p-4 rounded-xl bg-white/[0.03] border border-white/[0.06]">
           <input
             type="text"
             value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && createPlaylist()}
+            onChange={e => setNewName(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && createPlaylist()}
             placeholder="Playlist name..."
             autoFocus
-            className="flex-1 px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none placeholder-white/20 focus:bg-white/[0.1] transition"
+            className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none placeholder-white/20 focus:bg-white/[0.1] transition"
           />
-          <button onClick={createPlaylist} disabled={saving || !newName.trim()}
-            className="px-4 py-2.5 bg-white text-black rounded-lg text-sm font-medium disabled:opacity-40 transition">
-            {saving ? '...' : 'Create'}
-          </button>
+          <label className="flex items-center space-x-2 cursor-pointer py-1">
+            <div
+              onClick={() => setNewShared(s => !s)}
+              className={`w-8 h-4 rounded-full transition-colors relative ${newShared ? 'bg-blue-500' : 'bg-white/10'}`}
+            >
+              <div className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-transform ${newShared ? 'translate-x-4' : 'translate-x-0.5'}`} />
+            </div>
+            <span className="text-xs text-white/50">Collaborative — share with friends</span>
+          </label>
+          <div className="flex space-x-2">
+            <button onClick={() => { setCreating(false); setNewName(''); setNewShared(false); }}
+              className="px-3 py-2 text-sm text-white/30 hover:text-white/60 transition">Cancel</button>
+            <button onClick={createPlaylist} disabled={saving || !newName.trim()}
+              className="flex-1 px-4 py-2 bg-white text-black rounded-lg text-sm font-medium disabled:opacity-40 transition">
+              {saving ? '...' : 'Create'}
+            </button>
+          </div>
         </div>
       )}
 
+      {/* Join collaborative playlist */}
+      <div className="mb-4 p-3 rounded-xl bg-white/[0.02] border border-white/[0.05]">
+        <div className="flex space-x-2">
+          <input
+            type="text"
+            value={joinToken}
+            onChange={e => setJoinToken(e.target.value)}
+            placeholder="Paste invite link to join a playlist..."
+            className="flex-1 px-3 py-2 bg-white/[0.04] rounded-lg text-white text-xs outline-none placeholder-white/20 focus:bg-white/[0.07] transition"
+          />
+          <button onClick={joinPlaylist} disabled={joining || !joinToken.trim()}
+            className="flex items-center space-x-1.5 px-3 py-2 bg-blue-500/20 border border-blue-500/30 text-blue-400 text-xs rounded-lg disabled:opacity-40 hover:bg-blue-500/30 transition">
+            <Users className="w-3.5 h-3.5" />
+            <span>{joining ? '...' : 'Join'}</span>
+          </button>
+        </div>
+        {joinError && <p className="text-xs text-red-400 mt-1.5 px-1">{joinError}</p>}
+      </div>
+
       {loading ? (
         <div className="flex justify-center py-20"><Loader className="w-6 h-6 animate-spin text-white/30" /></div>
-      ) : playlists.length === 0 ? (
+      ) : (playlists.length === 0 && sharedPlaylists.length === 0) ? (
         <div className="text-center py-20">
           <ListMusic className="w-12 h-12 mx-auto text-white/10 mb-3" />
           <p className="text-white/30 text-sm">No playlists yet</p>
           <p className="text-white/15 text-xs mt-1">Tap "New" above to create one</p>
         </div>
       ) : (
-        <div className="space-y-2">
-          {playlists.map(playlist => (
-            <div key={playlist.id}
-              onClick={() => navigate(`/library/playlists/${playlist.id}`)}
-              className="flex items-center space-x-3 p-3 rounded-xl hover:bg-white/[0.04] transition group cursor-pointer">
-              <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-purple-600/30 to-blue-600/20 flex items-center justify-center flex-shrink-0">
-                <Music className="w-5 h-5 text-white/30" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-white truncate">{playlist.name}</p>
-                <p className="text-xs text-white/30">
-                  {playlist.playlist_tracks?.[0]?.count || 0} tracks
-                  {playlist.is_public ? ' · Public' : ' · Private'}
-                </p>
-              </div>
-              <button onClick={() => deletePlaylist(playlist.id, playlist.name)}
-                className="p-2 rounded-lg bg-red-500/0 hover:bg-red-500/10 transition opacity-0 group-hover:opacity-100">
-                <Trash2 className="w-3.5 h-3.5 text-red-400" />
-              </button>
-            </div>
-          ))}
+        <div className="space-y-1">
+          {playlists.map(p => <PlaylistRow key={p.id} playlist={p} />)}
+          {sharedPlaylists.length > 0 && (
+            <>
+              <p className="text-[10px] uppercase tracking-widest text-white/20 font-semibold pt-4 pb-2 px-1">Collaborative</p>
+              {sharedPlaylists.map(p => <PlaylistRow key={p.id} playlist={p} isCollab />)}
+            </>
+          )}
         </div>
       )}
     </div>
   );
 }
-
-
-

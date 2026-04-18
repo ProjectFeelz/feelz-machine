@@ -18,6 +18,7 @@ import { ArtistProfileSkeleton } from '../components/SkeletonLoader';
 import ShareCard from '../components/ShareCard';
 import { usePullToRefresh } from '../hooks/usePullToRefresh';
 import PullToRefreshIndicator from '../components/PullToRefreshIndicator';
+import { VoiceMemoCard } from '../components/VoiceMemo';
 
 const PAYPAL_CLIENT_ID = process.env.REACT_APP_PAYPAL_CLIENT_ID;
 const EMOJI_REACTIONS = ['🔥', '❤️', '👏', '😮', '😂', '🎵'];
@@ -378,6 +379,9 @@ export default function ArtistProfilePage() {
   const [similarArtists, setSimilarArtists] = useState([]);
   const [thoughts, setThoughts] = useState([]);
   const [highlightedTrackId, setHighlightedTrackId] = useState(null);
+  const [voiceMemos, setVoiceMemos] = useState([]);
+  const [deepCuts, setDeepCuts] = useState([]);
+  const [weeklyDiscoveries, setWeeklyDiscoveries] = useState(0);
   const [purchasedTracks, setPurchasedTracks] = useState({});
 
   const checkExistingPurchases = async () => {
@@ -405,6 +409,36 @@ export default function ArtistProfilePage() {
   }, [user, tracks]);
 
   useEffect(() => { if (slug) fetchArtist(); }, [slug]);
+
+  // ── Voice memos ───────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!artist?.id) return;
+    supabase.from('artist_voice_memos')
+      .select('*').eq('artist_id', artist.id)
+      .order('created_at', { ascending: false }).limit(10)
+      .then(({ data }) => setVoiceMemos(data || []));
+  }, [artist?.id]);
+
+  // ── Deep cuts (least-streamed published tracks) ───────────────────────────
+  useEffect(() => {
+    if (!artist?.id || tracks.length === 0) return;
+    const sorted = [...tracks]
+      .filter(t => t.is_published)
+      .sort((a, b) => (a.stream_count || 0) - (b.stream_count || 0))
+      .slice(0, 5);
+    setDeepCuts(sorted);
+  }, [artist?.id, tracks]);
+
+  // ── Weekly discovery count (how many new listeners this week) ────────────
+  useEffect(() => {
+    if (!artist?.id) return;
+    const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    supabase.from('streams')
+      .select('user_id', { count: 'exact' })
+      .in('track_id', tracks.map(t => t.id).filter(Boolean))
+      .gte('created_at', weekAgo)
+      .then(({ count }) => setWeeklyDiscoveries(count || 0));
+  }, [artist?.id, tracks]);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -461,9 +495,12 @@ export default function ArtistProfilePage() {
         .order('created_at', { ascending: false });
       setThoughts(thoughtsData || []);
       if (user) {
-        const { data: streamData } = await supabase
-          .from('streams').select('track_id, tracks(genre, mood)')
-          .eq('tracks.artist_id', artistData.id).eq('user_id', user.id).limit(50);
+        const artistTrackIds = (trackData || []).map(t => t.id).filter(Boolean);
+        const { data: streamData } = artistTrackIds.length > 0
+          ? await supabase
+              .from('streams').select('track_id, tracks(genre, mood)')
+              .eq('user_id', user.id).in('track_id', artistTrackIds).limit(50)
+          : { data: [] };
         if (streamData && streamData.length > 0) {
           const tagCounts = {};
           streamData.forEach(s => {
@@ -1355,6 +1392,63 @@ export default function ArtistProfilePage() {
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* Deep Cuts — least-played tracks, frames obscurity as a feature */}
+      {deepCuts.length > 1 && (
+        <div className="mb-8 px-6">
+          <div className="flex items-center space-x-2 mb-3">
+            <h2 className="text-lg font-bold" style={{ fontFamily: `"${headingFont}", sans-serif` }}>Deep Cuts</h2>
+            <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold uppercase tracking-wider" style={{ background: `${accentColor}20`, color: accentColor }}>
+              Hidden gems
+            </span>
+          </div>
+          <div className="space-y-2">
+            {deepCuts.map((track, i) => (
+              <button
+                key={track.id}
+                onClick={() => handlePlayTrack(track)}
+                className="w-full flex items-center space-x-3 p-3 rounded-xl transition text-left group"
+                style={{ background: currentTrack?.id === track.id ? `${accentColor}15` : 'rgba(255,255,255,0.03)' }}
+              >
+                <span className="text-xs w-4 flex-shrink-0 text-center font-medium" style={{ color: `${textColor}25` }}>{i + 1}</span>
+                <div className="w-9 h-9 rounded-lg overflow-hidden flex-shrink-0" style={{ backgroundColor: `${textColor}08` }}>
+                  {track.cover_artwork_url
+                    ? <img src={track.cover_artwork_url} alt={track.title} className="w-full h-full object-cover" />
+                    : <div className="w-full h-full flex items-center justify-center"><Music className="w-4 h-4" style={{ color: `${textColor}20` }} /></div>}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate" style={{ color: textColor }}>{track.title}</p>
+                  <p className="text-xs truncate" style={{ color: `${textColor}40` }}>
+                    {track.stream_count > 0 ? `${formatNumber(track.stream_count)} plays` : 'Unheard'}
+                  </p>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Voice Memos from the artist */}
+      {voiceMemos.length > 0 && (
+        <div className="mb-8 px-6">
+          <h2 className="text-lg font-bold mb-3" style={{ fontFamily: `"${headingFont}", sans-serif` }}>Voice Memos</h2>
+          <div className="space-y-2">
+            {voiceMemos.map(memo => (
+              <VoiceMemoCard key={memo.id} memo={memo} canDelete={false} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Weekly discovery count */}
+      {weeklyDiscoveries > 0 && (
+        <div className="mx-6 mb-6 py-3 px-4 rounded-xl text-center" style={{ background: `${accentColor}10`, border: `1px solid ${accentColor}20` }}>
+          <p className="text-xs" style={{ color: `${textColor}50` }}>
+            <span className="font-bold" style={{ color: accentColor }}>{weeklyDiscoveries}</span>
+            {' '}listener{weeklyDiscoveries !== 1 ? 's' : ''} discovered {artist?.artist_name} this week
+          </p>
         </div>
       )}
 
