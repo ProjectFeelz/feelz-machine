@@ -22,6 +22,7 @@ export async function downloadTrack(trackId, title, authToken) {
   if (response.status === 403) {
     const err = await response.json().catch(() => ({}));
     if (err.error === 'not_released_yet') throw new Error('not_released_yet');
+    if (err.error === 'artists_cannot_download') throw new Error('artists_cannot_download');
     throw new Error('purchase_required');
   }
 

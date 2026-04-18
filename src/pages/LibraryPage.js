@@ -22,17 +22,19 @@ export default function LibraryPage() {
         ] = await Promise.all([
           supabase.from('track_likes').select('*', { count: 'exact', head: true }).eq('user_id', user.id),
           supabase.from('streams')
-            .select('tracks(id, title, cover_artwork_url, artist_name)')
+            .select('tracks(id, title, cover_artwork_url, artists(artist_name))')
             .eq('user_id', user.id)
             .order('created_at', { ascending: false })
             .limit(1),
           supabase.from('playlists').select('*', { count: 'exact', head: true }).eq('user_id', user.id),
           supabase.from('follows').select('*', { count: 'exact', head: true }).eq('follower_id', user.id),
-          supabase.from('track_downloads').select('*', { count: 'exact', head: true }).eq('user_id', user.id),
+          supabase.from('downloads').select('*', { count: 'exact', head: true }).eq('user_id', user.id),
         ]);
         setStats({
           likes:       likesCount || 0,
-          recentTrack: recentData?.[0]?.tracks || null,
+          recentTrack: recentData?.[0]?.tracks
+            ? { ...recentData[0].tracks, artist_name: recentData[0].tracks.artists?.artist_name }
+            : null,
           playlists:   playlistCount || 0,
           following:   followCount || 0,
           downloads:   dlCount || 0,
