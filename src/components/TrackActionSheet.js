@@ -73,7 +73,9 @@ export default function TrackActionSheet({ track, artist, onClose }) {
 
     useEffect(() => {
         if (view !== 'purchase' || !track) return;
+        // Don't load PayPal for free/PWYW-zero tracks
         if (!isPWYW && effectivePrice <= 0) return;
+        if (isPWYW && (parseFloat(fanPrice) || 0) <= 0) return;
         setPaypalReady(false);
         setPurchaseError('');
         const existing = document.getElementById('paypal-sdk-tas');
@@ -279,6 +281,22 @@ export default function TrackActionSheet({ track, artist, onClose }) {
             onClose();
         } catch (err) {
             if (err.message === 'purchase_required') {
+                // Free track — backend may not have a purchase record yet.
+                // Insert one then retry once before showing purchase view.
+                if (effectivePrice <= 0 && !isPWYW) {
+                    try {
+                        await supabase.from('downloads')
+                            .insert({ user_id: user.id, track_id: track.id, amount_paid: 0 })
+                            .catch(() => {});
+                        const { data: { session: s2 } } = await supabase.auth.getSession();
+                        await downloadTrack(track.id, track.title, s2?.access_token);
+                        setDownloading(false);
+                        onClose();
+                        return;
+                    } catch {
+                        // retry failed — fall through to purchase view as last resort
+                    }
+                }
                 setDownloading(false);
                 setView('purchase');
                 return;

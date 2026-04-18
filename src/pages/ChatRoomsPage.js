@@ -419,6 +419,7 @@ export default function ChatRoomsPage() {
                 {editingRoomId === room.id && renaming && (
                   <Loader className="w-3 h-3 animate-spin text-white/30" />
                 )}
+              </div>
             </button>
           ))}
         </div>
@@ -433,16 +434,15 @@ export default function ChatRoomsPage() {
         </div>
       )}
 
-      {/* Info card for non-artists */}
+      {/* Info card for listeners */}
       {!artist && rooms.length === 0 && (
         <div className="mt-6 rounded-xl bg-white/[0.02] border border-white/[0.04] p-4">
           <div className="flex items-center space-x-2 mb-2">
             <Zap className="w-4 h-4 text-purple-400" />
-            <h4 className="text-xs font-semibold text-white/50">Artist Feature</h4>
+            <h4 className="text-xs font-semibold text-white/50">Chat Rooms</h4>
           </div>
           <p className="text-[11px] text-white/25 leading-relaxed">
-            Chat rooms are created by artists on Pro or Premium plans.
-            Follow your favorite artists to join — their rooms and connect with the community.
+            Follow your favourite artists to join their chat rooms and connect with the community.
           </p>
         </div>
       )}

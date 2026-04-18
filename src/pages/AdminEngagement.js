@@ -123,6 +123,7 @@ export default function AdminEngagement() {
         { count: totalListeners },
         { count: activeListeners },
         { count: newListeners },
+        { count: totalProfiles },
       ] = await Promise.all([
         supabase.from('artists').select('*', { count: 'exact', head: true }),
         supabase.from('artists').select('*', { count: 'exact', head: true }).gte('last_seen_at', dormantCutoff),
@@ -130,7 +131,14 @@ export default function AdminEngagement() {
         supabase.from('listeners').select('*', { count: 'exact', head: true }),
         supabase.from('listeners').select('*', { count: 'exact', head: true }).gte('last_seen_at', dormantCutoff),
         supabase.from('listeners').select('*', { count: 'exact', head: true }).gte('created_at', newUserCutoff),
+        supabase.from('user_profiles').select('*', { count: 'exact', head: true }),
       ]);
+
+      // If listeners table is empty (records never inserted), fall back to
+      // total user_profiles minus artist accounts as a best-effort listener count
+      const effectiveListeners = (totalListeners || 0) > 0
+        ? (totalListeners || 0)
+        : Math.max(0, (totalProfiles || 0) - (totalArtists || 0));
 
       setSegmentCounts({
         new_artist:       newArtists || 0,
@@ -138,9 +146,9 @@ export default function AdminEngagement() {
         dormant_artist:   Math.max(0, (totalArtists || 0) - (activeArtists || 0)),
         new_listener:     newListeners || 0,
         active_listener:  Math.max(0, (activeListeners || 0) - (newListeners || 0)),
-        dormant_listener: Math.max(0, (totalListeners || 0) - (activeListeners || 0)),
+        dormant_listener: Math.max(0, effectiveListeners - (activeListeners || 0)),
         total_artists:    totalArtists || 0,
-        total_listeners:  totalListeners || 0,
+        total_listeners:  effectiveListeners,
       });
 
       setStats({ weekTotal: weekTotal || 0, totalEver: totalEver || 0, segBreakdown });

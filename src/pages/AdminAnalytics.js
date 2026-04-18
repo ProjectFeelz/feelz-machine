@@ -52,11 +52,13 @@ export default function AdminAnalytics() {
         { count: trackCount },
         { count: publishedCount },
         { count: collabCount },
+        { count: profileCount },
       ] = await Promise.all([
         supabase.from('artists').select('*', { count: 'exact', head: true }),
         supabase.from('tracks').select('*', { count: 'exact', head: true }),
         supabase.from('tracks').select('*', { count: 'exact', head: true }).eq('is_published', true),
         supabase.from('collaborations').select('*', { count: 'exact', head: true }),
+        supabase.from('user_profiles').select('*', { count: 'exact', head: true }),
       ]);
 
       // Follows
@@ -98,6 +100,7 @@ export default function AdminAnalytics() {
         likes: likeCount,
         downloads: Math.max(downloadCount, totalDownloadsCounted),
         streams: totalStreams,
+        listeners: Math.max(0, (profileCount || 0) - (artistCount || 0)),
       });
 
       // Signup timeline (last 7 days)
@@ -172,6 +175,45 @@ export default function AdminAnalytics() {
     if (data) exportCSV(data, ['track_id', 'user_id', 'duration_played', 'completed', 'device_type', 'platform', 'created_at'], 'streams_export.csv');
   };
 
+  const exportGlobalStats = async () => {
+    const rows = [{
+      total_artists: stats.artists,
+      total_listeners: stats.listeners,
+      total_tracks: stats.tracks,
+      published_tracks: stats.published,
+      total_streams: stats.streams,
+      total_downloads: stats.downloads,
+      total_follows: stats.follows,
+      total_likes: stats.likes,
+      total_collabs: stats.collabs,
+      total_engagement: stats.follows + stats.likes,
+      exported_at: new Date().toISOString(),
+    }];
+    exportCSV(rows, ['total_artists','total_listeners','total_tracks','published_tracks','total_streams','total_downloads','total_follows','total_likes','total_collabs','total_engagement','exported_at'], 'global_stats.csv');
+  };
+
+  const exportUserBehaviors = async () => {
+    // Join user_profiles with artists to get role, then pull stream/like/download counts per user
+    const [
+      { data: profiles },
+      { data: artistIds },
+    ] = await Promise.all([
+      supabase.from('user_profiles').select('user_id, created_at').order('created_at', { ascending: false }).limit(5000),
+      supabase.from('artists').select('user_id, artist_name, tier, total_streams, follower_count'),
+    ]);
+    const artistMap = Object.fromEntries((artistIds || []).map(a => [a.user_id, a]));
+    const rows = (profiles || []).map(p => ({
+      user_id: p.user_id,
+      role: artistMap[p.user_id] ? 'artist' : 'listener',
+      artist_name: artistMap[p.user_id]?.artist_name || '',
+      tier: artistMap[p.user_id]?.tier || '',
+      total_streams: artistMap[p.user_id]?.total_streams || '',
+      follower_count: artistMap[p.user_id]?.follower_count || '',
+      joined_at: p.created_at,
+    }));
+    if (rows.length) exportCSV(rows, ['user_id','role','artist_name','tier','total_streams','follower_count','joined_at'], 'user_behaviors.csv');
+  };
+
 
   useEffect(() => {
     if (isAdmin === false) { navigate('/hub'); return; }
@@ -202,6 +244,7 @@ export default function AdminAnalytics() {
           {/* Overview Stats */}
           <div className="grid grid-cols-2 gap-2 mb-8">
             <StatCard icon={Mic2} label="Total Artists" value={stats.artists} color="bg-purple-500/20" />
+            <StatCard icon={Users} label="Total Listeners" value={stats.listeners} subtext="Non-artist accounts" color="bg-cyan-500/20" />
             <StatCard icon={Music} label="Total Tracks" value={stats.tracks} subtext={`${stats.published} published`} color="bg-green-500/20" />
             <StatCard icon={Headphones} label="Total Streams" value={stats.streams} color="bg-violet-500/20" />
             <StatCard icon={Download} label="Total Downloads" value={stats.downloads} color="bg-blue-500/20" />
@@ -226,6 +269,12 @@ export default function AdminAnalytics() {
               </button>
               <button onClick={exportStreams} className="flex items-center space-x-2 px-4 py-2.5 bg-white/[0.04] rounded-xl text-sm text-white/60 hover:bg-white/[0.08] transition border border-white/[0.06]">
                 <FileDown className="w-3.5 h-3.5" /><span>Streams CSV</span>
+              </button>
+              <button onClick={exportGlobalStats} className="flex items-center space-x-2 px-4 py-2.5 bg-white/[0.04] rounded-xl text-sm text-white/60 hover:bg-white/[0.08] transition border border-white/[0.06]">
+                <FileDown className="w-3.5 h-3.5" /><span>Global Stats CSV</span>
+              </button>
+              <button onClick={exportUserBehaviors} className="flex items-center space-x-2 px-4 py-2.5 bg-white/[0.04] rounded-xl text-sm text-white/60 hover:bg-white/[0.08] transition border border-white/[0.06]">
+                <FileDown className="w-3.5 h-3.5" /><span>User Behaviors CSV</span>
               </button>
             </div>
           </div>
@@ -275,9 +324,3 @@ export default function AdminAnalytics() {
     </div>
   );
 }
-
-
-
-
-
-

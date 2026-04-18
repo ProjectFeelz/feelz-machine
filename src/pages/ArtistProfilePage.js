@@ -969,7 +969,8 @@ export default function ArtistProfilePage() {
                       backgroundColor: isActive ? `${secondaryColor}15` : highlightedTrackId === track.id ? `${secondaryColor}25` : 'transparent',
                       outline: highlightedTrackId === track.id ? `1px solid ${secondaryColor}50` : 'none',
                     }}>
-                    <div className="w-7 flex items-center justify-center flex-shrink-0">
+                    {/* Track number — always left-aligned */}
+                    <div className="w-6 flex items-center justify-start flex-shrink-0">
                       {isActive ? (
                         isTrackPlaying ? (
                           <div className="flex items-end space-x-0.5 h-4">
@@ -982,7 +983,8 @@ export default function ArtistProfilePage() {
                         <span className="text-sm" style={{ color: `${textColor}30` }}>{i + 1}</span>
                       )}
                     </div>
-                    <div className="w-10 h-10 rounded-md overflow-hidden flex-shrink-0" style={{ backgroundColor: `${textColor}08` }}>
+                    {/* Bigger artwork: w-12 h-12 */}
+                    <div className="w-12 h-12 rounded-md overflow-hidden flex-shrink-0" style={{ backgroundColor: `${textColor}08` }}>
                       {(track.cover_artwork_url || track.albums?.cover_artwork_url) ? (
                         <img src={track.cover_artwork_url || track.albums?.cover_artwork_url} alt="" className="w-full h-full object-cover" />
                       ) : (
@@ -1006,66 +1008,28 @@ export default function ArtistProfilePage() {
                       </div>
                     </div>
                     {track.duration && <span className="text-xs flex-shrink-0" style={{ color: `${textColor}30` }}>{formatDuration(track.duration)}</span>}
+                    {/* 3-dot menu — like and queue removed for cleaner mobile layout */}
                     <button onClick={(e) => { e.stopPropagation(); setActionSheetTrack(track); }}
                       className="flex-shrink-0 p-1.5 rounded-lg transition-all active:scale-95"
                       style={{ color: `${textColor}30` }} title="More">
                       <MoreHorizontal className="w-4 h-4" />
                     </button>
-                    <button onClick={(e) => handleLike(track, e)}
-                      className="flex-shrink-0 p-1.5 rounded-lg transition-all active:scale-95"
-                      style={{ color: likedTracks[track.id] ? '#ef4444' : `${textColor}30` }}>
-                      <Heart className="w-4 h-4" fill={likedTracks[track.id] ? '#ef4444' : 'none'} />
-                    </button>
-                    <div className="relative flex-shrink-0">
-                      <button onClick={(e) => { e.stopPropagation(); setShowAddToPlaylist(showAddToPlaylist === track.id ? null : track.id); }}
-                        className="p-1.5 rounded-lg transition-all active:scale-95" style={{ color: `${textColor}30` }}>
-                        <ListMusic className="w-4 h-4" />
-                      </button>
-                      {showAddToPlaylist === track.id && (
-                        <div className="absolute right-0 bottom-8 z-50 w-52 rounded-xl shadow-2xl overflow-hidden"
-                          style={{ backgroundColor: '#111', border: '1px solid rgba(255,255,255,0.08)' }}>
-                          <div className="flex items-center justify-between px-4 py-2.5 border-b border-white/[0.06]">
-                            <p className="text-xs font-semibold text-white/50">Add to Playlist</p>
-                            <button onClick={(e) => { e.stopPropagation(); setShowAddToPlaylist(null); }} className="text-white/30 text-lg leading-none">×</button>
-                          </div>
-                          {playlists.length === 0
-                            ? <div className="px-4 py-3"><p className="text-xs text-white/30">No playlists yet</p></div>
-                            : playlists.map(pl => {
-                                const key = `${pl.id}-${track.id}`;
-                                return (
-                                  <button key={pl.id}
-                                    onClick={(e) => { e.stopPropagation(); handleAddToPlaylist(pl.id, track.id); }}
-                                    disabled={addingTo === pl.id}
-                                    className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-white/[0.04] transition text-left">
-                                    <span className="text-sm text-white/70 truncate">{pl.name}</span>
-                                    {addedTo[key] ? <Check className="w-3.5 h-3.5 text-green-400 flex-shrink-0" /> : null}
-                                  </button>
-                                );
-                              })
-                          }
-                        </div>
-                      )}
-                    </div>
+                    {/* Icon-only download button */}
                     {track.is_downloadable && (
                       purchasedTracks[track.id] ? (
                         <button onClick={(e) => { e.stopPropagation(); triggerDownload(track); }} disabled={downloading === track.id}
-                          className="flex-shrink-0 flex items-center space-x-1 px-2.5 py-1.5 rounded-lg transition-all active:scale-95 disabled:opacity-50"
-                          style={{ backgroundColor: `${secondaryColor}20`, color: secondaryColor }}>
+                          className="flex-shrink-0 p-1.5 rounded-lg transition-all active:scale-95 disabled:opacity-50"
+                          style={{ color: secondaryColor }} title="Download">
                           {downloading === track.id ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
-                          <span className="text-[11px] font-semibold">Download</span>
                         </button>
                       ) : (
                         <button onClick={(e) => handleDownload(track, e)} disabled={downloading === track.id}
-                          className="flex-shrink-0 flex items-center space-x-1 px-2.5 py-1.5 rounded-lg transition-all active:scale-95 disabled:opacity-50"
-                          style={{ backgroundColor: `${secondaryColor}20`, color: secondaryColor }}>
+                          className="flex-shrink-0 p-1.5 rounded-lg transition-all active:scale-95 disabled:opacity-50"
+                          style={{ color: secondaryColor }} title={getEffectivePrice(track) > 0 ? `$${getEffectivePrice(track)}` : 'Download'}>
                           {downloading === track.id ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
-                          {track.pay_what_you_want
-                            ? <span className="text-[11px] font-semibold">PWYW</span>
-                            : getEffectivePrice(track) > 0 && <span className="text-[11px] font-semibold">${getEffectivePrice(track)}</span>
-                          }
                         </button>
                       )
-                    )} 
+                    )}
                   </div>
                   <TrackVersions track={track} albumPrice={track.albums?.price || 0}
                     onPlayVersion={(version) => {

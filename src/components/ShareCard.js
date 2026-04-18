@@ -21,7 +21,7 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
   const [sharing, setSharing] = useState(false);
 
   const title      = track?.title || artist?.artist_name || 'Feelz Machine';
-  const subtitle   = track?.artist_name || (artist ? 'Artist Profile' : '');
+  const subtitle   = track?.artist_name || (artist ? `Listen on Feelz Machine` : '');
   const artworkUrl = track?.cover_artwork_url || artist?.profile_image_url || null;
   const displayUrl = shareUrl
     ? shareUrl.replace('https://www.', '').replace('https://', '')
@@ -136,7 +136,9 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
           await navigator.share({
             files: [file],
             title,
-            text: `Listen to ${title}${subtitle ? ` by ${subtitle}` : ''} on Feelz Machine`,
+            text: track
+              ? `Listen to ${title} by ${track.artist_name} on Feelz Machine`
+              : `Listen to ${title} on Feelz Machine`,
             url: shareUrl || window.location.href,
           });
         } else {

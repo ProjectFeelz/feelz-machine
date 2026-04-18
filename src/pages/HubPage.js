@@ -161,11 +161,6 @@ export default function HubPage() {
           {isAdmin && (
             <Section title="Admin" icon={Shield}>
               <LinkCard icon={Shield}    label="Admin Panel"        description="Broadcast · Analytics · Moderation · Users"  path="/admin"              color="bg-yellow-500/20" />
-              <LinkCard icon={Megaphone} label="Broadcast"          description="Send messages to all users"                  path="/admin/broadcast"    color="bg-purple-500/20" />
-              <LinkCard icon={Brain}     label="Engagement Drip"    description="AI messaging · segment stats"               path="/admin/engagement"   color="bg-violet-500/20" />
-              <LinkCard icon={BarChart3} label="Platform Analytics" description="Streams, signups, engagement metrics"        path="/admin/analytics"    color="bg-blue-500/20" />
-              <LinkCard icon={Trophy}    label="Competitions"       description="Create and manage competitions"              path="/admin/competitions" color="bg-yellow-500/20" />
-              <LinkCard icon={Zap}       label="Boost Manager"      description="Feature and boost artist content"            path="/admin/boost"        color="bg-amber-500/20" />
             </Section>
           )}
 
