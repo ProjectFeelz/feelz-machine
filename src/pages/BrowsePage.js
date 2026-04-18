@@ -225,7 +225,7 @@ export default function BrowsePage() {
       });
       setArtists(sortedArtists);
     } catch (err) { console.error('Browse fetch error:', err); }
-    setLoading(false);
+    finally { setLoading(false); }
   };
 
   const searchAll = (q) => {

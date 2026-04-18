@@ -201,7 +201,7 @@ export default function AlbumDetailPage() {
         setLikedTracks(likeMap);
       }
     } catch (err) { console.error(err); }
-    setLoading(false);
+    finally { setLoading(false); }
   };
 
   const fetchPlaylists = async () => {

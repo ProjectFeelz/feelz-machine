@@ -323,11 +323,21 @@ export function PlayerProvider({ children }) {
     });
   }, []);
 
+  // Replaces the queue and index without re-triggering playback.
+  // Used by pages that start playback immediately then resolve the full queue async.
+  const replaceQueue = useCallback((list, idx) => {
+    setQueue(list);
+    queueRef.current = list;
+    setQueueIndex(idx);
+    queueIndexRef.current = idx;
+  }, []);
+
   const value = {
     currentTrack, isPlaying, duration, currentTime, volume, queue, queueIndex,
     shuffle, repeat, isMinimized, setIsMinimized, playTrack, togglePlay, seek,
     setVolume: setVolumeLevel, setVolumeLevel, playNext, playPrev, addToQueue,
     removeFromQueue, moveInQueue, playNextInQueue, clearQueue, toggleShuffle, toggleRepeat,
+    replaceQueue,
   };
 
   return (

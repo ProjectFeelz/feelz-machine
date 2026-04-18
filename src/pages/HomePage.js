@@ -152,7 +152,7 @@ function SquareCard({ item, itemList = [], isAlbum = false, showNew = false, onP
 
 export default function HomePage() {
   const { user, artist } = useAuth();
-  const { playTrack, currentTrack, isPlaying, togglePlay } = usePlayer();
+  const { playTrack, currentTrack, isPlaying, togglePlay, replaceQueue } = usePlayer();
   const { streak, discoveryStreak, recordDiscovery } = useStreak(user);
   const navigate = useNavigate();
 
@@ -341,9 +341,6 @@ export default function HomePage() {
 
   useEffect(() => {
     fetchData();
-    // Safety: if fetchData hangs for any reason, release the skeleton after 8s
-    const safetyTimer = setTimeout(() => setLoading(false), 8000);
-    return () => clearTimeout(safetyTimer);
   }, [user]);
 
   // ── Fetch daily spotlight artist ──────────────────────────────────────────
@@ -456,9 +453,14 @@ export default function HomePage() {
 
   const handlePlay = async (track, _list) => {
     if (currentTrack?.id === track.id) { togglePlay(); return; }
+    // Start playback immediately with a single-track queue as a placeholder,
+    // then patch the queue once the async radio fetch resolves — without
+    // calling playTrack a second time (which would hit the same-track guard
+    // and toggle pause instead of updating the queue).
     playTrack(track, [track]);
     const radioQueue = await buildRadioQueue(track);
-    playTrack(track, radioQueue);
+    const idx = radioQueue.findIndex(t => t.id === track.id);
+    replaceQueue(radioQueue, idx >= 0 ? idx : 0);
 
     // Check if this is a new artist for the user — if so, record discovery
     if (user && track.artist_id) {
