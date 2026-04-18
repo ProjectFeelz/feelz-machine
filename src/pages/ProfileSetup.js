@@ -385,11 +385,7 @@ export default function ListenerWelcomeTour({ displayName, onDone }) {
   const [animDir, setAnimDir] = useState(1);
   const [visible, setVisible] = useState(false);
 
-  const slide  = SLIDES[step];
-  // Safety: if step races past SLIDES length (re-render race on onDone), bail cleanly
-  if (!slide) return null;
-  const isLast = step === SLIDES.length - 1;
-
+  // ✅ All hooks must come before any early return
   useEffect(() => {
     const t = setTimeout(() => setVisible(true), 80);
     return () => clearTimeout(t);
@@ -400,6 +396,12 @@ export default function ListenerWelcomeTour({ displayName, onDone }) {
     const t = setTimeout(() => setVisible(true), 120);
     return () => clearTimeout(t);
   }, [step]);
+
+  const slide  = SLIDES[step];
+  // Safety: if step races past SLIDES length (re-render race on onDone), bail cleanly
+  if (!slide) return null;
+
+  const isLast = step === SLIDES.length - 1;
 
   const next = () => {
     if (isLast) { onDone(); return; }
