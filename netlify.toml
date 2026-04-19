@@ -2,6 +2,9 @@
   command = "npm run build"
   publish = "build"
 
+[build.environment]
+  REACT_APP_VAPID_PUBLIC_KEY = "BASwU9c4nwdW8W43aOOrqfiYooWNHM_wkVdJTblUyBsjdFpOOtRIJBtTD7vw6fJU9AlEg3sOL_n5mp0RabRWSPc"
+
 [functions]
   directory = "netlify/functions"
 
@@ -21,47 +24,47 @@
   name = "weekly-artist-report"
   schedule = "0 8 * * 1"
 
-      [[redirects]]
-        from = "/.well-known/assetlinks.json"
-          to = "/.well-known/assetlinks.json"
-            status = 200
-              force = true
+[[redirects]]
+  from = "/.well-known/assetlinks.json"
+  to = "/.well-known/assetlinks.json"
+  status = 200
+  force = true
 
-                [[redirects]]
-                  from = "/manifest.json"
-                    to = "/manifest.json"
-                      status = 200
-                        force = true
+[[redirects]]
+  from = "/manifest.json"
+  to = "/manifest.json"
+  status = 200
+  force = true
 
-                          [[redirects]]
-                            from = "/*/manifest.json"
-                              to = "/manifest.json"
-                                status = 200
-                                  force = true
+[[redirects]]
+  from = "/*/manifest.json"
+  to = "/manifest.json"
+  status = 200
+  force = true
 
-                                    [[redirects]]
-                                      from = "/player/manifest.json"
-                                        to = "/manifest.json"
-                                          status = 200
-                                            force = true
+[[redirects]]
+  from = "/player/manifest.json"
+  to = "/manifest.json"
+  status = 200
+  force = true
 
-                                              [[redirects]]
-                                                from = "/service-worker.js"
-                                                  to = "/service-worker.js"
-                                                    status = 200
-                                                      force = true
+[[redirects]]
+  from = "/service-worker.js"
+  to = "/service-worker.js"
+  status = 200
+  force = true
 
-                                                        [[redirects]]
-                                                          from = "/player"
-                                                            to = "/index.html"
-                                                              status = 200
+[[redirects]]
+  from = "/player"
+  to = "/index.html"
+  status = 200
 
-                                                                [[redirects]]
-                                                                  from = "/player/*"
-                                                                    to = "/index.html"
-                                                                      status = 200
+[[redirects]]
+  from = "/player/*"
+  to = "/index.html"
+  status = 200
 
-                                                                        [[redirects]]
-                                                                          from = "/*"
-                                                                            to = "/index.html"
-                                                                              status = 200
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
