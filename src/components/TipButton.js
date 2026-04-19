@@ -21,8 +21,6 @@ export default function TipButton({ artist }) {
   const paypalRef               = useRef(null);
   const paypalRendered          = useRef(false);
 
-  if (!artist?.paypal_email) return null;
-
   const amountNum = parseFloat(amount);
   const valid = !isNaN(amountNum) && amountNum >= 1 && amountNum <= 500;
 
@@ -73,6 +71,9 @@ export default function TipButton({ artist }) {
       document.head.appendChild(script);
     }
   }, [step]);
+
+  // Early return AFTER all hooks — safe per Rules of Hooks
+  if (!artist?.paypal_email) return null;
 
   const reset = () => { setOpen(false); setAmount(''); setMessage(''); setStep('form'); setError(''); paypalRendered.current = false; };
 

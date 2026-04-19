@@ -123,6 +123,7 @@ export default function ProfilePage() {
     }
     setFreezing(false);
   };
+  const [activeTab, setActiveTab]             = useState('profile');
   const [editing, setEditing]                 = useState(false);
   const [saving, setSaving]                   = useState(false);
   const [avatarUploading, setAvatarUploading] = useState(false);
