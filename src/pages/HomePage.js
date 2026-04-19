@@ -252,17 +252,28 @@ export default function HomePage() {
 
   const fetchLiveSessions = async () => {
     try {
-      const { data } = await supabase
+      const { data: sessions } = await supabase
         .from('listening_sessions')
-        .select('id, title, artist_id, artists(artist_name, slug, profile_image_url)')
+        .select('id, title, artist_id')
         .eq('status', 'live')
         .order('created_at', { ascending: false })
         .limit(8);
-      setLiveSessions((data || []).map(s => ({
+
+      if (!sessions || sessions.length === 0) { setLiveSessions([]); return; }
+
+      // Enrich with artist data via separate query (avoids FK join 400 error)
+      const artistIds = [...new Set(sessions.map(s => s.artist_id).filter(Boolean))];
+      const { data: artists } = await supabase
+        .from('artists')
+        .select('id, artist_name, slug, profile_image_url')
+        .in('id', artistIds);
+
+      const artistMap = Object.fromEntries((artists || []).map(a => [a.id, a]));
+      setLiveSessions(sessions.map(s => ({
         ...s,
-        artist_name: s.artists?.artist_name || 'Unknown Artist',
-        artist_slug: s.artists?.slug || null,
-        artist_image: s.artists?.profile_image_url || null,
+        artist_name:  artistMap[s.artist_id]?.artist_name  || 'Unknown Artist',
+        artist_slug:  artistMap[s.artist_id]?.slug         || null,
+        artist_image: artistMap[s.artist_id]?.profile_image_url || null,
       })));
     } catch (err) { console.error('Live sessions fetch error:', err); }
   };

@@ -927,26 +927,6 @@ export default function ArtistProfilePage() {
         </div>
       </div>
 
-      {/* 🔴 LIVE NOW BANNER */}
-      {liveSession && (
-        <button
-          onClick={() => navigate(`/session/${liveSession.id}`)}
-          className="mx-6 mt-4 w-[calc(100%-3rem)] flex items-center justify-between px-4 py-3 rounded-2xl border border-red-500/30 bg-red-500/10 hover:bg-red-500/20 transition active:scale-[0.98]"
-        >
-          <div className="flex items-center space-x-2.5">
-            <span className="relative flex h-2.5 w-2.5">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
-              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500" />
-            </span>
-            <span className="text-sm font-semibold text-red-400">Live Now</span>
-            {liveSession.title && (
-              <span className="text-sm text-red-300/70 truncate max-w-[160px]">— {liveSession.title}</span>
-            )}
-          </div>
-          <Radio className="w-4 h-4 text-red-400 flex-shrink-0" />
-        </button>
-      )}
-
       {/* ARTIST INFO */}
       <div className="px-6 pt-24 flex flex-col items-center text-center">
         <div className="flex items-center space-x-2 mb-1">
@@ -1027,6 +1007,26 @@ export default function ArtistProfilePage() {
           </div>
         )}
       </div>
+
+      {/* 🔴 LIVE NOW BANNER — rendered here, below the profile image */}
+      {liveSession && (
+        <button
+          onClick={() => navigate(`/session/${liveSession.id}`)}
+          className="mx-6 mb-4 w-[calc(100%-3rem)] flex items-center justify-between px-4 py-3 rounded-2xl border border-red-500/30 bg-red-500/10 hover:bg-red-500/20 transition active:scale-[0.98]"
+        >
+          <div className="flex items-center space-x-2.5">
+            <span className="relative flex h-2.5 w-2.5">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
+              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500" />
+            </span>
+            <span className="text-sm font-semibold text-red-400">Live Now</span>
+            {liveSession.title && (
+              <span className="text-sm text-red-300/70 truncate max-w-[160px]">— {liveSession.title}</span>
+            )}
+          </div>
+          <Radio className="w-4 h-4 text-red-400 flex-shrink-0" />
+        </button>
+      )}
 
       {thoughts.length > 0 && (
         <div className="px-6 mb-6 space-y-3">
@@ -1500,7 +1500,7 @@ export default function ArtistProfilePage() {
         </div>
       )}
 
-      <ArtistGuestbook artistId={artist?.id} textColor={textColor} accentColor={accentColor} />
+      <ArtistGuestbook artistId={artist?.id} textColor={textColor} accentColor={accentColor} isOwner={isProfileOwner} />
 
       <div className="px-6 pt-8 pb-4 text-center">
         <p className="text-[11px]" style={{ color: `${textColor}20` }}>

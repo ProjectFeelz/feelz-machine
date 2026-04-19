@@ -11,7 +11,7 @@ import {
   Shield, Users, BarChart3, Music, Flame,
   Upload, HeartHandshake, Bell, Palette, MessageCircle,
   ChevronRight, Crown, Zap, Star, LayoutDashboard,
-  User, LogOut, DollarSign, Megaphone, Radio, Trophy, Brain, Mic2, Loader,
+  User, LogOut, DollarSign, Megaphone, Radio, Trophy, Brain, Mic2, Loader, X, Youtube,
 } from 'lucide-react';
 
 function LinkCard({ icon: Icon, label, description, path, color, onClick }) {
@@ -62,15 +62,17 @@ export default function HubPage() {
   const { tierSlug, tierLoading } = useTier();
   const { streak } = useStreak(user);
   const [activeTab, setActiveTab] = useState('home');
-  const [startingSession, setStartingSession] = useState(false);
+  const [startingSession, setStartingSession]   = useState(false);
+  const [showLiveModal, setShowLiveModal]       = useState(false);
+  const [liveTitle, setLiveTitle]               = useState('');
+  const [liveMode, setLiveMode]                 = useState('audio'); // 'audio' | 'youtube'
 
-  const tierConfig = {
-    premium: { label: 'Premium', color: 'text-yellow-400', bg: 'bg-yellow-500/10', icon: Crown },
-    pro:     { label: 'Pro',     color: 'text-purple-400', bg: 'bg-purple-500/10', icon: Zap },
-    free:    { label: 'Free',    color: 'text-white/30',   bg: 'bg-white/[0.04]',  icon: Star },
+  const openLiveModal = () => {
+    if (!artist) return;
+    setLiveTitle(`${artist.artist_name}'s Live Session`);
+    setLiveMode('audio');
+    setShowLiveModal(true);
   };
-  const tier     = tierConfig[tierSlug] || tierConfig.free;
-  const TierIcon = tier.icon;
 
   const startLiveSession = async () => {
     if (!artist || startingSession) return;
@@ -85,19 +87,20 @@ export default function HubPage() {
         .maybeSingle();
 
       if (existing) {
+        setShowLiveModal(false);
         navigate(`/session/${existing.id}`);
         return;
       }
 
-      const title = `${artist.artist_name}'s Live Session`;
+      const title = liveTitle.trim() || `${artist.artist_name}'s Live Session`;
       const { data: session, error } = await supabase
         .from('listening_sessions')
-        .insert({ artist_id: artist.id, title, mode: 'audio', status: 'live' })
+        .insert({ artist_id: artist.id, title, mode: liveMode, status: 'live' })
         .select().single();
 
       if (error) throw error;
 
-      // Notify followers with drop alerts
+      // Notify followers
       const { data: { session: authSession } } = await supabase.auth.getSession();
       fetch('/.netlify/functions/notify-session-live', {
         method: 'POST',
@@ -105,12 +108,21 @@ export default function HubPage() {
         body: JSON.stringify({ session_id: session.id, artist_id: artist.id, token: authSession?.access_token }),
       }).catch(() => {});
 
+      setShowLiveModal(false);
       navigate(`/session/${session.id}`);
     } catch (err) {
       console.error('Start session error:', err);
     }
     setStartingSession(false);
   };
+
+  const tierConfig = {
+    premium: { label: 'Premium', color: 'text-yellow-400', bg: 'bg-yellow-500/10', icon: Crown },
+    pro:     { label: 'Pro',     color: 'text-purple-400', bg: 'bg-purple-500/10', icon: Zap },
+    free:    { label: 'Free',    color: 'text-white/30',   bg: 'bg-white/[0.04]',  icon: Star },
+  };
+  const tier     = tierConfig[tierSlug] || tierConfig.free;
+  const TierIcon = tier.icon;
 
   if (!user) {
     return (
@@ -224,7 +236,7 @@ export default function HubPage() {
               <LinkCard icon={BarChart3}      label="Analytics"      description="Track performance and stream data"      path="/dashboard?tab=analytics" color="bg-indigo-500/20" />
               <LinkCard icon={MessageCircle}  label="Chat Rooms"     description="Community conversations"                path="/chat"                    color="bg-violet-500/20" />
               <button
-                onClick={startLiveSession}
+                onClick={openLiveModal}
                 disabled={startingSession}
                 className="w-full flex items-center space-x-4 p-4 bg-red-500/10 rounded-xl border border-red-500/20 hover:bg-red-500/15 active:bg-red-500/20 transition text-left group disabled:opacity-50"
               >
@@ -263,6 +275,73 @@ export default function HubPage() {
             <span>Sign Out</span>
           </button>
         </>
+      )}
+
+      {/* ── Go Live setup modal ───────────────────────────────────────────── */}
+      {showLiveModal && (
+        <div className="fixed inset-0 z-[600] flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm px-4 pb-6 sm:pb-0">
+          <div className="w-full max-w-sm bg-[#111] border border-white/10 rounded-2xl p-5 space-y-5">
+            {/* Header */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                <h2 className="text-base font-semibold text-white">Set Up Live Session</h2>
+              </div>
+              <button onClick={() => setShowLiveModal(false)} className="w-8 h-8 rounded-full bg-white/[0.06] flex items-center justify-center hover:bg-white/10 transition">
+                <X className="w-4 h-4 text-white/60" />
+              </button>
+            </div>
+
+            {/* Session title */}
+            <div className="space-y-1.5">
+              <label className="text-xs text-white/40 font-medium uppercase tracking-wider">Session Title</label>
+              <input
+                value={liveTitle}
+                onChange={e => setLiveTitle(e.target.value)}
+                placeholder="Give your session a name..."
+                maxLength={80}
+                className="w-full px-3 py-2.5 bg-white/[0.06] border border-white/[0.08] rounded-xl text-sm text-white placeholder-white/25 focus:outline-none focus:border-white/20"
+              />
+            </div>
+
+            {/* Mode toggle */}
+            <div className="space-y-1.5">
+              <label className="text-xs text-white/40 font-medium uppercase tracking-wider">Stream Type</label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => setLiveMode('audio')}
+                  className={`flex items-center justify-center space-x-2 py-3 rounded-xl border text-sm font-medium transition ${liveMode === 'audio' ? 'bg-white/15 border-white/20 text-white' : 'bg-white/[0.04] border-white/[0.06] text-white/40 hover:bg-white/[0.08]'}`}
+                >
+                  <Music className="w-4 h-4" />
+                  <span>Audio Queue</span>
+                </button>
+                <button
+                  onClick={() => setLiveMode('youtube')}
+                  className={`flex items-center justify-center space-x-2 py-3 rounded-xl border text-sm font-medium transition ${liveMode === 'youtube' ? 'bg-red-500/20 border-red-500/30 text-red-400' : 'bg-white/[0.04] border-white/[0.06] text-white/40 hover:bg-white/[0.08]'}`}
+                >
+                  <Youtube className="w-4 h-4" />
+                  <span>YouTube Live</span>
+                </button>
+              </div>
+              <p className="text-[11px] text-white/25 pt-0.5">
+                {liveMode === 'audio'
+                  ? 'Queue tracks from your library — listeners hear everything in sync.'
+                  : 'Paste a YouTube live URL after you go live to embed your stream.'}
+              </p>
+            </div>
+
+            {/* Go Live button */}
+            <button
+              onClick={startLiveSession}
+              disabled={startingSession || !liveTitle.trim()}
+              className="w-full py-3 rounded-xl bg-red-500 hover:bg-red-400 disabled:opacity-40 transition text-white font-semibold text-sm flex items-center justify-center space-x-2"
+            >
+              {startingSession
+                ? <><Loader className="w-4 h-4 animate-spin" /><span>Starting…</span></>
+                : <><Radio className="w-4 h-4" /><span>Go Live</span></>}
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );

@@ -142,13 +142,18 @@ export default function ListeningSessionPage() {
   const [youtubeInput, setYoutubeInput] = useState('');
   const [listenerCount, setListenerCount] = useState(0);
 
-  const audioRef    = useRef(new Audio());
+  const audioRef      = useRef(new Audio());
   const sessionSubRef = useRef(null);
-  const chatEndRef  = useRef(null);
-  const syncTimerRef = useRef(null);
+  const chatEndRef    = useRef(null);
+  const syncTimerRef  = useRef(null);
   const reactionIdRef = useRef(0);
+  // Keep a ref to queue so syncAudio never closes over a stale copy
+  const queueRef      = useRef([]);
 
   const isHost = artist && session?.artist_id === artist.id;
+
+  // Mirror queue state into a ref so syncAudio always has the latest data
+  useEffect(() => { queueRef.current = queue; }, [queue]);
 
   // ── Load session ────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -179,7 +184,9 @@ export default function ListeningSessionPage() {
         filter: `id=eq.${sessionId}`,
       }, (payload) => {
         setSession(prev => ({ ...prev, ...payload.new }));
-        if (!isHost && payload.new.mode === 'audio') {
+        // Use !artist (not !isHost) — isHost closes over stale session state
+        // during the initial render before session loads
+        if (!artist && payload.new.mode === 'audio') {
           syncAudio(payload.new);
         }
         if (payload.new.status === 'ended') {
@@ -222,10 +229,13 @@ export default function ListeningSessionPage() {
       .from('listening_session_queue')
       .select('*, tracks(id, title, cover_artwork_url, file_url, duration)')
       .eq('session_id', sessionId).order('position');
-    setQueue(q || []);
+    const loadedQueue = q || [];
+    setQueue(loadedQueue);
+    queueRef.current = loadedQueue; // update ref immediately so syncAudio can use it
     setLoading(false);
 
-    if (!isHost && s.mode === 'audio') syncAudio(s);
+    // Sync audio for listeners using the freshly-loaded queue (not stale state)
+    if (!artist && s.mode === 'audio') syncAudio(s, loadedQueue);
   };
 
   const loadMessages = async () => {
@@ -236,9 +246,12 @@ export default function ListeningSessionPage() {
   };
 
   // ── Audio sync for listeners ────────────────────────────────────────────────
-  const syncAudio = useCallback((s) => {
-    if (!s.current_track_id || isHost) return;
-    const track = queue.find(q => q.track_id === s.current_track_id)?.tracks;
+  // acceptss an optional `queueOverride` for the initial load call where
+  // React state hasn't updated yet but we have the data in hand.
+  const syncAudio = useCallback((s, queueOverride) => {
+    if (!s.current_track_id) return;
+    const q = queueOverride ?? queueRef.current;
+    const track = q.find(item => item.track_id === s.current_track_id)?.tracks;
     if (!track?.file_url) return;
 
     const audio = audioRef.current;
@@ -246,16 +259,17 @@ export default function ListeningSessionPage() {
       audio.src = track.file_url;
     }
 
-    // Compute expected playback position accounting for latency
-    const elapsed = s.is_playing ? (Date.now() - new Date(s.started_at).getTime()) / 1000 : 0;
+    // Compute expected playback position accounting for network latency
+    const elapsed = s.is_playing
+      ? (Date.now() - new Date(s.started_at).getTime()) / 1000
+      : 0;
     const expectedPos = parseFloat(s.playback_pos || 0) + elapsed;
     const drift = Math.abs(audio.currentTime - expectedPos);
+    if (drift > 2) audio.currentTime = Math.max(0, expectedPos);
 
-    if (drift > 2) audio.currentTime = expectedPos;
-
-    if (s.is_playing && audio.paused) audio.play().catch(() => {});
+    if (s.is_playing && audio.paused)  audio.play().catch(() => {});
     if (!s.is_playing && !audio.paused) audio.pause();
-  }, [queue, isHost]);
+  }, []); // no deps needed — reads live data via refs
 
   // ── Host controls ───────────────────────────────────────────────────────────
   const updateSession = async (updates) => {
@@ -266,6 +280,10 @@ export default function ListeningSessionPage() {
   const hostPlay = async () => {
     const currentTrack = queue.find(q => q.track_id === session.current_track_id)?.tracks;
     if (!currentTrack?.file_url) return;
+    // Always ensure src is set — may have been lost on re-mount
+    if (audioRef.current.src !== currentTrack.file_url) {
+      audioRef.current.src = currentTrack.file_url;
+    }
     await updateSession({ is_playing: true, started_at: new Date().toISOString() });
     audioRef.current.play().catch(() => {});
   };
@@ -308,7 +326,16 @@ export default function ListeningSessionPage() {
 
   const endSession = async () => {
     if (!window.confirm('End this listening session?')) return;
-    await supabase.from('listening_sessions').update({ status: 'ended', ended_at: new Date().toISOString() }).eq('id', sessionId);
+    // Unsubscribe from realtime FIRST to prevent the UPDATE trigger
+    // firing back into this component and causing a 409 conflict race
+    if (sessionSubRef.current) {
+      supabase.removeChannel(sessionSubRef.current);
+      sessionSubRef.current = null;
+    }
+    audioRef.current.pause();
+    await supabase.from('listening_sessions')
+      .update({ status: 'ended', ended_at: new Date().toISOString() })
+      .eq('id', sessionId);
     navigate('/dashboard');
   };
 
