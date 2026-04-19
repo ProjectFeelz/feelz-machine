@@ -15,6 +15,10 @@ exports.handler = async (event) => {
     return { statusCode: 405, body: 'Method Not Allowed' };
   }
 
+  const secret = event.headers['x-internal-secret'];
+  if (!secret || secret !== process.env.INTERNAL_FUNCTION_SECRET) {
+    return { statusCode: 401, body: 'Unauthorized' };
+  }
   let body;
   try {
     body = JSON.parse(event.body);
@@ -108,8 +112,12 @@ exports.handler = async (event) => {
 
     // 6. Send notifications to each artist
     for (const record of payoutRecords) {
+      // Resolve the artist's user_id so the notification is visible in the bell
+      const { data: artistUser } = await supabase
+        .from('artists').select('user_id').eq('id', record.artist_id).maybeSingle();
       await supabase.from('notifications').insert({
         artist_id: record.artist_id,
+        user_id: artistUser?.user_id || null,
         type: 'payout_pending',
         title: 'New Sale',
         message: `You earned $${record.amount.toFixed(2)} from a sale of "${track.title}". Payout is pending.`,

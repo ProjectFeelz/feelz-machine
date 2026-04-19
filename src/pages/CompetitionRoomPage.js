@@ -406,6 +406,11 @@ export default function CompetitionRoomPage() {
         if (voteErr.code === '23505') { showToast('Already voted for this entry'); }
         else throw voteErr;
       } else {
+        // Keep the vote tracker table in sync so the limit survives page refresh
+        await supabase.from('competition_user_votes').upsert(
+          { competition_id: competitionId, user_id: user.id, votes_cast: myVotes.votes_cast + 1 },
+          { onConflict: 'competition_id,user_id' }
+        );
         setMyVotes(prev => ({
           votes_cast: prev.votes_cast + 1,
           voted_entries: [...prev.voted_entries, entryId],

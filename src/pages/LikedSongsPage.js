@@ -206,7 +206,7 @@ export default function LikedSongsPage() {
                           <ListMusic className="w-4 h-4 text-white/50" /><span className="text-sm text-white/70">Add to Playlist</span>
                         </button>
                         {track.artist?.slug && (
-                          <button onClick={() => { navigate(`/artist/${track.artist.slug}`); setMenuTrack(null); }}
+                          <button onClick={() => { track.artist?.slug && navigate(`/artist/${track.artist.slug}`); setMenuTrack(null); }}
                             className="w-full flex items-center space-x-3 px-4 py-3 hover:bg-white/[0.04] transition text-left border-t border-white/[0.05]">
                             <span className="text-sm text-white/40">View Artist</span>
                           </button>

@@ -191,6 +191,11 @@ export function AuthProvider({ children }) {
         }).eq('id', artist.id);
       }
       // Listener profile
+      await supabase.from('streams').delete().eq('user_id', userId);
+      await supabase.from('push_subscriptions').delete().eq('user_id', userId);
+      await supabase.from('artist_guestbook').delete().eq('user_id', userId);
+      await supabase.from('user_streaks').delete().eq('user_id', userId);
+      await supabase.from('playlists').delete().eq('user_id', userId);
       await supabase.from('listeners').delete().eq('user_id', userId);
       // User profile
       await supabase.from('user_profiles').delete().eq('user_id', userId);

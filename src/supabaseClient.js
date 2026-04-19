@@ -24,7 +24,7 @@ export async function ensureFreshSession() {
   const { data: { session }, error } = await supabase.auth.getSession();
   
   if (error || !session) {
-    console.log('No session found');
+    console.log('Token expiring soon, refreshing...');
     return null;
   }
 

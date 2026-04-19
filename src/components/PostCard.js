@@ -38,7 +38,7 @@ function renderContent(text, taggedArtists, navigate) {
   if (lastIndex < text.length) tokens.push({ type: 'text', value: text.substring(lastIndex) });
   return tokens.map((token, i) => {
     if (token.type === 'mention') return (
-      <button key={i} onClick={() => navigate(`/artist/${token.slug}`)} className="text-purple-400 font-medium hover:text-purple-300 transition">
+      <button key={i} onClick={() => token.slug && navigate(`/artist/${token.slug}`)} className="text-purple-400 font-medium hover:text-purple-300 transition">
         @{token.value}
       </button>
     );

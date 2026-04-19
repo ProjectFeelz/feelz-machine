@@ -72,7 +72,7 @@ exports.handler = async (event) => {
   const siteUrl = process.env.URL || 'https://www.feelzmachine.com';
   fetch(`${siteUrl}/.netlify/functions/send-push`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'x-internal-secret': process.env.INTERNAL_FUNCTION_SECRET },
     body: JSON.stringify({
       user_ids: userIds,
       title: `${artist.artist_name} is live 🎵`,

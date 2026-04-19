@@ -17,7 +17,7 @@ function createWindow() {
       nodeIntegration: false,
       contextIsolation: true,
       preload: path.join(__dirname, 'preload.js'),
-      webSecurity: false,
+      webSecurity: !isDev,
     },
     show: false,
   });
@@ -32,8 +32,7 @@ function createWindow() {
     mainWindow.show();
   });
 
-  // ALWAYS open DevTools to see errors
-  mainWindow.webContents.openDevTools();
+  if (isDev) mainWindow.webContents.openDevTools();
 
   // Log crashes
   mainWindow.webContents.on('crashed', () => {

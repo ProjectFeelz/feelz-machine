@@ -92,7 +92,7 @@ export function PlayerProvider({ children }) {
       }
     }
     const nextTrack = q[nextIndex];
-    if (nextTrack) {
+    if (nextTrack?.file_url) {
       streamLoggedRef.current = false;
       audioRef.current.src = nextTrack.file_url;
       audioRef.current.volume = volumeRef.current;
@@ -282,7 +282,7 @@ export function PlayerProvider({ children }) {
       else { audioRef.current.currentTime = 0; return; }
     }
     const prevTrack = q[prevIndex];
-    if (prevTrack) {
+    if (prevTrack?.file_url) {
       streamLoggedRef.current = false;
       audioRef.current.src = prevTrack.file_url;
       audioRef.current.volume = volumeRef.current;

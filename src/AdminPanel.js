@@ -53,7 +53,6 @@ function AdminPanel({ user, profile }) {
       if (usersError) {
         console.error('❌ User count error:', usersError);
       } else {
-        console.log('✅ User count loaded:', usersCount);
       }
 
       const { count: samplesCount } = await supabase
@@ -67,7 +66,7 @@ function AdminPanel({ user, profile }) {
         totalSamples: samplesCount || 0
       });
 
-      console.log('📊 Stats updated:', {
+      if (process.env.NODE_ENV === 'development') console.log('📊 Stats updated:', {
         plays: playsCount || 0,
         downloads: downloadsCount || 0,
         users: usersCount || 0,

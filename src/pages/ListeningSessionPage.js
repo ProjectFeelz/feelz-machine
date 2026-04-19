@@ -143,6 +143,7 @@ export default function ListeningSessionPage() {
   const [listenerCount, setListenerCount] = useState(0);
 
   const audioRef    = useRef(new Audio());
+  const sessionSubRef = useRef(null);
   const chatEndRef  = useRef(null);
   const syncTimerRef = useRef(null);
   const reactionIdRef = useRef(0);
@@ -170,7 +171,9 @@ export default function ListeningSessionPage() {
       });
 
     // Realtime session state changes
-    const sessionSub = supabase.channel(`session-state-${sessionId}`)
+    const sessionSub = supabase.channel(`session-state-${sessionId}`);
+    sessionSubRef.current = sessionSub;
+    sessionSub
       .on('postgres_changes', {
         event: 'UPDATE', schema: 'public', table: 'listening_sessions',
         filter: `id=eq.${sessionId}`,
@@ -332,9 +335,11 @@ export default function ListeningSessionPage() {
     setReactions(prev => [...prev, { emoji, id }]);
     setTimeout(() => setReactions(prev => prev.filter(r => r.id !== id)), 2000);
     // Broadcast to other listeners via Supabase realtime broadcast
-    supabase.channel(`session-state-${sessionId}`).send({
-      type: 'broadcast', event: 'reaction', payload: { emoji },
-    }).catch(() => {});
+    if (sessionSubRef.current) {
+      sessionSubRef.current.send({
+        type: 'broadcast', event: 'reaction', payload: { emoji },
+      }).catch(() => {});
+    }
   };
 
   if (loading) return (

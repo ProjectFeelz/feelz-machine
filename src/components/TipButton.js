@@ -87,8 +87,11 @@ export default function TipButton({ artist }) {
     if (window.paypal) { initPayPal(); }
     else {
       const script = document.createElement('script');
+      script.id = 'paypal-sdk-tip';
       script.src = `https://www.paypal.com/sdk/js?client-id=${process.env.REACT_APP_PAYPAL_CLIENT_ID}&currency=USD`;
       script.onload = initPayPal;
+      const existing = document.getElementById('paypal-sdk-tip');
+      if (existing) existing.remove();
       document.head.appendChild(script);
     }
   }, [step]);

@@ -35,6 +35,10 @@ exports.handler = async (event) => {
   let body;
   try { body = JSON.parse(event.body); } catch { return { statusCode: 400, body: 'Invalid JSON' }; }
 
+  const secret = event.headers['x-internal-secret'];
+  if (!secret || secret !== process.env.INTERNAL_FUNCTION_SECRET) {
+    return { statusCode: 401, body: 'Unauthorized' };
+  }
   const { user_ids, title, body: msgBody, url = '/', tag = 'feelz' } = body;
   if (!user_ids?.length || !title) return { statusCode: 400, body: 'user_ids and title required' };
 
