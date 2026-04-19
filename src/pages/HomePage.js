@@ -4,7 +4,7 @@ import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import { useStreak } from '../hooks/useStreak';
 import { usePlayer } from '../contexts/PlayerContext';
-import { Flame, Play, Pause, Music, Verified, MoreHorizontal, Disc, Sparkles, Users, Trophy, Compass, Headphones } from 'lucide-react';
+import { Flame, Play, Pause, Music, Verified, MoreHorizontal, Disc, Sparkles, Users, Trophy, Compass, Headphones, Radio } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import TrackActionSheet from '../components/TrackActionSheet';
 import { usePullToRefresh } from '../hooks/usePullToRefresh';
@@ -171,6 +171,7 @@ export default function HomePage() {
   const [spotlightArtist, setSpotlightArtist]       = useState(null);
   const [unheardTracks, setUnheardTracks]           = useState([]);
   const [weeklyDiscoveries, setWeeklyDiscoveries]   = useState(0);
+  const [liveSessions, setLiveSessions]             = useState([]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -238,15 +239,32 @@ export default function HomePage() {
       setTopArtists(artists || []);
 
       if (user) {
-        await Promise.all([fetchRecommendations(), fetchFollowedReleases(), fetchCompetitions(), fetchWrapped()]);
+        await Promise.all([fetchRecommendations(), fetchFollowedReleases(), fetchCompetitions(), fetchWrapped(), fetchLiveSessions()]);
       } else {
-        await fetchCompetitions();
+        await Promise.all([fetchCompetitions(), fetchLiveSessions()]);
       }
     } catch (err) {
       console.error('Failed to fetch:', err);
     } finally {
       setLoading(false);
     }
+  };
+
+  const fetchLiveSessions = async () => {
+    try {
+      const { data } = await supabase
+        .from('listening_sessions')
+        .select('id, title, artist_id, artists(artist_name, slug, profile_image_url)')
+        .eq('status', 'live')
+        .order('created_at', { ascending: false })
+        .limit(8);
+      setLiveSessions((data || []).map(s => ({
+        ...s,
+        artist_name: s.artists?.artist_name || 'Unknown Artist',
+        artist_slug: s.artists?.slug || null,
+        artist_image: s.artists?.profile_image_url || null,
+      })));
+    } catch (err) { console.error('Live sessions fetch error:', err); }
   };
 
   const fetchCompetitions = async () => {
@@ -625,6 +643,50 @@ export default function HomePage() {
             ))}
           </div>
         </Section>
+      )}
+
+      {/* 🔴 Live Now — artists currently streaming */}
+      {liveSessions.length > 0 && (
+        <div className="mb-6">
+          <div className="flex items-center justify-between mb-3 px-6">
+            <div className="flex items-center space-x-2">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500" />
+              </span>
+              <span className="section-label text-red-400">Live Now</span>
+            </div>
+          </div>
+          <div className="flex space-x-3 overflow-x-auto px-6 scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
+            {liveSessions.map(session => (
+              <button
+                key={session.id}
+                onClick={() => navigate(`/session/${session.id}`)}
+                className="flex-shrink-0 w-40 md:w-52 text-left group"
+              >
+                <div className="relative aspect-square rounded-xl overflow-hidden bg-white/[0.06] mb-2">
+                  {session.artist_image
+                    ? <img src={session.artist_image} alt={session.artist_name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                    : <div className="w-full h-full flex items-center justify-center"><Radio className="w-8 h-8 text-white/20" /></div>
+                  }
+                  {/* Red live badge overlay */}
+                  <div className="absolute inset-0 bg-red-500/10 rounded-xl" />
+                  <div className="absolute top-2 left-2 flex items-center space-x-1 px-2 py-0.5 rounded-full bg-red-500/90 backdrop-blur">
+                    <span className="relative flex h-1.5 w-1.5">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75" />
+                      <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-white" />
+                    </span>
+                    <span className="text-[9px] font-bold text-white uppercase tracking-widest">Live</span>
+                  </div>
+                </div>
+                <p className="text-sm font-medium text-white truncate">{session.artist_name}</p>
+                {session.title && (
+                  <p className="text-xs text-white/40 truncate mt-0.5">{session.title}</p>
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
       )}
 
       {/* Trending — highest social proof, works for every visitor */}

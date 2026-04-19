@@ -4,7 +4,7 @@
  * Minimum $1, maximum $500.
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import { Heart, Loader, X, DollarSign } from 'lucide-react';
@@ -23,6 +23,27 @@ export default function TipButton({ artist }) {
 
   const amountNum = parseFloat(amount);
   const valid = !isNaN(amountNum) && amountNum >= 1 && amountNum <= 500;
+
+  // Keep the sheet above the software keyboard on mobile
+  const [vvHeight, setVvHeight] = useState(() =>
+    typeof window !== 'undefined' ? (window.visualViewport?.height ?? window.innerHeight) : 600
+  );
+  useEffect(() => {
+    if (!open) return;
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const onResize = () => setVvHeight(vv.height);
+    vv.addEventListener('resize', onResize);
+    return () => vv.removeEventListener('resize', onResize);
+  }, [open]);
+
+  // Prevent body scroll while sheet is open
+  useEffect(() => {
+    if (!open) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, [open]);
 
   useEffect(() => {
     if (step !== 'paying' || paypalRendered.current) return;
@@ -88,8 +109,15 @@ export default function TipButton({ artist }) {
   );
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm" onClick={reset}>
-      <div className="w-full max-w-md bg-zinc-900 border border-white/10 rounded-t-3xl p-6 pb-safe pb-8" onClick={e => e.stopPropagation()}>
+    <div
+      className="fixed inset-x-0 z-50 flex flex-col justify-start items-center bg-black/60 backdrop-blur-sm overflow-y-auto"
+      style={{ top: 0, height: vvHeight }}
+      onClick={reset}
+    >
+      <div
+        className="w-full max-w-md bg-zinc-900 border border-white/10 rounded-b-3xl p-6 pb-8"
+        onClick={e => e.stopPropagation()}
+      >
         <div className="flex items-center justify-between mb-5">
           <div>
             <p className="text-base font-semibold text-white">Tip {artist.artist_name}</p>

@@ -12,7 +12,7 @@ import {
   Instagram, Twitter, Youtube, Globe, Music,
   Loader, Verified, Download, Heart, ListMusic, Check,
   MoreHorizontal, DollarSign, MessageCircle, ChevronDown,
-  ChevronUp, Send, Trash2, Shuffle
+  ChevronUp, Send, Trash2, Shuffle, Radio
 } from 'lucide-react';
 import { ArtistProfileSkeleton } from '../components/SkeletonLoader';
 import ShareCard from '../components/ShareCard';
@@ -386,6 +386,7 @@ export default function ArtistProfilePage() {
   const [deepCuts, setDeepCuts] = useState([]);
   const [weeklyDiscoveries, setWeeklyDiscoveries] = useState(0);
   const [purchasedTracks, setPurchasedTracks] = useState({});
+  const [liveSession, setLiveSession] = useState(null);
 
   const checkExistingPurchases = async () => {
     if (!user || !tracks.length) return;
@@ -413,7 +414,25 @@ export default function ArtistProfilePage() {
 
   useEffect(() => { if (slug) fetchArtist(); }, [slug]);
 
-  // ── Voice memos ───────────────────────────────────────────────────────────
+  // ── Live session check ────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!artist?.id) return;
+    let cancelled = false;
+    const check = async () => {
+      const { data } = await supabase
+        .from('listening_sessions')
+        .select('id, title')
+        .eq('artist_id', artist.id)
+        .eq('status', 'live')
+        .limit(1)
+        .maybeSingle();
+      if (!cancelled) setLiveSession(data || null);
+    };
+    check();
+    // Re-check every 30 s so the banner appears/disappears without a full reload
+    const interval = setInterval(check, 30_000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [artist?.id]);
   useEffect(() => {
     if (!artist?.id) return;
     supabase.from('artist_voice_memos')
@@ -907,6 +926,26 @@ export default function ArtistProfilePage() {
           </div>
         </div>
       </div>
+
+      {/* 🔴 LIVE NOW BANNER */}
+      {liveSession && (
+        <button
+          onClick={() => navigate(`/session/${liveSession.id}`)}
+          className="mx-6 mt-4 w-[calc(100%-3rem)] flex items-center justify-between px-4 py-3 rounded-2xl border border-red-500/30 bg-red-500/10 hover:bg-red-500/20 transition active:scale-[0.98]"
+        >
+          <div className="flex items-center space-x-2.5">
+            <span className="relative flex h-2.5 w-2.5">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
+              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500" />
+            </span>
+            <span className="text-sm font-semibold text-red-400">Live Now</span>
+            {liveSession.title && (
+              <span className="text-sm text-red-300/70 truncate max-w-[160px]">— {liveSession.title}</span>
+            )}
+          </div>
+          <Radio className="w-4 h-4 text-red-400 flex-shrink-0" />
+        </button>
+      )}
 
       {/* ARTIST INFO */}
       <div className="px-6 pt-24 flex flex-col items-center text-center">
