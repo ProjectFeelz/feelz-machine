@@ -15,6 +15,7 @@ import TierGate from '../components/TierGate';
 import { TierBadge } from '../components/TierGate';
 import { useTier } from '../contexts/useTier';
 import ProfileCompletionBanner from '../components/ProfileCompletionBanner';
+import { useStreak } from '../hooks/useStreak';
 
 const TikTokIcon = ({ className }) => (
   <svg className={className} viewBox="0 0 24 24" fill="currentColor">
@@ -89,8 +90,39 @@ export default function ProfilePage() {
     rawIsAdmin, rawIsArtist, rawIsMaster, viewAs, setViewAs, deleteAccount,
   } = useAuth();
   const { tierSlug } = useTier();
+  const { streak, longestStreak, discoveryStreak } = useStreak(user);
+  const [streakRow, setStreakRow]       = useState(null);
+  const [freezing, setFreezing]         = useState(false);
+  const [freezeMsg, setFreezeMsg]       = useState('');
 
-  const [activeTab, setActiveTab]             = useState('profile');
+  useEffect(() => {
+    if (!user) return;
+    supabase.from('user_streaks').select('*').eq('user_id', user.id).maybeSingle()
+      .then(({ data }) => setStreakRow(data));
+  }, [user?.id]);
+
+  const useStreakFreeze = async () => {
+    if (!streakRow || !streakRow.freeze_available || freezing) return;
+    const thisMonth = new Date().toISOString().slice(0, 7);
+    if (streakRow.freeze_used_month === thisMonth) {
+      setFreezeMsg('You already used your freeze this month.');
+      return;
+    }
+    setFreezing(true);
+    // Extend last_active_date by 1 day so streak doesn't break
+    const newDate = new Date();
+    newDate.setDate(newDate.getDate() + 1);
+    const { error } = await supabase.from('user_streaks').update({
+      freeze_used_month: thisMonth,
+      freeze_available: false,
+      last_active_date: newDate.toISOString().split('T')[0],
+    }).eq('user_id', user.id);
+    if (!error) {
+      setStreakRow(prev => ({ ...prev, freeze_used_month: thisMonth, freeze_available: false }));
+      setFreezeMsg('Freeze used! Your streak is protected for today.');
+    }
+    setFreezing(false);
+  };
   const [editing, setEditing]                 = useState(false);
   const [saving, setSaving]                   = useState(false);
   const [avatarUploading, setAvatarUploading] = useState(false);
@@ -678,6 +710,51 @@ export default function ProfilePage() {
             </div>
           )}
         </>
+      )}
+
+      {/* ── Streak & Discovery card ── */}
+      {user && (streak > 0 || discoveryStreak > 0) && (
+        <div className="rounded-2xl border border-white/[0.06] p-4 mb-4" style={{ background: 'rgba(255,255,255,0.02)' }}>
+          <p className="text-[10px] uppercase tracking-wider text-white/25 font-semibold mb-3">Your Streaks</p>
+          <div className="flex space-x-3 mb-4">
+            {streak > 0 && (
+              <div className="flex-1 p-3 rounded-xl bg-orange-500/10 border border-orange-500/20 text-center">
+                <p className="text-2xl font-bold text-orange-400">{streak}</p>
+                <p className="text-[10px] text-orange-400/60 mt-0.5">Day streak 🔥</p>
+                <p className="text-[10px] text-white/20 mt-1">Best: {longestStreak}</p>
+              </div>
+            )}
+            {discoveryStreak > 0 && (
+              <div className="flex-1 p-3 rounded-xl bg-blue-500/10 border border-blue-500/20 text-center">
+                <p className="text-2xl font-bold text-blue-400">{discoveryStreak}</p>
+                <p className="text-[10px] text-blue-400/60 mt-0.5">Discovery streak 🧭</p>
+                <p className="text-[10px] text-white/20 mt-1">New artists daily</p>
+              </div>
+            )}
+          </div>
+
+          {/* Freeze */}
+          {streakRow && streak > 2 && (
+            <div>
+              {streakRow.freeze_available && streakRow.freeze_used_month !== new Date().toISOString().slice(0, 7) ? (
+                <button
+                  onClick={useStreakFreeze}
+                  disabled={freezing}
+                  className="w-full py-2.5 rounded-xl border border-blue-500/25 bg-blue-500/10 text-blue-400 text-xs font-semibold hover:bg-blue-500/20 transition disabled:opacity-40"
+                >
+                  {freezing ? 'Activating...' : '🧊 Use Streak Freeze (1 left this month)'}
+                </button>
+              ) : (
+                <p className="text-[11px] text-white/20 text-center py-1">
+                  {streakRow.freeze_used_month === new Date().toISOString().slice(0, 7)
+                    ? '🧊 Streak freeze used this month'
+                    : 'Keep your streak going — freeze available next month'}
+                </p>
+              )}
+              {freezeMsg && <p className="text-xs text-center mt-2 text-blue-400/70">{freezeMsg}</p>}
+            </div>
+          )}
+        </div>
       )}
 
       {/* ── Nav links ── */}

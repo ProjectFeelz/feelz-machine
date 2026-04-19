@@ -4,13 +4,14 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useStreak } from '../hooks/useStreak';
 import { useTier } from '../contexts/useTier';
+import { supabase } from '../supabaseClient';
 import CollabThread from '../components/CollabThread';
 import ProfileCompletionBanner from '../components/ProfileCompletionBanner';
 import {
   Shield, Users, BarChart3, Music, Flame,
   Upload, HeartHandshake, Bell, Palette, MessageCircle,
   ChevronRight, Crown, Zap, Star, LayoutDashboard,
-  User, LogOut, DollarSign, Megaphone, Radio, Trophy, Brain, Mic2,
+  User, LogOut, DollarSign, Megaphone, Radio, Trophy, Brain, Mic2, Loader,
 } from 'lucide-react';
 
 function LinkCard({ icon: Icon, label, description, path, color, onClick }) {
@@ -62,7 +63,47 @@ export default function HubPage() {
   const { streak } = useStreak(user);
   const [activeTab, setActiveTab] = useState('home');
 
-  const tierConfig = {
+  const [startingSession, setStartingSession] = useState(false);
+
+  const startLiveSession = async () => {
+    if (!artist || startingSession) return;
+    setStartingSession(true);
+    try {
+      // Check for existing live session
+      const { data: existing } = await supabase
+        .from('listening_sessions')
+        .select('id')
+        .eq('artist_id', artist.id)
+        .eq('status', 'live')
+        .maybeSingle();
+
+      if (existing) {
+        navigate(`/session/${existing.id}`);
+        return;
+      }
+
+      const title = `${artist.artist_name}'s Live Session`;
+      const { data: session, error } = await supabase
+        .from('listening_sessions')
+        .insert({ artist_id: artist.id, title, mode: 'audio', status: 'live' })
+        .select().single();
+
+      if (error) throw error;
+
+      // Notify followers with drop alerts
+      const { data: { session: authSession } } = await supabase.auth.getSession();
+      fetch('/.netlify/functions/notify-session-live', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: session.id, artist_id: artist.id, token: authSession?.access_token }),
+      }).catch(() => {});
+
+      navigate(`/session/${session.id}`);
+    } catch (err) {
+      console.error('Start session error:', err);
+    }
+    setStartingSession(false);
+  };
     premium: { label: 'Premium', color: 'text-yellow-400', bg: 'bg-yellow-500/10', icon: Crown },
     pro:     { label: 'Pro',     color: 'text-purple-400', bg: 'bg-purple-500/10', icon: Zap },
     free:    { label: 'Free',    color: 'text-white/30',   bg: 'bg-white/[0.04]',  icon: Star },
@@ -183,6 +224,25 @@ export default function HubPage() {
               <LinkCard icon={HeartHandshake} label="Collaborations"  description="Manage collab requests and credits"     onClick={() => setActiveTab('collabs')}   color="bg-cyan-500/20" />
               <LinkCard icon={BarChart3}      label="Analytics"       description="Track performance and stream data"      path="/dashboard?tab=analytics" color="bg-indigo-500/20" />
               <LinkCard icon={MessageCircle}  label="Chat Rooms"      description="Community conversations"                path="/chat"                    color="bg-violet-500/20" />
+              <button
+                onClick={startLiveSession}
+                disabled={startingSession}
+                className="w-full flex items-center space-x-4 p-4 bg-red-500/10 rounded-xl border border-red-500/20 hover:bg-red-500/15 active:bg-red-500/20 transition text-left group disabled:opacity-50"
+              >
+                <div className="w-11 h-11 rounded-lg bg-red-500/20 flex items-center justify-center flex-shrink-0">
+                  {startingSession
+                    ? <Loader className="w-5 h-5 text-red-400 animate-spin" />
+                    : <Radio className="w-5 h-5 text-red-400" />}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-white">Go Live</p>
+                  <p className="text-[11px] text-white/30 mt-0.5">Stream music or plug in a YouTube live for your followers</p>
+                </div>
+                <div className="flex items-center space-x-1.5 flex-shrink-0">
+                  <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                  <span className="text-xs font-semibold text-red-400">LIVE</span>
+                </div>
+              </button>
             </Section>
           )}
 

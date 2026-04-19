@@ -17,6 +17,7 @@ import FollowingPage from './pages/FollowingPage';
 import PlaylistsPage from './pages/PlaylistsPage';
 import PlaylistDetailPage from './pages/PlaylistDetailPage';
 import PlaylistJoinPage from './pages/PlaylistJoinPage';
+import ListeningSessionPage from './pages/ListeningSessionPage';
 import ProfilePage from './pages/ProfilePage';
 import FeedPage from './pages/FeedPage';
 import ArtistDashboard from './pages/ArtistDashboard';
@@ -94,6 +95,7 @@ export default function AppRouter() {
               <Route path="/upgrade" element={<TierUpgradePage />} />
               <Route path="/chat/:roomId" element={<ChatRoomView />} />
               <Route path="/competition/:competitionId" element={<CompetitionRoomPage />} />
+              <Route path="/session/:sessionId" element={<ListeningSessionPage />} />
 
               {/* Legal pages — fixed titles */}
               <Route path="/privacy-policy" element={

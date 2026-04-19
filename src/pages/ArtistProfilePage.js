@@ -19,6 +19,9 @@ import ShareCard from '../components/ShareCard';
 import { usePullToRefresh } from '../hooks/usePullToRefresh';
 import PullToRefreshIndicator from '../components/PullToRefreshIndicator';
 import { VoiceMemoCard } from '../components/VoiceMemo';
+import TipButton from '../components/TipButton';
+import DropAlertButton from '../components/DropAlertButton';
+import ArtistGuestbook from '../components/ArtistGuestbook';
 
 const PAYPAL_CLIENT_ID = process.env.REACT_APP_PAYPAL_CLIENT_ID;
 const EMOJI_REACTIONS = ['🔥', '❤️', '👏', '😮', '😂', '🎵'];
@@ -920,7 +923,7 @@ export default function ArtistProfilePage() {
           <span className="text-sm" style={{ color: `${textColor}80` }}>{tracks.length} track{tracks.length !== 1 ? 's' : ''}</span>
           <span className="text-sm" style={{ color: `${textColor}80` }}>{formatNumber(artist.total_streams)} streams</span>
         </div>
-        <div className="flex items-center justify-center space-x-3 mb-6">
+        <div className="flex items-center justify-center space-x-3 mb-4 flex-wrap gap-y-2">
           <button onClick={handleFollow}
             className="flex items-center space-x-2 px-5 py-2.5 rounded-full text-sm font-semibold transition-all active:scale-95"
             style={{
@@ -931,6 +934,12 @@ export default function ArtistProfilePage() {
             {isFollowing ? <UserCheck className="w-4 h-4" /> : <UserPlus className="w-4 h-4" />}
             <span>{isFollowing ? 'Following' : 'Follow'}</span>
           </button>
+          {user && user.id !== artist?.user_id && (
+            <>
+              <TipButton artist={artist} />
+              <DropAlertButton artistId={artist?.id} textColor={textColor} />
+            </>
+          )}
           {tracks.length > 0 && (
             <>
               <button onClick={() => handlePlayTrack(tracks[0])}
@@ -1451,6 +1460,8 @@ export default function ArtistProfilePage() {
           </p>
         </div>
       )}
+
+      <ArtistGuestbook artistId={artist?.id} textColor={textColor} accentColor={accentColor} />
 
       <div className="px-6 pt-8 pb-4 text-center">
         <p className="text-[11px]" style={{ color: `${textColor}20` }}>

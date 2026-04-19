@@ -11,6 +11,7 @@ import { usePullToRefresh } from '../hooks/usePullToRefresh';
 import PullToRefreshIndicator from '../components/PullToRefreshIndicator';
 import { HomeSkeleton } from '../components/SkeletonLoader';
 import WrappedCard from '../components/WrappedCard';
+import OnThisDay from '../components/OnThisDay';
 
 function getArtistLimit(totalArtists) {
   if (totalArtists < 10) return 3;
@@ -543,6 +544,9 @@ export default function HomePage() {
           <WrappedCard notification={wrappedNotif} compact />
         </div>
       )}
+
+      {/* On This Day — resurface a track from exactly 1 year ago */}
+      <OnThisDay user={user} />
 
       {/* Active Competitions banner */}
       {activeCompetitions.length > 0 && (

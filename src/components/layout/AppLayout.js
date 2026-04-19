@@ -13,6 +13,7 @@ import { OfflineBanner } from '../../hooks/useOffline';
 import ErrorBoundary from '../ErrorBoundary';
 import AppTour, { useTourState } from '../AppTour';
 import { useStreak } from '../../hooks/useStreak';
+import InstallPrompt from '../InstallPrompt';
 
 const NAV_HEIGHT         = 64;
 const MINI_PLAYER_HEIGHT = 64;
@@ -186,6 +187,7 @@ export default function AppLayout() {
       {showTour && splashDone && !loading && hasProfile && (
   <AppTour isArtist={isArtist} onDone={dismissTour} />
 )}
+      <InstallPrompt />
     </div>
   );
 }

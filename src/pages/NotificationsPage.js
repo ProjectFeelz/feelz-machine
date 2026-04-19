@@ -22,6 +22,7 @@ const TYPE_CONFIG = {
   milestone_500:    { icon: TrendingUp,    color: 'text-yellow-400', bg: 'bg-yellow-500/10', label: 'Milestone' },
   milestone_1k:     { icon: TrendingUp,    color: 'text-orange-400', bg: 'bg-orange-500/10', label: 'Milestone' },
   milestone_10k:    { icon: TrendingUp,    color: 'text-orange-400', bg: 'bg-orange-500/10', label: 'Milestone' },
+  milestone_stream: { icon: TrendingUp,    color: 'text-orange-400', bg: 'bg-orange-500/10', label: 'Milestone' },
   download:         { icon: Download,      color: 'text-green-400',  bg: 'bg-green-500/10',  label: 'Download' },
   announcement:     { icon: Megaphone,     color: 'text-yellow-400', bg: 'bg-yellow-500/10', label: 'Announcement' },
   new_stream:       { icon: Radio,         color: 'text-cyan-400',   bg: 'bg-cyan-500/10',   label: 'New Stream' },
@@ -35,6 +36,10 @@ const TYPE_CONFIG = {
   monthly_wrapped:  { icon: TrendingUp,    color: 'text-pink-400',   bg: 'bg-pink-500/10',   label: 'Monthly Wrapped' },
   top_supporter:    { icon: Heart,         color: 'text-orange-400', bg: 'bg-orange-500/10', label: 'Top Supporter' },
   streak:           { icon: Bell,          color: 'text-yellow-400', bg: 'bg-yellow-500/10', label: 'Streak' },
+  session_live:     { icon: Radio,         color: 'text-red-400',    bg: 'bg-red-500/10',    label: 'Live Session' },
+  weekly_report:    { icon: TrendingUp,    color: 'text-cyan-400',   bg: 'bg-cyan-500/10',   label: 'Weekly Report' },
+  first_listener:   { icon: Heart,         color: 'text-yellow-400', bg: 'bg-yellow-500/10', label: 'First! 🎯' },
+  tip:              { icon: Heart,         color: 'text-pink-400',   bg: 'bg-pink-500/10',   label: 'Tip Received' },
 };
 
 const FILTERS = [
@@ -78,8 +83,6 @@ export default function NotificationsPage() {
     if (!user) return;
     setPageLoading(true);
     try {
-      // FIX: Simplified query — removed broken FK joins (from_artist, track).
-      // Notifications store data in metadata instead — no FK join needed.
       let query = supabase
         .from('notifications')
         .select('*')
@@ -94,7 +97,6 @@ export default function NotificationsPage() {
 
       const { data, error } = await query;
       if (error) {
-        // notifications table may not exist yet — fail gracefully
         if (error.code === '42P01') {
           console.warn('notifications table does not exist yet');
           setAllNotifs([]);
@@ -136,7 +138,11 @@ export default function NotificationsPage() {
     const type = notif.type;
     const meta = notif.metadata || {};
 
-    // Stream notification — go to the artist's analytics dashboard
+    if (type === 'session_live' && meta.session_id) {
+      navigate(`/session/${meta.session_id}`);
+      return;
+    }
+
     if (type === 'new_stream') {
       if (artist) {
         navigate('/dashboard?tab=analytics');
@@ -152,7 +158,7 @@ export default function NotificationsPage() {
       navigate(`/feed?post=${meta.post_id}`);
       return;
     }
-    // New track notification for listeners — go to artist page or track
+
     if (type === 'new_post' && !meta.post_id) {
       if (notif.track_id) {
         navigate(notif.from_artist_id
@@ -163,90 +169,91 @@ export default function NotificationsPage() {
       }
       return;
     }
+
     if (type === 'mention' && meta.post_id) {
       navigate(`/feed?post=${meta.post_id}`);
       return;
     }
+
     if (type === 'track_commented' && meta.post_id) {
       navigate(`/feed?post=${meta.post_id}`);
       return;
     }
 
-    // Track liked with post_like metadata -> feed
     if (meta.post_like && meta.post_id) {
       navigate(`/feed?post=${meta.post_id}`);
       return;
     }
 
-    // Playlist add -> library (artist who received the notif goes to track, listener goes to playlists)
     if (type === 'playlist_add' || meta.playlist_add) {
       navigate('/library/playlists');
       return;
     }
 
-    // Track liked -> artist page
     if (type === 'track_liked' && meta.artist_slug) {
       navigate('/artist/' + meta.artist_slug);
       return;
     }
 
-    // New follower -> their profile (stored in metadata)
     if (type === 'new_follower' && meta.from_artist_slug) {
       navigate('/artist/' + meta.from_artist_slug);
       return;
     }
 
-    // New track drop -> go to artist page (both artist and listener)
     if (type === 'new_track') {
       const slug = meta.artist_slug;
       navigate(slug ? `/artist/${slug}` : '/browse');
       return;
     }
 
-    // Tier granted -> profile
     if (type === 'tier_granted') {
       navigate('/profile');
       return;
     }
 
-    // Download notification -> dashboard (artists) or library (listeners)
     if (type === 'download') {
       navigate(artist ? '/dashboard?tab=analytics' : '/library');
       return;
     }
 
-    // Collab notifications -> dashboard (artists only)
+    if (type === 'weekly_report') {
+      navigate('/dashboard?tab=analytics');
+      return;
+    }
+
+    if (type === 'tip') {
+      navigate('/dashboard?tab=analytics');
+      return;
+    }
+
+    if (type === 'first_listener') {
+      if (meta.track_id) navigate(`/track/${meta.track_id}`);
+      return;
+    }
+
     if (type?.startsWith('collab_')) {
       navigate(artist ? '/dashboard?tab=collabs' : '/');
       return;
     }
 
-    // Milestone -> dashboard (artists) or home (listeners)
     if (type?.startsWith('milestone_')) {
       if (artist) {
         navigate('/dashboard?tab=analytics');
       } else {
-        // Listener milestone — just stay on notifications, nothing to navigate to
         return;
       }
       return;
     }
 
-    // Competition winner -> competition room
     if (type === 'competition_winner' && meta.competition_id) {
       navigate(`/competition/${meta.competition_id}`);
       return;
     }
 
-    // AI engagement drip -> artists go to community, listeners to browse
     if (type === 'engagement') {
       navigate(artist ? '/community' : '/browse');
       return;
     }
-
-    // Announcement -> intentionally stays on page (video/content renders inline in the card)
-    // If the announcement has an external URL in metadata, nothing to navigate to —
-    // the card itself handles rendering the YouTube embed.
   };
 
   if (!user) {
@@ -265,6 +272,7 @@ export default function NotificationsPage() {
           <meta name="description" content="Your Feelz Machine notifications — followers, collabs, likes and milestones." />
           <link rel="canonical" href="https://www.feelzmachine.com/notifications" />
         </Helmet>
+
         {/* Header */}
         <div className="flex items-center justify-between mb-6 sticky top-0 z-20 bg-black/90 backdrop-blur-sm md:relative md:top-auto md:bg-transparent md:backdrop-blur-none pt-2 pb-2 -mx-4 px-4">
           <div className="flex items-center space-x-3">
@@ -350,7 +358,6 @@ export default function NotificationsPage() {
                           !notif.read ? 'bg-white/[0.02] border border-white/[0.06]' : ''
                         }`}
                       >
-                        {/* Avatar: use from_artist_image from metadata if available */}
                         {meta.from_artist_image ? (
                           <div className="relative flex-shrink-0">
                             <img src={meta.from_artist_image} alt="" className="w-10 h-10 rounded-full object-cover" />

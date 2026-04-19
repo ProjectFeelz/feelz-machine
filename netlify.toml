@@ -17,6 +17,10 @@
   name = "daily-spotlight"
   schedule = "5 0 * * *"
 
+[[scheduled_functions]]
+  name = "weekly-artist-report"
+  schedule = "0 8 * * 1"
+
       [[redirects]]
         from = "/.well-known/assetlinks.json"
           to = "/.well-known/assetlinks.json"
