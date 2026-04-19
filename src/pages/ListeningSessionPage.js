@@ -19,7 +19,7 @@ import { useAuth } from '../contexts/AuthContext';
 import {
   Play, Pause, SkipForward, X, Users, Music, Radio,
   Plus, Search, Loader, Send, Youtube, Mic, MicOff,
-  ChevronDown, Heart, Flame, Star, Zap
+  ChevronDown, Heart, Flame, Star, Zap, Trash2
 } from 'lucide-react';
 
 const YOUTUBE_REGEX = /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:watch\?v=|live\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/;
