@@ -62,8 +62,15 @@ export default function HubPage() {
   const { tierSlug, tierLoading } = useTier();
   const { streak } = useStreak(user);
   const [activeTab, setActiveTab] = useState('home');
-
   const [startingSession, setStartingSession] = useState(false);
+
+  const tierConfig = {
+    premium: { label: 'Premium', color: 'text-yellow-400', bg: 'bg-yellow-500/10', icon: Crown },
+    pro:     { label: 'Pro',     color: 'text-purple-400', bg: 'bg-purple-500/10', icon: Zap },
+    free:    { label: 'Free',    color: 'text-white/30',   bg: 'bg-white/[0.04]',  icon: Star },
+  };
+  const tier     = tierConfig[tierSlug] || tierConfig.free;
+  const TierIcon = tier.icon;
 
   const startLiveSession = async () => {
     if (!artist || startingSession) return;
@@ -104,12 +111,6 @@ export default function HubPage() {
     }
     setStartingSession(false);
   };
-    premium: { label: 'Premium', color: 'text-yellow-400', bg: 'bg-yellow-500/10', icon: Crown },
-    pro:     { label: 'Pro',     color: 'text-purple-400', bg: 'bg-purple-500/10', icon: Zap },
-    free:    { label: 'Free',    color: 'text-white/30',   bg: 'bg-white/[0.04]',  icon: Star },
-  };
-  const tier     = tierConfig[tierSlug] || tierConfig.free;
-  const TierIcon = tier.icon;
 
   if (!user) {
     return (
@@ -175,8 +176,6 @@ export default function HubPage() {
       {/* Home tab */}
       {(!isArtist || activeTab === 'home') && (
         <>
-          {/* Profile completion banner — artists only */}
-          {/* Banner "Update profile" navigates to /profile (Profile tab) for artists */}
           {isArtist && <ProfileCompletionBanner />}
 
           {/* Tier card */}
@@ -201,7 +200,7 @@ export default function HubPage() {
           {/* Admin */}
           {isAdmin && (
             <Section title="Admin" icon={Shield}>
-              <LinkCard icon={Shield}    label="Admin Panel"        description="Broadcast · Analytics · Moderation · Users"  path="/admin"              color="bg-yellow-500/20" />
+              <LinkCard icon={Shield} label="Admin Panel" description="Broadcast · Analytics · Moderation · Users" path="/admin" color="bg-yellow-500/20" />
             </Section>
           )}
 
@@ -219,11 +218,11 @@ export default function HubPage() {
           {/* Artist Tools */}
           {isArtist && (
             <Section title="Artist Tools" icon={Music}>
-              <LinkCard icon={Upload}         label="Upload Track"    description="Upload and publish new music"           path="/dashboard?tab=upload"    color="bg-green-500/20" />
-              <LinkCard icon={Radio}          label="Collab Radar"    description="Find artists who vibe with your sound"  onClick={() => navigate('/collab-radar')} color="bg-purple-500/20" />
-              <LinkCard icon={HeartHandshake} label="Collaborations"  description="Manage collab requests and credits"     onClick={() => setActiveTab('collabs')}   color="bg-cyan-500/20" />
-              <LinkCard icon={BarChart3}      label="Analytics"       description="Track performance and stream data"      path="/dashboard?tab=analytics" color="bg-indigo-500/20" />
-              <LinkCard icon={MessageCircle}  label="Chat Rooms"      description="Community conversations"                path="/chat"                    color="bg-violet-500/20" />
+              <LinkCard icon={Upload}         label="Upload Track"   description="Upload and publish new music"           path="/dashboard?tab=upload"    color="bg-green-500/20" />
+              <LinkCard icon={Radio}          label="Collab Radar"   description="Find artists who vibe with your sound"  onClick={() => navigate('/collab-radar')} color="bg-purple-500/20" />
+              <LinkCard icon={HeartHandshake} label="Collaborations" description="Manage collab requests and credits"     onClick={() => setActiveTab('collabs')}   color="bg-cyan-500/20" />
+              <LinkCard icon={BarChart3}      label="Analytics"      description="Track performance and stream data"      path="/dashboard?tab=analytics" color="bg-indigo-500/20" />
+              <LinkCard icon={MessageCircle}  label="Chat Rooms"     description="Community conversations"                path="/chat"                    color="bg-violet-500/20" />
               <button
                 onClick={startLiveSession}
                 disabled={startingSession}
@@ -248,8 +247,8 @@ export default function HubPage() {
 
           {/* Account */}
           <Section title="Account" icon={User}>
-            <LinkCard icon={Palette}    label="Profile & Appearance" description="Edit bio, socials, and theme"     path="/profile"       color="bg-pink-500/20" />
-            <LinkCard icon={Bell}       label="Notifications"         description="Collabs, followers, milestones"   path="/notifications"  color="bg-orange-500/20" />
+            <LinkCard icon={Palette}    label="Profile & Appearance" description="Edit bio, socials, and theme"   path="/profile"      color="bg-pink-500/20" />
+            <LinkCard icon={Bell}       label="Notifications"         description="Collabs, followers, milestones" path="/notifications" color="bg-orange-500/20" />
             {isArtist && (
               <LinkCard icon={DollarSign} label="Payments" description="PayPal settings and earnings" path="/profile" color="bg-emerald-500/20" />
             )}
