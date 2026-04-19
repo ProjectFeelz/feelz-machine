@@ -66,11 +66,17 @@ export default function HubPage() {
   const [showLiveModal, setShowLiveModal]       = useState(false);
   const [liveTitle, setLiveTitle]               = useState('');
   const [liveMode, setLiveMode]                 = useState('audio'); // 'audio' | 'youtube'
+  const [liveYoutubeUrl, setLiveYoutubeUrl]     = useState('');
+  const [scheduleMode, setScheduleMode]         = useState(false); // toggle schedule vs go live now
+  const [scheduledAt, setScheduledAt]           = useState('');    // ISO datetime string
 
   const openLiveModal = () => {
     if (!artist) return;
     setLiveTitle(`${artist.artist_name}'s Live Session`);
     setLiveMode('audio');
+    setLiveYoutubeUrl('');
+    setScheduleMode(false);
+    setScheduledAt('');
     setShowLiveModal(true);
   };
 
@@ -93,9 +99,16 @@ export default function HubPage() {
       }
 
       const title = liveTitle.trim() || `${artist.artist_name}'s Live Session`;
+      const isScheduled = scheduleMode && scheduledAt;
+      const insertData = {
+        artist_id: artist.id, title, mode: liveMode,
+        status: isScheduled ? 'scheduled' : 'live',
+        ...(isScheduled ? { scheduled_at: new Date(scheduledAt).toISOString() } : {}),
+        ...(liveMode === 'youtube' && liveYoutubeUrl ? { youtube_url: liveYoutubeUrl } : {}),
+      };
       const { data: session, error } = await supabase
         .from('listening_sessions')
-        .insert({ artist_id: artist.id, title, mode: liveMode, status: 'live' })
+        .insert(insertData)
         .select().single();
 
       if (error) throw error;
@@ -109,7 +122,9 @@ export default function HubPage() {
       }).catch(() => {});
 
       setShowLiveModal(false);
-      navigate(`/session/${session.id}`);
+      if (!scheduleMode || !scheduledAt) {
+        navigate(`/session/${session.id}`);
+      }
     } catch (err) {
       console.error('Start session error:', err);
     }
@@ -326,19 +341,54 @@ export default function HubPage() {
               <p className="text-[11px] text-white/25 pt-0.5">
                 {liveMode === 'audio'
                   ? 'Queue tracks from your library — listeners hear everything in sync.'
-                  : 'Paste a YouTube live URL after you go live to embed your stream.'}
+                  : 'Optionally paste a YouTube live URL now, or add it once inside the session.'}
               </p>
             </div>
 
-            {/* Go Live button */}
+            {/* YouTube URL input (optional, shown when YouTube mode) */}
+            {liveMode === 'youtube' && (
+              <div className="space-y-1.5">
+                <label className="text-xs text-white/40 font-medium uppercase tracking-wider">YouTube Live URL (optional)</label>
+                <input
+                  value={liveYoutubeUrl}
+                  onChange={e => setLiveYoutubeUrl(e.target.value)}
+                  placeholder="https://youtube.com/live/..."
+                  className="w-full px-3 py-2.5 bg-white/[0.06] border border-white/[0.08] rounded-xl text-sm text-white placeholder-white/25 focus:outline-none focus:border-red-500/40"
+                />
+              </div>
+            )}
+
+            {/* Schedule toggle */}
+            <div className="space-y-2">
+              <button
+                onClick={() => setScheduleMode(v => !v)}
+                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl border text-sm transition ${scheduleMode ? 'bg-purple-500/15 border-purple-500/30 text-purple-300' : 'bg-white/[0.04] border-white/[0.06] text-white/40 hover:bg-white/[0.07]'}`}
+              >
+                <span>📅 Schedule for later</span>
+                <span className="text-xs">{scheduleMode ? 'On' : 'Off'}</span>
+              </button>
+              {scheduleMode && (
+                <input
+                  type="datetime-local"
+                  value={scheduledAt}
+                  onChange={e => setScheduledAt(e.target.value)}
+                  min={new Date().toISOString().slice(0,16)}
+                  className="w-full px-3 py-2.5 bg-white/[0.06] border border-white/[0.08] rounded-xl text-sm text-white focus:outline-none focus:border-purple-500/40"
+                />
+              )}
+            </div>
+
+            {/* Go Live / Schedule button */}
             <button
               onClick={startLiveSession}
-              disabled={startingSession || !liveTitle.trim()}
-              className="w-full py-3 rounded-xl bg-red-500 hover:bg-red-400 disabled:opacity-40 transition text-white font-semibold text-sm flex items-center justify-center space-x-2"
+              disabled={startingSession || !liveTitle.trim() || (scheduleMode && !scheduledAt)}
+              className={`w-full py-3 rounded-xl disabled:opacity-40 transition text-white font-semibold text-sm flex items-center justify-center space-x-2 ${scheduleMode ? 'bg-purple-500 hover:bg-purple-400' : 'bg-red-500 hover:bg-red-400'}`}
             >
               {startingSession
-                ? <><Loader className="w-4 h-4 animate-spin" /><span>Starting…</span></>
-                : <><Radio className="w-4 h-4" /><span>Go Live</span></>}
+                ? <><Loader className="w-4 h-4 animate-spin" /><span>{scheduleMode ? 'Scheduling…' : 'Starting…'}</span></>
+                : scheduleMode
+                  ? <><span>📅</span><span>Schedule Stream</span></>
+                  : <><Radio className="w-4 h-4" /><span>Go Live</span></>}
             </button>
           </div>
         </div>

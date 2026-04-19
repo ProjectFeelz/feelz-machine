@@ -317,6 +317,14 @@ export default function ListeningSessionPage() {
     }
   };
 
+  const removeFromQueue = async (queueItem) => {
+    // Don't allow removing the currently playing track
+    if (queueItem.track_id === session.current_track_id) return;
+    await supabase.from('listening_session_queue').delete().eq('id', queueItem.id);
+    setQueue(prev => prev.filter(q => q.id !== queueItem.id));
+    queueRef.current = queueRef.current.filter(q => q.id !== queueItem.id);
+  };
+
   const setYouTube = async () => {
     const ytId = extractYouTubeId(youtubeInput);
     if (!ytId) return;
@@ -509,7 +517,12 @@ export default function ListeningSessionPage() {
                       <div key={q.id} className={`flex items-center space-x-2 p-2 rounded-lg ${q.track_id === session.current_track_id ? 'bg-white/[0.08]' : ''}`}>
                         <span className="text-xs text-white/20 w-4">{i + 1}</span>
                         <p className="text-xs text-white truncate flex-1">{q.tracks?.title}</p>
-                        {q.track_id === session.current_track_id && <span className="text-[10px] text-green-400">playing</span>}
+                        {q.track_id === session.current_track_id
+                          ? <span className="text-[10px] text-green-400">playing</span>
+                          : <button onClick={() => removeFromQueue(q)} className="w-6 h-6 flex items-center justify-center rounded hover:bg-red-500/20 transition flex-shrink-0">
+                              <Trash2 className="w-3 h-3 text-red-400/50 hover:text-red-400" />
+                            </button>
+                        }
                       </div>
                     ))}
                   </div>

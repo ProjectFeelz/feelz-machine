@@ -96,7 +96,7 @@ export default function MiniPlayer() {
   return (
     <div
       className="md:hidden fixed left-0 right-0 z-50"
-      style={{ bottom: '56px' }}
+      style={{ bottom: 'calc(56px + var(--safe-area-bottom, 0px))' }}
     >
       {/* End-of-queue: More like this */}
       {showRadioEnd && radioSuggestions.length > 0 && (

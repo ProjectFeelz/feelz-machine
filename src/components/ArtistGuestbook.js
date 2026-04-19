@@ -119,7 +119,7 @@ export default function ArtistGuestbook({ artistId, textColor = '#ffffff', accen
   const visible = showAll ? entries : entries.slice(0, 5);
 
   return (
-    <div className="mb-8 px-6">
+    <div className="mb-8 mx-4 px-4 py-5 rounded-2xl" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}>
       <div className="flex items-center space-x-2 mb-4">
         <MessageSquare className="w-4 h-4" style={{ color: `${textColor}40` }} />
         <h2 className="text-base font-semibold" style={{ color: textColor }}>Listener Wall</h2>
@@ -130,7 +130,7 @@ export default function ArtistGuestbook({ artistId, textColor = '#ffffff', accen
         )}
       </div>
 
-      {user && (
+      {user && !isOwner && (
         <div className="mb-4 space-y-2">
           {/* Emoji quick-pick */}
           <div className="flex space-x-1.5">

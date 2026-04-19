@@ -8,11 +8,11 @@ import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import { usePlayer } from '../contexts/PlayerContext';
 import {
-  ArrowLeft, Play, Pause, Share2, UserPlus, UserCheck,
+  ArrowLeft, Calendar, Play, Pause, Share2, UserPlus, UserCheck,
   Instagram, Twitter, Youtube, Globe, Music,
   Loader, Verified, Download, Heart, ListMusic, Check,
   MoreHorizontal, DollarSign, MessageCircle, ChevronDown,
-  ChevronUp, Send, Trash2, Shuffle, Radio
+  ChevronUp, Send, Trash2, Shuffle, Radio, X
 } from 'lucide-react';
 import { ArtistProfileSkeleton } from '../components/SkeletonLoader';
 import ShareCard from '../components/ShareCard';
@@ -387,6 +387,7 @@ export default function ArtistProfilePage() {
   const [weeklyDiscoveries, setWeeklyDiscoveries] = useState(0);
   const [purchasedTracks, setPurchasedTracks] = useState({});
   const [liveSession, setLiveSession] = useState(null);
+  const [scheduledSession, setScheduledSession] = useState(null);
 
   const checkExistingPurchases = async () => {
     if (!user || !tracks.length) return;
@@ -419,17 +420,20 @@ export default function ArtistProfilePage() {
     if (!artist?.id) return;
     let cancelled = false;
     const check = async () => {
-      const { data } = await supabase
-        .from('listening_sessions')
-        .select('id, title')
-        .eq('artist_id', artist.id)
-        .eq('status', 'live')
-        .limit(1)
-        .maybeSingle();
-      if (!cancelled) setLiveSession(data || null);
+      const [{ data: live }, { data: scheduled }] = await Promise.all([
+        supabase.from('listening_sessions').select('id, title')
+          .eq('artist_id', artist.id).eq('status', 'live').limit(1).maybeSingle(),
+        supabase.from('listening_sessions').select('id, title, scheduled_at')
+          .eq('artist_id', artist.id).eq('status', 'scheduled')
+          .gt('scheduled_at', new Date().toISOString())
+          .order('scheduled_at', { ascending: true }).limit(1).maybeSingle(),
+      ]);
+      if (!cancelled) {
+        setLiveSession(live || null);
+        setScheduledSession(scheduled || null);
+      }
     };
     check();
-    // Re-check every 30 s so the banner appears/disappears without a full reload
     const interval = setInterval(check, 30_000);
     return () => { cancelled = true; clearInterval(interval); };
   }, [artist?.id]);
@@ -898,14 +902,14 @@ export default function ArtistProfilePage() {
           <img src={theme.background_image_url} alt="" className="absolute inset-0 w-full h-full object-cover opacity-30" />
         )}
         <div className="absolute inset-0" style={{ background: `linear-gradient(to bottom, transparent 20%, ${bgColor} 100%)` }} />
-        <div className="fixed top-0 left-0 right-0 flex items-center justify-center p-5 z-50">
+        <div className="fixed top-0 left-0 right-0 flex items-end justify-center px-5 z-50" style={{ paddingTop: 'max(env(safe-area-inset-top), 44px)', paddingBottom: '10px' }}>
           <button onClick={() => navigate(-1)}
-            className="absolute left-5 w-9 h-9 flex items-center justify-center rounded-full backdrop-blur-md"
-            style={{ backgroundColor: `${bgColor}80` }}>
+            className="absolute left-5 w-10 h-10 flex items-center justify-center rounded-full backdrop-blur-md"
+            style={{ backgroundColor: `${bgColor}80`, bottom: '10px' }}>
             <ArrowLeft className="w-5 h-5" style={{ color: textColor }} />
           </button>
           <button onClick={handleShare}
-            className="w-9 h-9 flex items-center justify-center rounded-full backdrop-blur-md"
+            className="w-10 h-10 flex items-center justify-center rounded-full backdrop-blur-md"
             style={{ backgroundColor: `${bgColor}80` }}>
             {copied
               ? <span className="text-xs" style={{ color: primaryColor }}>Copied!</span>
@@ -1010,22 +1014,58 @@ export default function ArtistProfilePage() {
 
       {/* 🔴 LIVE NOW BANNER — rendered here, below the profile image */}
       {liveSession && (
-        <button
-          onClick={() => navigate(`/session/${liveSession.id}`)}
-          className="mx-6 mb-4 w-[calc(100%-3rem)] flex items-center justify-between px-4 py-3 rounded-2xl border border-red-500/30 bg-red-500/10 hover:bg-red-500/20 transition active:scale-[0.98]"
-        >
+        <div className="mx-6 mb-4 w-[calc(100%-3rem)] flex items-center space-x-2">
+          <button
+            onClick={() => navigate(`/session/${liveSession.id}`)}
+            className="flex-1 flex items-center justify-between px-4 py-3 rounded-2xl border border-red-500/30 bg-red-500/10 hover:bg-red-500/20 transition active:scale-[0.98]"
+          >
+            <div className="flex items-center space-x-2.5">
+              <span className="relative flex h-2.5 w-2.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500" />
+              </span>
+              <span className="text-sm font-semibold text-red-400">Live Now</span>
+              {liveSession.title && (
+                <span className="text-sm text-red-300/70 truncate max-w-[120px]">— {liveSession.title}</span>
+              )}
+            </div>
+            <Radio className="w-4 h-4 text-red-400 flex-shrink-0" />
+          </button>
+          {isProfileOwner && (
+            <button
+              onClick={async () => {
+                if (!window.confirm('End this live session?')) return;
+                await supabase.from('listening_sessions')
+                  .update({ status: 'ended', ended_at: new Date().toISOString() })
+                  .eq('id', liveSession.id);
+                setLiveSession(null);
+              }}
+              title="End session"
+              className="w-10 h-10 flex items-center justify-center rounded-2xl border border-red-500/30 bg-red-500/10 hover:bg-red-500/25 transition flex-shrink-0"
+            >
+              <X className="w-4 h-4 text-red-400" />
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* 📅 SCHEDULED STREAM BANNER */}
+      {!liveSession && scheduledSession?.scheduled_at && (
+        <div className="mx-6 mb-4 w-[calc(100%-3rem)] flex items-center justify-between px-4 py-3 rounded-2xl border border-purple-500/25 bg-purple-500/8">
           <div className="flex items-center space-x-2.5">
-            <span className="relative flex h-2.5 w-2.5">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
-              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500" />
-            </span>
-            <span className="text-sm font-semibold text-red-400">Live Now</span>
-            {liveSession.title && (
-              <span className="text-sm text-red-300/70 truncate max-w-[160px]">— {liveSession.title}</span>
-            )}
+            <Calendar className="w-4 h-4 text-purple-400 flex-shrink-0" />
+            <div>
+              <span className="text-sm font-semibold text-purple-300">Next Live Stream</span>
+              <p className="text-xs text-purple-300/50 mt-0.5">
+                {new Date(scheduledSession.scheduled_at).toLocaleDateString('en-US', {
+                  weekday: 'short', month: 'short', day: 'numeric',
+                  hour: '2-digit', minute: '2-digit',
+                })}
+                {scheduledSession.title && ` · ${scheduledSession.title}`}
+              </p>
+            </div>
           </div>
-          <Radio className="w-4 h-4 text-red-400 flex-shrink-0" />
-        </button>
+        </div>
       )}
 
       {thoughts.length > 0 && (

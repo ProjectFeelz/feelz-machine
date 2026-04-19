@@ -2,32 +2,29 @@ import { useState, useRef, useCallback } from 'react';
 
 /**
  * usePullToRefresh
- *
  * Detects downward pull gesture at the top of a scrollable container
  * and fires an onRefresh callback.
  *
- * Usage:
- *   const { pullProps, isPulling, pullProgress, isRefreshing } = usePullToRefresh(onRefresh);
- *   <div {...pullProps}>...</div>
- *
- * pullProgress: 0–1, use to animate the indicator
- * isPulling: true while finger is dragging
- * isRefreshing: true while onRefresh promise is pending
+ * iOS: higher threshold (110px) and requires scroll to be truly at top
+ * Android: moderate threshold (85px)
  */
 
-const THRESHOLD    = 70;  // px to pull before triggering
-const MAX_PULL     = 100; // max visual pull distance
+const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+
+const THRESHOLD  = isIOS ? 110 : 85;   // px before triggering
+const MAX_PULL   = 130;                  // max visual pull distance
+const RESISTANCE = isIOS ? 0.38 : 0.48; // lower = harder to pull
 
 export function usePullToRefresh(onRefresh) {
-  const [pullY, setPullY]           = useState(0);
+  const [pullY, setPullY]               = useState(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const startY    = useRef(null);
   const pulling   = useRef(false);
 
   const onTouchStart = useCallback((e) => {
-    // Only activate at the very top of the scroll container
     const el = e.currentTarget;
-    if (el.scrollTop > 0) return;
+    // On iOS, scrollTop can be negative during bounce — treat <= 1 as top
+    if (el.scrollTop > 1) return;
     startY.current = e.touches[0].clientY;
     pulling.current = false;
   }, []);
@@ -37,10 +34,9 @@ export function usePullToRefresh(onRefresh) {
     const delta = e.touches[0].clientY - startY.current;
     if (delta <= 0) { setPullY(0); pulling.current = false; return; }
     pulling.current = true;
-    // Ease the pull — diminishing returns past threshold
-    const eased = Math.min(delta * 0.5, MAX_PULL);
+    const eased = Math.min(delta * RESISTANCE, MAX_PULL);
     setPullY(eased);
-    if (eased > 10) e.preventDefault(); // stop page scroll while pulling
+    if (eased > 8) e.preventDefault();
   }, [isRefreshing]);
 
   const onTouchEnd = useCallback(async () => {
@@ -48,7 +44,7 @@ export function usePullToRefresh(onRefresh) {
     startY.current = null;
     if (pullY >= THRESHOLD) {
       setIsRefreshing(true);
-      setPullY(THRESHOLD); // hold indicator in place
+      setPullY(THRESHOLD);
       try { await onRefresh(); } catch {}
       setIsRefreshing(false);
     }

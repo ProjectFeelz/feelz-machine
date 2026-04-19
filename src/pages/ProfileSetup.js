@@ -1,3 +1,6 @@
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
+import ArtistFollowPrompt from '../components/ArtistFollowPrompt';
 import React, { useState, useEffect } from 'react';
 import {
   Music, Bell, Trophy, Heart, MessageCircle,
@@ -379,8 +382,8 @@ function SlideVisual({ slide }) {
   }
 }
 
-// ── Main component ────────────────────────────────────────────────────────────
-export default function ListenerWelcomeTour({ displayName, onDone }) {
+// ── Inner tour component (used by ProfileSetup wrapper) ──────────────────────
+function ListenerWelcomeTour({ displayName, onDone }) {
   const [step, setStep]       = useState(0);
   const [animDir, setAnimDir] = useState(1);
   const [visible, setVisible] = useState(false);
@@ -522,5 +525,38 @@ export default function ListenerWelcomeTour({ displayName, onDone }) {
         }
       `}</style>
     </div>
+  );
+}
+
+// ── ProfileSetup — default export ─────────────────────────────────────────────
+// Sequences: ListenerWelcomeTour → ArtistFollowPrompt → navigate to /
+// Artist accounts skip ArtistFollowPrompt (they don't need to follow artists to onboard)
+export default function ProfileSetup() {
+  const navigate = useNavigate();
+  const { user, artist } = useAuth();
+  const [stage, setStage] = useState('tour'); // 'tour' | 'follow'
+
+  const handleTourDone = () => {
+    // Artists skip the follow prompt — they're here to be followed, not follow
+    if (artist) {
+      navigate('/');
+    } else {
+      setStage('follow');
+    }
+  };
+
+  const handleFollowDone = () => {
+    navigate('/');
+  };
+
+  if (stage === 'follow') {
+    return <ArtistFollowPrompt onDone={handleFollowDone} />;
+  }
+
+  return (
+    <ListenerWelcomeTour
+      displayName={artist?.artist_name || null}
+      onDone={handleTourDone}
+    />
   );
 }

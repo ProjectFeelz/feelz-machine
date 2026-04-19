@@ -7,7 +7,7 @@ import MiniPlayer from './MiniPlayer';
 import FullPlayer from './FullPlayer';
 import { usePlayer } from '../../contexts/PlayerContext';
 import { useAuth } from '../../contexts/AuthContext';
-import { Bell } from 'lucide-react';
+import { Bell, Flame } from 'lucide-react';
 import useNotifications from '../../contexts/useNotifications';
 import { OfflineBanner } from '../../hooks/useOffline';
 import ErrorBoundary from '../ErrorBoundary';
@@ -89,21 +89,32 @@ function SplashScreen() {
 // ── Bell button ───────────────────────────────────────────────────────────────
 function MobileBellButton() {
   const { unreadCount } = useNotifications();
+  const { user } = useAuth();
+  const { streak } = useStreak(user);
   const navigate = useNavigate();
   return (
-    <div className="md:hidden fixed top-0 left-0 right-0 z-40 h-14 flex items-center justify-end px-4 pt-3 pointer-events-none">
-      <button
-        onClick={() => navigate('/notifications')}
-        aria-label="Notifications"
-        className="relative w-9 h-9 flex items-center justify-center rounded-full hover:bg-white/[0.06] transition pointer-events-auto"
-      >
-        <Bell className="w-5 h-5 text-white/60" />
-        {unreadCount > 0 && (
-          <span className="absolute top-1 right-1 w-4 h-4 rounded-full bg-red-500 flex items-center justify-center text-[9px] font-bold text-white">
-            {unreadCount > 9 ? '9+' : unreadCount}
-          </span>
+    <div className="md:hidden fixed top-0 left-0 right-0 z-40 flex items-end justify-end px-4 pointer-events-none" style={{ paddingTop: 'max(env(safe-area-inset-top), 44px)', paddingBottom: '6px' }}>
+      <div className="flex items-center space-x-2 pointer-events-auto">
+        {/* Streak flame — sits beside the bell */}
+        {streak > 1 && (
+          <div className="flex items-center space-x-1 px-2 py-1 rounded-full bg-orange-500/15 border border-orange-500/25">
+            <Flame className="w-3 h-3 text-orange-400" />
+            <span className="text-xs font-bold text-orange-400">{streak}</span>
+          </div>
         )}
-      </button>
+        <button
+          onClick={() => navigate('/notifications')}
+          aria-label="Notifications"
+          className="relative w-9 h-9 flex items-center justify-center rounded-full hover:bg-white/[0.06] transition"
+        >
+          <Bell className="w-5 h-5 text-white/60" />
+          {unreadCount > 0 && (
+            <span className="absolute top-1 right-1 w-4 h-4 rounded-full bg-red-500 flex items-center justify-center text-[9px] font-bold text-white">
+              {unreadCount > 9 ? '9+' : unreadCount}
+            </span>
+          )}
+        </button>
+      </div>
     </div>
   );
 }
@@ -160,7 +171,7 @@ export default function AppLayout() {
       <main
         className="w-full md:w-[calc(100%-256px)] md:ml-64"
         style={{
-          paddingBottom: mobilePaddingBottom,
+          paddingBottom: `calc(${mobilePaddingBottom}px + var(--safe-area-bottom, 0px))`,
           WebkitOverflowScrolling: 'touch',
           overscrollBehavior: 'contain',
         }}
