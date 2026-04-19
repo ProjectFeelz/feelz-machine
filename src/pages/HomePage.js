@@ -154,7 +154,7 @@ function SquareCard({ item, itemList = [], isAlbum = false, showNew = false, onP
 export default function HomePage() {
   const { user, artist } = useAuth();
   const { playTrack, currentTrack, isPlaying, togglePlay, replaceQueue } = usePlayer();
-  const { streak, discoveryStreak, recordDiscovery } = useStreak(user);
+  const { discoveryStreak, recordDiscovery } = useStreak(user);
   const navigate = useNavigate();
 
   const [featuredTracks, setFeaturedTracks]         = useState([]);
@@ -544,20 +544,12 @@ export default function HomePage() {
       <div className="greeting-hero px-6 pt-6 pb-6">
         <div className="flex items-center justify-between mb-1">
           <p className="section-label">{new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</p>
-          <div className="flex items-center space-x-2">
-            {user && discoveryStreak > 1 && (
-              <div className="flex items-center space-x-1 px-2 py-1 rounded-full bg-blue-500/10 border border-blue-500/20">
-                <Compass className="w-3 h-3 text-blue-400" />
-                <span className="text-xs font-bold text-blue-400">{discoveryStreak}</span>
-              </div>
-            )}
-            {user && streak > 1 && (
-              <div className="flex items-center space-x-1 px-2.5 py-1 rounded-full bg-orange-500/10 border border-orange-500/20">
-                <Flame className="w-3 h-3 text-orange-400" />
-                <span className="text-xs font-bold text-orange-400">{streak}</span>
-              </div>
-            )}
-          </div>
+          {user && discoveryStreak > 1 && (
+            <div className="flex items-center space-x-1 px-2 py-1 rounded-full bg-blue-500/10 border border-blue-500/20">
+              <Compass className="w-3 h-3 text-blue-400" />
+              <span className="text-xs font-bold text-blue-400">{discoveryStreak}</span>
+            </div>
+          )}
         </div>
         <h1 className="text-2xl font-bold text-white">
           {user ? greeting() : 'Feelz Machine'}

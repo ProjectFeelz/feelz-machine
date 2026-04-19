@@ -2,7 +2,7 @@ import { Helmet } from 'react-helmet-async';
 import { downloadTrack } from '../utils/downloadTrack';
 import TrackActionSheet from '../components/TrackActionSheet';
 import TrackVersions from '../components/TrackVersions';
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
@@ -387,6 +387,7 @@ export default function ArtistProfilePage() {
   const [weeklyDiscoveries, setWeeklyDiscoveries] = useState(0);
   const [purchasedTracks, setPurchasedTracks] = useState({});
   const [liveSession, setLiveSession] = useState(null);
+  const liveCheckRef = useRef(null);
   const [scheduledSession, setScheduledSession] = useState(null);
 
   const checkExistingPurchases = async () => {
@@ -434,8 +435,8 @@ export default function ArtistProfilePage() {
       }
     };
     check();
-    const interval = setInterval(check, 30_000);
-    return () => { cancelled = true; clearInterval(interval); };
+    liveCheckRef.current = setInterval(check, 30_000);
+    return () => { cancelled = true; clearInterval(liveCheckRef.current); };
   }, [artist?.id]);
   useEffect(() => {
     if (!artist?.id) return;
@@ -1035,10 +1036,24 @@ export default function ArtistProfilePage() {
             <button
               onClick={async () => {
                 if (!window.confirm('End this live session?')) return;
-                await supabase.from('listening_sessions')
+                // Stop the poll immediately so it can't resurrect the session
+                clearInterval(liveCheckRef.current);
+                const { error } = await supabase.from('listening_sessions')
                   .update({ status: 'ended', ended_at: new Date().toISOString() })
                   .eq('id', liveSession.id);
-                setLiveSession(null);
+                if (error) {
+                  console.error('Failed to end session:', error);
+                  alert('Could not end the session. Please try again.');
+                  // Restart poll if update failed
+                  liveCheckRef.current = setInterval(async () => {
+                    const { data: live } = await supabase.from('listening_sessions')
+                      .select('id, title').eq('artist_id', artist.id)
+                      .eq('status', 'live').limit(1).maybeSingle();
+                    setLiveSession(live || null);
+                  }, 30_000);
+                } else {
+                  setLiveSession(null);
+                }
               }}
               title="End session"
               className="w-10 h-10 flex items-center justify-center rounded-2xl border border-red-500/30 bg-red-500/10 hover:bg-red-500/25 transition flex-shrink-0"

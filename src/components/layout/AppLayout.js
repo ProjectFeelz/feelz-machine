@@ -95,13 +95,6 @@ function MobileBellButton() {
   return (
     <div className="md:hidden fixed top-0 left-0 right-0 z-40 flex items-end justify-end px-4 pointer-events-none" style={{ paddingTop: 'max(env(safe-area-inset-top), 44px)', paddingBottom: '6px' }}>
       <div className="flex items-center space-x-2 pointer-events-auto">
-        {/* Streak flame — sits beside the bell */}
-        {streak > 1 && (
-          <div className="flex items-center space-x-1 px-2 py-1 rounded-full bg-orange-500/15 border border-orange-500/25">
-            <Flame className="w-3 h-3 text-orange-400" />
-            <span className="text-xs font-bold text-orange-400">{streak}</span>
-          </div>
-        )}
         <button
           onClick={() => navigate('/notifications')}
           aria-label="Notifications"
@@ -114,6 +107,13 @@ function MobileBellButton() {
             </span>
           )}
         </button>
+        {/* Streak flame — sits to the right of the bell */}
+        {streak > 1 && (
+          <div className="flex items-center space-x-1 px-2 py-1 rounded-full bg-orange-500/15 border border-orange-500/25">
+            <Flame className="w-3 h-3 text-orange-400" />
+            <span className="text-xs font-bold text-orange-400">{streak}</span>
+          </div>
+        )}
       </div>
     </div>
   );
