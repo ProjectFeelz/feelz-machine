@@ -93,7 +93,7 @@ function MobileBellButton() {
   const { streak } = useStreak(user);
   const navigate = useNavigate();
   return (
-    <div className="md:hidden fixed top-0 left-0 right-0 z-40 flex items-end justify-end px-4 pointer-events-none" style={{ paddingTop: 'max(env(safe-area-inset-top), 44px)', paddingBottom: '6px' }}>
+    <div className="md:hidden fixed top-0 left-0 right-0 z-[60] flex items-end justify-end px-4 pointer-events-none" style={{ paddingTop: 'max(env(safe-area-inset-top), 44px)', paddingBottom: '6px' }}>
       <div className="flex items-center space-x-2 pointer-events-auto">
         <button
           onClick={() => navigate('/notifications')}

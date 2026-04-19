@@ -179,17 +179,11 @@ export function PlayerProvider({ children }) {
         device_type: /Mobi|Android/i.test(navigator.userAgent) ? 'mobile' : 'desktop',
       });
 
-      // 3. Increment stream_count on the track
-      await supabase
-        .from('tracks')
-        .update({ stream_count: (track.stream_count || 0) + 1 })
-        .eq('id', trackId);
+      // 3. Increment stream_count on the track (atomic — avoids race conditions)
+      await supabase.rpc('increment_stream_count', { track_id: trackId });
 
       // 4. Increment artist total_streams
-      await supabase
-        .from('artists')
-        .update({ total_streams: (art.total_streams || 0) + 1 })
-        .eq('id', track.artist_id);
+      await supabase.rpc('increment_artist_streams', { artist_id: track.artist_id });
 
       // 5. Stream milestone notifications are handled by the check_stream_milestones
       //    DB trigger — no manual insert needed here.
