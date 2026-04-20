@@ -419,8 +419,8 @@ export default function HubPage() {
 
       {/* ── Bug Report modal ──────────────────────────────────────────────── */}
       {showBugModal && (
-        <div className="fixed inset-0 z-[600] flex items-center justify-center bg-black/70 backdrop-blur-sm px-4" onClick={() => setShowBugModal(false)}>
-          <div className="w-full max-w-sm bg-[#111] border border-white/10 rounded-2xl p-5 space-y-4" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 z-[600] flex items-center justify-center px-6 bg-black/80 backdrop-blur-sm" onClick={() => setShowBugModal(false)}>
+          <div className="w-full overflow-hidden rounded-3xl p-5 space-y-4" style={{ maxWidth: 360, backgroundColor: '#0f0f0f', border: '1px solid rgba(255,255,255,0.08)', boxShadow: '0 32px 64px rgba(0,0,0,0.6)' }} onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2">
                 <Bug className="w-4 h-4 text-red-400" />
@@ -449,8 +449,8 @@ export default function HubPage() {
 
       {/* ── Admin DM modal ───────────────────────────────────────────────────── */}
       {showDMModal && isAdmin && (
-        <div className="fixed inset-0 z-[600] flex items-center justify-center bg-black/70 backdrop-blur-sm px-4" onClick={() => setShowDMModal(false)}>
-          <div className="w-full max-w-sm bg-[#111] border border-white/10 rounded-2xl p-5 space-y-4" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 z-[600] flex items-center justify-center px-6 bg-black/80 backdrop-blur-sm" onClick={() => setShowDMModal(false)}>
+          <div className="w-full overflow-hidden rounded-3xl p-5 space-y-4" style={{ maxWidth: 360, backgroundColor: '#0f0f0f', border: '1px solid rgba(255,255,255,0.08)', boxShadow: '0 32px 64px rgba(0,0,0,0.6)' }} onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2">
                 <MessageSquare className="w-4 h-4 text-blue-400" />
@@ -508,8 +508,8 @@ export default function HubPage() {
 
       {/* ── Go Live setup modal ───────────────────────────────────────────── */}
       {showLiveModal && (
-        <div className="fixed inset-0 z-[600] flex items-center justify-center bg-black/70 backdrop-blur-sm px-4" onClick={() => setShowLiveModal(false)}>
-          <div className="w-full max-w-sm bg-[#111] border border-white/10 rounded-2xl p-5 space-y-5 overflow-y-auto max-h-[80vh]" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 z-[600] flex items-center justify-center px-6 bg-black/80 backdrop-blur-sm" onClick={() => setShowLiveModal(false)}>
+          <div className="w-full overflow-y-auto rounded-3xl p-5 space-y-5" style={{ maxWidth: 360, maxHeight: '80vh', backgroundColor: '#0f0f0f', border: '1px solid rgba(255,255,255,0.08)', boxShadow: '0 32px 64px rgba(0,0,0,0.6)' }} onClick={e => e.stopPropagation()}>
             {/* Header */}
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2">
