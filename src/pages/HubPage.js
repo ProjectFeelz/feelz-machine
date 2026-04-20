@@ -12,7 +12,7 @@ import {
   Upload, HeartHandshake, Bell, Palette, MessageCircle,
   ChevronRight, Crown, Zap, Star, LayoutDashboard,
   User, LogOut, DollarSign, Megaphone, Radio, Trophy, Brain, Mic2, Loader, X, Youtube,
-  Info, Globe, Lock,
+  Info, Globe, Lock, Search, Plus,
 } from 'lucide-react';
 
 function LinkCard({ icon: Icon, label, description, path, color, onClick }) {
