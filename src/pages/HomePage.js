@@ -536,7 +536,7 @@ export default function HomePage() {
   if (loading) return <HomeSkeleton />;
 
   return (
-    <div className="pt-14 md:pt-0 pb-4" {...pullProps}>
+    <div className="pb-4" {...pullProps}>
       <Helmet>
         <title>Home · Feelz Machine</title>
         <meta name="description" content="Discover independent music, trending tracks and artists on Feelz Machine." />
@@ -547,7 +547,7 @@ export default function HomePage() {
 
       <PullToRefreshIndicator pullProgress={pullProgress} isRefreshing={isRefreshing} />
 
-      <div className="greeting-hero px-6 pt-6 pb-6">
+      <div className="greeting-hero px-6 pt-14 md:pt-6 pb-6">
         <div className="flex items-center justify-between mb-1">
           <p className="section-label">{new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</p>
           {user && discoveryStreak > 1 && (
