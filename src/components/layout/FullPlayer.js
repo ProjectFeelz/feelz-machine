@@ -96,9 +96,18 @@ function CassetteVisualizer({ isPlaying, currentTime, duration, coverUrl }) {
     imgOpacity.current = 0;
     const img = new window.Image();
     img.crossOrigin = 'anonymous';
-    img.onload  = () => { imgRef.current = img; };
+    img.onload  = () => {
+      imgRef.current = img;
+      // Snap to fully visible if it loaded instantly from cache
+      imgOpacity.current = img.complete ? 1 : 0;
+    };
     img.onerror = () => { imgRef.current = null; };
     img.src = coverUrl;
+    // Already cached — complete fires before onload in some browsers
+    if (img.complete && img.naturalWidth > 0) {
+      imgRef.current = img;
+      imgOpacity.current = 1;
+    }
   }, [coverUrl]);
 
   React.useEffect(() => {
@@ -669,6 +678,14 @@ export default function FullPlayer() {
         setLyricsLoading(false);
       });
   }, [currentTrack?.id]);
+
+  // Preload cover art as soon as track changes so cassette/artwork modes show instantly
+  useEffect(() => {
+    if (!currentTrack?.cover_artwork_url) return;
+    const img = new window.Image();
+    img.crossOrigin = 'anonymous';
+    img.src = currentTrack.cover_artwork_url;
+  }, [currentTrack?.cover_artwork_url]);
 
   useEffect(() => {
     if (!currentTrack || !user) { setLiked(false); return; }
