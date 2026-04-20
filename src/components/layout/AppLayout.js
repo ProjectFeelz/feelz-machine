@@ -103,7 +103,7 @@ function MobileBellButton() {
   return (
     <div
       className="md:hidden fixed top-0 left-0 right-0 z-[60] flex items-center justify-end px-4 pointer-events-none"
-      style={{ paddingTop: 'env(safe-area-inset-top, 0px)', height: 'calc(env(safe-area-inset-top, 0px) + 44px)' }}
+      style={{ paddingTop: 'max(env(safe-area-inset-top, 0px), 12px)', height: 'calc(max(env(safe-area-inset-top, 0px), 12px) + 44px)' }}
     >
       <div className="flex items-center space-x-1.5 pointer-events-auto">
         {/* Streak flame */}

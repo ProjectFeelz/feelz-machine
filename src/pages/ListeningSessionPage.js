@@ -234,8 +234,20 @@ export default function ListeningSessionPage() {
     queueRef.current = loadedQueue; // update ref immediately so syncAudio can use it
     setLoading(false);
 
+    // If host session has queued tracks but no current track set, auto-select the first one
+    let activeSession = s;
+    if (artist && loadedQueue.length > 0 && !s.current_track_id) {
+      const firstTrackId = loadedQueue[0].track_id;
+      await supabase
+        .from('listening_sessions')
+        .update({ current_track_id: firstTrackId, playback_pos: 0 })
+        .eq('id', sessionId);
+      activeSession = { ...s, current_track_id: firstTrackId, playback_pos: 0 };
+      setSession(activeSession);
+    }
+
     // Sync audio for listeners using the freshly-loaded queue (not stale state)
-    if (!artist && s.mode === 'audio') syncAudio(s, loadedQueue);
+    if (!artist && activeSession.mode === 'audio') syncAudio(activeSession, loadedQueue);
   };
 
   const loadMessages = async () => {

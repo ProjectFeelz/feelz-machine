@@ -54,7 +54,7 @@ export default function LibraryPage() {
   ];
 
   return (
-    <div className="pt-14 md:pt-0 pb-4 px-6 md:px-0">
+    <div className="pb-4 px-6 md:px-0">
       <Helmet>
         <title>Library · Feelz Machine</title>
         <meta name="description" content="Your music library — liked songs, downloads, playlists and artists you follow." />
@@ -63,9 +63,11 @@ export default function LibraryPage() {
         <meta property="og:url" content="https://www.feelzmachine.com/library" />
       </Helmet>
 
-      <h1 className="text-2xl font-bold text-white mb-6 sticky top-0 z-20 bg-black/90 backdrop-blur-sm md:relative md:top-auto md:bg-transparent md:backdrop-blur-none pt-2 pb-2 -mx-6 px-6">
-        Your Library
-      </h1>
+      <div className="sticky top-0 z-20 bg-black/95 backdrop-blur-xl md:relative md:top-auto md:bg-transparent md:backdrop-blur-none pt-14 md:pt-4 pb-3 -mx-6 px-6 md:mx-0 md:px-0 border-b border-white/[0.04] md:border-none mb-6">
+        <h1 className="text-2xl font-bold text-white">
+          Your Library
+        </h1>
+      </div>
 
       <div className="space-y-1">
         {items.map(({ icon: Icon, label, path, iconColor, accent, count, sub }) => (

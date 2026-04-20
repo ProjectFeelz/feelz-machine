@@ -291,7 +291,7 @@ export default function ProfilePage() {
 
   if (!user) {
     return (
-      <div className="pt-16 md:pt-4 pb-4 px-4 text-center">
+      <div className="pt-14 md:pt-4 pb-4 px-4 text-center">
         <User className="w-16 h-16 mx-auto text-white/10 mb-4" />
         <h2 className="text-lg font-semibold text-white mb-2">Not signed in</h2>
         <button onClick={() => nav('/login')}
@@ -305,16 +305,16 @@ export default function ProfilePage() {
   const hasAnyLinks  = SOCIALS.some(p => form[p.key]);
 
   return (
-    <div className="pt-14 md:pt-0 pb-8 px-4 md:px-0">
+    <div className="pb-8 px-4 md:px-0">
       <Helmet>
         <title>Profile · Feelz Machine</title>
         <meta name="description" content="Manage your Feelz Machine artist profile, theme, social links and payments." />
         <link rel="canonical" href="https://www.feelzmachine.com/profile" />
       </Helmet>
 
-      <h1 className="text-2xl font-bold text-white mb-5 sticky top-0 z-20
-        bg-black/90 backdrop-blur-sm md:relative md:top-auto md:bg-transparent
-        md:backdrop-blur-none pt-2 pb-2 -mx-4 px-4">Profile</h1>
+      <div className="sticky top-0 z-20 bg-black/95 backdrop-blur-xl md:relative md:top-auto md:bg-transparent md:backdrop-blur-none pt-14 md:pt-4 pb-3 -mx-4 px-4 border-b border-white/[0.04] md:border-none mb-5">
+        <h1 className="text-2xl font-bold text-white">Profile</h1>
+      </div>
 
       <ProfileCompletionBanner compact />
 

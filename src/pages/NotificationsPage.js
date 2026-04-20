@@ -274,7 +274,7 @@ export default function NotificationsPage() {
         </Helmet>
 
         {/* Header */}
-        <div className="flex items-center justify-between mb-6 sticky top-0 z-20 bg-black/90 backdrop-blur-sm md:relative md:top-auto md:bg-transparent md:backdrop-blur-none pt-14 pb-2 -mx-4 px-4 md:pt-2">
+        <div className="flex items-center justify-between mb-6 sticky top-0 z-20 bg-black/95 backdrop-blur-xl md:relative md:top-auto md:bg-transparent md:backdrop-blur-none pt-14 md:pt-4 pb-3 -mx-4 px-4 border-b border-white/[0.04] md:border-none">
           <div className="flex items-center space-x-3">
             <button onClick={() => navigate(-1)}
               className="w-9 h-9 flex items-center justify-center rounded-full bg-white/[0.06] hover:bg-white/[0.1] transition">

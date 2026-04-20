@@ -216,15 +216,15 @@ export default function HubPage() {
       </Helmet>
 
       {/* Header */}
-      <div className="mb-6 sticky top-0 z-20 bg-black/90 backdrop-blur-sm md:relative md:top-auto md:bg-transparent md:backdrop-blur-none pt-14 md:pt-2 -mx-4 px-4">
+      <div className="mb-6 sticky top-0 z-20 bg-black/95 backdrop-blur-xl md:relative md:top-auto md:bg-transparent md:backdrop-blur-none pt-14 md:pt-4 pb-3 -mx-4 px-4 border-b border-white/[0.04] md:border-none">
         <div className="flex items-center space-x-3 mb-1">
           <LayoutDashboard className="w-6 h-6 text-white/60" />
           <h1 className="text-2xl font-bold text-white">Hub</h1>
         </div>
-        <p className="text-sm text-white/40 ml-9">Your control center</p>
+        <p className="text-sm text-white/40">Your control center</p>
 
         {streak > 1 && (
-          <div className="flex items-center space-x-1.5 mt-2 ml-9">
+          <div className="flex items-center space-x-1.5 mt-1">
             <Flame className="w-3.5 h-3.5 text-orange-400" />
             <span className="text-xs font-semibold text-orange-400">{streak}-day streak</span>
             {streak >= 7 && <span className="text-[10px] text-orange-400/50">🔥</span>}

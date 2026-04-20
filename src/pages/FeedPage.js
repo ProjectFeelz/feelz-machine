@@ -119,7 +119,7 @@ export default function FeedPage() {
   const { pullProps, pullProgress, isRefreshing } = usePullToRefresh(refresh);
 
   return (
-    <div className="pt-10 md:pt-0 pb-4 px-6 md:px-0" {...pullProps}>
+    <div className="pb-4 px-6 md:px-0" {...pullProps}>
       <Helmet>
         <title>Community · Feelz Machine</title>
         <meta name="description" content="See the latest posts, updates and music from independent artists on Feelz Machine." />
@@ -130,8 +130,9 @@ export default function FeedPage() {
 
       <PullToRefreshIndicator pullProgress={pullProgress} isRefreshing={isRefreshing} />
 
-      {/* Header — no refresh button */}
-      <div className="flex items-center justify-between mb-4">
+      {/* Header */}
+      <div className="sticky top-0 z-20 bg-black/95 backdrop-blur-xl pt-14 md:pt-4 pb-3 -mx-6 px-6 md:mx-0 md:px-0 border-b border-white/[0.04] md:bg-transparent md:backdrop-blur-none md:border-none mb-4">
+        <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-white">Feed</h1>
         <button
           onClick={() => navigate('/chat')}
@@ -140,6 +141,7 @@ export default function FeedPage() {
           <MessageCircle className="w-3.5 h-3.5 text-purple-400" />
           <span className="text-xs text-white/60 font-medium">Chat Rooms</span>
         </button>
+        </div>
       </div>
 
       {/* Trending bar */}
