@@ -275,8 +275,8 @@ export default function BrowsePage() {
 
       {/* ── Sticky header ── */}
       <div className="sticky top-0 z-20 bg-black/95 backdrop-blur-xl pt-14 md:pt-4 pb-3 px-6 md:px-0 border-b border-white/[0.04] md:bg-transparent md:backdrop-blur-none md:border-none">
-        {/* Search — pr-[100px] on mobile reserves space for the fixed bell/profile icons */}
-        <div className="relative mb-3 md:pr-0 pr-[100px]">
+        {/* Search — pr on mobile reserves space for fixed bell bar (streak+bell+avatar = ~152px incl padding) */}
+        <div className="relative mb-3 md:pr-0 pr-[152px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
           <input
             type="text"
