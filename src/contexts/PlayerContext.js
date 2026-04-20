@@ -2,6 +2,14 @@ import React, { createContext, useContext, useState, useRef, useCallback, useEff
 import { supabase } from '../supabaseClient';
 import { useMediaSession } from '../hooks/useMediaSession';
 
+// Preload a track's cover art into the browser cache so VinylRecord/Cassette show instantly
+function preloadCover(track) {
+  if (!track?.cover_artwork_url) return;
+  const img = new window.Image();
+  img.crossOrigin = 'anonymous';
+  img.src = track.cover_artwork_url;
+}
+
 const PlayerContext = createContext({});
 
 function PlayerProviderInner({ children, value, isPlaying, togglePlay, playNext, playPrev, currentTrack }) {
@@ -98,6 +106,9 @@ export function PlayerProvider({ children }) {
       audioRef.current.volume = volumeRef.current;
       audioRef.current.play().catch(console.error);
       setCurrentTrack(nextTrack);
+      preloadCover(nextTrack);
+      // Preload the track after this one too
+      if (q[nextIndex + 1]) preloadCover(q[nextIndex + 1]);
       setQueueIndex(nextIndex);
       setCurrentTime(0);
 
@@ -231,6 +242,7 @@ export function PlayerProvider({ children }) {
     audio.volume = volumeRef.current;
     audio.play().catch(console.error);
     setCurrentTrack(track);
+    preloadCover(track);
     setCurrentTime(0);
     setIsMinimized(false);
     if (trackList.length > 0) {
@@ -240,6 +252,9 @@ export function PlayerProvider({ children }) {
       setQueueIndex(resolvedIdx);
       queueRef.current = trackList;
       queueIndexRef.current = resolvedIdx;
+      // Preload next track's cover too
+      const nextIdx = resolvedIdx + 1;
+      if (nextIdx < trackList.length) preloadCover(trackList[nextIdx]);
     }
   }, [currentTrack, isPlaying]);
 

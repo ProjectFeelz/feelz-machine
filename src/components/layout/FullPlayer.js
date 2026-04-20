@@ -679,13 +679,7 @@ export default function FullPlayer() {
       });
   }, [currentTrack?.id]);
 
-  // Preload cover art as soon as track changes so cassette/artwork modes show instantly
-  useEffect(() => {
-    if (!currentTrack?.cover_artwork_url) return;
-    const img = new window.Image();
-    img.crossOrigin = 'anonymous';
-    img.src = currentTrack.cover_artwork_url;
-  }, [currentTrack?.cover_artwork_url]);
+  // Preload is handled in PlayerContext on playTrack/playNext
 
   useEffect(() => {
     if (!currentTrack || !user) { setLiked(false); return; }
