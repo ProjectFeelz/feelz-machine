@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { usePushNotifications } from '../hooks/usePushNotifications';
 import ArtistFollowPrompt from '../components/ArtistFollowPrompt';
 import React, { useState, useEffect } from 'react';
 import {
@@ -387,6 +388,8 @@ function ListenerWelcomeTour({ displayName, onDone }) {
   const [step, setStep]       = useState(0);
   const [animDir, setAnimDir] = useState(1);
   const [visible, setVisible] = useState(false);
+  const { user } = useAuth();
+  const { supported, subscribed, subscribe } = usePushNotifications(user);
 
   // ✅ All hooks must come before any early return
   useEffect(() => {
@@ -406,7 +409,11 @@ function ListenerWelcomeTour({ displayName, onDone }) {
 
   const isLast = step === SLIDES.length - 1;
 
-  const next = () => {
+  const next = async () => {
+    // On the notifications slide, request push permission before advancing
+    if (slide.id === 'notifications' && supported && !subscribed) {
+      await subscribe();
+    }
     if (isLast) { onDone(); return; }
     setAnimDir(1);
     setStep(s => s + 1);

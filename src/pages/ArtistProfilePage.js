@@ -903,7 +903,7 @@ export default function ArtistProfilePage() {
           <img src={theme.background_image_url} alt="" className="absolute inset-0 w-full h-full object-cover opacity-30" />
         )}
         <div className="absolute inset-0" style={{ background: `linear-gradient(to bottom, transparent 20%, ${bgColor} 100%)` }} />
-        <div className="fixed top-0 left-0 right-0 flex items-center justify-between px-4 z-50" style={{ paddingTop: 'max(env(safe-area-inset-top, 0px), 12px)', height: 'calc(max(env(safe-area-inset-top, 0px), 12px) + 44px)' }}>
+        <div className="fixed top-0 left-0 right-0 flex items-center justify-between px-4 z-50" style={{ paddingTop: 'max(env(safe-area-inset-top, 0px), 12px)', height: 'calc(max(env(safe-area-inset-top, 0px), 12px) + 44px)', willChange: 'transform', WebkitTransform: 'translateZ(0)', transform: 'translateZ(0)' }}>
           <button onClick={() => navigate(-1)}
             className="w-10 h-10 flex items-center justify-center rounded-full backdrop-blur-md"
             style={{ backgroundColor: `${bgColor}80` }}>

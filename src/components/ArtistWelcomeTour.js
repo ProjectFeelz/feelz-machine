@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { useAuth } from '../contexts/AuthContext';
+import { usePushNotifications } from '../hooks/usePushNotifications';
 import {
   Upload, MessageCircle, Bell, Flame, Users,
   ArrowRight, ChevronLeft, Check, Sparkles, Radio,
@@ -304,6 +306,8 @@ export default function ArtistWelcomeTour({ artistName, onDone }) {
   const [step, setStep]       = useState(0);
   const [animDir, setAnimDir] = useState(1);
   const [visible, setVisible] = useState(false);
+  const { user } = useAuth();
+  const { supported, subscribed, subscribe } = usePushNotifications(user);
 
   const slide  = SLIDES[step];
   const isLast = step === SLIDES.length - 1;
@@ -320,7 +324,10 @@ export default function ArtistWelcomeTour({ artistName, onDone }) {
     return () => clearTimeout(t);
   }, [step]);
 
-  const next = () => {
+  const next = async () => {
+    if (slide.id === 'notifications' && supported && !subscribed) {
+      await subscribe();
+    }
     if (isLast) { onDone(); return; }
     setAnimDir(1);
     setStep(s => s + 1);

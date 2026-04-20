@@ -38,12 +38,12 @@ function timeAgo(date) {
 }
 
 // ── Floating reaction ─────────────────────────────────────────────────────────
-function FloatingReaction({ emoji, id }) {
+function FloatingReaction({ emoji, id, left }) {
   return (
     <div
       key={id}
       className="absolute bottom-0 text-2xl pointer-events-none animate-float-up"
-      style={{ left: `${10 + Math.random() * 80}%` }}
+      style={{ left: `${left}%` }}
     >
       {emoji}
     </div>
@@ -379,8 +379,9 @@ export default function ListeningSessionPage() {
   };
 
   const sendReaction = (emoji) => {
-    const id = ++reactionIdRef.current;
-    setReactions(prev => [...prev, { emoji, id }]);
+    const id   = ++reactionIdRef.current;
+    const left = 10 + Math.random() * 80;
+    setReactions(prev => [...prev, { emoji, id, left }]);
     setTimeout(() => setReactions(prev => prev.filter(r => r.id !== id)), 2000);
     // Broadcast to other listeners via Supabase realtime broadcast
     if (sessionSubRef.current) {
@@ -559,9 +560,11 @@ export default function ListeningSessionPage() {
           </div>
         )}
 
-        {/* Reactions overlay */}
-        <div className="relative flex-shrink-0 h-8 mx-4 overflow-hidden pointer-events-none">
-          {reactions.map(r => <FloatingReaction key={r.id} emoji={r.emoji} id={r.id} />)}
+        {/* Reactions overlay — absolute so it floats over chat without stealing layout space */}
+        <div className="pointer-events-none" style={{ position: 'relative', height: 0 }}>
+          <div className="absolute bottom-0 left-4 right-4 pointer-events-none" style={{ height: '120px' }}>
+            {reactions.map(r => <FloatingReaction key={r.id} emoji={r.emoji} id={r.id} left={r.left} />)}
+          </div>
         </div>
 
         {/* Chat */}
