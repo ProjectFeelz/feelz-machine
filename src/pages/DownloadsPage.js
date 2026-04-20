@@ -50,8 +50,8 @@ export default function DownloadsPage() {
   };
 
   return (
-    <div className="pt-14 md:pt-0 pb-32 px-4 max-w-2xl">
-      <div className="flex items-center space-x-3 mb-6 sticky top-0 z-20 bg-black/90 backdrop-blur-sm md:relative md:top-auto md:bg-transparent md:backdrop-blur-none pt-14 md:pt-2 pb-2 -mx-4 px-4">
+    <div className="pb-32 px-4 max-w-2xl">
+      <div className="flex items-center space-x-3 mb-6 sticky top-0 z-20 bg-black/95 backdrop-blur-xl md:relative md:top-auto md:bg-transparent md:backdrop-blur-none pt-14 md:pt-4 pb-3 -mx-4 px-4 border-b border-white/[0.04] md:border-none">
         <button onClick={() => navigate('/library')}
           className="w-9 h-9 flex items-center justify-center rounded-full bg-white/[0.06] hover:bg-white/[0.1] transition">
           <ArrowLeft className="w-5 h-5 text-white" />

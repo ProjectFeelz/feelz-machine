@@ -265,8 +265,7 @@ export default function NotificationsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-black text-white">
-      <div className="max-w-2xl mx-auto px-4 py-6 pb-32">
+    <div className="max-w-2xl mx-auto px-4 pb-32">
         <Helmet>
           <title>Notifications · Feelz Machine</title>
           <meta name="description" content="Your Feelz Machine notifications — followers, collabs, likes and milestones." />
@@ -428,6 +427,5 @@ export default function NotificationsPage() {
           </div>
         )}
       </div>
-    </div>
   );
 }

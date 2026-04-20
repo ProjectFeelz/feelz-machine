@@ -202,7 +202,7 @@ export default function ChatRoomsPage() {
   }
 
   return (
-    <div className="pt-14 md:pt-0 pb-4 px-6 md:px-0">
+    <div className="pb-4 px-6 md:px-0">
       <Helmet>
         <title>Chat Rooms · Feelz Machine</title>
         <meta name="description" content="Join artist chat rooms and connect with the Feelz Machine community." />
@@ -212,7 +212,7 @@ export default function ChatRoomsPage() {
       </Helmet>
 
       {/* Header */}
-      <div className="flex items-center justify-between mb-6 sticky top-0 z-20 bg-black/90 backdrop-blur-sm md:relative md:top-auto md:bg-transparent md:backdrop-blur-none pt-14 pb-2 -mx-6 px-6 md:pt-2">
+      <div className="flex items-center justify-between mb-6 sticky top-0 z-20 bg-black/95 backdrop-blur-xl md:relative md:top-auto md:bg-transparent md:backdrop-blur-none pt-14 md:pt-4 pb-3 -mx-6 px-6 border-b border-white/[0.04] md:border-none">
         <h1 className="text-2xl font-bold text-white">Chat Rooms</h1>
 
       </div>

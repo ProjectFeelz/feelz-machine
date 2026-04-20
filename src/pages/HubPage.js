@@ -206,7 +206,7 @@ export default function HubPage() {
   }
 
   return (
-    <div className="pt-14 md:pt-0 pb-32 px-4 md:px-0">
+    <div className="pb-32 px-4 md:px-0">
       <Helmet>
         <title>Hub · Feelz Machine</title>
         <meta name="description" content="Your Feelz Machine control center — access your dashboard, library, community and settings." />

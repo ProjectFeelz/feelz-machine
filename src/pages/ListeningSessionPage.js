@@ -141,6 +141,7 @@ export default function ListeningSessionPage() {
   const [showQueue, setShowQueue]     = useState(false);
   const [youtubeInput, setYoutubeInput] = useState('');
   const [listenerCount, setListenerCount] = useState(0);
+  const [audioLocked, setAudioLocked] = useState(false);
 
   const audioRef      = useRef(new Audio());
   const sessionSubRef = useRef(null);
@@ -279,7 +280,7 @@ export default function ListeningSessionPage() {
     const drift = Math.abs(audio.currentTime - expectedPos);
     if (drift > 2) audio.currentTime = Math.max(0, expectedPos);
 
-    if (s.is_playing && audio.paused)  audio.play().catch(() => {});
+    if (s.is_playing && audio.paused)  audio.play().catch(() => { setAudioLocked(true); });
     if (!s.is_playing && !audio.paused) audio.pause();
   }, []); // no deps needed — reads live data via refs
 
@@ -425,14 +426,28 @@ export default function ListeningSessionPage() {
       <div className="flex-1 flex flex-col overflow-hidden">
 
         {/* Player / YouTube embed */}
-        <div className="flex-shrink-0 px-4 py-4">
+        <div className="flex-shrink-0 px-4 py-4 relative">
+          {!isHost && audioLocked && session.mode === 'audio' && (
+            <button
+              onClick={() => {
+                audioRef.current.play().catch(() => {});
+                setAudioLocked(false);
+              }}
+              className="absolute inset-0 flex flex-col items-center justify-center bg-black/70 backdrop-blur-sm rounded-2xl z-10 space-y-2"
+            >
+              <div className="w-12 h-12 rounded-full bg-white flex items-center justify-center">
+                <Play className="w-5 h-5 text-black ml-0.5" />
+              </div>
+              <span className="text-xs text-white/60">Tap to start audio</span>
+            </button>
+          )}
           {session.mode === 'youtube' && ytId ? (
             <div className="rounded-2xl overflow-hidden bg-black" style={{ aspectRatio: '16/9' }}>
               <iframe
-                src={`https://www.youtube.com/embed/${ytId}?autoplay=1&rel=0`}
+                src={`https://www.youtube.com/embed/${ytId}?autoplay=1&mute=1&rel=0&playsinline=1`}
                 className="w-full h-full"
                 allowFullScreen
-                allow="autoplay; encrypted-media"
+                allow="autoplay; encrypted-media; picture-in-picture"
                 title="Live Stream"
               />
             </div>
