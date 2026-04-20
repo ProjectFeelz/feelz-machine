@@ -132,7 +132,7 @@ export default function PlaylistsPage() {
 
   return (
     <div className="pb-32 px-4 max-w-2xl">
-      <div className="flex items-center justify-between mb-6 sticky top-0 z-20 bg-black/95 backdrop-blur-xl md:relative md:top-auto md:bg-transparent md:backdrop-blur-none pt-14 md:pt-4 pb-3 -mx-4 px-4 border-b border-white/[0.04] md:border-none">
+      <div className="flex items-center mb-6 sticky top-0 z-20 bg-black/95 backdrop-blur-xl md:relative md:top-auto md:bg-transparent md:backdrop-blur-none pt-14 md:pt-4 pb-3 -mx-4 px-4 border-b border-white/[0.04] md:border-none">
         <div className="flex items-center space-x-3">
           <button onClick={() => navigate('/library')} className="w-9 h-9 flex items-center justify-center rounded-full bg-white/[0.06] hover:bg-white/[0.1] transition">
             <ArrowLeft className="w-5 h-5 text-white" />
@@ -142,11 +142,13 @@ export default function PlaylistsPage() {
             <p className="text-xs text-white/30">{playlists.length + sharedPlaylists.length} playlists</p>
           </div>
         </div>
-        <button onClick={() => setCreating(!creating)}
-          className="flex items-center space-x-1.5 px-3 py-2 bg-white/[0.06] rounded-lg text-sm text-white/60 hover:bg-white/[0.1] transition">
-          <Plus className="w-4 h-4" /><span>New</span>
-        </button>
       </div>
+
+      {/* New playlist button — sits under the header */}
+      <button onClick={() => setCreating(!creating)}
+        className="w-full flex items-center space-x-2 px-4 py-3 mb-4 bg-white/[0.04] hover:bg-white/[0.07] rounded-xl border border-white/[0.06] text-sm text-white/60 hover:text-white/80 transition">
+        <Plus className="w-4 h-4" /><span>New playlist</span>
+      </button>
 
       {/* Create form */}
       {creating && (
