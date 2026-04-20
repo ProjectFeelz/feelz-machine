@@ -67,7 +67,7 @@ const SLIDES = [
     glowColor: 'rgba(129,140,248,0.14)',
     tag: 'Notifications',
     title: 'Turn on\nnotifications',
-    subtitle: "New drops from artists you follow, competition results, platform announcements and your monthly listening wrapped. The bell icon in Hub keeps you connected to everything.",
+    subtitle: "New drops from artists you follow, competition results, platform announcements and your monthly listening wrapped. Find Notifications inside Hub — tap Hub in the bottom nav, then Notifications.",
     visual: 'notifications',
   },
   {

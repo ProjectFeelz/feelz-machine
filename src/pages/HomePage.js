@@ -252,12 +252,19 @@ export default function HomePage() {
 
   const fetchLiveSessions = async () => {
     try {
-      const { data: sessions } = await supabase
+      const { data: sessions, error: sessErr } = await supabase
         .from('listening_sessions')
         .select('id, title, artist_id')
         .eq('status', 'live')
         .order('created_at', { ascending: false })
         .limit(8);
+
+      // RLS policy may block the query — fail silently so the rest of the page loads
+      if (sessErr) {
+        console.warn('Live sessions unavailable:', sessErr.message);
+        setLiveSessions([]);
+        return;
+      }
 
       if (!sessions || sessions.length === 0) { setLiveSessions([]); return; }
 

@@ -349,6 +349,20 @@ export default function TrackUploadPanel() {
     if (!trackForm.audio_file) { showMessage('error', 'Audio file is required'); return; }
     if (!trackForm.title.trim()) { showMessage('error', 'Track title is required'); return; }
     if (!artist) { showMessage('error', 'No artist profile found'); return; }
+
+    // ── Album guard: cover art is required so the home page always has visuals ──
+    if (isAlbumRelease && !sessionAlbumId) {
+      if (!release.album_cover_file) {
+        showMessage('error', `Cover artwork is required for a ${release.release_type}. The home page must always display artwork.`);
+        return;
+      }
+    }
+    // Individual tracks inside an album must also have cover art
+    if (isAlbumRelease && !trackForm.cover_file && albumTrackQueue.length === 0) {
+      showMessage('error', 'Please add cover artwork for the first track.');
+      return;
+    }
+
     setUploading(true);
     try {
       let albumId = null;
@@ -659,10 +673,21 @@ export default function TrackUploadPanel() {
                     onChange={(e) => setRelease({ ...release, album_price: e.target.value })} />
                 </div>
                 <div>
-                  <FieldLabel>Cover Artwork</FieldLabel>
+                  <FieldLabel>
+                    Cover Artwork <span className="text-red-400">*</span>
+                    <span className="text-white/20 font-normal ml-1">(required — shown on home page)</span>
+                  </FieldLabel>
                   <input type="file" accept=".jpg,.jpeg,.png,.webp"
                     onChange={(e) => setRelease({ ...release, album_cover_file: e.target.files[0] })}
-                    className="w-full text-sm text-white/60 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:bg-white/[0.06] file:text-white/60 file:text-sm hover:file:bg-white/[0.1]" />
+                    className={`w-full text-sm text-white/60 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:bg-white/[0.06] file:text-white/60 file:text-sm hover:file:bg-white/[0.1] rounded-lg transition ${
+                      !release.album_cover_file ? 'ring-1 ring-red-500/40' : 'ring-1 ring-green-500/30'
+                    }`} />
+                  {!release.album_cover_file && (
+                    <p className="text-[10px] text-red-400/70 mt-1.5 flex items-center space-x-1">
+                      <AlertCircle className="w-3 h-3 flex-shrink-0" />
+                      <span>Albums without artwork are hidden from the home page.</span>
+                    </p>
+                  )}
                 </div>
               </div>
               <div>

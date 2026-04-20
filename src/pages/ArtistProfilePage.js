@@ -421,7 +421,7 @@ export default function ArtistProfilePage() {
     if (!artist?.id) return;
     let cancelled = false;
     const check = async () => {
-      const [{ data: live }, { data: scheduled }] = await Promise.all([
+      const [liveRes, scheduledRes] = await Promise.all([
         supabase.from('listening_sessions').select('id, title')
           .eq('artist_id', artist.id).eq('status', 'live').limit(1).maybeSingle(),
         supabase.from('listening_sessions').select('id, title, scheduled_at')
@@ -430,8 +430,8 @@ export default function ArtistProfilePage() {
           .order('scheduled_at', { ascending: true }).limit(1).maybeSingle(),
       ]);
       if (!cancelled) {
-        setLiveSession(live || null);
-        setScheduledSession(scheduled || null);
+        setLiveSession(liveRes.error ? null : (liveRes.data || null));
+        setScheduledSession(scheduledRes.error ? null : (scheduledRes.data || null));
       }
     };
     check();
