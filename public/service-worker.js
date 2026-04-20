@@ -1,4 +1,4 @@
-const CACHE = 'feelz-v6';
+const CACHE = 'feelz-v7';
 const OFFLINE_URL = '/player/index.html';
 
 const PRECACHE = [
