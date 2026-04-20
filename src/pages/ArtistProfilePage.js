@@ -874,7 +874,7 @@ export default function ArtistProfilePage() {
     : `Stream music by ${artist.artist_name} on Feelz Machine — independent music platform.`;
 
   return (
-    <div className="min-h-screen pb-32" style={{ backgroundColor: bgColor, color: textColor, fontFamily: `"${bodyFont}", sans-serif`, ...themeStyles }} {...pullProps}>
+    <div className="min-h-screen pb-32" style={{ backgroundColor: bgColor, color: textColor, fontFamily: `"${bodyFont}", sans-serif`, ...themeStyles, WebkitTransform: 'translateZ(0)', transform: 'translateZ(0)' }} {...pullProps}>
       <PullToRefreshIndicator pullProgress={pullProgress} isRefreshing={isRefreshing} />
 
       {/* ── Dynamic head tags ── */}
@@ -894,16 +894,16 @@ export default function ArtistProfilePage() {
       </Helmet>
 
       {/* BANNER */}
-      <div className="relative w-full" style={{ height: '220px' }}>
+      <div className="relative w-full" style={{ height: '220px', contain: 'layout style', willChange: 'transform' }}>
         {artist.banner_image_url || theme?.banner_image_url ? (
-          <img src={artist.banner_image_url || theme?.banner_image_url} alt="" className="absolute inset-0 w-full h-full object-cover" />
+          <img src={artist.banner_image_url || theme?.banner_image_url} alt="" className="absolute inset-0 w-full h-full object-cover" style={{ transform: 'translateZ(0)', WebkitTransform: 'translateZ(0)' }} />
         ) : (
-          <div className="absolute inset-0" style={{ background: `linear-gradient(135deg, ${secondaryColor}40, ${accentColor}30, ${bgColor})` }} />
+          <div className="absolute inset-0" style={{ background: `linear-gradient(135deg, ${secondaryColor}40, ${accentColor}30, ${bgColor})`, transform: 'translateZ(0)' }} />
         )}
         {theme?.background_image_url && !artist.banner_image_url && !theme?.banner_image_url && (
-          <img src={theme.background_image_url} alt="" className="absolute inset-0 w-full h-full object-cover opacity-30" />
+          <img src={theme.background_image_url} alt="" className="absolute inset-0 w-full h-full object-cover opacity-30" style={{ transform: 'translateZ(0)' }} />
         )}
-        <div className="absolute inset-0" style={{ background: `linear-gradient(to bottom, transparent 20%, ${bgColor} 100%)` }} />
+        <div className="absolute inset-0" style={{ background: `linear-gradient(to bottom, transparent 20%, ${bgColor} 100%)`, transform: 'translateZ(0)', WebkitTransform: 'translateZ(0)' }} />
         <div className="fixed top-0 left-0 right-0 flex items-center justify-between px-4 z-50" style={{ paddingTop: 'max(env(safe-area-inset-top, 0px), 12px)', height: 'calc(max(env(safe-area-inset-top, 0px), 12px) + 44px)', willChange: 'transform', WebkitTransform: 'translateZ(0)', transform: 'translateZ(0)' }}>
           <button onClick={() => navigate(-1)}
             className="w-10 h-10 flex items-center justify-center rounded-full backdrop-blur-md"
