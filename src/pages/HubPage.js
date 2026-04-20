@@ -1,5 +1,5 @@
 import { Helmet } from 'react-helmet-async';
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useStreakContext } from '../contexts/StreakContext';
@@ -70,6 +70,10 @@ export default function HubPage() {
   const [liveYoutubeUrl, setLiveYoutubeUrl]     = useState('');
   const [scheduleMode, setScheduleMode]         = useState(false); // toggle schedule vs go live now
   const [scheduledAt, setScheduledAt]           = useState('');    // ISO datetime string
+  const [queueTracks, setQueueTracks]           = useState([]);    // pre-session queue for audio mode
+  const [trackSearch, setTrackSearch]           = useState('');
+  const [trackResults, setTrackResults]         = useState([]);
+  const [searchingTracks, setSearchingTracks]   = useState(false);
 
   const openLiveModal = () => {
     if (!artist) return;
@@ -78,7 +82,43 @@ export default function HubPage() {
     setLiveYoutubeUrl('');
     setScheduleMode(false);
     setScheduledAt('');
+    setQueueTracks([]);
+    setTrackSearch('');
+    setTrackResults([]);
     setShowLiveModal(true);
+  };
+
+  // Track search for audio queue
+  useEffect(() => {
+    if (!artist?.id || trackSearch.trim().length < 2) { setTrackResults([]); return; }
+    const t = setTimeout(async () => {
+      setSearchingTracks(true);
+      const { data } = await supabase
+        .from('tracks')
+        .select('id, title, cover_artwork_url, duration')
+        .eq('artist_id', artist.id)
+        .ilike('title', `%${trackSearch.trim()}%`)
+        .limit(8);
+      setTrackResults((data || []).filter(t => !queueTracks.find(q => q.id === t.id)));
+      setSearchingTracks(false);
+    }, 300);
+    return () => clearTimeout(t);
+  }, [trackSearch, artist?.id, queueTracks]);
+
+  const addToQueue = (track) => {
+    setQueueTracks(prev => [...prev, track]);
+    setTrackSearch('');
+    setTrackResults([]);
+  };
+
+  const removeFromQueue = (trackId) => {
+    setQueueTracks(prev => prev.filter(t => t.id !== trackId));
+  };
+
+  const fmtDuration = (s) => {
+    if (!s) return '';
+    const m = Math.floor(s / 60);
+    return `${m}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
   };
 
   const startLiveSession = async () => {
@@ -121,6 +161,17 @@ export default function HubPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ session_id: session.id, artist_id: artist.id, token: authSession?.access_token }),
       }).catch(() => {});
+
+      // Pre-populate the queue if tracks were selected
+      if (liveMode === 'audio' && queueTracks.length > 0) {
+        await supabase.from('listening_session_queue').insert(
+          queueTracks.map((track, i) => ({
+            session_id: session.id,
+            track_id: track.id,
+            position: i,
+          }))
+        );
+      }
 
       setShowLiveModal(false);
       if (!scheduleMode || !scheduledAt) {
@@ -348,6 +399,76 @@ export default function HubPage() {
                   : 'Optionally paste a YouTube live URL now, or add it once inside the session.'}
               </p>
             </div>
+
+            {/* Audio queue builder */}
+            {liveMode === 'audio' && (
+              <div className="space-y-2">
+                <label className="text-xs text-white/40 font-medium uppercase tracking-wider">Queue Tracks (optional)</label>
+
+                {/* Search input */}
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-white/30" />
+                  <input
+                    value={trackSearch}
+                    onChange={e => setTrackSearch(e.target.value)}
+                    placeholder="Search your tracks..."
+                    className="w-full pl-9 pr-3 py-2.5 bg-white/[0.06] border border-white/[0.08] rounded-xl text-sm text-white placeholder-white/25 focus:outline-none focus:border-white/20"
+                  />
+                  {searchingTracks && (
+                    <Loader className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 animate-spin text-white/30" />
+                  )}
+                </div>
+
+                {/* Search results */}
+                {trackResults.length > 0 && (
+                  <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl overflow-hidden">
+                    {trackResults.map(track => (
+                      <button
+                        key={track.id}
+                        onClick={() => addToQueue(track)}
+                        className="w-full flex items-center space-x-3 px-3 py-2.5 hover:bg-white/[0.06] transition text-left border-b border-white/[0.04] last:border-0"
+                      >
+                        <div className="w-8 h-8 rounded-lg bg-white/[0.06] flex-shrink-0 overflow-hidden">
+                          {track.cover_artwork_url
+                            ? <img src={track.cover_artwork_url} alt="" className="w-full h-full object-cover" />
+                            : <Music className="w-3.5 h-3.5 text-white/20 m-auto mt-2" />}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm text-white truncate">{track.title}</p>
+                          {track.duration && <p className="text-[10px] text-white/30">{fmtDuration(track.duration)}</p>}
+                        </div>
+                        <Plus className="w-4 h-4 text-white/40 flex-shrink-0" />
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* Queued tracks */}
+                {queueTracks.length > 0 && (
+                  <div className="space-y-1">
+                    {queueTracks.map((track, i) => (
+                      <div key={track.id} className="flex items-center space-x-2.5 px-2 py-2 rounded-xl bg-white/[0.04] border border-white/[0.06]">
+                        <span className="text-[10px] text-white/20 w-4 text-center flex-shrink-0">{i + 1}</span>
+                        <div className="w-7 h-7 rounded-md bg-white/[0.06] flex-shrink-0 overflow-hidden">
+                          {track.cover_artwork_url
+                            ? <img src={track.cover_artwork_url} alt="" className="w-full h-full object-cover" />
+                            : <Music className="w-3 h-3 text-white/20 m-auto mt-2" />}
+                        </div>
+                        <p className="text-xs text-white flex-1 truncate">{track.title}</p>
+                        {track.duration && <p className="text-[10px] text-white/30 flex-shrink-0">{fmtDuration(track.duration)}</p>}
+                        <button onClick={() => removeFromQueue(track.id)} className="p-1 rounded-lg hover:bg-white/[0.08] transition flex-shrink-0">
+                          <X className="w-3.5 h-3.5 text-white/30 hover:text-red-400" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {queueTracks.length === 0 && trackSearch.trim().length < 2 && (
+                  <p className="text-[10px] text-white/20 text-center py-1">Search above to add tracks, or add them once you're live.</p>
+                )}
+              </div>
+            )}
 
             {/* YouTube URL input (optional, shown when YouTube mode) */}
             {liveMode === 'youtube' && (

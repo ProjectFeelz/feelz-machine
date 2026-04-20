@@ -256,7 +256,6 @@ export default function HomePage() {
         .from('listening_sessions')
         .select('id, title, artist_id')
         .eq('status', 'live')
-        .order('created_at', { ascending: false })
         .limit(8);
 
       // RLS policy may block the query — fail silently so the rest of the page loads

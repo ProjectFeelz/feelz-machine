@@ -7,7 +7,7 @@ import MiniPlayer from './MiniPlayer';
 import FullPlayer from './FullPlayer';
 import { usePlayer } from '../../contexts/PlayerContext';
 import { useAuth } from '../../contexts/AuthContext';
-import { Bell, Flame } from 'lucide-react';
+import { Bell, Flame, UserCircle } from 'lucide-react';
 import useNotifications from '../../contexts/useNotifications';
 import { OfflineBanner } from '../../hooks/useOffline';
 import ErrorBoundary from '../ErrorBoundary';
@@ -91,10 +91,30 @@ function SplashScreen() {
 function MobileBellButton() {
   const { unreadCount } = useNotifications();
   const { streak } = useContext(StreakContext);
+  const { user, artist, isArtist } = useAuth();
   const navigate = useNavigate();
+
+  const profilePath = isArtist && artist?.slug
+    ? `/artist/${artist.slug}`
+    : '/profile';
+
+  if (!user) return null;
+
   return (
-    <div className="md:hidden fixed top-0 left-0 right-0 z-[60] flex items-end justify-end px-4 pointer-events-none" style={{ paddingTop: 'max(env(safe-area-inset-top), 44px)', paddingBottom: '6px' }}>
-      <div className="flex items-center space-x-2 pointer-events-auto">
+    <div
+      className="md:hidden fixed top-0 left-0 right-0 z-[60] flex items-center justify-end px-4 pointer-events-none"
+      style={{ paddingTop: 'env(safe-area-inset-top, 0px)', height: 'calc(env(safe-area-inset-top, 0px) + 44px)' }}
+    >
+      <div className="flex items-center space-x-1.5 pointer-events-auto">
+        {/* Streak flame */}
+        {streak > 1 && (
+          <div className="flex items-center space-x-1 px-2 py-1 rounded-full bg-orange-500/15 border border-orange-500/25">
+            <Flame className="w-3 h-3 text-orange-400" />
+            <span className="text-xs font-bold text-orange-400">{streak}</span>
+          </div>
+        )}
+
+        {/* Notifications bell */}
         <button
           onClick={() => navigate('/notifications')}
           aria-label="Notifications"
@@ -107,13 +127,23 @@ function MobileBellButton() {
             </span>
           )}
         </button>
-        {/* Streak flame — sits to the right of the bell */}
-        {streak > 1 && (
-          <div className="flex items-center space-x-1 px-2 py-1 rounded-full bg-orange-500/15 border border-orange-500/25">
-            <Flame className="w-3 h-3 text-orange-400" />
-            <span className="text-xs font-bold text-orange-400">{streak}</span>
-          </div>
-        )}
+
+        {/* Profile shortcut */}
+        <button
+          onClick={() => navigate(profilePath)}
+          aria-label="Profile"
+          className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-white/[0.06] transition overflow-hidden"
+        >
+          {(isArtist ? artist?.profile_image_url : null) ? (
+            <img
+              src={artist.profile_image_url}
+              alt="Profile"
+              className="w-full h-full object-cover rounded-full"
+            />
+          ) : (
+            <UserCircle className="w-5 h-5 text-white/60" />
+          )}
+        </button>
       </div>
     </div>
   );
