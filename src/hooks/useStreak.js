@@ -16,13 +16,16 @@ import { supabase } from '../supabaseClient';
 const MILESTONE_DAYS = [3, 7, 14, 30, 60, 100];
 const DISCOVERY_MILESTONES = [3, 7, 14, 30];
 
+function toUTCDateStr(d) {
+  return new Date(d).toISOString().split('T')[0];
+}
 function isSameDay(a, b) {
-  const da = new Date(a); const db = new Date(b);
-  return da.getFullYear() === db.getFullYear() && da.getMonth() === db.getMonth() && da.getDate() === db.getDate();
+  return toUTCDateStr(a) === toUTCDateStr(b);
 }
 function isYesterday(date) {
-  const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
-  return isSameDay(date, yesterday);
+  const yesterday = new Date();
+  yesterday.setUTCDate(yesterday.getUTCDate() - 1);
+  return toUTCDateStr(date) === toUTCDateStr(yesterday);
 }
 
 export function useStreak(user) {
