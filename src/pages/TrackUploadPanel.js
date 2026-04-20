@@ -423,16 +423,20 @@ export default function TrackUploadPanel() {
 
       if (trackForm.is_published) {
         try {
-          const { data: followers } = await supabase.from('follows')
-            .select('follower_id').eq('artist_id', artist.id);
-          if (followers?.length > 0) {
-            await supabase.from('notifications').insert(followers.map(f => ({
-              user_id: f.follower_id, artist_id: artist.id, type: 'new_track',
-              title: `${artist.artist_name} uploaded a new track`,
-              body: trackForm.title, track_id: trackId,
-              metadata: { track_title: trackForm.title, artist_name: artist.artist_name, artist_slug: artist.slug },
-            })));
-          }
+          // notify-new-track handles in-app notifications (correct 'message' column)
+          // AND web push to followers with drop alerts enabled — all server-side
+          const { data: { session: authSession } } = await supabase.auth.getSession();
+          fetch('/.netlify/functions/notify-new-track', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              track_id:    trackId,
+              track_title: trackForm.title,
+              artist_id:   artist.id,
+              artist_slug: artist.slug,
+              token:       authSession?.access_token,
+            }),
+          }).catch(() => {});
         } catch {}
       }
 
