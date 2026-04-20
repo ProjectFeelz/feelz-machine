@@ -1508,7 +1508,7 @@ export default function ArtistProfilePage() {
               Hidden gems
             </span>
           </div>
-          <div className="space-y-2">
+          <div className="space-y-2 max-h-72 overflow-y-auto scrollbar-hide">
             {deepCuts.map((track, i) => {
               const isActive = currentTrack?.id === track.id;
               return (

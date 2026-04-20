@@ -72,14 +72,18 @@ html, body, #root {
   background-color: rgba(10, 10, 10, 0.92) !important;
 }
 
-/* Promote sticky/fixed elements with backdrop-blur to their own GPU layer.
-   Without this iOS repaints the blur on every scroll frame → jitter. */
-.backdrop-blur-xl,
-.backdrop-blur-sm,
-.backdrop-blur-md {
+/* Only promote FIXED/STICKY headers — not every blurred element.
+   Blanket will-change causes layer explosion → scroll jitter on fast upswipe. */
+.sticky.backdrop-blur-xl,
+.fixed.backdrop-blur-xl {
   -webkit-transform: translateZ(0);
   transform: translateZ(0);
   will-change: transform;
+}
+
+/* Contain scroll pages so the browser doesn't recalculate the full document */
+.scroll-page {
+  contain: layout style;
 }
 
 /* ── Border overrides ───────────────────────────────────────────────────────

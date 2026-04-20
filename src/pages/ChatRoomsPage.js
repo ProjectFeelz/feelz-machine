@@ -441,8 +441,8 @@ export default function ChatRoomsPage() {
       {artist && (
         <button
           onClick={() => { setShowCreate(!showCreate); setError(''); }}
-          className="fixed bottom-24 right-5 z-30 w-12 h-12 rounded-full flex items-center justify-center shadow-lg transition-all active:scale-95 md:hidden"
-          style={{ backgroundColor: showCreate ? 'rgba(255,255,255,0.15)' : '#7c3aed' }}
+          className="fixed bottom-20 right-5 z-30 w-12 h-12 rounded-full flex items-center justify-center shadow-lg transition-all active:scale-95 md:hidden"
+          style={{ backgroundColor: showCreate ? 'rgba(255,255,255,0.15)' : '#7c3aed', marginBottom: 'env(safe-area-inset-bottom, 0px)' }}
         >
           {showCreate
             ? <X className="w-5 h-5 text-white" />

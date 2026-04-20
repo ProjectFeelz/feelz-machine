@@ -280,6 +280,7 @@ export default function HubPage() {
           {isAdmin && (
             <Section title="Admin" icon={Shield}>
               <LinkCard icon={Shield} label="Admin Panel" description="Broadcast · Analytics · Moderation · Users" path="/admin" color="bg-yellow-500/20" />
+              <LinkCard icon={MessageSquare} label="Message a User" description="Send a notification directly to any user" onClick={() => setShowDMModal(true)} color="bg-blue-500/20" />
             </Section>
           )}
 
@@ -347,10 +348,69 @@ export default function HubPage() {
         </>
       )}
 
+      {/* ── Admin DM modal ───────────────────────────────────────────────────── */}
+      {showDMModal && isAdmin && (
+        <div className="fixed inset-0 z-[600] flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm px-4 pb-6 sm:pb-0" onClick={() => setShowDMModal(false)}>
+          <div className="w-full max-w-sm bg-[#111] border border-white/10 rounded-2xl p-5 space-y-4" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <MessageSquare className="w-4 h-4 text-blue-400" />
+                <h2 className="text-base font-semibold text-white">Message a User</h2>
+              </div>
+              <button onClick={() => setShowDMModal(false)} className="w-8 h-8 rounded-full bg-white/[0.06] flex items-center justify-center hover:bg-white/10 transition">
+                <X className="w-4 h-4 text-white/60" />
+              </button>
+            </div>
+            {!dmUserId ? (
+              <div className="space-y-2">
+                <p className="text-xs text-white/30">Search for the user to message:</p>
+                <div className="relative">
+                  <input value={dmSearch} onChange={e => searchDMUsers(e.target.value)}
+                    placeholder="Search by artist name..."
+                    className="w-full px-3 py-2.5 bg-white/[0.06] border border-white/[0.08] rounded-xl text-sm text-white placeholder-white/20 focus:outline-none focus:border-blue-500/40" />
+                  {dmSearching && <Loader className="absolute right-3 top-3 w-4 h-4 animate-spin text-white/30" />}
+                </div>
+                {dmResults.length > 0 && (
+                  <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl overflow-hidden">
+                    {dmResults.map(u => (
+                      <button key={u.id} onClick={() => { setDmUserId(u.user_id); setDmUserName(u.artist_name); }}
+                        className="w-full flex items-center space-x-3 px-3 py-2.5 hover:bg-white/[0.06] transition text-left border-b border-white/[0.04] last:border-0">
+                        <div className="w-8 h-8 rounded-full overflow-hidden bg-white/10 flex-shrink-0 flex items-center justify-center">
+                          {u.profile_image_url
+                            ? <img src={u.profile_image_url} alt="" className="w-full h-full object-cover" />
+                            : <span className="text-xs font-bold text-white/40">{u.artist_name[0]}</span>}
+                        </div>
+                        <span className="text-sm text-white">{u.artist_name}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between px-3 py-2 bg-blue-500/10 border border-blue-500/20 rounded-xl">
+                  <span className="text-sm text-blue-300 font-medium">To: {dmUserName}</span>
+                  <button onClick={() => { setDmUserId(''); setDmUserName(''); }} className="text-white/30 hover:text-white/60 text-xs">change</button>
+                </div>
+                <textarea value={dmMessage} onChange={e => setDmMessage(e.target.value)}
+                  placeholder="Your message to this user..."
+                  rows={4} maxLength={500}
+                  className="w-full px-3 py-2.5 bg-white/[0.06] border border-white/[0.08] rounded-xl text-sm text-white placeholder-white/20 focus:outline-none focus:border-blue-500/40 resize-none" />
+                <button onClick={sendAdminDM} disabled={!dmMessage.trim() || dmSending || dmSent}
+                  className="w-full flex items-center justify-center space-x-2 py-3 bg-blue-600 disabled:opacity-40 hover:bg-blue-500 rounded-xl text-sm font-semibold text-white transition">
+                  {dmSent ? <Check className="w-4 h-4" /> : dmSending ? <Loader className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                  <span>{dmSent ? 'Sent!' : 'Send Message'}</span>
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* ── Go Live setup modal ───────────────────────────────────────────── */}
       {showLiveModal && (
-        <div className="fixed inset-0 z-[600] flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm px-4 pb-6 sm:pb-0">
-          <div className="w-full max-w-sm bg-[#111] border border-white/10 rounded-2xl p-5 space-y-5">
+        <div className="fixed inset-0 z-[600] flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm px-4 pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))] sm:pb-0">
+          <div className="w-full max-w-sm bg-[#111] border border-white/10 rounded-2xl p-5 space-y-5 overflow-y-auto max-h-[85vh]">
             {/* Header */}
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2">
