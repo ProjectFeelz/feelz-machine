@@ -15,7 +15,7 @@ import TierGate from '../components/TierGate';
 import { TierBadge } from '../components/TierGate';
 import { useTier } from '../contexts/useTier';
 import ProfileCompletionBanner from '../components/ProfileCompletionBanner';
-import { useStreak } from '../hooks/useStreak';
+import { useStreakContext } from '../contexts/StreakContext';
 
 const TikTokIcon = ({ className }) => (
   <svg className={className} viewBox="0 0 24 24" fill="currentColor">
@@ -90,7 +90,7 @@ export default function ProfilePage() {
     rawIsAdmin, rawIsArtist, rawIsMaster, viewAs, setViewAs, deleteAccount,
   } = useAuth();
   const { tierSlug } = useTier();
-  const { streak, longestStreak, discoveryStreak } = useStreak(user);
+  const { streak, longestStreak, discoveryStreak } = useStreakContext();
   const [streakRow, setStreakRow]       = useState(null);
   const [freezing, setFreezing]         = useState(false);
   const [freezeMsg, setFreezeMsg]       = useState('');
@@ -305,7 +305,7 @@ export default function ProfilePage() {
   const hasAnyLinks  = SOCIALS.some(p => form[p.key]);
 
   return (
-    <div className="pt-12 md:pt-0 pb-8 px-4 md:px-0">
+    <div className="pt-14 md:pt-0 pb-8 px-4 md:px-0">
       <Helmet>
         <title>Profile · Feelz Machine</title>
         <meta name="description" content="Manage your Feelz Machine artist profile, theme, social links and payments." />

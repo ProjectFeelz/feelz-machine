@@ -2,7 +2,7 @@ import { Helmet } from 'react-helmet-async';
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
-import { useStreak } from '../hooks/useStreak';
+import { useStreakContext } from '../contexts/StreakContext';
 import { usePlayer } from '../contexts/PlayerContext';
 import { Flame, Play, Pause, Music, Verified, MoreHorizontal, Disc, Sparkles, Users, Trophy, Compass, Headphones, Radio } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -154,7 +154,7 @@ function SquareCard({ item, itemList = [], isAlbum = false, showNew = false, onP
 export default function HomePage() {
   const { user, artist } = useAuth();
   const { playTrack, currentTrack, isPlaying, togglePlay, replaceQueue } = usePlayer();
-  const { discoveryStreak, recordDiscovery } = useStreak(user);
+  const { discoveryStreak, recordDiscovery } = useStreakContext();
   const navigate = useNavigate();
 
   const [featuredTracks, setFeaturedTracks]         = useState([]);
@@ -530,7 +530,7 @@ export default function HomePage() {
   if (loading) return <HomeSkeleton />;
 
   return (
-    <div className="pt-12 md:pt-0 pb-4" {...pullProps}>
+    <div className="pt-14 md:pt-0 pb-4" {...pullProps}>
       <Helmet>
         <title>Home · Feelz Machine</title>
         <meta name="description" content="Discover independent music, trending tracks and artists on Feelz Machine." />

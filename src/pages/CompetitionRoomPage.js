@@ -521,7 +521,7 @@ export default function CompetitionRoomPage() {
       )}
 
       {/* Header */}
-      <div className="sticky top-0 z-20 bg-black/90 backdrop-blur-sm px-5 pt-12 md:pt-4 pb-4 border-b border-white/[0.04]">
+      <div className="sticky top-0 z-20 bg-black/90 backdrop-blur-sm px-5 pt-14 md:pt-4 pb-4 border-b border-white/[0.04]">
         <div className="flex items-center space-x-3">
           <button onClick={() => navigate('/chat')}
             className="w-9 h-9 flex items-center justify-center rounded-full bg-white/[0.06]">

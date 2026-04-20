@@ -202,7 +202,7 @@ export default function ChatRoomsPage() {
   }
 
   return (
-    <div className="pt-12 md:pt-0 pb-4 px-6 md:px-0">
+    <div className="pt-14 md:pt-0 pb-4 px-6 md:px-0">
       <Helmet>
         <title>Chat Rooms · Feelz Machine</title>
         <meta name="description" content="Join artist chat rooms and connect with the Feelz Machine community." />
@@ -212,19 +212,9 @@ export default function ChatRoomsPage() {
       </Helmet>
 
       {/* Header */}
-      <div className="flex items-center justify-between mb-6 sticky top-0 z-20 bg-black/90 backdrop-blur-sm md:relative md:top-auto md:bg-transparent md:backdrop-blur-none pt-2 pb-2 -mx-6 px-6">
+      <div className="flex items-center justify-between mb-6 sticky top-0 z-20 bg-black/90 backdrop-blur-sm md:relative md:top-auto md:bg-transparent md:backdrop-blur-none pt-14 pb-2 -mx-6 px-6 md:pt-2">
         <h1 className="text-2xl font-bold text-white">Chat Rooms</h1>
-        {artist && (
-          <button
-            onClick={() => { setShowCreate(!showCreate); setError(''); }}
-            className="w-9 h-9 flex items-center justify-center rounded-full bg-white/[0.06] hover:bg-white/[0.1] transition"
-          >
-            {showCreate
-              ? <X className="w-4 h-4 text-white/60" />
-              : <Plus className="w-4 h-4 text-white/60" />
-            }
-          </button>
-        )}
+
       </div>
 
       {/* Create room form */}
@@ -447,6 +437,18 @@ export default function ChatRoomsPage() {
         </div>
       )}
 
+      {/* Create room FAB — positioned away from bell */}
+      {artist && (
+        <button
+          onClick={() => { setShowCreate(!showCreate); setError(''); }}
+          className="fixed bottom-24 right-5 z-30 w-12 h-12 rounded-full flex items-center justify-center shadow-lg transition-all active:scale-95 md:hidden"
+          style={{ backgroundColor: showCreate ? 'rgba(255,255,255,0.15)' : '#7c3aed' }}
+        >
+          {showCreate
+            ? <X className="w-5 h-5 text-white" />
+            : <Plus className="w-5 h-5 text-white" />}
+        </button>
+      )}
     </div>
   );
 }

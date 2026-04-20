@@ -2,7 +2,7 @@ import { Helmet } from 'react-helmet-async';
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { useStreak } from '../hooks/useStreak';
+import { useStreakContext } from '../contexts/StreakContext';
 import { useTier } from '../contexts/useTier';
 import { supabase } from '../supabaseClient';
 import CollabThread from '../components/CollabThread';
@@ -12,6 +12,7 @@ import {
   Upload, HeartHandshake, Bell, Palette, MessageCircle,
   ChevronRight, Crown, Zap, Star, LayoutDashboard,
   User, LogOut, DollarSign, Megaphone, Radio, Trophy, Brain, Mic2, Loader, X, Youtube,
+  Info, Globe, Lock,
 } from 'lucide-react';
 
 function LinkCard({ icon: Icon, label, description, path, color, onClick }) {
@@ -60,7 +61,7 @@ export default function HubPage() {
   const navigate = useNavigate();
   const { user, artist, isAdmin, isArtist, signOut } = useAuth();
   const { tierSlug, tierLoading } = useTier();
-  const { streak } = useStreak(user);
+  const { streak } = useStreakContext();
   const [activeTab, setActiveTab] = useState('home');
   const [startingSession, setStartingSession]   = useState(false);
   const [showLiveModal, setShowLiveModal]       = useState(false);
@@ -164,7 +165,7 @@ export default function HubPage() {
       </Helmet>
 
       {/* Header */}
-      <div className="mb-6 sticky top-0 z-20 bg-black/90 backdrop-blur-sm md:relative md:top-auto md:bg-transparent md:backdrop-blur-none pt-2 -mx-4 px-4">
+      <div className="mb-6 sticky top-0 z-20 bg-black/90 backdrop-blur-sm md:relative md:top-auto md:bg-transparent md:backdrop-blur-none pt-14 md:pt-2 -mx-4 px-4">
         <div className="flex items-center space-x-3 mb-1">
           <LayoutDashboard className="w-6 h-6 text-white/60" />
           <h1 className="text-2xl font-bold text-white">Hub</h1>
@@ -279,6 +280,9 @@ export default function HubPage() {
             {isArtist && (
               <LinkCard icon={DollarSign} label="Payments" description="PayPal settings and earnings" path="/profile" color="bg-emerald-500/20" />
             )}
+            <LinkCard icon={Info}  label="About"           description="App info and credits"          path="/about"           color="bg-white/[0.06]" />
+            <LinkCard icon={Lock}  label="Privacy Policy"  description="How we handle your data"       path="/privacy-policy"  color="bg-white/[0.06]" />
+            <LinkCard icon={Globe} label="Terms of Use"    description="Platform rules and guidelines"  path="/terms-of-use"    color="bg-white/[0.06]" />
           </Section>
 
           {/* Sign out */}

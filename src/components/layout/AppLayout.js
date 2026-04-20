@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useContext } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import MobileNav from './MobileNav';
 import DesktopSidebar from './DesktopSidebar';
@@ -13,6 +13,7 @@ import { OfflineBanner } from '../../hooks/useOffline';
 import ErrorBoundary from '../ErrorBoundary';
 import AppTour, { useTourState } from '../AppTour';
 import { useStreak } from '../../hooks/useStreak';
+import { StreakContext } from '../../contexts/StreakContext';
 import InstallPrompt from '../InstallPrompt';
 
 const NAV_HEIGHT         = 64;
@@ -89,8 +90,7 @@ function SplashScreen() {
 // ── Bell button ───────────────────────────────────────────────────────────────
 function MobileBellButton() {
   const { unreadCount } = useNotifications();
-  const { user } = useAuth();
-  const { streak } = useStreak(user);
+  const { streak } = useContext(StreakContext);
   const navigate = useNavigate();
   return (
     <div className="md:hidden fixed top-0 left-0 right-0 z-[60] flex items-end justify-end px-4 pointer-events-none" style={{ paddingTop: 'max(env(safe-area-inset-top), 44px)', paddingBottom: '6px' }}>
@@ -127,8 +127,8 @@ export default function AppLayout() {
   const location                    = useLocation();
   const [splashDone, setSplashDone] = useState(false);
 
-  // Daily streak — fires once per day on app open
-  useStreak(user);
+  // Daily streak — fires ONCE here; all other components read from StreakContext
+  const streakValue = useStreak(user);
 
   // Tour — fires once per account type after first sign-up
   const { show: showTour, dismiss: dismissTour } = useTourState(isArtist, !loading);
@@ -161,6 +161,7 @@ export default function AppLayout() {
   if (!splashDone) return <SplashScreen />;
 
   return (
+    <StreakContext.Provider value={streakValue}>
     <div className="min-h-screen bg-black text-white">
       {/* Offline detection — fixed banner, renders above everything */}
       <OfflineBanner />
@@ -200,5 +201,6 @@ export default function AppLayout() {
 )}
       <InstallPrompt />
     </div>
+    </StreakContext.Provider>
   );
 }

@@ -274,7 +274,7 @@ export default function NotificationsPage() {
         </Helmet>
 
         {/* Header */}
-        <div className="flex items-center justify-between mb-6 sticky top-0 z-20 bg-black/90 backdrop-blur-sm md:relative md:top-auto md:bg-transparent md:backdrop-blur-none pt-2 pb-2 -mx-4 px-4">
+        <div className="flex items-center justify-between mb-6 sticky top-0 z-20 bg-black/90 backdrop-blur-sm md:relative md:top-auto md:bg-transparent md:backdrop-blur-none pt-14 pb-2 -mx-4 px-4 md:pt-2">
           <div className="flex items-center space-x-3">
             <button onClick={() => navigate(-1)}
               className="w-9 h-9 flex items-center justify-center rounded-full bg-white/[0.06] hover:bg-white/[0.1] transition">
@@ -285,22 +285,7 @@ export default function NotificationsPage() {
               {unreadCount > 0 && <p className="text-xs text-white/40">{unreadCount} unread</p>}
             </div>
           </div>
-          <div className="flex items-center space-x-2">
-            {unreadCount > 0 && (
-              <button onClick={markAllRead}
-                className="flex items-center space-x-1 px-3 py-1.5 bg-white/[0.06] rounded-lg text-xs text-white/50 hover:bg-white/[0.1] transition">
-                <CheckCheck className="w-3.5 h-3.5" />
-                <span>Read all</span>
-              </button>
-            )}
-            {allNotifs.length > 0 && (
-              <button onClick={async () => { await clearAll(); fetchAll(); }}
-                className="flex items-center space-x-1 px-3 py-1.5 bg-red-500/[0.06] rounded-lg text-xs text-red-400/60 hover:bg-red-500/[0.12] transition">
-                <Trash2 className="w-3.5 h-3.5" />
-                <span>Clear</span>
-              </button>
-            )}
-          </div>
+
         </div>
 
         {/* Filters */}
@@ -314,6 +299,26 @@ export default function NotificationsPage() {
             </button>
           ))}
         </div>
+
+        {/* Action buttons — below filters, away from bell */}
+        {(unreadCount > 0 || allNotifs.length > 0) && (
+          <div className="flex items-center space-x-2 mb-4">
+            {unreadCount > 0 && (
+              <button onClick={markAllRead}
+                className="flex items-center space-x-1.5 px-3 py-2 bg-white/[0.06] rounded-xl text-xs text-white/50 hover:bg-white/[0.1] transition">
+                <CheckCheck className="w-3.5 h-3.5" />
+                <span>Mark all read</span>
+              </button>
+            )}
+            {allNotifs.length > 0 && (
+              <button onClick={async () => { await clearAll(); fetchAll(); }}
+                className="flex items-center space-x-1.5 px-3 py-2 bg-red-500/[0.06] rounded-xl text-xs text-red-400/60 hover:bg-red-500/[0.12] transition">
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Clear all</span>
+              </button>
+            )}
+          </div>
+        )}
 
         {/* Content */}
         {pageLoading ? (

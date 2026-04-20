@@ -54,7 +54,7 @@ export default function LibraryPage() {
   ];
 
   return (
-    <div className="pt-12 md:pt-0 pb-4 px-6 md:px-0">
+    <div className="pt-14 md:pt-0 pb-4 px-6 md:px-0">
       <Helmet>
         <title>Library · Feelz Machine</title>
         <meta name="description" content="Your music library — liked songs, downloads, playlists and artists you follow." />
