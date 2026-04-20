@@ -1509,27 +1509,30 @@ export default function ArtistProfilePage() {
             </span>
           </div>
           <div className="space-y-2">
-            {deepCuts.map((track, i) => (
-              <button
-                key={track.id}
-                onClick={() => handlePlayTrack(track)}
-                className="w-full flex items-center space-x-3 p-3 rounded-xl transition text-left group"
-                style={{ background: currentTrack?.id === track.id ? `${accentColor}15` : 'rgba(255,255,255,0.03)' }}
-              >
-                <span className="text-xs w-4 flex-shrink-0 text-center font-medium" style={{ color: `${textColor}25` }}>{i + 1}</span>
-                <div className="w-9 h-9 rounded-lg overflow-hidden flex-shrink-0" style={{ backgroundColor: `${textColor}08` }}>
-                  {track.cover_artwork_url
-                    ? <img src={track.cover_artwork_url} alt={track.title} className="w-full h-full object-cover" />
-                    : <div className="w-full h-full flex items-center justify-center"><Music className="w-4 h-4" style={{ color: `${textColor}20` }} /></div>}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate" style={{ color: textColor }}>{track.title}</p>
-                  <p className="text-xs truncate" style={{ color: `${textColor}40` }}>
-                    {track.stream_count > 0 ? `${formatNumber(track.stream_count)} plays` : 'Unheard'}
-                  </p>
-                </div>
-              </button>
-            ))}
+            {deepCuts.map((track, i) => {
+              const isActive = currentTrack?.id === track.id;
+              return (
+                <button
+                  key={track.id}
+                  onClick={() => handlePlayTrack(track)}
+                  className="w-full flex items-center space-x-3 p-3 rounded-xl transition text-left group"
+                  style={{ background: isActive ? `${accentColor}15` : 'rgba(255,255,255,0.03)', transform: 'translateZ(0)' }}
+                >
+                  <span className="text-xs w-4 flex-shrink-0 text-center font-medium" style={{ color: `${textColor}25` }}>{i + 1}</span>
+                  <div className="w-9 h-9 rounded-lg overflow-hidden flex-shrink-0" style={{ backgroundColor: `${textColor}08` }}>
+                    {track.cover_artwork_url
+                      ? <img src={track.cover_artwork_url} alt={track.title} className="w-full h-full object-cover" />
+                      : <div className="w-full h-full flex items-center justify-center"><Music className="w-4 h-4" style={{ color: `${textColor}20` }} /></div>}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate" style={{ color: textColor }}>{track.title}</p>
+                    <p className="text-xs truncate" style={{ color: `${textColor}40` }}>
+                      {track.stream_count > 0 ? `${formatNumber(track.stream_count)} plays` : 'Unheard'}
+                    </p>
+                  </div>
+                </button>
+              );
+            })}
           </div>
         </div>
       )}
