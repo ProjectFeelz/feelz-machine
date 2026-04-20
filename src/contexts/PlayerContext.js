@@ -211,17 +211,7 @@ export function PlayerProvider({ children }) {
           if (collab.artist_id === track.artist_id) continue;
           // Also skip if this collab artist is the current listener
           if (collab.artists?.user_id === userId) continue;
-          const { data: collabArt } = await supabase
-            .from('artists')
-            .select('total_streams')
-            .eq('id', collab.artist_id)
-            .single();
-          if (collabArt) {
-            await supabase
-              .from('artists')
-              .update({ total_streams: (collabArt.total_streams || 0) + 1 })
-              .eq('id', collab.artist_id);
-          }
+          await supabase.rpc('increment_artist_streams', { artist_id: collab.artist_id });
         }
       }
     } catch (err) {

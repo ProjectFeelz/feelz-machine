@@ -547,7 +547,7 @@ export default function HomePage() {
 
       <PullToRefreshIndicator pullProgress={pullProgress} isRefreshing={isRefreshing} />
 
-      <div className="greeting-hero px-6 pt-14 md:pt-6 pb-6">
+      <div className="greeting-hero px-6 pt-14 md:pt-6 pb-6 border-b border-white/[0.05] mb-6">
         <div className="flex items-center justify-between mb-1">
           <p className="section-label">{new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</p>
           {user && discoveryStreak > 1 && (
