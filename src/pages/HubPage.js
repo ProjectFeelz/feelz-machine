@@ -419,7 +419,7 @@ export default function HubPage() {
 
       {/* ── Bug Report modal ──────────────────────────────────────────────── */}
       {showBugModal && (
-        <div className="fixed inset-0 z-[600] flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm px-4 pb-6 sm:pb-0" onClick={() => setShowBugModal(false)}>
+        <div className="fixed inset-0 z-[600] flex items-center justify-center bg-black/70 backdrop-blur-sm px-4" onClick={() => setShowBugModal(false)}>
           <div className="w-full max-w-sm bg-[#111] border border-white/10 rounded-2xl p-5 space-y-4" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2">
@@ -449,7 +449,7 @@ export default function HubPage() {
 
       {/* ── Admin DM modal ───────────────────────────────────────────────────── */}
       {showDMModal && isAdmin && (
-        <div className="fixed inset-0 z-[600] flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm px-4 pb-6 sm:pb-0" onClick={() => setShowDMModal(false)}>
+        <div className="fixed inset-0 z-[600] flex items-center justify-center bg-black/70 backdrop-blur-sm px-4" onClick={() => setShowDMModal(false)}>
           <div className="w-full max-w-sm bg-[#111] border border-white/10 rounded-2xl p-5 space-y-4" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2">
@@ -508,8 +508,8 @@ export default function HubPage() {
 
       {/* ── Go Live setup modal ───────────────────────────────────────────── */}
       {showLiveModal && (
-        <div className="fixed inset-0 z-[600] flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm px-4 pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))] sm:pb-0">
-          <div className="w-full max-w-sm bg-[#111] border border-white/10 rounded-2xl p-5 space-y-5 overflow-y-auto max-h-[85vh]">
+        <div className="fixed inset-0 z-[600] flex items-center justify-center bg-black/70 backdrop-blur-sm px-4" onClick={() => setShowLiveModal(false)}>
+          <div className="w-full max-w-sm bg-[#111] border border-white/10 rounded-2xl p-5 space-y-5 overflow-y-auto max-h-[80vh]" onClick={e => e.stopPropagation()}>
             {/* Header */}
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2">
