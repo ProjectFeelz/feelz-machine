@@ -1,4 +1,4 @@
-const CACHE = 'feelz-v7';
+const CACHE = 'feelz-v8';
 const OFFLINE_URL = '/player/index.html';
 
 const PRECACHE = [
@@ -9,34 +9,61 @@ const PRECACHE = [
   '/manifest.json',
 ];
 
+// ── Install: cache shell assets and take over immediately ─────────────────────
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(cache => cache.addAll(PRECACHE)));
   self.skipWaiting();
 });
 
+// ── Activate: wipe ALL old caches, then claim all open clients ────────────────
 self.addEventListener('activate', e => {
   e.waitUntil(
     caches.keys().then(keys =>
-      Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
-    )
+      Promise.all(keys.filter(k => k !== CACHE).map(k => {
+        console.log('[SW] Deleting old cache:', k);
+        return caches.delete(k);
+      }))
+    ).then(() => self.clients.claim())
   );
-  self.clients.claim();
 });
 
+// ── Message: allow the app to trigger a forced update ─────────────────────────
+self.addEventListener('message', e => {
+  if (e.data === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
+  if (e.data === 'CLEAR_CACHE') {
+    caches.keys().then(keys => Promise.all(keys.map(k => caches.delete(k))));
+  }
+});
+
+// ── Fetch: network-first for navigation, cache-first for assets ───────────────
 self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
   if (e.request.method !== 'GET') return;
   if (url.origin !== self.location.origin) return;
+
+  // Navigation requests: always try network first so new deploys are picked up
+  // immediately — only fall back to cache when truly offline.
   if (e.request.mode === 'navigate') {
     e.respondWith(
-      fetch(e.request).catch(() =>
-        caches.match(OFFLINE_URL)
-          .then(r => r || caches.match('/player/'))
-          .then(r => r || new Response('Offline', { status: 503, headers: { 'Content-Type': 'text/plain' } }))
-      )
+      fetch(e.request)
+        .then(response => {
+          const clone = response.clone();
+          caches.open(CACHE).then(cache => cache.put(e.request, clone));
+          return response;
+        })
+        .catch(() =>
+          caches.match(e.request)
+            .then(r => r || caches.match(OFFLINE_URL))
+            .then(r => r || caches.match('/player/'))
+            .then(r => r || new Response('Offline', { status: 503, headers: { 'Content-Type': 'text/plain' } }))
+        )
     );
     return;
   }
+
+  // Static assets: cache-first for speed, fall back to network
   e.respondWith(
     caches.match(e.request).then(cached => {
       if (cached) return cached;
@@ -47,7 +74,7 @@ self.addEventListener('fetch', e => {
         }
         return response;
       }).catch(() =>
-        cached || new Response('Not available offline', { status: 503, headers: { 'Content-Type': 'text/plain' } })
+        new Response('Not available offline', { status: 503, headers: { 'Content-Type': 'text/plain' } })
       );
     })
   );
