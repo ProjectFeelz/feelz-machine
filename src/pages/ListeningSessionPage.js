@@ -14,6 +14,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import TipButton from '../components/TipButton';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import {
@@ -147,7 +148,8 @@ export default function ListeningSessionPage() {
   const sessionSubRef = useRef(null);
   const chatEndRef    = useRef(null);
   const syncTimerRef  = useRef(null);
-  const reactionIdRef = useRef(0);
+  const reactionIdRef      = useRef(0);
+  const reactionChannelRef = useRef(null);
   // Keep a ref to queue so syncAudio never closes over a stale copy
   const queueRef      = useRef([]);
 
@@ -196,6 +198,18 @@ export default function ListeningSessionPage() {
       })
       .subscribe();
 
+    // Realtime reactions — shared broadcast channel everyone subscribes to
+    const reactionSub = supabase.channel(`session-reactions-${sessionId}`)
+      .on('broadcast', { event: 'reaction' }, ({ payload }) => {
+        if (!payload?.emoji) return;
+        const id   = ++reactionIdRef.current;
+        const left = 10 + Math.random() * 80;
+        setReactions(prev => [...prev, { emoji: payload.emoji, id, left }]);
+        setTimeout(() => setReactions(prev => prev.filter(r => r.id !== id)), 2000);
+      })
+      .subscribe();
+    reactionChannelRef.current = reactionSub;
+
     // Realtime chat
     const chatSub = supabase.channel(`session-chat-${sessionId}`)
       .on('postgres_changes', {
@@ -210,6 +224,7 @@ export default function ListeningSessionPage() {
       supabase.removeChannel(channel);
       supabase.removeChannel(sessionSub);
       supabase.removeChannel(chatSub);
+      if (reactionChannelRef.current) supabase.removeChannel(reactionChannelRef.current);
       if (syncTimerRef.current) clearInterval(syncTimerRef.current);
       audioRef.current.pause();
     };
@@ -221,7 +236,7 @@ export default function ListeningSessionPage() {
 
   const loadSession = async () => {
     const { data: s } = await supabase
-      .from('listening_sessions').select('*, artists(artist_name, slug, profile_image_url)')
+      .from('listening_sessions').select('*, artists(id, artist_name, slug, profile_image_url, paypal_email)')
       .eq('id', sessionId).maybeSingle();
     if (!s || s.status === 'ended') { navigate('/'); return; }
     setSession(s);
@@ -383,9 +398,9 @@ export default function ListeningSessionPage() {
     const left = 10 + Math.random() * 80;
     setReactions(prev => [...prev, { emoji, id, left }]);
     setTimeout(() => setReactions(prev => prev.filter(r => r.id !== id)), 2000);
-    // Broadcast to other listeners via Supabase realtime broadcast
-    if (sessionSubRef.current) {
-      sessionSubRef.current.send({
+    // Broadcast to all participants via dedicated reaction channel
+    if (reactionChannelRef.current) {
+      reactionChannelRef.current.send({
         type: 'broadcast', event: 'reaction', payload: { emoji },
       }).catch(() => {});
     }
@@ -577,13 +592,16 @@ export default function ListeningSessionPage() {
 
         {/* Reaction bar + chat input */}
         <div className="flex-shrink-0 px-4 pb-safe pb-4 pt-2 border-t border-white/[0.06] space-y-2">
-          <div className="flex space-x-2">
+          <div className="flex items-center space-x-2">
             {REACTIONS.map(emoji => (
               <button key={emoji} onClick={() => sendReaction(emoji)}
                 className="flex-1 py-1.5 text-xl rounded-xl bg-white/[0.04] hover:bg-white/[0.08] active:scale-90 transition">
                 {emoji}
               </button>
             ))}
+            {!isHost && session?.artists?.paypal_email && (
+              <TipButton artist={session.artists} />
+            )}
           </div>
           {user && (
             <form onSubmit={sendMessage} className="flex space-x-2">
