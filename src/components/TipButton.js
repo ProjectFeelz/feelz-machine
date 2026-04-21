@@ -104,7 +104,7 @@ export default function TipButton({ artist }) {
   if (!open) return (
     <button
       onClick={() => { if (!user) return; setOpen(true); }}
-      className="flex items-center space-x-1.5 px-4 py-2 rounded-xl border border-pink-500/30 bg-pink-500/10 text-pink-400 text-sm font-medium hover:bg-pink-500/20 transition"
+      className="flex items-center space-x-1.5 px-3 py-1.5 rounded-full border border-pink-500/30 bg-pink-500/10 text-pink-400 text-xs font-medium hover:bg-pink-500/20 transition"
     >
       <Heart className="w-4 h-4" />
       <span>Tip</span>
