@@ -874,7 +874,7 @@ export default function ArtistProfilePage() {
     : `Stream music by ${artist.artist_name} on Feelz Machine — independent music platform.`;
 
   return (
-    <div className="min-h-screen pb-32" style={{ backgroundColor: bgColor, color: textColor, fontFamily: `"${bodyFont}", sans-serif`, ...themeStyles, WebkitTransform: 'translateZ(0)', transform: 'translateZ(0)' }} {...pullProps}>
+    <div className="min-h-screen pb-32" style={{ backgroundColor: bgColor, color: textColor, fontFamily: `"${bodyFont}", sans-serif`, ...themeStyles }} {...pullProps}>
       <PullToRefreshIndicator pullProgress={pullProgress} isRefreshing={isRefreshing} />
 
       {/* ── Dynamic head tags ── */}
@@ -894,23 +894,29 @@ export default function ArtistProfilePage() {
       </Helmet>
 
       {/* BANNER */}
-      <div className="relative w-full" style={{ height: '220px', contain: 'layout style', willChange: 'transform' }}>
+      <div className="relative w-full" style={{ height: '220px' }}>
         {artist.banner_image_url || theme?.banner_image_url ? (
-          <img src={artist.banner_image_url || theme?.banner_image_url} alt="" className="absolute inset-0 w-full h-full object-cover" style={{ transform: 'translateZ(0)', WebkitTransform: 'translateZ(0)' }} />
+          <img src={artist.banner_image_url || theme?.banner_image_url} alt="" className="absolute inset-0 w-full h-full object-cover" />
         ) : (
-          <div className="absolute inset-0" style={{ background: `linear-gradient(135deg, ${secondaryColor}40, ${accentColor}30, ${bgColor})`, transform: 'translateZ(0)' }} />
+          <div className="absolute inset-0" style={{ background: `linear-gradient(135deg, ${secondaryColor}40, ${accentColor}30, ${bgColor})` }} />
         )}
         {theme?.background_image_url && !artist.banner_image_url && !theme?.banner_image_url && (
-          <img src={theme.background_image_url} alt="" className="absolute inset-0 w-full h-full object-cover opacity-30" style={{ transform: 'translateZ(0)' }} />
+          <img src={theme.background_image_url} alt="" className="absolute inset-0 w-full h-full object-cover opacity-30" />
         )}
-        <div className="absolute inset-0" style={{ background: `linear-gradient(to bottom, transparent 20%, ${bgColor} 100%)`, transform: 'translateZ(0)', WebkitTransform: 'translateZ(0)' }} />
-        <div className="fixed top-0 left-0 right-0 flex items-center justify-between px-4 z-50" style={{ paddingTop: 'max(env(safe-area-inset-top, 0px), 12px)', height: 'calc(max(env(safe-area-inset-top, 0px), 12px) + 44px)', willChange: 'transform', WebkitTransform: 'translateZ(0)', transform: 'translateZ(0)' }}>
+        <div className="absolute inset-0" style={{ background: `linear-gradient(to bottom, transparent 20%, ${bgColor} 100%)` }} />
+        <div className="fixed top-0 left-0 right-0 flex items-center justify-between px-4 z-50" style={{ paddingTop: 'max(env(safe-area-inset-top, 0px), 12px)', height: 'calc(max(env(safe-area-inset-top, 0px), 12px) + 44px)' }}>
           <button onClick={() => navigate(-1)}
             className="w-10 h-10 flex items-center justify-center rounded-full backdrop-blur-md"
             style={{ backgroundColor: `${bgColor}80` }}>
             <ArrowLeft className="w-5 h-5" style={{ color: textColor }} />
           </button>
-          <div className="w-10 h-10" />
+          <button onClick={handleShare}
+            className="w-10 h-10 flex items-center justify-center rounded-full backdrop-blur-md"
+            style={{ backgroundColor: `${bgColor}80` }}>
+            {copied
+              ? <span className="text-xs" style={{ color: primaryColor }}>Copied!</span>
+              : <Share2 className="w-4 h-4" style={{ color: textColor }} />}
+          </button>
         </div>
         <div className="absolute -bottom-16 left-1/2 -translate-x-1/2 z-10">
           <div className="w-32 h-32 rounded-2xl overflow-hidden border-4 shadow-2xl"
@@ -959,13 +965,6 @@ export default function ArtistProfilePage() {
               <DropAlertButton artistId={artist?.id} textColor={textColor} />
             </>
           )}
-          <button onClick={handleShare}
-            className="flex items-center space-x-2 px-5 py-2.5 rounded-full text-sm font-semibold transition-all active:scale-95"
-            style={{ backgroundColor: `${textColor}10`, color: textColor, border: `1px solid ${textColor}20` }}>
-            {copied
-              ? <span className="text-xs font-semibold" style={{ color: primaryColor }}>Copied!</span>
-              : <><Share2 className="w-4 h-4" /><span>Share</span></>}
-          </button>
           {tracks.length > 0 && (
             <>
               <button onClick={() => handlePlayTrack(tracks[0])}
@@ -1509,30 +1508,28 @@ export default function ArtistProfilePage() {
               Hidden gems
             </span>
           </div>
-          <div className="flex space-x-3 overflow-x-auto scrollbar-hide -mx-6 px-6 pb-1">
+          <div className="space-y-2">
             {deepCuts.map((track, i) => {
               const isActive = currentTrack?.id === track.id;
               return (
                 <button
                   key={track.id}
                   onClick={() => handlePlayTrack(track)}
-                  className="flex-shrink-0 w-32 flex flex-col items-start rounded-xl transition active:scale-95 text-left"
-                  style={{ background: isActive ? `${accentColor}15` : 'rgba(255,255,255,0.04)', transform: 'translateZ(0)', padding: '10px' }}
+                  className="w-full flex items-center space-x-3 p-3 rounded-xl transition text-left group"
+                  style={{ background: isActive ? `${accentColor}15` : 'rgba(255,255,255,0.03)', transform: 'translateZ(0)' }}
                 >
-                  <div className="w-full aspect-square rounded-lg overflow-hidden mb-2 relative" style={{ backgroundColor: `${textColor}08` }}>
+                  <span className="text-xs w-4 flex-shrink-0 text-center font-medium" style={{ color: `${textColor}25` }}>{i + 1}</span>
+                  <div className="w-9 h-9 rounded-lg overflow-hidden flex-shrink-0" style={{ backgroundColor: `${textColor}08` }}>
                     {track.cover_artwork_url
                       ? <img src={track.cover_artwork_url} alt={track.title} className="w-full h-full object-cover" />
-                      : <div className="w-full h-full flex items-center justify-center"><Music className="w-6 h-6" style={{ color: `${textColor}20` }} /></div>}
-                    {isActive && (
-                      <div className="absolute inset-0 flex items-center justify-center rounded-lg" style={{ background: `${accentColor}40` }}>
-                        <div className="w-3 h-3 rounded-full" style={{ backgroundColor: accentColor }} />
-                      </div>
-                    )}
+                      : <div className="w-full h-full flex items-center justify-center"><Music className="w-4 h-4" style={{ color: `${textColor}20` }} /></div>}
                   </div>
-                  <p className="text-xs font-semibold truncate w-full" style={{ color: textColor }}>{track.title}</p>
-                  <p className="text-[10px] truncate w-full mt-0.5" style={{ color: `${textColor}40` }}>
-                    {track.stream_count > 0 ? `${formatNumber(track.stream_count)} plays` : 'Unheard'}
-                  </p>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate" style={{ color: textColor }}>{track.title}</p>
+                    <p className="text-xs truncate" style={{ color: `${textColor}40` }}>
+                      {track.stream_count > 0 ? `${formatNumber(track.stream_count)} plays` : 'Unheard'}
+                    </p>
+                  </div>
                 </button>
               );
             })}
