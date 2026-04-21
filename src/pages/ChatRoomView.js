@@ -258,33 +258,7 @@ export default function ChatRoomView() {
 
   useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, polls]);
 
-  // Android keyboard fix: anchor the container to the visual viewport so the
-  // input bar sits flush against the top of the software keyboard with no gap.
-  useEffect(() => {
-    const vv = window.visualViewport;
-    if (!vv) return;
-    const el = document.getElementById('chat-room-root');
-    if (!el) return;
-    el.style.position = 'fixed';
-    el.style.left = '0';
-    el.style.right = '0';
-    const onResize = () => {
-      el.style.top = `${vv.offsetTop}px`;
-      el.style.height = `${vv.height}px`;
-    };
-    vv.addEventListener('resize', onResize);
-    vv.addEventListener('scroll', onResize);
-    onResize();
-    return () => {
-      vv.removeEventListener('resize', onResize);
-      vv.removeEventListener('scroll', onResize);
-      el.style.position = '';
-      el.style.top = '';
-      el.style.left = '';
-      el.style.right = '';
-      el.style.height = '';
-    };
-  }, []);
+
 
   // Load room members for @mention autocomplete
   useEffect(() => {
@@ -565,7 +539,7 @@ export default function ChatRoomView() {
   );
 
   return (
-    <div id="chat-room-root" className="flex flex-col bg-black" style={{ height: '100dvh', overflow: 'hidden' }}>
+    <div id="chat-room-root" className="flex flex-col bg-black text-white" style={{ minHeight: '100dvh', maxHeight: '100dvh' }}>
       {/* Top bar */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.06] bg-black/95 backdrop-blur-xl flex-shrink-0">
         <div className="flex items-center space-x-3">
@@ -605,7 +579,8 @@ export default function ChatRoomView() {
       )}
 
       {/* Timeline */}
-      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-1 min-h-0" {...pullProps}>
+      <div className="flex-1 flex flex-col overflow-hidden min-h-0">
+      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-1" {...pullProps}>
         <PullToRefreshIndicator pullProgress={pullProgress} isRefreshing={isRefreshing} />
         <div className="flex items-center space-x-2 px-2 py-2 mb-2 border-b border-white/[0.04]">
           <div className="w-7 h-7 rounded-lg overflow-hidden bg-gradient-to-br from-purple-600/20 to-blue-600/10 flex items-center justify-center flex-shrink-0">
@@ -680,6 +655,7 @@ export default function ChatRoomView() {
           );
         })}
         <div ref={messagesEndRef} />
+      </div>
       </div>
 
       {modWarning && (
