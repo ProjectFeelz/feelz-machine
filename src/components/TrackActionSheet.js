@@ -326,6 +326,7 @@ export default function TrackActionSheet({ track, artist, onClose }) {
     };
 
     return (
+        <>
         <div className="fixed inset-0 z-[100] flex items-end justify-center" onClick={onClose}>
             <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
             <div
@@ -629,13 +630,16 @@ export default function TrackActionSheet({ track, artist, onClose }) {
                 .animate-slide-up { animation: slideUp 0.25s ease-out; }
             `}</style>
 
-            {showShareCard && (
-                <ShareCard
-                    track={track}
-                    shareUrl={`https://www.feelzmachine.com/artist/${artist?.slug || track?.artist_slug}?track=${track?.slug || track?.id}`}
-                    onClose={() => setShowShareCard(false)}
-                />
-            )}
         </div>
+
+        {/* ShareCard outside sheet — avoids overflow-hidden clipping, matches FullPlayer pattern */}
+        {showShareCard && (
+            <ShareCard
+                track={track}
+                shareUrl={`https://www.feelzmachine.com/artist/${artist?.slug || track?.artist_slug}?track=${track?.slug || track?.id}`}
+                onClose={() => setShowShareCard(false)}
+            />
+        )}
+        </>
     );
 }
