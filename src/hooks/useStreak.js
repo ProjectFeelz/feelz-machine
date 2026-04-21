@@ -31,29 +31,37 @@ export function useStreak(user) {
   const [discoveryStreak, setDiscoveryStreak] = useState(0);
   const [loading, setLoading]                 = useState(true);
   const discoveredTodayRef                    = useRef(false);
-  const hasFiredRef                            = useRef(false);
+  const sessionKey = `streak_written_${user?.id}`;
 
   const checkAndUpdateStreak = useCallback(async () => {
-    if (hasFiredRef.current) return;  // already ran this session — skip
-    hasFiredRef.current = true;
     if (!user?.id) { setLoading(false); return; }
     try {
       const { data: row } = await supabase.from('user_streaks').select('*').eq('user_id', user.id).maybeSingle();
       const now = new Date(); const today = now.toISOString().split('T')[0];
 
       if (!row) {
-        await supabase.from('user_streaks').insert({
-          user_id: user.id, current_streak: 1, longest_streak: 1,
-          last_active_date: today, discovery_streak: 0, longest_discovery_streak: 0,
-        });
+        if (!sessionStorage.getItem(sessionKey)) {
+          sessionStorage.setItem(sessionKey, today);
+          await supabase.from('user_streaks').insert({
+            user_id: user.id, current_streak: 1, longest_streak: 1,
+            last_active_date: today, discovery_streak: 0, longest_discovery_streak: 0,
+          });
+        }
         setStreak(1); setLongestStreak(1); setDiscoveryStreak(0); setLoading(false); return;
       }
 
+      // Always read and display — pill shows on every page load/refresh
       setDiscoveryStreak(row.discovery_streak || 0);
       const lastActive = new Date(row.last_active_date + 'T00:00:00');
       if (isSameDay(lastActive, now)) {
         setStreak(row.current_streak); setLongestStreak(row.longest_streak); setLoading(false); return;
       }
+
+      // Guard the DB write — only increment once per session per day
+      if (sessionStorage.getItem(sessionKey) === today) {
+        setStreak(row.current_streak); setLongestStreak(row.longest_streak); setLoading(false); return;
+      }
+      sessionStorage.setItem(sessionKey, today);
 
       const newStreak = isYesterday(lastActive) ? (row.current_streak || 1) + 1 : 1;
       const newLongest = Math.max(newStreak, row.longest_streak || 0);
