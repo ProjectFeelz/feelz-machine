@@ -296,7 +296,7 @@ export default function AdminCompetitions() {
     setLoading(true);
     const { data } = await supabase
       .from('competitions')
-      .select('*, competition_entries(count)')
+      .select('*')
       .order('created_at', { ascending: false });
     setCompetitions(data || []);
     setLoading(false);
