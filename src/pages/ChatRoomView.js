@@ -666,7 +666,7 @@ export default function ChatRoomView() {
       )}
 
       {isMember ? (
-        <div className="px-4 pt-2 pb-3 border-t border-white/[0.06] bg-black/95 backdrop-blur-xl flex-shrink-0">
+        <div className="pl-4 pr-4 pt-2 pb-3 border-t border-white/[0.06] bg-black/95 backdrop-blur-xl flex-shrink-0" style={{ paddingRight: "max(16px, env(safe-area-inset-right, 16px))" }}>
           {myMembership?.is_muted ? (
             <div className="flex items-center justify-center space-x-2 py-2">
               <VolumeX className="w-4 h-4 text-white/20" />
@@ -744,7 +744,7 @@ export default function ChatRoomView() {
                 </div>
               )}
 
-              <div className="flex items-center space-x-2 pr-1">
+              <div className="flex items-center space-x-2">
                 <button onClick={() => { setShowEmojiPicker(p => !p); setShowTrackSearch(false); }}
                   className={`w-9 h-9 flex items-center justify-center rounded-xl transition flex-shrink-0 ${showEmojiPicker ? 'bg-purple-600/30 text-purple-300' : 'bg-white/[0.06] hover:bg-white/[0.1] text-white/40'}`}>
                   <Smile className="w-4 h-4" />
@@ -764,9 +764,9 @@ export default function ChatRoomView() {
                   onKeyDown={e => e.key === 'Enter' && !e.shiftKey && handleSend()}
                   placeholder={replyingTo ? `Reply to @${replyingTo.artist_name}...` : 'Type a message...'}
                   maxLength={500}
-                  className="flex-1 bg-white/[0.06] rounded-xl px-4 py-2.5 text-sm text-white placeholder-white/20 outline-none" />
+                  className="flex-1 min-w-0 bg-white/[0.06] rounded-xl px-4 py-2.5 text-sm text-white placeholder-white/20 outline-none" />
                 <button onClick={handleSend} disabled={!input.trim() || sending}
-                  className="w-10 h-10 flex items-center justify-center rounded-xl bg-purple-600 disabled:opacity-30 transition active:scale-95">
+                  className="w-10 h-10 flex items-center justify-center rounded-xl bg-purple-600 disabled:opacity-30 transition active:scale-95 flex-shrink-0">
                   {sending ? <Loader className="w-4 h-4 animate-spin text-white" /> : <Send className="w-4 h-4 text-white" />}
                 </button>
               </div>
