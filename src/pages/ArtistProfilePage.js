@@ -948,29 +948,23 @@ export default function ArtistProfilePage() {
           <span className="text-sm" style={{ color: `${textColor}80` }}>{tracks.length} track{tracks.length !== 1 ? 's' : ''}</span>
           <span className="text-sm" style={{ color: `${textColor}80` }}>{formatNumber(artist.total_streams)} streams</span>
         </div>
-        <div className="flex items-center justify-center space-x-3 mb-4 flex-wrap gap-y-2">
+        <div className="flex items-center justify-center flex-wrap gap-2 mb-4 px-4">
           <button onClick={handleFollow}
-            className="flex items-center space-x-2 px-5 py-2.5 rounded-full text-sm font-semibold transition-all active:scale-95"
+            className="flex items-center space-x-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all active:scale-95"
             style={{
               backgroundColor: isFollowing ? 'transparent' : primaryColor,
               color: isFollowing ? textColor : bgColor,
               border: `2px solid ${isFollowing ? `${textColor}30` : primaryColor}`,
             }}>
-            {isFollowing ? <UserCheck className="w-4 h-4" /> : <UserPlus className="w-4 h-4" />}
+            {isFollowing ? <UserCheck className="w-3.5 h-3.5" /> : <UserPlus className="w-3.5 h-3.5" />}
             <span>{isFollowing ? 'Following' : 'Follow'}</span>
           </button>
-          {user && user.id !== artist?.user_id && (
-            <>
-              <TipButton artist={artist} />
-              <DropAlertButton artistId={artist?.id} textColor={textColor} />
-            </>
-          )}
           {tracks.length > 0 && (
             <>
               <button onClick={() => handlePlayTrack(tracks[0])}
-                className="flex items-center space-x-2 px-5 py-2.5 rounded-full text-sm font-semibold transition-all active:scale-95"
+                className="flex items-center space-x-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all active:scale-95"
                 style={{ backgroundColor: secondaryColor, color: textColor }}>
-                <Play className="w-4 h-4" fill={textColor} />
+                <Play className="w-3.5 h-3.5" fill={textColor} />
                 <span>Play</span>
               </button>
               <button onClick={() => {
@@ -978,11 +972,23 @@ export default function ArtistProfilePage() {
                 const queue = shuffled.map(t => ({ ...t, artist_name: artist.artist_name, artist_slug: artist.slug }));
                 playTrack(queue[0], queue);
               }}
-                className="flex items-center space-x-2 px-5 py-2.5 rounded-full text-sm font-semibold transition-all active:scale-95"
+                className="flex items-center space-x-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all active:scale-95"
                 style={{ backgroundColor: `${secondaryColor}30`, color: textColor, border: `1px solid ${secondaryColor}40` }}>
-                <Shuffle className="w-4 h-4" />
+                <Shuffle className="w-3.5 h-3.5" />
                 <span>Shuffle</span>
               </button>
+            </>
+          )}
+          <button onClick={handleShare}
+            className="flex items-center space-x-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all active:scale-95"
+            style={{ backgroundColor: `${textColor}10`, color: `${textColor}70`, border: `1px solid ${textColor}20` }}>
+            <Share2 className="w-3.5 h-3.5" />
+            <span>Share</span>
+          </button>
+          {user && user.id !== artist?.user_id && (
+            <>
+              <TipButton artist={artist} />
+              <DropAlertButton artistId={artist?.id} textColor={textColor} />
             </>
           )}
         </div>
@@ -1508,28 +1514,33 @@ export default function ArtistProfilePage() {
               Hidden gems
             </span>
           </div>
-          <div className="space-y-2">
+          <div className="flex space-x-3 overflow-x-auto scrollbar-hide -mx-6 px-6">
             {deepCuts.map((track, i) => {
               const isActive = currentTrack?.id === track.id;
               return (
                 <button
                   key={track.id}
                   onClick={() => handlePlayTrack(track)}
-                  className="w-full flex items-center space-x-3 p-3 rounded-xl transition text-left group"
-                  style={{ background: isActive ? `${accentColor}15` : 'rgba(255,255,255,0.03)', transform: 'translateZ(0)' }}
+                  className="flex-shrink-0 w-28 flex flex-col items-center text-center transition active:scale-95 group"
                 >
-                  <span className="text-xs w-4 flex-shrink-0 text-center font-medium" style={{ color: `${textColor}25` }}>{i + 1}</span>
-                  <div className="w-9 h-9 rounded-lg overflow-hidden flex-shrink-0" style={{ backgroundColor: `${textColor}08` }}>
+                  <div className="w-28 h-28 rounded-xl overflow-hidden mb-2 flex-shrink-0 relative" style={{ backgroundColor: `${textColor}08` }}>
                     {track.cover_artwork_url
                       ? <img src={track.cover_artwork_url} alt={track.title} className="w-full h-full object-cover" />
-                      : <div className="w-full h-full flex items-center justify-center"><Music className="w-4 h-4" style={{ color: `${textColor}20` }} /></div>}
+                      : <div className="w-full h-full flex items-center justify-center" style={{ background: `linear-gradient(135deg, ${accentColor}30, ${accentColor}10)` }}><Music className="w-8 h-8" style={{ color: `${textColor}20` }} /></div>}
+                    {isActive && (
+                      <div className="absolute inset-0 flex items-center justify-center rounded-xl" style={{ backgroundColor: `${accentColor}30` }}>
+                        <div className="flex items-end space-x-0.5 h-4">
+                          <div className="w-0.5 rounded-full animate-pulse" style={{ height: '100%', backgroundColor: accentColor }} />
+                          <div className="w-0.5 rounded-full animate-pulse" style={{ height: '60%', backgroundColor: accentColor, animationDelay: '0.15s' }} />
+                          <div className="w-0.5 rounded-full animate-pulse" style={{ height: '80%', backgroundColor: accentColor, animationDelay: '0.3s' }} />
+                        </div>
+                      </div>
+                    )}
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate" style={{ color: textColor }}>{track.title}</p>
-                    <p className="text-xs truncate" style={{ color: `${textColor}40` }}>
-                      {track.stream_count > 0 ? `${formatNumber(track.stream_count)} plays` : 'Unheard'}
-                    </p>
-                  </div>
+                  <p className="text-xs font-medium truncate w-full" style={{ color: isActive ? accentColor : textColor }}>{track.title}</p>
+                  <p className="text-[10px] truncate w-full mt-0.5" style={{ color: `${textColor}40` }}>
+                    {track.stream_count > 0 ? `${formatNumber(track.stream_count)} plays` : 'Unheard'}
+                  </p>
                 </button>
               );
             })}
