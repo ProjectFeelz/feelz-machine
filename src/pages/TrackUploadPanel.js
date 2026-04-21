@@ -513,6 +513,7 @@ export default function TrackUploadPanel() {
         }
       }
       const { error } = await supabase.from('tracks').update({
+        artist_id: artist.id,
         title: editForm.title, slug: slugify(editForm.title),
         genre: editForm.genre, mood: editForm.mood, lyrics: editForm.lyrics,
         is_explicit: editForm.is_explicit, is_downloadable: editForm.is_downloadable,
@@ -529,6 +530,22 @@ export default function TrackUploadPanel() {
         updated_at: new Date().toISOString(),
       }).eq('id', id);
       if (error) throw error;
+      if (editForm.is_published) {
+        try {
+          const { data: { session: authSession } } = await supabase.auth.getSession();
+          fetch('/.netlify/functions/notify-new-track', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              track_id:    id,
+              track_title: editForm.title,
+              artist_id:   artist.id,
+              artist_slug: artist.slug,
+              token:       authSession?.access_token,
+            }),
+          }).catch(() => {});
+        } catch {}
+      }
       showMessage('success', 'Track updated!');
       setEditingId(null); setEditCoverFile(null); setEditAudioFile(null);
       fetchTracks();
