@@ -16,16 +16,13 @@ import { supabase } from '../supabaseClient';
 const MILESTONE_DAYS = [3, 7, 14, 30, 60, 100];
 const DISCOVERY_MILESTONES = [3, 7, 14, 30];
 
-function toUTCDateStr(d) {
-  return new Date(d).toISOString().split('T')[0];
-}
 function isSameDay(a, b) {
-  return toUTCDateStr(a) === toUTCDateStr(b);
+  const da = new Date(a); const db = new Date(b);
+  return da.getFullYear() === db.getFullYear() && da.getMonth() === db.getMonth() && da.getDate() === db.getDate();
 }
 function isYesterday(date) {
-  const yesterday = new Date();
-  yesterday.setUTCDate(yesterday.getUTCDate() - 1);
-  return toUTCDateStr(date) === toUTCDateStr(yesterday);
+  const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
+  return isSameDay(date, yesterday);
 }
 
 export function useStreak(user) {
@@ -34,8 +31,11 @@ export function useStreak(user) {
   const [discoveryStreak, setDiscoveryStreak] = useState(0);
   const [loading, setLoading]                 = useState(true);
   const discoveredTodayRef                    = useRef(false);
+  const hasFiredRef                            = useRef(false);
 
   const checkAndUpdateStreak = useCallback(async () => {
+    if (hasFiredRef.current) return;  // already ran this session — skip
+    hasFiredRef.current = true;
     if (!user?.id) { setLoading(false); return; }
     try {
       const { data: row } = await supabase.from('user_streaks').select('*').eq('user_id', user.id).maybeSingle();
