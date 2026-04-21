@@ -102,6 +102,24 @@ async function getPlatformContext() {
       }).join(' | ')
     : null;
 
+  // Most streamed track this week
+  const { data: trendingData } = await supabase.from('streams')
+    .select('track_id, tracks(title, artists(artist_name))')
+    .gte('created_at', new Date(Date.now() - 7 * 86400000).toISOString())
+    .limit(200);
+
+  const trendCounts = {};
+  const trendMeta   = {};
+  for (const s of (trendingData || [])) {
+    if (!s.track_id) continue;
+    trendCounts[s.track_id] = (trendCounts[s.track_id] || 0) + 1;
+    trendMeta[s.track_id]   = s.tracks;
+  }
+  const topTrackId = Object.entries(trendCounts).sort((a, b) => b[1] - a[1])[0]?.[0];
+  const trendingTrack = topTrackId && trendMeta[topTrackId]
+    ? `${trendMeta[topTrackId].title} by ${trendMeta[topTrackId].artists?.artist_name}`
+    : null;
+
   return {
     raw: competitions || [],
     hasActiveCompetition: (competitions?.length || 0) > 0,
@@ -109,6 +127,7 @@ async function getPlatformContext() {
     totalArtists: totalArtists || 0,
     newTracksThisWeek: newThisWeek || 0,
     recentDrops: (recentTracks || []).map(t => `"${t.title}" by ${t.artists?.artist_name}`).join(', '),
+    trendingTrack,
   };
 }
 
@@ -168,14 +187,20 @@ async function getArtistContext(artistId) {
   const monthAgo = new Date(Date.now() - 30 * 86400000).toISOString();
 
   const [
-    { count: tracksThisMonth },
+    { data: recentTracks },
     { count: newFollowers },
     { count: pendingCollabs },
+    { count: streamsThisWeek },
+    { count: downloadsTotal },
+    { data: artistRow },
+    { data: lastSession },
   ] = await Promise.all([
     supabase.from('tracks')
-      .select('*', { count: 'exact', head: true })
+      .select('id, title, created_at, stream_count, download_count')
       .eq('artist_id', artistId)
-      .gte('created_at', monthAgo),
+      .eq('is_published', true)
+      .order('created_at', { ascending: false })
+      .limit(5),
     supabase.from('follows')
       .select('*', { count: 'exact', head: true })
       .eq('artist_id', artistId)
@@ -184,69 +209,181 @@ async function getArtistContext(artistId) {
       .select('*', { count: 'exact', head: true })
       .eq('to_artist_id', artistId)
       .eq('status', 'pending'),
+    supabase.from('streams')
+      .select('*', { count: 'exact', head: true })
+      .in('track_id',
+        // subquery workaround: fetch track ids first
+        supabase.from('tracks').select('id').eq('artist_id', artistId).then
+          ? ['placeholder'] // will handle below
+          : []
+      )
+      .gte('created_at', weekAgo),
+    supabase.from('downloads')
+      .select('*', { count: 'exact', head: true })
+      .in('track_id',
+        supabase.from('tracks').select('id').eq('artist_id', artistId).then
+          ? ['placeholder']
+          : []
+      ),
+    supabase.from('artists')
+      .select('artist_name, total_streams, follower_count, genre, tier')
+      .eq('id', artistId)
+      .maybeSingle(),
+    supabase.from('listening_sessions')
+      .select('created_at')
+      .eq('artist_id', artistId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
   ]);
 
+  const tracksThisMonth = (recentTracks || []).filter(t =>
+    new Date(t.created_at) >= new Date(monthAgo)
+  ).length;
+
+  const latestTrack = recentTracks?.[0];
+
+  // Get actual stream count for this week via track ids
+  const trackIds = (recentTracks || []).map(t => t.id);
+  let streamsThisWeekActual = 0;
+  if (trackIds.length > 0) {
+    const { count } = await supabase.from('streams')
+      .select('*', { count: 'exact', head: true })
+      .in('track_id', trackIds)
+      .gte('created_at', weekAgo);
+    streamsThisWeekActual = count || 0;
+  }
+
+  const daysSinceSession = lastSession?.created_at
+    ? Math.floor((Date.now() - new Date(lastSession.created_at)) / 86400000)
+    : null;
+
   return {
-    tracksThisMonth:  tracksThisMonth  || 0,
-    newFollowersWeek: newFollowers     || 0,
-    pendingCollabs:   pendingCollabs   || 0,
+    tracksThisMonth,
+    totalPublishedTracks: (recentTracks || []).length,
+    latestTrackTitle:     latestTrack?.title || null,
+    latestTrackStreams:   latestTrack?.stream_count || 0,
+    newFollowersWeek:     newFollowers || 0,
+    pendingCollabs:       pendingCollabs || 0,
+    streamsThisWeek:      streamsThisWeekActual,
+    totalStreams:         artistRow?.total_streams || 0,
+    totalFollowers:       artistRow?.follower_count || 0,
+    tier:                 artistRow?.tier || 'free',
+    daysSinceLastSession: daysSinceSession,
   };
 }
 
 // ── Build listener prompt ─────────────────────────────────────
 function buildListenerPrompt(segment, ctx, platform) {
-  const streakNote = ctx.currentStreak >= 3
-    ? `They have a ${ctx.currentStreak}-day streak going — acknowledge it.`
-    : ctx.currentStreak === 0 ? 'No streak — could be a nudge to come back.' : '';
+  const name = ctx.displayName ? `Their name is ${ctx.displayName}.` : '';
 
-  const competitionNote = platform.hasActiveCompetition
-    ? `Active competition(s): ${platform.competitionSummary}. Weave this in if it fits naturally.`
+  const streakNote = ctx.currentStreak >= 7
+    ? `${ctx.currentStreak}-day streak — that's serious dedication, reference it.`
+    : ctx.currentStreak >= 3
+    ? `${ctx.currentStreak}-day streak going — acknowledge it warmly.`
+    : ctx.currentStreak === 0
+    ? 'No active streak — soft nudge to start one.'
     : '';
 
+  const discoveryNote = ctx.discoveryStreak >= 3
+    ? `Also on a ${ctx.discoveryStreak}-day artist discovery streak.` : '';
+
+  const engagementNote = [
+    ctx.likeCount    > 0 && `${ctx.likeCount} liked tracks`,
+    ctx.downloadCount > 0 && `${ctx.downloadCount} downloads — they actually support artists`,
+  ].filter(Boolean).join(', ');
+
   const historyNote = ctx.streamsLastMonth > 0
-    ? `Last 30 days: ${ctx.streamsLastMonth} streams. Top genre: ${ctx.topGenre || 'mixed'}. Artists they've played: ${ctx.recentArtists || 'various'}.`
+    ? [
+        `Last 30 days: ${ctx.streamsLastMonth} streams (${ctx.streamsThisWeek} this week).`,
+        ctx.topGenre  && `Top genre: ${ctx.topGenre}.`,
+        ctx.topMood   && `Mood they gravitate to: ${ctx.topMood}.`,
+        ctx.recentArtists && `Artists they've played: ${ctx.recentArtists}.`,
+      ].filter(Boolean).join(' ')
     : 'No recent streams — gone quiet.';
 
+  const followNote = ctx.followCount > 0
+    ? `Follows ${ctx.followCount} artists${ctx.followedArtists ? ` including ${ctx.followedArtists}` : ''}.`
+    : 'Not following any artists yet — could nudge them to discover someone.';
+
+  const unheardNote = ctx.unheardRecentDrops
+    ? `Recent drops they haven't heard yet: ${ctx.unheardRecentDrops}. Reference if relevant.`
+    : '';
+
+  const competitionNote = platform.hasActiveCompetition
+    ? `Active competition(s): ${platform.competitionSummary}. Weave in if it fits.`
+    : '';
+
   const dormantNote = segment === 'dormant_listener'
-    ? 'They drifted. No guilt — just drop something they\'d actually want to see.' : '';
+    ? "They drifted. No guilt — just something that'll make them want to open the app." : '';
 
   return `Write ONE personalised in-app notification for a ${segment.replace(/_/g, ' ')}.
 
-LISTENING HISTORY: ${historyNote}
-STREAK: ${streakNote || 'No notable streak.'}
-FOLLOWS: ${ctx.followCount} artists followed
+${name}
+LISTENING: ${historyNote}
+STREAK: ${streakNote || 'No notable streak.'} ${discoveryNote}
+ENGAGEMENT: ${engagementNote || 'Passive listener so far.'}
+FOLLOWING: ${followNote}
+${unheardNote}
 ${competitionNote}
 ${dormantNote}
 PLATFORM: ${platform.recentDrops ? `Fresh drops — ${platform.recentDrops}.` : ''} ${platform.newTracksThisWeek} new tracks this week.
 
-Reference their genre or recent artists if you have them. Warm and direct.`;
+Use their name if you have it. Reference their actual genre/artists/mood. Be specific, not generic.`;
 }
 
 // ── Build artist prompt ───────────────────────────────────────
 function buildArtistPrompt(segment, artist, ctx, platform) {
   const competitionNote = platform.hasActiveCompetition
-    ? `Active competition(s): ${platform.competitionSummary}. Nudge them toward entering or voting if relevant.`
+    ? `Active competition(s): ${platform.competitionSummary}. Nudge toward entering if relevant.`
     : '';
+
+  const sizeNote = ctx.totalFollowers > 0 || ctx.totalStreams > 0
+    ? `${ctx.totalFollowers} followers, ${ctx.totalStreams} all-time streams.`
+    : 'Just starting out.';
+
+  const weekNote = ctx.streamsThisWeek > 0
+    ? `${ctx.streamsThisWeek} streams this week — people are listening right now.`
+    : 'No streams this week yet.';
+
+  const latestNote = ctx.latestTrackTitle
+    ? `Latest track: "${ctx.latestTrackTitle}" with ${ctx.latestTrackStreams} streams.`
+    : 'No published tracks yet.';
 
   const activityParts = [
     ctx.tracksThisMonth  > 0 && `${ctx.tracksThisMonth} track(s) uploaded this month`,
     ctx.newFollowersWeek > 0 && `${ctx.newFollowersWeek} new follower(s) this week`,
-    ctx.pendingCollabs   > 0 && `${ctx.pendingCollabs} pending collab request(s)`,
+    ctx.pendingCollabs   > 0 && `${ctx.pendingCollabs} pending collab request(s) waiting for a reply`,
   ].filter(Boolean);
 
   const activityNote = activityParts.length ? activityParts.join(', ') : 'quiet lately';
-  const dormantNote  = segment === 'dormant_artist'
-    ? 'They\'ve been MIA. Real re-engagement only — no guilt.' : '';
+
+  const sessionNote = ctx.daysSinceLastSession !== null
+    ? ctx.daysSinceLastSession <= 7
+      ? 'Went live recently — momentum is there.'
+      : `Last live session was ${ctx.daysSinceLastSession} days ago.`
+    : 'Never gone live — could be a nudge.';
+
+  const tierNote = ctx.tier === 'free'
+    ? 'On free plan — could mention Pro/Premium features if relevant, but don\'t be pushy.' : '';
+
+  const dormantNote = segment === 'dormant_artist'
+    ? "Been quiet. Re-engagement only — make them feel the platform missed them, not guilty." : '';
 
   return `Write ONE in-app notification for ${artist.artist_name || 'an artist'} (${segment.replace(/_/g, ' ')}).
 
-THEIR ACTIVITY: ${activityNote}
+THEIR STATS: ${sizeNote}
+THIS WEEK: ${weekNote}
+LATEST TRACK: ${latestNote}
+ACTIVITY: ${activityNote}
+LIVE SESSIONS: ${sessionNote}
 GENRE: ${artist.genre || 'not set'}
+${tierNote}
 ${competitionNote}
 ${dormantNote}
-PLATFORM: ${platform.totalArtists} artists, ${platform.newTracksThisWeek} new tracks this week.
+PLATFORM: ${platform.totalArtists} artists total. ${platform.newTracksThisWeek} new tracks this week.${platform.trendingTrack ? ` Trending: "${platform.trendingTrack}".` : ''}
 
-Peer energy. Community-first. Make them feel part of something.`;
+Use their artist name. Be specific to their situation. Peer energy, not corporate.`;
 }
 
 // ── Weekly cap helper ─────────────────────────────────────────
