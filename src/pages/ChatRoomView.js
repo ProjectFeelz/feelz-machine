@@ -258,16 +258,19 @@ export default function ChatRoomView() {
 
   useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, polls]);
 
-  // Android keyboard fix: keep the container height locked to the visual viewport
-  // so the input bar always sticks to the top of the software keyboard.
+  // Android keyboard fix: anchor the container to the visual viewport so the
+  // input bar sits flush against the top of the software keyboard with no gap.
   useEffect(() => {
     const vv = window.visualViewport;
     if (!vv) return;
-    const containerRef = document.getElementById('chat-room-root');
+    const el = document.getElementById('chat-room-root');
+    if (!el) return;
+    el.style.position = 'fixed';
+    el.style.left = '0';
+    el.style.right = '0';
     const onResize = () => {
-      if (containerRef) {
-        containerRef.style.height = `${vv.height}px`;
-      }
+      el.style.top = `${vv.offsetTop}px`;
+      el.style.height = `${vv.height}px`;
     };
     vv.addEventListener('resize', onResize);
     vv.addEventListener('scroll', onResize);
@@ -275,6 +278,11 @@ export default function ChatRoomView() {
     return () => {
       vv.removeEventListener('resize', onResize);
       vv.removeEventListener('scroll', onResize);
+      el.style.position = '';
+      el.style.top = '';
+      el.style.left = '';
+      el.style.right = '';
+      el.style.height = '';
     };
   }, []);
 
@@ -682,7 +690,7 @@ export default function ChatRoomView() {
       )}
 
       {isMember ? (
-        <div className="px-4 pt-3 border-t border-white/[0.06] bg-black/95 backdrop-blur-xl flex-shrink-0" style={{ paddingBottom: 'max(12px, env(safe-area-inset-bottom, 12px))' }}>
+        <div className="px-4 pt-2 pb-3 border-t border-white/[0.06] bg-black/95 backdrop-blur-xl flex-shrink-0">
           {myMembership?.is_muted ? (
             <div className="flex items-center justify-center space-x-2 py-2">
               <VolumeX className="w-4 h-4 text-white/20" />
@@ -760,7 +768,7 @@ export default function ChatRoomView() {
                 </div>
               )}
 
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center space-x-2 pr-1">
                 <button onClick={() => { setShowEmojiPicker(p => !p); setShowTrackSearch(false); }}
                   className={`w-9 h-9 flex items-center justify-center rounded-xl transition flex-shrink-0 ${showEmojiPicker ? 'bg-purple-600/30 text-purple-300' : 'bg-white/[0.06] hover:bg-white/[0.1] text-white/40'}`}>
                   <Smile className="w-4 h-4" />
