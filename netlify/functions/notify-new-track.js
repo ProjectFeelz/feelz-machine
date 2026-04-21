@@ -59,15 +59,8 @@ exports.handler = async (event) => {
     await supabase.from('notifications').insert(notifRows.slice(i, i + 50));
   }
 
-  // 2. Web push — only to followers with drop alerts enabled
-  const { data: alerts } = await supabase
-    .from('artist_alerts').select('user_id').eq('artist_id', artist_id);
-
-  const alertUserIds = (alerts || [])
-    .map(a => a.user_id)
-    .filter(uid => followerIds.includes(uid));
-
-  if (alertUserIds.length > 0) {
+  // 2. Web push — all followers (following = opted in)
+  if (followerIds.length > 0) {
     const siteUrl = process.env.URL || 'https://www.feelzmachine.com';
     fetch(`${siteUrl}/.netlify/functions/send-push`, {
       method: 'POST',
@@ -76,7 +69,7 @@ exports.handler = async (event) => {
         'x-internal-secret': process.env.INTERNAL_FUNCTION_SECRET,
       },
       body: JSON.stringify({
-        user_ids: alertUserIds,
+        user_ids: followerIds,
         title:    `${artistName} just dropped 🎵`,
         body:     title,
         url:      slug ? `/artist/${slug}` : '/',
@@ -87,6 +80,6 @@ exports.handler = async (event) => {
 
   return {
     statusCode: 200,
-    body: JSON.stringify({ notified: followerIds.length, pushed: alertUserIds.length }),
+    body: JSON.stringify({ notified: followerIds.length, pushed: followerIds.length }),
   };
 };
