@@ -20,7 +20,6 @@ import { usePullToRefresh } from '../hooks/usePullToRefresh';
 import PullToRefreshIndicator from '../components/PullToRefreshIndicator';
 import { VoiceMemoCard } from '../components/VoiceMemo';
 import TipButton from '../components/TipButton';
-import DropAlertButton from '../components/DropAlertButton';
 import ArtistGuestbook from '../components/ArtistGuestbook';
 
 const PAYPAL_CLIENT_ID = process.env.REACT_APP_PAYPAL_CLIENT_ID;
@@ -668,10 +667,12 @@ export default function ArtistProfilePage() {
     try {
       if (isFollowing) {
         await supabase.from('follows').delete().eq('artist_id', artist.id).eq('follower_id', user.id);
+        await supabase.from('artist_alerts').delete().eq('artist_id', artist.id).eq('user_id', user.id);
         setIsFollowing(false);
         setFollowerCount(prev => Math.max(prev - 1, 0));
       } else {
         await supabase.from('follows').insert({ artist_id: artist.id, follower_id: user.id });
+        await supabase.from('artist_alerts').upsert({ artist_id: artist.id, user_id: user.id }, { onConflict: 'user_id,artist_id' });
         setIsFollowing(true);
         setFollowerCount(prev => prev + 1);
         const { data: myProfile } = await supabase.from('artists').select('id, artist_name').eq('user_id', user.id).maybeSingle();
@@ -986,10 +987,7 @@ export default function ArtistProfilePage() {
             <span>Share</span>
           </button>
           {user && user.id !== artist?.user_id && (
-            <>
-              <TipButton artist={artist} />
-              <DropAlertButton artistId={artist?.id} textColor={textColor} />
-            </>
+            <TipButton artist={artist} />
           )}
         </div>
         {artist.bio && (
