@@ -18,11 +18,9 @@ body {
   overscroll-behavior-y: none;
 }
 
-/* Promote main scroll container to its own compositor layer */
-main {
-  -webkit-transform: translateZ(0);
-  transform: translateZ(0);
-}
+/* NOTE: do NOT add transform/will-change to main — it breaks position:fixed
+   for ALL descendants (FABs, modals, overlays). Jitter is handled below
+   via scoped .sticky/.fixed backdrop-blur promotion only. */
 
 #root {
   min-height: 100vh;
@@ -72,18 +70,14 @@ html, body, #root {
   background-color: rgba(10, 10, 10, 0.92) !important;
 }
 
-/* Only promote FIXED/STICKY headers — not every blurred element.
-   Blanket will-change causes layer explosion → scroll jitter on fast upswipe. */
+/* Only promote sticky/fixed headers to GPU — not every blurred badge/pill.
+   Blanket will-change on all backdrop-blur elements creates dozens of
+   compositor layers → fast upswipe jitter on iOS/Android. */
 .sticky.backdrop-blur-xl,
 .fixed.backdrop-blur-xl {
   -webkit-transform: translateZ(0);
   transform: translateZ(0);
   will-change: transform;
-}
-
-/* Contain scroll pages so the browser doesn't recalculate the full document */
-.scroll-page {
-  contain: layout style;
 }
 
 /* ── Border overrides ───────────────────────────────────────────────────────
