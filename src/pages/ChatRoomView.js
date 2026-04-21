@@ -666,7 +666,7 @@ export default function ChatRoomView() {
       )}
 
       {isMember ? (
-        <div className="pl-4 pr-4 pt-2 pb-3 border-t border-white/[0.06] bg-black/95 backdrop-blur-xl flex-shrink-0" style={{ paddingRight: "max(16px, env(safe-area-inset-right, 16px))" }}>
+        <div className="px-3 pt-2 pb-3 border-t border-white/[0.06] bg-black/95 backdrop-blur-xl flex-shrink-0">
           {myMembership?.is_muted ? (
             <div className="flex items-center justify-center space-x-2 py-2">
               <VolumeX className="w-4 h-4 text-white/20" />
