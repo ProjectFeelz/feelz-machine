@@ -437,25 +437,12 @@ export default function ChatRoomsPage() {
         </div>
       )}
 
-      {/* Create room FAB — fixed above bottom nav */}
+      {/* Create room FAB — positioned away from bell */}
       {artist && (
         <button
           onClick={() => { setShowCreate(!showCreate); setError(''); }}
-          className="md:hidden"
-          style={{
-            position: 'fixed',
-            right: '20px',
-            bottom: 'calc(80px + env(safe-area-inset-bottom, 0px))',
-            zIndex: 50,
-            width: '52px',
-            height: '52px',
-            borderRadius: '9999px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            backgroundColor: showCreate ? 'rgba(255,255,255,0.15)' : '#7c3aed',
-            boxShadow: '0 4px 24px rgba(124,58,237,0.4)',
-          }}
+          className="fixed bottom-28 right-5 z-[200] w-14 h-14 rounded-full flex items-center justify-center shadow-lg shadow-purple-900/40 transition-all active:scale-95 md:hidden"
+          style={{ backgroundColor: showCreate ? 'rgba(255,255,255,0.15)' : '#7c3aed' }}
         >
           {showCreate
             ? <X className="w-5 h-5 text-white" />
