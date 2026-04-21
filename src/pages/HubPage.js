@@ -80,6 +80,7 @@ export default function HubPage() {
   const [bugSent, setBugSent]                   = useState(false);
   const [showDMModal, setShowDMModal]           = useState(false);
   const [dmUserId, setDmUserId]                 = useState('');
+  const [dmArtistId, setDmArtistId]             = useState('');
   const [dmUserName, setDmUserName]             = useState('');
   const [dmMessage, setDmMessage]               = useState('');
   const [dmSending, setDmSending]               = useState(false);
@@ -141,8 +142,10 @@ export default function HubPage() {
       const { data: admins } = await supabase.from('admins').select('user_id').limit(1);
       const adminId = admins?.[0]?.user_id;
       if (adminId) {
+        const { data: adminArtist } = await supabase.from('artists').select('id').eq('user_id', adminId).maybeSingle();
         await supabase.from('notifications').insert({
           user_id: adminId,
+          artist_id: adminArtist?.id || null,
           type: 'bug_report',
           title: 'Bug Report from ' + (artist?.artist_name || user?.email || 'User'),
           message: bugText.trim(),
@@ -175,6 +178,7 @@ export default function HubPage() {
     try {
       await supabase.from('notifications').insert({
         user_id: dmUserId,
+        artist_id: dmArtistId || null,
         type: 'admin_message',
         title: 'Message from Feelz Machine',
         message: dmMessage.trim(),
@@ -183,7 +187,7 @@ export default function HubPage() {
       setDmSent(true);
       setTimeout(() => {
         setDmSent(false); setShowDMModal(false);
-        setDmMessage(''); setDmUserId(''); setDmUserName(''); setDmSearch(''); setDmResults([]);
+        setDmMessage(''); setDmUserId(''); setDmArtistId(''); setDmUserName(''); setDmSearch(''); setDmResults([]);
       }, 2000);
     } catch (err) { console.error('Admin DM error:', err); }
     setDmSending(false);
@@ -400,8 +404,8 @@ export default function HubPage() {
             {isArtist && (
               <LinkCard icon={DollarSign} label="Payments" description="PayPal settings and earnings" path="/profile" color="bg-emerald-500/20" />
             )}
-            <LinkCard icon={Info}  label="About"           description="App info and credits"          path="/about"           color="bg-white/[0.06]" />
             <LinkCard icon={Bug}   label="Report a Bug"    description="Something broken? Let us know" onClick={() => setShowBugModal(true)} color="bg-red-500/15" />
+            <LinkCard icon={Info}  label="About"           description="App info and credits"          path="/about"           color="bg-white/[0.06]" />
             <LinkCard icon={Lock}  label="Privacy Policy"  description="How we handle your data"       path="/privacy-policy"  color="bg-white/[0.06]" />
             <LinkCard icon={Globe} label="Terms of Use"    description="Platform rules and guidelines"  path="/terms-of-use"    color="bg-white/[0.06]" />
           </Section>
@@ -472,7 +476,7 @@ export default function HubPage() {
                 {dmResults.length > 0 && (
                   <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl overflow-hidden">
                     {dmResults.map(u => (
-                      <button key={u.id} onClick={() => { setDmUserId(u.user_id); setDmUserName(u.artist_name); }}
+                      <button key={u.id} onClick={() => { setDmUserId(u.user_id); setDmUserName(u.artist_name); setDmArtistId(u.id); }}
                         className="w-full flex items-center space-x-3 px-3 py-2.5 hover:bg-white/[0.06] transition text-left border-b border-white/[0.04] last:border-0">
                         <div className="w-8 h-8 rounded-full overflow-hidden bg-white/10 flex-shrink-0 flex items-center justify-center">
                           {u.profile_image_url
@@ -489,7 +493,7 @@ export default function HubPage() {
               <div className="space-y-3">
                 <div className="flex items-center justify-between px-3 py-2 bg-blue-500/10 border border-blue-500/20 rounded-xl">
                   <span className="text-sm text-blue-300 font-medium">To: {dmUserName}</span>
-                  <button onClick={() => { setDmUserId(''); setDmUserName(''); }} className="text-white/30 hover:text-white/60 text-xs">change</button>
+                  <button onClick={() => { setDmUserId(''); setDmArtistId(''); setDmUserName(''); }} className="text-white/30 hover:text-white/60 text-xs">change</button>
                 </div>
                 <textarea value={dmMessage} onChange={e => setDmMessage(e.target.value)}
                   placeholder="Your message to this user..."
