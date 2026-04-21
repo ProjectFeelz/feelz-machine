@@ -380,13 +380,14 @@ async function processNewUsers(users, segmentKey, platform) {
 
   for (let i = 0; i < eligible.length; i += BATCH_SIZE) {
     const batch = eligible.slice(i, i + BATCH_SIZE);
+    const isArtistSegment = segmentKey.includes('artist');
     await supabase.from('notifications').insert(batch.map(u => ({
-      user_id: u.user_id, artist_id: u.id || null, type: 'engagement',
+      user_id: u.user_id, artist_id: isArtistSegment ? u.id : null, type: 'engagement',
       title: chosen.title, message: chosen.body,
       metadata: { segment: segmentKey, message_type: `drip_${segmentKey}`, ai_generated: true, personalised: false },
     })));
     await supabase.from('engagement_messages').insert(batch.map(u => ({
-      user_id: u.user_id, artist_id: u.id || null,
+      user_id: u.user_id, artist_id: isArtistSegment ? u.id : null,
       segment: segmentKey, message_type: `drip_${segmentKey}`,
       title: chosen.title, body: chosen.body,
     })));
