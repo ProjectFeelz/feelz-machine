@@ -258,6 +258,26 @@ export default function ChatRoomView() {
 
   useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, polls]);
 
+  // Android keyboard fix: keep the container height locked to the visual viewport
+  // so the input bar always sticks to the top of the software keyboard.
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const containerRef = document.getElementById('chat-room-root');
+    const onResize = () => {
+      if (containerRef) {
+        containerRef.style.height = `${vv.height}px`;
+      }
+    };
+    vv.addEventListener('resize', onResize);
+    vv.addEventListener('scroll', onResize);
+    onResize();
+    return () => {
+      vv.removeEventListener('resize', onResize);
+      vv.removeEventListener('scroll', onResize);
+    };
+  }, []);
+
   // Load room members for @mention autocomplete
   useEffect(() => {
     if (!roomId) return;
@@ -537,7 +557,7 @@ export default function ChatRoomView() {
   );
 
   return (
-    <div className="flex flex-col h-screen bg-black">
+    <div id="chat-room-root" className="flex flex-col bg-black" style={{ height: '100dvh', overflow: 'hidden' }}>
       {/* Top bar */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.06] bg-black/95 backdrop-blur-xl flex-shrink-0">
         <div className="flex items-center space-x-3">
@@ -577,7 +597,7 @@ export default function ChatRoomView() {
       )}
 
       {/* Timeline */}
-      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-1" {...pullProps}>
+      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-1 min-h-0" {...pullProps}>
         <PullToRefreshIndicator pullProgress={pullProgress} isRefreshing={isRefreshing} />
         <div className="flex items-center space-x-2 px-2 py-2 mb-2 border-b border-white/[0.04]">
           <div className="w-7 h-7 rounded-lg overflow-hidden bg-gradient-to-br from-purple-600/20 to-blue-600/10 flex items-center justify-center flex-shrink-0">
