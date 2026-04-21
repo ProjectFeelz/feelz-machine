@@ -45,7 +45,7 @@ export default function DropAlertButton({ artistId, textColor = '#ffffff' }) {
       onClick={toggle}
       disabled={toggling}
       title={enabled ? 'Turn off drop alerts' : 'Get notified when this artist drops'}
-      className="flex items-center space-x-1.5 px-3 py-2 rounded-xl border transition text-xs font-medium disabled:opacity-40"
+      className="flex items-center space-x-1.5 px-3 py-1.5 rounded-full border transition text-xs font-medium disabled:opacity-40"
       style={enabled
         ? { background: 'rgba(251,191,36,0.15)', borderColor: 'rgba(251,191,36,0.3)', color: 'rgb(251,191,36)' }
         : { background: `${textColor}08`, borderColor: `${textColor}15`, color: `${textColor}50` }
