@@ -75,6 +75,8 @@ export default function HubPage() {
   const [trackResults, setTrackResults]         = useState([]);
   const [searchingTracks, setSearchingTracks]   = useState(false);
   const [showBugModal, setShowBugModal]         = useState(false);
+  const [testPushSending, setTestPushSending]   = useState(false);
+  const [testPushResult, setTestPushResult]     = useState(null);
   const [bugText, setBugText]                   = useState('');
   const [bugSubmitting, setBugSubmitting]       = useState(false);
   const [bugSent, setBugSent]                   = useState(false);
@@ -88,6 +90,32 @@ export default function HubPage() {
   const [dmSearch, setDmSearch]                 = useState('');
   const [dmResults, setDmResults]               = useState([]);
   const [dmSearching, setDmSearching]           = useState(false);
+
+  const sendTestPush = async () => {
+    if (testPushSending || !artist?.id) return;
+    setTestPushSending(true);
+    setTestPushResult(null);
+    try {
+      const { data: { session: authSession } } = await supabase.auth.getSession();
+      const res = await fetch('/.netlify/functions/notify-new-track', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          track_id:    'test-push-' + Date.now(),
+          track_title: '🔔 Test notification',
+          artist_id:   artist.id,
+          artist_slug: artist.slug,
+          token:       authSession?.access_token,
+        }),
+      });
+      const result = await res.json();
+      setTestPushResult(`Sent to ${result.notified ?? 0} follower(s)`);
+    } catch (err) {
+      setTestPushResult('Failed: ' + err.message);
+    }
+    setTestPushSending(false);
+    setTimeout(() => setTestPushResult(null), 5000);
+  };
 
   const openLiveModal = () => {
     if (!artist) return;
@@ -155,12 +183,14 @@ export default function HubPage() {
           if (notifErr) console.error('Bug notif error:', notifErr.message);
         }
       }
-      await supabase.from('user_feedback').insert({
-        user_id: user?.id,
-        message: bugText.trim(),
-        feedback_type: 'bug_report',
-        status: 'open',
-      }).catch(() => {}); // non-critical
+      try {
+        await supabase.from('user_feedback').insert({
+          user_id: user?.id,
+          message: bugText.trim(),
+          feedback_type: 'bug_report',
+          status: 'open',
+        });
+      } catch {} // non-critical
       setBugSent(true);
       setTimeout(() => { setBugSent(false); setShowBugModal(false); setBugText(''); }, 2000);
     } catch (err) { console.error('Bug report error:', err); }
@@ -359,6 +389,23 @@ export default function HubPage() {
             <Section title="Admin" icon={Shield}>
               <LinkCard icon={Shield} label="Admin Panel" description="Broadcast · Analytics · Moderation · Users" path="/admin" color="bg-yellow-500/20" />
               <LinkCard icon={MessageSquare} label="Message a User" description="Send a notification directly to any user" onClick={() => setShowDMModal(true)} color="bg-blue-500/20" />
+              <button
+                onClick={sendTestPush}
+                disabled={testPushSending}
+                className="w-full flex items-center space-x-4 p-4 bg-green-500/10 rounded-xl border border-green-500/20 hover:bg-green-500/15 active:bg-green-500/20 transition text-left disabled:opacity-50"
+              >
+                <div className="w-11 h-11 rounded-lg bg-green-500/20 flex items-center justify-center flex-shrink-0">
+                  {testPushSending
+                    ? <Loader className="w-5 h-5 text-green-400 animate-spin" />
+                    : <Send className="w-5 h-5 text-green-400" />}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-white">Test Push Notification</p>
+                  <p className="text-[11px] text-white/30 mt-0.5">
+                    {testPushResult || 'Fire a test push to all your followers'}
+                  </p>
+                </div>
+              </button>
             </Section>
           )}
 
