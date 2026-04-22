@@ -34,16 +34,27 @@ async function generateSingleMessage(prompt) {
       'anthropic-version': '2023-06-01',
     },
     body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       max_tokens: 200,
       system: `You are the voice of Feelz Machine — an independent music platform. Direct, authentic, energetic. Never corporate. Write ONE in-app notification. Return ONLY valid JSON: {"title":"...","body":"..."}. Title max 60 chars. Body max 120 chars.`,
       messages: [{ role: 'user', content: prompt }],
     }),
   });
   const data = await response.json();
-  const text = data.content?.[0]?.text || '{}';
+  if (data.error) {
+    console.error('Claude API error:', JSON.stringify(data.error));
+    return null;
+  }
+  if (!data.content?.[0]?.text) {
+    console.error('Claude unexpected response:', JSON.stringify(data).slice(0, 200));
+    return null;
+  }
+  const text = data.content[0].text;
   try { return JSON.parse(text.replace(/```json|```/g, '').trim()); }
-  catch { return null; }
+  catch (e) {
+    console.error('Claude JSON parse error:', text.slice(0, 100));
+    return null;
+  }
 }
 
 // ── Claude: segment-level 3-variant messages (new users) ─────
@@ -56,7 +67,7 @@ async function generateSegmentMessages(ctx) {
       'anthropic-version': '2023-06-01',
     },
     body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       max_tokens: 500,
       system: `You are the voice of Feelz Machine. Write short in-app notification copy. Return ONLY a JSON array of 3 variants: [{"title":"...","body":"..."},...]`,
       messages: [{ role: 'user', content: `Segment: ${ctx.segment}\nDescription: ${ctx.description}\nPlatform: ${ctx.platformContext}\nTone: ${ctx.tone}` }],
