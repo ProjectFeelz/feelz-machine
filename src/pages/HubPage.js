@@ -12,7 +12,7 @@ import {
   Upload, HeartHandshake, Bell, Palette, MessageCircle,
   ChevronRight, Crown, Zap, Star, LayoutDashboard,
   User, LogOut, DollarSign, Megaphone, Radio, Trophy, Brain, Mic2, Loader, X, Youtube,
-  Info, Globe, Lock, Search, Plus, Bug, Send, MessageSquare, Check,
+  Info, Globe, Lock, Search, Plus, MessageSquare, Check,
 } from 'lucide-react';
 
 function LinkCard({ icon: Icon, label, description, path, color, onClick }) {
@@ -74,12 +74,8 @@ export default function HubPage() {
   const [trackSearch, setTrackSearch]           = useState('');
   const [trackResults, setTrackResults]         = useState([]);
   const [searchingTracks, setSearchingTracks]   = useState(false);
-  const [showBugModal, setShowBugModal]         = useState(false);
   const [testPushSending, setTestPushSending]   = useState(false);
   const [testPushResult, setTestPushResult]     = useState(null);
-  const [bugText, setBugText]                   = useState('');
-  const [bugSubmitting, setBugSubmitting]       = useState(false);
-  const [bugSent, setBugSent]                   = useState(false);
   const [showDMModal, setShowDMModal]           = useState(false);
   const [dmUserId, setDmUserId]                 = useState('');
   const [dmArtistId, setDmArtistId]             = useState('');
@@ -161,37 +157,6 @@ export default function HubPage() {
     if (!s) return '';
     const m = Math.floor(s / 60);
     return `${m}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
-  };
-
-  const submitBugReport = async () => {
-    if (!bugText.trim() || bugSubmitting) return;
-    setBugSubmitting(true);
-    try {
-      const { data: admins, error: adminErr } = await supabase.from('admins').select('user_id');
-      if (adminErr) console.error('Bug report: could not fetch admins', adminErr);
-      const adminList = admins || [];
-      if (adminList.length > 0) {
-        await Promise.all(adminList.map(async (admin) => {
-          const { data: adminArtist } = await supabase.from('artists').select('id').eq('user_id', admin.user_id).maybeSingle();
-          await supabase.from('notifications').insert({
-            user_id: admin.user_id,
-            artist_id: adminArtist?.id || null,
-            type: 'bug_report',
-            title: 'Bug Report from ' + (artist?.artist_name || user?.email || 'User'),
-            message: bugText.trim(),
-            metadata: { from_user_id: user?.id, from_artist_name: artist?.artist_name || null, action_url: '/admin/bug-reports' },
-          });
-        }));
-      } else {
-        console.warn('Bug report submitted but no admins found in admins table — notification not sent');
-      }
-      await supabase.from('user_feedback').insert({
-        user_id: user?.id, feedback: bugText.trim(), type: 'bug_report',
-      }).catch(() => {});
-      setBugSent(true);
-      setTimeout(() => { setBugSent(false); setShowBugModal(false); setBugText(''); }, 2000);
-    } catch (err) { console.error('Bug report error:', err); }
-    setBugSubmitting(false);
   };
 
   const searchDMUsers = async (q) => {
@@ -453,7 +418,6 @@ export default function HubPage() {
             {isArtist && (
               <LinkCard icon={DollarSign} label="Payments" description="PayPal settings and earnings" path="/profile" color="bg-emerald-500/20" />
             )}
-            <LinkCard icon={Bug}   label="Report a Bug"    description="Something broken? Let us know" onClick={() => setShowBugModal(true)} color="bg-red-500/15" />
             <LinkCard icon={Info}  label="About"           description="App info and credits"          path="/about"           color="bg-white/[0.06]" />
             <LinkCard icon={Lock}  label="Privacy Policy"  description="How we handle your data"       path="/privacy-policy"  color="bg-white/[0.06]" />
             <LinkCard icon={Globe} label="Terms of Use"    description="Platform rules and guidelines"  path="/terms-of-use"    color="bg-white/[0.06]" />
@@ -470,34 +434,6 @@ export default function HubPage() {
         </>
       )}
 
-      {/* ── Bug Report modal ──────────────────────────────────────────────── */}
-      {showBugModal && (
-        <div className="fixed inset-0 z-[600] flex items-center justify-center px-6 bg-black/80 backdrop-blur-sm" onClick={() => setShowBugModal(false)}>
-          <div className="w-full overflow-hidden rounded-3xl p-5 space-y-4" style={{ maxWidth: 360, backgroundColor: '#0f0f0f', border: '1px solid rgba(255,255,255,0.08)', boxShadow: '0 32px 64px rgba(0,0,0,0.6)' }} onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-2">
-                <Bug className="w-4 h-4 text-red-400" />
-                <h2 className="text-base font-semibold text-white">Report a Bug</h2>
-              </div>
-              <button onClick={() => setShowBugModal(false)} className="w-8 h-8 rounded-full bg-white/[0.06] flex items-center justify-center hover:bg-white/10 transition">
-                <X className="w-4 h-4 text-white/60" />
-              </button>
-            </div>
-            <p className="text-xs text-white/30 leading-relaxed">Describe what happened and what you expected. Which page were you on?</p>
-            <textarea value={bugText} onChange={e => setBugText(e.target.value)}
-              placeholder="e.g. When I tap Follow, the count doesn't update..."
-              rows={5} maxLength={1000}
-              className="w-full px-3 py-2.5 bg-white/[0.06] border border-white/[0.08] rounded-xl text-sm text-white placeholder-white/20 focus:outline-none focus:border-red-500/40 resize-none" />
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] text-white/20">{bugText.length}/1000</span>
-              <button onClick={submitBugReport} disabled={!bugText.trim() || bugSubmitting || bugSent}
-                className="flex items-center space-x-2 px-4 py-2.5 bg-red-500 disabled:opacity-40 hover:bg-red-400 rounded-xl text-sm font-semibold text-white transition">
-                {bugSent ? <Check className="w-4 h-4" /> : bugSubmitting ? <Loader className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                <span>{bugSent ? 'Sent!' : 'Send Report'}</span>
-              </button>
-            </div>
-          </div>
-        </div>
       )}
 
       {/* ── Admin DM modal ───────────────────────────────────────────────────── */}

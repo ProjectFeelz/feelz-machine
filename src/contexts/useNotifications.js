@@ -128,7 +128,7 @@ export default function useNotifications() {
       setUnreadCount(prev => prev + 1);
     };
 
-    const channel = supabase
+    let channelBuilder = supabase
       .channel('notifications-realtime')
       .on('postgres_changes', {
         event: 'INSERT',
@@ -143,8 +143,20 @@ export default function useNotifications() {
         filter: `user_id=eq.${user.id}`,
       }, () => {
         fetchUnreadCount();
-      })
-      .subscribe();
+      });
+
+    // Also listen on artist_id — engagement drip inserts with artist_id
+    // for artist-targeted notifications, which would otherwise be missed
+    if (artist?.id) {
+      channelBuilder = channelBuilder.on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'notifications',
+        filter: `artist_id=eq.${artist.id}`,
+      }, handleInsert);
+    }
+
+    const channel = channelBuilder.subscribe();
 
     // Fallback poll every 2 minutes in case realtime misses something
     pollRef.current = setInterval(fetchUnreadCount, 120000);

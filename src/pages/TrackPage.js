@@ -156,6 +156,20 @@ export default function TrackPage() {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       await downloadTrack(track.id, track.title, session?.access_token);
+      // Notify the artist that someone downloaded their track
+      if (artist?.user_id && artist?.id) {
+        const { data: myProfile } = await supabase.from('artists').select('id, artist_name').eq('user_id', user.id).maybeSingle();
+        supabase.from('notifications').insert({
+          user_id: artist.user_id,
+          artist_id: artist.id,
+          type: 'download',
+          title: `${myProfile?.artist_name || 'Someone'} downloaded ${track.title}`,
+          message: `${myProfile?.artist_name || 'Someone'} downloaded your track "${track.title}"`,
+          track_id: track.id,
+          from_artist_id: myProfile?.id || null,
+          metadata: { download: true, purchase_price: track.download_price || 0 },
+        }).catch(() => {});
+      }
     } catch (err) {
       console.error('Download error:', err);
     }
