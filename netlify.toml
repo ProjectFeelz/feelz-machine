@@ -9,7 +9,7 @@
   directory = "netlify/functions"
 
 [[scheduled_functions]]
-  name = "engagement-drip"
+  name = "engagement-drip-cron"
   schedule = "0 8 * * 1,4"
 
 [[scheduled_functions]]
