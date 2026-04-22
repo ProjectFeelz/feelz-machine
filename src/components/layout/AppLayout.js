@@ -15,6 +15,7 @@ import AppTour, { useTourState } from '../AppTour';
 import { useStreak } from '../../hooks/useStreak';
 import { StreakContext } from '../../contexts/StreakContext';
 import InstallPrompt from '../InstallPrompt';
+import { usePushNotifications } from '../../hooks/usePushNotifications';
 
 const NAV_HEIGHT         = 64;
 const MINI_PLAYER_HEIGHT = 64;
@@ -185,6 +186,17 @@ export default function AppLayout() {
     const title = getTitle(location.pathname);
     document.title = title ? `${title} · ${BASE_TITLE}` : BASE_TITLE;
   }, [location.pathname]);
+
+  // Auto-subscribe to push notifications for any logged-in user who hasn't subscribed yet.
+  // Runs silently on app load — no prompt unless browser requires permission.
+  const { supported, subscribed, subscribe } = usePushNotifications(user);
+  useEffect(() => {
+    if (!user || !supported || subscribed || !splashDone) return;
+    // Only auto-subscribe if permission already granted — don't prompt unprompted
+    if (Notification.permission === 'granted') {
+      subscribe().catch(() => {});
+    }
+  }, [user, supported, subscribed, splashDone]);
 
   const mobilePaddingBottom = currentTrack ? NAV_WITH_PLAYER : NAV_HEIGHT;
 
