@@ -192,10 +192,12 @@ export default function AppLayout() {
   const { supported, subscribed, subscribe } = usePushNotifications(user);
   useEffect(() => {
     if (!user || !supported || subscribed || !splashDone) return;
-    // Only auto-subscribe if permission already granted — don't prompt unprompted
-    if (Notification.permission === 'granted') {
-      subscribe().catch(() => {});
-    }
+    // Guard: Notification API may not exist in all environments
+    try {
+      if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+        subscribe().catch(() => {});
+      }
+    } catch {}
   }, [user, supported, subscribed, splashDone]);
 
   const mobilePaddingBottom = currentTrack ? NAV_WITH_PLAYER : NAV_HEIGHT;
