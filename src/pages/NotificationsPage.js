@@ -92,7 +92,7 @@ export default function NotificationsPage() {
         .limit(100);
 
       if (artist) {
-        query = query.eq('artist_id', artist.id);
+        query = query.or(`artist_id.eq.${artist.id},user_id.eq.${user.id}`);
       } else {
         query = query.eq('user_id', user.id);
       }
@@ -116,7 +116,7 @@ export default function NotificationsPage() {
     setPageLoading(false);
   }, [artist, user]);
 
-  useEffect(() => { fetchAll(); }, [fetchAll]);
+  useEffect(() => { fetchAll(); }, [fetchAll, unreadCount]);
 
   const filtered = allNotifs.filter(n => filterMatch(n.type, filter));
 

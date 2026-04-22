@@ -32,8 +32,8 @@ export default function AdminBugReports() {
     try {
       let query = supabase
         .from('user_feedback')
-        .select('id, user_id, message, feedback_type, status, created_at, updated_at, admin_notes, admin_reply, replied_at')
-        .eq('feedback_type', 'bug_report')
+        .select('id, user_id, feedback, type, status, created_at, updated_at, admin_notes, admin_reply, replied_at')
+        .eq('type', 'bug_report')
         .order('created_at', { ascending: false });
 
       if (statusFilter !== 'all') query = query.eq('status', statusFilter);
@@ -96,7 +96,7 @@ export default function AdminBugReports() {
         title:          'Response to your bug report',
         message:        text,
         from_artist_id: artist?.id || null,
-        metadata:       { reply_to_feedback_id: report.id, original_message: report.message },
+        metadata:       { reply_to_feedback_id: report.id, original_message: report.feedback },
       });
 
       setReports(prev => prev.map(r =>
@@ -111,7 +111,7 @@ export default function AdminBugReports() {
     if (!search.trim()) return true;
     const q = search.toLowerCase();
     return (
-      r.message?.toLowerCase().includes(q) ||
+      r.feedback?.toLowerCase().includes(q) ||
       r.artist?.artist_name?.toLowerCase().includes(q) ||
       r.profile?.email?.toLowerCase().includes(q)
     );
@@ -212,7 +212,7 @@ export default function AdminBugReports() {
                       {s.label}
                     </span>
                   </div>
-                  <p className="text-sm text-white/70 line-clamp-2">{report.message}</p>
+                  <p className="text-sm text-white/70 line-clamp-2">{report.feedback}</p>
                   <p className="text-[10px] text-white/30 mt-1">{ago}</p>
                 </div>
                 {isOpen
@@ -226,7 +226,7 @@ export default function AdminBugReports() {
                   {/* Full message */}
                   <div className="bg-black/30 rounded-xl p-3">
                     <p className="text-[10px] text-white/30 uppercase tracking-wide mb-1.5">Report</p>
-                    <p className="text-sm text-white/80 leading-relaxed">{report.message}</p>
+                    <p className="text-sm text-white/80 leading-relaxed">{report.feedback}</p>
                   </div>
 
                   {/* Previous reply if exists */}

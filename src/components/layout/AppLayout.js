@@ -195,7 +195,23 @@ export default function AppLayout() {
     // Guard: Notification API may not exist in all environments
     try {
       if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
-        subscribe().catch(() => {});
+        // subscribe() checks subscribed flag — if already subscribed in browser,
+        // also re-upsert the endpoint to DB in case it went stale
+        navigator.serviceWorker.ready.then(reg =>
+          reg.pushManager.getSubscription()
+        ).then(async (existingSub) => {
+          if (existingSub) {
+            const { supabase: sb } = await import('../../supabaseClient');
+            const p256dh = btoa(String.fromCharCode(...new Uint8Array(existingSub.getKey('p256dh'))));
+            const auth   = btoa(String.fromCharCode(...new Uint8Array(existingSub.getKey('auth'))));
+            await sb.from('push_subscriptions').upsert(
+              { user_id: user.id, endpoint: existingSub.endpoint, p256dh, auth },
+              { onConflict: 'user_id,endpoint' }
+            );
+          } else {
+            subscribe().catch(() => {});
+          }
+        }).catch(() => {});
       }
     } catch {}
   }, [user, supported, subscribed, splashDone]);

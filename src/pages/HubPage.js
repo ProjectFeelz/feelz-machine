@@ -167,18 +167,23 @@ export default function HubPage() {
     if (!bugText.trim() || bugSubmitting) return;
     setBugSubmitting(true);
     try {
-      const { data: admins } = await supabase.from('admins').select('user_id').limit(1);
-      const adminId = admins?.[0]?.user_id;
-      if (adminId) {
-        const { data: adminArtist } = await supabase.from('artists').select('id').eq('user_id', adminId).maybeSingle();
-        await supabase.from('notifications').insert({
-          user_id: adminId,
-          artist_id: adminArtist?.id || null,
-          type: 'bug_report',
-          title: 'Bug Report from ' + (artist?.artist_name || user?.email || 'User'),
-          message: bugText.trim(),
-          metadata: { from_user_id: user?.id, from_artist_name: artist?.artist_name || null, action_url: '/admin/bug-reports' },
-        });
+      const { data: admins, error: adminErr } = await supabase.from('admins').select('user_id');
+      if (adminErr) console.error('Bug report: could not fetch admins', adminErr);
+      const adminList = admins || [];
+      if (adminList.length > 0) {
+        await Promise.all(adminList.map(async (admin) => {
+          const { data: adminArtist } = await supabase.from('artists').select('id').eq('user_id', admin.user_id).maybeSingle();
+          await supabase.from('notifications').insert({
+            user_id: admin.user_id,
+            artist_id: adminArtist?.id || null,
+            type: 'bug_report',
+            title: 'Bug Report from ' + (artist?.artist_name || user?.email || 'User'),
+            message: bugText.trim(),
+            metadata: { from_user_id: user?.id, from_artist_name: artist?.artist_name || null, action_url: '/admin/bug-reports' },
+          });
+        }));
+      } else {
+        console.warn('Bug report submitted but no admins found in admins table — notification not sent');
       }
       await supabase.from('user_feedback').insert({
         user_id: user?.id, feedback: bugText.trim(), type: 'bug_report',

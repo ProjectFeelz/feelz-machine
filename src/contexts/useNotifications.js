@@ -119,10 +119,14 @@ export default function useNotifications() {
     if (!artist && !user) return;
     fetchNotifications();
 
-    // Realtime: increment badge instantly on new notification insert
-    const filter = artist
-      ? `artist_id=eq.${artist.id}`
-      : `user_id=eq.${user.id}`;
+    // Realtime: listen on both artist_id AND user_id channels for artists,
+    // since different notification sources use different columns.
+    const handleInsert = (payload) => {
+      setNotifications(prev =>
+        prev.some(n => n.id === payload.new.id) ? prev : [payload.new, ...prev]
+      );
+      setUnreadCount(prev => prev + 1);
+    };
 
     const channel = supabase
       .channel('notifications-realtime')
@@ -130,18 +134,14 @@ export default function useNotifications() {
         event: 'INSERT',
         schema: 'public',
         table: 'notifications',
-        filter,
-      }, (payload) => {
-        setNotifications(prev => [payload.new, ...prev]);
-        setUnreadCount(prev => prev + 1);
-      })
+        filter: `user_id=eq.${user.id}`,
+      }, handleInsert)
       .on('postgres_changes', {
         event: 'UPDATE',
         schema: 'public',
         table: 'notifications',
-        filter,
+        filter: `user_id=eq.${user.id}`,
       }, () => {
-        // Re-fetch on updates (mark-read etc) to stay in sync
         fetchUnreadCount();
       })
       .subscribe();
