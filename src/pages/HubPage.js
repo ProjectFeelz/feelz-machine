@@ -156,8 +156,11 @@ export default function HubPage() {
         }
       }
       await supabase.from('user_feedback').insert({
-        user_id: user?.id, feedback: bugText.trim(), type: 'bug_report',
-      }).catch(() => {}); // non-critical, ignore if table doesn't exist
+        user_id: user?.id,
+        message: bugText.trim(),
+        feedback_type: 'bug_report',
+        status: 'open',
+      }).catch(() => {}); // non-critical
       setBugSent(true);
       setTimeout(() => { setBugSent(false); setShowBugModal(false); setBugText(''); }, 2000);
     } catch (err) { console.error('Bug report error:', err); }
