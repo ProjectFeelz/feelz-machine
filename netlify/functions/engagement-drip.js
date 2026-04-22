@@ -220,22 +220,8 @@ async function getArtistContext(artistId) {
       .select('*', { count: 'exact', head: true })
       .eq('to_artist_id', artistId)
       .eq('status', 'pending'),
-    supabase.from('streams')
-      .select('*', { count: 'exact', head: true })
-      .in('track_id',
-        // subquery workaround: fetch track ids first
-        supabase.from('tracks').select('id').eq('artist_id', artistId).then
-          ? ['placeholder'] // will handle below
-          : []
-      )
-      .gte('created_at', weekAgo),
-    supabase.from('downloads')
-      .select('*', { count: 'exact', head: true })
-      .in('track_id',
-        supabase.from('tracks').select('id').eq('artist_id', artistId).then
-          ? ['placeholder']
-          : []
-      ),
+    Promise.resolve({ count: 0 }), // streams placeholder — resolved below with real track ids
+    Promise.resolve({ count: 0 }), // downloads placeholder — resolved below with real track ids
     supabase.from('artists')
       .select('artist_name, total_streams, follower_count, genre, tier')
       .eq('id', artistId)
@@ -447,7 +433,57 @@ async function segmentUsers() {
   return segs;
 }
 
-// ── Process individuals (personalised per-user Claude call) ───
+// ── Process individuals (parallel batches of 5) ──────────────
+const PARALLEL_BATCH = 5; // Claude calls in parallel — safe for rate limits
+
+async function processOneUser(user, segmentKey, platform, isArtist) {
+  try {
+    let prompt;
+    if (isArtist) {
+      const ctx = await getArtistContext(user.id);
+      prompt = buildArtistPrompt(segmentKey, user, ctx, platform);
+    } else {
+      const ctx = await getListenerContext(user.user_id);
+      prompt = buildListenerPrompt(segmentKey, ctx, platform);
+    }
+
+    const msg = await generateSingleMessage(prompt);
+    if (!msg?.title) return 0;
+
+    const siteUrl = process.env.URL || 'https://www.feelzmachine.com';
+    await Promise.all([
+      supabase.from('notifications').insert({
+        user_id:   user.user_id,
+        artist_id: isArtist ? user.id : null,
+        type:      'engagement',
+        title:     msg.title,
+        message:   msg.body,
+        metadata:  { segment: segmentKey, message_type: `drip_${segmentKey}`, ai_generated: true, personalised: true },
+      }),
+      supabase.from('engagement_messages').insert({
+        user_id:      user.user_id,
+        artist_id:    isArtist ? user.id : null,
+        segment:      segmentKey,
+        message_type: `drip_${segmentKey}`,
+        title:        msg.title,
+        body:         msg.body,
+      }),
+    ]);
+
+    // Web push — fire and forget
+    fetch(`${siteUrl}/.netlify/functions/send-push`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-internal-secret': process.env.INTERNAL_FUNCTION_SECRET },
+      body: JSON.stringify({ user_ids: [user.user_id], title: msg.title, body: msg.body, url: '/', tag: `drip-${segmentKey}` }),
+    }).catch(() => {});
+
+    return 1;
+  } catch (err) {
+    console.error(`Error for ${user.user_id}:`, err.message);
+    return 0;
+  }
+}
+
 async function processIndividuals(users, segmentKey, platform, isArtist) {
   if (!users.length) return 0;
   const userIds = users.map(u => u.user_id).filter(Boolean);
@@ -456,44 +492,11 @@ async function processIndividuals(users, segmentKey, platform, isArtist) {
   if (!eligible.length) return 0;
 
   let sent = 0;
-  for (const user of eligible) {
-    try {
-      let prompt;
-      if (isArtist) {
-        const ctx = await getArtistContext(user.id);
-        prompt = buildArtistPrompt(segmentKey, user, ctx, platform);
-      } else {
-        const ctx = await getListenerContext(user.user_id);
-        prompt = buildListenerPrompt(segmentKey, ctx, platform);
-      }
-
-      const msg = await generateSingleMessage(prompt);
-      if (!msg?.title) continue;
-
-      await Promise.all([
-        supabase.from('notifications').insert({
-          user_id:   user.user_id,
-          artist_id: isArtist ? user.id : null,
-          type:      'engagement',
-          title:     msg.title,
-          message:   msg.body,
-          metadata:  { segment: segmentKey, message_type: `drip_${segmentKey}`, ai_generated: true, personalised: true },
-        }),
-        supabase.from('engagement_messages').insert({
-          user_id:      user.user_id,
-          artist_id:    isArtist ? user.id : null,
-          segment:      segmentKey,
-          message_type: `drip_${segmentKey}`,
-          title:        msg.title,
-          body:         msg.body,
-        }),
-      ]);
-
-      sent++;
-      await new Promise(r => setTimeout(r, 300)); // rate limit
-    } catch (err) {
-      console.error(`Error for ${user.user_id}:`, err.message);
-    }
+  // Process in parallel batches — PARALLEL_BATCH at a time to stay within Claude rate limits
+  for (let i = 0; i < eligible.length; i += PARALLEL_BATCH) {
+    const batch = eligible.slice(i, i + PARALLEL_BATCH);
+    const results = await Promise.all(batch.map(user => processOneUser(user, segmentKey, platform, isArtist)));
+    sent += results.reduce((a, b) => a + b, 0);
   }
   return sent;
 }
@@ -526,6 +529,7 @@ async function processNewUsers(users, segmentKey, platform) {
 
   const chosen = messages[new Date().getDay() % messages.length];
 
+  const siteUrl = process.env.URL || 'https://www.feelzmachine.com';
   for (let i = 0; i < eligible.length; i += BATCH_SIZE) {
     const batch = eligible.slice(i, i + BATCH_SIZE);
     const isArtistSegment = segmentKey.includes('artist');
@@ -539,6 +543,12 @@ async function processNewUsers(users, segmentKey, platform) {
       segment: segmentKey, message_type: `drip_${segmentKey}`,
       title: chosen.title, body: chosen.body,
     })));
+    // Web push for this batch
+    fetch(`${siteUrl}/.netlify/functions/send-push`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-internal-secret': process.env.INTERNAL_FUNCTION_SECRET },
+      body: JSON.stringify({ user_ids: batch.map(u => u.user_id), title: chosen.title, body: chosen.body, url: '/', tag: `drip-${segmentKey}` }),
+    }).catch(() => {});
   }
 
   return eligible.length;
