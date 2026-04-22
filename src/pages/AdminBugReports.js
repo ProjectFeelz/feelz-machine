@@ -32,19 +32,24 @@ export default function AdminBugReports() {
     try {
       let query = supabase
         .from('user_feedback')
-        .select(`
-          id, user_id, message, feedback_type, status, created_at, updated_at,
-          admin_notes, admin_reply, replied_at,
-          profile:profiles!user_feedback_user_id_fkey(full_name, avatar_url, email),
-          artist:artists!user_feedback_user_id_fkey(artist_name, slug, profile_image_url)
-        `)
+        .select('id, user_id, message, feedback_type, status, created_at, updated_at, admin_notes, admin_reply, replied_at')
         .eq('feedback_type', 'bug_report')
         .order('created_at', { ascending: false });
 
       if (statusFilter !== 'all') query = query.eq('status', statusFilter);
       const { data, error } = await query;
       if (error) throw error;
-      setReports(data || []);
+
+      // Look up artist names for each report
+      const enriched = await Promise.all((data || []).map(async (r) => {
+        const { data: artistData } = await supabase
+          .from('artists')
+          .select('artist_name, slug, profile_image_url')
+          .eq('user_id', r.user_id)
+          .maybeSingle();
+        return { ...r, artist: artistData || null };
+      }));
+      setReports(enriched);
     } catch (err) {
       console.error('Fetch bug reports error:', err);
     }
@@ -180,8 +185,8 @@ export default function AdminBugReports() {
         ) : filtered.map(report => {
           const s      = STATUS_STYLES[report.status] || STATUS_STYLES.open;
           const isOpen = expanded === report.id;
-          const name   = report.artist?.artist_name || report.profile?.full_name || report.profile?.email || 'Unknown User';
-          const avatar = report.artist?.profile_image_url || report.profile?.avatar_url;
+          const name   = report.artist?.artist_name || 'Unknown User';
+          const avatar = report.artist?.profile_image_url || null;
           const ago    = (() => {
             const diff = Date.now() - new Date(report.created_at);
             const h = Math.floor(diff / 3600000);
