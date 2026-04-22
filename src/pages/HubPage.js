@@ -171,26 +171,18 @@ export default function HubPage() {
       const adminId = admins?.[0]?.user_id;
       if (adminId) {
         const { data: adminArtist } = await supabase.from('artists').select('id').eq('user_id', adminId).maybeSingle();
-        if (adminArtist?.id) {
-          const { error: notifErr } = await supabase.from('notifications').insert({
-            user_id: adminId,
-            artist_id: adminArtist.id,
-            type: 'bug_report',
-            title: 'Bug Report from ' + (artist?.artist_name || user?.email || 'User'),
-            message: bugText.trim(),
-            metadata: { from_user_id: user?.id, from_artist_name: artist?.artist_name || null, action_url: '/admin/bug-reports' },
-          });
-          if (notifErr) console.error('Bug notif error:', notifErr.message);
-        }
-      }
-      try {
-        await supabase.from('user_feedback').insert({
-          user_id: user?.id,
+        await supabase.from('notifications').insert({
+          user_id: adminId,
+          artist_id: adminArtist?.id || null,
+          type: 'bug_report',
+          title: 'Bug Report from ' + (artist?.artist_name || user?.email || 'User'),
           message: bugText.trim(),
-          feedback_type: 'bug_report',
-          status: 'open',
+          metadata: { from_user_id: user?.id, from_artist_name: artist?.artist_name || null, action_url: '/admin/bug-reports' },
         });
-      } catch {} // non-critical
+      }
+      await supabase.from('user_feedback').insert({
+        user_id: user?.id, feedback: bugText.trim(), type: 'bug_report',
+      }).catch(() => {});
       setBugSent(true);
       setTimeout(() => { setBugSent(false); setShowBugModal(false); setBugText(''); }, 2000);
     } catch (err) { console.error('Bug report error:', err); }
@@ -388,7 +380,6 @@ export default function HubPage() {
           {isAdmin && (
             <Section title="Admin" icon={Shield}>
               <LinkCard icon={Shield} label="Admin Panel" description="Broadcast · Analytics · Moderation · Users" path="/admin" color="bg-yellow-500/20" />
-              <LinkCard icon={MessageSquare} label="Message a User" description="Send a notification directly to any user" onClick={() => setShowDMModal(true)} color="bg-blue-500/20" />
               <button
                 onClick={sendTestPush}
                 disabled={testPushSending}
