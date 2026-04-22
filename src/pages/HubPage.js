@@ -178,7 +178,7 @@ export default function HubPage() {
             type: 'bug_report',
             title: 'Bug Report from ' + (artist?.artist_name || user?.email || 'User'),
             message: bugText.trim(),
-            metadata: { from_user_id: user?.id, from_artist_name: artist?.artist_name || null },
+            metadata: { from_user_id: user?.id, from_artist_name: artist?.artist_name || null, action_url: '/admin/bug-reports' },
           });
           if (notifErr) console.error('Bug notif error:', notifErr.message);
         }
