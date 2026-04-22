@@ -5,7 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import {
     ChevronLeft, Send, Loader, Check, AlertCircle,
     Smartphone, Megaphone, Youtube, Link, Users, Upload,
-    Download, Apple, Play, ExternalLink, Trash2, Search, MessageSquare, X
+    Download, Apple, Play, ExternalLink, Trash2
 } from 'lucide-react';
 
 const YOUTUBE_SHORT_REGEX = /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/shorts\/|youtu\.be\/)([a-zA-Z0-9_-]{11})/;
@@ -20,37 +20,6 @@ function extractYouTubeId(url) {
 }
 
 function SettingRow({ label, description, icon: Icon, iconColor, children }) {
-    const searchArtists = async (q) => {
-        setDmSearch(q);
-        if (q.length < 2) { setDmResults([]); return; }
-        setDmSearching(true);
-        const { data } = await supabase.from('artists')
-            .select('id, user_id, artist_name, profile_image_url')
-            .ilike('artist_name', `%${q}%`).limit(8);
-        setDmResults(data || []);
-        setDmSearching(false);
-    };
-
-    const sendDM = async () => {
-        if (!dmTarget || !dmTitle.trim() || !dmMessage.trim() || dmSending) return;
-        setDmSending(true);
-        setDmError('');
-        try {
-            const { error } = await supabase.from('notifications').insert({
-                user_id:   dmTarget.user_id,
-                artist_id: dmTarget.id,
-                type:      'admin_message',
-                title:     dmTitle.trim(),
-                message:   dmMessage.trim(),
-            });
-            if (error) throw error;
-            setDmSent(true);
-            setDmTitle(''); setDmMessage(''); setDmTarget(null); setDmSearch(''); setDmResults([]);
-            setTimeout(() => setDmSent(false), 3000);
-        } catch (err) { setDmError(err.message); }
-        setDmSending(false);
-    };
-
     return (
         <div className="bg-white/[0.03] rounded-2xl border border-white/[0.06] p-5 mb-4">
             <div className="flex items-center space-x-3 mb-4">
@@ -99,16 +68,16 @@ export default function AdminBroadcast() {
     const [recipientCount, setRecipientCount] = useState(0);
     const [preview, setPreview] = useState(null);
 
-    // Direct message to individual user
-    const [dmSearch, setDmSearch]         = useState('');
-    const [dmResults, setDmResults]       = useState([]);
-    const [dmSearching, setDmSearching]   = useState(false);
-    const [dmTarget, setDmTarget]         = useState(null);
-    const [dmTitle, setDmTitle]           = useState('');
-    const [dmMessage, setDmMessage]       = useState('');
-    const [dmSending, setDmSending]       = useState(false);
-    const [dmSent, setDmSent]             = useState(false);
-    const [dmError, setDmError]           = useState('');
+    // Direct message to artist
+    const [dmSearch, setDmSearch]       = useState('');
+    const [dmResults, setDmResults]     = useState([]);
+    const [dmSearching, setDmSearching] = useState(false);
+    const [dmTarget, setDmTarget]       = useState(null);
+    const [dmTitle, setDmTitle]         = useState('');
+    const [dmMessage, setDmMessage]     = useState('');
+    const [dmSending, setDmSending]     = useState(false);
+    const [dmSent, setDmSent]           = useState(false);
+    const [dmError, setDmError]         = useState('');
 
     useEffect(() => {
         if (!authLoading && !isAdmin) { navigate('/hub'); return; }
@@ -131,6 +100,41 @@ export default function AdminBroadcast() {
             if (row.key === 'play_store_url') setPlayStoreUrl(row.value || '');
             if (row.key === 'app_store_url') setAppStoreUrl(row.value || '');
         });
+    };
+
+    const searchArtists = async (q) => {
+        setDmSearch(q);
+        if (q.length < 2) { setDmResults([]); return; }
+        setDmSearching(true);
+        const { data } = await supabase.from('artists')
+            .select('id, user_id, artist_name, profile_image_url')
+            .ilike('artist_name', `%${q}%`).limit(8);
+        setDmResults(data || []);
+        setDmSearching(false);
+    };
+
+    const sendDM = async () => {
+        if (!dmTarget || !dmTitle.trim() || !dmMessage.trim() || dmSending) return;
+        setDmSending(true);
+        setDmError('');
+        try {
+            await supabase.from('notifications').insert({
+                user_id:  dmTarget.user_id,
+                artist_id: dmTarget.id,
+                type:     'admin_message',
+                title:    dmTitle.trim(),
+                message:  dmMessage.trim(),
+                metadata: { from_admin: true },
+            });
+            setDmSent(true);
+            setTimeout(() => {
+                setDmSent(false); setDmTarget(null); setDmTitle('');
+                setDmMessage(''); setDmSearch(''); setDmResults('');
+            }, 2000);
+        } catch (err) {
+            setDmError(err.message);
+        }
+        setDmSending(false);
     };
 
     const countRecipients = async () => {
@@ -447,61 +451,6 @@ export default function AdminBroadcast() {
                         <span>{sending ? 'Sending...' : `Send to ${recipientCount} Artists`}</span>
                     </button>
                 </div>
-            </div>
-
-            {/* ── Direct Message ─────────────────────────────── */}
-            <div className="px-4 pb-32">
-                <SettingRow label="Message a User" description="Send a notification directly to one artist" icon={MessageSquare} iconColor="bg-blue-500/20 text-blue-400">
-                    {/* Artist search */}
-                    <div className="relative mb-3">
-                        <div className="flex items-center space-x-2 bg-white/[0.06] rounded-xl px-3 py-2.5">
-                            <Search className="w-4 h-4 text-white/30 flex-shrink-0" />
-                            <input value={dmSearch} onChange={e => searchArtists(e.target.value)}
-                                placeholder="Search artist by name..."
-                                className="flex-1 bg-transparent text-sm text-white placeholder-white/25 outline-none" />
-                            {dmSearching && <Loader className="w-3.5 h-3.5 animate-spin text-white/30" />}
-                        </div>
-                        {dmResults.length > 0 && !dmTarget && (
-                            <div className="absolute top-full left-0 right-0 z-10 mt-1 bg-neutral-900 border border-white/[0.08] rounded-xl overflow-hidden shadow-xl">
-                                {dmResults.map(a => (
-                                    <button key={a.id} onClick={() => { setDmTarget(a); setDmSearch(a.artist_name); setDmResults([]); }}
-                                        className="w-full flex items-center space-x-2.5 px-3 py-2.5 hover:bg-white/[0.06] transition text-left border-b border-white/[0.04] last:border-0">
-                                        <div className="w-8 h-8 rounded-full overflow-hidden bg-white/10 flex-shrink-0">
-                                            {a.profile_image_url
-                                                ? <img src={a.profile_image_url} alt="" className="w-full h-full object-cover" />
-                                                : <span className="text-xs text-white/30 flex items-center justify-center h-full">{a.artist_name[0]}</span>}
-                                        </div>
-                                        <span className="text-sm text-white">{a.artist_name}</span>
-                                    </button>
-                                ))}
-                            </div>
-                        )}
-                    </div>
-
-                    {dmTarget && (
-                        <div className="flex items-center space-x-2 mb-3 px-3 py-2 bg-blue-500/10 border border-blue-500/20 rounded-xl">
-                            <span className="text-sm text-blue-300 flex-1">To: {dmTarget.artist_name}</span>
-                            <button onClick={() => { setDmTarget(null); setDmSearch(''); }}><X className="w-4 h-4 text-white/30" /></button>
-                        </div>
-                    )}
-
-                    <input value={dmTitle} onChange={e => setDmTitle(e.target.value)}
-                        placeholder="Title"
-                        className="w-full bg-white/[0.06] rounded-xl px-3 py-2.5 text-sm text-white placeholder-white/25 outline-none mb-2" />
-                    <textarea value={dmMessage} onChange={e => setDmMessage(e.target.value)}
-                        placeholder="Message"
-                        rows={3}
-                        className="w-full bg-white/[0.06] rounded-xl px-3 py-2.5 text-sm text-white placeholder-white/25 outline-none resize-none mb-3" />
-
-                    {dmError && <p className="text-xs text-red-400 mb-2">{dmError}</p>}
-                    {dmSent && <p className="text-xs text-green-400 mb-2">Message sent!</p>}
-
-                    <button onClick={sendDM} disabled={!dmTarget || !dmTitle.trim() || !dmMessage.trim() || dmSending}
-                        className="w-full flex items-center justify-center space-x-2 py-3 bg-blue-600 text-white rounded-xl font-semibold text-sm disabled:opacity-40 transition">
-                        {dmSending ? <Loader className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                        <span>{dmSending ? 'Sending...' : 'Send Message'}</span>
-                    </button>
-                </SettingRow>
             </div>
         </div>
     );
