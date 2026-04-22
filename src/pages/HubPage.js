@@ -155,11 +155,9 @@ export default function HubPage() {
           if (notifErr) console.error('Bug notif error:', notifErr.message);
         }
       }
-      try {
-        await supabase.from('user_feedback').insert({
-          user_id: user?.id, feedback: bugText.trim(), type: 'bug_report',
-        });
-      } catch {}
+      await supabase.from('user_feedback').insert({
+        user_id: user?.id, feedback: bugText.trim(), type: 'bug_report',
+      }).catch(() => {}); // non-critical, ignore if table doesn't exist
       setBugSent(true);
       setTimeout(() => { setBugSent(false); setShowBugModal(false); setBugText(''); }, 2000);
     } catch (err) { console.error('Bug report error:', err); }
