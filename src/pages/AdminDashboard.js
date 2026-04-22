@@ -6,7 +6,7 @@ import {
   Shield, Users, Search, Loader, UserCheck,
   UserX, Crown, MoreVertical, Music, Mail, Calendar,
   Megaphone, BarChart3, AlertTriangle, Zap, Trophy,
-  Brain, Copy, ChevronRight,
+  Brain, Copy, ChevronRight, Bug,
 } from 'lucide-react';
 
 // ── Admin nav items in priority order ────────────────────────
