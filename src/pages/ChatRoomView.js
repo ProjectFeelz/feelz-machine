@@ -264,9 +264,16 @@ export default function ChatRoomView() {
   useEffect(() => {
     if (!roomId) return;
     supabase.from('chat_room_members')
-      .select('user_id, artists(artist_name, profile_image_url, slug)')
+      .select('user_id')
       .eq('room_id', roomId).limit(100)
-      .then(({ data }) => setRoomMembers((data || []).filter(m => m.artists)));
+      .then(async ({ data }) => {
+        if (!data?.length) return;
+        const userIds = data.map(m => m.user_id).filter(Boolean);
+        const { data: artists } = await supabase.from('artists')
+          .select('user_id, artist_name, profile_image_url, slug')
+          .in('user_id', userIds);
+        setRoomMembers((artists || []).map(a => ({ user_id: a.user_id, artists: a })));
+      });
   }, [roomId]);
 
   // @mention autocomplete — fires whenever @ appears at end of input
