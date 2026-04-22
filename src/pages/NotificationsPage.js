@@ -41,7 +41,6 @@ const TYPE_CONFIG = {
   first_listener:   { icon: Heart,         color: 'text-yellow-400', bg: 'bg-yellow-500/10', label: 'First! 🎯' },
   tip:              { icon: Heart,         color: 'text-pink-400',   bg: 'bg-pink-500/10',   label: 'Tip Received' },
   admin_message:    { icon: Megaphone,     color: 'text-yellow-400', bg: 'bg-yellow-500/10', label: 'Message from Admin' },
-  bug_report:       { icon: MessageCircle, color: 'text-red-400',    bg: 'bg-red-500/10',    label: 'Bug Report' },
 };
 
 const FILTERS = [
@@ -257,7 +256,7 @@ export default function NotificationsPage() {
       return;
     }
     // admin_message and bug_report — no navigation, just mark as read
-    if (type === 'admin_message' || type === 'bug_report') return;
+    if (type === 'admin_message') return;
   };
 
   if (!user) {

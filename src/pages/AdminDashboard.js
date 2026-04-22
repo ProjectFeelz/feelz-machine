@@ -6,7 +6,7 @@ import {
   Shield, Users, Search, Loader, UserCheck,
   UserX, Crown, MoreVertical, Music, Mail, Calendar,
   Megaphone, BarChart3, AlertTriangle, Zap, Trophy,
-  Brain, Copy, ChevronRight, Bug,
+  Brain, Copy, ChevronRight,
 } from 'lucide-react';
 
 // ── Admin nav items in priority order ────────────────────────
@@ -31,7 +31,6 @@ const ADMIN_SECTIONS = [
       { label: 'Competitions',    icon: Trophy,         path: '/admin/competitions', color: 'bg-yellow-500/15 text-yellow-300',  desc: 'Create and manage competitions' },
       { label: 'Boost Manager',   icon: Zap,            path: '/admin/boost',        color: 'bg-amber-500/15 text-amber-300',    desc: 'Feature and boost content' },
       { label: 'Moderation',      icon: AlertTriangle,  path: '/admin/moderation',   color: 'bg-red-500/15 text-red-300',        desc: 'Flagged tracks and reports' },
-      { label: 'Bug Reports',       icon: Bug,            path: '/admin/bug-reports',  color: 'bg-orange-500/15 text-orange-300',  desc: 'User feedback and bug reports' },
     ],
   },
   {

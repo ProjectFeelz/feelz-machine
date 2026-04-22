@@ -674,6 +674,33 @@ export default function ArtistProfilePage() {
         await supabase.from('follows').insert({ artist_id: artist.id, follower_id: user.id });
         await supabase.from('artist_alerts').upsert({ artist_id: artist.id, user_id: user.id }, { onConflict: 'user_id,artist_id' });
         setIsFollowing(true);
+        // Auto-request push permission on first follow
+        try {
+          if ('Notification' in window && 'serviceWorker' in navigator && 'PushManager' in window) {
+            const permission = Notification.permission === 'default'
+              ? await Notification.requestPermission()
+              : Notification.permission;
+            if (permission === 'granted') {
+              const reg = await navigator.serviceWorker.ready;
+              const existing = await reg.pushManager.getSubscription();
+              const sub = existing || await reg.pushManager.subscribe({
+                userVisibleOnly: true,
+                applicationServerKey: (() => {
+                  const key = process.env.REACT_APP_VAPID_PUBLIC_KEY;
+                  const padding = '='.repeat((4 - key.length % 4) % 4);
+                  const base64 = (key + padding).replace(/-/g, '+').replace(/_/g, '/');
+                  return Uint8Array.from([...window.atob(base64)].map(c => c.charCodeAt(0)));
+                })(),
+              });
+              const p256dh = btoa(String.fromCharCode(...new Uint8Array(sub.getKey('p256dh'))));
+              const auth   = btoa(String.fromCharCode(...new Uint8Array(sub.getKey('auth'))));
+              await supabase.from('push_subscriptions').upsert(
+                { user_id: user.id, endpoint: sub.endpoint, p256dh, auth },
+                { onConflict: 'user_id,endpoint' }
+              );
+            }
+          }
+        } catch (pushErr) { console.warn('Push subscribe skipped:', pushErr.message); }
         setFollowerCount(prev => prev + 1);
         const { data: myProfile } = await supabase.from('artists').select('id, artist_name').eq('user_id', user.id).maybeSingle();
         await supabase.from('notifications').insert({
