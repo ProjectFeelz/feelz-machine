@@ -434,8 +434,6 @@ export default function HubPage() {
         </>
       )}
 
-      )}
-
       {/* ── Admin DM modal ───────────────────────────────────────────────────── */}
       {showDMModal && isAdmin && (
         <div className="fixed inset-0 z-[600] flex items-center justify-center px-6 bg-black/80 backdrop-blur-sm" onClick={() => setShowDMModal(false)}>
