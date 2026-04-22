@@ -187,16 +187,16 @@ export default function AppLayout() {
     document.title = title ? `${title} · ${BASE_TITLE}` : BASE_TITLE;
   }, [location.pathname]);
 
-  // Auto-subscribe to push notifications for any logged-in user who hasn't subscribed yet.
-  // Runs silently on app load — no prompt unless browser requires permission.
+  // Push notifications — auto-subscribe on load if permission already granted,
+  // or prompt if this user follows artists but hasn't granted permission yet.
   const { supported, subscribed, subscribe } = usePushNotifications(user);
   useEffect(() => {
     if (!user || !supported || subscribed || !splashDone) return;
-    // Guard: Notification API may not exist in all environments
     try {
-      if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
-        // subscribe() checks subscribed flag — if already subscribed in browser,
-        // also re-upsert the endpoint to DB in case it went stale
+      if (typeof Notification === 'undefined') return;
+
+      if (Notification.permission === 'granted') {
+        // Already granted — re-upsert existing sub in case it went stale
         navigator.serviceWorker.ready.then(reg =>
           reg.pushManager.getSubscription()
         ).then(async (existingSub) => {
@@ -212,6 +212,21 @@ export default function AppLayout() {
             subscribe().catch(() => {});
           }
         }).catch(() => {});
+
+      } else if (Notification.permission === 'default') {
+        // Not yet decided — prompt if this user follows anyone (backfill existing followers)
+        import('../../supabaseClient').then(async ({ supabase: sb }) => {
+          const { count } = await sb
+            .from('follows')
+            .select('*', { count: 'exact', head: true })
+            .eq('follower_id', user.id);
+          if (count > 0) {
+            const permission = await Notification.requestPermission();
+            if (permission === 'granted') {
+              subscribe().catch(() => {});
+            }
+          }
+        }).catch(() => {});
       }
     } catch {}
   }, [user, supported, subscribed, splashDone]);
@@ -222,45 +237,43 @@ export default function AppLayout() {
 
   return (
     <StreakContext.Provider value={streakValue}>
-    <div className="min-h-screen bg-black text-white">
-      {/* Offline detection — fixed banner, renders above everything */}
-      <OfflineBanner />
+      <div className="min-h-screen bg-black text-white">
+        {/* Offline detection — fixed banner, renders above everything */}
+        <OfflineBanner />
 
-      <DesktopSidebar />
-      <MobileBellButton />
+        <DesktopSidebar />
+        <MobileBellButton />
 
-      <main
-        className="w-full md:w-[calc(100%-256px)] md:ml-64"
-        style={{
-          paddingBottom: `calc(${mobilePaddingBottom}px + var(--safe-area-bottom, 0px))`,
-          WebkitOverflowScrolling: 'touch',
-          overscrollBehavior: 'contain',
-        }}
-      >
-        <style>{`
-          @media (min-width: 768px) {
-            main { padding-bottom: ${currentTrack ? '100px' : '0px'} !important; }
-          }
-        `}</style>
-        <div className="md:px-8 md:pt-8 w-full">
-          {/* Error boundary — catches crashes in any page, shows friendly recovery */}
-          <ErrorBoundary>
-            <Outlet />
-          </ErrorBoundary>
-        </div>
-      </main>
+        <main
+          className="w-full md:w-[calc(100%-256px)] md:ml-64"
+          style={{
+            paddingBottom: `calc(${mobilePaddingBottom}px + var(--safe-area-bottom, 0px))`,
+            WebkitOverflowScrolling: 'touch',
+            overscrollBehavior: 'contain',
+          }}
+        >
+          <style>{`
+            @media (min-width: 768px) {
+              main { padding-bottom: ${currentTrack ? '100px' : '0px'} !important; }
+            }
+          `}</style>
+          <div className="md:px-8 md:pt-8 w-full">
+            <ErrorBoundary>
+              <Outlet />
+            </ErrorBoundary>
+          </div>
+        </main>
 
-      <FullPlayer />
-      <DesktopPlayer />
-      <MiniPlayer />
-      <MobileNav />
+        <FullPlayer />
+        <DesktopPlayer />
+        <MiniPlayer />
+        <MobileNav />
 
-      {/* First-time onboarding tour — only shows once, after splash is done */}
-      {showTour && splashDone && !loading && hasProfile && (
-  <AppTour isArtist={isArtist} onDone={dismissTour} />
-)}
-      <InstallPrompt />
-    </div>
+        {showTour && splashDone && !loading && hasProfile && (
+          <AppTour isArtist={isArtist} onDone={dismissTour} />
+        )}
+        <InstallPrompt />
+      </div>
     </StreakContext.Provider>
   );
 }

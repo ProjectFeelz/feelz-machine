@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import {
-  MessageCircle, Plus, Loader, Lock, Users, Search, Zap, X, Pencil, Trash2, Trophy, Crown, Clock
+  MessageCircle, Plus, Loader, Lock, Users, Search, Zap, X, Pencil, Trash2, Trophy, Crown, Clock, Bug
 } from 'lucide-react';
 import TierGate from '../components/TierGate';
 import { useTier } from '../contexts/useTier';
@@ -18,31 +18,146 @@ function timeAgo(date) {
   return `${Math.floor(s / 86400)}d ago`;
 }
 
+// ── Accent colour presets ─────────────────────────────────────────────────────
+const COLOR_SWATCHES = [
+  { label: 'Purple',  value: '#7c3aed' },
+  { label: 'Blue',    value: '#2563eb' },
+  { label: 'Cyan',    value: '#0891b2' },
+  { label: 'Green',   value: '#16a34a' },
+  { label: 'Amber',   value: '#d97706' },
+  { label: 'Red',     value: '#ef4444' },
+  { label: 'Pink',    value: '#db2777' },
+  { label: 'Default', value: null      },
+];
+
+// Derive Tailwind-safe inline styles from a hex colour
+function accentStyles(color) {
+  if (!color) return {};
+  return {
+    borderColor: `${color}40`,       // 25% opacity border
+    background:  `linear-gradient(to right, ${color}15, transparent)`,
+  };
+}
+
+function accentIconStyle(color) {
+  if (!color) return {};
+  return { background: `${color}25` };
+}
+
+function accentTextStyle(color) {
+  if (!color) return {};
+  return { color };
+}
+
+// ── Pinned room card ──────────────────────────────────────────────────────────
+function PinnedRoomCard({ room, lastMessage, onNavigate }) {
+  const color = room.accent_color || '#ef4444';
+  return (
+    <button
+      onClick={() => onNavigate(room.id)}
+      className="w-full flex items-center space-x-3 p-3.5 rounded-xl border transition text-left mb-5"
+      style={accentStyles(color)}
+    >
+      <div
+        className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0"
+        style={accentIconStyle(color)}
+      >
+        <Bug className="w-5 h-5" style={accentTextStyle(color)} />
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center space-x-2">
+          <p className="text-sm font-bold truncate" style={accentTextStyle(color)}>
+            {room.name}
+          </p>
+          <span
+            className="text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded-full flex-shrink-0"
+            style={{ background: `${color}20`, color }}
+          >
+            Pinned
+          </span>
+        </div>
+        {lastMessage?.content ? (
+          <p className="text-[11px] truncate mt-0.5" style={{ color: `${color}80` }}>
+            {lastMessage.content}
+          </p>
+        ) : (
+          <p className="text-[11px] mt-0.5" style={{ color: `${color}60` }}>
+            Share feedback or report issues
+          </p>
+        )}
+      </div>
+      <div className="flex flex-col items-end space-y-1 flex-shrink-0">
+        {lastMessage && (
+          <div className="flex items-center space-x-1">
+            <Clock className="w-2.5 h-2.5" style={{ color: `${color}50` }} />
+            <span className="text-[10px]" style={{ color: `${color}60` }}>
+              {timeAgo(lastMessage.created_at)}
+            </span>
+          </div>
+        )}
+        <div className="flex items-center space-x-1">
+          <Users className="w-3 h-3" style={{ color: `${color}50` }} />
+          <span className="text-xs" style={{ color: `${color}60` }}>{room.member_count || 0}</span>
+        </div>
+      </div>
+    </button>
+  );
+}
+
+// ── Colour picker strip ───────────────────────────────────────────────────────
+function ColorPicker({ value, onChange }) {
+  return (
+    <div>
+      <label className="block text-xs text-white/40 mb-2">Room Colour</label>
+      <div className="flex items-center space-x-2 flex-wrap gap-y-2">
+        {COLOR_SWATCHES.map(s => (
+          <button
+            key={s.label}
+            title={s.label}
+            onClick={() => onChange(s.value)}
+            className="w-7 h-7 rounded-full border-2 transition-transform hover:scale-110 flex items-center justify-center"
+            style={{
+              background:   s.value || 'rgba(255,255,255,0.08)',
+              borderColor:  value === s.value ? '#fff' : 'transparent',
+            }}
+          >
+            {s.value === null && (
+              <span className="text-[9px] text-white/40 font-bold">—</span>
+            )}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Main page ─────────────────────────────────────────────────────────────────
 export default function ChatRoomsPage() {
   const navigate = useNavigate();
   const { user, artist } = useAuth();
   const { isPro, isPremium, tierSlug } = useTier();
 
-  const [rooms, setRooms] = useState([]);
+  const [rooms, setRooms]               = useState([]);
   const [competitions, setCompetitions] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading]           = useState(true);
   const [lastMessages, setLastMessages] = useState({});
-  const [query, setQuery] = useState('');
-  const [error, setError] = useState('');
+  const [query, setQuery]               = useState('');
+  const [error, setError]               = useState('');
 
   // Create room
   const [showCreate, setShowCreate] = useState(false);
-  const [newName, setNewName] = useState('');
-  const [subOnly, setSubOnly] = useState(false);
-  const [creating, setCreating] = useState(false);
+  const [newName, setNewName]       = useState('');
+  const [newColor, setNewColor]     = useState(null);
+  const [subOnly, setSubOnly]       = useState(false);
+  const [creating, setCreating]     = useState(false);
 
-  // Rename room
-  const [editingRoomId, setEditingRoomId] = useState(null);
-  const [editName, setEditName] = useState('');
-  const [renaming, setRenaming] = useState(false);
+  // Rename / colour room
+  const [editingRoomId, setEditingRoomId]   = useState(null);
+  const [editName, setEditName]             = useState('');
+  const [editColor, setEditColor]           = useState(null);
+  const [renaming, setRenaming]             = useState(false);
   const [deletingRoomId, setDeletingRoomId] = useState(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
-
 
   useEffect(() => {
     fetchRooms();
@@ -52,7 +167,6 @@ export default function ChatRoomsPage() {
   const fetchLastMessages = async (roomIds) => {
     if (!roomIds?.length) return;
     try {
-      // Fetch the latest message for each room in one query
       const { data } = await supabase
         .from('chat_messages')
         .select('room_id, content, created_at')
@@ -60,11 +174,8 @@ export default function ChatRoomsPage() {
         .eq('is_deleted', false)
         .order('created_at', { ascending: false });
       if (!data) return;
-      // Keep only the first (most recent) message per room
       const map = {};
-      data.forEach(msg => {
-        if (!map[msg.room_id]) map[msg.room_id] = msg;
-      });
+      data.forEach(msg => { if (!map[msg.room_id]) map[msg.room_id] = msg; });
       setLastMessages(map);
     } catch (err) { console.error('Last messages error:', err); }
   };
@@ -118,11 +229,12 @@ export default function ChatRoomsPage() {
       const { data: room, error: insertErr } = await supabase
         .from('chat_rooms')
         .insert({
-          artist_id: artist.id,
-          name: newName.trim(),
-          is_subscribers_only: subOnly,
-          max_members: isPremium ? 500 : 100,
-          member_count: 1,
+          artist_id:            artist.id,
+          name:                 newName.trim(),
+          is_subscribers_only:  subOnly,
+          max_members:          isPremium ? 500 : 100,
+          member_count:         1,
+          accent_color:         newColor || null,
         })
         .select()
         .single();
@@ -130,10 +242,11 @@ export default function ChatRoomsPage() {
       await supabase.from('chat_room_members').insert({
         room_id: room.id,
         user_id: user.id,
-        role: 'admin',
+        role:    'admin',
       });
       setShowCreate(false);
       setNewName('');
+      setNewColor(null);
       setSubOnly(false);
       fetchRooms();
     } catch (err) {
@@ -146,52 +259,53 @@ export default function ChatRoomsPage() {
     e.stopPropagation();
     setEditingRoomId(room.id);
     setEditName(room.name);
+    setEditColor(room.accent_color || null);
   };
 
   const handleRename = async (room) => {
-    if (!editName.trim() || editName.trim() === room.name) {
-      setEditingRoomId(null);
-      return;
-    }
+    const nameChanged  = editName.trim() && editName.trim() !== room.name;
+    const colorChanged = editColor !== (room.accent_color || null);
+    if (!nameChanged && !colorChanged) { setEditingRoomId(null); return; }
     setRenaming(true);
     try {
       await supabase
         .from('chat_rooms')
-        .update({ name: editName.trim() })
+        .update({ name: editName.trim() || room.name, accent_color: editColor })
         .eq('id', room.id);
       fetchRooms();
-    } catch (err) {
-      console.error('Rename error:', err);
-    }
+    } catch (err) { console.error('Rename error:', err); }
     setRenaming(false);
     setEditingRoomId(null);
   };
 
   const handleDeleteRoom = async (e, roomId) => {
     e.stopPropagation();
-    if (confirmDeleteId !== roomId) {
-      setConfirmDeleteId(roomId);
-      return;
-    }
+    if (confirmDeleteId !== roomId) { setConfirmDeleteId(roomId); return; }
     setDeletingRoomId(roomId);
     try {
       await supabase.from('chat_messages').delete().eq('room_id', roomId);
       await supabase.from('chat_room_members').delete().eq('room_id', roomId);
       await supabase.from('chat_rooms').delete().eq('id', roomId);
       setRooms(prev => prev.filter(r => r.id !== roomId));
-    } catch (err) {
-      console.error('Delete room error:', err);
-    }
+    } catch (err) { console.error('Delete room error:', err); }
     setDeletingRoomId(null);
     setConfirmDeleteId(null);
   };
 
-  const filtered = query.trim()
-    ? rooms.filter(r =>
+  // ── Sort: pinned first (but below competitions), then by member count
+  const pinnedRooms  = rooms.filter(r => r.is_pinned);
+  const regularRooms = rooms.filter(r => !r.is_pinned);
+
+  const filteredRegular = query.trim()
+    ? regularRooms.filter(r =>
         r.name?.toLowerCase().includes(query.toLowerCase()) ||
         r.artists?.artist_name?.toLowerCase().includes(query.toLowerCase())
       )
-    : rooms;
+    : regularRooms;
+
+  const filteredPinned = query.trim()
+    ? pinnedRooms.filter(r => r.name?.toLowerCase().includes(query.toLowerCase()))
+    : pinnedRooms;
 
   if (loading) {
     return (
@@ -214,7 +328,6 @@ export default function ChatRoomsPage() {
       {/* Header */}
       <div className="flex items-center justify-between mb-6 sticky top-0 z-20 bg-black/95 backdrop-blur-xl md:relative md:top-auto md:bg-transparent md:backdrop-blur-none pt-14 md:pt-4 pb-3 -mx-6 px-6 border-b border-white/[0.04] md:border-none">
         <h1 className="text-2xl font-bold text-white">Chat Rooms</h1>
-
       </div>
 
       {/* Create room form */}
@@ -238,6 +351,25 @@ export default function ChatRoomsPage() {
                   className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none placeholder-white/20"
                 />
               </div>
+
+              {/* Colour picker */}
+              <ColorPicker value={newColor} onChange={setNewColor} />
+
+              {/* Preview */}
+              {newColor && (
+                <div
+                  className="flex items-center space-x-2 p-2.5 rounded-lg border"
+                  style={accentStyles(newColor)}
+                >
+                  <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0" style={accentIconStyle(newColor)}>
+                    <MessageCircle className="w-4 h-4" style={accentTextStyle(newColor)} />
+                  </div>
+                  <span className="text-xs font-semibold truncate" style={accentTextStyle(newColor)}>
+                    {newName || 'Room Name Preview'}
+                  </span>
+                </div>
+              )}
+
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-white">Subscribers only</p>
@@ -277,7 +409,7 @@ export default function ChatRoomsPage() {
         </div>
       )}
 
-      {/* Competition Rooms — shown above regular chat rooms */}
+      {/* Competition Rooms — top priority */}
       {competitions.length > 0 && (
         <div className="mb-5">
           <p className="text-[10px] uppercase tracking-widest text-white/30 font-semibold mb-2 flex items-center space-x-1.5">
@@ -286,7 +418,7 @@ export default function ChatRoomsPage() {
           </p>
           <div className="space-y-2">
             {competitions.map(comp => {
-              const isOpen = comp.status === 'open';
+              const isOpen   = comp.status === 'open';
               const isVoting = comp.status === 'voting';
               return (
                 <button
@@ -321,110 +453,154 @@ export default function ChatRoomsPage() {
         </div>
       )}
 
-      {/* Room list */}
-      {filtered.length > 0 ? (
-        <div className="space-y-2">
-          {filtered.map(room => (
-            <button
+      {/* Pinned rooms — below competitions, above regular rooms */}
+      {filteredPinned.length > 0 && (
+        <div>
+          {filteredPinned.map(room => (
+            <PinnedRoomCard
               key={room.id}
-              onClick={() => editingRoomId !== room.id && navigate(`/chat/${room.id}`)}
-              className="w-full flex items-center space-x-3 p-3.5 rounded-xl bg-white/[0.03] border border-white/[0.06] hover:bg-white/[0.05] transition text-left"
-            >
-              {/* Artist avatar */}
-              <div className="w-11 h-11 rounded-xl overflow-hidden bg-gradient-to-br from-purple-600/30 to-blue-600/20 flex items-center justify-center flex-shrink-0">
-                {room.artists?.profile_image_url
-                  ? <img src={room.artists.profile_image_url} alt="" className="w-11 h-11 object-cover" />
-                  : <MessageCircle className="w-5 h-5 text-white/30" />
-                }
-              </div>
-
-              {/* Room info */}
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center space-x-1.5">
-                  {editingRoomId === room.id ? (
-                    <input
-                      autoFocus
-                      value={editName}
-                      onChange={e => setEditName(e.target.value)}
-                      onBlur={() => handleRename(room)}
-                      onKeyDown={e => {
-                        if (e.key === 'Enter') handleRename(room);
-                        if (e.key === 'Escape') setEditingRoomId(null);
-                        e.stopPropagation();
-                      }}
-                      onClick={e => e.stopPropagation()}
-                      className="bg-white/[0.08] text-white text-sm rounded px-2 py-0.5 outline-none w-full border border-white/[0.15]"
-                    />
-                  ) : (
-                    <p className="text-sm font-semibold text-white truncate">{room.name}</p>
-                  )}
-                  {room.is_subscribers_only && <Lock className="w-3 h-3 text-yellow-400 flex-shrink-0" />}
-                </div>
-                <div className="flex items-center space-x-1.5 mt-0.5">
-                  <span className="text-xs text-white/40 truncate">{room.artists?.artist_name}</span>
-                  {room.artists?.is_verified && (
-                    <span className="text-[9px] text-blue-400">✓</span>
-                  )}
-                </div>
-                {lastMessages[room.id]?.content && (
-                  <p className="text-[11px] text-white/20 truncate mt-0.5 max-w-[160px]">
-                    {lastMessages[room.id].content}
-                  </p>
-                )}
-              </div>
-
-              {/* Last message + member count */}
-              <div className="flex flex-col items-end space-y-1 flex-shrink-0">
-                {lastMessages[room.id] && (
-                  <div className="flex items-center space-x-1">
-                    <Clock className="w-2.5 h-2.5 text-white/20" />
-                    <span className="text-[10px] text-white/25">{timeAgo(lastMessages[room.id].created_at)}</span>
-                  </div>
-                )}
-                <div className="flex items-center space-x-1">
-                  <Users className="w-3 h-3 text-white/20" />
-                  <span className="text-xs text-white/30">{room.member_count || 0}</span>
-                </div>
-                {room.artist_id === artist?.id && editingRoomId !== room.id && (
-                  <>
-                    <button
-                      onClick={e => startRename(e, room)}
-                      className="p-1.5 hover:bg-white/[0.08] rounded-lg transition"
-                      title="Rename room"
-                    >
-                      <Pencil className="w-3 h-3 text-white/30" />
-                    </button>
-                    <button
-                      onClick={e => handleDeleteRoom(e, room.id)}
-                      disabled={deletingRoomId === room.id}
-                      className={`p-1.5 rounded-lg transition ${confirmDeleteId === room.id ? "bg-red-500/20" : "hover:bg-white/[0.08]"}`}
-                      title={confirmDeleteId === room.id ? 'Click again to confirm' : 'Delete room'}
-                    >
-                      {deletingRoomId === room.id
-                        ? <Loader className="w-3 h-3 animate-spin text-red-400" />
-                        : <Trash2 className={`w-3 h-3 ${confirmDeleteId === room.id ? "text-red-400" : "text-white/30"}`} />}
-                    </button>
-                  </>
-                )}
-                {editingRoomId === room.id && renaming && (
-                  <Loader className="w-3 h-3 animate-spin text-white/30" />
-                )}
-              </div>
-            </button>
+              room={room}
+              lastMessage={lastMessages[room.id]}
+              onNavigate={(id) => navigate(`/chat/${id}`)}
+            />
           ))}
         </div>
-      ) : (
+      )}
+
+      {/* Regular room list */}
+      {filteredRegular.length > 0 && (
+        <div className="space-y-2">
+          {filteredRegular.map(room => {
+            const color = room.accent_color || null;
+            const isEditing = editingRoomId === room.id;
+            return (
+              <button
+                key={room.id}
+                onClick={() => !isEditing && navigate(`/chat/${room.id}`)}
+                className="w-full flex items-center space-x-3 p-3.5 rounded-xl border transition text-left"
+                style={color ? accentStyles(color) : {
+                  background:   'rgba(255,255,255,0.03)',
+                  borderColor:  'rgba(255,255,255,0.06)',
+                }}
+              >
+                {/* Avatar */}
+                <div
+                  className="w-11 h-11 rounded-xl overflow-hidden flex items-center justify-center flex-shrink-0"
+                  style={color ? accentIconStyle(color) : { background: 'linear-gradient(135deg, rgba(124,58,237,0.3), rgba(37,99,235,0.2))' }}
+                >
+                  {room.artists?.profile_image_url
+                    ? <img src={room.artists.profile_image_url} alt="" className="w-11 h-11 object-cover" />
+                    : <MessageCircle className="w-5 h-5" style={color ? accentTextStyle(color) : { color: 'rgba(255,255,255,0.3)' }} />
+                  }
+                </div>
+
+                {/* Room info */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center space-x-1.5">
+                    {isEditing ? (
+                      <div className="flex-1 space-y-2" onClick={e => e.stopPropagation()}>
+                        <input
+                          autoFocus
+                          value={editName}
+                          onChange={e => setEditName(e.target.value)}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter') handleRename(room);
+                            if (e.key === 'Escape') setEditingRoomId(null);
+                            e.stopPropagation();
+                          }}
+                          className="bg-white/[0.08] text-white text-sm rounded px-2 py-0.5 outline-none w-full border border-white/[0.15]"
+                        />
+                        <ColorPicker value={editColor} onChange={setEditColor} />
+                        <button
+                          onClick={e => { e.stopPropagation(); handleRename(room); }}
+                          className="text-xs text-purple-400 font-semibold"
+                        >
+                          {renaming ? 'Saving...' : 'Save'}
+                        </button>
+                      </div>
+                    ) : (
+                      <p
+                        className="text-sm font-semibold truncate"
+                        style={color ? accentTextStyle(color) : { color: '#fff' }}
+                      >
+                        {room.name}
+                      </p>
+                    )}
+                    {room.is_subscribers_only && <Lock className="w-3 h-3 text-yellow-400 flex-shrink-0" />}
+                  </div>
+                  {!isEditing && (
+                    <>
+                      <div className="flex items-center space-x-1.5 mt-0.5">
+                        <span className="text-xs text-white/40 truncate">{room.artists?.artist_name}</span>
+                        {room.artists?.is_verified && (
+                          <span className="text-[9px] text-blue-400">✓</span>
+                        )}
+                      </div>
+                      {lastMessages[room.id]?.content && (
+                        <p className="text-[11px] text-white/20 truncate mt-0.5 max-w-[160px]">
+                          {lastMessages[room.id].content}
+                        </p>
+                      )}
+                    </>
+                  )}
+                </div>
+
+                {/* Right side */}
+                {!isEditing && (
+                  <div className="flex flex-col items-end space-y-1 flex-shrink-0">
+                    {lastMessages[room.id] && (
+                      <div className="flex items-center space-x-1">
+                        <Clock className="w-2.5 h-2.5 text-white/20" />
+                        <span className="text-[10px] text-white/25">{timeAgo(lastMessages[room.id].created_at)}</span>
+                      </div>
+                    )}
+                    <div className="flex items-center space-x-1">
+                      <Users className="w-3 h-3 text-white/20" />
+                      <span className="text-xs text-white/30">{room.member_count || 0}</span>
+                    </div>
+                    {room.artist_id === artist?.id && (
+                      <>
+                        <button
+                          onClick={e => startRename(e, room)}
+                          className="p-1.5 hover:bg-white/[0.08] rounded-lg transition"
+                          title="Edit room"
+                        >
+                          <Pencil className="w-3 h-3 text-white/30" />
+                        </button>
+                        <button
+                          onClick={e => handleDeleteRoom(e, room.id)}
+                          disabled={deletingRoomId === room.id}
+                          className={`p-1.5 rounded-lg transition ${confirmDeleteId === room.id ? 'bg-red-500/20' : 'hover:bg-white/[0.08]'}`}
+                          title={confirmDeleteId === room.id ? 'Click again to confirm' : 'Delete room'}
+                        >
+                          {deletingRoomId === room.id
+                            ? <Loader className="w-3 h-3 animate-spin text-red-400" />
+                            : <Trash2 className={`w-3 h-3 ${confirmDeleteId === room.id ? 'text-red-400' : 'text-white/30'}`} />
+                          }
+                        </button>
+                      </>
+                    )}
+                  </div>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Empty state */}
+      {filteredRegular.length === 0 && filteredPinned.length === 0 && (
         <div className="text-center py-16">
           <MessageCircle className="w-12 h-12 mx-auto text-white/10 mb-3" />
           <p className="text-sm text-white/30 mb-1">
             {query ? 'No rooms match your search' : 'No chat rooms yet'}
           </p>
-          {!query && artist && <p className="text-xs text-white/15">Create the first one!</p>}
+          {!query && artist  && <p className="text-xs text-white/15">Create the first one!</p>}
           {!query && !artist && <p className="text-xs text-white/15">Artist chat rooms will appear here</p>}
         </div>
       )}
 
-      {/* Info card for listeners */}
+      {/* Info card for listeners with no rooms */}
       {!artist && rooms.length === 0 && (
         <div className="mt-6 rounded-xl bg-white/[0.02] border border-white/[0.04] p-4">
           <div className="flex items-center space-x-2 mb-2">
@@ -437,7 +613,7 @@ export default function ChatRoomsPage() {
         </div>
       )}
 
-      {/* Create room FAB — positioned away from bell */}
+      {/* Create room FAB */}
       {artist && (
         <button
           onClick={() => { setShowCreate(!showCreate); setError(''); }}

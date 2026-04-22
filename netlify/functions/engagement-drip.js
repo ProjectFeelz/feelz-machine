@@ -201,8 +201,8 @@ async function getArtistContext(artistId) {
     { data: recentTracks },
     { count: newFollowers },
     { count: pendingCollabs },
-    { count: streamsThisWeek },
-    { count: downloadsTotal },
+    ,
+    ,
     { data: artistRow },
     { data: lastSession },
   ] = await Promise.all([
@@ -220,8 +220,8 @@ async function getArtistContext(artistId) {
       .select('*', { count: 'exact', head: true })
       .eq('to_artist_id', artistId)
       .eq('status', 'pending'),
-    Promise.resolve({ count: 0 }), // streams placeholder — resolved below with real track ids
-    Promise.resolve({ count: 0 }), // downloads placeholder — resolved below with real track ids
+    Promise.resolve({ count: 0 }), // streams placeholder
+    Promise.resolve({ count: 0 }), // downloads placeholder
     supabase.from('artists')
       .select('artist_name, total_streams, follower_count, genre, tier')
       .eq('id', artistId)
@@ -240,7 +240,6 @@ async function getArtistContext(artistId) {
 
   const latestTrack = recentTracks?.[0];
 
-  // Get actual stream count for this week via track ids
   const trackIds = (recentTracks || []).map(t => t.id);
   let streamsThisWeekActual = 0;
   if (trackIds.length > 0) {
@@ -293,8 +292,8 @@ function buildListenerPrompt(segment, ctx, platform) {
   const historyNote = ctx.streamsLastMonth > 0
     ? [
         `Last 30 days: ${ctx.streamsLastMonth} streams (${ctx.streamsThisWeek} this week).`,
-        ctx.topGenre  && `Top genre: ${ctx.topGenre}.`,
-        ctx.topMood   && `Mood they gravitate to: ${ctx.topMood}.`,
+        ctx.topGenre      && `Top genre: ${ctx.topGenre}.`,
+        ctx.topMood       && `Mood they gravitate to: ${ctx.topMood}.`,
         ctx.recentArtists && `Artists they've played: ${ctx.recentArtists}.`,
       ].filter(Boolean).join(' ')
     : 'No recent streams — gone quiet.';
@@ -362,7 +361,7 @@ function buildArtistPrompt(segment, artist, ctx, platform) {
     : 'Never gone live — could be a nudge.';
 
   const tierNote = ctx.tier === 'free'
-    ? 'On free plan — could mention Pro/Premium features if relevant, but don\'t be pushy.' : '';
+    ? "On free plan — could mention Pro/Premium features if relevant, but don't be pushy." : '';
 
   const dormantNote = segment === 'dormant_artist'
     ? "Been quiet. Re-engagement only — make them feel the platform missed them, not guilty." : '';
@@ -434,7 +433,7 @@ async function segmentUsers() {
 }
 
 // ── Process individuals (parallel batches of 5) ──────────────
-const PARALLEL_BATCH = 5; // Claude calls in parallel — safe for rate limits
+const PARALLEL_BATCH = 5;
 
 async function processOneUser(user, segmentKey, platform, isArtist) {
   try {
@@ -448,10 +447,13 @@ async function processOneUser(user, segmentKey, platform, isArtist) {
     }
 
     const msg = await generateSingleMessage(prompt);
-    if (!msg?.title) return 0;
+    if (!msg?.title) {
+      console.error(`Claude returned no message for ${user.user_id} segment=${segmentKey}`);
+      return 0;
+    }
 
     const siteUrl = process.env.URL || 'https://www.feelzmachine.com';
-    await Promise.all([
+    const [notifResult, msgResult] = await Promise.all([
       supabase.from('notifications').insert({
         user_id:   user.user_id,
         artist_id: isArtist ? user.id : null,
@@ -470,6 +472,9 @@ async function processOneUser(user, segmentKey, platform, isArtist) {
       }),
     ]);
 
+    if (notifResult.error) console.error(`Notification insert failed for ${user.user_id}:`, JSON.stringify(notifResult.error));
+    if (msgResult.error)   console.error(`EngagementMessage insert failed for ${user.user_id}:`, JSON.stringify(msgResult.error));
+
     // Web push — fire and forget
     fetch(`${siteUrl}/.netlify/functions/send-push`, {
       method: 'POST',
@@ -477,7 +482,7 @@ async function processOneUser(user, segmentKey, platform, isArtist) {
       body: JSON.stringify({ user_ids: [user.user_id], title: msg.title, body: msg.body, url: '/', tag: `drip-${segmentKey}` }),
     }).catch(() => {});
 
-    return 1;
+    return (notifResult.error) ? 0 : 1;
   } catch (err) {
     console.error(`Error for ${user.user_id}:`, err.message);
     return 0;
@@ -492,7 +497,6 @@ async function processIndividuals(users, segmentKey, platform, isArtist) {
   if (!eligible.length) return 0;
 
   let sent = 0;
-  // Process in parallel batches — PARALLEL_BATCH at a time to stay within Claude rate limits
   for (let i = 0; i < eligible.length; i += PARALLEL_BATCH) {
     const batch = eligible.slice(i, i + PARALLEL_BATCH);
     const results = await Promise.all(batch.map(user => processOneUser(user, segmentKey, platform, isArtist)));
@@ -528,22 +532,32 @@ async function processNewUsers(users, segmentKey, platform) {
   if (!eligible.length) return 0;
 
   const chosen = messages[new Date().getDay() % messages.length];
-
   const siteUrl = process.env.URL || 'https://www.feelzmachine.com';
+  const isArtistSegment = segmentKey.includes('artist');
+
   for (let i = 0; i < eligible.length; i += BATCH_SIZE) {
     const batch = eligible.slice(i, i + BATCH_SIZE);
-    const isArtistSegment = segmentKey.includes('artist');
-    await supabase.from('notifications').insert(batch.map(u => ({
-      user_id: u.user_id, artist_id: isArtistSegment ? u.id : null, type: 'engagement',
-      title: chosen.title, message: chosen.body,
-      metadata: { segment: segmentKey, message_type: `drip_${segmentKey}`, ai_generated: true, personalised: false },
+
+    const { error: notifErr } = await supabase.from('notifications').insert(batch.map(u => ({
+      user_id:   u.user_id,
+      artist_id: isArtistSegment ? u.id : null,
+      type:      'engagement',
+      title:     chosen.title,
+      message:   chosen.body,
+      metadata:  { segment: segmentKey, message_type: `drip_${segmentKey}`, ai_generated: true, personalised: false },
     })));
-    await supabase.from('engagement_messages').insert(batch.map(u => ({
-      user_id: u.user_id, artist_id: isArtistSegment ? u.id : null,
-      segment: segmentKey, message_type: `drip_${segmentKey}`,
-      title: chosen.title, body: chosen.body,
+    if (notifErr) console.error(`New user notification batch insert failed (${segmentKey}):`, JSON.stringify(notifErr));
+
+    const { error: msgErr } = await supabase.from('engagement_messages').insert(batch.map(u => ({
+      user_id:      u.user_id,
+      artist_id:    isArtistSegment ? u.id : null,
+      segment:      segmentKey,
+      message_type: `drip_${segmentKey}`,
+      title:        chosen.title,
+      body:         chosen.body,
     })));
-    // Web push for this batch
+    if (msgErr) console.error(`New user engagement_messages batch insert failed (${segmentKey}):`, JSON.stringify(msgErr));
+
     fetch(`${siteUrl}/.netlify/functions/send-push`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-internal-secret': process.env.INTERNAL_FUNCTION_SECRET },
