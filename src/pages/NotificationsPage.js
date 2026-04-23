@@ -3,10 +3,12 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
+import { usePlayer } from '../contexts/PlayerContext';
 import {
-  Bell, Users, Heart, MessageCircle, TrendingUp, UserPlus,
-  Check, X, ChevronLeft, Loader, CheckCheck, Trash2, Music, Download, Megaphone,
-  Radio, FileText
+  Bell, Users, Heart, MessageCircle, TrendingUp,
+  UserPlus, Check, X, ChevronLeft, Loader,
+  CheckCheck, Trash2, Music, Download, Megaphone,
+  Radio, FileText, Play
 } from 'lucide-react';
 import useNotifications from '../contexts/useNotifications';
 import WrappedCard from '../components/WrappedCard';
@@ -76,6 +78,7 @@ function formatDate(date) {
 export default function NotificationsPage() {
   const navigate = useNavigate();
   const { artist, user } = useAuth();
+  const { playTrack } = usePlayer();
   const { unreadCount, markAsRead, markAllRead, clearAll } = useNotifications();
   const [filter, setFilter] = useState('all');
   const [allNotifs, setAllNotifs] = useState([]);
@@ -192,6 +195,20 @@ export default function NotificationsPage() {
 
     // New track drop — go to the artist page to play it
     if (type === 'new_track') {
+      // If we have enough info to play the track directly, do it
+      if (meta.track_id && meta.track_title) {
+        playTrack({
+          id:                meta.track_id,
+          title:             meta.track_title,
+          file_url:          meta.file_url || null,
+          cover_artwork_url: meta.track_artwork || null,
+          artist_name:       meta.artist_name || '',
+          artist_slug:       meta.artist_slug || '',
+        }, []);
+        // Navigate to artist profile as context
+        if (meta.artist_slug) navigate(`/artist/${meta.artist_slug}`);
+        return;
+      }
       const slug = meta.artist_slug;
       navigate(slug ? `/artist/${slug}` : '/browse');
       return;
@@ -398,13 +415,38 @@ export default function NotificationsPage() {
                             </div>
                           )}
 
-                          {/* Track thumbnail from metadata */}
+                          {/* Playable track pill — new_track and engagement */}
                           {meta.track_title && (
-                            <div className="flex items-center space-x-2 mt-2 p-2 bg-white/[0.03] rounded-lg">
-                              {meta.track_artwork && (
-                                <img src={meta.track_artwork} alt="" className="w-7 h-7 rounded object-cover" />
+                            <div
+                              className="flex items-center space-x-2 mt-2 p-2 bg-white/[0.04] rounded-lg border border-white/[0.06] cursor-pointer hover:bg-white/[0.07] transition active:scale-[0.98]"
+                              onClick={e => {
+                                e.stopPropagation();
+                                if (meta.track_id) {
+                                  playTrack({
+                                    id:                meta.track_id,
+                                    title:             meta.track_title,
+                                    file_url:          meta.file_url || null,
+                                    cover_artwork_url: meta.track_artwork || null,
+                                    artist_name:       meta.artist_name || '',
+                                    artist_slug:       meta.artist_slug || '',
+                                  }, []);
+                                }
+                              }}
+                            >
+                              {meta.track_artwork
+                                ? <img src={meta.track_artwork} alt="" className="w-8 h-8 rounded object-cover flex-shrink-0" />
+                                : <div className="w-8 h-8 rounded bg-white/[0.06] flex items-center justify-center flex-shrink-0">
+                                    <Music className="w-3.5 h-3.5 text-white/30" />
+                                  </div>}
+                              <div className="flex-1 min-w-0">
+                                <p className="text-[11px] text-white/70 font-medium truncate">{meta.track_title}</p>
+                                {meta.artist_name && <p className="text-[10px] text-white/30 truncate">{meta.artist_name}</p>}
+                              </div>
+                              {meta.track_id && (
+                                <div className="w-6 h-6 rounded-full bg-white/10 flex items-center justify-center flex-shrink-0">
+                                  <Play className="w-3 h-3 text-white/60 ml-0.5" />
+                                </div>
                               )}
-                              <p className="text-[11px] text-white/40 truncate">{meta.track_title}</p>
                             </div>
                           )}
 
