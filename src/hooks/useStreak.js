@@ -10,7 +10,7 @@
  * Returns: { streak, longestStreak, discoveryStreak, recordDiscovery, loading }
  *
  * Double-increment fix:
- *   sessionStorage key is written BEFORE the DB await so that any concurrent
+ *   localStorage key is written BEFORE the DB await so that any concurrent
  *   call (React StrictMode double-invoke, route remount, auth re-render) that
  *   reads the key while the first write is still in-flight will bail out
  *   immediately instead of proceeding with a stale row.
@@ -56,8 +56,8 @@ export function useStreak(user) {
       const now   = new Date();
       const today = now.toISOString().split('T')[0];
 
-      // ── Already ran for this user today in this browser session ─────────────
-      if (sessionStorage.getItem(sessionKey) === today) {
+      // ── Already ran for this user today ─────────────────────────────────────
+      if (localStorage.getItem(sessionKey) === today) {
         // Still need to read + display the current values
         const { data: row } = await supabase
           .from('user_streaks').select('current_streak, longest_streak, discovery_streak')
@@ -78,7 +78,7 @@ export function useStreak(user) {
       // ── First ever visit — create the row ───────────────────────────────────
       if (!row) {
         // Claim the session slot BEFORE the insert to prevent double-insert
-        sessionStorage.setItem(sessionKey, today);
+        localStorage.setItem(sessionKey, today);
         await supabase.from('user_streaks').insert({
           user_id:                  user.id,
           current_streak:           1,
@@ -104,7 +104,7 @@ export function useStreak(user) {
       // ── Already active today per DB — nothing to increment ──────────────────
       if (isSameDay(lastActive, now)) {
         // Mark session so we skip the DB fetch next time too
-        sessionStorage.setItem(sessionKey, today);
+        localStorage.setItem(sessionKey, today);
         setLoading(false);
         return;
       }
@@ -112,7 +112,7 @@ export function useStreak(user) {
       // ── New day: claim the session slot BEFORE the DB write ─────────────────
       // This is the critical fix — any concurrent call arriving between here
       // and the await below will see the key already set and bail out.
-      sessionStorage.setItem(sessionKey, today);
+      localStorage.setItem(sessionKey, today);
 
       const newStreak  = isYesterday(lastActive) ? (row.current_streak || 1) + 1 : 1;
       const newLongest = Math.max(newStreak, row.longest_streak || 0);
