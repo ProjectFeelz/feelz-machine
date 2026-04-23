@@ -138,7 +138,17 @@ export default function NotificationsPage() {
     grouped[key].push(n);
   });
 
+  // Notification types that are informational only — no useful tap destination
+  const READ_ONLY_TYPES = new Set([
+    'streak', 'top_supporter', 'weekly_report', 'monthly_wrapped',
+    'tip', 'engagement',
+  ]);
+
   const handleClick = (notif) => {
+    if (READ_ONLY_TYPES.has(notif.type)) {
+      if (!notif.read) markAsRead(notif.id);
+      return; // no navigation
+    }
     if (!notif.read) markAsRead(notif.id);
     const type = notif.type;
     const meta = notif.metadata || {};
@@ -372,13 +382,14 @@ export default function NotificationsPage() {
                       );
                     }
 
+                    const isReadOnly = READ_ONLY_TYPES.has(notif.type);
                     return (
-                      <button
+                      <div
                         key={notif.id}
-                        onClick={() => handleClick(notif)}
-                        className={`w-full flex items-start space-x-3 px-4 py-3.5 rounded-xl hover:bg-white/[0.04] transition text-left ${
+                        onClick={() => { if (!notif.read) markAsRead(notif.id); if (!isReadOnly) handleClick(notif); }}
+                        className={`w-full flex items-start space-x-3 px-4 py-3.5 rounded-xl transition text-left ${
                           !notif.read ? 'bg-white/[0.02] border border-white/[0.06]' : ''
-                        }`}
+                        } ${isReadOnly ? 'cursor-default' : 'cursor-pointer hover:bg-white/[0.04]'}`}
                       >
                         {meta.from_artist_image ? (
                           <div className="relative flex-shrink-0">
@@ -461,7 +472,7 @@ export default function NotificationsPage() {
                         {!notif.read && (
                           <div className="w-2.5 h-2.5 rounded-full bg-white mt-2 flex-shrink-0" />
                         )}
-                      </button>
+                      </div>
                     );
                   })}
                 </div>
