@@ -8,7 +8,7 @@ import {
   Bell, Users, Heart, MessageCircle, TrendingUp,
   UserPlus, Check, X, ChevronLeft, Loader,
   CheckCheck, Trash2, Music, Download, Megaphone,
-  Radio, FileText, Play
+  Radio, FileText, Play, DollarSign
 } from 'lucide-react';
 import useNotifications from '../contexts/useNotifications';
 import WrappedCard from '../components/WrappedCard';
