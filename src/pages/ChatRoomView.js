@@ -10,7 +10,7 @@ import {
   CornerDownRight, BarChart2, Plus, Check, Pin,
   Smile, Music, Play, Bug, CheckCircle,
   ChevronDown, 
-} from 'lucide-react';;
+} from 'lucide-react';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const EMOJIS = [

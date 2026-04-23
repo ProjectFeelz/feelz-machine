@@ -14,7 +14,7 @@ import {
   User, LogOut, DollarSign, Radio, Mic2,
   Loader, X, Youtube, Info, Search,
   Plus, MessageSquare, Check, Send, 
-} from 'lucide-react';;
+} from 'lucide-react';
 
 function LinkCard({ icon: Icon, label, description, path, color, onClick }) {
   const navigate = useNavigate();

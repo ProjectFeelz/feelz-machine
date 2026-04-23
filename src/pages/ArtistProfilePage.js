@@ -1,8 +1,8 @@
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { downloadTrack } from '../utils/downloadTrack';
 import TrackActionSheet from '../components/TrackActionSheet';
 import TrackVersions from '../components/TrackVersions';
-import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
@@ -14,7 +14,7 @@ import {
   Heart, Check, MoreHorizontal, DollarSign, MessageCircle,
   ChevronDown, ChevronUp, Send, Trash2, Shuffle,
   Radio, X
-} from 'lucide-react';;
+} from 'lucide-react';
 import { ArtistProfileSkeleton } from '../components/SkeletonLoader';
 import ShareCard from '../components/ShareCard';
 import { usePullToRefresh } from '../hooks/usePullToRefresh';

@@ -5,8 +5,8 @@ import {
   Play, Pause, SkipBack, SkipForward, ChevronDown,
   Shuffle, Repeat, Repeat1, Heart, Share2,
   ListMusic, Volume2, VolumeX, X, MoreHorizontal,
-  Music2, Moon, Timer, 
-} from 'lucide-react';;
+  Music2, Moon,
+} from 'lucide-react';
 import { usePlayer } from '../../contexts/PlayerContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../supabaseClient';
