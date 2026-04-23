@@ -972,8 +972,11 @@ export default function TrackUploadPanel() {
                 </TierGate>
                 <TierGate feature="collaborations" inline>
                   <label className="flex items-center space-x-2 cursor-pointer">
-                    <input type="checkbox" checked={trackForm.is_preorder || false}
-                      onChange={() => setTrackForm({ ...trackForm, is_preorder: !trackForm.is_preorder })}
+                    <input type="checkbox"
+                      checked={trackForm.is_preorder || false}
+                      disabled={!isPremium}
+                      title={!isPremium ? 'Pre-order releases require Premium' : ''}
+                      onChange={() => isPremium && setTrackForm({ ...trackForm, is_preorder: !trackForm.is_preorder })}
                       className="rounded border-white/20" />
                     <span className="text-xs text-white/50">Pre-order</span>
                   </label>
@@ -1500,12 +1503,13 @@ export default function TrackUploadPanel() {
                               { key: 'is_downloadable', label: 'Downloadable' },
                               { key: 'is_premium',      label: 'Premium' },
                               { key: 'has_versions',    label: 'Has Versions' },
-                              { key: 'is_preorder',     label: 'Pre-order' },
-                            ].map(({ key, label }) => (
-                              <label key={key} className="flex items-center space-x-1.5 text-xs text-white/40 cursor-pointer">
+                              { key: 'is_preorder', label: 'Pre-order', premiumOnly: true },
+                            ].map(({ key, label, premiumOnly, disabled }) => (
+                              <label key={key} className={`flex items-center space-x-1.5 text-xs cursor-pointer ${(premiumOnly && !isPremium) || disabled ? 'text-white/20 cursor-not-allowed' : 'text-white/40'}`}>
                                 <input type="checkbox" checked={editForm[key] || false}
-                                  onChange={(e) => setEditForm({ ...editForm, [key]: e.target.checked })}
-                                  className="rounded border-white/20" />
+                                  disabled={(premiumOnly && !isPremium) || disabled}
+                                  onChange={(e) => { if ((premiumOnly && !isPremium) || disabled) return; setEditForm({ ...editForm, [key]: e.target.checked }); }}
+                                  className="rounded disabled:opacity-30 border-white/20" />
                                 <span>{label}</span>
                               </label>
                             ))}

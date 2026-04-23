@@ -14,6 +14,7 @@ const TIER_ACCESS = {
     collaborations: false,
     priority_trending: false,
     download_sales: false,
+    pre_order: false,
     custom_branding: false,
     advanced_analytics: false,
   },
@@ -28,6 +29,7 @@ const TIER_ACCESS = {
     priority_trending: false,
     download_sales: true,
     download_sales_monthly_limit: 2,   // Pro: 2 paid download tracks per month
+    pre_order: false,
     custom_branding: true,
     advanced_analytics: false,
     community_post: true,
@@ -45,6 +47,7 @@ const TIER_ACCESS = {
     priority_trending: true,
     download_sales: true,
     download_sales_monthly_limit: Infinity, // Premium: unlimited
+    pre_order: true,
     custom_branding: true,
     advanced_analytics: true,
     community_post: true,
@@ -66,6 +69,7 @@ const FEATURE_LABELS = {
   community_post: { name: 'Community Posts', description: 'Share updates and music with your fans', minTier: 'pro' },
   unlimited_uploads: { name: 'Unlimited Uploads', description: 'Upload unlimited tracks and albums', minTier: 'pro' },
   daily_thought: { name: 'Daily Thought', description: 'Post a daily message on your artist profile', minTier: 'pro' },
+  pre_order: { name: 'Pre-order Releases', description: 'Let fans pre-save upcoming releases before they drop', minTier: 'premium' },
 }
 
   export function useTier() {
