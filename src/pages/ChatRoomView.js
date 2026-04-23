@@ -7,7 +7,7 @@ import PullToRefreshIndicator from '../components/PullToRefreshIndicator';
 import {
   ArrowLeft, Send, Loader, Users, Shield,
   AlertTriangle, Trash2, VolumeX, Lock, X, CornerDownRight, BarChart2, Plus, Check, Pin,
-  Smile, Music, Play
+  Smile, Music, Play, Bug
 } from 'lucide-react';
 
 const EMOJIS = [
@@ -15,6 +15,9 @@ const EMOJIS = [
   '😭','😤','🤯','👀','✨','💀','🫶','🤝','🎉','🥳','😎','🤘','💪','🫡',
 ];
 
+// Navigate to the track's artist page — clicking a track pill opens the artist page
+// so the user can play it from there. Deep-linking into a specific track player
+// can be added later when that route exists.
 function TrackPill({ trackId, navigate }) {
   const [track, setTrack] = React.useState(null);
   React.useEffect(() => {
@@ -26,13 +29,16 @@ function TrackPill({ trackId, navigate }) {
   if (!track) return <span className="text-white/30 text-xs italic">♪</span>;
   return (
     <button
-      onClick={() => navigate(`/artist/${track.artists?.slug}`)}
+      onClick={e => {
+        e.stopPropagation();
+        if (track.artists?.slug) navigate(`/artist/${track.artists.slug}`);
+      }}
       className="inline-flex items-center space-x-1.5 px-2 py-0.5 rounded-lg bg-purple-500/15 border border-purple-500/20 hover:bg-purple-500/25 transition mx-0.5 align-middle"
     >
       <div className="w-5 h-5 rounded overflow-hidden flex-shrink-0 bg-white/10">
         {track.cover_artwork_url
           ? <img src={track.cover_artwork_url} alt="" className="w-full h-full object-cover" />
-          : <Music className="w-3 h-3 text-purple-400" style={{margin:'auto',marginTop:4}} />}
+          : <Music className="w-3 h-3 text-purple-400" style={{ margin: 'auto', marginTop: 4 }} />}
       </div>
       <span className="text-xs font-medium text-purple-300 max-w-[110px] truncate">{track.title}</span>
       <Play className="w-2.5 h-2.5 text-purple-400 flex-shrink-0" fill="currentColor" />
@@ -82,7 +88,6 @@ function PollCard({ poll, userId, onVote }) {
   const totalVotes = poll.options.reduce((sum, o) => sum + (o.votes || 0), 0);
   const myVote = poll.my_vote;
   const showResults = !!myVote || expired;
-
   return (
     <div className="mx-2 my-2 p-3 rounded-xl bg-white/[0.04] border border-white/[0.06]">
       <div className="flex items-center space-x-1.5 mb-2">
@@ -122,12 +127,12 @@ function PollCard({ poll, userId, onVote }) {
 
 function CreatePollModal({ roomId, artistId, onClose, onCreated }) {
   const [question, setQuestion] = useState('');
-  const [options, setOptions] = useState(['', '']);
+  const [options, setOptions]   = useState(['', '']);
   const [duration, setDuration] = useState(24);
   const [creating, setCreating] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError]       = useState('');
 
-  const addOption = () => { if (options.length < 6) setOptions(prev => [...prev, '']); };
+  const addOption    = () => { if (options.length < 6) setOptions(prev => [...prev, '']); };
   const removeOption = (i) => { if (options.length > 2) setOptions(prev => prev.filter((_, idx) => idx !== i)); };
   const updateOption = (i, val) => setOptions(prev => prev.map((o, idx) => idx === i ? val : o));
 
@@ -138,9 +143,7 @@ function CreatePollModal({ roomId, artistId, onClose, onCreated }) {
     setCreating(true);
     try {
       const expiresAt = new Date(Date.now() + duration * 3600000).toISOString();
-      const formattedOptions = validOptions.map((text, i) => ({
-        id: String.fromCharCode(97 + i), text: text.trim(), votes: 0,
-      }));
+      const formattedOptions = validOptions.map((text, i) => ({ id: String.fromCharCode(97 + i), text: text.trim(), votes: 0 }));
       const { error: err } = await supabase.from('chat_polls').insert({
         room_id: roomId, artist_id: artistId,
         question: question.trim(), options: formattedOptions, expires_at: expiresAt,
@@ -203,23 +206,24 @@ function CreatePollModal({ roomId, artistId, onClose, onCreated }) {
 
 export default function ChatRoomView() {
   const { roomId } = useParams();
-  const navigate = useNavigate();
+  const navigate   = useNavigate();
   const { user, artist, isAdmin } = useAuth();
 
-  const [room, setRoom] = useState(null);  const [spendGate, setSpendGate] = useState(false); // true when user hasn't spent $5 on this artist
-  const [messages, setMessages] = useState([]);
-  const [polls, setPolls] = useState([]);
-  const [wordFilters, setWordFilters] = useState([]);
-  const [input, setInput] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [sending, setSending] = useState(false);
-  const [isMember, setIsMember] = useState(false);
-  const [myMembership, setMyMembership] = useState(null);
-  const [joining, setJoining] = useState(false);
-  const [showMembers, setShowMembers] = useState(false);
-  const [modWarning, setModWarning] = useState('');
-  const [replyingTo, setReplyingTo] = useState(null);
-  const [showPollModal, setShowPollModal]   = useState(false);
+  const [room, setRoom]                       = useState(null);
+  const [spendGate, setSpendGate]             = useState(false);
+  const [messages, setMessages]               = useState([]);
+  const [polls, setPolls]                     = useState([]);
+  const [wordFilters, setWordFilters]         = useState([]);
+  const [input, setInput]                     = useState('');
+  const [loading, setLoading]                 = useState(true);
+  const [sending, setSending]                 = useState(false);
+  const [isMember, setIsMember]               = useState(false);
+  const [myMembership, setMyMembership]       = useState(null);
+  const [joining, setJoining]                 = useState(false);
+  const [showMembers, setShowMembers]         = useState(false);
+  const [modWarning, setModWarning]           = useState('');
+  const [replyingTo, setReplyingTo]           = useState(null);
+  const [showPollModal, setShowPollModal]     = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showTrackSearch, setShowTrackSearch] = useState(false);
   const [trackQuery, setTrackQuery]           = useState('');
@@ -229,7 +233,7 @@ export default function ChatRoomView() {
   const [roomMembers, setRoomMembers]         = useState([]);
 
   const messagesEndRef = useRef(null);
-  const inputRef = useRef(null);
+  const inputRef       = useRef(null);
 
   const isRoomArtist = room?.artists?.user_id === user?.id;
 
@@ -239,67 +243,63 @@ export default function ChatRoomView() {
     }
   }, [roomId, user]);
 
+  // Realtime — messages and polls
   useEffect(() => {
     if (!roomId) return;
     const channel = supabase.channel(`chat-${roomId}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages', filter: `room_id=eq.${roomId}` },
-        (payload) => { fetchSingleMessage(payload.new.id); })
+        (payload) => fetchSingleMessage(payload.new.id))
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'chat_messages', filter: `room_id=eq.${roomId}` },
         (payload) => {
-          if (payload.new.is_deleted) {
-            setMessages(prev => prev.map(m => m.id === payload.new.id ? { ...m, is_deleted: true, deleted_reason: payload.new.deleted_reason } : m));
-          }
+          // Immediately update local state — no need to re-fetch the whole list
+          setMessages(prev => prev.map(m =>
+            m.id === payload.new.id
+              ? { ...m, is_deleted: payload.new.is_deleted, deleted_reason: payload.new.deleted_reason, is_pinned: payload.new.is_pinned }
+              : m
+          ));
         })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_polls', filter: `room_id=eq.${roomId}` },
-        () => { fetchPolls(); })
+        () => fetchPolls())
       .subscribe();
-    return () => { supabase.removeChannel(channel); };
+    return () => supabase.removeChannel(channel);
   }, [roomId]);
 
   useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, polls]);
 
-
-
   // Load room members for @mention autocomplete
   useEffect(() => {
     if (!roomId) return;
-    supabase.from('chat_room_members')
-      .select('user_id')
-      .eq('room_id', roomId).limit(100)
+    supabase.from('chat_room_members').select('user_id').eq('room_id', roomId).limit(100)
       .then(async ({ data }) => {
         if (!data?.length) return;
         const userIds = data.map(m => m.user_id).filter(Boolean);
         const { data: artists } = await supabase.from('artists')
-          .select('user_id, artist_name, profile_image_url, slug')
-          .in('user_id', userIds);
+          .select('user_id, artist_name, profile_image_url, slug').in('user_id', userIds);
         setRoomMembers((artists || []).map(a => ({ user_id: a.user_id, artists: a })));
       });
   }, [roomId]);
 
-  // @mention autocomplete — fires whenever @ appears at end of input
+  // @mention autocomplete
   useEffect(() => {
     const m = input.match(/@(\w*)$/);
     if (m) {
       const q = m[1].toLowerCase();
       setMentionResults(
-        roomMembers.filter(mb =>
-          mb.artists?.artist_name?.toLowerCase().includes(q) && mb.user_id !== user?.id
-        ).slice(0, 5)
+        roomMembers.filter(mb => mb.artists?.artist_name?.toLowerCase().includes(q) && mb.user_id !== user?.id).slice(0, 5)
       );
     } else {
       setMentionResults([]);
     }
   }, [input, roomMembers, user?.id]);
 
-  // Track search for song tagging
+  // Track search
   useEffect(() => {
     if (!trackQuery.trim() || trackQuery.length < 2) { setTrackResults([]); return; }
     const t = setTimeout(async () => {
       setTrackSearching(true);
       const { data } = await supabase.from('tracks')
         .select('id, title, cover_artwork_url, artists(artist_name)')
-        .ilike('title', `%${trackQuery.trim()}%`)
-        .eq('is_published', true).limit(6);
+        .ilike('title', `%${trackQuery.trim()}%`).eq('is_published', true).limit(6);
       setTrackResults(data || []);
       setTrackSearching(false);
     }, 300);
@@ -316,14 +316,12 @@ export default function ChatRoomView() {
   const fetchPolls = async () => {
     const { data: pollsData } = await supabase.from('chat_polls').select('*')
       .eq('room_id', roomId).order('created_at', { ascending: true });
-    if (!pollsData || pollsData.length === 0) { setPolls([]); return; }
-
+    if (!pollsData?.length) { setPolls([]); return; }
     const pollIds = pollsData.map(p => p.id);
     const [{ data: myVotes }, { data: allVotes }] = await Promise.all([
       supabase.from('chat_poll_votes').select('poll_id, option_id').eq('user_id', user.id).in('poll_id', pollIds),
       supabase.from('chat_poll_votes').select('poll_id, option_id').in('poll_id', pollIds),
     ]);
-
     const myVoteMap = {};
     (myVotes || []).forEach(v => { myVoteMap[v.poll_id] = v.option_id; });
     const voteCounts = {};
@@ -331,7 +329,6 @@ export default function ChatRoomView() {
       if (!voteCounts[v.poll_id]) voteCounts[v.poll_id] = {};
       voteCounts[v.poll_id][v.option_id] = (voteCounts[v.poll_id][v.option_id] || 0) + 1;
     });
-
     setPolls(pollsData.map(poll => ({
       ...poll,
       my_vote: myVoteMap[poll.id] || null,
@@ -349,9 +346,12 @@ export default function ChatRoomView() {
   const fetchMessages = async () => {
     const { data, error } = await supabase.from('chat_messages')
       .select('id, room_id, user_id, content, created_at, is_deleted, deleted_reason, is_pinned')
-      .eq('room_id', roomId).order('is_pinned', { ascending: false }).order('created_at', { ascending: true }).limit(200);
+      .eq('room_id', roomId)
+      .order('is_pinned', { ascending: false })
+      .order('created_at', { ascending: true })
+      .limit(200);
     if (error) { console.error('fetchMessages error:', error); return; }
-    if (data && data.length > 0) {
+    if (data?.length) {
       const userIds = [...new Set(data.map(m => m.user_id))];
       const { data: artistsData } = await supabase.from('artists')
         .select('user_id, artist_name, slug, profile_image_url, is_verified').in('user_id', userIds);
@@ -359,7 +359,7 @@ export default function ChatRoomView() {
       (artistsData || []).forEach(a => { artistMap[a.user_id] = a; });
       const missingIds = userIds.filter(id => !artistMap[id]);
       const profileMap = {};
-      if (missingIds.length > 0) {
+      if (missingIds.length) {
         const { data: profilesData } = await supabase.from('user_profiles')
           .select('user_id, name, email, avatar_url').in('user_id', missingIds);
         (profilesData || []).forEach(p => { profileMap[p.user_id] = p; });
@@ -375,21 +375,20 @@ export default function ChatRoomView() {
 
   const fetchSingleMessage = async (msgId) => {
     const { data } = await supabase.from('chat_messages')
-      .select('id, room_id, user_id, content, created_at, is_deleted, deleted_reason')
+      .select('id, room_id, user_id, content, created_at, is_deleted, deleted_reason, is_pinned')
       .eq('id', msgId).single();
-    if (data) {
-      const { data: artistData } = await supabase.from('artists')
-        .select('user_id, artist_name, slug, profile_image_url, is_verified')
-        .eq('user_id', data.user_id).maybeSingle();
-      let resolvedArtist = artistData || null;
-      if (!resolvedArtist) {
-        const { data: profileData } = await supabase.from('user_profiles')
-          .select('user_id, name, avatar_url').eq('user_id', data.user_id).maybeSingle();
-        if (profileData) resolvedArtist = { artist_name: profileData.name || 'Listener', profile_image_url: profileData.avatar_url || null, slug: null, is_verified: false };
-      }
-      const enriched = { ...data, artist: resolvedArtist };
-      setMessages(prev => { if (prev.find(m => m.id === enriched.id)) return prev; return [...prev, enriched]; });
+    if (!data) return;
+    const { data: artistData } = await supabase.from('artists')
+      .select('user_id, artist_name, slug, profile_image_url, is_verified')
+      .eq('user_id', data.user_id).maybeSingle();
+    let resolvedArtist = artistData || null;
+    if (!resolvedArtist) {
+      const { data: profileData } = await supabase.from('user_profiles')
+        .select('user_id, name, avatar_url').eq('user_id', data.user_id).maybeSingle();
+      if (profileData) resolvedArtist = { artist_name: profileData.name || 'Listener', profile_image_url: profileData.avatar_url || null, slug: null, is_verified: false };
     }
+    const enriched = { ...data, artist: resolvedArtist };
+    setMessages(prev => prev.find(m => m.id === enriched.id) ? prev : [...prev, enriched]);
   };
 
   const fetchWordFilters = async () => {
@@ -400,61 +399,43 @@ export default function ChatRoomView() {
   const checkMembership = async () => {
     const { data } = await supabase.from('chat_room_members').select('*')
       .eq('room_id', roomId).eq('user_id', user.id).maybeSingle();
-    if (data) { setIsMember(true); setMyMembership(data); } else { setIsMember(false); setMyMembership(null); }
+    if (data) { setIsMember(true); setMyMembership(data); }
+    else       { setIsMember(false); setMyMembership(null); }
   };
 
-    const joinRoom = async () => {
-  if (!user) { navigate('/login'); return; }
-  setJoining(true);
-  try {
-    if (room?.is_subscribers_only) {
-      const artistId = room?.artists?.id;
-      if (artistId) {
-        const { data: artistTracks } = await supabase
-          .from('tracks')
-          .select('id')
-          .eq('artist_id', artistId);
-        const trackIds = (artistTracks || []).map(t => t.id);
-        let totalSpent = 0;
-        if (trackIds.length > 0) {
-          const { data: spendData } = await supabase
-            .from('downloads')
-            .select('amount_paid')
-            .eq('user_id', user.id)
-            .in('track_id', trackIds);
-          totalSpent = (spendData || []).reduce((sum, d) => sum + (d.amount_paid || 0), 0);
-        }
-        if (totalSpent < 5) {
-          setSpendGate(true);
-          setJoining(false);
-          return;
+  const joinRoom = async () => {
+    if (!user) { navigate('/login'); return; }
+    setJoining(true);
+    try {
+      if (room?.is_subscribers_only) {
+        const artistId = room?.artists?.id;
+        if (artistId) {
+          const { data: artistTracks } = await supabase.from('tracks').select('id').eq('artist_id', artistId);
+          const trackIds = (artistTracks || []).map(t => t.id);
+          let totalSpent = 0;
+          if (trackIds.length) {
+            const { data: spendData } = await supabase.from('downloads')
+              .select('amount_paid').eq('user_id', user.id).in('track_id', trackIds);
+            totalSpent = (spendData || []).reduce((sum, d) => sum + (d.amount_paid || 0), 0);
+          }
+          if (totalSpent < 5) { setSpendGate(true); setJoining(false); return; }
         }
       }
-    }
-    const { data: existing } = await supabase.from('chat_room_members').select('id')
-      .eq('room_id', roomId).eq('user_id', user.id).maybeSingle();
-    if (existing) {
-      setIsMember(true);
-      setMyMembership({ role: 'member' });
-      setJoining(false);
-      return;
-    }
-    const { error } = await supabase.from('chat_room_members').insert({
-      room_id: roomId, user_id: user.id, role: 'member'
-    });
-    if (error) throw error;
-    try {
-      await supabase.rpc('increment_chat_member_count', { room_id_input: roomId });
-    } catch {
-      await supabase.from('chat_rooms').update({ member_count: (room?.member_count || 0) + 1 }).eq('id', roomId);
-    }
-    setIsMember(true);
-    setMyMembership({ role: 'member' });
-  } catch (err) {
-    console.error('Join error:', err);
-  }
-  setJoining(false);
-};
+      const { data: existing } = await supabase.from('chat_room_members').select('id')
+        .eq('room_id', roomId).eq('user_id', user.id).maybeSingle();
+      if (existing) { setIsMember(true); setMyMembership({ role: 'member' }); setJoining(false); return; }
+      const { error } = await supabase.from('chat_room_members').insert({ room_id: roomId, user_id: user.id, role: 'member' });
+      if (error) throw error;
+      try {
+        await supabase.rpc('increment_chat_member_count', { room_id_input: roomId });
+      } catch {
+        await supabase.from('chat_rooms').update({ member_count: (room?.member_count || 0) + 1 }).eq('id', roomId);
+      }
+      setIsMember(true); setMyMembership({ role: 'member' });
+    } catch (err) { console.error('Join error:', err); }
+    setJoining(false);
+  };
+
   const insertMention = (member) => {
     setInput(prev => prev.replace(/@\w*$/, '@' + member.artists.artist_name + ' '));
     setMentionResults([]);
@@ -502,16 +483,23 @@ export default function ChatRoomView() {
   const handlePin = async (msgId, currentlyPinned) => {
     try {
       await supabase.from('chat_messages').update({ is_pinned: false }).eq('room_id', roomId);
-      if (!currentlyPinned) {
-        await supabase.from('chat_messages').update({ is_pinned: true }).eq('id', msgId);
-      }
+      if (!currentlyPinned) await supabase.from('chat_messages').update({ is_pinned: true }).eq('id', msgId);
       fetchMessages();
     } catch (err) { console.error('Pin error:', err); }
   };
 
   const handleDelete = async (msgId) => {
-    try { await supabase.from('chat_messages').update({ is_deleted: true, deleted_reason: 'Removed by moderator' }).eq('id', msgId); }
-    catch (err) { console.error('Delete error:', err); }
+    // Optimistic update — remove immediately from UI, no need to wait for realtime
+    setMessages(prev => prev.map(m =>
+      m.id === msgId ? { ...m, is_deleted: true, deleted_reason: 'Removed by moderator' } : m
+    ));
+    try {
+      await supabase.from('chat_messages').update({ is_deleted: true, deleted_reason: 'Removed by moderator' }).eq('id', msgId);
+    } catch (err) {
+      console.error('Delete error:', err);
+      // Revert if DB update failed
+      setMessages(prev => prev.map(m => m.id === msgId ? { ...m, is_deleted: false, deleted_reason: null } : m));
+    }
   };
 
   const refreshMessages = useCallback(async () => {
@@ -519,13 +507,16 @@ export default function ChatRoomView() {
   }, []);
 
   const { pullProps, pullProgress, isRefreshing } = usePullToRefresh(refreshMessages);
-  
   const isRoomAdmin = room?.artists?.user_id === user?.id || myMembership?.role === 'admin' || myMembership?.role === 'moderator';
 
   const timeline = [
     ...messages.map(m => ({ ...m, _type: 'message' })),
     ...polls.map(p => ({ ...p, _type: 'poll' })),
   ].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+
+  // Derive accent colour from room for the bug room header
+  const accentColor = room?.accent_color || null;
+  const isBugRoom   = room?.is_pinned && !!accentColor;
 
   if (!user) return (
     <div className="min-h-screen bg-black flex flex-col items-center justify-center px-6">
@@ -541,38 +532,55 @@ export default function ChatRoomView() {
     <div className="min-h-screen bg-black flex flex-col items-center justify-center px-6">
       <AlertTriangle className="w-12 h-12 text-white/10 mb-4" />
       <p className="text-white/40 text-sm">Room not found</p>
-      <button onClick={() => navigate('/community')} className="mt-4 text-sm text-white/30 hover:text-white/50">Back to rooms</button>
+      <button onClick={() => navigate('/chat')} className="mt-4 text-sm text-white/30 hover:text-white/50">Back to rooms</button>
     </div>
   );
 
   return (
     <div id="chat-room-root" className="flex flex-col bg-black text-white" style={{ minHeight: '100dvh', maxHeight: '100dvh' }}>
-      {/* Top bar */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.06] bg-black/95 backdrop-blur-xl flex-shrink-0">
+
+      {/* Top bar — always pinned, styled for accent rooms */}
+      <div
+        className="flex items-center justify-between px-4 py-3 border-b border-white/[0.06] backdrop-blur-xl flex-shrink-0 sticky top-0 z-30"
+        style={isBugRoom
+          ? { background: `linear-gradient(to right, ${accentColor}18, #000000f2)`, borderColor: `${accentColor}30` }
+          : { background: 'rgba(0,0,0,0.95)' }
+        }
+      >
         <div className="flex items-center space-x-3">
           <button onClick={() => navigate('/chat')} className="w-9 h-9 flex items-center justify-center rounded-full bg-white/[0.06]">
             <ArrowLeft className="w-5 h-5 text-white" />
           </button>
           <button onClick={() => room.artists?.slug && navigate(`/artist/${room.artists.slug}`)} className="flex items-center space-x-2.5">
-            <div className="w-9 h-9 rounded-xl overflow-hidden bg-gradient-to-br from-purple-600/30 to-blue-600/20 flex items-center justify-center">
-              {room.artists?.profile_image_url
-                ? <img src={room.artists.profile_image_url} alt="" className="w-9 h-9 object-cover" />
-                : <span className="text-sm font-bold text-white/40">{room.artists?.artist_name?.[0]}</span>}
+            {/* Avatar — bug room shows bug icon with accent colour */}
+            <div
+              className="w-9 h-9 rounded-xl overflow-hidden flex items-center justify-center flex-shrink-0"
+              style={isBugRoom
+                ? { background: `${accentColor}25` }
+                : { background: 'linear-gradient(135deg, rgba(124,58,237,0.3), rgba(37,99,235,0.2))' }
+              }
+            >
+              {isBugRoom
+                ? <Bug className="w-5 h-5" style={{ color: accentColor }} />
+                : room.artists?.profile_image_url
+                  ? <img src={room.artists.profile_image_url} alt="" className="w-9 h-9 object-cover" />
+                  : <span className="text-sm font-bold text-white/40">{room.artists?.artist_name?.[0]}</span>
+              }
             </div>
             <div>
               <div className="flex items-center space-x-1.5">
-                <p className="text-sm font-semibold text-white">{room.name}</p>
+                <p className="text-sm font-semibold" style={isBugRoom ? { color: accentColor } : { color: '#fff' }}>
+                  {room.name}
+                </p>
                 {room.is_subscribers_only && <Lock className="w-3 h-3 text-yellow-400" />}
               </div>
               <p className="text-[10px] text-white/30">{room.artists?.artist_name} · {room.member_count} members</p>
             </div>
           </button>
         </div>
-        <div className="flex items-center space-x-2">
-          <button onClick={() => setShowMembers(!showMembers)} className="w-9 h-9 flex items-center justify-center rounded-full bg-white/[0.06]">
-            <Users className="w-4 h-4 text-white/50" />
-          </button>
-        </div>
+        <button onClick={() => setShowMembers(!showMembers)} className="w-9 h-9 flex items-center justify-center rounded-full bg-white/[0.06]">
+          <Users className="w-4 h-4 text-white/50" />
+        </button>
       </div>
 
       {showMembers && (
@@ -587,82 +595,91 @@ export default function ChatRoomView() {
 
       {/* Timeline */}
       <div className="flex-1 flex flex-col overflow-hidden min-h-0">
-      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-1" {...pullProps}>
-        <PullToRefreshIndicator pullProgress={pullProgress} isRefreshing={isRefreshing} />
-        <div className="flex items-center space-x-2 px-2 py-2 mb-2 border-b border-white/[0.04]">
-          <div className="w-7 h-7 rounded-lg overflow-hidden bg-gradient-to-br from-purple-600/20 to-blue-600/10 flex items-center justify-center flex-shrink-0">
-            {room.artists?.profile_image_url
-              ? <img src={room.artists.profile_image_url} alt="" className="w-7 h-7 object-cover" />
-              : <span className="text-xs font-bold text-white/30">{room.artists?.artist_name?.[0]}</span>}
+        <div className="flex-1 overflow-y-auto px-4 py-3 space-y-1" {...pullProps}>
+          <PullToRefreshIndicator pullProgress={pullProgress} isRefreshing={isRefreshing} />
+          <div className="flex items-center space-x-2 px-2 py-2 mb-2 border-b border-white/[0.04]">
+            <div
+              className="w-7 h-7 rounded-lg overflow-hidden flex items-center justify-center flex-shrink-0"
+              style={isBugRoom
+                ? { background: `${accentColor}20` }
+                : { background: 'linear-gradient(135deg, rgba(124,58,237,0.2), rgba(37,99,235,0.1))' }
+              }
+            >
+              {isBugRoom
+                ? <Bug className="w-4 h-4" style={{ color: accentColor }} />
+                : room.artists?.profile_image_url
+                  ? <img src={room.artists.profile_image_url} alt="" className="w-7 h-7 object-cover" />
+                  : <span className="text-xs font-bold text-white/30">{room.artists?.artist_name?.[0]}</span>
+              }
+            </div>
+            <p className="text-xs text-white/30 flex-1">{room.name} · Created by {room.artists?.artist_name}</p>
+            <Shield className="w-3 h-3 text-white/15" />
+            <span className="text-[10px] text-white/15">Moderated</span>
           </div>
-          <p className="text-xs text-white/30 flex-1">{room.name} · Created by {room.artists?.artist_name}</p>
-          <Shield className="w-3 h-3 text-white/15" />
-          <span className="text-[10px] text-white/15">Moderated</span>
-        </div>
 
-        {timeline.map((item, i) => {
-          if (item._type === 'poll') {
-            return <PollCard key={`poll-${item.id}`} poll={item} userId={user.id} onVote={handleVote} />;
-          }
-          const msg = item;
-          const prevItem = timeline[i - 1];
-          const sameSender = prevItem && prevItem._type === 'message' && prevItem.user_id === msg.user_id &&
-            (new Date(msg.created_at) - new Date(prevItem.created_at)) < 120000;
-          const isMe = msg.user_id === user.id;
-          const isRoomOwner = msg.user_id === room.artists?.user_id;
-          const canDelete = isMe || isRoomAdmin;
+          {timeline.map((item, i) => {
+            if (item._type === 'poll') {
+              return <PollCard key={`poll-${item.id}`} poll={item} userId={user.id} onVote={handleVote} />;
+            }
+            const msg = item;
+            const prevItem = timeline[i - 1];
+            const sameSender = prevItem && prevItem._type === 'message' && prevItem.user_id === msg.user_id &&
+              (new Date(msg.created_at) - new Date(prevItem.created_at)) < 120000;
+            const isMe        = msg.user_id === user.id;
+            const isRoomOwner = msg.user_id === room.artists?.user_id;
+            const canDelete   = isMe || isRoomAdmin;
 
-          if (msg.is_deleted) return (
-            <div key={msg.id} className="px-3 py-1.5">
-              <p className="text-xs text-white/15 italic">Message removed{msg.deleted_reason ? `: ${msg.deleted_reason}` : ''}</p>
-            </div>
-          );
+            if (msg.is_deleted) return (
+              <div key={msg.id} className="px-3 py-1.5">
+                <p className="text-xs text-white/15 italic">Message removed{msg.deleted_reason ? `: ${msg.deleted_reason}` : ''}</p>
+              </div>
+            );
 
-          return (
-            <div key={msg.id} className={`group flex items-start space-x-2.5 px-2 py-1 rounded-lg hover:bg-white/[0.02] transition ${sameSender ? 'mt-0' : 'mt-2'} ${msg.is_pinned ? 'bg-purple-500/[0.05] border-l-2 border-purple-500/40' : ''}`}>
-              {!sameSender ? (
-                <div className="w-8 h-8 rounded-full overflow-hidden bg-gradient-to-br from-purple-600/30 to-blue-600/20 flex items-center justify-center flex-shrink-0 mt-0.5">
-                  {msg.artist?.profile_image_url
-                    ? <img src={msg.artist.profile_image_url} alt="" className="w-8 h-8 rounded-full object-cover" />
-                    : <span className="text-xs font-bold text-white/40">{(msg.artist?.artist_name || '?')[0]}</span>}
-                </div>
-              ) : <div className="w-8 flex-shrink-0" />}
-              <div className="flex-1 min-w-0">
-                {!sameSender && (
-                  <div className="flex items-center space-x-1.5 mb-0.5">
-                    <span className={`text-xs font-semibold ${isRoomOwner ? 'text-purple-400' : 'text-white'}`}>{msg.artist?.artist_name || 'User'}</span>
-                    {isRoomOwner && <span className="text-[9px] px-1.5 py-0.5 bg-purple-500/10 text-purple-400 rounded font-medium">HOST</span>}
-                    {msg.artist?.is_verified && <span className="text-[9px] text-blue-400">✓</span>}
-                    {msg.is_pinned && <span className="flex items-center space-x-0.5 text-[9px] text-purple-400 font-medium"><Pin className="w-2.5 h-2.5" /><span>Pinned</span></span>}
-                    <span className="text-[10px] text-white/15">{timeAgo(msg.created_at)}</span>
+            return (
+              <div key={msg.id} className={`group flex items-start space-x-2.5 px-2 py-1 rounded-lg hover:bg-white/[0.02] transition ${sameSender ? 'mt-0' : 'mt-2'} ${msg.is_pinned ? 'bg-purple-500/[0.05] border-l-2 border-purple-500/40' : ''}`}>
+                {!sameSender ? (
+                  <div className="w-8 h-8 rounded-full overflow-hidden bg-gradient-to-br from-purple-600/30 to-blue-600/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+                    {msg.artist?.profile_image_url
+                      ? <img src={msg.artist.profile_image_url} alt="" className="w-8 h-8 rounded-full object-cover" />
+                      : <span className="text-xs font-bold text-white/40">{(msg.artist?.artist_name || '?')[0]}</span>}
                   </div>
-                )}
-                <MessageContent content={msg.content} navigate={navigate} />
+                ) : <div className="w-8 flex-shrink-0" />}
+                <div className="flex-1 min-w-0">
+                  {!sameSender && (
+                    <div className="flex items-center space-x-1.5 mb-0.5">
+                      <span className={`text-xs font-semibold ${isRoomOwner ? 'text-purple-400' : 'text-white'}`}>{msg.artist?.artist_name || 'User'}</span>
+                      {isRoomOwner && <span className="text-[9px] px-1.5 py-0.5 bg-purple-500/10 text-purple-400 rounded font-medium">HOST</span>}
+                      {msg.artist?.is_verified && <span className="text-[9px] text-blue-400">✓</span>}
+                      {msg.is_pinned && <span className="flex items-center space-x-0.5 text-[9px] text-purple-400 font-medium"><Pin className="w-2.5 h-2.5" /><span>Pinned</span></span>}
+                      <span className="text-[10px] text-white/15">{timeAgo(msg.created_at)}</span>
+                    </div>
+                  )}
+                  <MessageContent content={msg.content} navigate={navigate} />
+                </div>
+                <div className="opacity-0 group-hover:opacity-100 flex items-center space-x-1 flex-shrink-0 transition">
+                  {isMember && !isMe && (
+                    <button onClick={() => { setReplyingTo({ id: msg.id, artist_name: msg.artist?.artist_name || 'User' }); setInput(`@${msg.artist?.artist_name || 'User'} `); inputRef.current?.focus(); }}
+                      className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-white/[0.06] transition">
+                      <CornerDownRight className="w-3 h-3 text-white/30" />
+                    </button>
+                  )}
+                  {(isRoomAdmin || isAdmin) && (
+                    <button onClick={() => handlePin(msg.id, msg.is_pinned)}
+                      className={`w-7 h-7 flex items-center justify-center rounded-full hover:bg-purple-500/10 transition ${msg.is_pinned ? 'text-purple-400' : 'text-white/30'}`}>
+                      <Pin className="w-3 h-3" />
+                    </button>
+                  )}
+                  {canDelete && (
+                    <button onClick={() => handleDelete(msg.id)} className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-red-500/10 transition">
+                      <Trash2 className="w-3 h-3 text-red-400/50" />
+                    </button>
+                  )}
+                </div>
               </div>
-              <div className="opacity-0 group-hover:opacity-100 flex items-center space-x-1 flex-shrink-0 transition">
-                {isMember && !isMe && (
-                  <button onClick={() => { setReplyingTo({ id: msg.id, artist_name: msg.artist?.artist_name || 'User' }); setInput(`@${msg.artist?.artist_name || 'User'} `); inputRef.current?.focus(); }}
-                    className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-white/[0.06] transition">
-                    <CornerDownRight className="w-3 h-3 text-white/30" />
-                  </button>
-                )}
-                {(isRoomAdmin || isAdmin) && (
-                  <button onClick={() => handlePin(msg.id, msg.is_pinned)}
-                    className={`w-7 h-7 flex items-center justify-center rounded-full hover:bg-purple-500/10 transition ${msg.is_pinned ? 'text-purple-400' : 'text-white/30'}`}>
-                    <Pin className="w-3 h-3" />
-                  </button>
-                )}
-                {canDelete && (
-                  <button onClick={() => handleDelete(msg.id)} className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-red-500/10 transition">
-                    <Trash2 className="w-3 h-3 text-red-400/50" />
-                  </button>
-                )}
-              </div>
-            </div>
-          );
-        })}
-        <div ref={messagesEndRef} />
-      </div>
+            );
+          })}
+          <div ref={messagesEndRef} />
+        </div>
       </div>
 
       {modWarning && (
@@ -672,6 +689,7 @@ export default function ChatRoomView() {
         </div>
       )}
 
+      {/* Input bar or join prompt */}
       {isMember ? (
         <div className="px-3 pt-2 pb-3 border-t border-white/[0.06] bg-black/95 backdrop-blur-xl flex-shrink-0">
           {myMembership?.is_muted ? (
@@ -687,7 +705,6 @@ export default function ChatRoomView() {
                   <button onClick={() => { setReplyingTo(null); setInput(''); }} className="text-white/30 hover:text-white/60 text-sm leading-none">×</button>
                 </div>
               )}
-              {/* @mention dropdown */}
               {mentionResults.length > 0 && (
                 <div className="mb-2 bg-neutral-900 border border-white/[0.08] rounded-xl overflow-hidden">
                   {mentionResults.map(m => (
@@ -703,8 +720,6 @@ export default function ChatRoomView() {
                   ))}
                 </div>
               )}
-
-              {/* Track search panel */}
               {showTrackSearch && (
                 <div className="mb-2 bg-neutral-900 border border-white/[0.08] rounded-xl overflow-hidden">
                   <div className="flex items-center space-x-2 px-3 py-2 border-b border-white/[0.06]">
@@ -735,8 +750,6 @@ export default function ChatRoomView() {
                     : <p className="text-[10px] text-white/20 text-center py-3">Type to search published tracks</p>}
                 </div>
               )}
-
-              {/* Emoji picker */}
               {showEmojiPicker && (
                 <div className="mb-2 p-2 bg-neutral-900 border border-white/[0.08] rounded-xl">
                   <div className="grid grid-cols-8 gap-1">
@@ -750,7 +763,6 @@ export default function ChatRoomView() {
                   </div>
                 </div>
               )}
-
               <div className="flex items-center space-x-2">
                 <button onClick={() => { setShowEmojiPicker(p => !p); setShowTrackSearch(false); }}
                   className={`w-9 h-9 flex items-center justify-center rounded-xl transition flex-shrink-0 ${showEmojiPicker ? 'bg-purple-600/30 text-purple-300' : 'bg-white/[0.06] hover:bg-white/[0.1] text-white/40'}`}>
@@ -766,12 +778,24 @@ export default function ChatRoomView() {
                     <BarChart2 className="w-4 h-4 text-white/40" />
                   </button>
                 )}
-                <input ref={inputRef} type="text" value={input}
+                {/* autocomplete="off" + autoComplete="off" prevents the browser/keyboard
+                    payment card overlay from appearing over the chat input on mobile */}
+                <input
+                  ref={inputRef}
+                  type="text"
+                  value={input}
                   onChange={e => setInput(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && !e.shiftKey && handleSend()}
                   placeholder={replyingTo ? `Reply to @${replyingTo.artist_name}...` : 'Type a message...'}
                   maxLength={500}
-                  className="flex-1 min-w-0 bg-white/[0.06] rounded-xl px-4 py-2.5 text-sm text-white placeholder-white/20 outline-none" />
+                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="sentences"
+                  spellCheck="true"
+                  data-lpignore="true"
+                  data-form-type="other"
+                  className="flex-1 min-w-0 bg-white/[0.06] rounded-xl px-4 py-2.5 text-sm text-white placeholder-white/20 outline-none"
+                />
                 <button onClick={handleSend} disabled={!input.trim() || sending}
                   className="w-10 h-10 flex items-center justify-center rounded-xl bg-purple-600 disabled:opacity-30 transition active:scale-95 flex-shrink-0">
                   {sending ? <Loader className="w-4 h-4 animate-spin text-white" /> : <Send className="w-4 h-4 text-white" />}
@@ -780,36 +804,30 @@ export default function ChatRoomView() {
             </>
           )}
         </div>
+      ) : spendGate ? (
+        <div className="px-4 py-4 border-t border-white/[0.06] flex-shrink-0">
+          <div className="rounded-xl bg-yellow-500/10 border border-yellow-500/20 p-4 text-center">
+            <Lock className="w-6 h-6 text-yellow-400 mx-auto mb-2" />
+            <p className="text-sm font-semibold text-white mb-1">Supporter Access Required</p>
+            <p className="text-xs text-white/40 mb-3">
+              This is a subscriber-only room. Purchase at least <span className="text-white font-semibold">$5</span> of music from <span className="text-white">{room?.artists?.artist_name}</span> to join.
+            </p>
+            <button onClick={() => navigate(`/artist/${room?.artists?.slug}`)}
+              className="w-full py-2.5 bg-yellow-500 text-black rounded-xl font-semibold text-sm transition active:scale-95">
+              Browse {room?.artists?.artist_name}&apos;s Music
+            </button>
+          </div>
+        </div>
       ) : (
-                  spendGate ? (
-                              <div className="px-4 py-4 border-t border-white/[0.06] flex-shrink-0">
-                                            <div className="rounded-xl bg-yellow-500/10 border border-yellow-500/20 p-4 text-center">
-                                                            <Lock className="w-6 h-6 text-yellow-400 mx-auto mb-2" />
-                                                                            <p className="text-sm font-semibold text-white mb-1">Supporter Access Required</p>
-                                                                                            <p className="text-xs text-white/40 mb-3">
-                                                                                                              This is a subscriber-only room. Purchase at least <span className="text-white font-semibold">$5</span> of music
-                                                                                                                                from <span className="text-white">{room?.artists?.artist_name}</span> to join — a single, multiple singles, or an album all count.
-                                                                                                                                                </p>
-                                                                                                                                                                <button
-                                                                                                                                                                                  onClick={() => navigate(`/artist/${room?.artists?.slug}`)}
-                                                                                                                                                                                                    className="w-full py-2.5 bg-yellow-500 text-black rounded-xl font-semibold text-sm transition active:scale-95"
-                                                                                                                                                                                                                    >
-                                                                                                                                                                                                                                      Browse {room?.artists?.artist_name}&apos;s Music
-                                                                                                                                                                                                                                                      </button>
-                                                                                                                                                                                                                                                                    </div>
-                                                                                                                                                                                                                                                                                </div>
-                                                                                                                                                                                                                                                                                          ) : (
-                                                                                                                                                                                                                                                                                                      <div className="px-4 py-3 border-t border-white/[0.06] flex-shrink-0">
-                                                                                                                                                                                                                                                                                                                    <button onClick={joinRoom} disabled={joining}
-                                                                                                                                                                                                                                                                                                                                    className="w-full py-3 bg-white text-black rounded-xl font-semibold text-sm flex items-center justify-center space-x-2 disabled:opacity-50 transition">
-                                                                                                                                                                                                                                                                                                                                                    {joining ? <Loader className="w-4 h-4 animate-spin" /> : <Users className="w-4 h-4" />}
-                                                                                                                                                                                                                                                                                                                                                                    <span>{joining ? 'Joining...' : 'Join Room to Chat'}</span>
-                                                                                                                                                                                                                                                                                                                                                                                  </button>
-                                                                                                                                                                                                                                                                                                                                                                                              </div>
-                                                                                                                                                                                                                                                                                                                                                                                                        )
-                                                                                                                                                                                                                                                                                                                                                                                                                )}
-                                                                                                                                                                                                                                                                                                                                                                                                                
-      )
+        <div className="px-4 py-3 border-t border-white/[0.06] flex-shrink-0">
+          <button onClick={joinRoom} disabled={joining}
+            className="w-full py-3 bg-white text-black rounded-xl font-semibold text-sm flex items-center justify-center space-x-2 disabled:opacity-50 transition">
+            {joining ? <Loader className="w-4 h-4 animate-spin" /> : <Users className="w-4 h-4" />}
+            <span>{joining ? 'Joining...' : 'Join Room to Chat'}</span>
+          </button>
+        </div>
+      )}
+
       {showPollModal && (
         <CreatePollModal roomId={roomId} artistId={artist?.id}
           onClose={() => setShowPollModal(false)} onCreated={fetchPolls} />

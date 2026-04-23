@@ -41,6 +41,7 @@ const TYPE_CONFIG = {
   first_listener:   { icon: Heart,         color: 'text-yellow-400', bg: 'bg-yellow-500/10', label: 'First! 🎯' },
   tip:              { icon: Heart,         color: 'text-pink-400',   bg: 'bg-pink-500/10',   label: 'Tip Received' },
   admin_message:    { icon: Megaphone,     color: 'text-yellow-400', bg: 'bg-yellow-500/10', label: 'Message from Admin' },
+  bug_report:       { icon: MessageCircle, color: 'text-red-400',    bg: 'bg-red-500/10',    label: 'Bug Report' },
 };
 
 const FILTERS = [
@@ -139,45 +140,29 @@ export default function NotificationsPage() {
     const type = notif.type;
     const meta = notif.metadata || {};
 
-    if (type === 'session_live' && meta.session_id) {
-      navigate(`/session/${meta.session_id}`);
+    // Live session — go directly to the stream
+    if (type === 'session_live') {
+      if (meta.session_id) navigate(`/session/${meta.session_id}`);
+      else if (meta.artist_slug) navigate(`/artist/${meta.artist_slug}`);
+      else navigate('/browse');
       return;
     }
 
+    // New stream stat — artist sees analytics, listener sees artist page
     if (type === 'new_stream') {
-      if (artist) {
-        navigate('/dashboard?tab=analytics');
-      } else if (meta.artist_slug) {
-        navigate('/artist/' + meta.artist_slug);
-      } else {
-        navigate('/browse');
-      }
+      if (artist) navigate('/dashboard?tab=analytics');
+      else if (meta.artist_slug) navigate('/artist/' + meta.artist_slug);
+      else navigate('/browse');
       return;
     }
 
-    if (type === 'new_post' && meta.post_id) {
+    // New post / comment / mention — go to the post
+    if ((type === 'new_post' || type === 'mention' || type === 'track_commented') && meta.post_id) {
       navigate(`/feed?post=${meta.post_id}`);
       return;
     }
-
     if (type === 'new_post' && !meta.post_id) {
-      if (notif.track_id) {
-        navigate(notif.from_artist_id
-          ? `/artist/${meta.artist_slug || ''}`
-          : '/browse');
-      } else {
-        navigate('/browse');
-      }
-      return;
-    }
-
-    if (type === 'mention' && meta.post_id) {
-      navigate(`/feed?post=${meta.post_id}`);
-      return;
-    }
-
-    if (type === 'track_commented' && meta.post_id) {
-      navigate(`/feed?post=${meta.post_id}`);
+      navigate(meta.artist_slug ? `/artist/${meta.artist_slug}` : '/browse');
       return;
     }
 
@@ -191,16 +176,21 @@ export default function NotificationsPage() {
       return;
     }
 
-    if (type === 'track_liked' && meta.artist_slug) {
-      navigate('/artist/' + meta.artist_slug);
+    // Track liked — artist sees their page, so they can see their track
+    if (type === 'track_liked') {
+      if (meta.artist_slug) navigate('/artist/' + meta.artist_slug);
+      else if (artist) navigate('/dashboard?tab=analytics');
       return;
     }
 
-    if (type === 'new_follower' && meta.from_artist_slug) {
-      navigate('/artist/' + meta.from_artist_slug);
+    // New follower — go to the follower's artist page
+    if (type === 'new_follower') {
+      if (meta.from_artist_slug) navigate('/artist/' + meta.from_artist_slug);
+      else navigate('/community');
       return;
     }
 
+    // New track drop — go to the artist page to play it
     if (type === 'new_track') {
       const slug = meta.artist_slug;
       navigate(slug ? `/artist/${slug}` : '/browse');
@@ -212,8 +202,9 @@ export default function NotificationsPage() {
       return;
     }
 
+    // Download — artist sees analytics, listener sees their library
     if (type === 'download') {
-      navigate(artist ? '/dashboard?tab=analytics' : '/library');
+      navigate(artist ? '/dashboard?tab=analytics' : '/library/downloads');
       return;
     }
 
@@ -228,34 +219,41 @@ export default function NotificationsPage() {
     }
 
     if (type === 'first_listener') {
-      if (meta.track_id) navigate(`/track/${meta.track_id}`);
+      if (meta.track_id && meta.artist_slug) navigate(`/artist/${meta.artist_slug}`);
+      else if (artist) navigate('/dashboard?tab=analytics');
       return;
     }
 
     if (type?.startsWith('collab_')) {
-      navigate(artist ? '/dashboard?tab=collabs' : '/');
+      navigate(artist ? '/dashboard?tab=collabs' : '/community');
       return;
     }
 
     if (type?.startsWith('milestone_')) {
-      if (artist) {
-        navigate('/dashboard?tab=analytics');
+      navigate(artist ? '/dashboard?tab=analytics' : '/browse');
+      return;
+    }
+
+    if (type === 'competition_winner' || type === 'competition_result') {
+      if (meta.competition_id) navigate(`/competition/${meta.competition_id}`);
+      else navigate('/browse');
+      return;
+    }
+
+    // Engagement drip — take user somewhere useful based on the drip segment
+    if (type === 'engagement') {
+      const segment = meta.segment || '';
+      if (segment.includes('artist')) {
+        navigate(artist ? '/dashboard' : '/community');
+      } else if (segment.includes('dormant')) {
+        navigate('/browse');
       } else {
-        return;
+        navigate('/browse');
       }
       return;
     }
 
-    if (type === 'competition_winner' && meta.competition_id) {
-      navigate(`/competition/${meta.competition_id}`);
-      return;
-    }
-
-    if (type === 'engagement') {
-      navigate(artist ? '/community' : '/browse');
-      return;
-    }
-    // admin_message and bug_report — no navigation, just mark as read
+    // Admin messages — no navigation, just mark read
     if (type === 'admin_message') return;
   };
 

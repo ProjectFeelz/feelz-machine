@@ -36,7 +36,7 @@ async function generateSingleMessage(prompt) {
     body: JSON.stringify({
       model: 'claude-sonnet-4-6',
       max_tokens: 200,
-      system: `You are the voice of Feelz Machine — an independent music platform. Direct, authentic, energetic. Never corporate. Write ONE in-app notification. Return ONLY valid JSON: {"title":"...","body":"..."}. Title max 60 chars. Body max 120 chars.`,
+      system: `You are the voice of Feelz Machine, an independent music platform. Write like a friend texting someone about music they actually care about. Casual, warm, direct. No em-dashes, no corporate language, no exclamation marks on every line. Just real talk. Write ONE in-app notification. Return ONLY valid JSON: {"title":"...","body":"..."}. Title max 60 chars. Body max 120 chars.`,
       messages: [{ role: 'user', content: prompt }],
     }),
   });
@@ -69,7 +69,7 @@ async function generateSegmentMessages(ctx) {
     body: JSON.stringify({
       model: 'claude-sonnet-4-6',
       max_tokens: 500,
-      system: `You are the voice of Feelz Machine. Write short in-app notification copy. Return ONLY a JSON array of 3 variants: [{"title":"...","body":"..."},...]`,
+      system: `You are the voice of Feelz Machine. Write like a real person texting about music. Casual and warm, no em-dashes, no hype-speak, no corporate tone. Return ONLY a JSON array of 3 variants: [{"title":"...","body":"..."},...]`,
       messages: [{ role: 'user', content: `Segment: ${ctx.segment}\nDescription: ${ctx.description}\nPlatform: ${ctx.platformContext}\nTone: ${ctx.tone}` }],
     }),
   });
