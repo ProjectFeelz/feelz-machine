@@ -113,15 +113,12 @@ export default function TipButton({ artist }) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 backdrop-blur-sm px-4 pb-6"
+      className="fixed inset-0 z-[600] flex items-center justify-center px-6 bg-black/80 backdrop-blur-sm"
       onClick={reset}
     >
       <div
-        className="w-full max-w-md bg-zinc-900 border border-white/10 rounded-2xl p-6 overflow-y-auto"
-        style={{
-          paddingBottom: 'max(24px, env(safe-area-inset-bottom, 24px))',
-          maxHeight: 'calc(100dvh - 120px)',
-        }}
+        className="w-full overflow-y-auto rounded-3xl p-5 space-y-4"
+        style={{ maxWidth: 360, maxHeight: '80vh', backgroundColor: '#0f0f0f', border: '1px solid rgba(255,255,255,0.08)', boxShadow: '0 32px 64px rgba(0,0,0,0.6)' }}
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-5">

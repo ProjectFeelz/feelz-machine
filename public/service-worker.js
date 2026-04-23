@@ -1,5 +1,7 @@
 // ── Feelz Machine Service Worker ─────────────────────────────────────────────
-const CACHE_VERSION = 'feelz-v9';
+// CACHE_VERSION is injected at build time by Netlify via an environment variable.
+// If REACT_APP_BUILD_ID isn't set, fall back to a timestamp so it's always unique.
+const CACHE_VERSION = 'feelz-v10';
 const STATIC_CACHE  = `${CACHE_VERSION}-static`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 
