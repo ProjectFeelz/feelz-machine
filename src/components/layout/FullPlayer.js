@@ -3,9 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import { motion, useMotionValue, useTransform, animate } from 'framer-motion';
 import {
   Play, Pause, SkipBack, SkipForward, ChevronDown,
-  Shuffle, Repeat, Repeat1, Heart, Share2, ListMusic, Check,
-  Volume2, VolumeX, X, MoreHorizontal, Music2,
-} from 'lucide-react';
+  Shuffle, Repeat, Repeat1, Heart, Share2,
+  ListMusic, Volume2, VolumeX, X, MoreHorizontal,
+  Music2, Moon, Timer, 
+} from 'lucide-react';;
 import { usePlayer } from '../../contexts/PlayerContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../supabaseClient';
@@ -648,6 +649,68 @@ export default function FullPlayer() {
   const [lyrics, setLyrics]                   = useState(null);
   const [lyricsLoading, setLyricsLoading]     = useState(false);
 
+  // Sleep timer
+  const [sleepMinutes, setSleepMinutes]       = useState(null);   // null = off
+  const [sleepRemaining, setSleepRemaining]   = useState(null);   // seconds remaining
+  const [showSleepPicker, setShowSleepPicker] = useState(false);
+  const sleepTimerRef                         = useRef(null);
+  const sleepIntervalRef                      = useRef(null);
+
+  const SLEEP_OPTIONS = [15, 30, 45, 60, 90];
+
+  const startSleepTimer = (minutes) => {
+    // Clear any existing timer
+    clearTimeout(sleepTimerRef.current);
+    clearInterval(sleepIntervalRef.current);
+    tap();
+    setSleepMinutes(minutes);
+    setSleepRemaining(minutes * 60);
+    setShowSleepPicker(false);
+
+    // Countdown interval
+    sleepIntervalRef.current = setInterval(() => {
+      setSleepRemaining(prev => {
+        if (prev <= 1) {
+          clearInterval(sleepIntervalRef.current);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    // The actual stop
+    sleepTimerRef.current = setTimeout(() => {
+      togglePlay && togglePlay(); // pause playback
+      setSleepMinutes(null);
+      setSleepRemaining(null);
+      clearInterval(sleepIntervalRef.current);
+    }, minutes * 60 * 1000);
+  };
+
+  const cancelSleepTimer = () => {
+    clearTimeout(sleepTimerRef.current);
+    clearInterval(sleepIntervalRef.current);
+    setSleepMinutes(null);
+    setSleepRemaining(null);
+    tap();
+  };
+
+  // Clean up on unmount
+  useEffect(() => {
+    return () => {
+      clearTimeout(sleepTimerRef.current);
+      clearInterval(sleepIntervalRef.current);
+    };
+  }, []);
+
+  const formatSleepRemaining = (secs) => {
+    if (!secs) return '';
+    const m = Math.floor(secs / 60);
+    const s = secs % 60;
+    if (m > 0) return `${m}m`;
+    return `${s}s`;
+  };
+
   const y       = useMotionValue(window.innerHeight);
   const opacity = useTransform(y, [0, 300], [1, 0]);
 
@@ -1036,7 +1099,7 @@ export default function FullPlayer() {
                     style={{ accentColor: 'white' }} />
                 </div>
 
-                {/* Share / More */}
+                {/* Share / More / Sleep Timer */}
                 <div className="flex items-center justify-center mt-5 space-x-8">
                   <button
                     onClick={() => { tap(); setShowShareCard(true); }}
@@ -1044,6 +1107,40 @@ export default function FullPlayer() {
                     <Share2 className="w-5 h-5" />
                     <span className="text-[10px]">Share</span>
                   </button>
+
+                  {/* Sleep timer button */}
+                  <div className="relative">
+                    <button
+                      onClick={() => {
+                        tap();
+                        if (sleepMinutes) { cancelSleepTimer(); }
+                        else { setShowSleepPicker(p => !p); }
+                      }}
+                      className={`flex flex-col items-center space-y-1 transition active:scale-95 ${sleepMinutes ? 'text-purple-400' : 'text-white/40 hover:text-white/70'}`}>
+                      <Moon className="w-5 h-5" />
+                      <span className="text-[10px]">
+                        {sleepRemaining ? formatSleepRemaining(sleepRemaining) : 'Sleep'}
+                      </span>
+                    </button>
+                    {showSleepPicker && (
+                      <div className="absolute bottom-12 left-1/2 -translate-x-1/2 bg-neutral-900 border border-white/[0.1] rounded-2xl p-3 shadow-2xl z-50 w-44">
+                        <p className="text-[10px] text-white/30 uppercase tracking-widest font-semibold mb-2 text-center">Stop after</p>
+                        <div className="space-y-1">
+                          {SLEEP_OPTIONS.map(mins => (
+                            <button key={mins} onClick={() => startSleepTimer(mins)}
+                              className="w-full py-2 px-3 rounded-xl text-sm text-white/70 hover:bg-white/[0.08] hover:text-white transition text-center">
+                              {mins} minutes
+                            </button>
+                          ))}
+                        </div>
+                        <button onClick={() => { setShowSleepPicker(false); tap(); }}
+                          className="w-full mt-2 py-1.5 text-xs text-white/30 hover:text-white/50 transition text-center">
+                          Cancel
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
                   <button onClick={() => { tap(); setShowActionSheet(true); }}
                     className="flex flex-col items-center space-y-1 text-white/40 hover:text-white/70 transition active:scale-95">
                     <MoreHorizontal className="w-5 h-5" />

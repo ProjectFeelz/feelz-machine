@@ -11,9 +11,10 @@ import {
   Shield, Users, BarChart3, Music, Flame,
   Upload, HeartHandshake, Bell, Palette, MessageCircle,
   ChevronRight, Crown, Zap, Star, LayoutDashboard,
-  User, LogOut, DollarSign, Megaphone, Radio, Trophy, Brain, Mic2, Loader, X, Youtube,
-  Info, Globe, Lock, Search, Plus, MessageSquare, Check, Send,
-} from 'lucide-react';
+  User, LogOut, DollarSign, Radio, Mic2,
+  Loader, X, Youtube, Info, Search,
+  Plus, MessageSquare, Check, Send, 
+} from 'lucide-react';;
 
 function LinkCard({ icon: Icon, label, description, path, color, onClick }) {
   const navigate = useNavigate();
@@ -66,11 +67,11 @@ export default function HubPage() {
   const [startingSession, setStartingSession]   = useState(false);
   const [showLiveModal, setShowLiveModal]       = useState(false);
   const [liveTitle, setLiveTitle]               = useState('');
-  const [liveMode, setLiveMode]                 = useState('audio'); // 'audio' | 'youtube'
+  const [liveMode, setLiveMode]                 = useState('audio');
   const [liveYoutubeUrl, setLiveYoutubeUrl]     = useState('');
-  const [scheduleMode, setScheduleMode]         = useState(false); // toggle schedule vs go live now
-  const [scheduledAt, setScheduledAt]           = useState('');    // ISO datetime string
-  const [queueTracks, setQueueTracks]           = useState([]);    // pre-session queue for audio mode
+  const [scheduleMode, setScheduleMode]         = useState(false);
+  const [scheduledAt, setScheduledAt]           = useState('');
+  const [queueTracks, setQueueTracks]           = useState([]);
   const [trackSearch, setTrackSearch]           = useState('');
   const [trackResults, setTrackResults]         = useState([]);
   const [searchingTracks, setSearchingTracks]   = useState(false);
@@ -126,7 +127,6 @@ export default function HubPage() {
     setShowLiveModal(true);
   };
 
-  // Track search for audio queue
   useEffect(() => {
     if (!artist?.id || trackSearch.trim().length < 2) { setTrackResults([]); return; }
     const t = setTimeout(async () => {
@@ -175,12 +175,12 @@ export default function HubPage() {
     setDmSending(true);
     try {
       await supabase.from('notifications').insert({
-        user_id: dmUserId,
+        user_id:   dmUserId,
         artist_id: dmArtistId || null,
-        type: 'admin_message',
-        title: 'Message from Feelz Machine',
-        message: dmMessage.trim(),
-        metadata: { from_admin: true },
+        type:      'admin_message',
+        title:     'Message from Feelz Machine',
+        message:   dmMessage.trim(),
+        metadata:  { from_admin: true },
       });
       setDmSent(true);
       setTimeout(() => {
@@ -195,7 +195,6 @@ export default function HubPage() {
     if (!artist || startingSession) return;
     setStartingSession(true);
     try {
-      // Check for existing live session
       const { data: existing } = await supabase
         .from('listening_sessions')
         .select('id')
@@ -224,7 +223,6 @@ export default function HubPage() {
 
       if (error) throw error;
 
-      // Notify followers
       const { data: { session: authSession } } = await supabase.auth.getSession();
       fetch('/.netlify/functions/notify-session-live', {
         method: 'POST',
@@ -232,21 +230,14 @@ export default function HubPage() {
         body: JSON.stringify({ session_id: session.id, artist_id: artist.id, token: authSession?.access_token }),
       }).catch(() => {});
 
-      // Pre-populate the queue if tracks were selected
       if (liveMode === 'audio' && queueTracks.length > 0) {
         await supabase.from('listening_session_queue').insert(
-          queueTracks.map((track, i) => ({
-            session_id: session.id,
-            track_id: track.id,
-            position: i,
-          }))
+          queueTracks.map((track, i) => ({ session_id: session.id, track_id: track.id, position: i }))
         );
       }
 
       setShowLiveModal(false);
-      if (!scheduleMode || !scheduledAt) {
-        navigate(`/session/${session.id}`);
-      }
+      if (!scheduleMode || !scheduledAt) navigate(`/session/${session.id}`);
     } catch (err) {
       console.error('Start session error:', err);
     }
@@ -411,16 +402,14 @@ export default function HubPage() {
             </Section>
           )}
 
-          {/* Account */}
+          {/* Account — Privacy Policy and Terms moved to About page */}
           <Section title="Account" icon={User}>
             <LinkCard icon={Palette}    label="Profile & Appearance" description="Edit bio, socials, and theme"   path="/profile"      color="bg-pink-500/20" />
             <LinkCard icon={Bell}       label="Notifications"         description="Collabs, followers, milestones" path="/notifications" color="bg-orange-500/20" />
             {isArtist && (
               <LinkCard icon={DollarSign} label="Payments" description="PayPal settings and earnings" path="/profile" color="bg-emerald-500/20" />
             )}
-            <LinkCard icon={Info}  label="About"           description="App info and credits"          path="/about"           color="bg-white/[0.06]" />
-            <LinkCard icon={Lock}  label="Privacy Policy"  description="How we handle your data"       path="/privacy-policy"  color="bg-white/[0.06]" />
-            <LinkCard icon={Globe} label="Terms of Use"    description="Platform rules and guidelines"  path="/terms-of-use"    color="bg-white/[0.06]" />
+            <LinkCard icon={Info} label="About" description="App info, plans, privacy and terms" path="/about" color="bg-white/[0.06]" />
           </Section>
 
           {/* Sign out */}
@@ -497,7 +486,6 @@ export default function HubPage() {
       {showLiveModal && (
         <div className="fixed inset-0 z-[600] flex items-center justify-center px-6 bg-black/80 backdrop-blur-sm" onClick={() => setShowLiveModal(false)}>
           <div className="w-full overflow-y-auto rounded-3xl p-5 space-y-5" style={{ maxWidth: 360, maxHeight: '80vh', backgroundColor: '#0f0f0f', border: '1px solid rgba(255,255,255,0.08)', boxShadow: '0 32px 64px rgba(0,0,0,0.6)' }} onClick={e => e.stopPropagation()}>
-            {/* Header */}
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2">
                 <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
@@ -508,7 +496,6 @@ export default function HubPage() {
               </button>
             </div>
 
-            {/* Session title */}
             <div className="space-y-1.5">
               <label className="text-xs text-white/40 font-medium uppercase tracking-wider">Session Title</label>
               <input
@@ -520,7 +507,6 @@ export default function HubPage() {
               />
             </div>
 
-            {/* Mode toggle */}
             <div className="space-y-1.5">
               <label className="text-xs text-white/40 font-medium uppercase tracking-wider">Stream Type</label>
               <div className="grid grid-cols-2 gap-2">
@@ -546,12 +532,9 @@ export default function HubPage() {
               </p>
             </div>
 
-            {/* Audio queue builder */}
             {liveMode === 'audio' && (
               <div className="space-y-2">
                 <label className="text-xs text-white/40 font-medium uppercase tracking-wider">Queue Tracks (optional)</label>
-
-                {/* Search input */}
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-white/30" />
                   <input
@@ -564,8 +547,6 @@ export default function HubPage() {
                     <Loader className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 animate-spin text-white/30" />
                   )}
                 </div>
-
-                {/* Search results */}
                 {trackResults.length > 0 && (
                   <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl overflow-hidden">
                     {trackResults.map(track => (
@@ -588,8 +569,6 @@ export default function HubPage() {
                     ))}
                   </div>
                 )}
-
-                {/* Queued tracks */}
                 {queueTracks.length > 0 && (
                   <div className="space-y-1">
                     {queueTracks.map((track, i) => (
@@ -609,14 +588,12 @@ export default function HubPage() {
                     ))}
                   </div>
                 )}
-
                 {queueTracks.length === 0 && trackSearch.trim().length < 2 && (
                   <p className="text-[10px] text-white/20 text-center py-1">Search above to add tracks, or add them once you're live.</p>
                 )}
               </div>
             )}
 
-            {/* YouTube URL input (optional, shown when YouTube mode) */}
             {liveMode === 'youtube' && (
               <div className="space-y-1.5">
                 <label className="text-xs text-white/40 font-medium uppercase tracking-wider">YouTube Live URL (optional)</label>
@@ -629,7 +606,6 @@ export default function HubPage() {
               </div>
             )}
 
-            {/* Schedule toggle */}
             <div className="space-y-2">
               <button
                 onClick={() => setScheduleMode(v => !v)}
@@ -643,20 +619,19 @@ export default function HubPage() {
                   type="datetime-local"
                   value={scheduledAt}
                   onChange={e => setScheduledAt(e.target.value)}
-                  min={new Date().toISOString().slice(0,16)}
+                  min={new Date().toISOString().slice(0, 16)}
                   className="w-full px-3 py-2.5 bg-white/[0.06] border border-white/[0.08] rounded-xl text-sm text-white focus:outline-none focus:border-purple-500/40"
                 />
               )}
             </div>
 
-            {/* Go Live / Schedule button */}
             <button
               onClick={startLiveSession}
               disabled={startingSession || !liveTitle.trim() || (scheduleMode && !scheduledAt)}
               className={`w-full py-3 rounded-xl disabled:opacity-40 transition text-white font-semibold text-sm flex items-center justify-center space-x-2 ${scheduleMode ? 'bg-purple-500 hover:bg-purple-400' : 'bg-red-500 hover:bg-red-400'}`}
             >
               {startingSession
-                ? <><Loader className="w-4 h-4 animate-spin" /><span>{scheduleMode ? 'Scheduling…' : 'Starting…'}</span></>
+                ? <><Loader className="w-4 h-4 animate-spin" /><span>{scheduleMode ? 'Scheduling...' : 'Starting...'}</span></>
                 : scheduleMode
                   ? <><span>📅</span><span>Schedule Stream</span></>
                   : <><Radio className="w-4 h-4" /><span>Go Live</span></>}

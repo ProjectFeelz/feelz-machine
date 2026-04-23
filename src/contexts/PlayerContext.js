@@ -30,6 +30,9 @@ export function PlayerProvider({ children }) {
   const [isMinimized, setIsMinimized]   = useState(false);
 
   const audioRef        = useRef(new Audio());
+  const audioRefB       = useRef(new Audio());  // second element for crossfade
+  const crossfadingRef  = useRef(false);
+  const CROSSFADE_SECS  = 3; // seconds of overlap
   const streamLoggedRef = useRef(false);
   const queueRef        = useRef([]);
   const queueIndexRef   = useRef(-1);
@@ -102,15 +105,54 @@ export function PlayerProvider({ children }) {
     const nextTrack = q[nextIndex];
     if (nextTrack?.file_url) {
       streamLoggedRef.current = false;
-      audioRef.current.src = nextTrack.file_url;
-      audioRef.current.volume = volumeRef.current;
-      audioRef.current.play().catch(console.error);
+
+      // ── Crossfade: use a temporary second element to fade out the current
+      // track, then switch audioRef (the primary, event-listened element) to
+      // the new track once the overlap completes.
+      // We never swap refs — audioRef stays as the primary element throughout
+      // so all event listeners (timeupdate, ended, play, pause) remain valid.
+      const primaryAudio = audioRef.current;
+      const targetVol    = volumeRef.current;
+      crossfadingRef.current = true;
+
+      // Clone current playback into the secondary element so it can fade out
+      const fadeOutAudio  = audioRefB.current;
+      fadeOutAudio.src    = primaryAudio.src;
+      fadeOutAudio.volume = targetVol;
+      try {
+        fadeOutAudio.currentTime = primaryAudio.currentTime;
+        fadeOutAudio.play().catch(() => {});
+      } catch {}
+
+      // Switch the primary element to the new track immediately (silent)
+      primaryAudio.src    = nextTrack.file_url;
+      primaryAudio.volume = 0;
+      primaryAudio.play().catch(console.error);
+
       setCurrentTrack(nextTrack);
       preloadCover(nextTrack);
-      // Preload the track after this one too
       if (q[nextIndex + 1]) preloadCover(q[nextIndex + 1]);
       setQueueIndex(nextIndex);
       setCurrentTime(0);
+
+      const steps    = 30;
+      const interval = (CROSSFADE_SECS * 1000) / steps;
+      let   step     = 0;
+
+      const fade = setInterval(() => {
+        step++;
+        const progress        = step / steps;
+        fadeOutAudio.volume   = Math.max(0, targetVol * (1 - progress));
+        primaryAudio.volume   = Math.min(targetVol, targetVol * progress);
+        if (step >= steps) {
+          clearInterval(fade);
+          fadeOutAudio.pause();
+          fadeOutAudio.src    = '';
+          fadeOutAudio.volume = targetVol;
+          primaryAudio.volume = targetVol;
+          crossfadingRef.current = false;
+        }
+      }, interval);
 
       // When 2 or fewer tracks remain, extend queue silently
       if (!shuffleRef.current && rep !== 'all' && q.length - nextIndex <= 2) {
@@ -196,8 +238,48 @@ export function PlayerProvider({ children }) {
       // 4. Increment artist total_streams
       await supabase.rpc('increment_artist_streams', { artist_id: track.artist_id });
 
-      // 5. Stream milestone notifications are handled by the check_stream_milestones
-      //    DB trigger — no manual insert needed here.
+      // 5. Stream milestone notifications for the artist are handled by DB trigger.
+
+      // 5b. Fan milestone — celebrate the LISTENER's loyalty to this artist.
+      //     "You've played [Artist] 100 times" — fires at 10, 50, 100, 250, 500, 1000.
+      const FAN_MILESTONES = [10, 50, 100, 250, 500, 1000];
+      try {
+        const { count: totalPlays } = await supabase
+          .from('streams')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', userId)
+          .in('track_id',
+            // Get all track IDs by this artist so we count artist-level plays
+            (await supabase.from('tracks').select('id').eq('artist_id', track.artist_id))
+              .data?.map(t => t.id) || [trackId]
+          );
+
+        if (FAN_MILESTONES.includes(totalPlays)) {
+          const { data: artistInfo } = await supabase
+            .from('artists').select('artist_name').eq('id', track.artist_id).maybeSingle();
+          const name = artistInfo?.artist_name || 'this artist';
+
+          const milestoneMessages = {
+            10:   { title: `10 plays with ${name}`, message: `You keep coming back. That's what being a real fan looks like.` },
+            50:   { title: `50 plays with ${name}`, message: `Fifty plays in. You clearly know something others don't.` },
+            100:  { title: `100 plays with ${name} 🎯`, message: `One hundred plays. You're not just a listener — you're a supporter.` },
+            250:  { title: `250 plays with ${name}`, message: `250 plays deep. The artist notices fans like you.` },
+            500:  { title: `500 plays with ${name} 🔥`, message: `500 plays. That's dedication. Top fan energy.` },
+            1000: { title: `1000 plays with ${name} 🏆`, message: `A thousand plays. Legendary listener status. This artist owes you one.` },
+          };
+
+          const msg = milestoneMessages[totalPlays];
+          if (msg) {
+            await supabase.from('notifications').insert({
+              user_id:  userId,
+              type:     'top_supporter',
+              title:    msg.title,
+              message:  msg.message,
+              metadata: { artist_id: track.artist_id, artist_name: name, play_count: totalPlays, fan_milestone: true },
+            }).catch(() => {});
+          }
+        }
+      } catch { /* fan milestone is non-critical, never let it break playback */ }
 
       // 6. Collab artists — also increment their total_streams (skip if they're the listener)
       const { data: collabs } = await supabase

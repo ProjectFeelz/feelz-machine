@@ -196,7 +196,16 @@ function VersionsEditor({ versions, setVersions }) {
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function TrackUploadPanel() {
-  const { artist } = useAuth();
+  const { artist, user, refreshProfile } = useAuth();
+
+  // Race-condition guard: if the component mounts before AuthContext finishes
+  // loading the artist (e.g. tab switch after draft save), retry once after 800ms.
+  useEffect(() => {
+    if (user && !artist) {
+      const t = setTimeout(() => refreshProfile(), 800);
+      return () => clearTimeout(t);
+    }
+  }, [user, artist]); // eslint-disable-line react-hooks/exhaustive-deps
   const { convert, converting, progress: convProgress, error: convError } = useAudioConverter();
 
   const [activeTab, setActiveTab]               = useState('upload');
@@ -497,6 +506,14 @@ export default function TrackUploadPanel() {
   };
 
   const saveEdit = async (id) => {
+    if (!artist) {
+      // Artist context not loaded yet — attempt a fresh fetch before giving up
+      await refreshProfile();
+      if (!artist) {
+        showMessage('error', 'Artist profile not found. Please refresh and try again.');
+        return;
+      }
+    }
     setUploading(true);
     try {
       let coverUrl = editForm.cover_artwork_url || '';

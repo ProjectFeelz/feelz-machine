@@ -30,12 +30,18 @@ export function AuthProvider({ children }) {
   };
 
   const fetchArtist = async (userId) => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('artists')
       .select('*')
       .eq('user_id', userId)
       .maybeSingle();
-    if (data) setArtist(data);
+    if (data) {
+      setArtist(data);
+    } else if (!error) {
+      // Row genuinely doesn't exist — clear any stale state
+      setArtist(null);
+    }
+    // If there's a network error, preserve existing state rather than wiping it
   };
 
   const fetchListener = async (userId) => {

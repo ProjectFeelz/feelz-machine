@@ -1,14 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
+import { Lock, Globe, ChevronRight } from 'lucide-react';
 
 const features = [
-  { emoji: '🎵', title: 'Upload & Stream', desc: 'Upload tracks, create albums, and let fans stream instantly from anywhere.' },
-  { emoji: '💰', title: 'Sell Downloads', desc: 'Set your own prices. Fans pay via PayPal and get instant high-quality downloads.' },
-  { emoji: '🤝', title: 'Collaborations', desc: 'Invite collabs, set royalty splits, and manage credits — all built in.' },
-  { emoji: '📊', title: 'Real Analytics', desc: 'Streams, downloads, followers, engagement. Know how your music performs.' },
-  { emoji: '🎨', title: 'Custom Profile', desc: 'Build a branded artist page with your own colors, fonts, and themes.' },
-  { emoji: '📣', title: 'Community Feed', desc: 'Post updates, embed YouTube videos, connect directly with your fanbase.' },
+  { emoji: '🎵', title: 'Upload & Stream',   desc: 'Upload tracks, create albums, and let fans stream instantly from anywhere.' },
+  { emoji: '💰', title: 'Sell Downloads',    desc: 'Set your own prices. Fans pay via PayPal and get instant high-quality downloads.' },
+  { emoji: '🤝', title: 'Collaborations',    desc: 'Invite collabs, set royalty splits, and manage credits — all built in.' },
+  { emoji: '📊', title: 'Real Analytics',    desc: 'Streams, downloads, followers, engagement. Know how your music performs.' },
+  { emoji: '🎨', title: 'Custom Profile',    desc: 'Build a branded artist page with your own colors, fonts, and themes.' },
+  { emoji: '📣', title: 'Community Feed',    desc: 'Post updates, embed YouTube videos, connect directly with your fanbase.' },
 ];
 
 const tiers = [
@@ -29,10 +30,41 @@ const tiers = [
   },
 ];
 
+function LegalCard({ icon: Icon, label, description, path }) {
+  const navigate = useNavigate();
+  return (
+    <button
+      onClick={() => navigate(path)}
+      style={{
+        width: '100%', display: 'flex', alignItems: 'center', gap: 16,
+        padding: 16, background: 'rgba(255,255,255,0.03)',
+        border: '1px solid rgba(255,255,255,0.07)',
+        borderRadius: 12, cursor: 'pointer', textAlign: 'left',
+        transition: 'background 0.15s',
+      }}
+      onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.06)'}
+      onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.03)'}
+    >
+      <div style={{
+        width: 44, height: 44, borderRadius: 10, flexShrink: 0,
+        background: 'rgba(255,255,255,0.06)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}>
+        <Icon size={20} color="rgba(255,255,255,0.7)" />
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <p style={{ fontSize: 14, fontWeight: 500, color: '#fff', margin: 0 }}>{label}</p>
+        <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', margin: '2px 0 0' }}>{description}</p>
+      </div>
+      <ChevronRight size={16} color="rgba(255,255,255,0.2)" style={{ flexShrink: 0 }} />
+    </button>
+  );
+}
+
 export default function AboutPage() {
   const navigate = useNavigate();
   const [playStoreUrl, setPlayStoreUrl] = useState('');
-  const [appStoreUrl, setAppStoreUrl] = useState('');
+  const [appStoreUrl, setAppStoreUrl]   = useState('');
 
   useEffect(() => {
     supabase
@@ -42,7 +74,7 @@ export default function AboutPage() {
       .then(({ data }) => {
         (data || []).forEach(row => {
           if (row.key === 'play_store_url') setPlayStoreUrl(row.value || '');
-          if (row.key === 'app_store_url') setAppStoreUrl(row.value || '');
+          if (row.key === 'app_store_url')  setAppStoreUrl(row.value  || '');
         });
       });
   }, []);
@@ -85,7 +117,6 @@ export default function AboutPage() {
           </button>
         </div>
 
-        {/* App Store Buttons */}
         {hasAppButtons && (
           <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap', marginTop: 16 }}>
             {playStoreUrl && (
@@ -124,7 +155,6 @@ export default function AboutPage() {
         )}
       </div>
 
-      {/* Divider */}
       <div style={{ maxWidth: 800, margin: '0 auto 48px', height: 1, background: 'rgba(255,255,255,0.06)' }} />
 
       {/* Features */}
@@ -176,7 +206,7 @@ export default function AboutPage() {
               <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {items.map(item => (
                   <li key={item} style={{ fontSize: 13, color: 'rgba(255,255,255,0.45)', display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ color: '#8CAB2E', fontSize: 11, flexShrink: 0 }}>—</span>{item}
+                    <span style={{ color: '#8CAB2E', fontSize: 11, flexShrink: 0 }}>-</span>{item}
                   </li>
                 ))}
               </ul>
@@ -185,20 +215,30 @@ export default function AboutPage() {
         </div>
       </div>
 
-      {/* Legal links */}
-      <div style={{ textAlign: 'center', paddingBottom: 16 }}>
-        <div style={{ display: 'flex', gap: 24, justifyContent: 'center', flexWrap: 'wrap' }}>
-          {[
-            { label: 'Privacy Policy', path: '/privacy-policy' },
-            { label: 'Terms of Use', path: '/terms-of-use' },
-          ].map(({ label, path }) => (
-            <button key={label} onClick={() => navigate(path)}
-              style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.25)', fontSize: 13, cursor: 'pointer' }}>
-              {label}
-            </button>
-          ))}
+      {/* Legal — promoted to proper nav cards */}
+      <div style={{ padding: '0 24px', maxWidth: 600, margin: '0 auto 48px' }}>
+        <p style={{ fontSize: 11, fontWeight: 500, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.25)', marginBottom: 16 }}>
+          Legal
+        </p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <LegalCard
+            icon={Lock}
+            label="Privacy Policy"
+            description="How we handle your data"
+            path="/privacy-policy"
+          />
+          <LegalCard
+            icon={Globe}
+            label="Terms of Use"
+            description="Platform rules and guidelines"
+            path="/terms-of-use"
+          />
         </div>
-        <p style={{ marginTop: 12, fontSize: 12, color: 'rgba(255,255,255,0.15)' }}>© 2026 Project Feelz</p>
+      </div>
+
+      {/* Footer */}
+      <div style={{ textAlign: 'center', paddingBottom: 16 }}>
+        <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.15)' }}>© 2026 Project Feelz</p>
       </div>
 
     </div>

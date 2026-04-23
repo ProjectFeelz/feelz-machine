@@ -8,12 +8,13 @@ import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import { usePlayer } from '../contexts/PlayerContext';
 import {
-  ArrowLeft, Calendar, Play, Pause, Share2, UserPlus, UserCheck,
-  Instagram, Twitter, Youtube, Globe, Music,
-  Loader, Verified, Download, Heart, ListMusic, Check,
-  MoreHorizontal, DollarSign, MessageCircle, ChevronDown,
-  ChevronUp, Send, Trash2, Shuffle, Radio, X
-} from 'lucide-react';
+  ArrowLeft, Calendar, Play, Pause, Share2,
+  UserPlus, UserCheck, Instagram, Twitter, Youtube,
+  Globe, Music, Loader, Verified, Download,
+  Heart, Check, MoreHorizontal, DollarSign, MessageCircle,
+  ChevronDown, ChevronUp, Send, Trash2, Shuffle,
+  Radio, X
+} from 'lucide-react';;
 import { ArtistProfileSkeleton } from '../components/SkeletonLoader';
 import ShareCard from '../components/ShareCard';
 import { usePullToRefresh } from '../hooks/usePullToRefresh';
@@ -388,6 +389,54 @@ export default function ArtistProfilePage() {
   const [liveSession, setLiveSession] = useState(null);
   const liveCheckRef = useRef(null);
   const [scheduledSession, setScheduledSession] = useState(null);
+  const [topListeners, setTopListeners]         = useState([]);
+
+  const fetchTopListeners = async (artistId) => {
+    // Top 5 listeners by stream count for this artist's tracks
+    try {
+      const { data: trackData } = await supabase
+        .from('tracks').select('id').eq('artist_id', artistId).eq('is_published', true);
+      const trackIds = (trackData || []).map(t => t.id);
+      if (!trackIds.length) return;
+
+      const { data: streamData } = await supabase
+        .from('streams')
+        .select('user_id')
+        .in('track_id', trackIds);
+      if (!streamData?.length) return;
+
+      // Count streams per user
+      const counts = {};
+      streamData.forEach(s => { counts[s.user_id] = (counts[s.user_id] || 0) + 1; });
+      const top5 = Object.entries(counts)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5)
+        .map(([uid, count]) => ({ user_id: uid, count }));
+
+      // Enrich with profile data
+      const uids = top5.map(t => t.user_id);
+      const [{ data: artistProfiles }, { data: listenerProfiles }] = await Promise.all([
+        supabase.from('artists').select('user_id, artist_name, profile_image_url, slug').in('user_id', uids),
+        supabase.from('user_profiles').select('user_id, name, avatar_url').in('user_id', uids),
+      ]);
+      const artistMap = {};
+      (artistProfiles || []).forEach(a => { artistMap[a.user_id] = a; });
+      const listenerMap = {};
+      (listenerProfiles || []).forEach(l => { listenerMap[l.user_id] = l; });
+
+      setTopListeners(top5.map(({ user_id, count }) => {
+        const a = artistMap[user_id];
+        const l = listenerMap[user_id];
+        return {
+          user_id,
+          count,
+          name:   a?.artist_name || l?.name || 'Listener',
+          avatar: a?.profile_image_url || l?.avatar_url || null,
+          slug:   a?.slug || null,
+        };
+      }));
+    } catch (err) { console.error('Top listeners error:', err); }
+  };
 
   const checkExistingPurchases = async () => {
     if (!user || !tracks.length) return;
@@ -414,6 +463,7 @@ export default function ArtistProfilePage() {
   }, [user, tracks]);
 
   useEffect(() => { if (slug) fetchArtist(); }, [slug]);
+  useEffect(() => { if (artist?.id) fetchTopListeners(artist.id); }, [artist?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Live session check ────────────────────────────────────────────────────
   useEffect(() => {
@@ -674,33 +724,6 @@ export default function ArtistProfilePage() {
         await supabase.from('follows').insert({ artist_id: artist.id, follower_id: user.id });
         await supabase.from('artist_alerts').upsert({ artist_id: artist.id, user_id: user.id }, { onConflict: 'user_id,artist_id' });
         setIsFollowing(true);
-        // Auto-request push permission on first follow
-        try {
-          if ('Notification' in window && 'serviceWorker' in navigator && 'PushManager' in window) {
-            const permission = Notification.permission === 'default'
-              ? await Notification.requestPermission()
-              : Notification.permission;
-            if (permission === 'granted') {
-              const reg = await navigator.serviceWorker.ready;
-              const existing = await reg.pushManager.getSubscription();
-              const sub = existing || await reg.pushManager.subscribe({
-                userVisibleOnly: true,
-                applicationServerKey: (() => {
-                  const key = process.env.REACT_APP_VAPID_PUBLIC_KEY;
-                  const padding = '='.repeat((4 - key.length % 4) % 4);
-                  const base64 = (key + padding).replace(/-/g, '+').replace(/_/g, '/');
-                  return Uint8Array.from([...window.atob(base64)].map(c => c.charCodeAt(0)));
-                })(),
-              });
-              const p256dh = btoa(String.fromCharCode(...new Uint8Array(sub.getKey('p256dh'))));
-              const auth   = btoa(String.fromCharCode(...new Uint8Array(sub.getKey('auth'))));
-              await supabase.from('push_subscriptions').upsert(
-                { user_id: user.id, endpoint: sub.endpoint, p256dh, auth },
-                { onConflict: 'user_id,endpoint' }
-              );
-            }
-          }
-        } catch (pushErr) { console.warn('Push subscribe skipped:', pushErr.message); }
         setFollowerCount(prev => prev + 1);
         const { data: myProfile } = await supabase.from('artists').select('id, artist_name').eq('user_id', user.id).maybeSingle();
         await supabase.from('notifications').insert({
@@ -976,6 +999,36 @@ export default function ArtistProfilePage() {
           <span className="text-sm" style={{ color: `${textColor}80` }}>{tracks.length} track{tracks.length !== 1 ? 's' : ''}</span>
           <span className="text-sm" style={{ color: `${textColor}80` }}>{formatNumber(artist.total_streams)} streams</span>
         </div>
+
+        {/* Top Listeners leaderboard */}
+        {topListeners.length > 0 && (
+          <div className="mb-4 px-1">
+            <p className="text-[10px] uppercase tracking-widest font-semibold mb-2" style={{ color: `${textColor}40` }}>
+              Top Listeners
+            </p>
+            <div className="flex items-center space-x-2">
+              {topListeners.map((listener, i) => (
+                <div key={listener.user_id} className="flex flex-col items-center" title={listener.name}>
+                  <div className="relative">
+                    <div className="w-9 h-9 rounded-full overflow-hidden border-2" style={{ borderColor: i === 0 ? primaryColor : `${textColor}20` }}>
+                      {listener.avatar
+                        ? <img src={listener.avatar} alt={listener.name} className="w-full h-full object-cover" />
+                        : <div className="w-full h-full flex items-center justify-center text-xs font-bold" style={{ background: `${primaryColor}30`, color: textColor }}>
+                            {listener.name[0]}
+                          </div>}
+                    </div>
+                    {i === 0 && (
+                      <span className="absolute -top-1 -right-1 text-[10px]">👑</span>
+                    )}
+                  </div>
+                  <span className="text-[9px] mt-0.5 max-w-[36px] truncate" style={{ color: `${textColor}50` }}>
+                    {listener.count}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
         <div className="flex items-center justify-center flex-wrap gap-2 mb-4 px-4">
           <button onClick={handleFollow}
             className="flex items-center space-x-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all active:scale-95"

@@ -58,6 +58,10 @@
   name = "weekly-artist-report"
   schedule = "0 8 * * 1"
 
+[[scheduled_functions]]
+  name = "weekly-listener-recap"
+  schedule = "0 18 * * 0"
+
 # ── Redirects ─────────────────────────────────────────────────────────────────
 [[redirects]]
   from = "/.well-known/assetlinks.json"

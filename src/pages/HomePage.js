@@ -163,6 +163,7 @@ export default function HomePage() {
   const [trending, setTrending]                     = useState([]);
   const [topArtists, setTopArtists]                 = useState([]);
   const [recommended, setRecommended]               = useState([]);
+  const [similarArtists, setSimilarArtists]         = useState([]);
   const [followedReleases, setFollowedReleases]     = useState([]);
   const [loading, setLoading]                       = useState(true);
   const [actionSheetTrack, setActionSheetTrack]     = useState(null);
@@ -239,7 +240,7 @@ export default function HomePage() {
       setTopArtists(artists || []);
 
       if (user) {
-        await Promise.all([fetchRecommendations(), fetchFollowedReleases(), fetchCompetitions(), fetchWrapped(), fetchLiveSessions()]);
+        await Promise.all([fetchRecommendations(), fetchFollowedReleases(), fetchCompetitions(), fetchWrapped(), fetchLiveSessions(), fetchSimilarArtists()]);
       } else {
         await Promise.all([fetchCompetitions(), fetchLiveSessions()]);
       }
@@ -373,6 +374,53 @@ export default function HomePage() {
         artist_slug: t.artists?.slug || null,
       })), topArtists.length));
     } catch (err) { console.error('Recommendations error:', err); }
+  };
+
+  const fetchSimilarArtists = async () => {
+    if (!user) return;
+    try {
+      // Get the user's top-played artists
+      const { data: streamData } = await supabase
+        .from('streams')
+        .select('track_id, tracks(artist_id, genre, artists(id, artist_name, slug))')
+        .eq('user_id', user.id)
+        .limit(100);
+      if (!streamData?.length) return;
+
+      // Count plays per artist and collect genres
+      const artistCounts = {};
+      const genreSet = new Set();
+      const playedArtistIds = new Set();
+      streamData.forEach(s => {
+        const a = s.tracks?.artists;
+        const g = s.tracks?.genre;
+        if (a?.id) {
+          artistCounts[a.id] = (artistCounts[a.id] || 0) + 1;
+          playedArtistIds.add(a.id);
+        }
+        if (g) genreSet.add(g);
+      });
+
+      if (!genreSet.size) return;
+
+      // Find artists with matching genres that the user hasn't played yet
+      const genres = [...genreSet].slice(0, 3);
+      const orFilter = genres.map(g => `genre.eq.${g}`).join(',');
+      const { data: candidates } = await supabase
+        .from('artists')
+        .select('id, artist_name, slug, profile_image_url, is_verified, follower_count, genre')
+        .not('profile_image_url', 'is', null)
+        .neq('profile_image_url', '')
+        .or(orFilter)
+        .order('follower_count', { ascending: false })
+        .limit(30);
+
+      if (!candidates?.length) return;
+
+      // Filter out artists already played, prioritise unheard
+      const unheard = candidates.filter(a => !playedArtistIds.has(a.id));
+      setSimilarArtists(unheard.slice(0, 8));
+    } catch (err) { console.error('Similar artists error:', err); }
   };
 
   useEffect(() => {
@@ -797,6 +845,37 @@ export default function HomePage() {
                   {a.is_verified && <Verified className="w-3 h-3 text-blue-400 flex-shrink-0" />}
                 </div>
                 <p className="text-xs text-white/30 mt-0.5">{formatNumber(a.follower_count)} followers</p>
+              </button>
+            ))}
+          </div>
+        </Section>
+      )}
+
+      {/* You Might Also Like — artists in the user's genres they haven't heard yet */}
+      {similarArtists.length > 0 && (
+        <Section title="You Might Also Like" icon={Compass} onSeeAll={() => navigate('/browse?tab=artists')}>
+          <div className="flex space-x-3 overflow-x-auto px-6 scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
+            {similarArtists.map(a => (
+              <button key={a.id} onClick={() => navigate(`/artist/${a.slug}`)}
+                className="flex-shrink-0 w-36 md:w-44 text-center group">
+                <div className="w-36 h-36 md:w-44 md:h-44 rounded-2xl overflow-hidden bg-white/[0.06] mb-2 mx-auto relative">
+                  <img src={a.profile_image_url} alt={a.artist_name || ''}
+                    loading="lazy" decoding="async"
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                  {/* Genre badge overlay */}
+                  {a.genre && (
+                    <div className="absolute bottom-1.5 left-1.5 right-1.5">
+                      <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-black/60 backdrop-blur text-white/70 font-medium truncate block text-center">
+                        {a.genre}
+                      </span>
+                    </div>
+                  )}
+                </div>
+                <div className="flex items-center justify-center space-x-1">
+                  <p className="text-sm font-medium text-white truncate max-w-[130px]">{a.artist_name}</p>
+                  {a.is_verified && <Verified className="w-3 h-3 text-blue-400 flex-shrink-0" />}
+                </div>
+                <p className="text-xs text-white/30 mt-0.5">{a.follower_count > 0 ? `${formatNumber(a.follower_count)} followers` : 'New artist'}</p>
               </button>
             ))}
           </div>
