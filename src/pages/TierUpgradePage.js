@@ -76,6 +76,7 @@ const TIER_FEATURES = {
       { text: 'Priority in browse/trending', included: false },
       { text: 'Download sales', included: false },
       { text: 'YouTube video backdrop', included: false },
+      { text: 'Live streaming', included: false },
     ],
   },
   premium: {
@@ -96,6 +97,8 @@ const TIER_FEATURES = {
       { text: 'Pre-order releases', included: true },
       { text: 'YouTube video backdrop', included: true },
       { text: 'Featured track placement', included: true },
+      { text: 'Live streaming to followers', included: true },
+      { text: 'Tip goals & fan fundraising', included: true },
     ],
   },
 };
