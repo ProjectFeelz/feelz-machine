@@ -26,7 +26,8 @@ const TIER_ACCESS = {
     analytics: true,
     collaborations: true,
     priority_trending: false,
-    download_sales: false,
+    download_sales: true,
+    download_sales_monthly_limit: 2,   // Pro: 2 paid download tracks per month
     custom_branding: true,
     advanced_analytics: false,
     community_post: true,
@@ -43,6 +44,7 @@ const TIER_ACCESS = {
     collaborations: true,
     priority_trending: true,
     download_sales: true,
+    download_sales_monthly_limit: Infinity, // Premium: unlimited
     custom_branding: true,
     advanced_analytics: true,
     community_post: true,
@@ -58,7 +60,7 @@ const FEATURE_LABELS = {
   analytics: { name: 'Analytics', description: 'View detailed track and audience analytics', minTier: 'pro' },
   collaborations: { name: 'Collaborations', description: 'Collaborate with other artists and set royalty splits', minTier: 'pro' },
   priority_trending: { name: 'Priority Trending', description: 'Get boosted visibility in browse and trending', minTier: 'premium' },
-  download_sales: { name: 'Download Sales', description: 'Sell track downloads directly to fans', minTier: 'premium' },
+  download_sales: { name: 'Download Sales', description: 'Sell track downloads directly to fans (Pro: 2/month, Premium: unlimited)', minTier: 'pro' },
   custom_branding: { name: 'Custom Branding', description: 'Full branding control on your profile', minTier: 'pro' },
   advanced_analytics: { name: 'Advanced Analytics', description: 'Deep audience insights and export tools', minTier: 'premium' },
   community_post: { name: 'Community Posts', description: 'Share updates and music with your fans', minTier: 'pro' },
@@ -72,6 +74,7 @@ const FEATURE_LABELS = {
   const [tierData, setTierData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [trackCount, setTrackCount] = useState(0);
+  const [monthlyDownloadSalesCount, setMonthlyDownloadSalesCount] = useState(0);
 
   useEffect(() => {
     if (isAdmin) {
@@ -82,6 +85,7 @@ const FEATURE_LABELS = {
     if (artist) {
       fetchTier(artist.id);
       fetchTrackCount(artist.id);
+      fetchMonthlyDownloadSalesCount(artist.id);
     } else {
       setTierSlug('free');
       setLoading(false);
@@ -150,6 +154,20 @@ const FEATURE_LABELS = {
     setTrackCount(count || 0);
   };
 
+  const fetchMonthlyDownloadSalesCount = async (artistId) => {
+    if (!artistId) return;
+    const startOfMonth = new Date();
+    startOfMonth.setDate(1);
+    startOfMonth.setHours(0, 0, 0, 0);
+    const { count } = await supabase
+      .from('tracks')
+      .select('*', { count: 'exact', head: true })
+      .eq('artist_id', artistId)
+      .gt('download_price', 0)
+      .gte('created_at', startOfMonth.toISOString());
+    setMonthlyDownloadSalesCount(count || 0);
+  };
+
   // Get access rules for current tier
   const access = TIER_ACCESS[tierSlug] || TIER_ACCESS.free;
 
@@ -191,6 +209,14 @@ const FEATURE_LABELS = {
   const isPremium = tierSlug === 'premium';
   const isFree = tierSlug === 'free';
 
+  const downloadSalesLimit = access.download_sales_monthly_limit ?? 0;
+  const canAddDownloadSale = isPremium
+    ? true
+    : (access.download_sales && monthlyDownloadSalesCount < downloadSalesLimit);
+  const downloadSalesRemaining = isPremium
+    ? Infinity
+    : Math.max(0, downloadSalesLimit - monthlyDownloadSalesCount);
+
   return {
     tierSlug,
     tierData,
@@ -206,10 +232,18 @@ const FEATURE_LABELS = {
     uploadsRemaining,
     getMinTier,
     getFeatureInfo,
-    refreshTier: () => artist?.id && fetchTier(artist.id),
+    refreshTier: () => {
+      if (artist?.id) {
+        fetchTier(artist.id);
+        fetchMonthlyDownloadSalesCount(artist.id);
+      }
+    },
+    // Download sales limit enforcement
+    downloadSalesLimit,
+    downloadSalesUsed: monthlyDownloadSalesCount,
+    downloadSalesRemaining,
+    canAddDownloadSale,
   };
 }
 
 export { TIER_ACCESS, FEATURE_LABELS };
-
-

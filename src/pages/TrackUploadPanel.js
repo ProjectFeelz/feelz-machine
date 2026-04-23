@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import CollaboratorSearch from '../components/CollaboratorSearch';
 import TierGate from '../components/TierGate';
+import { useTier } from '../contexts/useTier';
 import { useAudioConverter } from '../hooks/useAudioConverter';
 import UploadHelpPanel from '../components/UploadHelpPanel';
 
@@ -197,6 +198,7 @@ function VersionsEditor({ versions, setVersions }) {
 
 export default function TrackUploadPanel() {
   const { artist, user, refreshProfile } = useAuth();
+  const { isPremium, canAddDownloadSale, downloadSalesRemaining, downloadSalesLimit } = useTier();
 
   // Race-condition guard: if the component mounts before AuthContext finishes
   // loading the artist (e.g. tab switch after draft save), retry once after 800ms.
@@ -851,9 +853,24 @@ export default function TrackUploadPanel() {
                 )}
                 <TierGate feature="download_sales" inline>
                   <div>
-                    <FieldLabel>Download Price (USD)</FieldLabel>
-                    <FInput type="number" min="0" step="0.01" value={trackForm.download_price}
-                      onChange={(e) => setTrackForm({ ...trackForm, download_price: e.target.value })} />
+                    <FieldLabel>
+                      Download Price (USD)
+                      {!isPremium && downloadSalesLimit > 0 && (
+                        <span className="ml-2 text-[10px] text-white/30 font-normal">
+                          {downloadSalesRemaining > 0
+                            ? `${downloadSalesRemaining} of ${downloadSalesLimit} remaining this month`
+                            : 'Monthly limit reached'}
+                        </span>
+                      )}
+                    </FieldLabel>
+                    {canAddDownloadSale || parseFloat(trackForm.download_price) > 0 ? (
+                      <FInput type="number" min="0" step="0.01" value={trackForm.download_price}
+                        onChange={(e) => setTrackForm({ ...trackForm, download_price: e.target.value })} />
+                    ) : (
+                      <div className="px-3 py-2.5 bg-white/[0.03] rounded-lg border border-white/[0.06] text-xs text-white/30">
+                        Monthly limit reached (2/month on Pro) — upgrade to Premium for unlimited
+                      </div>
+                    )}
                   </div>
                 </TierGate>
                 {trackForm.is_downloadable && parseFloat(trackForm.download_price) > 0 && (
@@ -1424,9 +1441,24 @@ export default function TrackUploadPanel() {
                                 onChange={(e) => setEditForm({ ...editForm, track_number: e.target.value })} />
                             </div>
                             <div>
-                              <FieldLabel>Download Price (USD)</FieldLabel>
-                              <FInput type="number" min="0" step="0.01" value={editForm.download_price}
-                                onChange={(e) => setEditForm({ ...editForm, download_price: e.target.value })} />
+                              <FieldLabel>
+                                Download Price (USD)
+                                {!isPremium && downloadSalesLimit > 0 && (
+                                  <span className="ml-2 text-[10px] text-white/30 font-normal">
+                                    {downloadSalesRemaining > 0
+                                      ? `${downloadSalesRemaining}/${downloadSalesLimit} left`
+                                      : 'Limit reached'}
+                                  </span>
+                                )}
+                              </FieldLabel>
+                              {canAddDownloadSale || parseFloat(editForm.download_price) > 0 ? (
+                                <FInput type="number" min="0" step="0.01" value={editForm.download_price}
+                                  onChange={(e) => setEditForm({ ...editForm, download_price: e.target.value })} />
+                              ) : (
+                                <div className="px-3 py-2.5 bg-white/[0.03] rounded-lg border border-white/[0.06] text-xs text-white/30">
+                                  Monthly limit reached — upgrade to Premium for unlimited
+                                </div>
+                              )}
                             </div>
                             {parseFloat(editForm.download_price) > 0 && (
                               <div className="md:col-span-2 space-y-2">

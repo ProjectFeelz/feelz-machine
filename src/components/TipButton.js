@@ -117,8 +117,11 @@ export default function TipButton({ artist }) {
       onClick={reset}
     >
       <div
-        className="w-full max-w-md bg-zinc-900 border border-white/10 rounded-2xl p-6"
-        style={{ paddingBottom: 'max(24px, env(safe-area-inset-bottom, 24px))' }}
+        className="w-full max-w-md bg-zinc-900 border border-white/10 rounded-2xl p-6 overflow-y-auto"
+        style={{
+          paddingBottom: 'max(24px, env(safe-area-inset-bottom, 24px))',
+          maxHeight: 'calc(100dvh - 120px)',
+        }}
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-5">

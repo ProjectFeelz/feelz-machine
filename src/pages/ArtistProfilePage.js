@@ -832,6 +832,25 @@ export default function ArtistProfilePage() {
           }))
         );
       }
+      // Send push notification to all followers
+      try {
+        const { data: { session: authSession } } = await supabase.auth.getSession();
+        fetch('/.netlify/functions/send-push', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-internal-secret': process.env.REACT_APP_INTERNAL_FUNCTION_SECRET || '',
+          },
+          body: JSON.stringify({
+            user_ids: followerIds,
+            title:    `Message from ${artist.artist_name}`,
+            body:     dmMessage.trim().slice(0, 100),
+            url:      `/artist/${artist.slug}`,
+            tag:      `dm-${artist.id}-${Date.now()}`,
+          }),
+        }).catch(() => {});
+      } catch {}
+
       setDmSent(true);
       setTimeout(() => { setDmSent(false); setShowDMModal(false); setDmMessage(''); }, 2000);
     } catch (err) { console.error('DM error:', err); }

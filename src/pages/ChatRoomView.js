@@ -867,12 +867,12 @@ export default function ChatRoomView() {
       style={{ minHeight: '100dvh', maxHeight: '100dvh' }}
       onClick={() => { if (reactionTarget) setReactionTarget(null); }}
     >
-      {/* Top bar */}
+      {/* Top bar — paddingTop accounts for iPhone notch/dynamic island */}
       <div
-        className="flex items-center justify-between px-4 py-3 border-b backdrop-blur-xl flex-shrink-0 sticky top-0 z-30"
+        className="flex items-center justify-between px-4 pb-3 border-b backdrop-blur-xl flex-shrink-0 sticky top-0 z-30"
         style={isBugRoom
-          ? { background: `linear-gradient(to right, ${accentColor}18, #000000f2)`, borderColor: `${accentColor}30` }
-          : { background: 'rgba(0,0,0,0.95)', borderColor: 'rgba(255,255,255,0.06)' }
+          ? { background: `linear-gradient(to right, ${accentColor}18, #000000f2)`, borderColor: `${accentColor}30`, paddingTop: 'max(12px, env(safe-area-inset-top, 12px))' }
+          : { background: 'rgba(0,0,0,0.95)', borderColor: 'rgba(255,255,255,0.06)', paddingTop: 'max(12px, env(safe-area-inset-top, 12px))' }
         }
       >
         <div className="flex items-center space-x-3">

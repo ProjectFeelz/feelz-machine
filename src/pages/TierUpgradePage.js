@@ -54,7 +54,7 @@ const TIER_FEATURES = {
       { text: 'Analytics dashboard', included: false },
       { text: 'Collaboration & splits', included: false },
       { text: 'Competition entry', included: false },
-      { text: 'Download sales', included: false },
+      { text: 'Download sales (2 tracks/month)', included: true },
     ],
   },
   pro: {
