@@ -65,7 +65,10 @@ self.addEventListener('fetch', e => {
     e.respondWith(
       fetch(req)
         .then(res => {
-          if (res?.status === 200) caches.open(RUNTIME_CACHE).then(c => c.put(req, res.clone()));
+          if (res?.status === 200) {
+            const toCache = res.clone(); // clone synchronously before async gap
+            caches.open(RUNTIME_CACHE).then(c => c.put(req, toCache));
+          }
           return res;
         })
         .catch(async () => {
@@ -80,7 +83,10 @@ self.addEventListener('fetch', e => {
   if (isHashedAsset(url)) {
     e.respondWith(
       caches.match(req).then(cached => cached || fetch(req).then(res => {
-        if (res?.status === 200) caches.open(STATIC_CACHE).then(c => c.put(req, res.clone()));
+        if (res?.status === 200) {
+          const toCache = res.clone(); // clone synchronously before any async gap
+          caches.open(STATIC_CACHE).then(c => c.put(req, toCache));
+        }
         return res;
       }))
     );
