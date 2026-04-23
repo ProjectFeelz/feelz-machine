@@ -501,7 +501,7 @@ export default function ArtistProfilePage() {
     if (!artist?.id) return;
     supabase.from('artist_stories')
       .select('*')
-      .eq('artist_id', artistData.id)
+      .eq('artist_id', artist.id)
       .gt('expires_at', new Date().toISOString())
       .order('created_at', { ascending: false })
       .limit(20)
