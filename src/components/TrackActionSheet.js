@@ -140,7 +140,7 @@ export default function TrackActionSheet({ track, artist, onClose }) {
 
                     await fetch('/.netlify/functions/process-split-payout', {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
+                        headers: { 'Content-Type': 'application/json', 'x-internal-secret': process.env.REACT_APP_INTERNAL_FUNCTION_SECRET || '' },
                         body: JSON.stringify({
                             track_id: track.id,
                             transaction_id: captureData.captureId,

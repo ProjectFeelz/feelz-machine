@@ -714,7 +714,7 @@ export default function ArtistProfilePage() {
           if (!captureData.success) throw new Error('Payment capture failed');
           await supabase.from('downloads').insert({ user_id: user.id, track_id: purchaseTrack.id, amount_paid: getEffectivePrice(purchaseTrack) });
           await fetch('/.netlify/functions/process-split-payout', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            method: 'POST', headers: { 'Content-Type': 'application/json', 'x-internal-secret': process.env.REACT_APP_INTERNAL_FUNCTION_SECRET || '' },
             body: JSON.stringify({ track_id: purchaseTrack.id, transaction_id: captureData.captureId, total_amount: getEffectivePrice(purchaseTrack), buyer_user_id: user.id }),
           });
           setPurchaseSuccess(true); setPurchasing(false);
@@ -1657,7 +1657,7 @@ export default function ArtistProfilePage() {
                             if (!captureData.success) throw new Error('Payment capture failed');
                             await supabase.from('downloads').insert({ user_id: user.id, track_id: pwywTrack.id, amount_paid: amount }).catch(() => {});
                             await fetch('/.netlify/functions/process-split-payout', {
-                              method: 'POST', headers: { 'Content-Type': 'application/json' },
+                              method: 'POST', headers: { 'Content-Type': 'application/json', 'x-internal-secret': process.env.REACT_APP_INTERNAL_FUNCTION_SECRET || '' },
                               body: JSON.stringify({ track_id: pwywTrack.id, transaction_id: captureData.captureId, total_amount: amount, buyer_user_id: user.id }),
                             }).catch(() => {});
                             setPwywPurchaseSuccess(true);

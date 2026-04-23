@@ -101,7 +101,7 @@ export default function PaidPlayGate({ track, artist, onClose, onPurchaseComplet
           if (user) {
             await supabase.from('downloads').insert({ user_id: user.id, track_id: track.id, amount_paid: track.download_price }).catch(() => {});
             await fetch('/.netlify/functions/process-split-payout', {
-              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              method: 'POST', headers: { 'Content-Type': 'application/json', 'x-internal-secret': process.env.REACT_APP_INTERNAL_FUNCTION_SECRET || '' },
               body: JSON.stringify({
                 track_id: track.id,
                 transaction_id: captureData.captureId,

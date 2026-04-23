@@ -42,6 +42,7 @@ const TYPE_CONFIG = {
   weekly_report:    { icon: TrendingUp,    color: 'text-cyan-400',   bg: 'bg-cyan-500/10',   label: 'Weekly Report' },
   first_listener:   { icon: Heart,         color: 'text-yellow-400', bg: 'bg-yellow-500/10', label: 'First! 🎯' },
   tip:              { icon: Heart,         color: 'text-pink-400',   bg: 'bg-pink-500/10',   label: 'Tip Received' },
+  payout_pending:   { icon: DollarSign,     color: 'text-green-400',  bg: 'bg-green-500/10',  label: 'Payout' },
   admin_message:    { icon: Megaphone,     color: 'text-yellow-400', bg: 'bg-yellow-500/10', label: 'Message from Admin' },
   bug_report:       { icon: MessageCircle, color: 'text-red-400',    bg: 'bg-red-500/10',    label: 'Bug Report' },
 };
@@ -141,7 +142,7 @@ export default function NotificationsPage() {
   // Notification types that are informational only — no useful tap destination
   const READ_ONLY_TYPES = new Set([
     'streak', 'top_supporter', 'weekly_report', 'monthly_wrapped',
-    'tip', 'engagement',
+    'tip', 'engagement', 'payout_pending',
   ]);
 
   const handleClick = (notif) => {

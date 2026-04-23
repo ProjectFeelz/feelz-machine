@@ -1,7 +1,6 @@
 // netlify/functions/process-split-payout.js
-// Triggered after a successful track purchase
-// Calculates royalty splits, logs to payouts table
-// TODO: Replace placeholder payout logic with real PayPal Payouts API calls
+// Triggered after a successful track purchase.
+// Calculates royalty splits, logs to payouts table, and fires real PayPal Payouts.
 
 const { createClient } = require('@supabase/supabase-js');
 
@@ -9,6 +8,48 @@ const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
+
+const PAYPAL_BASE = process.env.PAYPAL_SANDBOX === 'true'
+  ? 'https://api-m.sandbox.paypal.com'
+  : 'https://api-m.paypal.com';
+
+async function getPayPalAccessToken() {
+  const credentials = Buffer.from(
+    `${process.env.PAYPAL_CLIENT_ID}:${process.env.PAYPAL_CLIENT_SECRET}`
+  ).toString('base64');
+  const res = await fetch(`${PAYPAL_BASE}/v1/oauth2/token`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Basic ${credentials}`,
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: 'grant_type=client_credentials',
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error_description || 'Failed to get PayPal token');
+  return data.access_token;
+}
+
+async function sendPayPalPayout(accessToken, items, batchId) {
+  const res = await fetch(`${PAYPAL_BASE}/v1/payments/payouts`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      sender_batch_header: {
+        sender_batch_id: batchId,
+        email_subject: 'You earned from a Feelz Machine sale 🎵',
+        email_message: 'A track you collaborated on just sold. Your royalty split is on its way.',
+      },
+      items,
+    }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.message || 'PayPal payout failed');
+  return data;
+}
 
 exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') {
@@ -130,26 +171,62 @@ exports.handler = async (event) => {
       }).catch(() => {}); // Non-critical
     }
 
-    // TODO: Replace this section with real PayPal Payouts API
-    // -------------------------------------------------------
-    // const paypalToken = await getPayPalAccessToken();
-    // const payoutItems = await Promise.all(payoutRecords.map(async (record) => {
-    //   const { data: paymentProfile } = await supabase
-    //     .from('artist_payment_profiles')
-    //     .select('paypal_email')
-    //     .eq('artist_id', record.artist_id)
-    //     .single();
-    //   return {
-    //     recipient_type: 'EMAIL',
-    //     amount: { value: record.amount.toFixed(2), currency: record.currency },
-    //     receiver: paymentProfile?.paypal_email,
-    //     note: `Royalty payout for "${track.title}"`,
-    //     sender_item_id: record.transaction_id + '_' + record.artist_id,
-    //   };
-    // }));
-    // const paypalPayout = await createPayPalPayout(paypalToken, payoutItems);
-    // Update each payout record with paypal_payout_id and set status to 'paid'
-    // -------------------------------------------------------
+    // ── Real PayPal Payouts ──────────────────────────────────────────────────────
+    // Only send payouts if there are collaborators — solo tracks don't need splitting
+    if (collaborators.length > 0) {
+      try {
+        // Fetch each artist's PayPal email from their profile
+        const payoutItems = [];
+        const artistIds = payoutRecords.map(r => r.artist_id);
+        const { data: artistProfiles } = await supabase
+          .from('artists')
+          .select('id, paypal_email')
+          .in('id', artistIds);
+
+        const emailMap = {};
+        (artistProfiles || []).forEach(a => { if (a.paypal_email) emailMap[a.id] = a.paypal_email; });
+
+        for (const record of payoutRecords) {
+          const email = emailMap[record.artist_id];
+          if (!email) {
+            console.warn(`No PayPal email for artist ${record.artist_id} — skipping payout`);
+            // Mark as failed so admin can manually follow up
+            await supabase.from('payouts')
+              .update({ status: 'no_paypal_email' })
+              .eq('transaction_id', record.transaction_id)
+              .eq('artist_id', record.artist_id);
+            continue;
+          }
+          if (record.amount <= 0) continue;
+          payoutItems.push({
+            recipient_type: 'EMAIL',
+            amount: { value: record.amount.toFixed(2), currency: record.currency },
+            receiver: email,
+            note: `Royalty split for "${track.title}" on Feelz Machine`,
+            sender_item_id: `${record.transaction_id}_${record.artist_id}`,
+          });
+        }
+
+        if (payoutItems.length > 0) {
+          const batchId = `FEELZ_SPLIT_${transaction_id}`;
+          const accessToken = await getPayPalAccessToken();
+          const payoutData = await sendPayPalPayout(accessToken, payoutItems, batchId);
+          const paypalBatchId = payoutData.batch_header?.payout_batch_id || batchId;
+
+          // Update all payout records with the batch ID and mark as processing
+          await supabase.from('payouts')
+            .update({ paypal_payout_id: paypalBatchId, status: 'processing' })
+            .eq('transaction_id', transaction_id);
+        }
+      } catch (payoutErr) {
+        // Log the error but don't fail the whole response — payout records exist
+        // and admin can retry via the payouts dashboard
+        console.error('PayPal payout error (records saved, manual retry possible):', payoutErr.message);
+        await supabase.from('payouts')
+          .update({ status: 'payout_failed', notes: payoutErr.message })
+          .eq('transaction_id', transaction_id);
+      }
+    }
 
     return {
       statusCode: 200,
