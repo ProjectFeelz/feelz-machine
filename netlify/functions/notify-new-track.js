@@ -33,6 +33,10 @@ exports.handler = async (event) => {
     .eq('id', artist_id).eq('user_id', user.id).maybeSingle();
   if (!artist) return { statusCode: 403, body: 'Forbidden' };
 
+  // Fetch track details so we can embed file_url + artwork in metadata for in-app playback
+  const { data: trackData } = await supabase
+    .from('tracks').select('file_url, cover_artwork_url').eq('id', track_id).maybeSingle();
+
   // Get all followers
   const { data: followers } = await supabase
     .from('follows').select('follower_id').eq('artist_id', artist_id);
@@ -69,7 +73,14 @@ exports.handler = async (event) => {
     message:        title,
     track_id:       track_id,
     from_artist_id: artist_id,
-    metadata: { track_title: title, artist_name: artistName, artist_slug: slug },
+    metadata: {
+      track_id:      track_id,
+      track_title:   title,
+      track_artwork: trackData?.cover_artwork_url || null,
+      file_url:      trackData?.file_url || null,
+      artist_name:   artistName,
+      artist_slug:   slug,
+    },
   }));
 
   for (let i = 0; i < notifRows.length; i += 50) {
