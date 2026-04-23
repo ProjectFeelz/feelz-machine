@@ -43,7 +43,24 @@ exports.handler = async (event) => {
   const title = track_title || 'a new track';
   const artistName = artist.artist_name;
 
-  // 1. In-app notifications for all followers (use correct 'message' column)
+  // 1. In-app notifications for all followers
+  // Dedup guard: skip if a new_track notification already exists for this track today
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const { data: existing } = await supabase
+    .from('notifications')
+    .select('user_id')
+    .eq('artist_id', artist_id)
+    .eq('type', 'new_track')
+    .contains('metadata', { track_title: title })
+    .gte('created_at', today.toISOString())
+    .limit(1);
+
+  if (existing?.length) {
+    console.log(`Duplicate notify-new-track blocked for track: ${title}`);
+    return { statusCode: 200, body: JSON.stringify({ notified: 0, skipped: 'duplicate' }) };
+  }
+
   const notifRows = followerIds.map(uid => ({
     user_id:        uid,
     artist_id:      artist_id,

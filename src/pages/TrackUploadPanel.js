@@ -517,6 +517,13 @@ export default function TrackUploadPanel() {
       }
     }
     setUploading(true);
+    // Track whether this track was already published BEFORE this save
+    // so we only send the "new track" notification on first publish, not every edit
+    let wasPublished = false;
+    try {
+      const { data: currentTrack } = await supabase.from('tracks').select('is_published').eq('id', id).maybeSingle();
+      wasPublished = currentTrack?.is_published ?? false;
+    } catch {}
     try {
       let coverUrl = editForm.cover_artwork_url || '';
       let audioUrl = null;
@@ -549,7 +556,9 @@ export default function TrackUploadPanel() {
         updated_at: new Date().toISOString(),
       }).eq('id', id);
       if (error) throw error;
-      if (editForm.is_published) {
+      // Only notify followers if this is a FIRST publish (was draft, now live)
+      // Editing an already-published track must not re-notify
+      if (editForm.is_published && !wasPublished) {
         try {
           const { data: { session: authSession } } = await supabase.auth.getSession();
           fetch('/.netlify/functions/notify-new-track', {
