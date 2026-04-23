@@ -635,12 +635,14 @@ export default function FullPlayer() {
     playNext, playPrev, seek, duration, currentTime,
     shuffle, repeat, toggleShuffle, toggleRepeat,
     isMinimized, setIsMinimized, queue, volume, setVolumeLevel,
-    removeFromQueue,
+    removeFromQueue, moveInQueue,
   } = usePlayer();
   const { user } = useAuth();
   const { tap, success, heavy } = useHaptics();
 
   const [liked, setLiked]                     = useState(false);
+  const [draggingIdx, setDraggingIdx]         = useState(null);
+  const [dragOverIdx, setDragOverIdx]         = useState(null);
   const [showShareCard, setShowShareCard]      = useState(false);
   const [showQueue, setShowQueue]             = useState(false);
   const [showActionSheet, setShowActionSheet] = useState(false);
@@ -835,33 +837,61 @@ export default function FullPlayer() {
             <p className="text-xs uppercase tracking-wider text-white/30 font-semibold mb-3">Up Next</p>
             {(queue || []).length === 0 ? (
               <p className="text-sm text-white/20 text-center py-12">No tracks in queue</p>
-            ) : (queue || []).map((track, i) => (
-              <div key={track.id}
-                className={`flex items-center space-x-3 py-3 border-b border-white/[0.04] ${track.id === currentTrack.id ? 'opacity-100' : 'opacity-50'}`}>
-                <div className="w-10 h-10 rounded-lg overflow-hidden bg-white/[0.06] flex-shrink-0">
-                  {track.cover_artwork_url
-                    ? <img src={track.cover_artwork_url} alt="" className="w-full h-full object-cover" loading="lazy" />
-                    : <div className="w-full h-full flex items-center justify-center text-white/20">♪</div>}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className={`text-sm font-medium truncate ${track.id === currentTrack.id ? 'text-white' : 'text-white/60'}`}>{track.title}</p>
-                  <p className="text-xs text-white/30 truncate">{track.artist_name}</p>
-                </div>
-                {track.id === currentTrack.id ? (
-                  <div className="flex items-end space-x-0.5 h-4 flex-shrink-0">
-                    {[100, 60, 80].map((h, i) => (
-                      <div key={i} className="w-0.5 bg-white rounded-full animate-pulse"
-                        style={{ height: `${h}%`, animationDelay: `${i * 0.15}s` }} />
-                    ))}
+            ) : (queue || []).map((track, i) => {
+              const isActive    = track.id === currentTrack?.id;
+              const isDragging  = draggingIdx === i;
+              const isDragOver  = dragOverIdx === i;
+              return (
+                <div key={`${track.id}-${i}`}
+                  draggable={!isActive}
+                  onDragStart={() => { if (!isActive) setDraggingIdx(i); }}
+                  onDragOver={e => { e.preventDefault(); if (draggingIdx !== null && !isActive) setDragOverIdx(i); }}
+                  onDrop={() => {
+                    if (draggingIdx !== null && draggingIdx !== i) {
+                      moveInQueue(draggingIdx, i);
+                      tap();
+                    }
+                    setDraggingIdx(null);
+                    setDragOverIdx(null);
+                  }}
+                  onDragEnd={() => { setDraggingIdx(null); setDragOverIdx(null); }}
+                  className={`flex items-center space-x-3 py-3 border-b border-white/[0.04] transition-all
+                    ${isActive ? 'opacity-100' : 'opacity-50'}
+                    ${isDragging ? 'opacity-30 scale-95' : ''}
+                    ${isDragOver && !isActive ? 'border-t-2 border-t-purple-400' : ''}`}>
+                  {/* Drag handle — hidden for current track */}
+                  {!isActive && (
+                    <div className="flex flex-col space-y-0.5 flex-shrink-0 cursor-grab active:cursor-grabbing px-0.5">
+                      {[0,1,2].map(j => (
+                        <div key={j} className="w-3 h-0.5 rounded-full bg-white/20" />
+                      ))}
+                    </div>
+                  )}
+                  <div className={`w-10 h-10 rounded-lg overflow-hidden bg-white/[0.06] flex-shrink-0 ${isActive ? '' : ''}`}>
+                    {track.cover_artwork_url
+                      ? <img src={track.cover_artwork_url} alt="" className="w-full h-full object-cover" loading="lazy" />
+                      : <div className="w-full h-full flex items-center justify-center text-white/20">♪</div>}
                   </div>
-                ) : (
-                  <button onClick={() => { tap(); removeFromQueue(i); }}
-                    className="p-1.5 rounded-full hover:bg-white/10 flex-shrink-0">
-                    <X className="w-3.5 h-3.5 text-white/30" />
-                  </button>
-                )}
-              </div>
-            ))}
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-sm font-medium truncate ${isActive ? 'text-white' : 'text-white/60'}`}>{track.title}</p>
+                    <p className="text-xs text-white/30 truncate">{track.artist_name}</p>
+                  </div>
+                  {isActive ? (
+                    <div className="flex items-end space-x-0.5 h-4 flex-shrink-0">
+                      {[100, 60, 80].map((h, j) => (
+                        <div key={j} className="w-0.5 bg-white rounded-full animate-pulse"
+                          style={{ height: `${h}%`, animationDelay: `${j * 0.15}s` }} />
+                      ))}
+                    </div>
+                  ) : (
+                    <button onClick={() => { tap(); removeFromQueue(i); }}
+                      className="p-1.5 rounded-full hover:bg-white/10 flex-shrink-0">
+                      <X className="w-3.5 h-3.5 text-white/30" />
+                    </button>
+                  )}
+                </div>
+              );
+            })}
           </div>
 
         ) : (

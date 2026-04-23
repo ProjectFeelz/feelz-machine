@@ -10,6 +10,7 @@ import TrackActionSheet from '../components/TrackActionSheet';
 import { usePullToRefresh } from '../hooks/usePullToRefresh';
 import PullToRefreshIndicator from '../components/PullToRefreshIndicator';
 import { HomeSkeleton } from '../components/SkeletonLoader';
+import { StoriesRail } from '../components/ArtistStories';
 import WrappedCard from '../components/WrappedCard';
 import OnThisDay from '../components/OnThisDay';
 
@@ -612,6 +613,9 @@ export default function HomePage() {
           {user ? `Welcome back${artist ? ', ' + artist.artist_name : ''}` : 'Discover music from independent artists'}
         </p>
       </div>
+
+      {/* Stories rail — followed artists' 24hr clips */}
+      <StoriesRail userId={user?.id} />
 
       {/* Monthly Wrapped card */}
       {wrappedNotif && (

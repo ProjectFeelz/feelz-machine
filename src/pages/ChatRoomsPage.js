@@ -30,11 +30,10 @@ const COLOR_SWATCHES = [
   { label: 'Default', value: null      },
 ];
 
-// Derive Tailwind-safe inline styles from a hex colour
 function accentStyles(color) {
   if (!color) return {};
   return {
-    borderColor: `${color}40`,       // 25% opacity border
+    borderColor: `${color}40`,
     background:  `linear-gradient(to right, ${color}15, transparent)`,
   };
 }
@@ -50,7 +49,7 @@ function accentTextStyle(color) {
 }
 
 // ── Pinned room card ──────────────────────────────────────────────────────────
-function PinnedRoomCard({ room, lastMessage, onNavigate }) {
+function PinnedRoomCard({ room, lastMessage, unreadCount, onNavigate }) {
   const color = room.accent_color || '#ef4444';
   return (
     <button
@@ -99,6 +98,13 @@ function PinnedRoomCard({ room, lastMessage, onNavigate }) {
           <Users className="w-3 h-3" style={{ color: `${color}50` }} />
           <span className="text-xs" style={{ color: `${color}60` }}>{room.member_count || 0}</span>
         </div>
+        {unreadCount > 0 && (
+          <div className="w-5 h-5 rounded-full flex items-center justify-center" style={{ background: color }}>
+            <span className="text-[9px] font-bold text-white">
+              {unreadCount > 9 ? '9+' : unreadCount}
+            </span>
+          </div>
+        )}
       </div>
     </button>
   );
@@ -141,6 +147,7 @@ export default function ChatRoomsPage() {
   const [competitions, setCompetitions] = useState([]);
   const [loading, setLoading]           = useState(true);
   const [lastMessages, setLastMessages] = useState({});
+  const [unreadCounts, setUnreadCounts] = useState({});
   const [query, setQuery]               = useState('');
   const [error, setError]               = useState('');
 
@@ -152,11 +159,11 @@ export default function ChatRoomsPage() {
   const [creating, setCreating]     = useState(false);
 
   // Rename / colour room
-  const [editingRoomId, setEditingRoomId]   = useState(null);
-  const [editName, setEditName]             = useState('');
-  const [editColor, setEditColor]           = useState(null);
-  const [renaming, setRenaming]             = useState(false);
-  const [deletingRoomId, setDeletingRoomId] = useState(null);
+  const [editingRoomId, setEditingRoomId]     = useState(null);
+  const [editName, setEditName]               = useState('');
+  const [editColor, setEditColor]             = useState(null);
+  const [renaming, setRenaming]               = useState(false);
+  const [deletingRoomId, setDeletingRoomId]   = useState(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
 
   useEffect(() => {
@@ -180,6 +187,31 @@ export default function ChatRoomsPage() {
     } catch (err) { console.error('Last messages error:', err); }
   };
 
+  const fetchUnreadCounts = async (roomIds) => {
+    if (!user || !roomIds?.length) return;
+    try {
+      const { data: memberships } = await supabase
+        .from('chat_room_members')
+        .select('room_id, last_read_at')
+        .eq('user_id', user.id)
+        .in('room_id', roomIds);
+      if (!memberships?.length) return;
+
+      const counts = {};
+      await Promise.all(memberships.map(async (m) => {
+        if (!m.last_read_at) return;
+        const { count } = await supabase
+          .from('chat_messages')
+          .select('*', { count: 'exact', head: true })
+          .eq('room_id', m.room_id)
+          .eq('is_deleted', false)
+          .gt('created_at', m.last_read_at);
+        if (count > 0) counts[m.room_id] = count;
+      }));
+      setUnreadCounts(counts);
+    } catch (err) { console.error('Unread counts error:', err); }
+  };
+
   const fetchCompetitions = async () => {
     const { data } = await supabase
       .from('competitions')
@@ -199,6 +231,7 @@ export default function ChatRoomsPage() {
       const roomData = data || [];
       setRooms(roomData);
       fetchLastMessages(roomData.map(r => r.id));
+      fetchUnreadCounts(roomData.map(r => r.id));
     } catch (err) {
       console.error('Fetch rooms error:', err);
     }
@@ -229,12 +262,12 @@ export default function ChatRoomsPage() {
       const { data: room, error: insertErr } = await supabase
         .from('chat_rooms')
         .insert({
-          artist_id:            artist.id,
-          name:                 newName.trim(),
-          is_subscribers_only:  subOnly,
-          max_members:          isPremium ? 500 : 100,
-          member_count:         1,
-          accent_color:         newColor || null,
+          artist_id:           artist.id,
+          name:                newName.trim(),
+          is_subscribers_only: subOnly,
+          max_members:         isPremium ? 500 : 100,
+          member_count:        1,
+          accent_color:        newColor || null,
         })
         .select()
         .single();
@@ -292,7 +325,7 @@ export default function ChatRoomsPage() {
     setConfirmDeleteId(null);
   };
 
-  // ── Sort: pinned first (but below competitions), then by member count
+  // Pinned first (below competitions), then regular by member count
   const pinnedRooms  = rooms.filter(r => r.is_pinned);
   const regularRooms = rooms.filter(r => !r.is_pinned);
 
@@ -461,6 +494,7 @@ export default function ChatRoomsPage() {
               key={room.id}
               room={room}
               lastMessage={lastMessages[room.id]}
+              unreadCount={unreadCounts[room.id] || 0}
               onNavigate={(id) => navigate(`/chat/${id}`)}
             />
           ))}
@@ -471,16 +505,17 @@ export default function ChatRoomsPage() {
       {filteredRegular.length > 0 && (
         <div className="space-y-2">
           {filteredRegular.map(room => {
-            const color = room.accent_color || null;
+            const color     = room.accent_color || null;
             const isEditing = editingRoomId === room.id;
+            const unread    = unreadCounts[room.id] || 0;
             return (
               <button
                 key={room.id}
                 onClick={() => !isEditing && navigate(`/chat/${room.id}`)}
                 className="w-full flex items-center space-x-3 p-3.5 rounded-xl border transition text-left"
                 style={color ? accentStyles(color) : {
-                  background:   'rgba(255,255,255,0.03)',
-                  borderColor:  'rgba(255,255,255,0.06)',
+                  background:  'rgba(255,255,255,0.03)',
+                  borderColor: 'rgba(255,255,255,0.06)',
                 }}
               >
                 {/* Avatar */}
@@ -558,6 +593,14 @@ export default function ChatRoomsPage() {
                       <Users className="w-3 h-3 text-white/20" />
                       <span className="text-xs text-white/30">{room.member_count || 0}</span>
                     </div>
+                    {/* Unread badge */}
+                    {unread > 0 && (
+                      <div className="w-5 h-5 rounded-full bg-purple-500 flex items-center justify-center">
+                        <span className="text-[9px] font-bold text-white">
+                          {unread > 9 ? '9+' : unread}
+                        </span>
+                      </div>
+                    )}
                     {room.artist_id === artist?.id && (
                       <>
                         <button

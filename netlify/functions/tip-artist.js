@@ -91,6 +91,23 @@ exports.handler = async (event) => {
       message: message?.trim() || 'No message',
       metadata: { amount: amountNum, from_user_id: user.id },
     });
+
+    // Increment active tip goal if one exists
+    const { data: activeGoal } = await supabase
+      .from('tip_goals')
+      .select('id, current_usd, target_usd, achieved_at')
+      .eq('artist_id', artist_id)
+      .eq('is_active', true)
+      .maybeSingle();
+    if (activeGoal) {
+      const newTotal  = parseFloat(activeGoal.current_usd) + amountNum;
+      const achieved  = !activeGoal.achieved_at && newTotal >= parseFloat(activeGoal.target_usd);
+      await supabase.from('tip_goals').update({
+        current_usd: newTotal,
+        ...(achieved ? { achieved_at: new Date().toISOString() } : {}),
+      }).eq('id', activeGoal.id);
+    }
+
     return { statusCode: 200, body: JSON.stringify({ success: true }) };
   }
 

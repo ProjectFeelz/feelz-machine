@@ -62,6 +62,10 @@
   name = "weekly-listener-recap"
   schedule = "0 18 * * 0"
 
+[[scheduled_functions]]
+  name = "presave-notify"
+  schedule = "0 9 * * *"
+
 # ── Redirects ─────────────────────────────────────────────────────────────────
 [[redirects]]
   from = "/.well-known/assetlinks.json"

@@ -94,15 +94,29 @@ self.addEventListener('fetch', e => {
       const cache  = await caches.open(RUNTIME_CACHE);
       const cached = await cache.match(req);
 
-      // Always fetch fresh in background
+      // Always fetch fresh in background.
+      // Clone BEFORE returning to caller — a Response body can only be read once.
+      // We clone first for the cache, then return the original to the browser.
       const networkPromise = fetch(req).then(res => {
-        if (res?.status === 200) cache.put(req, res.clone());
+        if (res?.status === 200) {
+          cache.put(req, res.clone()); // clone goes to cache, original returned below
+        }
         return res;
       }).catch(() => null);
 
-      if (cached) return cached;           // serve stale, bg revalidate
+      if (cached) {
+        // Serve stale immediately; network updates cache in background
+        networkPromise.catch(() => {}); // prevent unhandled rejection
+        return cached;
+      }
+
+      // No cache — wait for network, clone for cache then return original
       const net = await networkPromise;
-      if (net) return net;
+      if (net?.status === 200) {
+        // Already cloned inside networkPromise above — just return the original
+        return net;
+      }
+      if (net) return net; // non-200 pass-through (redirects, etc.)
       return new Response('Not available offline', { status: 503, headers: { 'Content-Type': 'text/plain' } });
     })());
   }

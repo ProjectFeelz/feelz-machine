@@ -238,6 +238,8 @@ export default function TrackUploadPanel() {
   const [editCoverFile, setEditCoverFile]       = useState(null);
   const [editAudioFile, setEditAudioFile]       = useState(null);
   const [editAlbumCoverFile, setEditAlbumCoverFile] = useState(null);
+  const [albumTracks, setAlbumTracks]             = useState([]);   // tracks inside the album being edited
+  const [albumTracksLoading, setAlbumTracksLoading] = useState(false);
 
   const isAlbumRelease = ALBUM_TYPES.includes(release.release_type);
   const isWorking      = uploading || converting;
@@ -1043,7 +1045,22 @@ export default function TrackUploadPanel() {
                           {album.price > 0 && <span className="text-[10px] px-1.5 py-0.5 bg-white/[0.06] text-white/30 rounded">${album.price}</span>}
                         </div>
                       </div>
-                      <button type="button" onClick={() => { setEditingAlbumId(album.id); setEditAlbumCoverFile(null); setEditAlbumForm({ title: album.title, description: album.description || '', release_type: album.release_type || 'album', release_date: album.release_date || '', price: album.price || 0, is_published: album.is_published ?? true, cover_artwork_url: album.cover_artwork_url || '' }); }}
+                      <button type="button" onClick={async () => {
+                        setEditingAlbumId(album.id);
+                        setEditAlbumCoverFile(null);
+                        setEditAlbumForm({ title: album.title, description: album.description || '', release_type: album.release_type || 'album', release_date: album.release_date || '', price: album.price || 0, is_published: album.is_published ?? true, cover_artwork_url: album.cover_artwork_url || '' });
+                        // Load the tracks inside this album
+                        setAlbumTracksLoading(true);
+                        const { data } = await supabase.from('tracks')
+                          .select('*, albums(title)')
+                          .eq('album_id', album.id)
+                          .eq('artist_id', artist.id)
+                          .order('track_number', { ascending: true });
+                        setAlbumTracks(data || []);
+                        setAlbumTracksLoading(false);
+                        // Clear any open track edit
+                        setEditingId(null);
+                      }}
                         className="p-2 bg-white/[0.04] rounded-lg hover:bg-white/[0.08] transition">
                         <Edit className="w-4 h-4 text-white/40" />
                       </button>
@@ -1134,10 +1151,164 @@ export default function TrackUploadPanel() {
                           className="flex-1 py-2.5 rounded-xl bg-white text-black text-sm font-semibold hover:bg-white/90 transition">
                           Save Album
                         </button>
-                        <button type="button" onClick={() => setEditingAlbumId(null)}
+                        <button type="button" onClick={() => { setEditingAlbumId(null); setAlbumTracks([]); setEditingId(null); }}
                           className="px-4 py-2.5 rounded-xl bg-white/[0.06] text-white/50 text-sm hover:bg-white/[0.1] transition">
                           Cancel
                         </button>
+                      </div>
+
+                      {/* Tracks in this album */}
+                      <div className="border-t border-white/[0.06] pt-4 space-y-2">
+                        <p className="text-xs font-semibold text-white/40 uppercase tracking-wide">Tracks in this album</p>
+                        {albumTracksLoading ? (
+                          <div className="flex justify-center py-4">
+                            <Loader className="w-5 h-5 animate-spin text-white/20" />
+                          </div>
+                        ) : albumTracks.length === 0 ? (
+                          <p className="text-xs text-white/20 text-center py-4">No tracks in this album yet</p>
+                        ) : albumTracks.map(track => (
+                          <div key={track.id} className="bg-white/[0.02] rounded-xl border border-white/[0.04] overflow-hidden">
+                            {editingId !== track.id ? (
+                              <div className="flex items-center space-x-3 p-3">
+                                {track.cover_artwork_url
+                                  ? <img src={track.cover_artwork_url} alt="" className="w-10 h-10 rounded-lg object-cover flex-shrink-0" />
+                                  : <div className="w-10 h-10 rounded-lg bg-white/[0.06] flex items-center justify-center flex-shrink-0"><Music className="w-4 h-4 text-white/20" /></div>}
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center space-x-1.5">
+                                    <span className="text-[10px] text-white/25">#{track.track_number || '—'}</span>
+                                    <p className="text-sm font-medium text-white truncate">{track.title}</p>
+                                  </div>
+                                  <div className="flex gap-1.5 mt-0.5">
+                                    {track.is_published
+                                      ? <span className="text-[10px] px-1.5 py-0.5 bg-green-500/10 text-green-400 rounded">Live</span>
+                                      : <span className="text-[10px] px-1.5 py-0.5 bg-white/[0.06] text-white/30 rounded">Draft</span>}
+                                    {track.genre && <span className="text-[10px] text-white/20">{track.genre}</span>}
+                                    <span className="text-[10px] text-white/20">{track.stream_count || 0} streams</span>
+                                  </div>
+                                </div>
+                                <button type="button" onClick={() => startEdit(track)}
+                                  className="p-1.5 bg-white/[0.04] rounded-lg hover:bg-white/[0.08] transition flex-shrink-0">
+                                  <Edit className="w-3.5 h-3.5 text-white/40" />
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="p-4 space-y-4">
+                                <div className="flex items-center justify-between">
+                                  <p className="text-sm font-semibold text-white">Editing: {track.title}</p>
+                                  <button type="button" onClick={() => setEditingId(null)}
+                                    className="p-1.5 rounded-lg hover:bg-white/[0.06] transition">
+                                    <X className="w-4 h-4 text-white/30" />
+                                  </button>
+                                </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                  <div>
+                                    <FieldLabel>Title</FieldLabel>
+                                    <FInput type="text" value={editForm.title}
+                                      onChange={(e) => setEditForm({ ...editForm, title: e.target.value })} />
+                                  </div>
+                                  <div>
+                                    <FieldLabel>Track Number</FieldLabel>
+                                    <FInput type="number" min="1" value={editForm.track_number}
+                                      onChange={(e) => setEditForm({ ...editForm, track_number: e.target.value })} />
+                                  </div>
+                                  <div>
+                                    <FieldLabel>Genre</FieldLabel>
+                                    <FSelect value={editForm.genre}
+                                      onChange={(e) => setEditForm({ ...editForm, genre: e.target.value })}>
+                                      <option value="">None</option>
+                                      {GENRES.map(g => <option key={g} value={g}>{g}</option>)}
+                                    </FSelect>
+                                  </div>
+                                  <div>
+                                    <FieldLabel>Mood</FieldLabel>
+                                    <FSelect value={editForm.mood}
+                                      onChange={(e) => setEditForm({ ...editForm, mood: e.target.value })}>
+                                      <option value="">None</option>
+                                      {MOODS.map(m => <option key={m} value={m}>{m}</option>)}
+                                    </FSelect>
+                                  </div>
+                                  <div>
+                                    <FieldLabel>Download Price (USD)</FieldLabel>
+                                    <FInput type="number" min="0" step="0.01" value={editForm.download_price}
+                                      onChange={(e) => setEditForm({ ...editForm, download_price: e.target.value })} />
+                                  </div>
+                                </div>
+
+                                <div>
+                                  <FieldLabel>Lyrics</FieldLabel>
+                                  <textarea rows={3} value={editForm.lyrics}
+                                    onChange={(e) => setEditForm({ ...editForm, lyrics: e.target.value })}
+                                    className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none resize-none" />
+                                </div>
+
+                                <div className="flex flex-wrap gap-3">
+                                  {[
+                                    { key: 'is_published',    label: 'Published' },
+                                    { key: 'featured',        label: 'Featured' },
+                                    { key: 'is_explicit',     label: 'Explicit' },
+                                    { key: 'is_downloadable', label: 'Downloadable' },
+                                    { key: 'is_premium',      label: 'Premium' },
+                                  ].map(({ key, label }) => (
+                                    <label key={key} className="flex items-center space-x-1.5 text-xs text-white/40 cursor-pointer">
+                                      <input type="checkbox" checked={editForm[key] || false}
+                                        onChange={(e) => setEditForm({ ...editForm, [key]: e.target.checked })}
+                                        className="rounded border-white/20" />
+                                      <span>{label}</span>
+                                    </label>
+                                  ))}
+                                </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                  <div>
+                                    <FieldLabel>Cover Artwork</FieldLabel>
+                                    <div className="flex items-center gap-3">
+                                      {(editCoverFile ? URL.createObjectURL(editCoverFile) : editForm.cover_artwork_url) && (
+                                        <img src={editCoverFile ? URL.createObjectURL(editCoverFile) : editForm.cover_artwork_url}
+                                          alt="cover" className="w-12 h-12 rounded-lg object-cover flex-shrink-0" />
+                                      )}
+                                      <label className="cursor-pointer text-xs px-3 py-1.5 bg-white/[0.06] rounded-lg hover:bg-white/[0.1] text-white/60 transition">
+                                        Replace
+                                        <input type="file" accept="image/*" className="hidden"
+                                          onChange={(e) => setEditCoverFile(e.target.files[0])} />
+                                      </label>
+                                    </div>
+                                  </div>
+                                  <div>
+                                    <FieldLabel>Audio File</FieldLabel>
+                                    <label className="cursor-pointer text-xs px-3 py-1.5 bg-white/[0.06] rounded-lg hover:bg-white/[0.1] text-white/60 transition inline-block">
+                                      {editAudioFile ? editAudioFile.name : 'Replace audio…'}
+                                      <input type="file" accept="audio/*" className="hidden"
+                                        onChange={(e) => setEditAudioFile(e.target.files[0])} />
+                                    </label>
+                                  </div>
+                                </div>
+
+                                <div className="flex space-x-2 pt-1">
+                                  <button type="button" onClick={async () => {
+                                    await saveEdit(track.id);
+                                    // Refresh album track list after save
+                                    const { data } = await supabase.from('tracks')
+                                      .select('*, albums(title)')
+                                      .eq('album_id', album.id)
+                                      .eq('artist_id', artist.id)
+                                      .order('track_number', { ascending: true });
+                                    setAlbumTracks(data || []);
+                                    setEditingId(null);
+                                  }} disabled={isWorking}
+                                    className="px-5 py-2.5 bg-white text-black rounded-lg text-sm font-semibold flex items-center space-x-1.5 disabled:opacity-50 transition">
+                                    {isWorking ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                                    <span>{converting ? `Converting… ${convProgress}%` : 'Save Track'}</span>
+                                  </button>
+                                  <button type="button" onClick={() => setEditingId(null)}
+                                    className="px-4 py-2.5 bg-white/[0.06] text-white/60 rounded-lg text-sm transition hover:bg-white/[0.1]">
+                                    Cancel
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        ))}
                       </div>
                     </div>
                   )}

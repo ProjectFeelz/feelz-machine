@@ -21,6 +21,9 @@ import { usePullToRefresh } from '../hooks/usePullToRefresh';
 import PullToRefreshIndicator from '../components/PullToRefreshIndicator';
 import { VoiceMemoCard } from '../components/VoiceMemo';
 import TipButton from '../components/TipButton';
+import TipGoal from '../components/TipGoal';
+import { ArtistStoryView, StoryUpload } from '../components/ArtistStories';
+import PreSaveButton from '../components/PreSaveButton';
 import ArtistGuestbook from '../components/ArtistGuestbook';
 
 const PAYPAL_CLIENT_ID = process.env.REACT_APP_PAYPAL_CLIENT_ID;
@@ -347,7 +350,7 @@ export default function ArtistProfilePage() {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, artist: myArtist } = useAuth();
-  const { playTrack, currentTrack, isPlaying, togglePlay } = usePlayer();
+  const { playTrack, addToQueue, currentTrack, isPlaying, togglePlay } = usePlayer();
 
   const [artist, setArtist] = useState(null);
   const [theme, setTheme] = useState(null);
@@ -383,10 +386,17 @@ export default function ArtistProfilePage() {
   const [thoughts, setThoughts] = useState([]);
   const [highlightedTrackId, setHighlightedTrackId] = useState(null);
   const [voiceMemos, setVoiceMemos] = useState([]);
+  const [stories, setStories]         = useState([]);
+  const [viewingStory, setViewingStory] = useState(false);
   const [deepCuts, setDeepCuts] = useState([]);
   const [weeklyDiscoveries, setWeeklyDiscoveries] = useState(0);
   const [purchasedTracks, setPurchasedTracks] = useState({});
   const [liveSession, setLiveSession] = useState(null);
+  const [radioLoading, setRadioLoading] = useState(false);
+  const [showDMModal, setShowDMModal] = useState(false);
+  const [dmMessage, setDmMessage]     = useState('');
+  const [dmSending, setDmSending]     = useState(false);
+  const [dmSent, setDmSent]           = useState(false);
   const liveCheckRef = useRef(null);
   const [scheduledSession, setScheduledSession] = useState(null);
   const [topListeners, setTopListeners]         = useState([]);
@@ -489,6 +499,13 @@ export default function ArtistProfilePage() {
   }, [artist?.id]);
   useEffect(() => {
     if (!artist?.id) return;
+    supabase.from('artist_stories')
+      .select('*')
+      .eq('artist_id', artistData.id)
+      .gt('expires_at', new Date().toISOString())
+      .order('created_at', { ascending: false })
+      .limit(20)
+      .then(({ data }) => setStories(data || []));
     supabase.from('artist_voice_memos')
       .select('*').eq('artist_id', artist.id)
       .order('created_at', { ascending: false }).limit(10)
@@ -737,6 +754,88 @@ export default function ArtistProfilePage() {
         }).catch(() => {});
       }
     } catch (err) { console.error('Follow error:', err); }
+  };
+
+  const handleArtistRadio = async () => {
+    if (!artist || radioLoading) return;
+    setRadioLoading(true);
+    try {
+      // Start with this artist's tracks
+      const myTracks = tracks.map(t => ({ ...t, artist_name: artist.artist_name, artist_slug: artist.slug }));
+      
+      // Find artists with same genre
+      if (artist.genre) {
+        const { data: similar } = await supabase
+          .from('artists')
+          .select('id, artist_name, slug')
+          .eq('genre', artist.genre)
+          .neq('id', artist.id)
+          .order('total_streams', { ascending: false })
+          .limit(5);
+
+        if (similar?.length) {
+          const simIds = similar.map(a => a.id);
+          const { data: simTracks } = await supabase
+            .from('tracks')
+            .select('*, artists(artist_name, slug)')
+            .in('artist_id', simIds)
+            .eq('is_published', true)
+            .order('stream_count', { ascending: false })
+            .limit(30);
+
+          const normalised = (simTracks || []).map(t => ({
+            ...t,
+            artist_name: t.artists?.artist_name || 'Unknown',
+            artist_slug: t.artists?.slug || null,
+          }));
+
+          // Interleave: play this artist first, then similar
+          const combined = [...myTracks, ...normalised];
+          if (combined.length > 0) {
+            playTrack(combined[0], combined);
+            setRadioLoading(false);
+            return;
+          }
+        }
+      }
+
+      // Fallback: just play this artist's tracks on shuffle
+      if (myTracks.length > 0) {
+        const shuffled = [...myTracks].sort(() => Math.random() - 0.5);
+        playTrack(shuffled[0], shuffled);
+      }
+    } catch (err) { console.error('Radio error:', err); }
+    setRadioLoading(false);
+  };
+
+  const sendDMToFollowers = async () => {
+    if (!artist || !dmMessage.trim() || dmSending) return;
+    setDmSending(true);
+    try {
+      // Get all follower user_ids
+      const { data: follows } = await supabase
+        .from('follows').select('follower_id').eq('artist_id', artist.id);
+      if (!follows?.length) { setDmSending(false); return; }
+
+      const followerIds = follows.map(f => f.follower_id);
+      // Batch insert notifications (50 at a time)
+      for (let i = 0; i < followerIds.length; i += 50) {
+        const batch = followerIds.slice(i, i + 50);
+        await supabase.from('notifications').insert(
+          batch.map(uid => ({
+            user_id:   uid,
+            artist_id: artist.id,
+            type:      'admin_message',
+            title:     `Message from ${artist.artist_name}`,
+            message:   dmMessage.trim(),
+            metadata:  { from_artist_id: artist.id, artist_name: artist.artist_name },
+          }))
+        );
+      }
+      setDmSent(true);
+      setTimeout(() => { setDmSent(false); setShowDMModal(false); setDmMessage(''); }, 2000);
+    } catch (err) { console.error('DM error:', err); }
+    setDmSending(false);
   };
 
   const triggerDownload = async (track) => {
@@ -1058,6 +1157,14 @@ export default function ArtistProfilePage() {
                 <Shuffle className="w-3.5 h-3.5" />
                 <span>Shuffle</span>
               </button>
+              <button onClick={handleArtistRadio} disabled={radioLoading || tracks.length === 0}
+                className="flex items-center space-x-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all active:scale-95 disabled:opacity-40"
+                style={{ backgroundColor: `${secondaryColor}30`, color: textColor, border: `1px solid ${secondaryColor}40` }}>
+                {radioLoading
+                  ? <Loader className="w-3.5 h-3.5 animate-spin" />
+                  : <Radio className="w-3.5 h-3.5" />}
+                <span>Radio</span>
+              </button>
             </>
           )}
           <button onClick={handleShare}
@@ -1069,6 +1176,59 @@ export default function ArtistProfilePage() {
           {user && user.id !== artist?.user_id && (
             <TipButton artist={artist} />
           )}
+
+        {/* Tip Goal — shows to everyone */}
+        <TipGoal
+          artistId={artist.id}
+          primaryColor={primaryColor}
+          textColor={textColor}
+          isOwner={user?.id === artist.user_id}
+        />
+
+        {/* DM Followers button — artist only */}
+        {user?.id === artist.user_id && (
+          <div className="mx-4 mb-2">
+            <button onClick={() => setShowDMModal(true)}
+              className="w-full flex items-center justify-center space-x-2 py-2.5 rounded-xl border border-white/[0.08] text-xs font-medium transition active:scale-95"
+              style={{ color: `${textColor}60`, background: `${textColor}05` }}>
+              <MessageCircle className="w-3.5 h-3.5" />
+              <span>Message all followers</span>
+            </button>
+          </div>
+        )}
+
+        {/* DM Modal */}
+        {showDMModal && user?.id === artist.user_id && (
+          <div className="fixed inset-0 z-[600] flex items-end justify-center bg-black/70 backdrop-blur-sm"
+            onClick={() => setShowDMModal(false)}>
+            <div className="w-full max-w-lg bg-neutral-900 rounded-t-2xl p-5 border-t border-white/[0.08]"
+              onClick={e => e.stopPropagation()}>
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="text-sm font-bold text-white">Message your followers</h3>
+                  <p className="text-[11px] text-white/30 mt-0.5">Sends a notification to everyone following you</p>
+                </div>
+                <button onClick={() => setShowDMModal(false)}><X className="w-4 h-4 text-white/30" /></button>
+              </div>
+              <textarea value={dmMessage} onChange={e => setDmMessage(e.target.value)}
+                placeholder="Share an update, a hint about new music, or let them know you're going live..."
+                rows={4} maxLength={500}
+                className="w-full bg-white/[0.06] rounded-xl px-3 py-2.5 text-sm text-white placeholder-white/20 outline-none resize-none mb-3" />
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-[10px] text-white/20">{dmMessage.length}/500</span>
+              </div>
+              <button onClick={sendDMToFollowers} disabled={!dmMessage.trim() || dmSending || dmSent}
+                className="w-full py-3 rounded-xl text-sm font-semibold text-white disabled:opacity-40 transition flex items-center justify-center space-x-2"
+                style={{ background: primaryColor }}>
+                {dmSent
+                  ? <><Check className="w-4 h-4" /><span>Sent!</span></>
+                  : dmSending
+                  ? <><Loader className="w-4 h-4 animate-spin" /><span>Sending...</span></>
+                  : <><Send className="w-4 h-4" /><span>Send to followers</span></>}
+              </button>
+            </div>
+          </div>
+        )}
         </div>
         {artist.bio && (
           <p className="text-sm leading-relaxed mb-6 max-w-sm" style={{ color: `${textColor}90`, fontFamily: `"${bodyFont}", sans-serif` }}>
@@ -1233,6 +1393,14 @@ export default function ArtistProfilePage() {
                       </div>
                     </div>
                     {track.duration && <span className="text-xs flex-shrink-0" style={{ color: `${textColor}30` }}>{formatDuration(track.duration)}</span>}
+                    {/* Pre-save button for upcoming releases */}
+                    {track.is_preorder && track.release_date && new Date(track.release_date) > new Date() && user && (
+                      <PreSaveButton
+                        track={track}
+                        textColor={textColor}
+                        accentColor={primaryColor}
+                      />
+                    )}
                     {/* 3-dot menu — like and queue removed for cleaner mobile layout */}
                     <button onClick={(e) => { e.stopPropagation(); setActionSheetTrack(track); }}
                       className="flex-shrink-0 p-1.5 rounded-lg transition-all active:scale-95"
@@ -1624,6 +1792,45 @@ export default function ArtistProfilePage() {
             })}
           </div>
         </div>
+      )}
+
+      {/* Stories — 24hr clips */}
+      {(stories.length > 0 || user?.id === artist.user_id) && (
+        <div className="px-4 mb-4">
+          <div className="flex items-center space-x-4 overflow-x-auto pb-1 scrollbar-hide">
+            {user?.id === artist.user_id && (
+              <StoryUpload artistId={artist.id} onUploaded={() => {
+                supabase.from('artist_stories')
+                  .select('*').eq('artist_id', artist.id)
+                  .gt('expires_at', new Date().toISOString())
+                  .order('created_at', { ascending: false }).limit(20)
+                  .then(({ data }) => setStories(data || []));
+              }} />
+            )}
+            {stories.length > 0 && (
+              <button onClick={() => setViewingStory(true)}
+                className="flex-shrink-0 flex flex-col items-center space-y-1.5 w-16">
+                <div className="w-16 h-16 rounded-full p-0.5 bg-gradient-to-tr from-purple-500 to-pink-400">
+                  <div className="w-full h-full rounded-full overflow-hidden bg-black border border-black">
+                    {artist.profile_image_url
+                      ? <img src={artist.profile_image_url} alt="" className="w-full h-full object-cover" />
+                      : <div className="w-full h-full bg-white/10 flex items-center justify-center text-xs font-bold text-white/40">{artist.artist_name?.[0]}</div>}
+                  </div>
+                </div>
+                <span className="text-[10px]" style={{ color: `${textColor}50` }}>{stories.length} {stories.length === 1 ? 'story' : 'stories'}</span>
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {viewingStory && stories.length > 0 && (
+        <ArtistStoryView
+          stories={stories}
+          artist={artist}
+          initialIndex={0}
+          onClose={() => setViewingStory(false)}
+        />
       )}
 
       {/* Voice Memos from the artist */}
