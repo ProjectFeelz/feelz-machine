@@ -61,7 +61,7 @@ const ARTIST_TABS = [
 export default function HubPage() {
   const navigate = useNavigate();
   const { user, artist, isAdmin, isArtist, signOut } = useAuth();
-  const { tierSlug, tierLoading } = useTier();
+  const { tierSlug, tierLoading, isPremium } = useTier();
   const { streak } = useStreakContext();
   const [activeTab, setActiveTab] = useState('home');
   const [startingSession, setStartingSession]   = useState(false);
@@ -380,25 +380,43 @@ export default function HubPage() {
               <LinkCard icon={HeartHandshake} label="Collaborations" description="Manage collab requests and credits"     onClick={() => setActiveTab('collabs')}   color="bg-cyan-500/20" />
               <LinkCard icon={BarChart3}      label="Analytics"      description="Track performance and stream data"      path="/dashboard?tab=analytics" color="bg-indigo-500/20" />
               <LinkCard icon={MessageCircle}  label="Chat Rooms"     description="Community conversations"                path="/chat"                    color="bg-violet-500/20" />
-              <button
-                onClick={openLiveModal}
-                disabled={startingSession}
-                className="w-full flex items-center space-x-4 p-4 bg-red-500/10 rounded-xl border border-red-500/20 hover:bg-red-500/15 active:bg-red-500/20 transition text-left group disabled:opacity-50"
-              >
-                <div className="w-11 h-11 rounded-lg bg-red-500/20 flex items-center justify-center flex-shrink-0">
-                  {startingSession
-                    ? <Loader className="w-5 h-5 text-red-400 animate-spin" />
-                    : <Radio className="w-5 h-5 text-red-400" />}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-white">Go Live</p>
-                  <p className="text-[11px] text-white/30 mt-0.5">Stream music or plug in a YouTube live for your followers</p>
-                </div>
-                <div className="flex items-center space-x-1.5 flex-shrink-0">
-                  <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-                  <span className="text-xs font-semibold text-red-400">LIVE</span>
-                </div>
-              </button>
+              {isPremium ? (
+                <button
+                  onClick={openLiveModal}
+                  disabled={startingSession}
+                  className="w-full flex items-center space-x-4 p-4 bg-red-500/10 rounded-xl border border-red-500/20 hover:bg-red-500/15 active:bg-red-500/20 transition text-left group disabled:opacity-50"
+                >
+                  <div className="w-11 h-11 rounded-lg bg-red-500/20 flex items-center justify-center flex-shrink-0">
+                    {startingSession
+                      ? <Loader className="w-5 h-5 text-red-400 animate-spin" />
+                      : <Radio className="w-5 h-5 text-red-400" />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-white">Go Live</p>
+                    <p className="text-[11px] text-white/30 mt-0.5">Stream music or plug in a YouTube live for your followers</p>
+                  </div>
+                  <div className="flex items-center space-x-1.5 flex-shrink-0">
+                    <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                    <span className="text-xs font-semibold text-red-400">LIVE</span>
+                  </div>
+                </button>
+              ) : (
+                <button
+                  onClick={() => navigate('/upgrade')}
+                  className="w-full flex items-center space-x-4 p-4 bg-white/[0.03] rounded-xl border border-white/[0.06] hover:bg-white/[0.05] transition text-left group opacity-60"
+                >
+                  <div className="w-11 h-11 rounded-lg bg-white/[0.06] flex items-center justify-center flex-shrink-0">
+                    <Radio className="w-5 h-5 text-white/30" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-white/50">Go Live</p>
+                    <p className="text-[11px] text-white/25 mt-0.5">Premium feature — upgrade to stream live</p>
+                  </div>
+                  <div className="flex items-center space-x-1.5 flex-shrink-0">
+                    <Crown className="w-4 h-4 text-yellow-400/60" />
+                  </div>
+                </button>
+              )}
             </Section>
           )}
 
