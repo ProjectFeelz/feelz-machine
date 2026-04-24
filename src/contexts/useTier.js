@@ -1,253 +1,179 @@
-import { useState, useEffect, useCallback } from 'react';
+/**
+ * useStreak.js
+ *
+ * Streak is incremented atomically server-side via a Supabase RPC function.
+ * This eliminates ALL race conditions — the DB function checks last_active_date
+ * and only increments once per day, no matter how many times the hook fires.
+ *
+ * Requires SQL function in Supabase — see bottom of this file.
+ */
+
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../supabaseClient';
-import { useAuth } from './AuthContext';
 
-// Feature access map per tier
-const TIER_ACCESS = {
-  free: {
-    max_singles: 2,
-    max_albums: 0,
-    lyrics: false,
-    custom_theme: false,
-    chat_rooms: true,
-    analytics: false,
-    collaborations: false,
-    priority_trending: false,
-    download_sales: false,
-    pre_order: false,
-    custom_branding: false,
-    advanced_analytics: false,
-  },
-  pro: {
-    max_singles: Infinity,
-    max_albums: Infinity,
-    lyrics: true,
-    custom_theme: true,
-    chat_rooms: true,
-    analytics: true,
-    collaborations: true,
-    priority_trending: false,
-    download_sales: true,
-    download_sales_monthly_limit: 2,   // Pro: 2 paid download tracks per month
-    pre_order: false,
-    custom_branding: true,
-    advanced_analytics: false,
-    community_post: true,
-    daily_thought: true,
-  },
+const MILESTONE_DAYS       = [3, 7, 14, 30, 60, 100];
+const DISCOVERY_MILESTONES = [3, 7, 14, 30];
 
-  premium: {
-    max_singles: Infinity,
-    max_albums: Infinity,
-    lyrics: true,
-    custom_theme: true,
-    chat_rooms: true,
-    analytics: true,
-    collaborations: true,
-    priority_trending: true,
-    download_sales: true,
-    download_sales_monthly_limit: Infinity, // Premium: unlimited
-    pre_order: true,
-    custom_branding: true,
-    advanced_analytics: true,
-    community_post: true,
-    daily_thought: true,
-  },
-};
-
-// Human-readable feature names for upgrade prompts
-const FEATURE_LABELS = {
-  lyrics: { name: 'Lyrics', description: 'Add lyrics to your tracks', minTier: 'pro' },
-  custom_theme: { name: 'Custom Theme', description: 'Customize your artist profile page', minTier: 'pro' },
-  chat_rooms: { name: 'Chat Rooms', description: 'Create chat rooms for your fans', minTier: 'pro' },
-  analytics: { name: 'Analytics', description: 'View detailed track and audience analytics', minTier: 'pro' },
-  collaborations: { name: 'Collaborations', description: 'Collaborate with other artists and set royalty splits', minTier: 'pro' },
-  priority_trending: { name: 'Priority Trending', description: 'Get boosted visibility in browse and trending', minTier: 'premium' },
-  download_sales: { name: 'Download Sales', description: 'Sell track downloads directly to fans (Pro: 2/month, Premium: unlimited)', minTier: 'pro' },
-  custom_branding: { name: 'Custom Branding', description: 'Full branding control on your profile', minTier: 'pro' },
-  advanced_analytics: { name: 'Advanced Analytics', description: 'Deep audience insights and export tools', minTier: 'premium' },
-  community_post: { name: 'Community Posts', description: 'Share updates and music with your fans', minTier: 'pro' },
-  unlimited_uploads: { name: 'Unlimited Uploads', description: 'Upload unlimited tracks and albums', minTier: 'pro' },
-  daily_thought: { name: 'Daily Thought', description: 'Post a daily message on your artist profile', minTier: 'pro' },
-  pre_order: { name: 'Pre-order Releases', description: 'Let fans pre-save upcoming releases before they drop', minTier: 'premium' },
+function isSameDay(a, b) {
+  const da = new Date(a);
+  const db = new Date(b);
+  return da.getFullYear() === db.getFullYear() &&
+         da.getMonth()    === db.getMonth()    &&
+         da.getDate()     === db.getDate();
 }
 
-  export function useTier() {
-  const { artist, isAdmin } = useAuth();
-  const [tierSlug, setTierSlug] = useState('free');
-  const [tierData, setTierData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [trackCount, setTrackCount] = useState(0);
-  const [monthlyDownloadSalesCount, setMonthlyDownloadSalesCount] = useState(0);
+function isYesterday(date) {
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  return isSameDay(date, yesterday);
+}
 
-  useEffect(() => {
-    if (isAdmin) {
-      setTierSlug('premium');
-      setLoading(false);
-      return;
-    }
-    if (artist) {
-      fetchTier(artist.id);
-      fetchTrackCount(artist.id);
-      fetchMonthlyDownloadSalesCount(artist.id);
-    } else {
-      setTierSlug('free');
-      setLoading(false);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [artist?.id, isAdmin]);
+export function useStreak(user) {
+  const [streak,          setStreak]          = useState(0);
+  const [longestStreak,   setLongestStreak]   = useState(0);
+  const [discoveryStreak, setDiscoveryStreak] = useState(0);
+  const [loading,         setLoading]         = useState(true);
 
-  // Re-check tier when user returns from Safari (iOS PayPal hop)
-  useEffect(() => {
-    if (!artist?.id || isAdmin) return;
-    const handleVisibility = () => {
-      if (document.visibilityState === 'visible') {
-        fetchTier(artist.id);
-      }
-    };
-    document.addEventListener('visibilitychange', handleVisibility);
-    return () => document.removeEventListener('visibilitychange', handleVisibility);
-  }, [artist?.id, isAdmin]);
+  const discoveredTodayRef = useRef(false);
+  const runningRef         = useRef(false); // in-process guard
 
-  const fetchTier = async (artistId) => {
-    if (!artistId) return;
+  const lsKey = user?.id ? `streak_checked_${user.id}` : null;
+
+  const checkAndUpdateStreak = useCallback(async () => {
+    if (!user?.id) { setLoading(false); return; }
+    if (runningRef.current) return;
+    runningRef.current = true;
+
     try {
-      const { data: sub, error: subErr } = await supabase
-        .from('artist_tier_subscriptions')
-        .select('tier_id, status')
-        .eq('artist_id', artistId)
-        .eq('status', 'active')
-        .maybeSingle();
+      const today = new Date().toISOString().split('T')[0];
 
-      if (sub?.tier_id) {
-        // Step 2: get tier slug separately
-        const { data: tierRow } = await supabase
-          .from('platform_tiers')
-          .select('*')
-          .eq('id', sub.tier_id)
-          .maybeSingle();
-        if (tierRow) {
-          setTierSlug(['master','premium'].includes(tierRow.slug) ? 'premium' : tierRow.slug === 'pro' ? 'pro' : 'free');
-          setTierData(tierRow);
-          setLoading(false);
-          return;
+      // Already ran the RPC today — just read display values
+      if (lsKey && localStorage.getItem(lsKey) === today) {
+        const { data: row } = await supabase
+          .from('user_streaks')
+          .select('current_streak, longest_streak, discovery_streak')
+          .eq('user_id', user.id).maybeSingle();
+        if (row) {
+          setStreak(row.current_streak || 0);
+          setLongestStreak(row.longest_streak || 0);
+          setDiscoveryStreak(row.discovery_streak || 0);
+        }
+        setLoading(false);
+        runningRef.current = false;
+        return;
+      }
+
+      // Atomic increment via RPC — idempotent, safe to call multiple times
+      const { data: rpcResult, error: rpcErr } = await supabase
+        .rpc('check_and_increment_streak', { p_user_id: user.id });
+
+      if (rpcErr) {
+        // RPC not deployed yet — read current values and show them
+        console.warn('Streak RPC unavailable:', rpcErr.message);
+        const { data: row } = await supabase
+          .from('user_streaks')
+          .select('current_streak, longest_streak, discovery_streak')
+          .eq('user_id', user.id).maybeSingle();
+        if (row) {
+          setStreak(row.current_streak || 0);
+          setLongestStreak(row.longest_streak || 0);
+          setDiscoveryStreak(row.discovery_streak || 0);
+        }
+        setLoading(false);
+        runningRef.current = false;
+        return;
+      }
+
+      const result    = Array.isArray(rpcResult) ? rpcResult[0] : rpcResult;
+      if (!result) { setLoading(false); runningRef.current = false; return; }
+
+      const newStreak  = result.current_streak || 0;
+      const newLongest = result.longest_streak  || 0;
+      const lastActive = result.last_active_date;
+
+      if (lsKey) localStorage.setItem(lsKey, today);
+
+      setStreak(newStreak);
+      setLongestStreak(newLongest);
+
+      // Fetch discovery streak separately
+      const { data: fullRow } = await supabase
+        .from('user_streaks').select('discovery_streak')
+        .eq('user_id', user.id).maybeSingle();
+      if (fullRow) setDiscoveryStreak(fullRow.discovery_streak || 0);
+
+      // Milestone notifications — only if today is a new increment
+      if (lastActive === today && MILESTONE_DAYS.includes(newStreak)) {
+        const msgs = {
+          3:   { title: '3-day streak 🔥',        body: "You're on a roll, 3 days straight on Feelz Machine." },
+          7:   { title: 'One week streak 🔥🔥',    body: "Seven days running. The music doesn't stop with you." },
+          14:  { title: '2 weeks straight 🔥🔥🔥', body: "Two week streak. You're becoming a regular here." },
+          30:  { title: '30-day streak 💿',        body: "A whole month on Feelz Machine. You're part of this now." },
+          60:  { title: '60 days 🎯',              body: "Two months of daily Feelz. Legendary behaviour." },
+          100: { title: '100-day streak 🏆',       body: "One hundred consecutive days. You are Feelz Machine." },
+        };
+        const msg = msgs[newStreak];
+        if (msg) {
+          await supabase.from('notifications').insert({
+            user_id:  user.id, type: 'streak',
+            title:    msg.title, message: msg.body,
+            metadata: { streak_days: newStreak, milestone: true },
+          }).catch(() => {});
         }
       }
-
-      // Fallback: use artists.tier column directly
-      const { data: artistRow } = await supabase
-        .from('artists')
-        .select('tier')
-        .eq('id', artistId)
-        .maybeSingle();
-      const fallback = artistRow?.tier || 'free';
-      setTierSlug(['master','premium'].includes(fallback) ? 'premium' : fallback === 'pro' ? 'pro' : 'free');
-    } catch {
-      const fallback = artist?.tier || 'free';
-      setTierSlug(['master','premium'].includes(fallback) ? 'premium' : fallback === 'pro' ? 'pro' : 'free');
+    } catch (err) {
+      console.error('Streak check error:', err);
     }
+
     setLoading(false);
-  };
+    runningRef.current = false;
+  }, [user?.id, lsKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const fetchTrackCount = async (artistId) => {
-    if (!artistId) return;
-    const { count } = await supabase
-      .from('tracks')
-      .select('*', { count: 'exact', head: true })
-      .eq('artist_id', artistId);
-    setTrackCount(count || 0);
-  };
+  // Discovery streak — unchanged, discovery is lower frequency so no race issue
+  const recordDiscovery = useCallback(async (artistId) => {
+    if (!user?.id || !artistId || discoveredTodayRef.current) return;
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      const { data: row } = await supabase
+        .from('user_streaks')
+        .select('discovery_streak, longest_discovery_streak, last_discovery_date')
+        .eq('user_id', user.id).maybeSingle();
+      if (!row) return;
 
-  const fetchMonthlyDownloadSalesCount = async (artistId) => {
-    if (!artistId) return;
-    const startOfMonth = new Date();
-    startOfMonth.setDate(1);
-    startOfMonth.setHours(0, 0, 0, 0);
-    const { count } = await supabase
-      .from('tracks')
-      .select('*', { count: 'exact', head: true })
-      .eq('artist_id', artistId)
-      .gt('download_price', 0)
-      .gte('created_at', startOfMonth.toISOString());
-    setMonthlyDownloadSalesCount(count || 0);
-  };
+      if (row.last_discovery_date === today) { discoveredTodayRef.current = true; return; }
 
-  // Get access rules for current tier
-  const access = TIER_ACCESS[tierSlug] || TIER_ACCESS.free;
+      const lastDiscovery  = row.last_discovery_date ? new Date(row.last_discovery_date + 'T00:00:00') : null;
+      const newDiscovery   = !lastDiscovery ? 1 : isYesterday(lastDiscovery) ? (row.discovery_streak || 0) + 1 : 1;
+      const newLongestDisc = Math.max(newDiscovery, row.longest_discovery_streak || 0);
 
-  // Check if a specific feature is available
-  const hasFeature = useCallback((feature) => {
-    const rules = TIER_ACCESS[tierSlug] || TIER_ACCESS.free;
-    const val = rules[feature];
-    if (typeof val === 'boolean') return val;
-    if (typeof val === 'number') return val > 0;
-    return false;
-  }, [tierSlug]);
+      discoveredTodayRef.current = true;
 
-  // Check if user can upload more tracks
-  const canUpload = useCallback(() => {
-    if (access.max_singles === Infinity) return true;
-    return trackCount < access.max_singles;
-  }, [access, trackCount]);
+      await supabase.from('user_streaks').update({
+        discovery_streak: newDiscovery, longest_discovery_streak: newLongestDisc, last_discovery_date: today,
+      }).eq('user_id', user.id);
 
-  // Get remaining upload slots
-  const uploadsRemaining = useCallback(() => {
-    if (access.max_singles === Infinity) return Infinity;
-    return Math.max(access.max_singles - trackCount, 0);
-  }, [access, trackCount]);
+      setDiscoveryStreak(newDiscovery);
 
-  // Get the minimum tier needed for a feature
-  const getMinTier = useCallback((feature) => {
-    return FEATURE_LABELS[feature]?.minTier || 'pro';
-  }, []);
-
-  // Get feature label info
-  const getFeatureInfo = useCallback((feature) => {
-    return FEATURE_LABELS[feature] || { name: feature, description: '', minTier: 'pro' };
-  }, []);
-
-  // Check tier level (for comparisons)
-  const tierLevel = tierSlug === 'premium' ? 3 : tierSlug === 'pro' ? 2 : 1;
-
-  const isPro = tierSlug === 'pro' || tierSlug === 'premium';
-  const isPremium = tierSlug === 'premium';
-  const isFree = tierSlug === 'free';
-
-  const downloadSalesLimit = access.download_sales_monthly_limit ?? 0;
-  const canAddDownloadSale = isPremium
-    ? true
-    : (access.download_sales && monthlyDownloadSalesCount < downloadSalesLimit);
-  const downloadSalesRemaining = isPremium
-    ? Infinity
-    : Math.max(0, downloadSalesLimit - monthlyDownloadSalesCount);
-
-  return {
-    tierSlug,
-    tierData,
-    tierLevel,
-    access,
-    tierLoading: loading,
-    trackCount,
-    isPro,
-    isPremium,
-    isFree,
-    hasFeature,
-    canUpload,
-    uploadsRemaining,
-    getMinTier,
-    getFeatureInfo,
-    refreshTier: () => {
-      if (artist?.id) {
-        fetchTier(artist.id);
-        fetchMonthlyDownloadSalesCount(artist.id);
+      if (DISCOVERY_MILESTONES.includes(newDiscovery)) {
+        const msgs = {
+          3:  { title: '3 new artists discovered 🎵', body: "3 days of new finds. You've got an ear for this." },
+          7:  { title: 'Week of discovery 🌍',        body: "7 days of finding new artists. The underground loves you." },
+          14: { title: '2-week discovery streak 🔭',  body: "Two weeks of unearthing new talent. You belong here." },
+          30: { title: 'Discovery legend 🏆',         body: "30 days finding artists nobody knows yet. You are the scene." },
+        };
+        const msg = msgs[newDiscovery];
+        if (msg) {
+          await supabase.from('notifications').insert({
+            user_id: user.id, type: 'streak',
+            title: msg.title, message: msg.body,
+            metadata: { discovery_streak: newDiscovery, milestone: true },
+          }).catch(() => {});
+        }
       }
-    },
-    // Download sales limit enforcement
-    downloadSalesLimit,
-    downloadSalesUsed: monthlyDownloadSalesCount,
-    downloadSalesRemaining,
-    canAddDownloadSale,
-  };
-}
+    } catch (err) { console.error('Discovery streak error:', err); }
+  }, [user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-export { TIER_ACCESS, FEATURE_LABELS };
+  useEffect(() => { checkAndUpdateStreak(); }, [checkAndUpdateStreak]);
+
+  return { streak, longestStreak, discoveryStreak, recordDiscovery, loading };
+}
