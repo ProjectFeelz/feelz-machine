@@ -817,7 +817,8 @@ export default function ArtistProfilePage() {
         .from('follows').select('follower_id').eq('artist_id', artist.id);
       if (!follows?.length) { setDmSending(false); return; }
 
-      const followerIds = follows.map(f => f.follower_id);
+      // Exclude the artist themselves from the recipient list
+      const followerIds = follows.map(f => f.follower_id).filter(id => id !== user.id);
       // Batch insert notifications (50 at a time)
       for (let i = 0; i < followerIds.length; i += 50) {
         const batch = followerIds.slice(i, i + 50);
