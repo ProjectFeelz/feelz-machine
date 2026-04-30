@@ -432,7 +432,6 @@ function ListenerWelcomeTour({ displayName, onDone }) {
 
   return (
     <div className="fixed inset-0 z-[500] flex flex-col bg-black overflow-hidden">
-      <div className="flex-1 flex flex-col w-full max-w-2xl mx-auto">
       {/* Ambient glow */}
       <div
         className="absolute inset-0 pointer-events-none transition-all duration-700"
@@ -449,7 +448,7 @@ function ListenerWelcomeTour({ displayName, onDone }) {
       </div>
 
       {/* Progress bar */}
-      <div className="relative z-10 flex items-center space-x-1 px-6 mb-5">
+      <div className="relative z-10 flex items-center space-x-1 px-6 mb-5 md:max-w-2xl md:mx-auto md:w-full">
         {SLIDES.map((_, i) => (
           <div key={i} className="flex-1 h-0.5 rounded-full overflow-hidden bg-white/[0.07]">
             <div
@@ -466,7 +465,7 @@ function ListenerWelcomeTour({ displayName, onDone }) {
 
       {/* Slide */}
       <div
-        className="relative z-10 flex-1 flex flex-col items-center justify-between px-6 pb-6"
+        className="relative z-10 flex-1 flex flex-col items-center justify-between px-6 pb-6 md:max-w-2xl md:mx-auto md:w-full"
         style={{
           opacity: visible ? 1 : 0,
           transform: visible ? 'translateY(0)' : `translateY(${animDir > 0 ? '14px' : '-14px'})`,
@@ -523,7 +522,6 @@ function ListenerWelcomeTour({ displayName, onDone }) {
         </div>
       </div>
 
-      </div>
       <style>{`
         @keyframes float-slow {
           from { transform: translateY(0px) rotate(-4deg); }
