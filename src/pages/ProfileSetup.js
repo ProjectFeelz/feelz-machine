@@ -542,7 +542,7 @@ function ListenerWelcomeTour({ displayName, onDone }) {
 export default function ProfileSetup() {
   const navigate = useNavigate();
   const { user, artist, refreshProfile } = useAuth();
-  const [stage, setStage] = useState('tour'); // 'tour' | 'follow'
+  const [stage, setStage] = useState('type'); // 'type' | 'tour' | 'follow'
 
   const ensureListenerProfile = async () => {
     if (!user || artist) return;
@@ -555,6 +555,15 @@ export default function ProfileSetup() {
     } catch (err) { console.error('Listener profile error:', err); }
   };
 
+  const handleSelectType = async (type) => {
+    if (type === 'artist') {
+      // Artists go straight to the app — they set up their profile in Hub
+      navigate('/');
+    } else {
+      setStage('tour');
+    }
+  };
+
   const handleTourDone = async () => {
     if (artist) { navigate('/'); }
     else { await ensureListenerProfile(); setStage('follow'); }
@@ -564,6 +573,55 @@ export default function ProfileSetup() {
     await ensureListenerProfile();
     navigate('/');
   };
+
+  // Account type selection screen
+  if (stage === 'type' && !artist) {
+    return (
+      <div className="fixed inset-0 z-[500] flex flex-col bg-black items-center justify-center px-6">
+        <div className="w-full max-w-sm">
+          <div className="text-center mb-10">
+            <div className="w-16 h-16 rounded-3xl bg-purple-500/15 flex items-center justify-center mx-auto mb-5">
+              <span className="text-3xl">🎵</span>
+            </div>
+            <h1 className="text-2xl font-bold text-white mb-2">How will you use<br/>Feelz Machine?</h1>
+            <p className="text-sm text-white/40">This helps us personalise your experience</p>
+          </div>
+
+          <div className="space-y-3">
+            <button
+              onClick={() => handleSelectType('listener')}
+              className="w-full flex items-center space-x-4 p-4 rounded-2xl border border-white/[0.08] bg-white/[0.03] hover:bg-white/[0.06] transition active:scale-[0.98] text-left"
+            >
+              <div className="w-12 h-12 rounded-2xl bg-purple-500/15 flex items-center justify-center flex-shrink-0">
+                <span className="text-2xl">🎧</span>
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-white">I'm a listener</p>
+                <p className="text-xs text-white/40 mt-0.5">Discover and support independent music</p>
+              </div>
+            </button>
+
+            <button
+              onClick={() => handleSelectType('artist')}
+              className="w-full flex items-center space-x-4 p-4 rounded-2xl border border-purple-500/30 bg-purple-500/[0.06] hover:bg-purple-500/[0.1] transition active:scale-[0.98] text-left"
+            >
+              <div className="w-12 h-12 rounded-2xl bg-purple-500/20 flex items-center justify-center flex-shrink-0">
+                <span className="text-2xl">🎤</span>
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-white">I'm an artist</p>
+                <p className="text-xs text-white/40 mt-0.5">Upload music and connect with fans</p>
+              </div>
+            </button>
+          </div>
+
+          <p className="text-center text-[11px] text-white/20 mt-6">
+            You can change this at any time in your profile
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   if (stage === 'follow') {
     return <ArtistFollowPrompt onDone={handleFollowDone} />;
