@@ -431,7 +431,8 @@ function ListenerWelcomeTour({ displayName, onDone }) {
     : slide.title;
 
   return (
-    <div className="fixed inset-0 z-[500] flex flex-col bg-black overflow-y-auto">
+    <div className="fixed inset-0 z-[500] flex flex-col bg-black overflow-hidden">
+      <div className="flex-1 flex flex-col w-full max-w-2xl mx-auto">
       {/* Ambient glow */}
       <div
         className="absolute inset-0 pointer-events-none transition-all duration-700"
@@ -448,7 +449,7 @@ function ListenerWelcomeTour({ displayName, onDone }) {
       </div>
 
       {/* Progress bar */}
-      <div className="relative z-10 flex items-center space-x-1 px-6 mb-5 max-w-lg mx-auto w-full">
+      <div className="relative z-10 flex items-center space-x-1 px-6 mb-5">
         {SLIDES.map((_, i) => (
           <div key={i} className="flex-1 h-0.5 rounded-full overflow-hidden bg-white/[0.07]">
             <div
@@ -464,9 +465,8 @@ function ListenerWelcomeTour({ displayName, onDone }) {
       </div>
 
       {/* Slide */}
-      <div className="relative z-10 flex-1 flex flex-col items-center w-full">
       <div
-        className="flex flex-col items-center px-6 pb-6 w-full max-w-lg"
+        className="relative z-10 flex-1 flex flex-col items-center justify-between px-6 pb-6"
         style={{
           opacity: visible ? 1 : 0,
           transform: visible ? 'translateY(0)' : `translateY(${animDir > 0 ? '14px' : '-14px'})`,
@@ -474,7 +474,7 @@ function ListenerWelcomeTour({ displayName, onDone }) {
         }}
       >
         {/* Visual */}
-        <div className="flex items-center justify-center w-full py-8" style={{ height: 220 }}>
+        <div className="flex-1 flex items-center justify-center w-full">
           <SlideVisual slide={slide} />
         </div>
 
@@ -499,7 +499,7 @@ function ListenerWelcomeTour({ displayName, onDone }) {
         </div>
 
         {/* Nav */}
-        <div className="w-full max-w-sm flex items-center space-x-3 mx-auto">
+        <div className="w-full max-w-sm flex items-center space-x-3">
           {step > 0 && (
             <button
               onClick={prev}
@@ -522,8 +522,8 @@ function ListenerWelcomeTour({ displayName, onDone }) {
           </button>
         </div>
       </div>
-      </div>
 
+      </div>
       <style>{`
         @keyframes float-slow {
           from { transform: translateY(0px) rotate(-4deg); }
@@ -546,33 +546,20 @@ export default function ProfileSetup() {
   const { user, artist, refreshProfile } = useAuth();
   const [stage, setStage] = useState('tour'); // 'tour' | 'follow'
 
-  // Ensure a listener row exists so hasProfile = true and AppLayout
-  // doesn't redirect back to /setup after the tour completes
   const ensureListenerProfile = async () => {
-    if (!user || artist) return; // artists already have a profile
+    if (!user || artist) return;
     try {
-      // Upsert into user_profiles so hasProfile = true in AuthContext
       await supabase.from('user_profiles').upsert(
-        {
-          user_id:    user.id,
-          name:       user.user_metadata?.full_name || user.email?.split('@')[0] || 'Listener',
-          updated_at: new Date().toISOString(),
-        },
+        { user_id: user.id, name: user.user_metadata?.full_name || user.email?.split('@')[0] || 'Listener', updated_at: new Date().toISOString() },
         { onConflict: 'user_id', ignoreDuplicates: true }
       );
       await refreshProfile();
-    } catch (err) {
-      console.error('Listener profile create error:', err);
-    }
+    } catch (err) { console.error('Listener profile error:', err); }
   };
 
   const handleTourDone = async () => {
-    if (artist) {
-      navigate('/');
-    } else {
-      await ensureListenerProfile();
-      setStage('follow');
-    }
+    if (artist) { navigate('/'); }
+    else { await ensureListenerProfile(); setStage('follow'); }
   };
 
   const handleFollowDone = async () => {
