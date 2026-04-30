@@ -573,7 +573,7 @@ function AccountTypeScreen({ onListener, onArtist, initialScreen = 'type' }) {
   };
 
   const handleListenerContinue = async () => {
-    sessionStorage.setItem('onboarding_type', 'listener');
+    localStorage.setItem('onboarding_type', 'listener');
     try {
       await supabase.from('user_profiles').upsert(
         { user_id: user.id, name: user.user_metadata?.full_name || user.email?.split('@')[0] || 'Listener', updated_at: new Date().toISOString() },
@@ -672,12 +672,12 @@ export default function ProfileSetup() {
   // If returning from email confirmation and user already chose a type, honour it
   useEffect(() => {
     if (!user?.id) return;
-    const savedType = sessionStorage.getItem('onboarding_type');
+    const savedType = localStorage.getItem('onboarding_type');
     if (savedType === 'artist' && !artist) {
-      sessionStorage.removeItem('onboarding_type');
+      localStorage.removeItem('onboarding_type');
       setStage('artist_name');
     } else if (savedType === 'listener') {
-      sessionStorage.removeItem('onboarding_type');
+      localStorage.removeItem('onboarding_type');
       setStage('tour');
     }
   }, [user?.id]); // eslint-disable-line
@@ -685,17 +685,26 @@ export default function ProfileSetup() {
   const ensureListenerProfile = async () => {
     if (!user || artist) return;
     try {
-      await supabase.from('user_profiles').upsert(
-        { user_id: user.id, name: user.user_metadata?.full_name || user.email?.split('@')[0] || 'Listener', updated_at: new Date().toISOString() },
-        { onConflict: 'user_id', ignoreDuplicates: true }
-      );
+      const name = user.user_metadata?.full_name || user.email?.split('@')[0] || 'Listener';
+      const now  = new Date().toISOString();
+      // Write to user_profiles (for profile data) AND listeners (for hasProfile check)
+      await Promise.all([
+        supabase.from('user_profiles').upsert(
+          { user_id: user.id, name, updated_at: now },
+          { onConflict: 'user_id', ignoreDuplicates: true }
+        ),
+        supabase.from('listeners').upsert(
+          { user_id: user.id, created_at: now },
+          { onConflict: 'user_id', ignoreDuplicates: true }
+        ),
+      ]);
       await refreshProfile();
     } catch (err) { console.error('Listener profile error:', err); }
   };
 
   const handleSelectType = async (type) => {
     // Store the chosen type so we can read it back after email confirmation redirect
-    sessionStorage.setItem('onboarding_type', type);
+    localStorage.setItem('onboarding_type', type);
     if (type === 'artist') {
       navigate('/');
     } else {
