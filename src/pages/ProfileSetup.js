@@ -536,6 +536,127 @@ function ListenerWelcomeTour({ displayName, onDone }) {
   );
 }
 
+// ── AccountTypeScreen ────────────────────────────────────────────────────────
+function AccountTypeScreen({ user, supabase, refreshProfile, onListener, onArtist }) {
+  const [artistName, setArtistName]   = useState('');
+  const [showArtist, setShowArtist]   = useState(false);
+  const [saving, setSaving]           = useState(false);
+  const [error, setError]             = useState('');
+
+  function slugify(text) {
+    const base = text.toString().toLowerCase().trim()
+      .replace(/\s+/g, '-').replace(/[^\w\-]+/g, '').replace(/\-\-+/g, '-');
+    return `${base}-${Date.now().toString(36)}`;
+  }
+
+  const handleArtistContinue = async () => {
+    if (!artistName.trim()) { setError('Please enter your artist name'); return; }
+    setSaving(true); setError('');
+    try {
+      const { error: insertErr } = await supabase.from('artists').insert({
+        user_id:     user.id,
+        artist_name: artistName.trim(),
+        slug:        slugify(artistName.trim()),
+        tier:        'free',
+        created_at:  new Date().toISOString(),
+        updated_at:  new Date().toISOString(),
+      });
+      if (insertErr) throw insertErr;
+      await refreshProfile();
+      onArtist();
+    } catch (err) {
+      setError(err.message || 'Failed to create artist profile');
+    }
+    setSaving(false);
+  };
+
+  const handleListenerContinue = async () => {
+    try {
+      await supabase.from('user_profiles').upsert(
+        { user_id: user.id, name: user.user_metadata?.full_name || user.email?.split('@')[0] || 'Listener', updated_at: new Date().toISOString() },
+        { onConflict: 'user_id', ignoreDuplicates: true }
+      );
+      await refreshProfile();
+    } catch {}
+    onListener();
+  };
+
+  return (
+    <div className="fixed inset-0 z-[500] flex flex-col bg-black items-center justify-center px-6">
+      <div className="w-full max-w-sm">
+        {!showArtist ? (
+          <>
+            <div className="text-center mb-10">
+              <div className="w-16 h-16 rounded-3xl bg-purple-500/15 flex items-center justify-center mx-auto mb-5">
+                <span className="text-3xl">🎵</span>
+              </div>
+              <h1 className="text-2xl font-bold text-white mb-2">How will you use<br/>Feelz Machine?</h1>
+              <p className="text-sm text-white/40">This helps us personalise your experience</p>
+            </div>
+            <div className="space-y-3">
+              <button
+                onClick={handleListenerContinue}
+                className="w-full flex items-center space-x-4 p-4 rounded-2xl border border-white/[0.08] bg-white/[0.03] hover:bg-white/[0.06] transition active:scale-[0.98] text-left"
+              >
+                <div className="w-12 h-12 rounded-2xl bg-purple-500/15 flex items-center justify-center flex-shrink-0">
+                  <span className="text-2xl">🎧</span>
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-white">I'm a listener</p>
+                  <p className="text-xs text-white/40 mt-0.5">Discover and support independent music</p>
+                </div>
+              </button>
+              <button
+                onClick={() => setShowArtist(true)}
+                className="w-full flex items-center space-x-4 p-4 rounded-2xl border border-purple-500/30 bg-purple-500/[0.06] hover:bg-purple-500/[0.1] transition active:scale-[0.98] text-left"
+              >
+                <div className="w-12 h-12 rounded-2xl bg-purple-500/20 flex items-center justify-center flex-shrink-0">
+                  <span className="text-2xl">🎤</span>
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-white">I'm an artist</p>
+                  <p className="text-xs text-white/40 mt-0.5">Upload music and connect with fans</p>
+                </div>
+              </button>
+            </div>
+            <p className="text-center text-[11px] text-white/20 mt-6">You can change this any time in your profile</p>
+          </>
+        ) : (
+          <>
+            <div className="text-center mb-8">
+              <button onClick={() => setShowArtist(false)} className="text-xs text-white/30 hover:text-white/50 mb-6 transition">← Back</button>
+              <div className="w-16 h-16 rounded-3xl bg-purple-500/15 flex items-center justify-center mx-auto mb-5">
+                <span className="text-3xl">🎤</span>
+              </div>
+              <h1 className="text-2xl font-bold text-white mb-2">What's your artist name?</h1>
+              <p className="text-sm text-white/40">This is how fans will find you</p>
+            </div>
+            <div className="space-y-3">
+              <input
+                type="text" value={artistName} onChange={e => { setArtistName(e.target.value); setError(''); }}
+                placeholder="Your artist name"
+                maxLength={50}
+                className="w-full px-4 py-3.5 bg-white/[0.06] border border-white/[0.08] rounded-2xl text-white placeholder-white/25 outline-none focus:border-purple-500/50 transition text-sm"
+                autoFocus
+              />
+              {error && <p className="text-xs text-red-400">{error}</p>}
+              <button
+                onClick={handleArtistContinue}
+                disabled={saving || !artistName.trim()}
+                className="w-full py-4 rounded-2xl font-bold text-base bg-white text-black disabled:opacity-40 transition active:scale-[0.98] flex items-center justify-center space-x-2"
+              >
+                {saving
+                  ? <><Loader className="w-4 h-4 animate-spin" /><span>Setting up...</span></>
+                  : <span>Create Artist Profile</span>}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── ProfileSetup — default export ─────────────────────────────────────────────
 // Sequences: ListenerWelcomeTour → ArtistFollowPrompt → navigate to /
 // Artist accounts skip ArtistFollowPrompt (they don't need to follow artists to onboard)
@@ -576,51 +697,9 @@ export default function ProfileSetup() {
 
   // Account type selection screen
   if (stage === 'type' && !artist) {
-    return (
-      <div className="fixed inset-0 z-[500] flex flex-col bg-black items-center justify-center px-6">
-        <div className="w-full max-w-sm">
-          <div className="text-center mb-10">
-            <div className="w-16 h-16 rounded-3xl bg-purple-500/15 flex items-center justify-center mx-auto mb-5">
-              <span className="text-3xl">🎵</span>
-            </div>
-            <h1 className="text-2xl font-bold text-white mb-2">How will you use<br/>Feelz Machine?</h1>
-            <p className="text-sm text-white/40">This helps us personalise your experience</p>
-          </div>
-
-          <div className="space-y-3">
-            <button
-              onClick={() => handleSelectType('listener')}
-              className="w-full flex items-center space-x-4 p-4 rounded-2xl border border-white/[0.08] bg-white/[0.03] hover:bg-white/[0.06] transition active:scale-[0.98] text-left"
-            >
-              <div className="w-12 h-12 rounded-2xl bg-purple-500/15 flex items-center justify-center flex-shrink-0">
-                <span className="text-2xl">🎧</span>
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-white">I'm a listener</p>
-                <p className="text-xs text-white/40 mt-0.5">Discover and support independent music</p>
-              </div>
-            </button>
-
-            <button
-              onClick={() => handleSelectType('artist')}
-              className="w-full flex items-center space-x-4 p-4 rounded-2xl border border-purple-500/30 bg-purple-500/[0.06] hover:bg-purple-500/[0.1] transition active:scale-[0.98] text-left"
-            >
-              <div className="w-12 h-12 rounded-2xl bg-purple-500/20 flex items-center justify-center flex-shrink-0">
-                <span className="text-2xl">🎤</span>
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-white">I'm an artist</p>
-                <p className="text-xs text-white/40 mt-0.5">Upload music and connect with fans</p>
-              </div>
-            </button>
-          </div>
-
-          <p className="text-center text-[11px] text-white/20 mt-6">
-            You can change this at any time in your profile
-          </p>
-        </div>
-      </div>
-    );
+    return <AccountTypeScreen user={user} supabase={supabase} refreshProfile={refreshProfile}
+      onListener={() => setStage('tour')}
+      onArtist={() => navigate('/')} />;
   }
 
   if (stage === 'follow') {
