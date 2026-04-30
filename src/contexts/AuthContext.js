@@ -141,7 +141,9 @@ export function AuthProvider({ children }) {
       options: { emailRedirectTo: window.location.origin },
     });
     if (error) throw error;
-    if (data.user) await loadUser(data.user);
+    // Do NOT call loadUser here — the user hasn't confirmed their email yet.
+    // Supabase sends the confirmation email after this call.
+    // Once they click the link, the session will load automatically.
     return data;
   };
 
