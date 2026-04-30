@@ -191,8 +191,7 @@ export default function ArtistFollowPrompt({ onDone }) {
   if (step === 1) {
     return (
       <div className="fixed inset-0 z-[200] flex flex-col bg-black">
-      <div className="flex-1 flex flex-col w-full max-w-2xl mx-auto">
-        <div className="flex-shrink-0 px-6 pt-14 pb-4 text-center">
+        <div className="flex-shrink-0 px-6 pt-14 pb-4 text-center md:max-w-2xl md:mx-auto md:w-full">
           <div className="w-12 h-12 rounded-2xl bg-purple-500/15 flex items-center justify-center mx-auto mb-4">
             <span className="text-2xl">🎵</span>
           </div>
@@ -202,7 +201,7 @@ export default function ArtistFollowPrompt({ onDone }) {
           </p>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-4 pb-36">
+        <div className="flex-1 overflow-y-auto px-4 pb-36 md:max-w-2xl md:mx-auto md:w-full">
           <div className="grid grid-cols-2 gap-2.5">
             {GENRE_OPTIONS.map(({ label, emoji }) => {
               const selected = selectedGenres.includes(label);
@@ -229,9 +228,8 @@ export default function ArtistFollowPrompt({ onDone }) {
           </div>
         </div>
 
-      </div>{/* end max-w wrapper */}
-
         <div className="fixed bottom-0 left-0 right-0 px-6 pb-10 pt-4 bg-gradient-to-t from-black via-black/95 to-transparent">
+          <div className="md:max-w-2xl md:mx-auto">
           <button
             onClick={handleGenreContinue}
             className="w-full py-4 rounded-2xl font-bold text-base bg-white text-black shadow-lg shadow-white/10 transition-all active:scale-98 flex items-center justify-center space-x-2"
@@ -248,6 +246,7 @@ export default function ArtistFollowPrompt({ onDone }) {
           {selectedGenres.length === 0 && (
             <p className="text-center text-xs text-white/20 mt-2">No preference? We'll show you all artists</p>
           )}
+          </div>
         </div>
       </div>
     );
@@ -256,9 +255,8 @@ export default function ArtistFollowPrompt({ onDone }) {
   // ── Step 2: Artist grid ─────────────────────────────────────────────────────
   return (
     <div className="fixed inset-0 z-[200] flex flex-col bg-black">
-      <div className="flex-1 flex flex-col w-full max-w-2xl mx-auto">
       {/* Header */}
-      <div className="flex-shrink-0 px-6 pt-14 pb-5 text-center">
+      <div className="flex-shrink-0 px-6 pt-14 pb-5 text-center md:max-w-2xl md:mx-auto md:w-full">
         <div className="w-12 h-12 rounded-2xl bg-white/[0.06] flex items-center justify-center mx-auto mb-4">
           <Music className="w-6 h-6 text-purple-400" />
         </div>
@@ -304,7 +302,7 @@ export default function ArtistFollowPrompt({ onDone }) {
           </button>
         </div>
       ) : (
-        <div className="flex-1 overflow-y-auto px-4 pb-32">
+        <div className="flex-1 overflow-y-auto px-4 pb-32 md:max-w-2xl md:mx-auto md:w-full">
           {/* Genre badge row */}
           {selectedGenres.length > 0 && (
             <div className="flex flex-wrap gap-1.5 mb-4">
@@ -409,10 +407,9 @@ export default function ArtistFollowPrompt({ onDone }) {
         </div>
       )}
 
-      </div>{/* end max-w wrapper */}
-
       {/* Continue */}
       <div className="fixed bottom-0 left-0 right-0 px-6 pb-10 pt-4 bg-gradient-to-t from-black via-black/95 to-transparent">
+        <div className="md:max-w-2xl md:mx-auto">
         <button
           onClick={handleContinue}
           disabled={!canContinue}
@@ -425,6 +422,7 @@ export default function ArtistFollowPrompt({ onDone }) {
             ? `Let's go  →  Following ${followCount}`
             : `Follow ${MIN_FOLLOWS - followCount} more to continue`}
         </button>
+        </div>
       </div>
     </div>
   );
