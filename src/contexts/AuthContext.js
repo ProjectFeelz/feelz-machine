@@ -138,7 +138,7 @@ export function AuthProvider({ children }) {
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
-      options: { emailRedirectTo: window.location.origin },
+      options: { emailRedirectTo: `${window.location.origin}/setup` },
     });
     if (error) throw error;
     // Do NOT call loadUser here — the user hasn't confirmed their email yet.
