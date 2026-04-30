@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { supabase } from '../supabaseClient';
 import { usePushNotifications } from '../hooks/usePushNotifications';
 import ArtistFollowPrompt from '../components/ArtistFollowPrompt';
 import React, { useState, useEffect } from 'react';
@@ -430,7 +431,7 @@ function ListenerWelcomeTour({ displayName, onDone }) {
     : slide.title;
 
   return (
-    <div className="fixed inset-0 z-[500] flex flex-col bg-black overflow-hidden">
+    <div className="fixed inset-0 z-[500] flex flex-col bg-black overflow-y-auto">
       {/* Ambient glow */}
       <div
         className="absolute inset-0 pointer-events-none transition-all duration-700"
@@ -472,7 +473,7 @@ function ListenerWelcomeTour({ displayName, onDone }) {
         }}
       >
         {/* Visual */}
-        <div className="flex-1 flex items-center justify-center w-full">
+        <div className="flex items-center justify-center w-full py-6" style={{ minHeight: 200, maxHeight: 280 }}>
           <SlideVisual slide={slide} />
         </div>
 
@@ -540,19 +541,40 @@ function ListenerWelcomeTour({ displayName, onDone }) {
 // Artist accounts skip ArtistFollowPrompt (they don't need to follow artists to onboard)
 export default function ProfileSetup() {
   const navigate = useNavigate();
-  const { user, artist } = useAuth();
+  const { user, artist, refreshProfile } = useAuth();
   const [stage, setStage] = useState('tour'); // 'tour' | 'follow'
 
-  const handleTourDone = () => {
-    // Artists skip the follow prompt — they're here to be followed, not follow
+  // Ensure a listener row exists so hasProfile = true and AppLayout
+  // doesn't redirect back to /setup after the tour completes
+  const ensureListenerProfile = async () => {
+    if (!user || artist) return; // artists already have a profile
+    try {
+      // Upsert into user_profiles so hasProfile = true in AuthContext
+      await supabase.from('user_profiles').upsert(
+        {
+          user_id:    user.id,
+          name:       user.user_metadata?.full_name || user.email?.split('@')[0] || 'Listener',
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'user_id', ignoreDuplicates: true }
+      );
+      await refreshProfile();
+    } catch (err) {
+      console.error('Listener profile create error:', err);
+    }
+  };
+
+  const handleTourDone = async () => {
     if (artist) {
       navigate('/');
     } else {
+      await ensureListenerProfile();
       setStage('follow');
     }
   };
 
-  const handleFollowDone = () => {
+  const handleFollowDone = async () => {
+    await ensureListenerProfile();
     navigate('/');
   };
 
