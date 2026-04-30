@@ -214,7 +214,7 @@ export default function LoginPage() {
         await signInWithEmail(email.trim(), password);
       } else {
         await signUpWithEmail(email.trim(), password);
-        setSuccess('Account created! Check your email to confirm, then sign in.');
+        setSuccess('Account created! Check your inbox for a confirmation email — if you don\'t see it, check your spam or junk folder.');
         setAuthMode('signin');
         setPassword('');
       }
