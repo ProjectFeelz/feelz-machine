@@ -551,6 +551,7 @@ function AccountTypeScreen({ user, supabase, refreshProfile, onListener, onArtis
 
   const handleArtistContinue = async () => {
     if (!artistName.trim()) { setError('Please enter your artist name'); return; }
+    if (!user?.id) { setError('Session not ready — please wait a moment and try again'); return; }
     setSaving(true); setError('');
     try {
       const { error: insertErr } = await supabase.from('artists').insert({
@@ -642,7 +643,7 @@ function AccountTypeScreen({ user, supabase, refreshProfile, onListener, onArtis
               {error && <p className="text-xs text-red-400">{error}</p>}
               <button
                 onClick={handleArtistContinue}
-                disabled={saving || !artistName.trim()}
+                disabled={saving || !artistName.trim() || !user?.id}
                 className="w-full py-4 rounded-2xl font-bold text-base bg-white text-black disabled:opacity-40 transition active:scale-[0.98] flex items-center justify-center space-x-2"
               >
                 {saving
