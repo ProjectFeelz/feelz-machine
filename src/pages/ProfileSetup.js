@@ -537,9 +537,10 @@ function ListenerWelcomeTour({ displayName, onDone }) {
 }
 
 // ── AccountTypeScreen ────────────────────────────────────────────────────────
-function AccountTypeScreen({ user, supabase, refreshProfile, onListener, onArtist }) {
+function AccountTypeScreen({ onListener, onArtist, initialScreen = 'type' }) {
+  const { user, refreshProfile, loading: authLoading } = useAuth();
   const [artistName, setArtistName]   = useState('');
-  const [showArtist, setShowArtist]   = useState(false);
+  const [showArtist, setShowArtist]   = useState(initialScreen === 'artist');
   const [saving, setSaving]           = useState(false);
   const [error, setError]             = useState('');
 
@@ -572,6 +573,7 @@ function AccountTypeScreen({ user, supabase, refreshProfile, onListener, onArtis
   };
 
   const handleListenerContinue = async () => {
+    sessionStorage.setItem('onboarding_type', 'listener');
     try {
       await supabase.from('user_profiles').upsert(
         { user_id: user.id, name: user.user_metadata?.full_name || user.email?.split('@')[0] || 'Listener', updated_at: new Date().toISOString() },
@@ -597,6 +599,7 @@ function AccountTypeScreen({ user, supabase, refreshProfile, onListener, onArtis
             <div className="space-y-3">
               <button
                 onClick={handleListenerContinue}
+                disabled={authLoading}
                 className="w-full flex items-center space-x-4 p-4 rounded-2xl border border-white/[0.08] bg-white/[0.03] hover:bg-white/[0.06] transition active:scale-[0.98] text-left"
               >
                 <div className="w-12 h-12 rounded-2xl bg-purple-500/15 flex items-center justify-center flex-shrink-0">
@@ -643,7 +646,7 @@ function AccountTypeScreen({ user, supabase, refreshProfile, onListener, onArtis
               {error && <p className="text-xs text-red-400">{error}</p>}
               <button
                 onClick={handleArtistContinue}
-                disabled={saving || !artistName.trim() || !user?.id}
+                disabled={saving || !artistName.trim() || !user?.id || authLoading}
                 className="w-full py-4 rounded-2xl font-bold text-base bg-white text-black disabled:opacity-40 transition active:scale-[0.98] flex items-center justify-center space-x-2"
               >
                 {saving
@@ -666,6 +669,19 @@ export default function ProfileSetup() {
   const { user, artist, refreshProfile } = useAuth();
   const [stage, setStage] = useState('type'); // 'type' | 'tour' | 'follow'
 
+  // If returning from email confirmation and user already chose a type, honour it
+  useEffect(() => {
+    if (!user?.id) return;
+    const savedType = sessionStorage.getItem('onboarding_type');
+    if (savedType === 'artist' && !artist) {
+      sessionStorage.removeItem('onboarding_type');
+      setStage('artist_name');
+    } else if (savedType === 'listener') {
+      sessionStorage.removeItem('onboarding_type');
+      setStage('tour');
+    }
+  }, [user?.id]); // eslint-disable-line
+
   const ensureListenerProfile = async () => {
     if (!user || artist) return;
     try {
@@ -678,8 +694,9 @@ export default function ProfileSetup() {
   };
 
   const handleSelectType = async (type) => {
+    // Store the chosen type so we can read it back after email confirmation redirect
+    sessionStorage.setItem('onboarding_type', type);
     if (type === 'artist') {
-      // Artists go straight to the app — they set up their profile in Hub
       navigate('/');
     } else {
       setStage('tour');
@@ -697,8 +714,9 @@ export default function ProfileSetup() {
   };
 
   // Account type selection screen
-  if (stage === 'type' && !artist) {
-    return <AccountTypeScreen user={user} supabase={supabase} refreshProfile={refreshProfile}
+  if ((stage === 'type' || stage === 'artist_name') && !artist) {
+    return <AccountTypeScreen
+      initialScreen={stage === 'artist_name' ? 'artist' : 'type'}
       onListener={() => setStage('tour')}
       onArtist={() => navigate('/')} />;
   }
