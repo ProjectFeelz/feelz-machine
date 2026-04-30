@@ -448,7 +448,7 @@ function ListenerWelcomeTour({ displayName, onDone }) {
       </div>
 
       {/* Progress bar */}
-      <div className="relative z-10 flex items-center space-x-1 px-6 mb-5">
+      <div className="relative z-10 flex items-center space-x-1 px-6 mb-5 max-w-lg mx-auto w-full">
         {SLIDES.map((_, i) => (
           <div key={i} className="flex-1 h-0.5 rounded-full overflow-hidden bg-white/[0.07]">
             <div
@@ -464,8 +464,9 @@ function ListenerWelcomeTour({ displayName, onDone }) {
       </div>
 
       {/* Slide */}
+      <div className="relative z-10 flex-1 flex flex-col items-center w-full">
       <div
-        className="relative z-10 flex-1 flex flex-col items-center justify-between px-6 pb-6"
+        className="flex flex-col items-center px-6 pb-6 w-full max-w-lg"
         style={{
           opacity: visible ? 1 : 0,
           transform: visible ? 'translateY(0)' : `translateY(${animDir > 0 ? '14px' : '-14px'})`,
@@ -473,7 +474,7 @@ function ListenerWelcomeTour({ displayName, onDone }) {
         }}
       >
         {/* Visual */}
-        <div className="flex items-center justify-center w-full py-6" style={{ minHeight: 200, maxHeight: 280 }}>
+        <div className="flex items-center justify-center w-full py-8" style={{ height: 220 }}>
           <SlideVisual slide={slide} />
         </div>
 
@@ -498,7 +499,7 @@ function ListenerWelcomeTour({ displayName, onDone }) {
         </div>
 
         {/* Nav */}
-        <div className="w-full max-w-sm flex items-center space-x-3">
+        <div className="w-full max-w-sm flex items-center space-x-3 mx-auto">
           {step > 0 && (
             <button
               onClick={prev}
@@ -520,6 +521,7 @@ function ListenerWelcomeTour({ displayName, onDone }) {
             )}
           </button>
         </div>
+      </div>
       </div>
 
       <style>{`
