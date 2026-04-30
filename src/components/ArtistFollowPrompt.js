@@ -191,7 +191,7 @@ export default function ArtistFollowPrompt({ onDone }) {
   if (step === 1) {
     return (
       <div className="fixed inset-0 z-[200] flex flex-col bg-black">
-      <div className="flex-1 flex flex-col w-full max-w-2xl mx-auto overflow-hidden">
+      <div className="flex-1 flex flex-col w-full max-w-2xl mx-auto">
         <div className="flex-shrink-0 px-6 pt-14 pb-4 text-center">
           <div className="w-12 h-12 rounded-2xl bg-purple-500/15 flex items-center justify-center mx-auto mb-4">
             <span className="text-2xl">🎵</span>
@@ -229,6 +229,8 @@ export default function ArtistFollowPrompt({ onDone }) {
           </div>
         </div>
 
+      </div>{/* end max-w wrapper */}
+
         <div className="fixed bottom-0 left-0 right-0 px-6 pb-10 pt-4 bg-gradient-to-t from-black via-black/95 to-transparent">
           <button
             onClick={handleGenreContinue}
@@ -248,14 +250,13 @@ export default function ArtistFollowPrompt({ onDone }) {
           )}
         </div>
       </div>
-      </div>
     );
   }
 
   // ── Step 2: Artist grid ─────────────────────────────────────────────────────
   return (
     <div className="fixed inset-0 z-[200] flex flex-col bg-black">
-      <div className="flex-1 flex flex-col w-full max-w-2xl mx-auto overflow-hidden">
+      <div className="flex-1 flex flex-col w-full max-w-2xl mx-auto">
       {/* Header */}
       <div className="flex-shrink-0 px-6 pt-14 pb-5 text-center">
         <div className="w-12 h-12 rounded-2xl bg-white/[0.06] flex items-center justify-center mx-auto mb-4">
@@ -408,6 +409,8 @@ export default function ArtistFollowPrompt({ onDone }) {
         </div>
       )}
 
+      </div>{/* end max-w wrapper */}
+
       {/* Continue */}
       <div className="fixed bottom-0 left-0 right-0 px-6 pb-10 pt-4 bg-gradient-to-t from-black via-black/95 to-transparent">
         <button
@@ -422,7 +425,6 @@ export default function ArtistFollowPrompt({ onDone }) {
             ? `Let's go  →  Following ${followCount}`
             : `Follow ${MIN_FOLLOWS - followCount} more to continue`}
         </button>
-      </div>
       </div>
     </div>
   );
