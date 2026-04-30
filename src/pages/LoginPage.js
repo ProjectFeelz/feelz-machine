@@ -8,9 +8,21 @@ import {
 
 // ── Pricing data (mirrors TierUpgradePage) ────────────────────────────────────
 const BASE_USD = {
-  pro:     { monthly: 2.00,  annual: 17.00 },
-  premium: { monthly: 5.00,  annual: 42.00 },
+  pro:     { monthly: 2.00,  annual: 17.00  },
+  premium: { monthly: 5.00,  annual: 42.00  },
 };
+
+function getPrice(tierKey, billingCycle, rate) {
+  if (tierKey === 'free') return null;
+  const usd = BASE_USD[tierKey][billingCycle];
+  return Math.round(usd * rate);
+}
+
+function savingPct(tierKey) {
+  const monthly = BASE_USD[tierKey].monthly * 12;
+  const annual  = BASE_USD[tierKey].annual;
+  return Math.round((1 - annual / monthly) * 100);
+}
 
 const CURRENCY_MAP = {
   ZA: { symbol: 'R',   rate: 18.5 },
@@ -75,12 +87,11 @@ const TIERS = [
   },
 ];
 
-function TierCard({ tier, symbol, rate }) {
+function TierCard({ tier, symbol, rate, billingCycle = 'monthly' }) {
   const [expanded, setExpanded] = useState(false);
   const Icon = tier.icon;
 
-  const usdPrice = tier.key !== 'free' ? BASE_USD[tier.key].monthly : null;
-  const localPrice = usdPrice ? Math.round(usdPrice * rate) : null;
+  const localPrice = getPrice(tier.key, billingCycle, rate);
 
   const visibleFeatures = expanded ? tier.features : tier.features.slice(0, 5);
 
@@ -109,10 +120,15 @@ function TierCard({ tier, symbol, rate }) {
         </div>
         <div className="text-right">
           {localPrice ? (
-            <>
-              <span className="text-lg font-bold text-white">{symbol}{localPrice}</span>
-              <span className="text-xs text-white/30">/mo</span>
-            </>
+            <div className="flex flex-col items-end">
+              <div className="flex items-baseline space-x-0.5">
+                <span className="text-lg font-bold text-white">{symbol}{localPrice}</span>
+                <span className="text-xs text-white/30">/{billingCycle === 'monthly' ? 'mo' : 'yr'}</span>
+              </div>
+              {billingCycle === 'annual' && tier.key !== 'free' && (
+                <span className="text-[9px] font-bold text-green-400">SAVE {savingPct(tier.key)}%</span>
+              )}
+            </div>
           ) : (
             <span className="text-lg font-bold text-white">Free</span>
           )}
@@ -161,8 +177,9 @@ export default function LoginPage() {
   const [success, setSuccess]           = useState('');
 
   // Currency detection
-  const [symbol, setSymbol] = useState('$');
-  const [rate, setRate]     = useState(1);
+  const [symbol,       setSymbol]       = useState('$');
+  const [rate,         setRate]         = useState(1);
+  const [billingCycle, setBillingCycle] = useState('monthly');
 
   useEffect(() => {
     if (user) navigate(redirectTo || '/', { replace: true });
@@ -221,28 +238,6 @@ export default function LoginPage() {
         <div className="text-center mb-10">
           <h1 className="text-3xl font-bold text-white mb-2">Feelz Machine</h1>
           <p className="text-sm text-white/40">Independent music, no middlemen</p>
-        </div>
-
-        {/* ── Pricing section ──────────────────────────────────────────────── */}
-        <div className="mb-10">
-          <p className="text-[10px] uppercase tracking-widest text-white/30 font-semibold mb-4 text-center">
-            Artist Plans
-          </p>
-          <div className="space-y-3">
-            {TIERS.map(tier => (
-              <TierCard key={tier.key} tier={tier} symbol={symbol} rate={rate} />
-            ))}
-          </div>
-          <p className="text-center text-[11px] text-white/20 mt-4">
-            Listeners always sign up free · Artists choose their plan after joining
-          </p>
-        </div>
-
-        {/* ── Divider ──────────────────────────────────────────────────────── */}
-        <div className="flex items-center space-x-3 mb-6">
-          <div className="flex-1 h-px bg-white/[0.07]" />
-          <span className="text-xs text-white/25">Get started</span>
-          <div className="flex-1 h-px bg-white/[0.07]" />
         </div>
 
         {/* ── Auth section ─────────────────────────────────────────────────── */}
@@ -342,6 +337,42 @@ export default function LoginPage() {
             </svg>
             <span>Continue with Google</span>
           </button>
+        </div>
+
+        {/* ── Pricing section ──────────────────────────────────────────────── */}
+        <div className="mt-10">
+          <div className="flex items-center space-x-3 mb-6">
+            <div className="flex-1 h-px bg-white/[0.07]" />
+            <span className="text-xs text-white/25">Artist Plans</span>
+            <div className="flex-1 h-px bg-white/[0.07]" />
+          </div>
+
+          {/* Billing toggle */}
+          <div className="flex bg-white/[0.05] rounded-xl p-1 mb-5">
+            {['monthly', 'annual'].map(cycle => (
+              <button key={cycle}
+                onClick={() => setBillingCycle(cycle)}
+                className={`flex-1 py-2 rounded-lg text-sm font-semibold transition flex items-center justify-center space-x-1.5 ${
+                  billingCycle === cycle ? 'bg-white text-black' : 'text-white/40 hover:text-white/60'
+                }`}>
+                <span>{cycle === 'monthly' ? 'Monthly' : 'Annual'}</span>
+                {cycle === 'annual' && (
+                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-green-500/20 text-green-400">
+                    SAVE 30%
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+
+          <div className="space-y-3">
+            {TIERS.map(tier => (
+              <TierCard key={tier.key} tier={tier} symbol={symbol} rate={rate} billingCycle={billingCycle} />
+            ))}
+          </div>
+          <p className="text-center text-[11px] text-white/20 mt-4">
+            Listeners always sign up free · Artists choose their plan after joining
+          </p>
         </div>
 
         {/* Terms */}
