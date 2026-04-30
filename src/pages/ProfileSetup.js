@@ -6,9 +6,9 @@ import ArtistFollowPrompt from '../components/ArtistFollowPrompt';
 import React, { useState, useEffect } from 'react';
 import {
   Music, Bell, Trophy, Heart, MessageCircle,
-  ArrowRight, ChevronLeft, Sparkles, Headphones,
-  TrendingUp, DollarSign, Users, Flame, Play,
-  Download, Check,
+  ArrowRight, ChevronLeft, Sparkles, Headphones, TrendingUp,
+  DollarSign, Users, Flame, Play, Download,
+  Check, Loader
 } from 'lucide-react';
 
 // ── Slides ────────────────────────────────────────────────────────────────────
