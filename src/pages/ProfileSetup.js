@@ -600,24 +600,24 @@ function AccountTypeScreen({ onListener, onArtist, initialScreen = 'type' }) {
               <button
                 onClick={handleListenerContinue}
                 disabled={authLoading}
-                className="w-full flex items-center space-x-4 p-4 rounded-2xl border border-white/[0.08] bg-white/[0.03] hover:bg-white/[0.06] transition active:scale-[0.98] text-left"
+                className="w-full flex items-center space-x-4 p-4 rounded-2xl border border-cyan-500/20 bg-gradient-to-br from-cyan-500/10 to-transparent hover:border-cyan-500/35 hover:from-cyan-500/15 transition active:scale-[0.98] text-left group"
               >
-                <div className="w-12 h-12 rounded-2xl bg-purple-500/15 flex items-center justify-center flex-shrink-0">
-                  <span className="text-2xl">🎧</span>
+                <div className="w-11 h-11 rounded-2xl bg-cyan-500/15 flex items-center justify-center flex-shrink-0 group-hover:bg-cyan-500/20 transition">
+                  <span className="text-xl">🎧</span>
                 </div>
-                <div>
+                <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-white">I'm a listener</p>
                   <p className="text-xs text-white/40 mt-0.5">Discover and support independent music</p>
                 </div>
               </button>
               <button
                 onClick={() => setShowArtist(true)}
-                className="w-full flex items-center space-x-4 p-4 rounded-2xl border border-purple-500/30 bg-purple-500/[0.06] hover:bg-purple-500/[0.1] transition active:scale-[0.98] text-left"
+                className="w-full flex items-center space-x-4 p-4 rounded-2xl border border-purple-500/25 bg-gradient-to-br from-purple-500/10 to-transparent hover:border-purple-500/40 hover:from-purple-500/15 transition active:scale-[0.98] text-left group"
               >
-                <div className="w-12 h-12 rounded-2xl bg-purple-500/20 flex items-center justify-center flex-shrink-0">
-                  <span className="text-2xl">🎤</span>
+                <div className="w-11 h-11 rounded-2xl bg-purple-500/20 flex items-center justify-center flex-shrink-0 group-hover:bg-purple-500/25 transition">
+                  <span className="text-xl">🎤</span>
                 </div>
-                <div>
+                <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-white">I'm an artist</p>
                   <p className="text-xs text-white/40 mt-0.5">Upload music and connect with fans</p>
                 </div>
