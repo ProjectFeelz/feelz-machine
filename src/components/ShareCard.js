@@ -18,13 +18,16 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
   const [ready, setReady]           = useState(false);
   const [sharing, setSharing]       = useState(false);
   const [copied, setCopied]         = useState(false);
-  const [recording, setRecording]   = useState(false);
-  const [videoBlob, setVideoBlob]   = useState(null);
-  const [videoProgress, setVideoProgress] = useState(0); // 0-100
-  const [videoError, setVideoError] = useState('');
+  const [recording, setRecording]     = useState(false);
+  const [videoBlob, setVideoBlob]     = useState(null);
+  const [videoProgress, setVideoProgress] = useState(0);
+  const [videoError, setVideoError]   = useState('');
+  const [startTime, setStartTime]     = useState(0); // seconds into track
+  const [duration, setDuration]       = useState(30); // track duration for slider
 
-  const canvasRef   = useRef(null);
-  const videoRef    = useRef(null);
+  const canvasRef    = useRef(null);
+  const videoRef     = useRef(null);
+  const previewRef   = useRef(null); // live preview canvas
   const animFrameRef = useRef(null);
   const recorderRef  = useRef(null);
   const chunksRef    = useRef([]);
@@ -46,10 +49,28 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
     canvas.width  = W;
     canvas.height = H;
 
-    const bg = ctx.createLinearGradient(0, 0, W, H);
-    bg.addColorStop(0, '#0a0a0a');
-    bg.addColorStop(1, '#111111');
-    ctx.fillStyle = bg;
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(0, 0, W, H);
+
+    if (artworkUrl) {
+      // Subtle artwork bleed for depth — matches app aesthetic
+      try {
+        const bgImg = await loadImage(artworkUrl);
+        ctx.save();
+        ctx.globalAlpha = 0.12;
+        ctx.filter = 'blur(100px)';
+        ctx.drawImage(bgImg, -100, -100, W + 200, H * 0.6);
+        ctx.filter = 'none';
+        ctx.globalAlpha = 1;
+        ctx.restore();
+      } catch {}
+    }
+
+    // Purple glow at top
+    const topGlow = ctx.createRadialGradient(W/2, 0, 0, W/2, 0, H * 0.55);
+    topGlow.addColorStop(0,   'rgba(88,28,220,0.15)');
+    topGlow.addColorStop(1,   'rgba(0,0,0,0)');
+    ctx.fillStyle = topGlow;
     ctx.fillRect(0, 0, W, H);
 
     if (artworkUrl) {
@@ -87,21 +108,54 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
     ctx.font = '40px -apple-system, BlinkMacSystemFont, sans-serif';
     const subtitleLines = Math.ceil(title.length / 20);
     ctx.fillText(subtitle, W / 2, titleY + subtitleLines * 76);
-    ctx.fillStyle = 'rgba(255,255,255,0.25)';
-    ctx.font = '32px -apple-system, BlinkMacSystemFont, sans-serif';
+    // FM logo — top left
+    await drawFMLogo(ctx, 60, 60, 100);
+
+    // Track URL — full link, bottom
+    const trackLink = shareUrl || `feelzmachine.com`;
+    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    ctx.font = '28px -apple-system, BlinkMacSystemFont, sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText(displayUrl, W / 2, H - 60);
-    ctx.fillStyle = 'rgba(139,92,246,0.7)';
-    ctx.beginPath(); ctx.arc(W / 2 - 210, H - 44, 5, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.arc(W / 2 + 210, H - 44, 5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillText(trackLink.replace('https://', ''), W / 2, H - 56);
+    // Dots
+    ctx.fillStyle = 'rgba(140,171,46,0.8)';
+    ctx.beginPath(); ctx.arc(W / 2 - 240, H - 40, 5, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(W / 2 + 240, H - 40, 5, 0, Math.PI * 2); ctx.fill();
 
     setReady(true);
   }, [tab, title, subtitle, artworkUrl, displayUrl]);
 
   useEffect(() => {
     if (tab === 'image') { setReady(false); drawImageCard(); }
-    else { setReady(true); }
-  }, [tab, drawImageCard]);
+    else {
+      setReady(true);
+      if (audioUrl) {
+        const a = new window.Audio();
+        a.src = audioUrl;
+        a.onloadedmetadata = () => setDuration(Math.floor(a.duration) || 30);
+      }
+    }
+  }, [tab, drawImageCard, audioUrl]);
+
+  // Render a static preview frame when on video tab
+  useEffect(() => {
+    if (tab !== 'video' || recording) return;
+    const canvas = previewRef.current;
+    if (!canvas) return;
+    canvas.width  = 1080;
+    canvas.height = 1920;
+    const ctx = canvas.getContext('2d');
+    let cancelled = false;
+    (async () => {
+      let artImg = null;
+      if (artworkUrl) { try { artImg = await loadImage(artworkUrl); } catch {} }
+      if (cancelled) return;
+      const vinylImg = await buildVinylImage(artImg, 840);
+      if (cancelled) return;
+      await drawVideoFrame(ctx, artImg, vinylImg, 0);
+    })();
+    return () => { cancelled = true; };
+  }, [tab, artworkUrl, recording, buildVinylImage, drawVideoFrame]);
 
   // ── SVG vinyl to canvas image ────────────────────────────────────────────────
   // Renders the VinylRecord SVG to an HTMLImageElement so the canvas draw
@@ -126,14 +180,23 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
 
       let labelContent = '';
       if (artImg) {
-        // Embed artwork as base64 data URI inside SVG
-        const offscreen = window.document.createElement('canvas');
-        offscreen.width = offscreen.height = labelR * 2;
-        const octx = offscreen.getContext('2d');
-        octx.drawImage(artImg, 0, 0, labelR * 2, labelR * 2);
         try {
-          const dataUrl = offscreen.toDataURL('image/jpeg', 0.9);
-          labelContent = `<image href="${dataUrl}" x="${r - labelR}" y="${r - labelR}" width="${labelR * 2}" height="${labelR * 2}" clip-path="url(#${clipId})" preserveAspectRatio="xMidYMid slice"/>`;
+          // Draw artwork into offscreen canvas and embed as data URI in SVG
+          const lSize = Math.round(labelR * 2);
+          const offscreen = window.document.createElement('canvas');
+          offscreen.width  = lSize;
+          offscreen.height = lSize;
+          const octx = offscreen.getContext('2d');
+          // Fill black first so transparent PNGs look right
+          octx.fillStyle = '#000';
+          octx.fillRect(0, 0, lSize, lSize);
+          octx.drawImage(artImg, 0, 0, lSize, lSize);
+          const dataUrl = offscreen.toDataURL('image/jpeg', 0.92);
+          if (dataUrl && dataUrl.startsWith('data:image')) {
+            labelContent = `<image href="${dataUrl}" x="${r - labelR}" y="${r - labelR}" width="${lSize}" height="${lSize}" clip-path="url(#${clipId})" preserveAspectRatio="xMidYMid slice"/>`;
+          } else {
+            labelContent = `<circle cx="${r}" cy="${r}" r="${labelR}" fill="rgba(139,92,246,0.3)"/>`;
+          }
         } catch {
           labelContent = `<circle cx="${r}" cy="${r}" r="${labelR}" fill="rgba(139,92,246,0.3)"/>`;
         }
@@ -190,29 +253,49 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
   const drawVideoFrame = useCallback(async (ctx, artImg, vinylImg, angle) => {
     const W = 1080, H = 1920;
 
-    // Background — blurred artwork
-    ctx.fillStyle = '#060606';
+    // Background — app's pitch black with subtle purple tint like the full player
+    ctx.fillStyle = '#000000';
     ctx.fillRect(0, 0, W, H);
+
     if (artImg) {
+      // Very subtle blurred artwork at low opacity — just enough to add depth
       ctx.save();
-      ctx.globalAlpha = 0.3;
-      ctx.filter = 'blur(80px)';
-      ctx.drawImage(artImg, -100, -100, W + 200, H + 200);
+      ctx.globalAlpha = 0.12;
+      ctx.filter = 'blur(120px)';
+      ctx.drawImage(artImg, -200, -200, W + 400, H * 0.7);
       ctx.filter = 'none';
       ctx.globalAlpha = 1;
       ctx.restore();
     }
 
-    // Dark vignette overlay
-    const vignette = ctx.createRadialGradient(W/2, H/2, H*0.2, W/2, H/2, H*0.85);
-    vignette.addColorStop(0, 'rgba(0,0,0,0)');
-    vignette.addColorStop(1, 'rgba(0,0,0,0.75)');
-    ctx.fillStyle = vignette;
+    // Purple ambient glow at top — matches app's header glow
+    const topGlow = ctx.createRadialGradient(W/2, 0, 0, W/2, 0, H * 0.5);
+    topGlow.addColorStop(0,   'rgba(88,28,220,0.18)');
+    topGlow.addColorStop(0.5, 'rgba(88,28,220,0.06)');
+    topGlow.addColorStop(1,   'rgba(0,0,0,0)');
+    ctx.fillStyle = topGlow;
+    ctx.fillRect(0, 0, W, H);
+
+    // Bottom fade to pure black
+    const bottomFade = ctx.createLinearGradient(0, H * 0.65, 0, H);
+    bottomFade.addColorStop(0, 'rgba(0,0,0,0)');
+    bottomFade.addColorStop(1, 'rgba(0,0,0,0.95)');
+    ctx.fillStyle = bottomFade;
     ctx.fillRect(0, 0, W, H);
 
     // ── Vinyl disc — drawn from pre-built SVG image ────────────────────────────
     const vinylSize = 840;
     const cx = W / 2, cy = H / 2;
+    const r  = vinylSize / 2;
+
+    // Drop shadow BEFORE vinyl so it appears behind it
+    const shadow = ctx.createRadialGradient(cx, cy + r - 40, 0, cx, cy + r - 40, r * 0.85);
+    shadow.addColorStop(0,   'rgba(0,0,0,0.7)');
+    shadow.addColorStop(0.4, 'rgba(0,0,0,0.3)');
+    shadow.addColorStop(1,   'rgba(0,0,0,0)');
+    ctx.fillStyle = shadow;
+    ctx.fillRect(cx - r, cy - 60, r * 2, r + 120);
+
     if (vinylImg) {
       ctx.save();
       ctx.translate(cx, cy);
@@ -220,14 +303,6 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
       ctx.drawImage(vinylImg, -vinylSize / 2, -vinylSize / 2, vinylSize, vinylSize);
       ctx.restore();
     }
-
-    // Drop shadow under vinyl
-    const r = vinylSize / 2;
-    const shadow = ctx.createRadialGradient(cx, cy + r + 30, 0, cx, cy + r + 30, r * 0.8);
-    shadow.addColorStop(0, 'rgba(0,0,0,0.5)');
-    shadow.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = shadow;
-    ctx.fillRect(cx - r, cy + r - 20, r * 2, 120);
 
     // ── Text ───────────────────────────────────────────────────────────────────
     const textY = cy + r + 80;
@@ -241,13 +316,19 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
     ctx.font = '48px -apple-system, BlinkMacSystemFont, sans-serif';
     ctx.fillText(subtitle, W / 2, textY + titleLines * 88);
 
-    // Branding
-    ctx.fillStyle = 'rgba(255,255,255,0.2)';
-    ctx.font = '36px -apple-system, BlinkMacSystemFont, sans-serif';
-    ctx.fillText(displayUrl, W / 2, H - 80);
-    ctx.fillStyle = 'rgba(139,92,246,0.7)';
-    ctx.beginPath(); ctx.arc(W/2 - 240, H - 62, 6, 0, Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.arc(W/2 + 240, H - 62, 6, 0, Math.PI*2); ctx.fill();
+    // FM logo — top left corner
+    await drawFMLogo(ctx, 60, 80, 120);
+
+    // Track URL — full shareable link
+    const trackLink = displayUrl;
+    ctx.fillStyle = 'rgba(255,255,255,0.55)';
+    ctx.font = '34px -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(trackLink, W / 2, H - 72);
+    // Accent dots
+    ctx.fillStyle = 'rgba(140,171,46,0.8)';
+    ctx.beginPath(); ctx.arc(W/2 - 280, H - 54, 6, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(W/2 + 280, H - 54, 6, 0, Math.PI*2); ctx.fill();
   }, [title, subtitle, artworkUrl, displayUrl]);
 
   // ── Record video ─────────────────────────────────────────────────────────────
@@ -278,7 +359,7 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
     const RPM      = 33.3;
     const radsPerFrame = (RPM / 60) * 2 * Math.PI / FPS;
 
-    // Audio
+    // Audio — start from user-selected time offset
     let audioStream = null;
     let audioCtx    = null;
     let sourceNode  = null;
@@ -293,7 +374,7 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
         sourceNode.buffer = decoded;
         sourceNode.connect(dest);
         sourceNode.connect(audioCtx.destination);
-        sourceNode.start(0);
+        sourceNode.start(0, startTime); // start from selected offset
         audioStream = dest.stream;
       } catch (e) {
         console.warn('Audio capture failed:', e.message);
@@ -423,7 +504,7 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
     <div className="fixed inset-0 z-[200] flex items-end md:items-center justify-center bg-black/80 backdrop-blur-sm"
       onClick={onClose}>
       <div
-        className="relative w-full max-w-sm mx-4 mb-6 md:mb-0 rounded-3xl overflow-hidden"
+        className="relative w-full max-w-sm mx-4 mb-6 md:mb-0 rounded-3xl overflow-y-auto"
         style={{ backgroundColor: '#111', border: '1px solid rgba(255,255,255,0.08)' }}
         onClick={e => e.stopPropagation()}
       >
@@ -469,20 +550,11 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
               {/* Hidden recording canvas */}
               <canvas ref={videoRef} className="hidden" />
 
-              <div className="rounded-2xl bg-white/[0.04] aspect-[9/16] flex flex-col items-center justify-center space-y-4 relative overflow-hidden">
-                {!recording && !videoBlob && (
-                  <>
-                    <div className="w-20 h-20 rounded-full bg-purple-500/15 flex items-center justify-center">
-                      <Film className="w-8 h-8 text-purple-400" />
-                    </div>
-                    <div className="text-center px-6">
-                      <p className="text-sm font-semibold text-white mb-1">30-second Story video</p>
-                      <p className="text-xs text-white/30">Spinning vinyl with your track audio — ready to share to Instagram Stories</p>
-                    </div>
-                  </>
-                )}
+              {/* Preview — shows a static frame of how the video will look */}
+              <div className="rounded-2xl bg-black aspect-[9/16] relative overflow-hidden flex items-center justify-center">
+                <canvas ref={previewRef} className="w-full h-full object-contain" />
                 {recording && (
-                  <>
+                  <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/60 space-y-3">
                     <div className="w-16 h-16 relative">
                       <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
                         <circle cx="18" cy="18" r="15.9" fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="2" />
@@ -491,22 +563,42 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
                       </svg>
                       <span className="absolute inset-0 flex items-center justify-center text-xs font-bold text-white">{videoProgress}%</span>
                     </div>
-                    <p className="text-xs text-white/40">Rendering video...</p>
-                  </>
+                    <p className="text-xs text-white/60">Rendering...</p>
+                  </div>
                 )}
                 {videoBlob && !recording && (
-                  <>
-                    <div className="w-16 h-16 rounded-full bg-green-500/15 flex items-center justify-center">
-                      <Check className="w-8 h-8 text-green-400" />
+                  <div className="absolute bottom-4 left-0 right-0 flex justify-center">
+                    <div className="px-3 py-1.5 rounded-full bg-green-500/20 border border-green-500/30 flex items-center space-x-1.5">
+                      <Check className="w-3 h-3 text-green-400" />
+                      <span className="text-xs font-semibold text-green-400">Ready to share</span>
                     </div>
-                    <p className="text-sm font-semibold text-white">Video ready!</p>
-                    <p className="text-xs text-white/30 text-center px-6">Share directly to Instagram Stories or save to camera roll</p>
-                  </>
+                  </div>
                 )}
               </div>
 
+              {/* Start time picker */}
+              {audioUrl && !recording && (
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <p className="text-[11px] text-white/40">Start from</p>
+                    <p className="text-[11px] text-white/60 font-medium">
+                      {Math.floor(startTime / 60)}:{String(startTime % 60).padStart(2, '0')}
+                    </p>
+                  </div>
+                  <input
+                    type="range"
+                    min={0}
+                    max={Math.max(0, duration - 30)}
+                    value={startTime}
+                    onChange={e => { setStartTime(Number(e.target.value)); setVideoBlob(null); }}
+                    className="w-full accent-purple-500"
+                  />
+                  <p className="text-[10px] text-white/20">Drag to choose which 30 seconds to use</p>
+                </div>
+              )}
+
               {!audioUrl && (
-                <p className="text-[10px] text-amber-400/60 text-center">No audio on this track — video will be visual only</p>
+                <p className="text-[10px] text-amber-400/60 text-center">No audio — video will be visual only</p>
               )}
             </div>
           )}
@@ -575,6 +667,35 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
       </div>
     </div>
   );
+}
+
+// ── FM Logo + branding helpers ───────────────────────────────────────────────
+
+// Loads and caches the FM logo image
+let _fmLogoCache = null;
+async function getFMLogo() {
+  if (_fmLogoCache) return _fmLogoCache;
+  return new Promise((resolve) => {
+    const img = new window.Image();
+    img.crossOrigin = 'anonymous';
+    img.onload  = () => { _fmLogoCache = img; resolve(img); };
+    img.onerror = () => resolve(null);
+    img.src = '/logo.png';
+  });
+}
+
+// Draws the FM logo onto the canvas at position (x, y) with given size
+async function drawFMLogo(ctx, x, y, size) {
+  const img = await getFMLogo();
+  if (img) {
+    ctx.save();
+    // Clip to rounded square
+    ctx.beginPath();
+    roundRect(ctx, x, y, size, size, size * 0.22);
+    ctx.clip();
+    ctx.drawImage(img, x, y, size, size);
+    ctx.restore();
+  }
 }
 
 // ── Canvas helpers ─────────────────────────────────────────────────────────────
