@@ -31,6 +31,19 @@ function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
   ctx.fillText(line.trim(), x, lineY);
 }
 
+// Load ffmpeg.wasm v0.11 via CDN script tag — avoids bundler issues
+let _ffmpegLoaded = false;
+function loadFFmpegScript() {
+  return new Promise((resolve, reject) => {
+    if (_ffmpegLoaded || window.FFmpeg) { _ffmpegLoaded = true; resolve(); return; }
+    const script = document.createElement('script');
+    script.src = 'https://unpkg.com/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js';
+    script.onload  = () => { _ffmpegLoaded = true; resolve(); };
+    script.onerror = reject;
+    document.head.appendChild(script);
+  });
+}
+
 function proxyUrl(src) {
   return '/.netlify/functions/image-proxy?url=' + encodeURIComponent(src);
 }
@@ -103,6 +116,7 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
   const [duration, setDuration]       = useState(30);
   const [videoFormat, setVideoFormat]   = useState('');
   const [converting, setConverting]     = useState(false);
+  const [bgColor, setBgColor]           = useState('#0d0d0d');
 
   const canvasRef    = useRef(null);
   const videoRef     = useRef(null);
@@ -307,11 +321,12 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
   }, []);
 
   // ── Video frame draw ────────────────────────────────────────────────────────
-  const drawVideoFrame = useCallback(async (ctx, artImg, vinylImg, angle) => {
+  const drawVideoFrame = useCallback(async (ctx, artImg, vinylImg, angle, bgOverride) => {
     const W = 1080, H = 1920;
 
-    // Background — app's pitch black with subtle purple tint like the full player
-    ctx.fillStyle = '#0d0d0d';
+    // Background — user selected colour with subtle artwork bleed
+    const baseBg = bgOverride || '#0d0d0d';
+    ctx.fillStyle = baseBg;
     ctx.fillRect(0, 0, W, H);
 
     if (artImg) {
@@ -409,7 +424,7 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
     ctx.fillStyle = 'rgba(140,171,46,0.6)';
     ctx.beginPath(); ctx.arc(W/2 - 220, H - 54, 5, 0, Math.PI*2); ctx.fill();
     ctx.beginPath(); ctx.arc(W/2 + 220, H - 54, 5, 0, Math.PI*2); ctx.fill();
-  }, [title, subtitle, artworkUrl, displayUrl]);
+  }, [title, subtitle, artworkUrl, displayUrl, bgColor]);
 
   // Render a static preview frame when on video tab
   useEffect(() => {
@@ -426,7 +441,7 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
       if (cancelled) return;
       const vinylImg = await buildVinylImage(artImg, 840);
       if (cancelled) return;
-      await drawVideoFrame(ctx, artImg, vinylImg, 0);
+      await drawVideoFrame(ctx, artImg, vinylImg, 0, bgColor);
     })();
     return () => { cancelled = true; };
   }, [tab, artworkUrl, recording, buildVinylImage, drawVideoFrame]);
@@ -510,26 +525,19 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
       if (sourceNode) try { sourceNode.stop(); } catch {}
       if (audioCtx)   try { audioCtx.close();  } catch {}
 
-      // Convert WebM → MP4 using ffmpeg.wasm (runs in-browser, no server needed)
+      // Convert WebM → MP4 using ffmpeg.wasm v0.11 via CDN script tag
       try {
-        // Dynamically import ffmpeg to avoid loading it until needed
-        const { FFmpeg } = await import('@ffmpeg/ffmpeg');
-        const { fetchFile, toBlobURL } = await import('@ffmpeg/util');
-
-        const ffmpeg = new FFmpeg();
-
-        // Load ffmpeg.wasm — uses single-threaded mode (no COOP/COEP headers needed)
-        const baseURL = 'https://unpkg.com/@ffmpeg/core-mt@0.12.6/dist/esm';
-        await ffmpeg.load({
-          coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`,   'text/javascript'),
-          wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
+        await loadFFmpegScript();
+        const { createFFmpeg, fetchFile } = window.FFmpeg;
+        const ffmpeg = createFFmpeg({
+          corePath: 'https://unpkg.com/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js',
+          log: false,
         });
+        await ffmpeg.load();
 
-        // Write the WebM file into ffmpeg's virtual FS
-        await ffmpeg.writeFile('input.webm', await fetchFile(webmBlob));
+        ffmpeg.FS('writeFile', 'input.webm', await fetchFile(webmBlob));
 
-        // Convert: H264 + AAC + faststart + yuv420p (Instagram requirements)
-        await ffmpeg.exec([
+        await ffmpeg.run(
           '-i', 'input.webm',
           '-c:v', 'libx264',
           '-preset', 'ultrafast',
@@ -538,17 +546,18 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
           '-b:a', '128k',
           '-movflags', '+faststart',
           '-pix_fmt', 'yuv420p',
-          'output.mp4',
-        ]);
+          'output.mp4'
+        );
 
-        const mp4Data = await ffmpeg.readFile('output.mp4');
+        const mp4Data = ffmpeg.FS('readFile', 'output.mp4');
         const mp4Blob = new window.Blob([mp4Data.buffer], { type: 'video/mp4' });
         mp4Blob._ext  = 'mp4';
         setVideoBlob(mp4Blob);
         setVideoFormat('MP4');
+        try { ffmpeg.FS('unlink', 'input.webm'); } catch {}
+        try { ffmpeg.FS('unlink', 'output.mp4'); } catch {}
       } catch (err) {
         console.error('FFmpeg.wasm conversion error:', err);
-        // Fall back to WebM — user can still save it
         webmBlob._ext = 'webm';
         setVideoBlob(webmBlob);
         setVideoFormat('WEBM');
@@ -572,7 +581,7 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
         return;
       }
       const frameStart = performance.now();
-      await drawVideoFrame(ctx, artImg, vinylImg, angle);
+      await drawVideoFrame(ctx, artImg, vinylImg, angle, bgColor);
       angle += radsPerFrame;
       frame++;
       setVideoProgress(Math.round((frame / totalFrames) * 95));
@@ -760,6 +769,34 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
                   </div>
                 )}
               </div>
+
+              {/* Background colour picker */}
+              {!recording && (
+                <div className="space-y-2">
+                  <p className="text-[11px] text-white/40">Background</p>
+                  <div className="flex space-x-2">
+                    {[
+                      { color: '#0d0d0d', label: 'Black' },
+                      { color: '#0a0a1a', label: 'Dark Blue' },
+                      { color: '#0d0a14', label: 'Dark Purple' },
+                      { color: '#0a140a', label: 'Dark Green' },
+                      { color: '#14080a', label: 'Dark Red' },
+                      { color: '#1a1008', label: 'Dark Amber' },
+                    ].map(({ color, label }) => (
+                      <button
+                        key={color}
+                        onClick={() => { setBgColor(color); setVideoBlob(null); setVideoProgress(0); }}
+                        title={label}
+                        className="w-8 h-8 rounded-lg border-2 transition"
+                        style={{
+                          backgroundColor: color,
+                          borderColor: bgColor === color ? '#8CAB2E' : 'rgba(255,255,255,0.1)',
+                        }}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Start time picker */}
               {audioUrl && !recording && (
