@@ -37,17 +37,20 @@ function proxyUrl(src) {
 
 function loadImage(src) {
   return new Promise(function(resolve, reject) {
+    // Try direct load first with cache-bust to prevent stale responses
     var img = new window.Image();
     img.crossOrigin = 'anonymous';
     img.onload  = function() { resolve(img); };
     img.onerror = function() {
+      // Fallback: try via proxy
       var img2 = new window.Image();
       img2.crossOrigin = 'anonymous';
       img2.onload  = function() { resolve(img2); };
       img2.onerror = reject;
-      img2.src = src;
+      img2.src = proxyUrl(src);
     };
-    img.src = proxyUrl(src);
+    // Cache-bust so each unique URL gets a fresh load
+    img.src = src + (src.includes('?') ? '&' : '?') + '_cb=' + Date.now();
   });
 }
 
