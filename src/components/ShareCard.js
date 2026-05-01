@@ -1,53 +1,9 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { Download, Share2, X, Loader, Link, Check, Film, Image } from 'lucide-react';
 
-// ── Helper functions — defined before component to avoid temporal dead zone ───
+// ── Helper functions — all defined as hoisted function declarations ──────────
 
-let _fmLogoCache = null;
-async function getFMLogo() {
-  if (_fmLogoCache) return _fmLogoCache;
-  return new Promise((resolve) => {
-    const img = new window.Image();
-    img.crossOrigin = 'anonymous';
-    img.onload  = () => { _fmLogoCache = img; resolve(img); };
-    img.onerror = () => resolve(null);
-    img.src = '/logo.png';
-  });
-}
-
-async function drawFMLogo(ctx, x, y, size) {
-  const img = await getFMLogo();
-  if (img) {
-    ctx.save();
-    ctx.beginPath();
-    roundRect(ctx, x, y, size, size, size * 0.22);
-    ctx.clip();
-    ctx.drawImage(img, x, y, size, size);
-    ctx.restore();
-  }
-}
-
-function proxyUrl(src) {
-  return `/.netlify/functions/image-proxy?url=${encodeURIComponent(src)}`;
-}
-
-function loadImage(src) {
-  return new Promise((resolve, reject) => {
-    const proxied = proxyUrl(src);
-    const img = new window.Image();
-    img.crossOrigin = 'anonymous';
-    img.onload  = () => resolve(img);
-    img.onerror = () => {
-      const img2 = new window.Image();
-      img2.crossOrigin = 'anonymous';
-      img2.onload  = () => resolve(img2);
-      img2.onerror = reject;
-      img2.src = src;
-    };
-    img.src = proxied;
-  });
-}
-
+// roundRect first — used by drawFMLogo below
 function roundRect(ctx, x, y, w, h, r) {
   ctx.beginPath();
   ctx.moveTo(x + r, y);
@@ -73,6 +29,50 @@ function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
     } else { line = testLine; }
   }
   ctx.fillText(line.trim(), x, lineY);
+}
+
+function proxyUrl(src) {
+  return '/.netlify/functions/image-proxy?url=' + encodeURIComponent(src);
+}
+
+function loadImage(src) {
+  return new Promise(function(resolve, reject) {
+    var img = new window.Image();
+    img.crossOrigin = 'anonymous';
+    img.onload  = function() { resolve(img); };
+    img.onerror = function() {
+      var img2 = new window.Image();
+      img2.crossOrigin = 'anonymous';
+      img2.onload  = function() { resolve(img2); };
+      img2.onerror = reject;
+      img2.src = src;
+    };
+    img.src = proxyUrl(src);
+  });
+}
+
+// FM logo cache and loader
+var _fmLogoImg = null;
+function getFMLogo() {
+  return new Promise(function(resolve) {
+    if (_fmLogoImg) { resolve(_fmLogoImg); return; }
+    var img = new window.Image();
+    img.crossOrigin = 'anonymous';
+    img.onload  = function() { _fmLogoImg = img; resolve(img); };
+    img.onerror = function() { resolve(null); };
+    img.src = '/logo.png';
+  });
+}
+
+function drawFMLogo(ctx, x, y, size) {
+  return getFMLogo().then(function(img) {
+    if (!img) return;
+    ctx.save();
+    roundRect(ctx, x, y, size, size, size * 0.22);
+    ctx.clip();
+    ctx.drawImage(img, x, y, size, size);
+    ctx.restore();
+  });
 }
 
 /**
