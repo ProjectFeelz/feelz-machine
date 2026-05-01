@@ -487,15 +487,13 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
     const combined = new MediaStream(combinedTracks);
 
     // Pick best supported codec
-    // Try MP4 first (Instagram Stories requires MP4), fall back to WebM
+    // WebM with VP9+Opus — universally supported by Chrome on all platforms
     const mimeType = [
-      'video/mp4;codecs=h264,aac',
-      'video/mp4',
       'video/webm;codecs=vp9,opus',
       'video/webm;codecs=vp8,opus',
       'video/webm',
     ].find(t => window.MediaRecorder && window.MediaRecorder.isTypeSupported(t)) || 'video/webm';
-    const fileExt = mimeType.startsWith('video/mp4') ? 'mp4' : 'webm';
+    const fileExt = 'webm';
 
     const recorder = new window.MediaRecorder(combined, { mimeType, videoBitsPerSecond: 8_000_000 });
     recorderRef.current = recorder;
@@ -694,11 +692,9 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
                       <Check className="w-3 h-3 text-green-400" />
                       <span className="text-xs font-semibold text-green-400">Ready to share</span>
                     </div>
-                    {videoFormat && (
-                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${videoFormat === 'MP4' ? 'bg-green-500/20 text-green-400' : 'bg-amber-500/20 text-amber-400'}`}>
-                        {videoFormat === 'MP4' ? '✓ MP4 — Instagram compatible' : 'WebM — save to device'}
-                      </span>
-                    )}
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/[0.06] text-white/30">
+                      Save → open Instagram → share as story
+                    </span>
                   </div>
                 )}
               </div>
@@ -770,18 +766,10 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
                 </button>
               )}
               {videoBlob && !recording && (
-                <div className={`${videoFormat === 'MP4' ? 'flex space-x-3' : ''}`}>
-                  <button onClick={handleDownloadVideo}
-                    className={`flex items-center justify-center space-x-2 py-3 rounded-2xl bg-white/[0.06] hover:bg-white/[0.1] transition text-sm font-semibold text-white ${videoFormat === 'MP4' ? 'flex-1' : 'w-full'}`}>
-                    <Download className="w-4 h-4" /><span>Save</span>
-                  </button>
-                  {videoFormat === 'MP4' && (
-                    <button onClick={handleShareVideo} disabled={sharing}
-                      className="flex-1 flex items-center justify-center space-x-2 py-3 rounded-2xl bg-purple-600 hover:bg-purple-500 transition disabled:opacity-30 text-sm font-semibold text-white">
-                      {sharing ? <Loader className="w-4 h-4 animate-spin" /> : <><Share2 className="w-4 h-4" /><span>Share</span></>}
-                    </button>
-                  )}
-                </div>
+                <button onClick={handleDownloadVideo}
+                  className="w-full flex items-center justify-center space-x-2 py-3 rounded-2xl bg-purple-600 hover:bg-purple-500 transition text-sm font-semibold text-white">
+                  <Download className="w-4 h-4" /><span>Save to device</span>
+                </button>
               )}
               {videoBlob && (
                 <button onClick={() => { setVideoBlob(null); setVideoProgress(0); }}
