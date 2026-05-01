@@ -13,6 +13,13 @@
   included_files = ["node_modules/ffmpeg-static/**"]
   timeout = 26
 
+# ── Security headers for SharedArrayBuffer (ffmpeg.wasm) ─────────────────────
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Cross-Origin-Opener-Policy = "same-origin"
+    Cross-Origin-Embedder-Policy = "require-corp"
+
 # ── Cache headers ─────────────────────────────────────────────────────────────
 # service-worker.js must NEVER be cached by the browser HTTP cache.
 # Safari/iOS was caching this for up to 24hrs, blocking updates.

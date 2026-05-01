@@ -38,6 +38,7 @@ function loadFFmpegScript() {
     if (_ffmpegLoaded || window.FFmpeg) { _ffmpegLoaded = true; resolve(); return; }
     const script = document.createElement('script');
     script.src = 'https://unpkg.com/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js';
+    script.crossOrigin = 'anonymous';
     script.onload  = () => { _ffmpegLoaded = true; resolve(); };
     script.onerror = reject;
     document.head.appendChild(script);
@@ -532,6 +533,7 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
         const ffmpeg = createFFmpeg({
           corePath: 'https://unpkg.com/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js',
           log: false,
+          mainName: 'main',
         });
         await ffmpeg.load();
 
