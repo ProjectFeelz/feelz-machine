@@ -1,8 +1,8 @@
 /**
- * netlify/functions/convert-to-mp4-background.js
+ * netlify/functions/convert-to-mp4.js
  *
  * Receives a WebM video as base64, converts it to H.264/AAC MP4 using FFmpeg,
- * returns the MP4 as base64. Background function — 15 min timeout.
+ * returns the MP4 as base64. Regular function — synchronous request/response.
  *
  * POST body: { video: "<base64 webm>", mimeType: "video/webm" }
  * Response:  { mp4: "<base64 mp4>" }

@@ -519,7 +519,7 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
           reader.readAsDataURL(webmBlob);
         });
 
-        const response = await fetch('/.netlify/functions/convert-to-mp4-background', {
+        const response = await fetch('/.netlify/functions/convert-to-mp4', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ video: base64, mimeType }),
