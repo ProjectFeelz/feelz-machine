@@ -7,6 +7,10 @@
 
 [functions]
   directory = "netlify/functions"
+  node_bundler = "esbuild"
+
+[functions."convert-to-mp4-background"]
+  included_files = ["node_modules/ffmpeg-static/**"]
 
 # ── Cache headers ─────────────────────────────────────────────────────────────
 # service-worker.js must NEVER be cached by the browser HTTP cache.

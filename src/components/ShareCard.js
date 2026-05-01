@@ -101,7 +101,8 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
   const [videoError, setVideoError]   = useState('');
   const [startTime, setStartTime]     = useState(0);
   const [duration, setDuration]       = useState(30);
-  const [videoFormat, setVideoFormat] = useState('');
+  const [videoFormat, setVideoFormat]   = useState('');
+  const [converting, setConverting]     = useState(false);
 
   const canvasRef    = useRef(null);
   const videoRef     = useRef(null);
@@ -500,14 +501,52 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
     setVideoFormat(fileExt.toUpperCase());
 
     recorder.ondataavailable = e => { if (e.data.size > 0) chunksRef.current.push(e.data); };
-    recorder.onstop = () => {
-      const blob = new window.Blob(chunksRef.current, { type: mimeType });
-      blob._ext = fileExt; // store extension for download/share
-      setVideoBlob(blob);
+    recorder.onstop = async () => {
+      const webmBlob = new window.Blob(chunksRef.current, { type: mimeType });
       setRecording(false);
-      setVideoProgress(100);
+      setVideoFormat('CONVERTING');
+      setConverting(true);
+
       if (sourceNode) try { sourceNode.stop(); } catch {}
       if (audioCtx)   try { audioCtx.close();  } catch {}
+
+      // Convert WebM → MP4 via Netlify function
+      try {
+        const reader = new FileReader();
+        const base64 = await new Promise((res, rej) => {
+          reader.onload  = () => res(reader.result.split(',')[1]);
+          reader.onerror = rej;
+          reader.readAsDataURL(webmBlob);
+        });
+
+        const response = await fetch('/.netlify/functions/convert-to-mp4-background', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ video: base64, mimeType }),
+        });
+
+        if (response.ok) {
+          const { mp4 } = await response.json();
+          const mp4Bytes  = Uint8Array.from(atob(mp4), c => c.charCodeAt(0));
+          const mp4Blob   = new window.Blob([mp4Bytes], { type: 'video/mp4' });
+          mp4Blob._ext    = 'mp4';
+          setVideoBlob(mp4Blob);
+          setVideoFormat('MP4');
+        } else {
+          // Conversion failed — use WebM as fallback
+          webmBlob._ext = 'webm';
+          setVideoBlob(webmBlob);
+          setVideoFormat('WEBM');
+        }
+      } catch (err) {
+        console.error('Conversion error:', err);
+        webmBlob._ext = 'webm';
+        setVideoBlob(webmBlob);
+        setVideoFormat('WEBM');
+      }
+
+      setConverting(false);
+      setVideoProgress(100);
     };
 
     recorder.start(100);
@@ -673,17 +712,18 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
               {/* Preview — shows a static frame of how the video will look */}
               <div className="rounded-2xl bg-black aspect-[9/16] relative overflow-hidden flex items-center justify-center">
                 <canvas ref={previewRef} className="w-full h-full object-contain" />
-                {recording && (
+                {(recording || converting) && (
                   <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/60 space-y-3">
                     <div className="w-16 h-16 relative">
                       <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
                         <circle cx="18" cy="18" r="15.9" fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="2" />
                         <circle cx="18" cy="18" r="15.9" fill="none" stroke="#8B5CF6" strokeWidth="2"
-                          strokeDasharray={`${videoProgress} 100`} strokeLinecap="round" />
+                          strokeDasharray={`${converting ? 100 : videoProgress} 100`} strokeLinecap="round"
+                          style={converting ? { animation: 'spin 1s linear infinite' } : {}} />
                       </svg>
-                      <span className="absolute inset-0 flex items-center justify-center text-xs font-bold text-white">{videoProgress}%</span>
+                      {!converting && <span className="absolute inset-0 flex items-center justify-center text-xs font-bold text-white">{videoProgress}%</span>}
                     </div>
-                    <p className="text-xs text-white/60">Rendering...</p>
+                    <p className="text-xs text-white/60">{converting ? 'Converting to MP4...' : 'Rendering...'}</p>
                   </div>
                 )}
                 {videoBlob && !recording && (
@@ -753,7 +793,7 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
             </>
           ) : (
             <>
-              {!videoBlob && !recording && (
+              {!videoBlob && !recording && !converting && (
                 <button onClick={recordVideo}
                   className="w-full flex items-center justify-center space-x-2 py-3 rounded-2xl bg-purple-600 hover:bg-purple-500 transition text-sm font-semibold text-white">
                   <Film className="w-4 h-4" /><span>Generate Story Video</span>
@@ -765,11 +805,20 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
                   <span>Cancel</span>
                 </button>
               )}
-              {videoBlob && !recording && (
-                <button onClick={handleDownloadVideo}
-                  className="w-full flex items-center justify-center space-x-2 py-3 rounded-2xl bg-purple-600 hover:bg-purple-500 transition text-sm font-semibold text-white">
-                  <Download className="w-4 h-4" /><span>Save to device</span>
-                </button>
+              {videoBlob && !recording && !converting && (
+                <div className={videoFormat === 'MP4' ? 'flex space-x-3' : ''}>
+                  <button onClick={handleDownloadVideo}
+                    className={`flex items-center justify-center space-x-2 py-3 rounded-2xl bg-white/[0.06] hover:bg-white/[0.1] transition text-sm font-semibold text-white ${videoFormat === 'MP4' ? 'flex-1' : 'w-full'}`}>
+                    <Download className="w-4 h-4" />
+                    <span>{videoFormat === 'MP4' ? 'Save' : 'Save to device'}</span>
+                  </button>
+                  {videoFormat === 'MP4' && (
+                    <button onClick={handleShareVideo} disabled={sharing}
+                      className="flex-1 flex items-center justify-center space-x-2 py-3 rounded-2xl bg-purple-600 hover:bg-purple-500 transition disabled:opacity-30 text-sm font-semibold text-white">
+                      {sharing ? <Loader className="w-4 h-4 animate-spin" /> : <><Share2 className="w-4 h-4" /><span>Share</span></>}
+                    </button>
+                  )}
+                </div>
               )}
               {videoBlob && (
                 <button onClick={() => { setVideoBlob(null); setVideoProgress(0); }}
