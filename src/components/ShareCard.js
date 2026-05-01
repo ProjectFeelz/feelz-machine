@@ -103,8 +103,91 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
     else { setReady(true); }
   }, [tab, drawImageCard]);
 
-  // ── Vinyl canvas draw (single frame, angle in radians) ───────────────────────
-  const drawVideoFrame = useCallback(async (ctx, artImg, angle) => {
+  // ── SVG vinyl to canvas image ────────────────────────────────────────────────
+  // Renders the VinylRecord SVG to an HTMLImageElement so the canvas draw
+  // is pixel-perfect identical to the app's vinyl component
+  const buildVinylImage = useCallback((artImg, size) => {
+    return new Promise((resolve) => {
+      const r         = size / 2;
+      const labelR    = r * 0.30;
+      const innerRing = labelR + 6;
+      const spindleR  = r * 0.025;
+      const grooveCount = 22;
+      const uid = Math.random().toString(36).slice(2);
+      const clipId   = `vc-${uid}`;
+      const bodyGid  = `vb-${uid}`;
+      const shineId  = `vs-${uid}`;
+      const labelGid = `vl-${uid}`;
+
+      const grooves = Array.from({ length: grooveCount }, (_, i) => {
+        const min = innerRing + 4, max = r - 6;
+        return min + ((max - min) / grooveCount) * i;
+      });
+
+      let labelContent = '';
+      if (artImg) {
+        // Embed artwork as base64 data URI inside SVG
+        const offscreen = document.createElement('canvas');
+        offscreen.width = offscreen.height = labelR * 2;
+        const octx = offscreen.getContext('2d');
+        octx.drawImage(artImg, 0, 0, labelR * 2, labelR * 2);
+        try {
+          const dataUrl = offscreen.toDataURL('image/jpeg', 0.9);
+          labelContent = `<image href="${dataUrl}" x="${r - labelR}" y="${r - labelR}" width="${labelR * 2}" height="${labelR * 2}" clip-path="url(#${clipId})" preserveAspectRatio="xMidYMid slice"/>`;
+        } catch {
+          labelContent = `<circle cx="${r}" cy="${r}" r="${labelR}" fill="rgba(139,92,246,0.3)"/>`;
+        }
+      } else {
+        labelContent = `<circle cx="${r}" cy="${r}" r="${labelR}" fill="rgba(139,92,246,0.3)"/>`;
+      }
+
+      const grooveSvg = grooves.map((gr, i) =>
+        `<circle cx="${r}" cy="${r}" r="${gr}" fill="none" stroke="${
+          i % 4 === 0 ? 'rgba(255,255,255,0.055)' : i % 2 === 0 ? 'rgba(255,255,255,0.025)' : 'rgba(255,255,255,0.015)'
+        }" stroke-width="${i % 4 === 0 ? 0.7 : 0.35}"/>`
+      ).join('');
+
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+        <defs>
+          <clipPath id="${clipId}"><circle cx="${r}" cy="${r}" r="${labelR}"/></clipPath>
+          <radialGradient id="${bodyGid}" cx="38%" cy="32%" r="75%">
+            <stop offset="0%" stop-color="#1c1c1c"/>
+            <stop offset="35%" stop-color="#0e0e0e"/>
+            <stop offset="100%" stop-color="#060606"/>
+          </radialGradient>
+          <radialGradient id="${shineId}" cx="28%" cy="22%" r="55%">
+            <stop offset="0%" stop-color="rgba(255,255,255,0.09)"/>
+            <stop offset="50%" stop-color="rgba(255,255,255,0.02)"/>
+            <stop offset="100%" stop-color="rgba(255,255,255,0)"/>
+          </radialGradient>
+          <radialGradient id="${labelGid}" cx="50%" cy="50%" r="50%">
+            <stop offset="60%" stop-color="rgba(0,0,0,0)"/>
+            <stop offset="100%" stop-color="rgba(0,0,0,0.45)"/>
+          </radialGradient>
+        </defs>
+        <circle cx="${r}" cy="${r}" r="${r - 1}" fill="url(#${bodyGid})"/>
+        ${grooveSvg}
+        <circle cx="${r}" cy="${r}" r="${r - 2}" fill="none" stroke="rgba(255,255,255,0.07)" stroke-width="1.5"/>
+        <circle cx="${r}" cy="${r}" r="${innerRing}" fill="none" stroke="rgba(255,255,255,0.18)" stroke-width="1"/>
+        <circle cx="${r}" cy="${r}" r="${innerRing - 2}" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="0.5"/>
+        ${labelContent}
+        <circle cx="${r}" cy="${r}" r="${labelR}" fill="url(#${labelGid})"/>
+        <circle cx="${r}" cy="${r}" r="${labelR}" fill="none" stroke="rgba(255,255,255,0.2)" stroke-width="0.8"/>
+        <circle cx="${r}" cy="${r}" r="${r - 1}" fill="url(#${shineId})"/>
+        <circle cx="${r}" cy="${r}" r="${spindleR}" fill="#000" stroke="rgba(255,255,255,0.12)" stroke-width="0.6"/>
+      </svg>`;
+
+      const blob = new Blob([svg], { type: 'image/svg+xml' });
+      const url  = URL.createObjectURL(blob);
+      const img  = new Image();
+      img.onload  = () => { URL.revokeObjectURL(url); resolve(img); };
+      img.onerror = () => { URL.revokeObjectURL(url); resolve(null); };
+      img.src = url;
+    });
+  }, []);
+
+  // ── Video frame draw ────────────────────────────────────────────────────────
+  const drawVideoFrame = useCallback(async (ctx, artImg, vinylImg, angle) => {
     const W = 1080, H = 1920;
 
     // Background — blurred artwork
@@ -127,93 +210,22 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
     ctx.fillStyle = vignette;
     ctx.fillRect(0, 0, W, H);
 
-    // ── Vinyl disc ──────────────────────────────────────────────────────────────
+    // ── Vinyl disc — drawn from pre-built SVG image ────────────────────────────
+    const vinylSize = 840;
     const cx = W / 2, cy = H / 2;
-    const r  = 420;
-
-    ctx.save();
-    ctx.translate(cx, cy);
-    ctx.rotate(angle);
-
-    // Record body
-    const bodyGrad = ctx.createRadialGradient(-r*0.12, -r*0.18, 0, 0, 0, r);
-    bodyGrad.addColorStop(0,   '#1c1c1c');
-    bodyGrad.addColorStop(0.35,'#0e0e0e');
-    bodyGrad.addColorStop(1,   '#060606');
-    ctx.beginPath();
-    ctx.arc(0, 0, r, 0, Math.PI * 2);
-    ctx.fillStyle = bodyGrad;
-    ctx.fill();
-
-    // Grooves
-    const grooveCount = 22;
-    const labelR = r * 0.30;
-    const innerRing = labelR + 6;
-    for (let i = 0; i < grooveCount; i++) {
-      const gr = (innerRing + 4) + (((r - 6) - (innerRing + 4)) / grooveCount) * i;
-      ctx.beginPath();
-      ctx.arc(0, 0, gr, 0, Math.PI * 2);
-      ctx.strokeStyle = i % 4 === 0
-        ? 'rgba(255,255,255,0.055)'
-        : i % 2 === 0
-          ? 'rgba(255,255,255,0.025)'
-          : 'rgba(255,255,255,0.015)';
-      ctx.lineWidth = i % 4 === 0 ? 0.7 : 0.35;
-      ctx.stroke();
-    }
-
-    // Outer edge
-    ctx.beginPath(); ctx.arc(0, 0, r - 2, 0, Math.PI * 2);
-    ctx.strokeStyle = 'rgba(255,255,255,0.07)'; ctx.lineWidth = 1.5; ctx.stroke();
-
-    // Accent rings around label
-    ctx.beginPath(); ctx.arc(0, 0, innerRing, 0, Math.PI * 2);
-    ctx.strokeStyle = 'rgba(255,255,255,0.18)'; ctx.lineWidth = 1; ctx.stroke();
-    ctx.beginPath(); ctx.arc(0, 0, innerRing - 2, 0, Math.PI * 2);
-    ctx.strokeStyle = 'rgba(255,255,255,0.06)'; ctx.lineWidth = 0.5; ctx.stroke();
-
-    // Label artwork
-    if (artImg) {
+    if (vinylImg) {
       ctx.save();
-      ctx.beginPath(); ctx.arc(0, 0, labelR, 0, Math.PI * 2); ctx.clip();
-      ctx.drawImage(artImg, -labelR, -labelR, labelR * 2, labelR * 2);
+      ctx.translate(cx, cy);
+      ctx.rotate(angle);
+      ctx.drawImage(vinylImg, -vinylSize / 2, -vinylSize / 2, vinylSize, vinylSize);
       ctx.restore();
-    } else {
-      ctx.beginPath(); ctx.arc(0, 0, labelR, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(139,92,246,0.3)'; ctx.fill();
     }
-
-    // Label vignette
-    const labelVig = ctx.createRadialGradient(0, 0, labelR * 0.6, 0, 0, labelR);
-    labelVig.addColorStop(0, 'rgba(0,0,0,0)');
-    labelVig.addColorStop(1, 'rgba(0,0,0,0.45)');
-    ctx.beginPath(); ctx.arc(0, 0, labelR, 0, Math.PI * 2);
-    ctx.fillStyle = labelVig; ctx.fill();
-
-    // Label border
-    ctx.beginPath(); ctx.arc(0, 0, labelR, 0, Math.PI * 2);
-    ctx.strokeStyle = 'rgba(255,255,255,0.2)'; ctx.lineWidth = 0.8; ctx.stroke();
-
-    // Shine
-    const shine = ctx.createRadialGradient(-r*0.28, -r*0.22, 0, 0, 0, r);
-    shine.addColorStop(0,   'rgba(255,255,255,0.09)');
-    shine.addColorStop(0.5, 'rgba(255,255,255,0.02)');
-    shine.addColorStop(1,   'rgba(255,255,255,0)');
-    ctx.beginPath(); ctx.arc(0, 0, r - 1, 0, Math.PI * 2);
-    ctx.fillStyle = shine; ctx.fill();
-
-    // Spindle
-    ctx.beginPath(); ctx.arc(0, 0, r * 0.025, 0, Math.PI * 2);
-    ctx.fillStyle = '#000';
-    ctx.strokeStyle = 'rgba(255,255,255,0.12)'; ctx.lineWidth = 0.6;
-    ctx.fill(); ctx.stroke();
-
-    ctx.restore();
 
     // Drop shadow under vinyl
+    const r = vinylSize / 2;
     const shadow = ctx.createRadialGradient(cx, cy + r + 30, 0, cx, cy + r + 30, r * 0.8);
-    shadow.addColorStop(0,   'rgba(0,0,0,0.5)');
-    shadow.addColorStop(1,   'rgba(0,0,0,0)');
+    shadow.addColorStop(0, 'rgba(0,0,0,0.5)');
+    shadow.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.fillStyle = shadow;
     ctx.fillRect(cx - r, cy + r - 20, r * 2, 120);
 
@@ -257,6 +269,9 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
     if (artworkUrl) {
       try { artImg = await loadImage(artworkUrl); } catch {}
     }
+
+    // Build the vinyl SVG image once — reused every frame
+    const vinylImg = await buildVinylImage(artImg, 840);
 
     const DURATION = 30; // seconds
     const FPS      = 30;
@@ -320,7 +335,7 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
         recorder.stop();
         return;
       }
-      await drawVideoFrame(ctx, artImg, angle);
+      await drawVideoFrame(ctx, artImg, vinylImg, angle);
       angle += radsPerFrame;
       frame++;
       setVideoProgress(Math.round((frame / totalFrames) * 95));
@@ -568,8 +583,15 @@ function loadImage(src) {
     const img = new Image();
     img.crossOrigin = 'anonymous';
     img.onload  = () => resolve(img);
-    img.onerror = reject;
-    img.src = src;
+    img.onerror = () => {
+      // Retry without crossOrigin as fallback (won't work for canvas taint but shows image)
+      const img2 = new Image();
+      img2.onload  = () => resolve(img2);
+      img2.onerror = reject;
+      img2.src = src;
+    };
+    // Cache bust to force CORS headers on fresh load
+    img.src = src.includes('?') ? src : `${src}?cb=${Date.now()}`;
   });
 }
 
