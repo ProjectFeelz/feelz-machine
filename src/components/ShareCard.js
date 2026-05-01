@@ -1,6 +1,80 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { Download, Share2, X, Loader, Link, Check, Film, Image } from 'lucide-react';
 
+// ── Helper functions — defined before component to avoid temporal dead zone ───
+
+let _fmLogoCache = null;
+async function getFMLogo() {
+  if (_fmLogoCache) return _fmLogoCache;
+  return new Promise((resolve) => {
+    const img = new window.Image();
+    img.crossOrigin = 'anonymous';
+    img.onload  = () => { _fmLogoCache = img; resolve(img); };
+    img.onerror = () => resolve(null);
+    img.src = '/logo.png';
+  });
+}
+
+async function drawFMLogo(ctx, x, y, size) {
+  const img = await getFMLogo();
+  if (img) {
+    ctx.save();
+    ctx.beginPath();
+    roundRect(ctx, x, y, size, size, size * 0.22);
+    ctx.clip();
+    ctx.drawImage(img, x, y, size, size);
+    ctx.restore();
+  }
+}
+
+function proxyUrl(src) {
+  return `/.netlify/functions/image-proxy?url=${encodeURIComponent(src)}`;
+}
+
+function loadImage(src) {
+  return new Promise((resolve, reject) => {
+    const proxied = proxyUrl(src);
+    const img = new window.Image();
+    img.crossOrigin = 'anonymous';
+    img.onload  = () => resolve(img);
+    img.onerror = () => {
+      const img2 = new window.Image();
+      img2.crossOrigin = 'anonymous';
+      img2.onload  = () => resolve(img2);
+      img2.onerror = reject;
+      img2.src = src;
+    };
+    img.src = proxied;
+  });
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
+function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
+  const words = text.split(' ');
+  let line = '', lineY = y;
+  for (const word of words) {
+    const testLine = line + word + ' ';
+    if (ctx.measureText(testLine).width > maxWidth && line !== '') {
+      ctx.fillText(line.trim(), x, lineY);
+      line = word + ' '; lineY += lineHeight;
+    } else { line = testLine; }
+  }
+  ctx.fillText(line.trim(), x, lineY);
+}
+
 /**
  * ShareCard
  *
@@ -667,85 +741,4 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
       </div>
     </div>
   );
-}
-
-// ── FM Logo + branding helpers ───────────────────────────────────────────────
-
-// Loads and caches the FM logo image
-let _fmLogoCache = null;
-async function getFMLogo() {
-  if (_fmLogoCache) return _fmLogoCache;
-  return new Promise((resolve) => {
-    const img = new window.Image();
-    img.crossOrigin = 'anonymous';
-    img.onload  = () => { _fmLogoCache = img; resolve(img); };
-    img.onerror = () => resolve(null);
-    img.src = '/logo.png';
-  });
-}
-
-// Draws the FM logo onto the canvas at position (x, y) with given size
-async function drawFMLogo(ctx, x, y, size) {
-  const img = await getFMLogo();
-  if (img) {
-    ctx.save();
-    // Clip to rounded square
-    ctx.beginPath();
-    roundRect(ctx, x, y, size, size, size * 0.22);
-    ctx.clip();
-    ctx.drawImage(img, x, y, size, size);
-    ctx.restore();
-  }
-}
-
-// ── Canvas helpers ─────────────────────────────────────────────────────────────
-function proxyUrl(src) {
-  // Route through our Netlify proxy to ensure CORS headers for canvas access
-  return `/.netlify/functions/image-proxy?url=${encodeURIComponent(src)}`;
-}
-
-function loadImage(src) {
-  return new Promise((resolve, reject) => {
-    // Try proxy first — guaranteed CORS headers
-    const proxied = proxyUrl(src);
-    const img = new window.Image();
-    img.crossOrigin = 'anonymous';
-    img.onload  = () => resolve(img);
-    img.onerror = () => {
-      // Fall back to direct URL
-      const img2 = new window.Image();
-      img2.crossOrigin = 'anonymous';
-      img2.onload  = () => resolve(img2);
-      img2.onerror = reject;
-      img2.src = src;
-    };
-    img.src = proxied;
-  });
-}
-
-function roundRect(ctx, x, y, w, h, r) {
-  ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.lineTo(x + w - r, y);
-  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
-  ctx.lineTo(x + w, y + h - r);
-  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-  ctx.lineTo(x + r, y + h);
-  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
-  ctx.lineTo(x, y + r);
-  ctx.quadraticCurveTo(x, y, x + r, y);
-  ctx.closePath();
-}
-
-function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
-  const words = text.split(' ');
-  let line = '', lineY = y;
-  for (const word of words) {
-    const testLine = line + word + ' ';
-    if (ctx.measureText(testLine).width > maxWidth && line !== '') {
-      ctx.fillText(line.trim(), x, lineY);
-      line = word + ' '; lineY += lineHeight;
-    } else { line = testLine; }
-  }
-  ctx.fillText(line.trim(), x, lineY);
 }
