@@ -99,8 +99,9 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
   const [videoBlob, setVideoBlob]     = useState(null);
   const [videoProgress, setVideoProgress] = useState(0);
   const [videoError, setVideoError]   = useState('');
-  const [startTime, setStartTime]     = useState(0); // seconds into track
-  const [duration, setDuration]       = useState(30); // track duration for slider
+  const [startTime, setStartTime]     = useState(0);
+  const [duration, setDuration]       = useState(30);
+  const [videoFormat, setVideoFormat] = useState('');
 
   const canvasRef    = useRef(null);
   const videoRef     = useRef(null);
@@ -126,7 +127,7 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
     canvas.width  = W;
     canvas.height = H;
 
-    ctx.fillStyle = '#000000';
+    ctx.fillStyle = '#0d0d0d';
     ctx.fillRect(0, 0, W, H);
 
     if (artworkUrl) {
@@ -311,13 +312,13 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
     const W = 1080, H = 1920;
 
     // Background — app's pitch black with subtle purple tint like the full player
-    ctx.fillStyle = '#000000';
+    ctx.fillStyle = '#0d0d0d';
     ctx.fillRect(0, 0, W, H);
 
     if (artImg) {
       // Very subtle blurred artwork at low opacity — just enough to add depth
       ctx.save();
-      ctx.globalAlpha = 0.12;
+      ctx.globalAlpha = 0.15;
       ctx.filter = 'blur(120px)';
       ctx.drawImage(artImg, -200, -200, W + 400, H * 0.7);
       ctx.filter = 'none';
@@ -490,15 +491,24 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
     const combined = new MediaStream(combinedTracks);
 
     // Pick best supported codec
-    const mimeType = ['video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus','video/webm']
-      .find(t => window.MediaRecorder && window.MediaRecorder.isTypeSupported(t)) || 'video/webm';
+    // Try MP4 first (Instagram Stories requires MP4), fall back to WebM
+    const mimeType = [
+      'video/mp4;codecs=h264,aac',
+      'video/mp4',
+      'video/webm;codecs=vp9,opus',
+      'video/webm;codecs=vp8,opus',
+      'video/webm',
+    ].find(t => window.MediaRecorder && window.MediaRecorder.isTypeSupported(t)) || 'video/webm';
+    const fileExt = mimeType.startsWith('video/mp4') ? 'mp4' : 'webm';
 
     const recorder = new window.MediaRecorder(combined, { mimeType, videoBitsPerSecond: 8_000_000 });
     recorderRef.current = recorder;
+    setVideoFormat(fileExt.toUpperCase());
 
     recorder.ondataavailable = e => { if (e.data.size > 0) chunksRef.current.push(e.data); };
     recorder.onstop = () => {
       const blob = new window.Blob(chunksRef.current, { type: mimeType });
+      blob._ext = fileExt; // store extension for download/share
       setVideoBlob(blob);
       setRecording(false);
       setVideoProgress(100);
@@ -554,10 +564,12 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
         if (!blob) return;
         const file = new File([blob], `${title}-feelzmachine.png`, { type: 'image/png' });
         if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          const trackUrl = shareUrl || window.location.href;
           await navigator.share({
             files: [file], title,
-            text: track ? `Listen to ${title} by ${track.artist_name} on Feelz Machine` : `Listen to ${title} on Feelz Machine`,
-            url: shareUrl || window.location.href,
+            text: track
+              ? `Listen to ${title} by ${track.artist_name} on Feelz Machine\n${trackUrl}`
+              : `Listen to ${title} on Feelz Machine\n${trackUrl}`,
           });
         } else { handleDownloadImage(); }
       }, 'image/png');
@@ -569,7 +581,8 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
     if (!videoBlob) return;
     const url  = URL.createObjectURL(videoBlob);
     const link = document.createElement('a');
-    link.download = `${title.replace(/[^a-z0-9]/gi, '-').toLowerCase()}-feelzmachine.webm`;
+    const ext = videoBlob._ext || 'webm';
+    link.download = `${title.replace(/[^a-z0-9]/gi, '-').toLowerCase()}-feelzmachine.${ext}`;
     link.href = url;
     link.click();
     setTimeout(() => URL.revokeObjectURL(url), 5000);
@@ -579,7 +592,8 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
     if (!videoBlob) return;
     setSharing(true);
     try {
-      const file = new File([videoBlob], `${title}-feelzmachine.webm`, { type: videoBlob.type });
+      const ext2 = videoBlob._ext || 'webm';
+      const file = new File([videoBlob], `${title}-feelzmachine.${ext2}`, { type: videoBlob.type });
       const shareData = {
         files: [file],
         title,
@@ -679,11 +693,16 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
                   </div>
                 )}
                 {videoBlob && !recording && (
-                  <div className="absolute bottom-4 left-0 right-0 flex justify-center">
+                  <div className="absolute bottom-4 left-0 right-0 flex flex-col items-center space-y-2">
                     <div className="px-3 py-1.5 rounded-full bg-green-500/20 border border-green-500/30 flex items-center space-x-1.5">
                       <Check className="w-3 h-3 text-green-400" />
                       <span className="text-xs font-semibold text-green-400">Ready to share</span>
                     </div>
+                    {videoFormat && (
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${videoFormat === 'MP4' ? 'bg-green-500/20 text-green-400' : 'bg-amber-500/20 text-amber-400'}`}>
+                        {videoFormat === 'MP4' ? '✓ MP4 — Instagram compatible' : 'WebM — save to device'}
+                      </span>
+                    )}
                   </div>
                 )}
               </div>
@@ -755,15 +774,17 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
                 </button>
               )}
               {videoBlob && !recording && (
-                <div className="flex space-x-3">
+                <div className={`${videoFormat === 'MP4' ? 'flex space-x-3' : ''}`}>
                   <button onClick={handleDownloadVideo}
-                    className="flex-1 flex items-center justify-center space-x-2 py-3 rounded-2xl bg-white/[0.06] hover:bg-white/[0.1] transition text-sm font-semibold text-white">
+                    className={`flex items-center justify-center space-x-2 py-3 rounded-2xl bg-white/[0.06] hover:bg-white/[0.1] transition text-sm font-semibold text-white ${videoFormat === 'MP4' ? 'flex-1' : 'w-full'}`}>
                     <Download className="w-4 h-4" /><span>Save</span>
                   </button>
-                  <button onClick={handleShareVideo} disabled={sharing}
-                    className="flex-1 flex items-center justify-center space-x-2 py-3 rounded-2xl bg-purple-600 hover:bg-purple-500 transition disabled:opacity-30 text-sm font-semibold text-white">
-                    {sharing ? <Loader className="w-4 h-4 animate-spin" /> : <><Share2 className="w-4 h-4" /><span>Share</span></>}
-                  </button>
+                  {videoFormat === 'MP4' && (
+                    <button onClick={handleShareVideo} disabled={sharing}
+                      className="flex-1 flex items-center justify-center space-x-2 py-3 rounded-2xl bg-purple-600 hover:bg-purple-500 transition disabled:opacity-30 text-sm font-semibold text-white">
+                      {sharing ? <Loader className="w-4 h-4 animate-spin" /> : <><Share2 className="w-4 h-4" /><span>Share</span></>}
+                    </button>
+                  )}
                 </div>
               )}
               {videoBlob && (
