@@ -128,8 +128,13 @@ export default function useNotifications() {
       setUnreadCount(prev => prev + 1);
     };
 
+    // Remove any stale notification channels from previous sessions
+    supabase.getChannels()
+      .filter(ch => ch.topic.includes('notifications-realtime'))
+      .forEach(ch => supabase.removeChannel(ch));
+
     let channelBuilder = supabase
-      .channel('notifications-realtime')
+      .channel(`notifications-realtime-${Date.now()}`)
       .on('postgres_changes', {
         event: 'INSERT',
         schema: 'public',

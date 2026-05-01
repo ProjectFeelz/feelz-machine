@@ -496,7 +496,7 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
     ].find(t => window.MediaRecorder && window.MediaRecorder.isTypeSupported(t)) || 'video/webm';
     const fileExt = 'webm';
 
-    const recorder = new window.MediaRecorder(combined, { mimeType, videoBitsPerSecond: 8_000_000 });
+    const recorder = new window.MediaRecorder(combined, { mimeType, videoBitsPerSecond: 8000000 });
     recorderRef.current = recorder;
     setVideoFormat(fileExt.toUpperCase());
 
@@ -512,7 +512,7 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
 
       // Convert WebM → MP4 via Netlify function
       try {
-        const reader = new FileReader();
+        const reader = new window.FileReader();
         const base64 = await new Promise((res, rej) => {
           reader.onload  = () => res(reader.result.split(',')[1]);
           reader.onerror = rej;
@@ -527,7 +527,7 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
 
         if (response.ok) {
           const { mp4 } = await response.json();
-          const mp4Bytes  = Uint8Array.from(atob(mp4), c => c.charCodeAt(0));
+          const mp4Bytes  = Uint8Array.from(window.atob(mp4), c => c.charCodeAt(0));
           const mp4Blob   = new window.Blob([mp4Bytes], { type: 'video/mp4' });
           mp4Blob._ext    = 'mp4';
           setVideoBlob(mp4Blob);
