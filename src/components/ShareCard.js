@@ -456,8 +456,8 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
 
     const DURATION = 30; // seconds
     const FPS      = 30;
-    const RPM      = 33.3;
-    const radsPerFrame = (RPM / 60) * 2 * Math.PI / FPS;
+    // Match VinylRecord.js: one full rotation every 2.4s
+    const radsPerFrame = (2 * Math.PI / 2.4) / FPS;
 
     // Audio — start from user-selected time offset
     let audioStream = null;
@@ -556,22 +556,28 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
     let angle    = 0;
     const totalFrames = DURATION * FPS;
 
+    const FRAME_MS = 1000 / FPS; // 33.33ms per frame for consistent timing
     const animate = async () => {
       if (frame >= totalFrames) {
         recorder.stop();
         return;
       }
+      const frameStart = performance.now();
       await drawVideoFrame(ctx, artImg, vinylImg, angle);
       angle += radsPerFrame;
       frame++;
       setVideoProgress(Math.round((frame / totalFrames) * 95));
-      animFrameRef.current = requestAnimationFrame(animate);
+      // Use setTimeout for consistent frame rate instead of rAF
+      // rAF runs as fast as the display refresh which causes short videos
+      const elapsed = performance.now() - frameStart;
+      const delay = Math.max(0, FRAME_MS - elapsed);
+      animFrameRef.current = setTimeout(animate, delay);
     };
     animate();
   }, [audioUrl, artworkUrl, drawVideoFrame, startTime]);
 
   const stopRecording = () => {
-    if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+    if (animFrameRef.current) clearTimeout(animFrameRef.current);
     if (recorderRef.current && recorderRef.current.state !== 'inactive') recorderRef.current.stop();
     setRecording(false);
   };
