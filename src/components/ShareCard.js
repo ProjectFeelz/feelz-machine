@@ -340,18 +340,30 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
     ctx.fillStyle = bottomFade;
     ctx.fillRect(0, 0, W, H);
 
-    // ── Vinyl disc — drawn from pre-built SVG image ────────────────────────────
+    // ── Vinyl disc — moved up from centre for better composition ───────────────
     const vinylSize = 840;
-    const cx = W / 2, cy = H / 2;
+    const cx = W / 2;
+    const cy = H / 2 - 180; // moved up
     const r  = vinylSize / 2;
 
-    // Drop shadow BEFORE vinyl so it appears behind it
-    const shadow = ctx.createRadialGradient(cx, cy + r - 40, 0, cx, cy + r - 40, r * 0.85);
-    shadow.addColorStop(0,   'rgba(0,0,0,0.7)');
-    shadow.addColorStop(0.4, 'rgba(0,0,0,0.3)');
+    // Outer glow ring — separates vinyl from background
+    const glowGrad = ctx.createRadialGradient(cx, cy, r * 0.85, cx, cy, r * 1.15);
+    glowGrad.addColorStop(0,   'rgba(100,60,200,0.0)');
+    glowGrad.addColorStop(0.6, 'rgba(80,40,160,0.25)');
+    glowGrad.addColorStop(0.85,'rgba(60,20,120,0.15)');
+    glowGrad.addColorStop(1,   'rgba(0,0,0,0)');
+    ctx.fillStyle = glowGrad;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r * 1.15, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Drop shadow BEFORE vinyl
+    const shadow = ctx.createRadialGradient(cx, cy + r - 20, 0, cx, cy + r - 20, r * 0.9);
+    shadow.addColorStop(0,   'rgba(0,0,0,0.8)');
+    shadow.addColorStop(0.5, 'rgba(0,0,0,0.3)');
     shadow.addColorStop(1,   'rgba(0,0,0,0)');
     ctx.fillStyle = shadow;
-    ctx.fillRect(cx - r, cy - 60, r * 2, r + 120);
+    ctx.fillRect(cx - r, cy + r * 0.6, r * 2, r * 0.8);
 
     if (vinylImg) {
       ctx.save();
@@ -360,6 +372,19 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
       ctx.drawImage(vinylImg, -vinylSize / 2, -vinylSize / 2, vinylSize, vinylSize);
       ctx.restore();
     }
+
+    // Subtle rim light — top edge catches light to separate from bg
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(cx, cy, r - 1, 0, Math.PI * 2);
+    const rimGrad = ctx.createLinearGradient(cx, cy - r, cx, cy + r);
+    rimGrad.addColorStop(0,    'rgba(255,255,255,0.12)');
+    rimGrad.addColorStop(0.15, 'rgba(255,255,255,0.04)');
+    rimGrad.addColorStop(1,    'rgba(255,255,255,0)');
+    ctx.strokeStyle = rimGrad;
+    ctx.lineWidth = 3;
+    ctx.stroke();
+    ctx.restore();
 
     // ── Text ───────────────────────────────────────────────────────────────────
     const textY = cy + r + 80;
@@ -500,7 +525,7 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
       animFrameRef.current = requestAnimationFrame(animate);
     };
     animate();
-  }, [audioUrl, artworkUrl, drawVideoFrame]);
+  }, [audioUrl, artworkUrl, drawVideoFrame, startTime]);
 
   const stopRecording = () => {
     if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
@@ -555,12 +580,22 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
     setSharing(true);
     try {
       const file = new File([videoBlob], `${title}-feelzmachine.webm`, { type: videoBlob.type });
+      const shareData = {
+        files: [file],
+        title,
+        text: track ? `Listen to ${title} by ${track.artist_name} on Feelz Machine` : `Listen to ${title} on Feelz Machine`,
+        url: shareUrl || window.location.href,
+      };
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        await navigator.share({ files: [file], title,
-          text: track ? `Listen to ${title} by ${track.artist_name} on Feelz Machine` : `Listen to ${title} on Feelz Machine`,
-        });
-      } else { handleDownloadVideo(); }
-    } catch {}
+        await navigator.share(shareData);
+      } else {
+        // Desktop or unsupported — download instead
+        handleDownloadVideo();
+      }
+    } catch (e) {
+      // User cancelled or share failed — fall back to download
+      if (e.name !== 'AbortError') handleDownloadVideo();
+    }
     setSharing(false);
   };
 
