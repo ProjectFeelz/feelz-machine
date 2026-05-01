@@ -189,16 +189,14 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
     // FM logo — top left
     await drawFMLogo(ctx, 60, 60, 100);
 
-    // Track URL — full link, bottom
-    const trackLink = shareUrl || `feelzmachine.com`;
-    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    // Feelzmachine.com wordmark — subtle, bottom centre
+    ctx.fillStyle = 'rgba(255,255,255,0.2)';
     ctx.font = '28px -apple-system, BlinkMacSystemFont, sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText(trackLink.replace('https://', ''), W / 2, H - 56);
-    // Dots
-    ctx.fillStyle = 'rgba(140,171,46,0.8)';
-    ctx.beginPath(); ctx.arc(W / 2 - 240, H - 40, 5, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.arc(W / 2 + 240, H - 40, 5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillText('feelzmachine.com', W / 2, H - 56);
+    ctx.fillStyle = 'rgba(140,171,46,0.6)';
+    ctx.beginPath(); ctx.arc(W / 2 - 180, H - 40, 4, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(W / 2 + 180, H - 40, 4, 0, Math.PI * 2); ctx.fill();
 
     setReady(true);
   }, [tab, title, subtitle, artworkUrl, displayUrl]);
@@ -402,16 +400,14 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
     // FM logo — top left corner
     await drawFMLogo(ctx, 60, 80, 120);
 
-    // Track URL — full shareable link
-    const trackLink = displayUrl;
-    ctx.fillStyle = 'rgba(255,255,255,0.55)';
+    // Wordmark only — no track URL
+    ctx.fillStyle = 'rgba(255,255,255,0.2)';
     ctx.font = '34px -apple-system, BlinkMacSystemFont, sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText(trackLink, W / 2, H - 72);
-    // Accent dots
-    ctx.fillStyle = 'rgba(140,171,46,0.8)';
-    ctx.beginPath(); ctx.arc(W/2 - 280, H - 54, 6, 0, Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.arc(W/2 + 280, H - 54, 6, 0, Math.PI*2); ctx.fill();
+    ctx.fillText('feelzmachine.com', W / 2, H - 72);
+    ctx.fillStyle = 'rgba(140,171,46,0.6)';
+    ctx.beginPath(); ctx.arc(W/2 - 220, H - 54, 5, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(W/2 + 220, H - 54, 5, 0, Math.PI*2); ctx.fill();
   }, [title, subtitle, artworkUrl, displayUrl]);
 
   // Render a static preview frame when on video tab
