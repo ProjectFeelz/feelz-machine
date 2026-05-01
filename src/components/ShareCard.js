@@ -578,11 +578,11 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
   };
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-end md:items-center justify-center bg-black/80 backdrop-blur-sm"
+    <div className="fixed inset-0 z-[200] flex items-end md:items-center justify-center bg-black/80 backdrop-blur-sm p-4 pb-6 md:pb-4"
       onClick={onClose}>
       <div
-        className="relative w-full max-w-sm mx-4 mb-6 md:mb-0 rounded-3xl"
-        style={{ backgroundColor: '#111', border: '1px solid rgba(255,255,255,0.08)', maxHeight: '90vh', overflowY: 'auto' }}
+        className="relative w-full max-w-sm rounded-3xl"
+        style={{ backgroundColor: '#111', border: '1px solid rgba(255,255,255,0.08)', maxHeight: 'calc(100dvh - 32px)', overflowY: 'auto' }}
         onClick={e => e.stopPropagation()}
       >
         {/* Close */}
