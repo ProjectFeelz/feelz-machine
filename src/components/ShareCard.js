@@ -211,26 +211,6 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
     }
   }, [tab, drawImageCard, audioUrl]);
 
-  // Render a static preview frame when on video tab
-  useEffect(() => {
-    if (tab !== 'video' || recording) return;
-    const canvas = previewRef.current;
-    if (!canvas) return;
-    canvas.width  = 1080;
-    canvas.height = 1920;
-    const ctx = canvas.getContext('2d');
-    let cancelled = false;
-    (async () => {
-      let artImg = null;
-      if (artworkUrl) { try { artImg = await loadImage(artworkUrl); } catch {} }
-      if (cancelled) return;
-      const vinylImg = await buildVinylImage(artImg, 840);
-      if (cancelled) return;
-      await drawVideoFrame(ctx, artImg, vinylImg, 0);
-    })();
-    return () => { cancelled = true; };
-  }, [tab, artworkUrl, recording, buildVinylImage, drawVideoFrame]);
-
   // ── SVG vinyl to canvas image ────────────────────────────────────────────────
   // Renders the VinylRecord SVG to an HTMLImageElement so the canvas draw
   // is pixel-perfect identical to the app's vinyl component
@@ -404,6 +384,26 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
     ctx.beginPath(); ctx.arc(W/2 - 280, H - 54, 6, 0, Math.PI*2); ctx.fill();
     ctx.beginPath(); ctx.arc(W/2 + 280, H - 54, 6, 0, Math.PI*2); ctx.fill();
   }, [title, subtitle, artworkUrl, displayUrl]);
+
+  // Render a static preview frame when on video tab
+  useEffect(() => {
+    if (tab !== 'video' || recording) return;
+    const canvas = previewRef.current;
+    if (!canvas) return;
+    canvas.width  = 1080;
+    canvas.height = 1920;
+    const ctx = canvas.getContext('2d');
+    let cancelled = false;
+    (async () => {
+      let artImg = null;
+      if (artworkUrl) { try { artImg = await loadImage(artworkUrl); } catch {} }
+      if (cancelled) return;
+      const vinylImg = await buildVinylImage(artImg, 840);
+      if (cancelled) return;
+      await drawVideoFrame(ctx, artImg, vinylImg, 0);
+    })();
+    return () => { cancelled = true; };
+  }, [tab, artworkUrl, recording, buildVinylImage, drawVideoFrame]);
 
   // ── Record video ─────────────────────────────────────────────────────────────
   const recordVideo = useCallback(async () => {
