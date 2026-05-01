@@ -510,36 +510,45 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
       if (sourceNode) try { sourceNode.stop(); } catch {}
       if (audioCtx)   try { audioCtx.close();  } catch {}
 
-      // Convert WebM → MP4 via Netlify function
+      // Convert WebM → MP4 using ffmpeg.wasm (runs in-browser, no server needed)
       try {
-        const reader = new window.FileReader();
-        const base64 = await new Promise((res, rej) => {
-          reader.onload  = () => res(reader.result.split(',')[1]);
-          reader.onerror = rej;
-          reader.readAsDataURL(webmBlob);
+        // Dynamically import ffmpeg to avoid loading it until needed
+        const { FFmpeg } = await import('@ffmpeg/ffmpeg');
+        const { fetchFile, toBlobURL } = await import('@ffmpeg/util');
+
+        const ffmpeg = new FFmpeg();
+
+        // Load ffmpeg.wasm — uses single-threaded mode (no COOP/COEP headers needed)
+        const baseURL = 'https://unpkg.com/@ffmpeg/core-mt@0.12.6/dist/esm';
+        await ffmpeg.load({
+          coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`,   'text/javascript'),
+          wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
         });
 
-        const response = await fetch('/.netlify/functions/convert-to-mp4', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ video: base64, mimeType }),
-        });
+        // Write the WebM file into ffmpeg's virtual FS
+        await ffmpeg.writeFile('input.webm', await fetchFile(webmBlob));
 
-        if (response.ok) {
-          const { mp4 } = await response.json();
-          const mp4Bytes  = Uint8Array.from(window.atob(mp4), c => c.charCodeAt(0));
-          const mp4Blob   = new window.Blob([mp4Bytes], { type: 'video/mp4' });
-          mp4Blob._ext    = 'mp4';
-          setVideoBlob(mp4Blob);
-          setVideoFormat('MP4');
-        } else {
-          // Conversion failed — use WebM as fallback
-          webmBlob._ext = 'webm';
-          setVideoBlob(webmBlob);
-          setVideoFormat('WEBM');
-        }
+        // Convert: H264 + AAC + faststart + yuv420p (Instagram requirements)
+        await ffmpeg.exec([
+          '-i', 'input.webm',
+          '-c:v', 'libx264',
+          '-preset', 'ultrafast',
+          '-crf', '23',
+          '-c:a', 'aac',
+          '-b:a', '128k',
+          '-movflags', '+faststart',
+          '-pix_fmt', 'yuv420p',
+          'output.mp4',
+        ]);
+
+        const mp4Data = await ffmpeg.readFile('output.mp4');
+        const mp4Blob = new window.Blob([mp4Data.buffer], { type: 'video/mp4' });
+        mp4Blob._ext  = 'mp4';
+        setVideoBlob(mp4Blob);
+        setVideoFormat('MP4');
       } catch (err) {
-        console.error('Conversion error:', err);
+        console.error('FFmpeg.wasm conversion error:', err);
+        // Fall back to WebM — user can still save it
         webmBlob._ext = 'webm';
         setVideoBlob(webmBlob);
         setVideoFormat('WEBM');
@@ -729,7 +738,14 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
                       </svg>
                       {!converting && <span className="absolute inset-0 flex items-center justify-center text-xs font-bold text-white">{videoProgress}%</span>}
                     </div>
-                    <p className="text-xs text-white/60">{converting ? 'Converting to MP4...' : 'Rendering...'}</p>
+                    <p className="text-xs text-white/60">
+                      {converting ? 'Converting to MP4 for Instagram...' : 'Rendering...'}
+                    </p>
+                    {converting && (
+                      <p className="text-[10px] text-white/30 px-8 text-center">
+                        This takes 30–60s. Don't close the app.
+                      </p>
+                    )}
                   </div>
                 )}
                 {videoBlob && !recording && (

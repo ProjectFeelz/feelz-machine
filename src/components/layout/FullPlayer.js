@@ -1193,7 +1193,13 @@ export default function FullPlayer() {
 
       {/* ShareCard — rendered outside the player motion div to avoid z-index conflicts */}
       {showShareCard && (
-        <ShareCard track={currentTrack} onClose={() => setShowShareCard(false)} />
+        <ShareCard
+          track={currentTrack}
+          shareUrl={currentTrack?.artist_slug && (currentTrack?.slug || currentTrack?.id)
+            ? `https://www.feelzmachine.com/artist/${currentTrack.artist_slug}?track=${currentTrack.slug || currentTrack.id}`
+            : null}
+          onClose={() => setShowShareCard(false)}
+        />
       )}
     </>
   );
