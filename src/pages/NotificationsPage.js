@@ -82,6 +82,12 @@ export default function NotificationsPage() {
   const { playTrack } = usePlayer();
   const { unreadCount, markAsRead, markAllRead, clearAll } = useNotifications();
   const [filter, setFilter] = useState('all');
+  const [expandedIds, setExpandedIds] = useState(new Set());
+  const toggleExpand = (id) => setExpandedIds(prev => {
+    const next = new Set(prev);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  });
   const [allNotifs, setAllNotifs] = useState([]);
   const [pageLoading, setPageLoading] = useState(true);
 
@@ -410,7 +416,19 @@ export default function NotificationsPage() {
                             {notif.title}
                           </p>
                           {notif.message && (
-                            <p className="text-xs text-white/30 mt-0.5 line-clamp-2">{notif.message}</p>
+                            <>
+                              <p
+                                className={`text-xs text-white/30 mt-0.5 ${expandedIds.has(notif.id) ? '' : 'line-clamp-2'}`}
+                              >{notif.message}</p>
+                              {notif.message.length > 80 && (
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); toggleExpand(notif.id); }}
+                                  className="text-[10px] text-white/20 hover:text-white/40 mt-0.5 transition"
+                                >
+                                  {expandedIds.has(notif.id) ? 'Show less' : 'Read more'}
+                                </button>
+                              )}
+                            </>
                           )}
 
                           {/* Announcement YouTube embed */}
