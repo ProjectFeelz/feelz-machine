@@ -127,7 +127,7 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
       let labelContent = '';
       if (artImg) {
         // Embed artwork as base64 data URI inside SVG
-        const offscreen = document.createElement('canvas');
+        const offscreen = window.document.createElement('canvas');
         offscreen.width = offscreen.height = labelR * 2;
         const octx = offscreen.getContext('2d');
         octx.drawImage(artImg, 0, 0, labelR * 2, labelR * 2);
@@ -177,11 +177,11 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
         <circle cx="${r}" cy="${r}" r="${spindleR}" fill="#000" stroke="rgba(255,255,255,0.12)" stroke-width="0.6"/>
       </svg>`;
 
-      const blob = new Blob([svg], { type: 'image/svg+xml' });
-      const url  = URL.createObjectURL(blob);
-      const img  = new Image();
-      img.onload  = () => { URL.revokeObjectURL(url); resolve(img); };
-      img.onerror = () => { URL.revokeObjectURL(url); resolve(null); };
+      const blob = new window.Blob([svg], { type: 'image/svg+xml' });
+      const url  = window.URL.createObjectURL(blob);
+      const img  = new window.Image();
+      img.onload  = () => { window.URL.revokeObjectURL(url); resolve(img); };
+      img.onerror = () => { window.URL.revokeObjectURL(url); resolve(null); };
       img.src = url;
     });
   }, []);
@@ -284,7 +284,7 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
     let sourceNode  = null;
     if (audioUrl) {
       try {
-        audioCtx  = new AudioContext();
+        audioCtx  = new (window.AudioContext || window.webkitAudioContext)();
         const res = await fetch(audioUrl);
         const buf = await res.arrayBuffer();
         const decoded = await audioCtx.decodeAudioData(buf);
@@ -308,14 +308,14 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
 
     // Pick best supported codec
     const mimeType = ['video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus','video/webm']
-      .find(t => MediaRecorder.isTypeSupported(t)) || 'video/webm';
+      .find(t => window.MediaRecorder && window.MediaRecorder.isTypeSupported(t)) || 'video/webm';
 
-    const recorder = new MediaRecorder(combined, { mimeType, videoBitsPerSecond: 8_000_000 });
+    const recorder = new window.MediaRecorder(combined, { mimeType, videoBitsPerSecond: 8_000_000 });
     recorderRef.current = recorder;
 
     recorder.ondataavailable = e => { if (e.data.size > 0) chunksRef.current.push(e.data); };
     recorder.onstop = () => {
-      const blob = new Blob(chunksRef.current, { type: mimeType });
+      const blob = new window.Blob(chunksRef.current, { type: mimeType });
       setVideoBlob(blob);
       setRecording(false);
       setVideoProgress(100);
@@ -578,20 +578,27 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
 }
 
 // ── Canvas helpers ─────────────────────────────────────────────────────────────
+function proxyUrl(src) {
+  // Route through our Netlify proxy to ensure CORS headers for canvas access
+  return `/.netlify/functions/image-proxy?url=${encodeURIComponent(src)}`;
+}
+
 function loadImage(src) {
   return new Promise((resolve, reject) => {
-    const img = new Image();
+    // Try proxy first — guaranteed CORS headers
+    const proxied = proxyUrl(src);
+    const img = new window.Image();
     img.crossOrigin = 'anonymous';
     img.onload  = () => resolve(img);
     img.onerror = () => {
-      // Retry without crossOrigin as fallback (won't work for canvas taint but shows image)
-      const img2 = new Image();
+      // Fall back to direct URL
+      const img2 = new window.Image();
+      img2.crossOrigin = 'anonymous';
       img2.onload  = () => resolve(img2);
       img2.onerror = reject;
       img2.src = src;
     };
-    // Cache bust to force CORS headers on fresh load
-    img.src = src.includes('?') ? src : `${src}?cb=${Date.now()}`;
+    img.src = proxied;
   });
 }
 
