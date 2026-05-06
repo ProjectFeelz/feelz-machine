@@ -100,9 +100,10 @@ export function StoryUpload({ artistId, onUploaded }) {
       </button>
 
       {open && (
-        <div className="fixed inset-0 z-[600] flex items-end justify-center bg-black/80 backdrop-blur-sm"
+        <div className="fixed inset-0 z-[600] flex items-center justify-center px-6 bg-black/80 backdrop-blur-sm"
           onClick={() => setOpen(false)}>
-          <div className="w-full max-w-lg bg-neutral-900 rounded-t-2xl p-5 border-t border-white/[0.08]"
+          <div className="w-full overflow-y-auto rounded-3xl p-5 space-y-4"
+            style={{ maxWidth: 360, maxHeight: '80vh', backgroundColor: '#0f0f0f', border: '1px solid rgba(255,255,255,0.08)', boxShadow: '0 32px 64px rgba(0,0,0,0.6)' }}
             onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-bold text-white">Add a Story</h3>
@@ -119,8 +120,8 @@ export function StoryUpload({ artistId, onUploaded }) {
                 <span className="text-xs">Max {MAX_MB}MB</span>
               </button>
             ) : (
-              <div className="rounded-2xl overflow-hidden bg-black mb-3 relative">
-                {mediaType === 'image' && <img src={preview} alt="" className="w-full max-h-48 object-contain" />}
+              <div className="rounded-2xl overflow-hidden bg-black mb-3 relative" style={{ maxHeight: 200 }}>
+                {mediaType === 'image' && <img src={preview} alt="" className="w-full object-contain" style={{ maxHeight: 180 }} />}
                 {mediaType === 'audio' && (
                   <div className="flex items-center space-x-3 p-4">
                     <div className="w-10 h-10 rounded-full bg-purple-500/20 flex items-center justify-center">
@@ -132,7 +133,7 @@ export function StoryUpload({ artistId, onUploaded }) {
                     </div>
                   </div>
                 )}
-                {mediaType === 'video' && <video src={preview} controls className="w-full max-h-48" />}
+                {mediaType === 'video' && <video src={preview} controls className="w-full" style={{ maxHeight: 180 }} />}
                 <button onClick={() => { setFile(null); setPreview(null); }}
                   className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/60 flex items-center justify-center">
                   <X className="w-3.5 h-3.5 text-white" />
