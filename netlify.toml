@@ -71,6 +71,10 @@
   name = "presave-notify"
   schedule = "0 9 * * *"
 
+[[scheduled_functions]]
+  name = "cleanup-stories"
+  schedule = "0 2 * * *"
+
 # ── Redirects ─────────────────────────────────────────────────────────────────
 [[redirects]]
   from = "/.well-known/assetlinks.json"

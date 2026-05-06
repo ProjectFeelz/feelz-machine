@@ -48,6 +48,21 @@ export function StoryUpload({ artistId, onUploaded }) {
     const f = e.target.files[0];
     if (!f) return;
     if (f.size > MAX_MB * 1024 * 1024) { setError(`Max file size is ${MAX_MB}MB`); return; }
+    // Check video duration — max 60 seconds
+    if (f.type.startsWith('video')) {
+      const vid = document.createElement('video');
+      vid.preload = 'metadata';
+      const objUrl = URL.createObjectURL(f);
+      vid.onloadedmetadata = () => {
+        URL.revokeObjectURL(objUrl);
+        if (vid.duration > 60) { setError('Videos must be 60 seconds or less.'); return; }
+        setFile(f);
+        setError('');
+        setPreview(URL.createObjectURL(f));
+      };
+      vid.src = objUrl;
+      return;
+    }
     setFile(f);
     setError('');
     setPreview(URL.createObjectURL(f));
@@ -64,6 +79,20 @@ export function StoryUpload({ artistId, onUploaded }) {
     setUploading(true);
     setError('');
     try {
+      // Check 5-per-day limit
+      const dayStart = new Date();
+      dayStart.setHours(0, 0, 0, 0);
+      const { count } = await supabase
+        .from('artist_stories')
+        .select('*', { count: 'exact', head: true })
+        .eq('artist_id', artistId)
+        .gte('created_at', dayStart.toISOString());
+      if (count >= 5) {
+        setError('You can only post 5 stories per day.');
+        setUploading(false);
+        return;
+      }
+
       const ext  = file.name.split('.').pop();
       const path = `stories/${artistId}/${Date.now()}.${ext}`;
       const { error: upErr } = await supabase.storage.from('stories').upload(path, file, { upsert: false });
@@ -109,7 +138,7 @@ export function StoryUpload({ artistId, onUploaded }) {
               <h3 className="text-sm font-bold text-white">Add a Story</h3>
               <button onClick={() => setOpen(false)}><X className="w-4 h-4 text-white/30" /></button>
             </div>
-            <p className="text-xs text-white/30 mb-4">Stories disappear after 24 hours. Share audio clips, images, or short videos with your followers.</p>
+            <p className="text-xs text-white/30 mb-4">Stories disappear after 24 hours. Max 5 per day, videos up to 60 seconds.</p>
 
             {/* File picker */}
             {!file ? (
