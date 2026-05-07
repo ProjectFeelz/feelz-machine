@@ -17,7 +17,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useHaptics } from '../hooks/useHaptics';
 import {
   X, Plus, Upload, Loader, Play, Pause, Music, Image, Video,
-  Eye, Clock,
+  Eye, Clock, Trash2,
 } from 'lucide-react';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -48,21 +48,6 @@ export function StoryUpload({ artistId, onUploaded }) {
     const f = e.target.files[0];
     if (!f) return;
     if (f.size > MAX_MB * 1024 * 1024) { setError(`Max file size is ${MAX_MB}MB`); return; }
-    // Check video duration — max 60 seconds
-    if (f.type.startsWith('video')) {
-      const vid = document.createElement('video');
-      vid.preload = 'metadata';
-      const objUrl = URL.createObjectURL(f);
-      vid.onloadedmetadata = () => {
-        URL.revokeObjectURL(objUrl);
-        if (vid.duration > 60) { setError('Videos must be 60 seconds or less.'); return; }
-        setFile(f);
-        setError('');
-        setPreview(URL.createObjectURL(f));
-      };
-      vid.src = objUrl;
-      return;
-    }
     setFile(f);
     setError('');
     setPreview(URL.createObjectURL(f));
@@ -79,20 +64,6 @@ export function StoryUpload({ artistId, onUploaded }) {
     setUploading(true);
     setError('');
     try {
-      // Check 5-per-day limit
-      const dayStart = new Date();
-      dayStart.setHours(0, 0, 0, 0);
-      const { count } = await supabase
-        .from('artist_stories')
-        .select('*', { count: 'exact', head: true })
-        .eq('artist_id', artistId)
-        .gte('created_at', dayStart.toISOString());
-      if (count >= 5) {
-        setError('You can only post 5 stories per day.');
-        setUploading(false);
-        return;
-      }
-
       const ext  = file.name.split('.').pop();
       const path = `stories/${artistId}/${Date.now()}.${ext}`;
       const { error: upErr } = await supabase.storage.from('stories').upload(path, file, { upsert: false });
@@ -129,16 +100,15 @@ export function StoryUpload({ artistId, onUploaded }) {
       </button>
 
       {open && (
-        <div className="fixed inset-0 z-[600] flex items-center justify-center px-6 bg-black/80 backdrop-blur-sm"
+        <div className="fixed inset-0 z-[600] flex items-end justify-center bg-black/80 backdrop-blur-sm"
           onClick={() => setOpen(false)}>
-          <div className="w-full overflow-y-auto rounded-3xl p-5 space-y-4"
-            style={{ maxWidth: 360, maxHeight: '80vh', backgroundColor: '#0f0f0f', border: '1px solid rgba(255,255,255,0.08)', boxShadow: '0 32px 64px rgba(0,0,0,0.6)' }}
+          <div className="w-full max-w-lg bg-neutral-900 rounded-t-2xl p-5 border-t border-white/[0.08]"
             onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-bold text-white">Add a Story</h3>
               <button onClick={() => setOpen(false)}><X className="w-4 h-4 text-white/30" /></button>
             </div>
-            <p className="text-xs text-white/30 mb-4">Stories disappear after 24 hours. Max 5 per day, videos up to 60 seconds.</p>
+            <p className="text-xs text-white/30 mb-4">Stories disappear after 24 hours. Share audio clips, images, or short videos with your followers.</p>
 
             {/* File picker */}
             {!file ? (
@@ -149,8 +119,8 @@ export function StoryUpload({ artistId, onUploaded }) {
                 <span className="text-xs">Max {MAX_MB}MB</span>
               </button>
             ) : (
-              <div className="rounded-2xl overflow-hidden bg-black mb-3 relative" style={{ maxHeight: 200 }}>
-                {mediaType === 'image' && <img src={preview} alt="" className="w-full object-contain" style={{ maxHeight: 180 }} />}
+              <div className="rounded-2xl overflow-hidden bg-black mb-3 relative">
+                {mediaType === 'image' && <img src={preview} alt="" className="w-full max-h-48 object-contain" />}
                 {mediaType === 'audio' && (
                   <div className="flex items-center space-x-3 p-4">
                     <div className="w-10 h-10 rounded-full bg-purple-500/20 flex items-center justify-center">
@@ -162,7 +132,7 @@ export function StoryUpload({ artistId, onUploaded }) {
                     </div>
                   </div>
                 )}
-                {mediaType === 'video' && <video src={preview} controls className="w-full" style={{ maxHeight: 180 }} />}
+                {mediaType === 'video' && <video src={preview} controls className="w-full max-h-48" />}
                 <button onClick={() => { setFile(null); setPreview(null); }}
                   className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/60 flex items-center justify-center">
                   <X className="w-3.5 h-3.5 text-white" />
@@ -211,7 +181,7 @@ function StoryBubble({ artist, stories, viewed, onClick }) {
 }
 
 // ── Full-screen Story Viewer ──────────────────────────────────────────────────
-export function ArtistStoryView({ stories, artist, initialIndex = 0, onClose }) {
+export function ArtistStoryView({ stories, artist, initialIndex = 0, onClose, allGroups, groupIdx, onNavigateGroup, isOwner, onDelete }) {
   const { user } = useAuth();
   const { tap }  = useHaptics();
   const [idx, setIdx]             = useState(initialIndex);
@@ -257,13 +227,22 @@ export function ArtistStoryView({ stories, artist, initialIndex = 0, onClose }) 
 
   const goNext = () => {
     tap();
-    if (idx < stories.length - 1) setIdx(p => p + 1);
-    else onClose();
+    if (idx < stories.length - 1) {
+      setIdx(p => p + 1);
+    } else if (onNavigateGroup && allGroups && groupIdx < allGroups.length - 1) {
+      onNavigateGroup(groupIdx + 1);
+    } else {
+      onClose();
+    }
   };
 
   const goPrev = () => {
     tap();
-    if (idx > 0) setIdx(p => p - 1);
+    if (idx > 0) {
+      setIdx(p => p - 1);
+    } else if (onNavigateGroup && allGroups && groupIdx > 0) {
+      onNavigateGroup(groupIdx - 1);
+    }
   };
 
   if (!story) return null;
@@ -302,7 +281,16 @@ export function ArtistStoryView({ stories, artist, initialIndex = 0, onClose }) 
             </div>
           </div>
         </div>
-        <button onClick={onClose}><X className="w-5 h-5 text-white/60" /></button>
+        <div className="flex items-center space-x-2">
+          {isOwner && onDelete && (
+            <button
+              onClick={() => onDelete(story.id)}
+              className="w-8 h-8 flex items-center justify-center rounded-full bg-red-500/20">
+              <Trash2 className="w-4 h-4 text-red-400" />
+            </button>
+          )}
+          <button onClick={onClose}><X className="w-5 h-5 text-white/60" /></button>
+        </div>
       </div>
 
       {/* Media */}
@@ -345,7 +333,7 @@ export function StoriesRail({ userId }) {
   const navigate                    = useNavigate();
   const [storyGroups, setStoryGroups] = useState([]); // [{ artist, stories }]
   const [viewedIds, setViewedIds]   = useState(new Set());
-  const [viewing, setViewing]       = useState(null); // { artist, stories, idx }
+  const [viewing, setViewing]       = useState(null); // { artist, stories, idx, groupIdx }
   const [loading, setLoading]       = useState(true);
 
   useEffect(() => {
@@ -396,7 +384,7 @@ export function StoriesRail({ userId }) {
             artist={artist}
             stories={stories}
             viewed={viewedIds}
-            onClick={() => setViewing({ artist, stories, idx: 0 })}
+            onClick={() => setViewing({ artist, stories, idx: 0, groupIdx: storyGroups.indexOf(storyGroups.find(g => g.artist.id === artist.id)) })}
           />
         ))}
       </div>
@@ -406,6 +394,12 @@ export function StoriesRail({ userId }) {
           stories={viewing.stories}
           artist={viewing.artist}
           initialIndex={viewing.idx}
+          allGroups={storyGroups}
+          groupIdx={viewing.groupIdx}
+          onNavigateGroup={(newGroupIdx) => {
+            const g = storyGroups[newGroupIdx];
+            if (g) setViewing({ artist: g.artist, stories: g.stories, idx: 0, groupIdx: newGroupIdx });
+          }}
           onClose={() => setViewing(null)}
         />
       )}

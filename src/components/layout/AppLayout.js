@@ -7,7 +7,7 @@ import MiniPlayer from './MiniPlayer';
 import FullPlayer from './FullPlayer';
 import { usePlayer } from '../../contexts/PlayerContext';
 import { useAuth } from '../../contexts/AuthContext';
-import { Bell, Flame, UserCircle } from 'lucide-react';
+import { Bell, Flame, UserCircle, Compass } from 'lucide-react';
 import useNotifications from '../../contexts/useNotifications';
 import { OfflineBanner } from '../../hooks/useOffline';
 import ErrorBoundary from '../ErrorBoundary';
@@ -112,6 +112,13 @@ function MobileBellButton() {
           <div className="flex items-center space-x-1 px-2 py-1 rounded-full bg-orange-500/15 border border-orange-500/25">
             <Flame className="w-3 h-3 text-orange-400" />
             <span className="text-xs font-bold text-orange-400">{streak}</span>
+          </div>
+        )}
+        {/* Discovery streak */}
+        {streakValue?.discoveryStreak > 1 && (
+          <div className="flex items-center space-x-1 px-2 py-1 rounded-full bg-blue-500/15 border border-blue-500/25">
+            <Compass className="w-3 h-3 text-blue-400" />
+            <span className="text-xs font-bold text-blue-400">{streakValue.discoveryStreak}</span>
           </div>
         )}
 

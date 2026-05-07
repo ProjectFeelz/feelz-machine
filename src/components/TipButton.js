@@ -113,7 +113,7 @@ export default function TipButton({ artist }) {
 
   return (
     <div
-      className="fixed inset-0 z-[600] flex items-center justify-center px-6 bg-black/80 backdrop-blur-sm"
+      className="fixed inset-0 z-[600] flex items-center justify-center px-6 bg-black/80 backdrop-blur-sm md:pl-64"
       onClick={reset}
     >
       <div

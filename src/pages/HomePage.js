@@ -30,6 +30,18 @@ function limitPerArtist(items, totalArtists) {
   });
 }
 
+// Track IDs seen across all home page sections to prevent duplicates
+const _seenTrackIds = new Set();
+function dedupeAcrossSections(items, reset = false) {
+  if (reset) _seenTrackIds.clear();
+  return items.filter(item => {
+    if (!item.id) return true; // albums without id pass through
+    if (_seenTrackIds.has(item.id)) return false;
+    _seenTrackIds.add(item.id);
+    return true;
+  });
+}
+
 function formatNumber(n) {
   if (!n) return '0';
   if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
@@ -234,10 +246,14 @@ export default function HomePage() {
         .sort((a, b) => b._boosted - a._boosted).slice(0, 8);
 
       const artistCount = (artists || []).length;
-      setFeaturedTracks(limitPerArtist(normTrack(featured), artistCount));
-      setNewReleases(limitPerArtist(trackList, artistCount));
-      setNewAlbums(limitPerArtist(albumList, artistCount));
-      setTrending(limitPerArtist(trendingBoosted, artistCount));
+      // Reset seen IDs then dedupe each section in priority order
+      const featuredDeduped  = dedupeAcrossSections(limitPerArtist(normTrack(featured), artistCount), true);
+      const trendingDeduped  = dedupeAcrossSections(limitPerArtist(trendingBoosted, artistCount));
+      const releasesDeduped  = dedupeAcrossSections(limitPerArtist(trackList, artistCount));
+      setFeaturedTracks(featuredDeduped);
+      setTrending(trendingDeduped);
+      setNewReleases(releasesDeduped);
+      setNewAlbums(limitPerArtist(albumList, artistCount)); // albums don't need track dedup
       setTopArtists(artists || []);
 
       if (user) {
@@ -616,6 +632,7 @@ export default function HomePage() {
 
       {/* Stories rail — followed artists' 24hr clips */}
       <StoriesRail userId={user?.id} />
+      <div className="mb-4" />
 
       {/* Monthly Wrapped card */}
       {wrappedNotif && (

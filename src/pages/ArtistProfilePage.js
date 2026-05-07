@@ -12,7 +12,7 @@ import {
   UserPlus, UserCheck, Instagram, Twitter, Youtube,
   Globe, Music, Loader, Verified, Download,
   Heart, Check, MoreHorizontal, DollarSign, MessageCircle,
-  ChevronDown, ChevronUp, Send, Trash2, Shuffle,
+  ChevronDown, ChevronUp, Send, Trash2, Shuffle, Users,
   Radio, X
 } from 'lucide-react';
 import { ArtistProfileSkeleton } from '../components/SkeletonLoader';
@@ -387,7 +387,8 @@ export default function ArtistProfilePage() {
   const [highlightedTrackId, setHighlightedTrackId] = useState(null);
   const [voiceMemos, setVoiceMemos] = useState([]);
   const [stories, setStories]         = useState([]);
-  const [viewingStory, setViewingStory] = useState(false);
+  const [viewingStory, setViewingStory]   = useState(false);
+  const [showCommunity, setShowCommunity] = useState(false);
   const [deepCuts, setDeepCuts] = useState([]);
   const [weeklyDiscoveries, setWeeklyDiscoveries] = useState(0);
   const [purchasedTracks, setPurchasedTracks] = useState({});
@@ -1089,16 +1090,29 @@ export default function ArtistProfilePage() {
           </button>
         </div>
         <div className="absolute -bottom-16 left-1/2 -translate-x-1/2 z-10">
-          <div className="w-32 h-32 rounded-2xl overflow-hidden border-4 shadow-2xl"
-            style={{ borderColor: bgColor, backgroundColor: `${secondaryColor}30` }}>
-            {artist.profile_image_url ? (
-              <img src={artist.profile_image_url} alt={artist.artist_name} className="w-full h-full object-cover" />
-            ) : (
-              <div className="w-full h-full flex items-center justify-center"
-                style={{ background: `linear-gradient(135deg, ${secondaryColor}, ${accentColor})` }}>
-                <span className="text-2xl font-bold" style={{ color: textColor }}>{artist.artist_name?.[0]?.toUpperCase()}</span>
+          {/* Story ring — clickable if artist has active stories */}
+          <div
+            className="relative"
+            onClick={stories.length > 0 ? () => setViewingStory(true) : undefined}
+            style={{ cursor: stories.length > 0 ? 'pointer' : 'default' }}
+          >
+            {stories.length > 0 && (
+              <div className="absolute -inset-1.5 rounded-2xl"
+                style={{ background: 'linear-gradient(135deg, #8B5CF6, #06B6D4)', padding: 2, borderRadius: 18 }}>
+                <div className="w-full h-full rounded-2xl" style={{ backgroundColor: bgColor }} />
               </div>
             )}
+            <div className="relative w-32 h-32 rounded-2xl overflow-hidden border-4 shadow-2xl"
+              style={{ borderColor: stories.length > 0 ? 'transparent' : bgColor, backgroundColor: `${secondaryColor}30` }}>
+              {artist.profile_image_url ? (
+                <img src={artist.profile_image_url} alt={artist.artist_name} className="w-full h-full object-cover" />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center"
+                  style={{ background: `linear-gradient(135deg, ${secondaryColor}, ${accentColor})` }}>
+                  <span className="text-2xl font-bold" style={{ color: textColor }}>{artist.artist_name?.[0]?.toUpperCase()}</span>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -1196,6 +1210,12 @@ export default function ArtistProfilePage() {
           {user && user.id !== artist?.user_id && (
             <TipButton artist={artist} />
           )}
+          <button onClick={() => setShowCommunity(true)}
+            className="flex items-center space-x-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all active:scale-95"
+            style={{ backgroundColor: `${textColor}10`, color: `${textColor}70`, border: `1px solid ${textColor}20` }}>
+            <Users className="w-3.5 h-3.5" />
+            <span>Community</span>
+          </button>
 
         {/* Tip Goal — shows to everyone */}
         <TipGoal
@@ -1348,16 +1368,7 @@ export default function ArtistProfilePage() {
         </div>
       )}
 
-      {thoughts.length > 0 && (
-        <div className="px-6 mb-6 space-y-3">
-          {thoughts.map(thought => (
-            <ThoughtBlock key={thought.id} thought={thought} isOwner={isProfileOwner}
-              secondaryColor={secondaryColor} textColor={textColor} bgColor={bgColor}
-              user={user} navigate={navigate}
-              onDeleted={(id) => setThoughts(prev => prev.filter(t => t.id !== id))} />
-          ))}
-        </div>
-      )}
+
 
       {tracks.length > 0 && (
         <div className="px-6 mb-8">
@@ -1403,6 +1414,9 @@ export default function ArtistProfilePage() {
                         {track.title}
                         {track.is_preorder && track.release_date && new Date(track.release_date) > new Date() && (
                           <span className="ml-1.5 text-[9px] font-bold px-1 py-0.5 rounded-full bg-yellow-400/20 text-yellow-300 border border-yellow-400/30 uppercase tracking-wide align-middle">Pre</span>
+                        )}
+                        {track.created_at && (Date.now() - new Date(track.created_at).getTime()) < 7 * 24 * 60 * 60 * 1000 && (
+                          <span className="ml-1.5 text-[9px] font-bold px-1 py-0.5 rounded-full uppercase tracking-wide align-middle" style={{ background: `${accentColor}25`, color: accentColor, border: `1px solid ${accentColor}40` }}>New</span>
                         )}
                       </p>
                       <div className="flex items-center space-x-2">
@@ -1814,6 +1828,25 @@ export default function ArtistProfilePage() {
         </div>
       )}
 
+      {similarArtists.length > 0 && (
+        <div className="mb-8 px-6">
+          <h2 className="text-lg font-bold mb-3" style={{ fontFamily: `"${headingFont}", sans-serif` }}>Artists Like This</h2>
+          <div className="flex space-x-4 overflow-x-auto scrollbar-hide">
+            {similarArtists.map(a => (
+              <div key={a.id} className="flex-shrink-0 w-24 cursor-pointer group" onClick={() => navigate(`/artist/${a.slug}`)}>
+                <div className="w-24 h-24 rounded-full overflow-hidden mb-2 mx-auto" style={{ backgroundColor: `${textColor}08` }}>
+                  {a.profile_image_url
+                    ? <img src={a.profile_image_url} alt={a.artist_name} className="w-full h-full object-cover" />
+                    : <div className="w-full h-full flex items-center justify-center"><Music className="w-8 h-8" style={{ color: `${textColor}20` }} /></div>}
+                </div>
+                <p className="text-xs font-medium text-center truncate" style={{ color: textColor }}>{a.artist_name}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+
       {/* Stories — 24hr clips */}
       {(stories.length > 0 || user?.id === artist.user_id) && (
         <div className="px-4 mb-4">
@@ -1849,21 +1882,20 @@ export default function ArtistProfilePage() {
           stories={stories}
           artist={artist}
           initialIndex={0}
+          isOwner={user?.id === artist.user_id}
+          onDelete={async (storyId) => {
+            await supabase.from('artist_stories').delete().eq('id', storyId);
+            setStories(prev => {
+              const remaining = prev.filter(s => s.id !== storyId);
+              if (remaining.length === 0) setViewingStory(false);
+              return remaining;
+            });
+          }}
           onClose={() => setViewingStory(false)}
         />
       )}
 
-      {/* Voice Memos from the artist */}
-      {voiceMemos.length > 0 && (
-        <div className="mb-8 px-6">
-          <h2 className="text-lg font-bold mb-3" style={{ fontFamily: `"${headingFont}", sans-serif` }}>Voice Memos</h2>
-          <div className="space-y-2">
-            {voiceMemos.map(memo => (
-              <VoiceMemoCard key={memo.id} memo={memo} canDelete={false} />
-            ))}
-          </div>
-        </div>
-      )}
+
 
       {/* Weekly discovery count */}
       {weeklyDiscoveries > 0 && (
@@ -1875,13 +1907,84 @@ export default function ArtistProfilePage() {
         </div>
       )}
 
-      <ArtistGuestbook artistId={artist?.id} textColor={textColor} accentColor={accentColor} isOwner={isProfileOwner} />
+
 
       <div className="px-6 pt-8 pb-4 text-center">
         <p className="text-[11px]" style={{ color: `${textColor}20` }}>
           Powered by <span className="font-medium" style={{ color: `${textColor}30` }}>Feelz Machine</span>
         </p>
       </div>
+
+      {/* ── Community Modal ─────────────────────────────────────────────── */}
+      {showCommunity && (
+        <div className="fixed inset-0 z-[600] flex items-center justify-center px-6 bg-black/80 backdrop-blur-sm md:pl-64"
+          onClick={() => setShowCommunity(false)}>
+          <div className="w-full overflow-y-auto rounded-3xl"
+            style={{ maxWidth: 400, maxHeight: '85vh', backgroundColor: '#0f0f0f', border: '1px solid rgba(255,255,255,0.08)', boxShadow: '0 32px 64px rgba(0,0,0,0.6)' }}
+            onClick={e => e.stopPropagation()}>
+
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.06]">
+              <div>
+                <p className="text-sm font-bold text-white">Community</p>
+                <p className="text-xs text-white/30 mt-0.5">{artist.artist_name}</p>
+              </div>
+              <div className="flex items-center space-x-2">
+                <button onClick={() => { setShowCommunity(false); navigate('/community'); }}
+                  className="flex items-center space-x-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition"
+                  style={{ backgroundColor: `${secondaryColor}20`, color: secondaryColor, border: `1px solid ${secondaryColor}30` }}>
+                  <MessageCircle className="w-3 h-3" />
+                  <span>Chat Rooms</span>
+                </button>
+                <button onClick={() => setShowCommunity(false)}
+                  className="w-8 h-8 flex items-center justify-center rounded-full bg-white/[0.08] hover:bg-white/[0.15] transition">
+                  <X className="w-4 h-4 text-white/60" />
+                </button>
+              </div>
+            </div>
+
+            <div className="px-5 py-4 space-y-6">
+
+              {/* Listener Guestbook */}
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: `${textColor}40` }}>Listener Comments</p>
+                <ArtistGuestbook artistId={artist?.id} textColor={textColor} accentColor={accentColor} isOwner={isProfileOwner} />
+              </div>
+
+              {/* Thoughts of the Day */}
+              {thoughts.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: `${textColor}40` }}>Thoughts</p>
+                  <div className="space-y-3">
+                    {thoughts.map(thought => (
+                      <ThoughtBlock key={thought.id} thought={thought} isOwner={isProfileOwner}
+                        secondaryColor={secondaryColor} textColor={textColor} bgColor={bgColor}
+                        user={user} navigate={navigate}
+                        onDeleted={(id) => setThoughts(prev => prev.filter(t => t.id !== id))} />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Voice Memos */}
+              {voiceMemos.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: `${textColor}40` }}>Voice Memos</p>
+                  <div className="space-y-2">
+                    {voiceMemos.map(memo => (
+                      <VoiceMemoCard key={memo.id} memo={memo} canDelete={false} />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {thoughts.length === 0 && voiceMemos.length === 0 && (
+                <p className="text-xs text-white/20 text-center py-4">Nothing here yet — check back soon</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -15,6 +15,7 @@ import TierGate from '../components/TierGate';
 import { TierBadge } from '../components/TierGate';
 import { useTier } from '../contexts/useTier';
 import ProfileCompletionBanner from '../components/ProfileCompletionBanner';
+import { StoryUpload } from '../components/ArtistStories';
 import { useStreakContext } from '../contexts/StreakContext';
 
 const TikTokIcon = ({ className }) => (
@@ -610,6 +611,11 @@ export default function ProfilePage() {
                   </div>
                 </div>
               </TierGate>
+
+              {/* Story upload — under thought of the day */}
+              <div className="mt-3 rounded-2xl border border-white/[0.06] overflow-hidden" style={{ background: 'rgba(255,255,255,0.02)' }}>
+                <StoryUpload artistId={artist?.id} onUploaded={() => {}} />
+              </div>
             </>
           )}
 
