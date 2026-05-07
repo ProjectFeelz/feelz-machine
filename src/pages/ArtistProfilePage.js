@@ -1133,35 +1133,7 @@ export default function ArtistProfilePage() {
           <span className="text-sm" style={{ color: `${textColor}80` }}>{formatNumber(artist.total_streams)} streams</span>
         </div>
 
-        {/* Top Listeners leaderboard */}
-        {topListeners.length > 0 && (
-          <div className="mb-4 px-1">
-            <p className="text-[10px] uppercase tracking-widest font-semibold mb-2" style={{ color: `${textColor}40` }}>
-              Top Listeners
-            </p>
-            <div className="flex items-center space-x-2">
-              {topListeners.map((listener, i) => (
-                <div key={listener.user_id} className="flex flex-col items-center" title={listener.name}>
-                  <div className="relative">
-                    <div className="w-9 h-9 rounded-full overflow-hidden border-2" style={{ borderColor: i === 0 ? primaryColor : `${textColor}20` }}>
-                      {listener.avatar
-                        ? <img src={listener.avatar} alt={listener.name} className="w-full h-full object-cover" />
-                        : <div className="w-full h-full flex items-center justify-center text-xs font-bold" style={{ background: `${primaryColor}30`, color: textColor }}>
-                            {listener.name[0]}
-                          </div>}
-                    </div>
-                    {i === 0 && (
-                      <span className="absolute -top-1 -right-1 text-[10px]">👑</span>
-                    )}
-                  </div>
-                  <span className="text-[9px] mt-0.5 max-w-[36px] truncate" style={{ color: `${textColor}50` }}>
-                    {listener.count}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+
         <div className="flex items-center justify-center flex-wrap gap-2 mb-4 px-4">
           <button onClick={handleFollow}
             className="flex items-center space-x-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all active:scale-95"
@@ -1216,8 +1188,9 @@ export default function ArtistProfilePage() {
             <Users className="w-3.5 h-3.5" />
             <span>Community</span>
           </button>
+        </div>
 
-        {/* Tip Goal — shows to everyone */}
+        {/* Tip Goal — full width below pills */}
         <TipGoal
           artistId={artist.id}
           primaryColor={primaryColor}
@@ -1920,6 +1893,28 @@ export default function ArtistProfilePage() {
                       <p className="text-xs" style={{ color: `${textColor}40` }}>{stories.length} active {stories.length === 1 ? 'story' : 'stories'}</p>
                     </div>
                   </button>
+                </div>
+              )}
+
+              {/* Top Listeners */}
+              {topListeners.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: `${textColor}40` }}>Top Listeners</p>
+                  <div className="flex items-center space-x-3 flex-wrap gap-y-2">
+                    {topListeners.map((listener, i) => (
+                      <div key={listener.user_id} className="flex flex-col items-center" title={listener.name}>
+                        <div className="relative">
+                          <div className="w-10 h-10 rounded-full overflow-hidden border-2" style={{ borderColor: i === 0 ? primaryColor : `${textColor}20` }}>
+                            {listener.avatar
+                              ? <img src={listener.avatar} alt={listener.name} className="w-full h-full object-cover" />
+                              : <div className="w-full h-full flex items-center justify-center text-xs font-bold" style={{ background: `${primaryColor}30`, color: textColor }}>{listener.name[0]}</div>}
+                          </div>
+                          {i === 0 && <span className="absolute -top-1 -right-1 text-[10px]">👑</span>}
+                        </div>
+                        <span className="text-[9px] mt-1 max-w-[40px] truncate text-center" style={{ color: `${textColor}50` }}>{listener.count}</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
 
