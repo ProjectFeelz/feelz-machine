@@ -1242,7 +1242,6 @@ export default function ArtistProfilePage() {
             </div>
           </div>
         )}
-        </div>
         {artist.bio && (
           <p className="text-sm leading-relaxed mb-6 max-w-sm" style={{ color: `${textColor}90`, fontFamily: `"${bodyFont}", sans-serif` }}>
             {artist.bio}

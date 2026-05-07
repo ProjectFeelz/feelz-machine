@@ -613,7 +613,7 @@ export default function ProfilePage() {
               </TierGate>
 
               {/* Story upload — under thought of the day */}
-              <div className="mt-3 rounded-2xl border border-white/[0.06] overflow-hidden" style={{ background: 'rgba(255,255,255,0.02)' }}>
+              <div className="mt-3 mx-1 rounded-2xl border border-white/[0.06] overflow-hidden" style={{ background: 'rgba(255,255,255,0.02)' }}>
                 <StoryUpload artistId={artist?.id} onUploaded={() => {}} />
               </div>
             </>
