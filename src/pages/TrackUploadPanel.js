@@ -176,7 +176,7 @@ function VersionsEditor({ versions, setVersions }) {
             {VERSION_TYPES.map(v => <option key={v.value} value={v.value}>{v.label}</option>)}
           </select>
           <div className="flex items-center space-x-2">
-            <input type="file" accept=".wav,.mp3,.flac,.m4a"
+            <input type="file" accept=".wav,.mp3,.flac,.m4a,.ogg,.aac"
               onChange={(e) => update(i, 'file', e.target.files[0])}
               className="flex-1 text-xs text-white/40 file:mr-2 file:py-1.5 file:px-2 file:rounded file:border-0 file:bg-white/[0.06] file:text-white/50 file:text-xs" />
             <button type="button" onClick={() => remove(i)}
@@ -241,9 +241,6 @@ export default function TrackUploadPanel() {
   const [editAudioFile, setEditAudioFile]       = useState(null);
   const [editAlbumCoverFile, setEditAlbumCoverFile] = useState(null);
   const [albumTracks, setAlbumTracks]             = useState([]);   // tracks inside the album being edited
-  const [addingAlbumTrack, setAddingAlbumTrack]   = useState(false); // show add-track form in edit panel
-  const [newAlbumTrack, setNewAlbumTrack]         = useState({ ...BLANK_TRACK }); // form state for new track
-  const [addingAlbumTrackWorking, setAddingAlbumTrackWorking] = useState(false);
   const [albumTracksLoading, setAlbumTracksLoading] = useState(false);
 
   const isAlbumRelease = ALBUM_TYPES.includes(release.release_type);
@@ -364,38 +361,6 @@ export default function TrackUploadPanel() {
     e.preventDefault();
     if (!trackForm.audio_file) { showMessage('error', 'Audio file is required'); return; }
     if (!trackForm.title.trim()) { showMessage('error', 'Track title is required'); return; }
-
-    // Artwork duplicate check — singles only (album tracks share artwork intentionally)
-    if (!isAlbumRelease && trackForm.cover_file) {
-      // We can't check the hash client-side without uploading, so we check filename + size
-      // as a lightweight proxy. Artists who genuinely use the same image will need to re-upload.
-      const { data: existingTracks } = await supabase
-        .from('tracks')
-        .select('title, cover_artwork_url')
-        .eq('artist_id', artist.id)
-        .is('album_id', null)
-        .eq('is_published', true)
-        .not('cover_artwork_url', 'is', null);
-
-      if (existingTracks?.length) {
-        // Extract filename from existing URLs to compare with the new file name
-        const newFileName = trackForm.cover_file.name.toLowerCase().replace(/[^a-z0-9.]/g, '');
-        const newFileSize = trackForm.cover_file.size;
-        // Store file size in track metadata isn't available, so we compare URL patterns
-        // A simpler heuristic: warn if more than 2 existing singles already share the same artwork URL
-        const urlCounts = {};
-        existingTracks.forEach(t => {
-          if (t.cover_artwork_url) {
-            urlCounts[t.cover_artwork_url] = (urlCounts[t.cover_artwork_url] || 0) + 1;
-          }
-        });
-        const maxReuse = Math.max(...Object.values(urlCounts), 0);
-        if (maxReuse >= 2) {
-          showMessage('error', 'Your singles appear to be using the same artwork. Please use unique cover art for each track.');
-          return;
-        }
-      }
-    }
     if (!artist) { showMessage('error', 'No artist profile found'); return; }
 
     // ── Album guard: cover art is required so the home page always has visuals ──
@@ -939,7 +904,7 @@ export default function TrackUploadPanel() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <FieldLabel>Audio File * (.mp3, .wav, .flac)</FieldLabel>
-                  <input type="file" accept=".wav,.mp3,.flac,.m4a,.ogg"
+                  <input type="file" accept=".wav,.mp3,.flac,.m4a,.ogg,.aac"
                     onChange={(e) => {
                       const f = e.target.files[0];
                       if (f && f.size > 500 * 1024 * 1024) { showMessage('error', 'File too large! Max 500MB'); return; }
@@ -1342,7 +1307,7 @@ export default function TrackUploadPanel() {
                                     <FieldLabel>Audio File</FieldLabel>
                                     <label className="cursor-pointer text-xs px-3 py-1.5 bg-white/[0.06] rounded-lg hover:bg-white/[0.1] text-white/60 transition inline-block">
                                       {editAudioFile ? editAudioFile.name : 'Replace audio…'}
-                                      <input type="file" accept="audio/*" className="hidden"
+                                      <input type="file" accept=".wav,.mp3,.flac,.m4a,.ogg,.aac" className="hidden"
                                         onChange={(e) => setEditAudioFile(e.target.files[0])} />
                                     </label>
                                   </div>
@@ -1374,139 +1339,6 @@ export default function TrackUploadPanel() {
                           </div>
                         ))}
                       </div>
-
-                      {/* Add track to this album */}
-                      {!addingAlbumTrack ? (
-                        <button type="button"
-                          onClick={() => { setAddingAlbumTrack(true); setNewAlbumTrack({ ...BLANK_TRACK, track_number: String(albumTracks.length + 1) }); }}
-                          className="w-full py-2.5 mt-2 bg-white/[0.04] border border-dashed border-white/[0.12] text-white/40 text-sm rounded-lg hover:bg-white/[0.07] hover:text-white/60 transition flex items-center justify-center space-x-2">
-                          <Plus className="w-4 h-4" /><span>Add Track to Album</span>
-                        </button>
-                      ) : (
-                        <div className="mt-3 p-4 bg-white/[0.03] rounded-xl border border-white/[0.08] space-y-3">
-                          <div className="flex items-center justify-between">
-                            <p className="text-sm font-semibold text-white">New Track — #{newAlbumTrack.track_number}</p>
-                            <button type="button" onClick={() => setAddingAlbumTrack(false)}
-                              className="p-1.5 rounded-lg hover:bg-white/[0.06] transition">
-                              <X className="w-4 h-4 text-white/30" />
-                            </button>
-                          </div>
-
-                          {/* Audio file */}
-                          <div>
-                            <FieldLabel>Audio File *</FieldLabel>
-                            <label className="w-full cursor-pointer">
-                              <div className="px-3 py-2.5 bg-white/[0.06] rounded-lg text-xs text-white/40 hover:bg-white/[0.1] transition text-center border border-dashed border-white/[0.12]">
-                                {newAlbumTrack.audio_file ? newAlbumTrack.audio_file.name : 'Choose audio file…'}
-                              </div>
-                              <input type="file" accept="audio/*" className="hidden"
-                                onChange={(e) => setNewAlbumTrack(t => ({ ...t, audio_file: e.target.files[0] || null }))} />
-                            </label>
-                          </div>
-
-                          {/* Cover art */}
-                          <div>
-                            <FieldLabel>Cover Art (optional — uses album cover if blank)</FieldLabel>
-                            <label className="w-full cursor-pointer">
-                              <div className="px-3 py-2.5 bg-white/[0.06] rounded-lg text-xs text-white/40 hover:bg-white/[0.1] transition text-center border border-dashed border-white/[0.12]">
-                                {newAlbumTrack.cover_file ? newAlbumTrack.cover_file.name : 'Choose cover art…'}
-                              </div>
-                              <input type="file" accept="image/*" className="hidden"
-                                onChange={(e) => setNewAlbumTrack(t => ({ ...t, cover_file: e.target.files[0] || null }))} />
-                            </label>
-                          </div>
-
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                            <div>
-                              <FieldLabel>Track Title *</FieldLabel>
-                              <FInput type="text" value={newAlbumTrack.title}
-                                onChange={(e) => setNewAlbumTrack(t => ({ ...t, title: e.target.value }))}
-                                onBlur={(e) => setNewAlbumTrack(t => ({ ...t, title: normaliseTitleCase(e.target.value) }))} />
-                            </div>
-                            <div>
-                              <FieldLabel>Track Number</FieldLabel>
-                              <FInput type="number" min="1" value={newAlbumTrack.track_number}
-                                onChange={(e) => setNewAlbumTrack(t => ({ ...t, track_number: e.target.value }))} />
-                            </div>
-                            <div>
-                              <FieldLabel>Genre</FieldLabel>
-                              <FSelect value={newAlbumTrack.genre}
-                                onChange={(e) => setNewAlbumTrack(t => ({ ...t, genre: e.target.value }))}>
-                                <option value="">Select genre…</option>
-                                {GENRES.map(g => <option key={g} value={g}>{g}</option>)}
-                              </FSelect>
-                            </div>
-                            <div>
-                              <FieldLabel>Mood</FieldLabel>
-                              <FSelect value={newAlbumTrack.mood}
-                                onChange={(e) => setNewAlbumTrack(t => ({ ...t, mood: e.target.value }))}>
-                                <option value="">Select mood…</option>
-                                {MOODS.map(m => <option key={m} value={m}>{m}</option>)}
-                              </FSelect>
-                            </div>
-                          </div>
-
-                          <div className="flex flex-wrap gap-3">
-                            {[
-                              { key: 'is_published',    label: 'Published' },
-                              { key: 'is_explicit',     label: 'Explicit' },
-                              { key: 'is_downloadable', label: 'Downloadable' },
-                            ].map(({ key, label }) => (
-                              <label key={key} className="flex items-center space-x-1.5 cursor-pointer">
-                                <input type="checkbox" checked={newAlbumTrack[key]}
-                                  onChange={(e) => setNewAlbumTrack(t => ({ ...t, [key]: e.target.checked }))}
-                                  className="rounded border-white/20" />
-                                <span className="text-xs text-white/50">{label}</span>
-                              </label>
-                            ))}
-                          </div>
-
-                          <button type="button" disabled={addingAlbumTrackWorking || !newAlbumTrack.audio_file || !newAlbumTrack.title.trim()}
-                            onClick={async () => {
-                              if (!newAlbumTrack.audio_file || !newAlbumTrack.title.trim()) return;
-                              setAddingAlbumTrackWorking(true);
-                              try {
-                                const fileUrl = await convertAndUploadAudio(newAlbumTrack.audio_file, 'tracks/');
-                                let coverUrl = album.cover_artwork_url || null;
-                                if (newAlbumTrack.cover_file) {
-                                  coverUrl = await uploadFile(newAlbumTrack.cover_file, 'covers/');
-                                }
-                                const { data: inserted } = await supabase.from('tracks').insert({
-                                  artist_id:      artist.id,
-                                  album_id:       album.id,
-                                  title:          newAlbumTrack.title.trim(),
-                                  slug:           slugify(newAlbumTrack.title),
-                                  genre:          newAlbumTrack.genre || null,
-                                  mood:           newAlbumTrack.mood || null,
-                                  file_url:       fileUrl,
-                                  cover_artwork_url: coverUrl,
-                                  track_number:   parseInt(newAlbumTrack.track_number) || albumTracks.length + 1,
-                                  is_published:   newAlbumTrack.is_published,
-                                  is_explicit:    newAlbumTrack.is_explicit,
-                                  is_downloadable: newAlbumTrack.is_downloadable,
-                                  stream_count:   0,
-                                }).select().single();
-                                // Refresh tracks list
-                                const { data: refreshed } = await supabase.from('tracks')
-                                  .select('*, albums(title)')
-                                  .eq('album_id', album.id)
-                                  .eq('artist_id', artist.id)
-                                  .order('track_number', { ascending: true });
-                                setAlbumTracks(refreshed || []);
-                                setAddingAlbumTrack(false);
-                                setNewAlbumTrack({ ...BLANK_TRACK });
-                              } catch (err) {
-                                console.error('Add track error:', err);
-                              }
-                              setAddingAlbumTrackWorking(false);
-                            }}
-                            className="w-full py-2.5 bg-white text-black text-sm font-semibold rounded-lg disabled:opacity-40 transition flex items-center justify-center space-x-2">
-                            {addingAlbumTrackWorking
-                              ? <><Loader className="w-4 h-4 animate-spin" /><span>Uploading…</span></>
-                              : <><Plus className="w-4 h-4" /><span>Add Track</span></>}
-                          </button>
-                        </div>
-                      )}
                     </div>
                   )}
                 </div>
@@ -1712,7 +1544,7 @@ export default function TrackUploadPanel() {
                               <FieldLabel>Audio File</FieldLabel>
                               <label className="cursor-pointer text-xs px-3 py-1.5 bg-white/[0.06] rounded-lg hover:bg-white/[0.1] text-white/60 transition inline-block">
                                 {editAudioFile ? editAudioFile.name : 'Replace audio…'}
-                                <input type="file" accept="audio/*" className="hidden"
+                                <input type="file" accept=".wav,.mp3,.flac,.m4a,.ogg,.aac" className="hidden"
                                   onChange={(e) => setEditAudioFile(e.target.files[0])} />
                               </label>
                               {editAudioFile?.name?.toLowerCase().endsWith('.wav') && (
