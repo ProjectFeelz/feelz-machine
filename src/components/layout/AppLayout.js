@@ -91,7 +91,7 @@ function SplashScreen() {
 // ── Bell button ───────────────────────────────────────────────────────────────
 function MobileBellButton() {
   const { unreadCount } = useNotifications();
-  const { streak } = useContext(StreakContext);
+  const { streak, discoveryStreak } = useContext(StreakContext);
   const { user, artist, isArtist } = useAuth();
   const navigate = useNavigate();
 
@@ -115,10 +115,10 @@ function MobileBellButton() {
           </div>
         )}
         {/* Discovery streak */}
-        {streakValue?.discoveryStreak > 1 && (
+        {discoveryStreak > 1 && (
           <div className="flex items-center space-x-1 px-2 py-1 rounded-full bg-blue-500/15 border border-blue-500/25">
             <Compass className="w-3 h-3 text-blue-400" />
-            <span className="text-xs font-bold text-blue-400">{streakValue.discoveryStreak}</span>
+            <span className="text-xs font-bold text-blue-400">{discoveryStreak}</span>
           </div>
         )}
 
