@@ -615,12 +615,7 @@ export default function HomePage() {
       <div className="greeting-hero px-6 pt-14 md:pt-6 pb-6 border-b border-white/[0.05] mb-6">
         <div className="flex items-center justify-between mb-1">
           <p className="section-label">{new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</p>
-          {user && discoveryStreak > 1 && (
-            <div className="flex items-center space-x-1 px-2 py-1 rounded-full bg-blue-500/10 border border-blue-500/20">
-              <Compass className="w-3 h-3 text-blue-400" />
-              <span className="text-xs font-bold text-blue-400">{discoveryStreak}</span>
-            </div>
-          )}
+
         </div>
         <h1 className="text-2xl font-bold text-white">
           {user ? greeting() : 'Feelz Machine'}
@@ -631,8 +626,9 @@ export default function HomePage() {
       </div>
 
       {/* Stories rail — followed artists' 24hr clips */}
-      <StoriesRail userId={user?.id} />
-      <div className="mb-4" />
+      <div className="py-3 mb-2" style={{ background: 'linear-gradient(135deg, rgba(139,92,246,0.08) 0%, rgba(6,182,212,0.05) 100%)', borderTop: '1px solid rgba(139,92,246,0.1)', borderBottom: '1px solid rgba(6,182,212,0.08)' }}>
+        <StoriesRail userId={user?.id} />
+      </div>
 
       {/* Monthly Wrapped card */}
       {wrappedNotif && (

@@ -1767,27 +1767,10 @@ export default function ArtistProfilePage() {
         </div>
       )}
 
-      {similarArtists.length > 0 && (
-        <div className="mb-8 px-6">
-          <h2 className="text-lg font-bold mb-3" style={{ fontFamily: `"${headingFont}", sans-serif` }}>Artists Like This</h2>
-          <div className="flex space-x-4 overflow-x-auto scrollbar-hide">
-            {similarArtists.map(a => (
-              <div key={a.id} className="flex-shrink-0 w-24 cursor-pointer group" onClick={() => navigate(`/artist/${a.slug}`)}>
-                <div className="w-24 h-24 rounded-full overflow-hidden mb-2 mx-auto" style={{ backgroundColor: `${textColor}08` }}>
-                  {a.profile_image_url
-                    ? <img src={a.profile_image_url} alt={a.artist_name} className="w-full h-full object-cover" />
-                    : <div className="w-full h-full flex items-center justify-center"><Music className="w-8 h-8" style={{ color: `${textColor}20` }} /></div>}
-                </div>
-                <p className="text-xs font-medium text-center truncate" style={{ color: textColor }}>{a.artist_name}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
       {/* Deep Cuts — least-played tracks, frames obscurity as a feature */}
       {deepCuts.length > 1 && (
-        <div className="mb-8 px-6">
+        <div className="mb-8 py-5" style={{ background: `linear-gradient(135deg, ${accentColor}08 0%, transparent 100%)`, borderTop: `1px solid ${accentColor}12`, borderBottom: `1px solid ${accentColor}08` }}>
+        <div className="px-6">
           <div className="flex items-center space-x-2 mb-3">
             <h2 className="text-lg font-bold" style={{ fontFamily: `"${headingFont}", sans-serif` }}>Deep Cuts</h2>
             <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold uppercase tracking-wider" style={{ background: `${accentColor}20`, color: accentColor }}>
@@ -1826,6 +1809,7 @@ export default function ArtistProfilePage() {
             })}
           </div>
         </div>
+        </div>
       )}
 
       {similarArtists.length > 0 && (
@@ -1847,35 +1831,7 @@ export default function ArtistProfilePage() {
       )}
 
 
-      {/* Stories — 24hr clips */}
-      {(stories.length > 0 || user?.id === artist.user_id) && (
-        <div className="px-4 mb-4">
-          <div className="flex items-center space-x-4 overflow-x-auto pb-1 scrollbar-hide">
-            {user?.id === artist.user_id && (
-              <StoryUpload artistId={artist.id} onUploaded={() => {
-                supabase.from('artist_stories')
-                  .select('*').eq('artist_id', artist.id)
-                  .gt('expires_at', new Date().toISOString())
-                  .order('created_at', { ascending: false }).limit(20)
-                  .then(({ data }) => setStories(data || []));
-              }} />
-            )}
-            {stories.length > 0 && (
-              <button onClick={() => setViewingStory(true)}
-                className="flex-shrink-0 flex flex-col items-center space-y-1.5 w-16">
-                <div className="w-16 h-16 rounded-full p-0.5 bg-gradient-to-tr from-purple-500 to-pink-400">
-                  <div className="w-full h-full rounded-full overflow-hidden bg-black border border-black">
-                    {artist.profile_image_url
-                      ? <img src={artist.profile_image_url} alt="" className="w-full h-full object-cover" />
-                      : <div className="w-full h-full bg-white/10 flex items-center justify-center text-xs font-bold text-white/40">{artist.artist_name?.[0]}</div>}
-                  </div>
-                </div>
-                <span className="text-[10px]" style={{ color: `${textColor}50` }}>{stories.length} {stories.length === 1 ? 'story' : 'stories'}</span>
-              </button>
-            )}
-          </div>
-        </div>
-      )}
+
 
       {viewingStory && stories.length > 0 && (
         <ArtistStoryView
@@ -1944,6 +1900,28 @@ export default function ArtistProfilePage() {
             </div>
 
             <div className="px-5 py-4 space-y-6">
+
+              {/* Stories */}
+              {stories.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: `${textColor}40` }}>Stories</p>
+                  <button onClick={() => { setShowCommunity(false); setViewingStory(true); }}
+                    className="flex items-center space-x-3 w-full p-3 rounded-2xl transition hover:bg-white/[0.04]"
+                    style={{ border: '1px solid rgba(255,255,255,0.06)' }}>
+                    <div className="w-12 h-12 rounded-full p-0.5 flex-shrink-0" style={{ background: 'linear-gradient(135deg, #8B5CF6, #06B6D4)' }}>
+                      <div className="w-full h-full rounded-full overflow-hidden" style={{ backgroundColor: bgColor }}>
+                        {artist.profile_image_url
+                          ? <img src={artist.profile_image_url} alt="" className="w-full h-full object-cover" />
+                          : <div className="w-full h-full flex items-center justify-center text-xs font-bold" style={{ color: textColor }}>{artist.artist_name?.[0]}</div>}
+                      </div>
+                    </div>
+                    <div className="text-left">
+                      <p className="text-sm font-medium" style={{ color: textColor }}>{artist.artist_name}</p>
+                      <p className="text-xs" style={{ color: `${textColor}40` }}>{stories.length} active {stories.length === 1 ? 'story' : 'stories'}</p>
+                    </div>
+                  </button>
+                </div>
+              )}
 
               {/* Listener Guestbook */}
               <div>

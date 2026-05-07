@@ -55,9 +55,9 @@ function GoalEditModal({ goal, artistId, onClose, onSaved }) {
   };
 
   return (
-    <div className="fixed inset-0 z-[600] flex items-end justify-center bg-black/70 backdrop-blur-sm"
+    <div className="fixed inset-0 z-[600] flex items-center justify-center px-6 bg-black/70 backdrop-blur-sm md:pl-64"
       onClick={onClose}>
-      <div className="w-full max-w-lg bg-neutral-900 rounded-t-2xl p-5 border-t border-white/[0.08]"
+      <div className="w-full overflow-y-auto rounded-3xl p-5" style={{ maxWidth: 400, maxHeight: "80vh", backgroundColor: "#0f0f0f", border: "1px solid rgba(255,255,255,0.08)", boxShadow: "0 32px 64px rgba(0,0,0,0.6)" }}
         onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-sm font-bold text-white">{goal ? 'Edit Goal' : 'Create a Tip Goal'}</h3>
