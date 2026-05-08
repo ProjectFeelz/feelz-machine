@@ -12,7 +12,7 @@ import {
   UserPlus, UserCheck, Instagram, Twitter, Youtube,
   Globe, Music, Loader, Verified, Download,
   Heart, Check, MoreHorizontal, DollarSign, MessageCircle,
-  ChevronDown, ChevronUp, Send, Trash2, Shuffle, Users,
+  ChevronDown, ChevronUp, Send, Trash2, Shuffle, Users, Plus,
   Radio, X
 } from 'lucide-react';
 import { ArtistProfileSkeleton } from '../components/SkeletonLoader';
