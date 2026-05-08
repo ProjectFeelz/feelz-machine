@@ -249,13 +249,16 @@ export function ArtistStoryView({ stories, artist, initialIndex = 0, onClose, al
 
   return (
     <div className="fixed inset-0 z-[700] bg-black flex flex-col">
-      {/* Progress bars */}
+      {/* Progress bars — tappable to seek to that story */}
       <div className="flex space-x-1 px-3 pt-safe pt-4 flex-shrink-0">
         {stories.map((s, i) => (
-          <div key={s.id} className="flex-1 h-0.5 rounded-full bg-white/20 overflow-hidden">
-            <div className="h-full bg-white rounded-full transition-none"
-              style={{ width: i < idx ? '100%' : i === idx ? `${progress}%` : '0%' }} />
-          </div>
+          <button key={s.id} className="flex-1 h-3 flex items-center py-1 cursor-pointer"
+            onClick={() => setIdx(i)}>
+            <div className="w-full h-0.5 rounded-full bg-white/20 overflow-hidden">
+              <div className="h-full bg-white rounded-full transition-none"
+                style={{ width: i < idx ? '100%' : i === idx ? `${progress}%` : '0%' }} />
+            </div>
+          </button>
         ))}
       </div>
 
@@ -377,6 +380,7 @@ export function StoriesRail({ userId }) {
 
   return (
     <>
+      <div className="py-3" style={{ background: 'linear-gradient(135deg, rgba(139,92,246,0.08) 0%, rgba(6,182,212,0.05) 100%)', borderTop: '1px solid rgba(139,92,246,0.1)', borderBottom: '1px solid rgba(6,182,212,0.08)' }}>
       <div className="flex space-x-4 overflow-x-auto px-6 pb-1 scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
         {storyGroups.map(({ artist, stories }) => (
           <StoryBubble
@@ -387,6 +391,7 @@ export function StoriesRail({ userId }) {
             onClick={() => setViewing({ artist, stories, idx: 0, groupIdx: storyGroups.indexOf(storyGroups.find(g => g.artist.id === artist.id)) })}
           />
         ))}
+      </div>
       </div>
 
       {viewing && (

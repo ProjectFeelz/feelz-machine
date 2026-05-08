@@ -1113,9 +1113,21 @@ export default function ArtistProfilePage() {
                 </div>
               )}
             </div>
+                      </div>
+            {/* Quick-create button — own profile only */}
+            {isProfileOwner && (
+              <div className="absolute -bottom-1 -right-1 flex flex-col space-y-1">
+                <button
+                  onClick={() => setShowCommunity(true)}
+                  title="Add Story or go Live"
+                  className="w-7 h-7 rounded-full flex items-center justify-center shadow-lg border-2 transition hover:scale-110 active:scale-95"
+                  style={{ backgroundColor: primaryColor, borderColor: bgColor }}>
+                  <Plus className="w-3.5 h-3.5 text-white" />
+                </button>
+              </div>
+            )}
           </div>
         </div>
-      </div>
 
       {/* ARTIST INFO */}
       <div className="px-6 pt-24 flex flex-col items-center text-center">
@@ -1847,7 +1859,7 @@ export default function ArtistProfilePage() {
       {showCommunity && (
         <div className="fixed inset-0 z-[600] flex items-center justify-center px-6 bg-black/80 backdrop-blur-sm md:pl-64"
           onClick={() => setShowCommunity(false)}>
-          <div className="w-full overflow-y-auto rounded-3xl"
+          <div className="w-full overflow-y-auto overflow-x-hidden rounded-3xl"
             style={{ maxWidth: 400, maxHeight: '85vh', backgroundColor: '#0f0f0f', border: '1px solid rgba(255,255,255,0.08)', boxShadow: '0 32px 64px rgba(0,0,0,0.6)' }}
             onClick={e => e.stopPropagation()}>
 

@@ -626,9 +626,7 @@ export default function HomePage() {
       </div>
 
       {/* Stories rail — followed artists' 24hr clips */}
-      <div className="py-3 mb-2" style={{ background: 'linear-gradient(135deg, rgba(139,92,246,0.08) 0%, rgba(6,182,212,0.05) 100%)', borderTop: '1px solid rgba(139,92,246,0.1)', borderBottom: '1px solid rgba(6,182,212,0.08)' }}>
-        <StoriesRail userId={user?.id} />
-      </div>
+      <StoriesRail userId={user?.id} />
 
       {/* Monthly Wrapped card */}
       {wrappedNotif && (
