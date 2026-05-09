@@ -15,7 +15,6 @@ import { ArrowLeft, MessageCircle, Users } from 'lucide-react';
 import ArtistGuestbook from '../components/ArtistGuestbook';
 import { VoiceMemoCard } from '../components/VoiceMemo';
 import { ArtistStoryView } from '../components/ArtistStories';
-import ThoughtCard from '../components/ThoughtCard';
 
 export default function ArtistCommunityPage() {
   const { slug }         = useParams();
@@ -187,8 +186,13 @@ export default function ArtistCommunityPage() {
             <p className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: `${textColor}40` }}>Thoughts</p>
             <div className="space-y-3">
               {thoughts.map(thought => (
-                <ThoughtCard key={thought.id} thought={thought}
-                  onDeleted={(id) => setThoughts(prev => prev.filter(t => t.id !== id))} />
+                <div key={thought.id} className="p-4 rounded-2xl border border-white/[0.06]"
+                  style={{ background: 'rgba(255,255,255,0.02)' }}>
+                  <p className="text-sm leading-relaxed" style={{ color: textColor }}>{thought.content}</p>
+                  <p className="text-[10px] mt-2" style={{ color: `${textColor}30` }}>
+                    {new Date(thought.created_at).toLocaleDateString()}
+                  </p>
+                </div>
               ))}
             </div>
           </section>
