@@ -1957,8 +1957,8 @@ export default function ArtistProfilePage() {
                       onClick={() => {
                         if (id === 'live')    { setCreateTab('live'); setLiveTitle(`${artist?.artist_name}'s Live Session`); }
                         else if (id === 'memo')   { setCreateTab('memo'); }
-                        else if (id === 'upload') { setShowCreateModal(false); setCreateTab('menu'); navigate('/hub?tab=upload'); }
-                        else if (id === 'edit')   { setShowCreateModal(false); setCreateTab('menu'); navigate('/profile'); }
+                        else if (id === 'upload') { setShowCreateModal(false); setCreateTab('menu'); navigate('/dashboard?tab=upload'); }
+                        else if (id === 'edit')   { setShowCreateModal(false); setCreateTab('menu'); navigate('/profile/edit'); }
                         else setCreateTab(id);
                       }}
                       className={`w-full flex items-center space-x-3 p-4 rounded-2xl border transition active:scale-[0.98] text-left`}
