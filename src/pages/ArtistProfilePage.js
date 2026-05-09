@@ -1950,11 +1950,15 @@ export default function ArtistProfilePage() {
                     { id: 'memo',    icon: '🎙️', label: 'Voice Memo',          sub: 'Record a message for your fans',        color: 'pink' },
                     { id: 'dm',      icon: '📣', label: 'Message Fans',        sub: 'Send a notification to all followers',  color: 'green' },
                     { id: 'live',    icon: '🔴', label: 'Go Live',             sub: 'Start a live session',                  color: 'red' },
+                    { id: 'upload',  icon: '🎵', label: 'Upload Track',        sub: 'Add new music to your profile',         color: 'yellow' },
+                    { id: 'edit',    icon: '✏️', label: 'Edit Profile',        sub: 'Update your bio, photo and links',      color: 'gray' },
                   ].map(({ id, icon, label, sub, color }) => (
                     <button key={id}
                       onClick={() => {
-                        if (id === 'live')  { setCreateTab('live'); setLiveTitle(`${artist?.artist_name}'s Live Session`); }
-                        else if (id === 'memo') { setCreateTab('memo'); }
+                        if (id === 'live')    { setCreateTab('live'); setLiveTitle(`${artist?.artist_name}'s Live Session`); }
+                        else if (id === 'memo')   { setCreateTab('memo'); }
+                        else if (id === 'upload') { setShowCreateModal(false); setCreateTab('menu'); navigate('/hub?tab=upload'); }
+                        else if (id === 'edit')   { setShowCreateModal(false); setCreateTab('menu'); navigate('/profile'); }
                         else setCreateTab(id);
                       }}
                       className={`w-full flex items-center space-x-3 p-4 rounded-2xl border transition active:scale-[0.98] text-left`}

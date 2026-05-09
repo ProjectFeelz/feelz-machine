@@ -390,7 +390,7 @@ export function StoriesRail({ userId }) {
 
   return (
     <>
-      <div className="py-3" style={{ background: 'linear-gradient(135deg, rgba(139,92,246,0.08) 0%, rgba(6,182,212,0.05) 100%)', borderTop: '1px solid rgba(139,92,246,0.1)', borderBottom: '1px solid rgba(6,182,212,0.08)' }}>
+      <div className="pt-3 pb-4 mb-4" style={{ background: storyGroups.length ? 'linear-gradient(135deg, rgba(139,92,246,0.08) 0%, rgba(6,182,212,0.05) 100%)' : 'transparent', borderTop: storyGroups.length ? '1px solid rgba(139,92,246,0.1)' : 'none', borderBottom: storyGroups.length ? '1px solid rgba(6,182,212,0.08)' : 'none' }}>
       <div className="flex space-x-4 overflow-x-auto px-6 pb-1 scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
         {storyGroups.map(({ artist, stories }) => (
           <StoryBubble

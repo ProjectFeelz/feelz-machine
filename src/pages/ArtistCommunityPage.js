@@ -115,6 +115,16 @@ export default function ArtistCommunityPage() {
         </button>
       </div>
 
+      {/* Chat Rooms — prominent below header */}
+      <div className="px-5 pt-4">
+        <button onClick={() => navigate('/community')}
+          className="w-full flex items-center justify-center space-x-2 py-3 rounded-2xl text-sm font-semibold transition active:scale-[0.98]"
+          style={{ backgroundColor: `${primaryColor}15`, color: primaryColor, border: `1px solid ${primaryColor}25` }}>
+          <MessageCircle className="w-4 h-4" />
+          <span>Go to Chat Rooms</span>
+        </button>
+      </div>
+
       <div className="px-5 py-5 space-y-8">
 
         {/* Stories */}
