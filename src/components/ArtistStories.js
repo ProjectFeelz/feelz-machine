@@ -31,7 +31,7 @@ function timeLeft(expiresAt) {
 }
 
 // ── Story Upload ──────────────────────────────────────────────────────────────
-export function StoryUpload({ artistId, onUploaded }) {
+export function StoryUpload({ artistId, onUploaded, inline = false }) {
   const { tap } = useHaptics();
   const [open, setOpen]         = useState(false);
   const [file, setFile]         = useState(null);
@@ -87,28 +87,10 @@ export function StoryUpload({ artistId, onUploaded }) {
     setUploading(false);
   };
 
-  return (
-    <>
-      <button
-        onClick={() => { tap(); setOpen(true); }}
-        className="flex-shrink-0 flex flex-col items-center space-y-1.5"
-      >
-        <div className="w-16 h-16 rounded-full border-2 border-dashed border-white/20 flex items-center justify-center bg-white/[0.04] hover:bg-white/[0.07] transition">
-          <Plus className="w-6 h-6 text-white/40" />
-        </div>
-        <span className="text-[10px] text-white/30">Add Story</span>
-      </button>
-
-      {open && (
-        <div className="fixed inset-0 z-[600] flex items-end justify-center bg-black/80 backdrop-blur-sm"
-          onClick={() => setOpen(false)}>
-          <div className="w-full max-w-lg bg-neutral-900 rounded-t-2xl p-5 border-t border-white/[0.08]"
-            onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-bold text-white">Add a Story</h3>
-              <button onClick={() => setOpen(false)}><X className="w-4 h-4 text-white/30" /></button>
-            </div>
-            <p className="text-xs text-white/30 mb-4">Stories disappear after 24 hours. Share audio clips, images, or short videos with your followers.</p>
+  // Inline form content — shared between inline and modal modes
+  const formContent = (
+    <div className="space-y-3">
+      <p className="text-xs text-white/30">Stories disappear after 24 hours. Max 5 per day, videos up to 60 seconds.</p>
 
             {/* File picker */}
             {!file ? (
@@ -146,13 +128,41 @@ export function StoryUpload({ artistId, onUploaded }) {
               placeholder="Add a caption (optional)"
               className="w-full bg-white/[0.06] rounded-xl px-3 py-2.5 text-sm text-white placeholder-white/20 outline-none mb-3" />
 
-            {error && <p className="text-xs text-red-400 mb-3">{error}</p>}
+      {error && <p className="text-xs text-red-400">{error}</p>}
+      <button onClick={handleUpload} disabled={!file || uploading}
+        className="w-full py-3 bg-purple-600 rounded-xl text-sm font-semibold text-white disabled:opacity-40 transition flex items-center justify-center space-x-2">
+        {uploading ? <Loader className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+        <span>{uploading ? 'Uploading...' : 'Share Story'}</span>
+      </button>
+    </div>
+  );
 
-            <button onClick={handleUpload} disabled={!file || uploading}
-              className="w-full py-3 bg-purple-600 rounded-xl text-sm font-semibold text-white disabled:opacity-40 transition flex items-center justify-center space-x-2">
-              {uploading ? <Loader className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-              <span>{uploading ? 'Uploading...' : 'Share Story'}</span>
-            </button>
+  // Inline mode — just the form, no trigger button or outer modal
+  if (inline) return formContent;
+
+  return (
+    <>
+      <button
+        onClick={() => { tap(); setOpen(true); }}
+        className="flex-shrink-0 flex flex-col items-center space-y-1.5"
+      >
+        <div className="w-16 h-16 rounded-full border-2 border-dashed border-white/20 flex items-center justify-center bg-white/[0.04] hover:bg-white/[0.07] transition">
+          <Plus className="w-6 h-6 text-white/40" />
+        </div>
+        <span className="text-[10px] text-white/30">Add Story</span>
+      </button>
+
+      {open && (
+        <div className="fixed inset-0 z-[600] flex items-center justify-center px-4 bg-black/80 backdrop-blur-sm"
+          onClick={() => setOpen(false)}>
+          <div className="w-full overflow-y-auto rounded-3xl p-5"
+            style={{ maxWidth: 400, maxHeight: '85vh', backgroundColor: '#0f0f0f', border: '1px solid rgba(255,255,255,0.08)', boxShadow: '0 32px 64px rgba(0,0,0,0.6)' }}
+            onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-bold text-white">Add a Story</h3>
+              <button onClick={() => setOpen(false)}><X className="w-4 h-4 text-white/30" /></button>
+            </div>
+            {formContent}
           </div>
         </div>
       )}

@@ -19,7 +19,7 @@ import { ArtistProfileSkeleton } from '../components/SkeletonLoader';
 import ShareCard from '../components/ShareCard';
 import { usePullToRefresh } from '../hooks/usePullToRefresh';
 import PullToRefreshIndicator from '../components/PullToRefreshIndicator';
-import { VoiceMemoCard } from '../components/VoiceMemo';
+import { VoiceMemoCard, VoiceMemoUpload } from '../components/VoiceMemo';
 import TipButton from '../components/TipButton';
 import TipGoal from '../components/TipGoal';
 import { ArtistStoryView, StoryUpload } from '../components/ArtistStories';
@@ -1954,7 +1954,7 @@ export default function ArtistProfilePage() {
                     <button key={id}
                       onClick={() => {
                         if (id === 'live')  { setCreateTab('live'); setLiveTitle(`${artist?.artist_name}'s Live Session`); }
-                        else if (id === 'memo') { setShowCreateModal(false); navigate('/dashboard?tab=memos'); }
+                        else if (id === 'memo') { setCreateTab('memo'); }
                         else setCreateTab(id);
                       }}
                       className={`w-full flex items-center space-x-3 p-4 rounded-2xl border transition active:scale-[0.98] text-left`}
@@ -1972,7 +1972,7 @@ export default function ArtistProfilePage() {
               {/* ── Story ── */}
               {createTab === 'story' && (
                 <div className="rounded-2xl border border-white/[0.06] overflow-hidden" style={{ background: 'rgba(255,255,255,0.02)' }}>
-                  <StoryUpload artistId={artist.id} onUploaded={() => { setShowCreateModal(false); setCreateTab('menu'); }} />
+                  <StoryUpload artistId={artist.id} inline onUploaded={() => { setShowCreateModal(false); setCreateTab('menu'); }} />
                 </div>
               )}
 
@@ -2013,6 +2013,11 @@ export default function ArtistProfilePage() {
                     {createThoughtSaving ? <Loader className="w-4 h-4 animate-spin" /> : <span>Post Thought</span>}
                   </button>
                 </div>
+              )}
+
+              {/* ── Voice Memo ── */}
+              {createTab === 'memo' && (
+                <VoiceMemoUpload artistId={artist.id} onUploaded={() => { setShowCreateModal(false); setCreateTab('menu'); }} />
               )}
 
               {/* ── Message Fans ── */}
