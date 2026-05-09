@@ -70,7 +70,6 @@ function slugify(text) {
   return `${base}-${Date.now().toString(36)}`;
 }
 
-// ── Title case normaliser ─────────────────────────────────────────────────────
 function normaliseTitleCase(str) {
   if (!str) return str;
   const letters = str.replace(/[^a-zA-Z]/g, '');
@@ -194,28 +193,373 @@ function VersionsEditor({ versions, setVersions }) {
   );
 }
 
+// ─── AddTrackToAlbum ──────────────────────────────────────────────────────────
+// Full track upload form scoped to an existing album (used inside the Manage > Albums editor)
+
+function AddTrackToAlbum({
+  album,
+  existingTrackCount,
+  artist,
+  isPremium,
+  canAddDownloadSale,
+  downloadSalesRemaining,
+  downloadSalesLimit,
+  uploadFile,
+  convertAndUploadAudio,
+  saveCollaborations,
+  converting,
+  convProgress,
+  convError,
+  onTrackAdded,   // callback: receives newly-added track row
+  onCancel,
+}) {
+  const [trackForm, setTrackForm]       = useState({
+    ...BLANK_TRACK,
+    track_number: String(existingTrackCount + 1),
+    is_published: true,
+  });
+  const [versionFiles, setVersionFiles] = useState([]);
+  const [collaborators, setCollaborators] = useState([]);
+  const [uploading, setUploading]       = useState(false);
+  const [message, setMessage]           = useState({ type: '', text: '' });
+
+  const isWorking = uploading || converting;
+
+  const showMessage = (type, text) => {
+    setMessage({ type, text });
+    setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!trackForm.audio_file) { showMessage('error', 'Audio file is required'); return; }
+    if (!trackForm.title.trim()) { showMessage('error', 'Track title is required'); return; }
+
+    // Duplicate title check within this album
+    const normTitle = trackForm.title.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+    const { data: existingTitles } = await supabase
+      .from('tracks').select('title').eq('artist_id', artist.id);
+    if (existingTitles?.some(t => t.title.toLowerCase().replace(/[^a-z0-9]/g, '') === normTitle)) {
+      showMessage('error', `You already have a track called "${trackForm.title.trim()}". Please use a unique title.`);
+      return;
+    }
+
+    setUploading(true);
+    try {
+      const fileUrl = await convertAndUploadAudio(trackForm.audio_file, 'tracks/');
+      let coverUrl = null;
+      if (trackForm.cover_file) {
+        showMessage('info', 'Uploading cover artwork…');
+        coverUrl = await uploadFile(trackForm.cover_file, 'covers/');
+      }
+
+      showMessage('info', 'Saving track…');
+      const { data, error } = await supabase.from('tracks').insert([{
+        artist_id:         artist.id,
+        album_id:          album.id,
+        title:             trackForm.title.trim(),
+        slug:              slugify(trackForm.title),
+        genre:             trackForm.genre,
+        mood:              trackForm.mood,
+        lyrics:            trackForm.lyrics || null,
+        file_url:          fileUrl,
+        cover_artwork_url: coverUrl,
+        track_number:      parseInt(trackForm.track_number) || (existingTrackCount + 1),
+        is_explicit:       trackForm.is_explicit,
+        is_downloadable:   trackForm.is_downloadable,
+        is_published:      trackForm.is_published,
+        is_premium:        trackForm.is_premium,
+        download_price:    parseFloat(trackForm.download_price) || 0,
+        featured:          trackForm.featured,
+        has_versions:      trackForm.has_versions,
+        pay_what_you_want: trackForm.pay_what_you_want || false,
+        minimum_price:     parseFloat(trackForm.minimum_price) > 0 ? parseFloat(trackForm.minimum_price) : null,
+        is_preorder:       trackForm.is_preorder || false,
+        release_date:      trackForm.is_preorder && trackForm.release_date ? trackForm.release_date : null,
+        youtube_url:       trackForm.youtube_url?.trim() || null,
+      }]).select();
+      if (error) throw error;
+      const trackId = data[0].id;
+
+      if (trackForm.has_versions && versionFiles.length > 0) {
+        for (const ver of versionFiles) {
+          if (ver.file) {
+            showMessage('info', `Uploading version: ${ver.version_name}…`);
+            const verUrl = await convertAndUploadAudio(ver.file, 'versions/');
+            await supabase.from('track_versions').insert([{
+              track_id: trackId, version_name: ver.version_name,
+              version_type: ver.version_type, file_url: verUrl,
+            }]);
+          }
+        }
+      }
+
+      if (collaborators.length > 0) {
+        showMessage('info', 'Sending collab requests…');
+        await saveCollaborations(trackId, collaborators);
+      }
+
+      if (trackForm.is_published) {
+        try {
+          const { data: { session: authSession } } = await supabase.auth.getSession();
+          fetch('/.netlify/functions/notify-new-track', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              track_id:    trackId,
+              track_title: trackForm.title,
+              artist_id:   artist.id,
+              artist_slug: artist.slug,
+              token:       authSession?.access_token,
+            }),
+          }).catch(() => {});
+        } catch {}
+      }
+
+      showMessage('success', `"${trackForm.title}" added to album!`);
+      onTrackAdded(data[0]);
+
+    } catch (err) {
+      showMessage('error', 'Upload failed: ' + err.message);
+    }
+    setUploading(false);
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4 pt-2">
+      {/* Toast */}
+      {message.text && (
+        <div className={`p-3 rounded-lg text-sm flex items-start space-x-2 ${
+          message.type === 'success' ? 'bg-green-500/10 border border-green-500/20 text-green-400'
+          : message.type === 'info'  ? 'bg-blue-500/10 border border-blue-500/20 text-blue-400'
+          : 'bg-red-500/10 border border-red-500/20 text-red-400'
+        }`}>
+          {message.type === 'error' && <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />}
+          <span>{message.text}</span>
+        </div>
+      )}
+      {converting && <ConversionBanner progress={convProgress} />}
+      {convError && <div className="p-3 rounded-lg text-sm bg-red-500/10 border border-red-500/20 text-red-400">{convError}</div>}
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <FieldLabel>Track Title *</FieldLabel>
+          <FInput type="text" required value={trackForm.title}
+            onChange={(e) => setTrackForm({ ...trackForm, title: e.target.value })}
+            onBlur={(e) => setTrackForm(prev => ({ ...prev, title: normaliseTitleCase(e.target.value) }))} />
+        </div>
+        <div>
+          <FieldLabel>Track Number</FieldLabel>
+          <FInput type="number" min="1" value={trackForm.track_number}
+            onChange={(e) => setTrackForm({ ...trackForm, track_number: e.target.value })} />
+        </div>
+        <div>
+          <FieldLabel>Genre</FieldLabel>
+          <FSelect value={trackForm.genre}
+            onChange={(e) => setTrackForm({ ...trackForm, genre: e.target.value })}>
+            <option value="">Select genre…</option>
+            {GENRES.map(g => <option key={g} value={g}>{g}</option>)}
+          </FSelect>
+        </div>
+        <div>
+          <FieldLabel>Mood</FieldLabel>
+          <FSelect value={trackForm.mood}
+            onChange={(e) => setTrackForm({ ...trackForm, mood: e.target.value })}>
+            <option value="">Select mood…</option>
+            {MOODS.map(m => <option key={m} value={m}>{m}</option>)}
+          </FSelect>
+        </div>
+        <TierGate feature="download_sales" inline>
+          <div>
+            <FieldLabel>
+              Download Price (USD)
+              {!isPremium && downloadSalesLimit > 0 && (
+                <span className="ml-2 text-[10px] text-white/30 font-normal">
+                  {downloadSalesRemaining > 0
+                    ? `${downloadSalesRemaining} of ${downloadSalesLimit} remaining this month`
+                    : 'Monthly limit reached'}
+                </span>
+              )}
+            </FieldLabel>
+            {canAddDownloadSale || parseFloat(trackForm.download_price) > 0 ? (
+              <FInput type="number" min="0" step="0.01" value={trackForm.download_price}
+                onChange={(e) => setTrackForm({ ...trackForm, download_price: e.target.value })} />
+            ) : (
+              <div className="px-3 py-2.5 bg-white/[0.03] rounded-lg border border-white/[0.06] text-xs text-white/30">
+                Monthly limit reached (2/month on Pro) — upgrade to Premium for unlimited
+              </div>
+            )}
+          </div>
+        </TierGate>
+        {trackForm.is_downloadable && parseFloat(trackForm.download_price) > 0 && (
+          <div className="md:col-span-2 space-y-2">
+            <div className="flex items-center space-x-3">
+              <Toggle value={trackForm.pay_what_you_want}
+                onChange={() => setTrackForm({ ...trackForm, pay_what_you_want: !trackForm.pay_what_you_want })} />
+              <span className="text-xs text-white/50">Pay What You Want</span>
+            </div>
+            {trackForm.pay_what_you_want && (
+              <div>
+                <FieldLabel>Minimum Price (0 = free)</FieldLabel>
+                <FInput type="number" min="0" step="0.01" value={trackForm.minimum_price}
+                  onChange={(e) => setTrackForm({ ...trackForm, minimum_price: e.target.value })} />
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      <TierGate feature="lyrics" inline>
+        <div>
+          <FieldLabel>Lyrics (optional)</FieldLabel>
+          <textarea rows={3} value={trackForm.lyrics}
+            onChange={(e) => setTrackForm({ ...trackForm, lyrics: e.target.value })}
+            placeholder="Paste lyrics here…"
+            className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none resize-none" />
+        </div>
+      </TierGate>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <FieldLabel>Audio File * (.mp3, .wav, .flac)</FieldLabel>
+          <input type="file" accept=".wav,.mp3,.flac,.m4a,.ogg,.aac"
+            onChange={(e) => {
+              const f = e.target.files[0];
+              if (f && f.size > 500 * 1024 * 1024) { showMessage('error', 'File too large! Max 500MB'); return; }
+              setTrackForm({ ...trackForm, audio_file: f });
+            }}
+            className="w-full text-sm text-white/60 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:bg-white/[0.06] file:text-white/60 file:text-sm hover:file:bg-white/[0.1]" />
+          {trackForm.audio_file && (
+            <div className="mt-1 space-y-0.5">
+              <p className="text-xs text-white/30">{trackForm.audio_file.name} ({(trackForm.audio_file.size / (1024 * 1024)).toFixed(1)}MB)</p>
+              {trackForm.audio_file.name.toLowerCase().endsWith('.wav') && (
+                <p className="text-xs text-purple-400/70 flex items-center space-x-1">
+                  <Zap className="w-3 h-3" /><span>Will be converted to MP3 at 320kbps</span>
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+        <div>
+          <FieldLabel>Cover Artwork (.jpg, .png)</FieldLabel>
+          <input type="file" accept=".jpg,.jpeg,.png,.webp"
+            onChange={(e) => setTrackForm({ ...trackForm, cover_file: e.target.files[0] })}
+            className="w-full text-sm text-white/60 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:bg-white/[0.06] file:text-white/60 file:text-sm hover:file:bg-white/[0.1]" />
+        </div>
+      </div>
+
+      <TierGate feature="download_sales" inline>
+        <YoutubeField
+          value={trackForm.youtube_url}
+          onChange={(val) => setTrackForm({ ...trackForm, youtube_url: val })}
+        />
+      </TierGate>
+
+      <div className="flex flex-wrap gap-4">
+        {[
+          { key: 'is_published',    label: 'Published' },
+          { key: 'featured',        label: 'Featured', premiumOnly: true },
+          { key: 'is_explicit',     label: 'Explicit' },
+          { key: 'is_downloadable', label: 'Downloadable' },
+          { key: 'has_versions',    label: 'Has Versions' },
+        ].map(({ key, label, premiumOnly }) => (
+          premiumOnly ? (
+            <TierGate key={key} feature="download_sales" inline>
+              <label className="flex items-center space-x-2 cursor-pointer">
+                <Toggle value={trackForm[key]}
+                  onChange={() => setTrackForm({ ...trackForm, [key]: !trackForm[key] })} />
+                <span className="text-xs text-white/50">{label}</span>
+              </label>
+            </TierGate>
+          ) : (
+            <label key={key} className="flex items-center space-x-2 cursor-pointer">
+              <Toggle value={trackForm[key]}
+                onChange={() => setTrackForm({ ...trackForm, [key]: !trackForm[key] })} />
+              <span className="text-xs text-white/50">{label}</span>
+            </label>
+          )
+        ))}
+        <TierGate feature="download_sales" inline>
+          <label className="flex items-center space-x-2 cursor-pointer">
+            <Toggle value={trackForm.is_premium}
+              onChange={() => setTrackForm({ ...trackForm, is_premium: !trackForm.is_premium })} />
+            <span className="text-xs text-white/50">Premium</span>
+          </label>
+        </TierGate>
+        <TierGate feature="collaborations" inline>
+          <label className="flex items-center space-x-2 cursor-pointer">
+            <input type="checkbox"
+              checked={trackForm.is_preorder || false}
+              disabled={!isPremium}
+              title={!isPremium ? 'Pre-order releases require Premium' : ''}
+              onChange={() => isPremium && setTrackForm({ ...trackForm, is_preorder: !trackForm.is_preorder })}
+              className="rounded border-white/20" />
+            <span className="text-xs text-white/50">Pre-order</span>
+          </label>
+        </TierGate>
+      </div>
+
+      {trackForm.is_preorder && (
+        <div>
+          <FieldLabel>Release Date</FieldLabel>
+          <FInput type="datetime-local"
+            value={trackForm.release_date ? trackForm.release_date.substring(0, 16) : ''}
+            onChange={(e) => setTrackForm({ ...trackForm, release_date: e.target.value })} />
+        </div>
+      )}
+
+      {trackForm.has_versions && (
+        <div className="bg-white/[0.02] rounded-lg p-4 border border-white/[0.06] space-y-3">
+          <h4 className="text-sm font-medium text-white">Alternate Versions</h4>
+          <VersionsEditor versions={versionFiles} setVersions={setVersionFiles} />
+        </div>
+      )}
+
+      <TierGate feature="collaborations" inline>
+        <CollaboratorSearch collaborators={collaborators}
+          setCollaborators={setCollaborators} currentArtistId={artist.id} />
+      </TierGate>
+
+      <div className="flex space-x-2 pt-1">
+        <button type="submit" disabled={isWorking}
+          className="flex-1 py-3 bg-white text-black font-semibold rounded-lg hover:bg-white/90 disabled:opacity-50 transition flex items-center justify-center space-x-2">
+          {isWorking ? <Loader className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+          <span>
+            {converting ? `Converting… ${convProgress}%`
+              : uploading ? 'Uploading…'
+              : 'Add Track to Album'}
+          </span>
+        </button>
+        <button type="button" onClick={onCancel}
+          className="px-4 py-3 bg-white/[0.06] text-white/60 rounded-lg text-sm transition hover:bg-white/[0.1]">
+          Cancel
+        </button>
+      </div>
+    </form>
+  );
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function TrackUploadPanel() {
   const { artist, user, refreshProfile } = useAuth();
   const { isPremium, canAddDownloadSale, downloadSalesRemaining, downloadSalesLimit } = useTier();
 
-  // Race-condition guard: if the component mounts before AuthContext finishes
-  // loading the artist (e.g. tab switch after draft save), retry once after 800ms.
   useEffect(() => {
     if (user && !artist) {
       const t = setTimeout(() => refreshProfile(), 800);
       return () => clearTimeout(t);
     }
   }, [user, artist]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const { convert, converting, progress: convProgress, error: convError } = useAudioConverter();
 
   const [activeTab, setActiveTab]               = useState('upload');
   const [showHelp, setShowHelp]                 = useState(false);
   const [albums, setAlbums]                     = useState([]);
-  const [manageTab, setManageTab]               = useState('tracks');         // ← FIX 1
-  const [editingAlbumId, setEditingAlbumId]     = useState(null);             // ← FIX 1
-  const [editAlbumForm, setEditAlbumForm]       = useState({});               // ← FIX 1
+  const [manageTab, setManageTab]               = useState('tracks');
+  const [editingAlbumId, setEditingAlbumId]     = useState(null);
+  const [editAlbumForm, setEditAlbumForm]       = useState({});
   const [tracks, setTracks]                     = useState([]);
   const [filteredTracks, setFilteredTracks]     = useState([]);
   const [searchTerm, setSearchTerm]             = useState('');
@@ -240,8 +584,11 @@ export default function TrackUploadPanel() {
   const [editCoverFile, setEditCoverFile]       = useState(null);
   const [editAudioFile, setEditAudioFile]       = useState(null);
   const [editAlbumCoverFile, setEditAlbumCoverFile] = useState(null);
-  const [albumTracks, setAlbumTracks]             = useState([]);   // tracks inside the album being edited
+  const [albumTracks, setAlbumTracks]           = useState([]);
   const [albumTracksLoading, setAlbumTracksLoading] = useState(false);
+
+  // ── NEW: Add track to album (in manage panel) ──────────────────────────────
+  const [showAddTrackToAlbum, setShowAddTrackToAlbum] = useState(false);
 
   const isAlbumRelease = ALBUM_TYPES.includes(release.release_type);
   const isWorking      = uploading || converting;
@@ -363,7 +710,6 @@ export default function TrackUploadPanel() {
     if (!trackForm.title.trim()) { showMessage('error', 'Track title is required'); return; }
     if (!artist) { showMessage('error', 'No artist profile found'); return; }
 
-    // ── Duplicate title check ─────────────────────────────────────────────────
     const normTitle = trackForm.title.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
     const { data: existingTitles } = await supabase
       .from('tracks').select('title').eq('artist_id', artist.id);
@@ -372,21 +718,18 @@ export default function TrackUploadPanel() {
       return;
     }
 
-    // ── Duplicate artwork check (singles only) ────────────────────────────────
     if (!isAlbumRelease && trackForm.cover_file) {
       const { data: existingTracks } = await supabase
         .from('tracks').select('cover_artwork_url')
         .eq('artist_id', artist.id).is('album_id', null)
         .not('cover_artwork_url', 'is', null);
       if (existingTracks?.length >= 2) {
-        // Check if all existing singles share the same artwork URL (spam pattern)
         const urls = existingTracks.map(t => t.cover_artwork_url);
         const uniqueUrls = new Set(urls);
         if (uniqueUrls.size === 1 && urls.length >= 2) {
           showMessage('error', 'All your singles appear to use the same artwork. Please upload unique cover art for each track.');
           return;
         }
-        // Also check filename — if the new file has same name as an existing cover basename
         const newName = trackForm.cover_file.name.toLowerCase().replace(/[^a-z0-9]/g, '');
         const existingBasenames = urls.map(u => {
           try { return u.split('/').pop().split('?')[0].toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 12); } catch { return ''; }
@@ -399,14 +742,12 @@ export default function TrackUploadPanel() {
       }
     }
 
-    // ── Album guard: cover art is required so the home page always has visuals ──
     if (isAlbumRelease && !sessionAlbumId) {
       if (!release.album_cover_file) {
         showMessage('error', `Cover artwork is required for a ${release.release_type}. The home page must always display artwork.`);
         return;
       }
     }
-    // Individual tracks inside an album must also have cover art
     if (isAlbumRelease && !trackForm.cover_file && albumTrackQueue.length === 0) {
       showMessage('error', 'Please add cover artwork for the first track.');
       return;
@@ -472,8 +813,6 @@ export default function TrackUploadPanel() {
 
       if (trackForm.is_published) {
         try {
-          // notify-new-track handles in-app notifications (correct 'message' column)
-          // AND web push to followers with drop alerts enabled — all server-side
           const { data: { session: authSession } } = await supabase.auth.getSession();
           fetch('/.netlify/functions/notify-new-track', {
             method: 'POST',
@@ -547,7 +886,6 @@ export default function TrackUploadPanel() {
 
   const saveEdit = async (id) => {
     if (!artist) {
-      // Artist context not loaded yet — attempt a fresh fetch before giving up
       await refreshProfile();
       if (!artist) {
         showMessage('error', 'Artist profile not found. Please refresh and try again.');
@@ -555,8 +893,6 @@ export default function TrackUploadPanel() {
       }
     }
     setUploading(true);
-    // Track whether this track was already published BEFORE this save
-    // so we only send the "new track" notification on first publish, not every edit
     let wasPublished = false;
     try {
       const { data: currentTrack } = await supabase.from('tracks').select('is_published').eq('id', id).maybeSingle();
@@ -594,8 +930,6 @@ export default function TrackUploadPanel() {
         updated_at: new Date().toISOString(),
       }).eq('id', id);
       if (error) throw error;
-      // Only notify followers if this is a FIRST publish (was draft, now live)
-      // Editing an already-published track must not re-notify
       if (editForm.is_published && !wasPublished) {
         try {
           const { data: { session: authSession } } = await supabase.auth.getSession();
@@ -620,7 +954,6 @@ export default function TrackUploadPanel() {
     } finally { setUploading(false); }
   };
 
-  // ← FIX 2: saveAlbum function restored
   const saveAlbum = async (albumId) => {
     try {
       let coverUrl = editAlbumForm.cover_artwork_url || null;
@@ -655,6 +988,18 @@ export default function TrackUploadPanel() {
     } catch (err) { showMessage('error', 'Failed: ' + err.message); }
   };
 
+  // Helper: reload tracks for an open album
+  const reloadAlbumTracks = async (albumId) => {
+    setAlbumTracksLoading(true);
+    const { data } = await supabase.from('tracks')
+      .select('*, albums(title)')
+      .eq('album_id', albumId)
+      .eq('artist_id', artist.id)
+      .order('track_number', { ascending: true });
+    setAlbumTracks(data || []);
+    setAlbumTracksLoading(false);
+  };
+
   if (!artist) return (
     <div className="text-center py-20">
       <Music className="w-12 h-12 mx-auto text-white/20 mb-4" />
@@ -665,10 +1010,8 @@ export default function TrackUploadPanel() {
   return (
     <div className="space-y-5">
 
-      {/* Help panel */}
       {showHelp && <UploadHelpPanel onClose={() => setShowHelp(false)} />}
 
-      {/* Toast */}
       {message.text && (
         <div className={`p-3 rounded-lg text-sm flex items-start space-x-2 ${
           message.type === 'success' ? 'bg-green-500/10 border border-green-500/20 text-green-400'
@@ -682,7 +1025,7 @@ export default function TrackUploadPanel() {
       {converting && <ConversionBanner progress={convProgress} />}
       {convError   && <div className="p-3 rounded-lg text-sm bg-red-500/10 border border-red-500/20 text-red-400">{convError}</div>}
 
-      {/* Tab bar with help link */}
+      {/* Tab bar */}
       <div className="flex items-center space-x-2">
         <div className="flex flex-1 space-x-1 bg-white/[0.03] rounded-lg p-1">
           {[
@@ -697,7 +1040,6 @@ export default function TrackUploadPanel() {
             </button>
           ))}
         </div>
-        {/* Help button */}
         <button
           type="button"
           onClick={() => setShowHelp(true)}
@@ -1076,7 +1418,7 @@ export default function TrackUploadPanel() {
       {/* ══════════════════ MANAGE TAB ══════════════════ */}
       {activeTab === 'manage' && (
         <div className="space-y-4">
-          {/* Manage sub-tabs: Tracks / Albums */}
+          {/* Manage sub-tabs */}
           <div className="flex space-x-1 bg-white/[0.03] rounded-lg p-1">
             {['tracks', 'albums'].map(t => (
               <button key={t} type="button" onClick={() => setManageTab(t)}
@@ -1086,6 +1428,7 @@ export default function TrackUploadPanel() {
             ))}
           </div>
 
+          {/* ── Albums sub-tab ── */}
           {manageTab === 'albums' ? (
             <div className="space-y-2">
               {albums.length === 0 ? (
@@ -1112,19 +1455,17 @@ export default function TrackUploadPanel() {
                       </div>
                       <button type="button" onClick={async () => {
                         setEditingAlbumId(album.id);
+                        setShowAddTrackToAlbum(false);
                         setEditAlbumCoverFile(null);
-                        setEditAlbumForm({ title: album.title, description: album.description || '', release_type: album.release_type || 'album', release_date: album.release_date || '', price: album.price || 0, is_published: album.is_published ?? true, cover_artwork_url: album.cover_artwork_url || '' });
-                        // Load the tracks inside this album
-                        setAlbumTracksLoading(true);
-                        const { data } = await supabase.from('tracks')
-                          .select('*, albums(title)')
-                          .eq('album_id', album.id)
-                          .eq('artist_id', artist.id)
-                          .order('track_number', { ascending: true });
-                        setAlbumTracks(data || []);
-                        setAlbumTracksLoading(false);
-                        // Clear any open track edit
+                        setEditAlbumForm({
+                          title: album.title, description: album.description || '',
+                          release_type: album.release_type || 'album',
+                          release_date: album.release_date || '', price: album.price || 0,
+                          is_published: album.is_published ?? true,
+                          cover_artwork_url: album.cover_artwork_url || '',
+                        });
                         setEditingId(null);
+                        await reloadAlbumTracks(album.id);
                       }}
                         className="p-2 bg-white/[0.04] rounded-lg hover:bg-white/[0.08] transition">
                         <Edit className="w-4 h-4 text-white/40" />
@@ -1132,13 +1473,15 @@ export default function TrackUploadPanel() {
                     </div>
                   ) : (
                     <div className="p-4 space-y-4">
+                      {/* Album edit header */}
                       <div className="flex items-center justify-between">
                         <p className="text-sm font-semibold text-white">Editing: {album.title}</p>
-                        <button type="button" onClick={() => setEditingAlbumId(null)}
+                        <button type="button" onClick={() => { setEditingAlbumId(null); setAlbumTracks([]); setEditingId(null); setShowAddTrackToAlbum(false); }}
                           className="p-1.5 rounded-lg hover:bg-white/[0.06] transition">
                           <X className="w-4 h-4 text-white/30" />
                         </button>
                       </div>
+
                       {/* Cover artwork */}
                       <div>
                         <FieldLabel>Cover Artwork</FieldLabel>
@@ -1158,12 +1501,8 @@ export default function TrackUploadPanel() {
                             <div className="px-3 py-2 bg-white/[0.06] rounded-lg text-xs text-white/40 hover:bg-white/[0.1] transition text-center">
                               {editAlbumCoverFile ? editAlbumCoverFile.name : 'Change cover…'}
                             </div>
-                            <input
-                              type="file"
-                              accept="image/*"
-                              className="hidden"
-                              onChange={(e) => setEditAlbumCoverFile(e.target.files[0] || null)}
-                            />
+                            <input type="file" accept="image/*" className="hidden"
+                              onChange={(e) => setEditAlbumCoverFile(e.target.files[0] || null)} />
                           </label>
                           {editAlbumCoverFile && (
                             <button type="button" onClick={() => setEditAlbumCoverFile(null)}
@@ -1173,6 +1512,8 @@ export default function TrackUploadPanel() {
                           )}
                         </div>
                       </div>
+
+                      {/* Album fields */}
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                         <div>
                           <FieldLabel>Title</FieldLabel>
@@ -1216,15 +1557,69 @@ export default function TrackUploadPanel() {
                           className="flex-1 py-2.5 rounded-xl bg-white text-black text-sm font-semibold hover:bg-white/90 transition">
                           Save Album
                         </button>
-                        <button type="button" onClick={() => { setEditingAlbumId(null); setAlbumTracks([]); setEditingId(null); }}
+                        <button type="button" onClick={() => { setEditingAlbumId(null); setAlbumTracks([]); setEditingId(null); setShowAddTrackToAlbum(false); }}
                           className="px-4 py-2.5 rounded-xl bg-white/[0.06] text-white/50 text-sm hover:bg-white/[0.1] transition">
                           Cancel
                         </button>
                       </div>
 
-                      {/* Tracks in this album */}
-                      <div className="border-t border-white/[0.06] pt-4 space-y-2">
-                        <p className="text-xs font-semibold text-white/40 uppercase tracking-wide">Tracks in this album</p>
+                      {/* ── Tracks in this album ───────────────────────────────── */}
+                      <div className="border-t border-white/[0.06] pt-4 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <p className="text-xs font-semibold text-white/40 uppercase tracking-wide">
+                            Tracks in this album
+                          </p>
+                          {/* Add track button */}
+                          {!showAddTrackToAlbum && (
+                            <button
+                              type="button"
+                              onClick={() => { setShowAddTrackToAlbum(true); setEditingId(null); }}
+                              className="flex items-center space-x-1.5 px-3 py-1.5 bg-white/[0.06] hover:bg-white/[0.1] rounded-lg text-xs text-white/60 hover:text-white/80 transition"
+                            >
+                              <Plus className="w-3.5 h-3.5" />
+                              <span>Add Track</span>
+                            </button>
+                          )}
+                        </div>
+
+                        {/* ── Add Track to Album form ────────────────────────── */}
+                        {showAddTrackToAlbum && (
+                          <div className="bg-white/[0.02] rounded-xl border border-white/[0.08] p-4 space-y-1">
+                            <div className="flex items-center justify-between mb-2">
+                              <p className="text-xs font-semibold text-white/60 uppercase tracking-wide flex items-center space-x-1.5">
+                                <Upload className="w-3.5 h-3.5" />
+                                <span>New Track — Track {albumTracks.length + 1}</span>
+                              </p>
+                              <button type="button" onClick={() => setShowAddTrackToAlbum(false)}
+                                className="p-1 rounded hover:bg-white/[0.06] transition">
+                                <X className="w-3.5 h-3.5 text-white/30" />
+                              </button>
+                            </div>
+                            <AddTrackToAlbum
+                              album={album}
+                              existingTrackCount={albumTracks.length}
+                              artist={artist}
+                              isPremium={isPremium}
+                              canAddDownloadSale={canAddDownloadSale}
+                              downloadSalesRemaining={downloadSalesRemaining}
+                              downloadSalesLimit={downloadSalesLimit}
+                              uploadFile={uploadFile}
+                              convertAndUploadAudio={convertAndUploadAudio}
+                              saveCollaborations={saveCollaborations}
+                              converting={converting}
+                              convProgress={convProgress}
+                              convError={convError}
+                              onTrackAdded={async (newTrack) => {
+                                setShowAddTrackToAlbum(false);
+                                await reloadAlbumTracks(album.id);
+                                fetchTracks();
+                              }}
+                              onCancel={() => setShowAddTrackToAlbum(false)}
+                            />
+                          </div>
+                        )}
+
+                        {/* Existing tracks list */}
                         {albumTracksLoading ? (
                           <div className="flex justify-center py-4">
                             <Loader className="w-5 h-5 animate-spin text-white/20" />
@@ -1251,7 +1646,7 @@ export default function TrackUploadPanel() {
                                     <span className="text-[10px] text-white/20">{track.stream_count || 0} streams</span>
                                   </div>
                                 </div>
-                                <button type="button" onClick={() => startEdit(track)}
+                                <button type="button" onClick={() => { startEdit(track); setShowAddTrackToAlbum(false); }}
                                   className="p-1.5 bg-white/[0.04] rounded-lg hover:bg-white/[0.08] transition flex-shrink-0">
                                   <Edit className="w-3.5 h-3.5 text-white/40" />
                                 </button>
@@ -1352,13 +1747,7 @@ export default function TrackUploadPanel() {
                                 <div className="flex space-x-2 pt-1">
                                   <button type="button" onClick={async () => {
                                     await saveEdit(track.id);
-                                    // Refresh album track list after save
-                                    const { data } = await supabase.from('tracks')
-                                      .select('*, albums(title)')
-                                      .eq('album_id', album.id)
-                                      .eq('artist_id', artist.id)
-                                      .order('track_number', { ascending: true });
-                                    setAlbumTracks(data || []);
+                                    await reloadAlbumTracks(album.id);
                                     setEditingId(null);
                                   }} disabled={isWorking}
                                     className="px-5 py-2.5 bg-white text-black rounded-lg text-sm font-semibold flex items-center space-x-1.5 disabled:opacity-50 transition">
@@ -1380,7 +1769,9 @@ export default function TrackUploadPanel() {
                 </div>
               ))}
             </div>
+
           ) : (
+            /* ── Tracks sub-tab ── */
             <div className="space-y-4">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
@@ -1539,7 +1930,7 @@ export default function TrackUploadPanel() {
                               { key: 'is_downloadable', label: 'Downloadable' },
                               { key: 'is_premium',      label: 'Premium' },
                               { key: 'has_versions',    label: 'Has Versions' },
-                              { key: 'is_preorder', label: 'Pre-order', premiumOnly: true },
+                              { key: 'is_preorder',     label: 'Pre-order', premiumOnly: true },
                             ].map(({ key, label, premiumOnly, disabled }) => (
                               <label key={key} className={`flex items-center space-x-1.5 text-xs cursor-pointer ${(premiumOnly && !isPremium) || disabled ? 'text-white/20 cursor-not-allowed' : 'text-white/40'}`}>
                                 <input type="checkbox" checked={editForm[key] || false}
@@ -1615,7 +2006,7 @@ export default function TrackUploadPanel() {
                 </div>
               )}
             </div>
-          )}  {/* ← FIX 3: closes manageTab ternary */}
+          )}
         </div>
       )}
     </div>
