@@ -787,9 +787,9 @@ export default function ArtistProfilePage() {
     return () => clearTimeout(t);
   }, [trackSearch, artist?.id, queueTracks]);
 
-  const fmtDuration = (s) => s ? `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}` : '';
-  const addToQueue = (track) => { setQueueTracks(p => [...p, track]); setTrackSearch(''); setTrackResults([]); };
-  const removeFromQueue = (id) => setQueueTracks(p => p.filter(t => t.id !== id));
+  const fmtLiveDuration = (s) => s ? `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}` : '';
+  const addToLiveQueue = (track) => { setQueueTracks(p => [...p, track]); setTrackSearch(''); setTrackResults([]); };
+  const removeFromLiveQueue = (id) => setQueueTracks(p => p.filter(t => t.id !== id));
 
   const startLiveSession = async () => {
     if (!artist || startingSession) return;
@@ -2066,14 +2066,14 @@ export default function ArtistProfilePage() {
                       {trackResults.length > 0 && (
                         <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl overflow-hidden">
                           {trackResults.map(track => (
-                            <button key={track.id} onClick={() => addToQueue(track)}
+                            <button key={track.id} onClick={() => addToLiveQueue(track)}
                               className="w-full flex items-center space-x-3 px-3 py-2.5 hover:bg-white/[0.06] transition text-left border-b border-white/[0.04] last:border-0">
                               <div className="w-8 h-8 rounded-lg bg-white/[0.06] flex-shrink-0 overflow-hidden">
                                 {track.cover_artwork_url ? <img src={track.cover_artwork_url} alt="" className="w-full h-full object-cover" /> : <Music className="w-3.5 h-3.5 text-white/20 m-auto mt-2" />}
                               </div>
                               <div className="flex-1 min-w-0">
                                 <p className="text-sm text-white truncate">{track.title}</p>
-                                {track.duration && <p className="text-[10px] text-white/30">{fmtDuration(track.duration)}</p>}
+                                {track.duration && <p className="text-[10px] text-white/30">{fmtLiveDuration(track.duration)}</p>}
                               </div>
                               <Plus className="w-4 h-4 text-white/40 flex-shrink-0" />
                             </button>
@@ -2089,8 +2089,8 @@ export default function ArtistProfilePage() {
                                 {track.cover_artwork_url ? <img src={track.cover_artwork_url} alt="" className="w-full h-full object-cover" /> : <Music className="w-3 h-3 text-white/20 m-auto mt-2" />}
                               </div>
                               <p className="text-xs text-white flex-1 truncate">{track.title}</p>
-                              {track.duration && <p className="text-[10px] text-white/30 flex-shrink-0">{fmtDuration(track.duration)}</p>}
-                              <button onClick={() => removeFromQueue(track.id)} className="p-1 rounded-lg hover:bg-white/[0.08] transition">
+                              {track.duration && <p className="text-[10px] text-white/30 flex-shrink-0">{fmtLiveDuration(track.duration)}</p>}
+                              <button onClick={() => removeFromLiveQueue(track.id)} className="p-1 rounded-lg hover:bg-white/[0.08] transition">
                                 <X className="w-3.5 h-3.5 text-white/30" />
                               </button>
                             </div>
