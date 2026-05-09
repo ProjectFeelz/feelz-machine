@@ -866,36 +866,7 @@ export default function HomePage() {
         </Section>
       )}
 
-      {/* You Might Also Like — artists in the user's genres they haven't heard yet */}
-      {similarArtists.length > 0 && (
-        <Section title="You Might Also Like" icon={Compass} onSeeAll={() => navigate('/browse?tab=artists')}>
-          <div className="flex space-x-3 overflow-x-auto px-6 scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
-            {similarArtists.map(a => (
-              <button key={a.id} onClick={() => navigate(`/artist/${a.slug}`)}
-                className="flex-shrink-0 w-36 md:w-44 text-center group">
-                <div className="w-36 h-36 md:w-44 md:h-44 rounded-2xl overflow-hidden bg-white/[0.06] mb-2 mx-auto relative">
-                  <img src={a.profile_image_url} alt={a.artist_name || ''}
-                    loading="lazy" decoding="async"
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
-                  {/* Genre badge overlay */}
-                  {a.genre && (
-                    <div className="absolute bottom-1.5 left-1.5 right-1.5">
-                      <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-black/60 backdrop-blur text-white/70 font-medium truncate block text-center">
-                        {a.genre}
-                      </span>
-                    </div>
-                  )}
-                </div>
-                <div className="flex items-center justify-center space-x-1">
-                  <p className="text-sm font-medium text-white truncate max-w-[130px]">{a.artist_name}</p>
-                  {a.is_verified && <Verified className="w-3 h-3 text-blue-400 flex-shrink-0" />}
-                </div>
-                <p className="text-xs text-white/30 mt-0.5">{a.follower_count > 0 ? `${formatNumber(a.follower_count)} followers` : 'New artist'}</p>
-              </button>
-            ))}
-          </div>
-        </Section>
-      )}
+
 
       {actionSheetTrack && (
         <TrackActionSheet

@@ -388,7 +388,12 @@ export default function ArtistProfilePage() {
   const [voiceMemos, setVoiceMemos] = useState([]);
   const [stories, setStories]         = useState([]);
   const [viewingStory, setViewingStory]   = useState(false);
-  const [showCommunity, setShowCommunity] = useState(false);
+  const [showCommunity, setShowCommunity]     = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [createTab, setCreateTab]             = useState('menu'); // 'menu' | 'story' | 'thought' | 'dm'
+  const [createThought, setCreateThought]     = useState('');
+  const [createThoughtSaving, setCreateThoughtSaving] = useState(false);
+  const [createThoughtMsg, setCreateThoughtMsg] = useState('');
   const [deepCuts, setDeepCuts] = useState([]);
   const [weeklyDiscoveries, setWeeklyDiscoveries] = useState(0);
   const [purchasedTracks, setPurchasedTracks] = useState({});
@@ -1118,7 +1123,7 @@ export default function ArtistProfilePage() {
             {isProfileOwner && (
               <div className="absolute -bottom-1 -right-1 flex flex-col space-y-1">
                 <button
-                  onClick={() => setShowCommunity(true)}
+                  onClick={() => setShowCreateModal(true)}
                   title="Add Story or go Live"
                   className="w-7 h-7 rounded-full flex items-center justify-center shadow-lg border-2 transition hover:scale-110 active:scale-95"
                   style={{ backgroundColor: primaryColor, borderColor: bgColor }}>
@@ -1856,6 +1861,130 @@ export default function ArtistProfilePage() {
       </div>
 
       {/* ── Community Modal ─────────────────────────────────────────────── */}
+      {/* ── Create Modal ─────────────────────────────────────────────────── */}
+      {showCreateModal && (
+        <div className="fixed inset-0 z-[600] flex items-center justify-center px-6 bg-black/80 backdrop-blur-sm md:pl-64"
+          onClick={() => { setShowCreateModal(false); setCreateTab('menu'); setCreateThought(''); setCreateThoughtMsg(''); }}>
+          <div className="w-full overflow-y-auto overflow-x-hidden rounded-3xl"
+            style={{ maxWidth: 360, maxHeight: '85vh', backgroundColor: '#0f0f0f', border: '1px solid rgba(255,255,255,0.08)', boxShadow: '0 32px 64px rgba(0,0,0,0.6)' }}
+            onClick={e => e.stopPropagation()}>
+
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.06]">
+              <div className="flex items-center space-x-2">
+                {createTab !== 'menu' && (
+                  <button onClick={() => { setCreateTab('menu'); setCreateThought(''); setCreateThoughtMsg(''); }}
+                    className="w-7 h-7 flex items-center justify-center rounded-full bg-white/[0.08] hover:bg-white/[0.15] transition">
+                    <ChevronDown className="w-3.5 h-3.5 text-white/60 rotate-90" />
+                  </button>
+                )}
+                <p className="text-sm font-bold text-white">
+                  {createTab === 'menu' ? 'Create' : createTab === 'story' ? 'Add Story' : createTab === 'thought' ? 'Thought of the Day' : 'Message Fans'}
+                </p>
+              </div>
+              <button onClick={() => { setShowCreateModal(false); setCreateTab('menu'); setCreateThought(''); setCreateThoughtMsg(''); }}
+                className="w-8 h-8 flex items-center justify-center rounded-full bg-white/[0.08] hover:bg-white/[0.15] transition">
+                <X className="w-4 h-4 text-white/60" />
+              </button>
+            </div>
+
+            <div className="p-4 space-y-3">
+
+              {/* ── Menu ── */}
+              {createTab === 'menu' && (
+                <>
+                  {[
+                    { id: 'story',   icon: '📸', label: 'Add Story',          sub: 'Share a 24hr clip with fans',           color: 'purple' },
+                    { id: 'thought', icon: '💭', label: 'Thought of the Day',  sub: 'Share what's on your mind',            color: 'blue' },
+                    { id: 'memo',    icon: '🎙️', label: 'Voice Memo',          sub: 'Record a message for your fans',        color: 'pink' },
+                    { id: 'dm',      icon: '📣', label: 'Message Fans',        sub: 'Send a notification to all followers',  color: 'green' },
+                    { id: 'live',    icon: '🔴', label: 'Go Live',             sub: 'Start a live session',                  color: 'red' },
+                  ].map(({ id, icon, label, sub, color }) => (
+                    <button key={id}
+                      onClick={() => {
+                        if (id === 'live')  { setShowCreateModal(false); navigate('/hub'); }
+                        else if (id === 'memo') { setShowCreateModal(false); navigate('/dashboard?tab=memos'); }
+                        else setCreateTab(id);
+                      }}
+                      className={`w-full flex items-center space-x-3 p-4 rounded-2xl border transition active:scale-[0.98] text-left`}
+                      style={{ borderColor: `rgba(255,255,255,0.06)`, background: 'rgba(255,255,255,0.02)' }}>
+                      <span className="text-2xl flex-shrink-0">{icon}</span>
+                      <div>
+                        <p className="text-sm font-semibold text-white">{label}</p>
+                        <p className="text-xs text-white/30 mt-0.5">{sub}</p>
+                      </div>
+                    </button>
+                  ))}
+                </>
+              )}
+
+              {/* ── Story ── */}
+              {createTab === 'story' && (
+                <div className="rounded-2xl border border-white/[0.06] overflow-hidden" style={{ background: 'rgba(255,255,255,0.02)' }}>
+                  <StoryUpload artistId={artist.id} onUploaded={() => { setShowCreateModal(false); setCreateTab('menu'); }} />
+                </div>
+              )}
+
+              {/* ── Thought of the Day ── */}
+              {createTab === 'thought' && (
+                <div className="space-y-3">
+                  <textarea rows={4} maxLength={280} value={createThought}
+                    onChange={e => setCreateThought(e.target.value)}
+                    placeholder="What's on your mind today?"
+                    className="w-full px-3 py-2.5 bg-white/[0.06] rounded-xl text-white text-sm outline-none resize-none border border-white/[0.06] focus:border-white/20 transition placeholder-white/20" />
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-white/20">{createThought.length}/280</span>
+                    {createThoughtMsg && (
+                      <span className={`text-xs ${createThoughtMsg.includes('limit') || createThoughtMsg.includes('Failed') ? 'text-red-400' : 'text-green-400'}`}>
+                        {createThoughtMsg}
+                      </span>
+                    )}
+                  </div>
+                  <button
+                    disabled={createThoughtSaving || !createThought.trim()}
+                    onClick={async () => {
+                      if (!createThought.trim()) return;
+                      setCreateThoughtSaving(true);
+                      try {
+                        const { error } = await supabase.from('artist_thoughts').insert({
+                          artist_id: artist.id, content: createThought.trim(),
+                          created_at: new Date().toISOString(),
+                        });
+                        if (error) throw error;
+                        setCreateThoughtMsg('Posted!');
+                        setCreateThought('');
+                        setTimeout(() => { setShowCreateModal(false); setCreateTab('menu'); setCreateThoughtMsg(''); }, 1200);
+                      } catch { setCreateThoughtMsg('Failed to post'); }
+                      setCreateThoughtSaving(false);
+                    }}
+                    className="w-full py-3 rounded-2xl text-sm font-semibold transition disabled:opacity-40 flex items-center justify-center space-x-2"
+                    style={{ backgroundColor: primaryColor, color: bgColor }}>
+                    {createThoughtSaving ? <Loader className="w-4 h-4 animate-spin" /> : <span>Post Thought</span>}
+                  </button>
+                </div>
+              )}
+
+              {/* ── Message Fans ── */}
+              {createTab === 'dm' && (
+                <div className="space-y-3">
+                  <p className="text-xs text-white/30">Sends a push notification to everyone following you.</p>
+                  <textarea rows={4} maxLength={280} value={dmMessage}
+                    onChange={e => setDmMessage(e.target.value)}
+                    placeholder="Share an update, a hint about new music, or let them know you're going live..."
+                    className="w-full px-3 py-2.5 bg-white/[0.06] rounded-xl text-white text-sm outline-none resize-none border border-white/[0.06] focus:border-white/20 transition placeholder-white/20" />
+                  <button onClick={sendDMToFollowers} disabled={!dmMessage.trim() || dmSending || dmSent}
+                    className="w-full py-3 rounded-2xl text-sm font-semibold transition disabled:opacity-40 flex items-center justify-center space-x-2"
+                    style={{ backgroundColor: primaryColor, color: bgColor }}>
+                    {dmSending ? <Loader className="w-4 h-4 animate-spin" /> : dmSent ? <><Check className="w-4 h-4" /><span>Sent!</span></> : <><Send className="w-4 h-4" /><span>Send to followers</span></>}
+                  </button>
+                </div>
+              )}
+
+            </div>
+          </div>
+        </div>
+      )}
+
       {showCommunity && (
         <div className="fixed inset-0 z-[600] flex items-center justify-center px-6 bg-black/80 backdrop-blur-sm md:pl-64"
           onClick={() => setShowCommunity(false)}>
