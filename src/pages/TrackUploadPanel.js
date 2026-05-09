@@ -363,6 +363,42 @@ export default function TrackUploadPanel() {
     if (!trackForm.title.trim()) { showMessage('error', 'Track title is required'); return; }
     if (!artist) { showMessage('error', 'No artist profile found'); return; }
 
+    // ── Duplicate title check ─────────────────────────────────────────────────
+    const normTitle = trackForm.title.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+    const { data: existingTitles } = await supabase
+      .from('tracks').select('title').eq('artist_id', artist.id);
+    if (existingTitles?.some(t => t.title.toLowerCase().replace(/[^a-z0-9]/g, '') === normTitle)) {
+      showMessage('error', `You already have a track called "${trackForm.title.trim()}". Please use a unique title.`);
+      return;
+    }
+
+    // ── Duplicate artwork check (singles only) ────────────────────────────────
+    if (!isAlbumRelease && trackForm.cover_file) {
+      const { data: existingTracks } = await supabase
+        .from('tracks').select('cover_artwork_url')
+        .eq('artist_id', artist.id).is('album_id', null)
+        .not('cover_artwork_url', 'is', null);
+      if (existingTracks?.length >= 2) {
+        // Check if all existing singles share the same artwork URL (spam pattern)
+        const urls = existingTracks.map(t => t.cover_artwork_url);
+        const uniqueUrls = new Set(urls);
+        if (uniqueUrls.size === 1 && urls.length >= 2) {
+          showMessage('error', 'All your singles appear to use the same artwork. Please upload unique cover art for each track.');
+          return;
+        }
+        // Also check filename — if the new file has same name as an existing cover basename
+        const newName = trackForm.cover_file.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+        const existingBasenames = urls.map(u => {
+          try { return u.split('/').pop().split('?')[0].toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 12); } catch { return ''; }
+        });
+        const matchCount = existingBasenames.filter(b => b && newName.startsWith(b.slice(0, 8))).length;
+        if (matchCount >= 2) {
+          showMessage('error', 'This artwork looks like one you've used before. Please use unique cover art for each single.');
+          return;
+        }
+      }
+    }
+
     // ── Album guard: cover art is required so the home page always has visuals ──
     if (isAlbumRelease && !sessionAlbumId) {
       if (!release.album_cover_file) {

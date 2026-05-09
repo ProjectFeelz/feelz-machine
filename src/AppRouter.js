@@ -22,6 +22,7 @@ import ProfilePage from './pages/ProfilePage';
 import FeedPage from './pages/FeedPage';
 import ArtistDashboard from './pages/ArtistDashboard';
 import ArtistProfilePage from './pages/ArtistProfilePage';
+import ArtistCommunityPage from './pages/ArtistCommunityPage';
 import TierUpgradePage from './pages/TierUpgradePage';
 import ChatRoomsPage from './pages/ChatRoomsPage';
 import ChatRoomView from './pages/ChatRoomView';
@@ -131,6 +132,7 @@ export default function AppRouter() {
                 <Route path="/about" element={<AboutPage />} />
                 <Route path="/album/:id" element={<AlbumDetailPage />} />
                 <Route path="/artist/:slug" element={<ArtistProfilePage />} />
+                <Route path="/artist/:slug/community" element={<ArtistCommunityPage />} />
                 <Route path="/track/:slug" element={<TrackPage />} />
                 <Route path="/collab-radar" element={<CollabRadarPage />} />
                 <Route path="/admin" element={<AdminDashboard />} />
