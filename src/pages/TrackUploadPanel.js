@@ -393,7 +393,7 @@ export default function TrackUploadPanel() {
         });
         const matchCount = existingBasenames.filter(b => b && newName.startsWith(b.slice(0, 8))).length;
         if (matchCount >= 2) {
-          showMessage('error', 'This artwork looks like one you've used before. Please use unique cover art for each single.');
+          showMessage('error', "This artwork looks like one you've used before. Please use unique cover art for each single.");
           return;
         }
       }
