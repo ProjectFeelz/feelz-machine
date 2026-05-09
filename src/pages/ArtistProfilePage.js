@@ -1895,7 +1895,7 @@ export default function ArtistProfilePage() {
                 <>
                   {[
                     { id: 'story',   icon: '📸', label: 'Add Story',          sub: 'Share a 24hr clip with fans',           color: 'purple' },
-                    { id: 'thought', icon: '💭', label: 'Thought of the Day',  sub: 'Share what's on your mind',            color: 'blue' },
+                    { id: 'thought', icon: '💭', label: 'Thought of the Day',  sub: "Share what's on your mind",            color: 'blue' },
                     { id: 'memo',    icon: '🎙️', label: 'Voice Memo',          sub: 'Record a message for your fans',        color: 'pink' },
                     { id: 'dm',      icon: '📣', label: 'Message Fans',        sub: 'Send a notification to all followers',  color: 'green' },
                     { id: 'live',    icon: '🔴', label: 'Go Live',             sub: 'Start a live session',                  color: 'red' },
