@@ -710,6 +710,31 @@ export default function TrackUploadPanel() {
     if (!trackForm.title.trim()) { showMessage('error', 'Track title is required'); return; }
     if (!artist) { showMessage('error', 'No artist profile found'); return; }
 
+    // ── Duplicate title check ─────────────────────────────────────────────────
+    const normTitle = trackForm.title.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+    const { data: existingTitles } = await supabase
+      .from('tracks').select('title').eq('artist_id', artist.id);
+    if (existingTitles?.some(t => t.title.toLowerCase().replace(/[^a-z0-9]/g, '') === normTitle)) {
+      showMessage('error', `You already have a track called "${trackForm.title.trim()}". Please use a unique title.`);
+      return;
+    }
+
+    // ── Duplicate artwork check (singles only) ────────────────────────────────
+    if (!isAlbumRelease && trackForm.cover_file) {
+      const { data: existingTracks } = await supabase
+        .from('tracks').select('cover_artwork_url')
+        .eq('artist_id', artist.id).is('album_id', null)
+        .not('cover_artwork_url', 'is', null);
+      if (existingTracks?.length >= 2) {
+        const urls = existingTracks.map(t => t.cover_artwork_url);
+        const uniqueUrls = new Set(urls);
+        if (uniqueUrls.size === 1 && urls.length >= 2) {
+          showMessage('error', 'All your singles appear to use the same artwork. Please upload unique cover art for each track.');
+          return;
+        }
+      }
+    }
+
     const normTitle = trackForm.title.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
     const { data: existingTitles } = await supabase
       .from('tracks').select('title').eq('artist_id', artist.id);
@@ -857,6 +882,10 @@ export default function TrackUploadPanel() {
   };
 
   const finishAlbum = () => {
+    if (albumTrackQueue.length === 0) {
+      showMessage('error', `Please add at least one track before publishing your ${release.release_type}.`);
+      return;
+    }
     showMessage('success', `${release.release_type.toUpperCase()} published with ${albumTrackQueue.length} track${albumTrackQueue.length !== 1 ? 's' : ''}!`);
     resetAll();
   };
