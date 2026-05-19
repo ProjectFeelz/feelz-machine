@@ -199,10 +199,25 @@ export default function AdminEngagement() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
       });
-      const data = await res.json();
-      setTriggerResult(data);
-      showToast(`Done — ${data.totalSent || 0} notifications sent`);
-      load();
+      // Background functions return 202 with no body — handle both cases
+      const text = await res.text();
+      let data = {};
+      try { data = text ? JSON.parse(text) : {}; } catch {}
+      if (res.status === 202 || res.status === 200) {
+        if (data.skipped) {
+          showToast('Drip is disabled — enable it first');
+        } else if (data.totalSent !== undefined) {
+          setTriggerResult(data);
+          showToast(`Done — ${data.totalSent} notifications sent`);
+        } else {
+          // Background function accepted — processing async
+          showToast('Drip triggered — running in background. Check Netlify logs for results.');
+          setTriggerResult({ totalSent: '?', segments: {}, async: true });
+        }
+        load();
+      } else {
+        showToast(`Trigger failed: HTTP ${res.status} — ${data.error || text || 'unknown error'}`);
+      }
     } catch (err) {
       showToast('Trigger failed: ' + err.message);
     }
@@ -369,11 +384,13 @@ export default function AdminEngagement() {
 
         {/* Manual trigger result */}
         {triggerResult && (
-          <div className="rounded-xl bg-green-500/10 border border-green-500/20 p-4">
+          <div className={`rounded-xl p-4 border ${triggerResult.async ? 'bg-blue-500/10 border-blue-500/20' : 'bg-green-500/10 border-green-500/20'}`}>
             <div className="flex items-center space-x-2 mb-2">
-              <Check className="w-4 h-4 text-green-400" />
-              <p className="text-xs font-bold text-green-300">
-                Run complete — {triggerResult.totalSent} notifications sent
+              <Check className={`w-4 h-4 ${triggerResult.async ? 'text-blue-400' : 'text-green-400'}`} />
+              <p className={`text-xs font-bold ${triggerResult.async ? 'text-blue-300' : 'text-green-300'}`}>
+                {triggerResult.async
+                  ? 'Running in background — check Netlify logs'
+                  : `Run complete — ${triggerResult.totalSent} notifications sent`}
               </p>
             </div>
             <div className="space-y-1">
