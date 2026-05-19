@@ -15,7 +15,6 @@ import TierGate from '../components/TierGate';
 import { TierBadge } from '../components/TierGate';
 import { useTier } from '../contexts/useTier';
 import ProfileCompletionBanner from '../components/ProfileCompletionBanner';
-import { StoryUpload } from '../components/ArtistStories';
 import { useStreakContext } from '../contexts/StreakContext';
 
 const TikTokIcon = ({ className }) => (
@@ -58,9 +57,27 @@ const BIO_MAX              = 300;
 
 const ARTIST_TABS = [
   { key: 'profile',  label: 'Profile',  icon: User },
+  { key: 'edit',     label: 'Edit',     icon: Camera },
   { key: 'theme',    label: 'Theme',    icon: Palette },
   { key: 'links',    label: 'Links',    icon: Link },
   { key: 'payments', label: 'Payments', icon: DollarSign },
+];
+
+const GENRES_LIST = [
+  'Hip Hop','Trap','Drill','Boom Bap','Lo-Fi','R&B','Neo Soul','Pop',
+  'Electronic','House','Deep House','Tech House','Techno','Dubstep',
+  'Drum & Bass','Ambient','Downtempo','Future Bass','Jersey Club',
+  'Jazz','Funk','Soul','Rock','Metal','Indie','Alternative',
+  'Afrobeat','Amapiano','Reggae','Dancehall','Latin','Reggaeton',
+  'Country','EDM','Trance','Hardstyle','UK Garage','Grime',
+  'Experimental','Vaporwave','Synthwave','Other',
+];
+
+const MOODS_LIST = [
+  'Dark','Happy','Sad','Aggressive','Chill','Energetic','Melancholic',
+  'Uplifting','Mysterious','Peaceful','Intense','Dreamy','Romantic',
+  'Angry','Hopeful','Nostalgic','Epic','Smooth','Bouncy','Atmospheric',
+  'Moody','Vibey','Hard','Soft','Ethereal','Groovy','Other',
 ];
 
 function PillSelect({ options, selected, onToggle, multi = false }) {
@@ -137,6 +154,18 @@ export default function ProfilePage() {
     tiktok: '', facebook: '', discord: '', website: '',
     paypal_email: '',
   });
+
+  // Edit tab state (unified from UserProfilePage)
+  const editFileRef = React.useRef(null);
+  const [editDisplayName, setEditDisplayName] = useState('');
+  const [editBio, setEditBio]                 = useState('');
+  const [editGenres, setEditGenres]           = useState([]);
+  const [editMood, setEditMood]               = useState('');
+  const [editAvatarFile, setEditAvatarFile]   = useState(null);
+  const [editAvatarPreview, setEditAvatarPreview] = useState('');
+  const [editSaving, setEditSaving]           = useState(false);
+  const [editSaved, setEditSaved]             = useState(false);
+  const [editError, setEditError]             = useState('');
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
@@ -219,6 +248,29 @@ export default function ProfilePage() {
 
   useEffect(() => { if (artist) fetchThoughts(); }, [artist, fetchThoughts]);
 
+  // Load edit tab data from user_profiles when switching to edit tab
+  useEffect(() => {
+    if (activeTab !== 'edit' || !user) return;
+    supabase.from('user_profiles').select('name, avatar_url, genre, genre_preferences, mood, bio')
+      .eq('user_id', user.id).maybeSingle()
+      .then(({ data }) => {
+        if (data) {
+          setEditDisplayName(data.name || artist?.artist_name || '');
+          setEditBio(data.bio || artist?.bio || '');
+          const savedGenres = data.genre_preferences?.length
+            ? data.genre_preferences
+            : data.genre ? [data.genre] : (artist?.genre ? [artist.genre] : []);
+          setEditGenres(savedGenres);
+          setEditMood(data.mood || artist?.mood || '');
+        } else {
+          setEditDisplayName(artist?.artist_name || '');
+          setEditBio(artist?.bio || '');
+          setEditGenres(artist?.genre ? [artist.genre] : []);
+          setEditMood(artist?.mood || '');
+        }
+      });
+  }, [activeTab, user?.id]); // eslint-disable-line
+
   useEffect(() => {
     if (artist) {
       const s = artist.social_links || {};
@@ -276,6 +328,51 @@ export default function ProfilePage() {
       setTimeout(() => setMsg(''), 3000);
     } catch (e) { setMsg('Error: ' + e.message); }
     setSaving(false);
+  };
+
+  const handleEditSave = async () => {
+    if (!user) return;
+    setEditSaving(true); setEditError('');
+    try {
+      let newAvatarUrl = artist?.profile_image_url || '';
+      if (editAvatarFile) {
+        const ext  = editAvatarFile.name.split('.').pop();
+        const path = `profile-images/${user.id}-${Date.now()}.${ext}`;
+        const { error: uploadErr } = await supabase.storage
+          .from('artist-images').upload(path, editAvatarFile, { upsert: true });
+        if (uploadErr) throw uploadErr;
+        const { data: urlData } = supabase.storage.from('artist-images').getPublicUrl(path);
+        newAvatarUrl = urlData.publicUrl;
+      }
+      // Update artist profile
+      const artistUpdate = {
+        artist_name: editDisplayName.trim() || artist?.artist_name,
+        bio:         editBio.trim() || null,
+        genre:       editGenres[0] || null,
+        mood:        editMood || null,
+        updated_at:  new Date().toISOString(),
+      };
+      if (newAvatarUrl && newAvatarUrl !== artist?.profile_image_url) {
+        artistUpdate.profile_image_url = newAvatarUrl;
+      }
+      await supabase.from('artists').update(artistUpdate).eq('id', artist.id);
+      // Also upsert user_profiles for listener side
+      await supabase.from('user_profiles').upsert({
+        user_id:           user.id,
+        name:              editDisplayName.trim() || artist?.artist_name,
+        bio:               editBio.trim() || null,
+        genre:             editGenres[0] || null,
+        genre_preferences: editGenres,
+        mood:              editMood || null,
+        avatar_url:        newAvatarUrl || null,
+        updated_at:        new Date().toISOString(),
+      }, { onConflict: 'user_id' });
+      setEditAvatarFile(null); setEditAvatarPreview('');
+      await refreshProfile();
+      setEditSaved(true);
+      setTimeout(() => setEditSaved(false), 2500);
+    } catch (err) { setEditError(err.message || 'Failed to save'); }
+    setEditSaving(false);
   };
 
   const handleSignOut = async () => {
@@ -611,12 +708,114 @@ export default function ProfilePage() {
                   </div>
                 </div>
               </TierGate>
-
-              {/* Story upload — under thought of the day */}
-              <div className="mt-3 mx-1 rounded-2xl border border-white/[0.06] overflow-hidden" style={{ background: 'rgba(255,255,255,0.02)' }}>
-                <StoryUpload artistId={artist?.id} onUploaded={() => {}} />
-              </div>
             </>
+          )}
+
+          {/* ── Edit tab ── */}
+          {activeTab === 'edit' && (
+            <div className="rounded-2xl border border-white/[0.06] overflow-hidden mb-4" style={{ background: 'rgba(255,255,255,0.02)' }}>
+              <div className="px-4 py-3 border-b border-white/[0.05]">
+                <p className="text-sm font-semibold text-white">Edit Profile</p>
+                <p className="text-xs text-white/30 mt-0.5">Changes update your artist page instantly</p>
+              </div>
+              <div className="p-4 space-y-5">
+
+                {/* Avatar */}
+                <div className="flex flex-col items-center space-y-3">
+                  <div className="relative">
+                    <div className="w-20 h-20 rounded-2xl overflow-hidden border border-white/10" style={{ background: 'rgba(255,255,255,0.06)' }}>
+                      {(editAvatarPreview || artist?.profile_image_url)
+                        ? <img src={editAvatarPreview || artist?.profile_image_url} alt="" className="w-full h-full object-cover" />
+                        : <div className="w-full h-full flex items-center justify-center">
+                            <span className="text-2xl font-bold text-white/30">{artist?.artist_name?.[0]?.toUpperCase()}</span>
+                          </div>}
+                    </div>
+                    <label className="absolute -bottom-1 -right-1 w-7 h-7 bg-white rounded-full flex items-center justify-center cursor-pointer shadow-lg hover:bg-white/90 transition">
+                      <Camera className="w-3.5 h-3.5 text-black" />
+                      <input type="file" accept=".jpg,.jpeg,.png,.webp" className="hidden"
+                        onChange={e => {
+                          const f = e.target.files?.[0];
+                          if (!f) return;
+                          setEditAvatarFile(f);
+                          setEditAvatarPreview(URL.createObjectURL(f));
+                        }} />
+                    </label>
+                  </div>
+                  <p className="text-xs text-white/25">Tap camera to change photo</p>
+                </div>
+
+                {/* Display name */}
+                <div>
+                  <label className="block text-xs text-white/40 mb-1.5 font-semibold uppercase tracking-wider">Artist Name</label>
+                  <input type="text" value={editDisplayName} onChange={e => setEditDisplayName(e.target.value)}
+                    maxLength={50} placeholder="Your artist name"
+                    className="w-full px-3 py-2.5 bg-white/[0.06] rounded-xl text-white text-sm outline-none border border-white/[0.06] focus:border-white/20 transition placeholder-white/20" />
+                </div>
+
+                {/* Bio */}
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-xs text-white/40 font-semibold uppercase tracking-wider">Bio</label>
+                    <span className={`text-xs ${editBio.length > 270 ? 'text-yellow-400' : 'text-white/20'}`}>{editBio.length}/300</span>
+                  </div>
+                  <textarea rows={3} value={editBio} onChange={e => setEditBio(e.target.value)} maxLength={300}
+                    placeholder="Tell fans about yourself..."
+                    className="w-full px-3 py-2.5 bg-white/[0.06] rounded-xl text-white text-sm outline-none resize-none border border-white/[0.06] focus:border-white/20 transition placeholder-white/20" />
+                </div>
+
+                {/* Genre */}
+                <div>
+                  <label className="block text-xs text-white/40 mb-2 font-semibold uppercase tracking-wider">Genre</label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {GENRES_LIST.map(g => {
+                      const sel = editGenres.includes(g);
+                      return (
+                        <button key={g} type="button"
+                          onClick={() => setEditGenres(prev => sel ? prev.filter(x => x !== g) : [...prev, g])}
+                          className={`flex items-center space-x-1 px-2.5 py-1 rounded-full text-xs font-medium transition active:scale-95 ${
+                            sel ? 'bg-white text-black' : 'bg-white/[0.06] text-white/40 hover:bg-white/[0.1]'
+                          }`}>
+                          {sel && <Check className="w-2.5 h-2.5" strokeWidth={3} />}
+                          <span>{g}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Mood */}
+                <div>
+                  <label className="block text-xs text-white/40 mb-2 font-semibold uppercase tracking-wider">Mood</label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {MOODS_LIST.map(m => {
+                      const sel = editMood === m;
+                      return (
+                        <button key={m} type="button"
+                          onClick={() => setEditMood(prev => prev === m ? '' : m)}
+                          className={`flex items-center space-x-1 px-2.5 py-1 rounded-full text-xs font-medium transition active:scale-95 ${
+                            sel ? 'bg-white text-black' : 'bg-white/[0.06] text-white/40 hover:bg-white/[0.1]'
+                          }`}>
+                          {sel && <Check className="w-2.5 h-2.5" strokeWidth={3} />}
+                          <span>{m}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {editError && <p className="text-xs text-red-400">{editError}</p>}
+
+                <button onClick={handleEditSave} disabled={editSaving}
+                  className="w-full py-3 rounded-2xl font-semibold text-sm transition disabled:opacity-50 flex items-center justify-center space-x-2 active:scale-[0.98]"
+                  style={{ backgroundColor: editSaved ? '#16a34a' : '#fff', color: '#000' }}>
+                  {editSaving
+                    ? <Loader className="w-4 h-4 animate-spin text-black" />
+                    : editSaved
+                      ? <><Check className="w-4 h-4 text-white" /><span className="text-white">Saved!</span></>
+                      : <><Save className="w-4 h-4" /><span>Save Changes</span></>}
+                </button>
+              </div>
+            </div>
           )}
 
           {/* ── Theme tab ── */}

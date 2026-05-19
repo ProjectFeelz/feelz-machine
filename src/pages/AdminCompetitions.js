@@ -26,6 +26,16 @@ const BLANK_COMP = {
   entries_close_at: '',
   voting_open_at: '',
   voting_close_at: '',
+  competition_type: 'standard', // 'standard' | 'wheel' | 'paid_collab'
+  max_votes_per_user: 3,
+};
+
+const PAID_COLLAB_DEFAULTS = {
+  prize_description: '$50 USD cash + collab credit on both profiles',
+  cash_prize_amount: 50,
+  cash_prize_currency: 'USD',
+  competition_type: 'paid_collab',
+  max_votes_per_user: 2,
 };
 
 function CompetitionForm({ initial, onSave, onCancel, saving }) {
@@ -35,10 +45,49 @@ function CompetitionForm({ initial, onSave, onCancel, saving }) {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 gap-4">
+
+        {/* Competition type */}
+        <div>
+          <label className="text-xs text-white/40 uppercase tracking-wide block mb-1.5">Competition Type</label>
+          <div className="grid grid-cols-2 gap-2">
+            {[
+              { key: 'standard',   label: '🏆 Standard',         sub: 'Regular competition' },
+              { key: 'paid_collab', label: '💰 Paid Collaboration', sub: '$50 USD · stems provided' },
+            ].map(({ key, label, sub }) => (
+              <button key={key} type="button"
+                onClick={() => {
+                  if (key === 'paid_collab') {
+                    setForm(prev => ({ ...prev, ...PAID_COLLAB_DEFAULTS, competition_type: key }));
+                  } else {
+                    set('competition_type', key);
+                  }
+                }}
+                className={`p-3 rounded-xl border text-left transition active:scale-[0.98] ${
+                  form.competition_type === key
+                    ? key === 'paid_collab'
+                      ? 'border-yellow-500/40 bg-yellow-500/10'
+                      : 'border-white/20 bg-white/[0.08]'
+                    : 'border-white/[0.06] bg-white/[0.02]'
+                }`}>
+                <p className={`text-xs font-bold ${form.competition_type === key ? 'text-white' : 'text-white/40'}`}>{label}</p>
+                <p className="text-[10px] text-white/25 mt-0.5">{sub}</p>
+              </button>
+            ))}
+          </div>
+          {form.competition_type === 'paid_collab' && (
+            <div className="mt-2 p-3 rounded-xl bg-yellow-500/8 border border-yellow-500/20">
+              <p className="text-xs text-yellow-300 font-semibold mb-1">💰 Paid Collaboration</p>
+              <p className="text-[10px] text-yellow-400/60 leading-relaxed">
+                Upload your stems/beat/hook below. Artists complete the missing piece. Fans vote. Winner gets $50 USD automatically paid via PayPal + collab credit on both profiles. Free tier artists can enter.
+              </p>
+            </div>
+          )}
+        </div>
+
         <div>
           <label className="text-xs text-white/40 uppercase tracking-wide block mb-1.5">Title *</label>
           <input value={form.title} onChange={e => set('title', e.target.value)}
-            placeholder="e.g. Best Feature — Afrobeats Banger"
+            placeholder={form.competition_type === 'paid_collab' ? 'e.g. Need a Vocalist for Second Verse — Afrobeats' : 'e.g. Best Feature — Afrobeats Banger'}
             className="w-full bg-white/[0.06] rounded-xl px-4 py-2.5 text-sm text-white placeholder-white/20 outline-none border border-white/[0.06] focus:border-white/20" />
         </div>
 
@@ -114,6 +163,13 @@ function CompetitionForm({ initial, onSave, onCancel, saving }) {
               {['ZAR', 'USD', 'GBP', 'EUR', 'NGN', 'GHS', 'KES'].map(c => (
                 <option key={c} value={c} className="bg-neutral-900">{c}</option>
               ))}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs text-white/40 uppercase tracking-wide block mb-1.5">Votes Per Fan</label>
+            <select value={form.max_votes_per_user || 3} onChange={e => set('max_votes_per_user', parseInt(e.target.value))}
+              className="w-full bg-white/[0.06] rounded-xl px-3 py-2.5 text-sm text-white outline-none border border-white/[0.06]">
+              {[1,2,3,5].map(n => <option key={n} value={n} className="bg-neutral-900">{n} vote{n>1?'s':''}</option>)}
             </select>
           </div>
         </div>
@@ -315,6 +371,9 @@ export default function AdminCompetitions() {
         entries_close_at: form.entries_close_at || null,
         voting_open_at: form.voting_open_at || null,
         voting_close_at: form.voting_close_at || null,
+        competition_type: form.competition_type || 'standard',
+        paid_collab: form.competition_type === 'paid_collab',
+        max_votes_per_user: parseInt(form.max_votes_per_user) || 3,
       };
       const { error } = await supabase.from('competitions').insert(payload);
       if (error) throw error;
@@ -339,6 +398,9 @@ export default function AdminCompetitions() {
         entries_close_at: form.entries_close_at || null,
         voting_open_at: form.voting_open_at || null,
         voting_close_at: form.voting_close_at || null,
+        competition_type: form.competition_type || 'standard',
+        paid_collab: form.competition_type === 'paid_collab',
+        max_votes_per_user: parseInt(form.max_votes_per_user) || 3,
         updated_at: new Date().toISOString(),
       };
       const { error } = await supabase.from('competitions').update(payload).eq('id', editingId);
@@ -429,7 +491,11 @@ export default function AdminCompetitions() {
                   <div className="p-4">
                     <div className="flex items-start justify-between mb-2">
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-bold text-white truncate">{comp.title}</p>
+                        <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
+                          <p className="text-sm font-bold text-white truncate">{comp.title}</p>
+                          {comp.paid_collab && <span className="text-[9px] px-1.5 py-0.5 rounded-full font-bold bg-yellow-500/20 text-yellow-300 flex-shrink-0">💰 PAID COLLAB</span>}
+                          {comp.wheel_challenge && <span className="text-[9px] px-1.5 py-0.5 rounded-full font-bold bg-pink-500/20 text-pink-300 flex-shrink-0">🎲 WHEEL</span>}
+                        </div>
                         {comp.brief && <p className="text-xs text-white/40 mt-0.5 truncate">{comp.brief}</p>}
                       </div>
                       <div className="flex items-center space-x-2 ml-3">

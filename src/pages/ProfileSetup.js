@@ -550,9 +550,23 @@ function AccountTypeScreen({ onListener, onArtist, initialScreen = 'type' }) {
     return `${base}-${Date.now().toString(36)}`;
   }
 
+  const BLOCKED_PATTERNS = [
+    'dwgghost', 'dwg_ghost', 'dwg-ghost', 'mzizisimphiwe',
+    'simphiwemzizi', 'spam', 'test123',
+  ];
+  const isBlockedEmail = (email) => {
+    if (!email) return false;
+    const norm = email.toLowerCase().replace(/[^a-z0-9]/g, '');
+    return BLOCKED_PATTERNS.some(p => norm.includes(p));
+  };
+
   const handleArtistContinue = async () => {
     if (!artistName.trim()) { setError('Please enter your artist name'); return; }
     if (!user?.id) { setError('Session not ready — please wait a moment and try again'); return; }
+    if (isBlockedEmail(user.email)) {
+      setError('This account is not permitted to register. Please contact support.');
+      return;
+    }
     setSaving(true); setError('');
     try {
       const { error: insertErr } = await supabase.from('artists').insert({

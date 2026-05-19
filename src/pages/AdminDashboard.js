@@ -6,10 +6,9 @@ import {
   Shield, Users, Search, Loader, UserCheck,
   UserX, Crown, MoreVertical, Music, Mail, Calendar,
   Megaphone, BarChart3, AlertTriangle, Zap, Trophy,
-  Brain, Copy, ChevronRight,
+  Brain, Copy, ChevronRight, Ban, Trash2, Check,
 } from 'lucide-react';
 
-// ── Admin nav items in priority order ────────────────────────
 const ADMIN_SECTIONS = [
   {
     heading: 'Communications',
@@ -45,13 +44,14 @@ const ADMIN_SECTIONS = [
 export default function AdminDashboard() {
   const navigate = useNavigate();
   const { isAdmin } = useAuth();
-  const [artists, setArtists]           = useState([]);
-  const [users, setUsers]               = useState([]);
-  const [loading, setLoading]           = useState(true);
-  const [searchQuery, setSearchQuery]   = useState('');
-  const [activeTab, setActiveTab]       = useState('artists');
-  const [selectedUser, setSelectedUser] = useState(null);
+  const [artists, setArtists]             = useState([]);
+  const [users, setUsers]                 = useState([]);
+  const [loading, setLoading]             = useState(true);
+  const [searchQuery, setSearchQuery]     = useState('');
+  const [activeTab, setActiveTab]         = useState('artists');
+  const [selectedUser, setSelectedUser]   = useState(null);
   const [actionLoading, setActionLoading] = useState(false);
+  const [banConfirm, setBanConfirm]       = useState(null); // artist to confirm ban+delete
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -118,6 +118,45 @@ export default function AdminDashboard() {
     setSelectedUser(null);
   };
 
+  // Ban user permanently + delete all their content
+  const handleBanAndDelete = async (artist) => {
+    setActionLoading(true);
+    try {
+      // 1. Ban user in auth (2999 = effectively permanent)
+      await supabase.from('user_bans').upsert({
+        user_id: artist.user_id,
+        banned_until: '2999-12-31T23:59:59Z',
+        reason: 'Banned by admin',
+      }, { onConflict: 'user_id' }).catch(() => {});
+
+      // Also update auth.users directly via service role if available
+      const { error: banErr } = await supabase.rpc('ban_user', {
+        target_user_id: artist.user_id,
+      }).catch(() => ({ error: null }));
+      if (banErr) console.warn('RPC ban failed, falling back:', banErr);
+
+      // 2. Delete all their tracks
+      await supabase.from('tracks').delete().eq('artist_id', artist.id);
+
+      // 3. Delete all their albums
+      await supabase.from('albums').delete().eq('artist_id', artist.id);
+
+      // 4. Delete artist profile
+      await supabase.from('artists').delete().eq('id', artist.id);
+
+      // 5. Remove from follows
+      await supabase.from('follows').delete().eq('artist_id', artist.id);
+
+      await fetchData();
+      setBanConfirm(null);
+      setSelectedUser(null);
+    } catch (err) {
+      console.error('Ban error:', err);
+      alert('Ban failed: ' + err.message);
+    }
+    setActionLoading(false);
+  };
+
   const filteredArtists = artists.filter(a =>
     (a.artist_name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
     (a.email || '').toLowerCase().includes(searchQuery.toLowerCase())
@@ -139,6 +178,33 @@ export default function AdminDashboard() {
   return (
     <div className="pt-14 md:pt-0 pb-32 px-4 max-w-3xl mx-auto">
 
+      {/* Ban confirm modal */}
+      {banConfirm && (
+        <div className="fixed inset-0 z-[700] flex items-center justify-center px-6 bg-black/80 backdrop-blur-sm">
+          <div className="w-full max-w-sm bg-neutral-900 rounded-3xl p-6 border border-red-500/20">
+            <div className="flex items-start space-x-3 mb-4">
+              <AlertTriangle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-bold text-white mb-1">Ban & Delete "{banConfirm.artist_name}"?</p>
+                <p className="text-xs text-white/40 leading-relaxed">
+                  This will permanently ban the user, delete all their tracks, albums and artist profile. This cannot be undone.
+                </p>
+              </div>
+            </div>
+            <div className="flex space-x-2">
+              <button onClick={() => setBanConfirm(null)}
+                className="flex-1 py-2.5 rounded-xl text-sm text-white/40 border border-white/[0.08] hover:bg-white/[0.04] transition">
+                Cancel
+              </button>
+              <button onClick={() => handleBanAndDelete(banConfirm)} disabled={actionLoading}
+                className="flex-1 py-2.5 rounded-xl text-sm font-semibold bg-red-500 text-white disabled:opacity-50 transition flex items-center justify-center space-x-2">
+                {actionLoading ? <Loader className="w-4 h-4 animate-spin" /> : <><Ban className="w-4 h-4" /><span>Ban & Delete</span></>}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center space-x-3 mb-6 pt-2">
         <Shield className="w-5 h-5 text-yellow-400/70" />
@@ -155,19 +221,14 @@ export default function AdminDashboard() {
         ))}
       </div>
 
-      {/* ── Grouped nav sections ───────────────────────────── */}
+      {/* Grouped nav sections */}
       {ADMIN_SECTIONS.map(({ heading, items }) => (
         <div key={heading} className="mb-5">
-          <p className="text-[10px] uppercase tracking-widest text-white/25 font-semibold px-1 mb-2">
-            {heading}
-          </p>
+          <p className="text-[10px] uppercase tracking-widest text-white/25 font-semibold px-1 mb-2">{heading}</p>
           <div className="grid grid-cols-2 gap-2">
             {items.map(({ label, icon: Icon, path, color, desc }) => (
-              <button
-                key={label}
-                onClick={() => navigate(path)}
-                className="flex items-center space-x-3 px-3 py-3 bg-white/[0.03] rounded-xl border border-white/[0.06] hover:bg-white/[0.06] active:scale-[0.98] transition text-left group"
-              >
+              <button key={label} onClick={() => navigate(path)}
+                className="flex items-center space-x-3 px-3 py-3 bg-white/[0.03] rounded-xl border border-white/[0.06] hover:bg-white/[0.06] active:scale-[0.98] transition text-left group">
                 <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${color.split(' ')[0]}`}>
                   <Icon className={`w-4 h-4 ${color.split(' ')[1]}`} />
                 </div>
@@ -182,45 +243,30 @@ export default function AdminDashboard() {
         </div>
       ))}
 
-      {/* ── User / Artist management ───────────────────────── */}
+      {/* User Management */}
       <div className="mt-6">
-        <p className="text-[10px] uppercase tracking-widest text-white/25 font-semibold px-1 mb-3">
-          User Management
-        </p>
+        <p className="text-[10px] uppercase tracking-widest text-white/25 font-semibold px-1 mb-3">User Management</p>
 
-        {/* Search */}
         <div className="relative mb-3">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
+          <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
             placeholder="Search artists or users…"
-            className="w-full pl-10 pr-4 py-3 bg-white/[0.04] rounded-xl text-sm text-white placeholder:text-white/20 border border-white/[0.06] focus:border-white/20 focus:outline-none transition"
-          />
+            className="w-full pl-10 pr-4 py-3 bg-white/[0.04] rounded-xl text-sm text-white placeholder:text-white/20 border border-white/[0.06] focus:border-white/20 focus:outline-none transition" />
         </div>
 
-        {/* Tabs */}
         <div className="flex space-x-1 mb-3 bg-white/[0.03] rounded-lg p-1">
           {['artists', 'users'].map(tab => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
+            <button key={tab} onClick={() => setActiveTab(tab)}
               className={`flex-1 py-2 text-xs font-semibold rounded-md transition ${
                 activeTab === tab ? 'bg-white text-black' : 'text-white/40 hover:text-white/60'
-              }`}
-            >
-              {tab === 'artists'
-                ? `Artists (${filteredArtists.length})`
-                : `Users (${filteredUsers.length})`}
+              }`}>
+              {tab === 'artists' ? `Artists (${filteredArtists.length})` : `Users (${filteredUsers.length})`}
             </button>
           ))}
         </div>
 
         {loading ? (
-          <div className="flex justify-center py-12">
-            <Loader className="w-5 h-5 animate-spin text-white/20" />
-          </div>
+          <div className="flex justify-center py-12"><Loader className="w-5 h-5 animate-spin text-white/20" /></div>
         ) : activeTab === 'artists' ? (
           <div className="space-y-2">
             {filteredArtists.length === 0 ? (
@@ -245,10 +291,8 @@ export default function AdminDashboard() {
                       </p>
                     </div>
                   </div>
-                  <button
-                    onClick={() => setSelectedUser(selectedUser?.id === artist.id ? null : artist)}
-                    className="p-2 hover:bg-white/[0.05] rounded-lg transition"
-                  >
+                  <button onClick={() => setSelectedUser(selectedUser?.id === artist.id ? null : artist)}
+                    className="p-2 hover:bg-white/[0.05] rounded-lg transition">
                     <MoreVertical className="w-4 h-4 text-white/30" />
                   </button>
                 </div>
@@ -270,7 +314,7 @@ export default function AdminDashboard() {
                       {['free', 'pro', 'premium'].map(t => (
                         <button key={t} onClick={() => handleSetTier(artist, t)} disabled={actionLoading}
                           className={`flex-1 py-1.5 rounded-lg text-[11px] font-semibold transition ${
-                            t === 'free'    ? 'bg-white/[0.06] text-white/50 hover:bg-white/[0.1]'
+                            t === 'free'   ? 'bg-white/[0.06] text-white/50 hover:bg-white/[0.1]'
                             : t === 'pro'  ? 'bg-purple-500/20 text-purple-300 hover:bg-purple-500/30'
                             : 'bg-yellow-500/20 text-yellow-300 hover:bg-yellow-500/30'
                           }`}>
@@ -282,6 +326,12 @@ export default function AdminDashboard() {
                       className="w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg hover:bg-white/[0.05] transition text-left">
                       <Music className="w-4 h-4 text-white/40" />
                       <span className="text-xs text-white/60">View Profile</span>
+                    </button>
+                    {/* Ban + Delete */}
+                    <button onClick={() => { setBanConfirm(artist); setSelectedUser(null); }}
+                      className="w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg hover:bg-red-500/10 transition text-left border-t border-white/[0.04] mt-1 pt-3">
+                      <Ban className="w-4 h-4 text-red-400" />
+                      <span className="text-xs text-red-400">Ban & Delete Artist</span>
                     </button>
                   </div>
                 )}

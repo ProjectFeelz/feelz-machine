@@ -296,6 +296,89 @@ function SubmitEntryModal({ competition, artistId, onClose, onSubmitted }) {
 }
 
 // ── Main page ─────────────────────────────────────────────────
+// ── How It Works Panel ───────────────────────────────────────
+function HowItWorksPanel({ type, mode, votesAllowed, prize }) {
+  const [open, setOpen] = useState(false);
+
+  const steps = type === 'paid_collab' ? [
+    { icon: '🎧', title: 'Listen to the track',       body: 'Download the stems or beat provided. Get familiar with what's been built so far.' },
+    { icon: '🎤', title: 'Record your part',           body: 'Create your verse, hook, drums — whatever the brief asks for. Brand new recording only, no existing tracks.' },
+    { icon: '📤', title: 'Upload your entry',          body: 'Give it a title and submit before entries close. Your name stays hidden until the winner is revealed.' },
+    { icon: '🗳️', title: 'Fans vote',                  body: `Each fan gets ${votesAllowed} vote${votesAllowed > 1 ? 's' : ''}. Most votes wins. Voting opens when entries close.` },
+    { icon: '💰', title: 'Winner gets paid',           body: `${prize} paid automatically via PayPal — make sure your PayPal email is set in your profile. Both artists get collab credit on their profiles.` },
+  ] : [
+    { icon: '🎲', title: 'This week's prompt',        body: `The wheel landed on a ${mode === 'singer' ? 'vocalist' : 'beatmaker'} challenge. Your track must be inspired by the prompt — original work only.` },
+    { icon: '🎵', title: 'Make something new',         body: 'Record or produce a brand new track for this challenge. No existing uploads — fresh work only.' },
+    { icon: '📤', title: 'Submit before deadline',     body: 'Upload your entry with a title. Your name stays anonymous until a winner is crowned — judged purely on the music.' },
+    { icon: '🗳️', title: 'Community votes',            body: `Every listener gets ${votesAllowed} vote${votesAllowed > 1 ? 's' : ''}. Most votes wins. Voting opens Sunday 5pm and closes Sunday 11:59pm.` },
+    { icon: '🏆', title: 'Winner's reward',           body: prize || '3 months Pro or Premium automatically applied — plus Verified badge on your profile.' },
+  ];
+
+  const rules = type === 'paid_collab' ? [
+    'Entries must be original, newly recorded for this competition',
+    'The provided stems/beat must be used as the base',
+    'Free, Pro and Premium accounts can all enter',
+    'One entry per artist',
+    'Winner's PayPal email must be set in their profile before payout',
+    'Disqualified entries do not receive the prize',
+  ] : [
+    'Entries must be original, newly created for this challenge',
+    'Track must be genuinely inspired by the prompt — not a stretch',
+    'Free, Pro and Premium accounts can all enter',
+    'One entry per artist per week',
+    'Entries are anonymous until the winner is revealed',
+    'Admin can disqualify entries that don't follow the brief',
+  ];
+
+  return (
+    <div className="rounded-xl border border-white/[0.06] overflow-hidden bg-white/[0.02]">
+      <button
+        onClick={() => setOpen(p => !p)}
+        className="w-full flex items-center justify-between px-4 py-3 hover:bg-white/[0.03] transition">
+        <div className="flex items-center space-x-2">
+          <Info className="w-4 h-4 text-blue-400 flex-shrink-0" />
+          <p className="text-xs font-bold text-white">
+            {type === 'paid_collab' ? 'How Paid Collaborations Work' : 'How Collab Roulette Works'}
+          </p>
+        </div>
+        <ChevronDown className={`w-4 h-4 text-white/30 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+
+      {open && (
+        <div className="px-4 pb-4 space-y-4 border-t border-white/[0.04]">
+          {/* Steps */}
+          <div className="space-y-3 pt-3">
+            {steps.map((step, i) => (
+              <div key={i} className="flex items-start space-x-3">
+                <div className="w-8 h-8 rounded-xl bg-white/[0.04] flex items-center justify-center flex-shrink-0 text-base">
+                  {step.icon}
+                </div>
+                <div className="flex-1 min-w-0 pt-0.5">
+                  <p className="text-xs font-bold text-white mb-0.5">{step.title}</p>
+                  <p className="text-xs text-white/40 leading-relaxed">{step.body}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Rules */}
+          <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.04]">
+            <p className="text-[10px] font-bold text-white/40 uppercase tracking-wider mb-2">Rules</p>
+            <ul className="space-y-1.5">
+              {rules.map((rule, i) => (
+                <li key={i} className="flex items-start space-x-2">
+                  <span className="text-white/20 text-xs mt-0.5 flex-shrink-0">·</span>
+                  <p className="text-xs text-white/40 leading-relaxed">{rule}</p>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function CompetitionRoomPage() {
   const { competitionId } = useParams();
   const navigate = useNavigate();
@@ -312,8 +395,12 @@ export default function CompetitionRoomPage() {
   const [error, setError]             = useState('');
   const [toast, setToast]             = useState('');
 
-  const MAX_VOTES = 3;
-  const canEnter = isPro || isPremium;
+  // Wheel challenges use 2 votes, others use competition setting or 3
+  const MAX_VOTES = competition?.max_votes_per_user || (competition?.wheel_challenge ? 2 : 3);
+  // Free tier can enter wheel and paid collab competitions
+  // Standard competitions still require Pro or Premium
+  const canEnter = isPro || isPremium ||
+    (competition?.wheel_challenge || competition?.paid_collab ? !!user : false);
 
   const showToast = (msg) => {
     setToast(msg);
@@ -466,18 +553,61 @@ export default function CompetitionRoomPage() {
           .update({ is_verified: true })
           .eq('id', winnerEntry.artist_id);
 
-        // 4. Notify winner
+        // 4. Grant tier reward if this is a wheel challenge — upgrade based on current tier
+        if (competition?.wheel_challenge) {
+          try {
+            const now = new Date();
+            const { data: existingSub } = await supabase
+              .from('artist_tier_subscriptions')
+              .select('id, tier_id, platform_tiers(slug)')
+              .eq('artist_id', winnerEntry.artist_id).eq('status', 'active').maybeSingle();
+            const currentSlug = existingSub?.platform_tiers?.slug || 'free';
+            const expiry = new Date(now); expiry.setDate(expiry.getDate() + 90);
+
+            if (currentSlug === 'free') {
+              const { data: proTier } = await supabase
+                .from('platform_tiers').select('id').eq('slug', 'pro').maybeSingle();
+              if (proTier) await supabase.from('artist_tier_subscriptions').insert({
+                artist_id: winnerEntry.artist_id, tier_id: proTier.id,
+                status: 'active', started_at: now.toISOString(), expires_at: expiry.toISOString(),
+              });
+            } else if (currentSlug === 'pro') {
+              const { data: premTier } = await supabase
+                .from('platform_tiers').select('id').eq('slug', 'premium').maybeSingle();
+              if (premTier) {
+                await supabase.from('artist_tier_subscriptions')
+                  .update({ status: 'superseded', updated_at: now.toISOString() })
+                  .eq('id', existingSub.id);
+                await supabase.from('artist_tier_subscriptions').insert({
+                  artist_id: winnerEntry.artist_id, tier_id: premTier.id,
+                  status: 'active', started_at: now.toISOString(), expires_at: expiry.toISOString(),
+                });
+              }
+            } else if (currentSlug === 'premium') {
+              // Already Premium — featured placement for 7 days
+              await supabase.from('artists').update({
+                featured: true,
+                featured_until: new Date(Date.now() + 7*24*60*60*1000).toISOString(),
+              }).eq('id', winnerEntry.artist_id);
+            }
+          } catch(e) { console.error('Tier grant error:', e); }
+        }
+
+        // 5. Notify winner
+        const tierRewardMsg = competition?.wheel_challenge
+          ? ' Your tier reward has been applied automatically — check your profile.'
+          : '';
         await supabase.from('notifications').insert({
           artist_id: winnerEntry.artist_id,
           user_id: winnerEntry.artists?.user_id,
           type: 'competition_winner',
           title: '🏆 You won the competition!',
-          message: `You've been crowned winner of "${competition?.title}". You're now Verified on Feelz Machine!`,
-          metadata: { competition_id: competitionId, competition_title: competition?.title },
+          message: `You've been crowned winner of "${competition?.title}". You're now Verified on Feelz Machine!${proMsg}`,
+          metadata: { competition_id: competitionId, competition_title: competition?.title, wheel_challenge: !!competition?.wheel_challenge },
         }).catch(() => {});
       }
 
-      showToast('🏆 Winner crowned! Verified status granted.');
+      showToast(competition?.wheel_challenge ? '🏆 Winner crowned! Verified + tier reward granted.' : '🏆 Winner crowned! Verified status granted.');
       load();
     } catch (err) {
       console.error('Crown winner error:', err);
@@ -589,6 +719,21 @@ export default function CompetitionRoomPage() {
           </div>
         )}
 
+        {/* ── How It Works panel ── */}
+        {(() => {
+          const isWheel = competition?.wheel_challenge;
+          const isPaidCollab = competition?.paid_collab;
+          if (!isWheel && !isPaidCollab) return null;
+          return (
+            <HowItWorksPanel
+              type={isPaidCollab ? 'paid_collab' : 'wheel'}
+              mode={competition?.mode}
+              votesAllowed={MAX_VOTES}
+              prize={isPaidCollab ? '$50 USD cash' : competition?.prize_description}
+            />
+          );
+        })()}
+
         {/* Stem pack download */}
         {competition.stem_pack_url && (
           <a href={competition.stem_pack_url} target="_blank" rel="noopener noreferrer"
@@ -648,12 +793,18 @@ export default function CompetitionRoomPage() {
               <div className="p-3 rounded-xl bg-yellow-500/10 border border-yellow-500/20">
                 <div className="flex items-center space-x-2 mb-2">
                   <Lock className="w-4 h-4 text-yellow-400" />
-                  <p className="text-xs font-bold text-yellow-300">Pro or Premium required to enter</p>
+                  <p className="text-xs font-bold text-yellow-300">
+                    {competition?.wheel_challenge || competition?.paid_collab
+                      ? 'Sign in to enter this challenge'
+                      : 'Pro or Premium required to enter'}
+                  </p>
                 </div>
-                <button onClick={() => navigate('/upgrade')}
-                  className="text-xs text-yellow-400/70 hover:text-yellow-400 transition underline">
-                  Upgrade your plan →
-                </button>
+                {!(competition?.wheel_challenge || competition?.paid_collab) && (
+                  <button onClick={() => navigate('/upgrade')}
+                    className="text-xs text-yellow-400/70 hover:text-yellow-400 transition underline">
+                    Upgrade your plan →
+                  </button>
+                )}
               </div>
             ) : myEntry ? (
               <div className="flex items-center space-x-3 p-3 rounded-xl bg-green-500/10 border border-green-500/20">

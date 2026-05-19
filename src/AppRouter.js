@@ -22,7 +22,6 @@ import ProfilePage from './pages/ProfilePage';
 import FeedPage from './pages/FeedPage';
 import ArtistDashboard from './pages/ArtistDashboard';
 import ArtistProfilePage from './pages/ArtistProfilePage';
-import ArtistCommunityPage from './pages/ArtistCommunityPage';
 import TierUpgradePage from './pages/TierUpgradePage';
 import ChatRoomsPage from './pages/ChatRoomsPage';
 import ChatRoomView from './pages/ChatRoomView';
@@ -46,6 +45,7 @@ import TrackPage from './pages/TrackPage';
 import CollabRadarPage from './pages/CollabRadarPage';
 import AdminDuplicates from './pages/AdminDuplicates';
 import CompetitionRoomPage from './pages/CompetitionRoomPage';
+import WheelRevealPage from './pages/WheelRevealPage';
 import AdminCompetitions from './pages/AdminCompetitions';
 import AdminEngagement from './pages/AdminEngagement';
 
@@ -97,6 +97,7 @@ export default function AppRouter() {
               <Route path="/upgrade" element={<TierUpgradePage />} />
               <Route path="/chat/:roomId" element={<ChatRoomView />} />
               <Route path="/competition/:competitionId" element={<CompetitionRoomPage />} />
+              <Route path="/wheel" element={<WheelRevealPage />} />
               <Route path="/session/:sessionId" element={<ListeningSessionPage />} />
 
               {/* Legal pages — fixed titles */}
@@ -132,7 +133,6 @@ export default function AppRouter() {
                 <Route path="/about" element={<AboutPage />} />
                 <Route path="/album/:id" element={<AlbumDetailPage />} />
                 <Route path="/artist/:slug" element={<ArtistProfilePage />} />
-                <Route path="/artist/:slug/community" element={<ArtistCommunityPage />} />
                 <Route path="/track/:slug" element={<TrackPage />} />
                 <Route path="/collab-radar" element={<CollabRadarPage />} />
                 <Route path="/admin" element={<AdminDashboard />} />
