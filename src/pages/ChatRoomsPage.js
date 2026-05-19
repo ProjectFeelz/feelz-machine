@@ -144,7 +144,6 @@ export default function ChatRoomsPage() {
   const { isPro, isPremium, tierSlug } = useTier();
 
   const [rooms, setRooms]               = useState([]);
-  const [competitions, setCompetitions] = useState([]);
   const [loading, setLoading]           = useState(true);
   const [lastMessages, setLastMessages] = useState({});
   const [unreadCounts, setUnreadCounts] = useState({});
@@ -168,7 +167,6 @@ export default function ChatRoomsPage() {
 
   useEffect(() => {
     fetchRooms();
-    fetchCompetitions();
   }, []);
 
   const fetchLastMessages = async (roomIds) => {
@@ -212,14 +210,6 @@ export default function ChatRoomsPage() {
     } catch (err) { console.error('Unread counts error:', err); }
   };
 
-  const fetchCompetitions = async () => {
-    const { data } = await supabase
-      .from('competitions')
-      .select('id, title, status, brief, prize_description, cash_prize_amount, cash_prize_currency, entries_close_at, voting_close_at')
-      .in('status', ['upcoming', 'open', 'voting', 'closed'])
-      .order('created_at', { ascending: false });
-    setCompetitions(data || []);
-  };
 
   const fetchRooms = async () => {
     setLoading(true);
@@ -325,7 +315,7 @@ export default function ChatRoomsPage() {
     setConfirmDeleteId(null);
   };
 
-  // Pinned first (below competitions), then regular by member count
+  // Pinned first, then regular by member count
   const pinnedRooms  = rooms.filter(r => r.is_pinned);
   const regularRooms = rooms.filter(r => !r.is_pinned);
 
@@ -442,51 +432,7 @@ export default function ChatRoomsPage() {
         </div>
       )}
 
-      {/* Competition Rooms — top priority */}
-      {competitions.length > 0 && (
-        <div className="mb-5">
-          <p className="text-[10px] uppercase tracking-widest text-white/30 font-semibold mb-2 flex items-center space-x-1.5">
-            <Trophy className="w-3 h-3 text-yellow-400" />
-            <span>Active Competitions</span>
-          </p>
-          <div className="space-y-2">
-            {competitions.map(comp => {
-              const isOpen   = comp.status === 'open';
-              const isVoting = comp.status === 'voting';
-              return (
-                <button
-                  key={comp.id}
-                  onClick={() => navigate(`/competition/${comp.id}`)}
-                  className="w-full flex items-center space-x-3 p-3.5 rounded-xl bg-gradient-to-r from-yellow-500/10 to-transparent border border-yellow-500/20 hover:border-yellow-500/40 transition text-left"
-                >
-                  <div className="w-11 h-11 rounded-xl bg-yellow-500/10 flex items-center justify-center flex-shrink-0">
-                    <Trophy className="w-5 h-5 text-yellow-400" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-white truncate">{comp.title}</p>
-                    {comp.brief && (
-                      <p className="text-xs text-white/40 truncate mt-0.5">{comp.brief}</p>
-                    )}
-                    <div className="flex items-center space-x-2 mt-1">
-                      <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${isOpen ? 'bg-green-500/20 text-green-400' : isVoting ? 'bg-blue-500/20 text-blue-400' : 'bg-white/10 text-white/40'}`}>
-                        {isOpen ? 'Entries Open' : isVoting ? 'Voting Open' : comp.status}
-                      </span>
-                      {comp.prize_description && (
-                        <span className="text-[10px] text-yellow-400/60 truncate">
-                          🏆 {comp.prize_description}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  <Crown className="w-4 h-4 text-yellow-400/40 flex-shrink-0" />
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* Pinned rooms — below competitions, above regular rooms */}
+{/* Pinned rooms */}
       {filteredPinned.length > 0 && (
         <div>
           {filteredPinned.map(room => (

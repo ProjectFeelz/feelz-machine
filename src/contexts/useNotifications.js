@@ -119,11 +119,21 @@ export default function useNotifications() {
     if (!artist && !user) return;
     fetchNotifications();
 
-    // Realtime: listen on both artist_id AND user_id channels for artists,
-    // since different notification sources use different columns.
+    // Dedup set — prevents double-fire when both user_id and artist_id
+    // channels receive the same notification INSERT simultaneously
+    const seenIds = new Set();
+
     const handleInsert = (payload) => {
+      const id = payload.new?.id;
+      if (!id || seenIds.has(id)) return;
+      seenIds.add(id);
+      // Clean up old ids to prevent memory growth
+      if (seenIds.size > 200) {
+        const arr = [...seenIds];
+        arr.slice(0, 100).forEach(old => seenIds.delete(old));
+      }
       setNotifications(prev =>
-        prev.some(n => n.id === payload.new.id) ? prev : [payload.new, ...prev]
+        prev.some(n => n.id === id) ? prev : [payload.new, ...prev]
       );
       setUnreadCount(prev => prev + 1);
     };

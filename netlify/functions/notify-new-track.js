@@ -42,7 +42,8 @@ exports.handler = async (event) => {
     .from('follows').select('follower_id').eq('artist_id', artist_id);
   if (!followers?.length) return { statusCode: 200, body: JSON.stringify({ notified: 0 }) };
 
-  const followerIds = followers.map(f => f.follower_id);
+  // Exclude the artist themselves — they don't need to be notified of their own upload
+  const followerIds = followers.map(f => f.follower_id).filter(id => id !== user.id);
   const slug = artist_slug || artist.slug;
   const title = track_title || 'a new track';
   const artistName = artist.artist_name;
@@ -51,12 +52,13 @@ exports.handler = async (event) => {
   // Dedup guard: skip if a new_track notification already exists for this track today
   const today = new Date();
   today.setHours(0, 0, 0, 0);
+  // Dedup by track_id — stronger than title which can be duplicated
   const { data: existing } = await supabase
     .from('notifications')
     .select('user_id')
     .eq('artist_id', artist_id)
     .eq('type', 'new_track')
-    .contains('metadata', { track_title: title })
+    .eq('track_id', track_id)
     .gte('created_at', today.toISOString())
     .limit(1);
 
