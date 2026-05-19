@@ -1260,12 +1260,6 @@ export default function ArtistProfilePage() {
           {user && user.id !== artist?.user_id && (
             <TipButton artist={artist} />
           )}
-          <button onClick={() => navigate(`/artist/${artist.slug}/community`)}
-            className="flex items-center space-x-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all active:scale-95"
-            style={{ backgroundColor: `${textColor}10`, color: `${textColor}70`, border: `1px solid ${textColor}20` }}>
-            <Users className="w-3.5 h-3.5" />
-            <span>Community</span>
-          </button>
         </div>
 
         {/* Tip Goal — full width below pills */}
