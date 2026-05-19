@@ -539,104 +539,34 @@ export default function ProfilePage() {
                 style={{ background: 'rgba(255,255,255,0.02)' }}>
                 <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.05]">
                   <p className="text-sm font-semibold text-white">Artist Info</p>
-                  <button onClick={() => { setEditing(!editing); setMsg(''); }}
+                  <button onClick={() => setActiveTab('edit')}
                     className="text-xs text-white/40 hover:text-white/60 transition px-2 py-1 rounded-lg hover:bg-white/[0.04]">
-                    {editing ? 'Cancel' : 'Edit'}
+                    Edit →
                   </button>
                 </div>
                 <div className="p-4">
-                  {editing ? (
-                    <div className="space-y-4">
-                      {/* Artist Name */}
-                      <div>
-                        <label className="block text-xs text-white/40 mb-1">Artist Name</label>
-                        <input type="text" value={form.artist_name}
-                          onChange={e => setForm({ ...form, artist_name: e.target.value })}
-                          className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none border border-white/[0.06] focus:border-white/20 transition" />
-                      </div>
-
-                      {/* Bio */}
-                      <div>
-                        <div className="flex items-center justify-between mb-1">
-                          <label className="text-xs text-white/40">Bio</label>
-                          <span className={`text-xs transition ${form.bio.length > BIO_MAX * 0.9 ? 'text-yellow-400' : 'text-white/20'}`}>
-                            {form.bio.length}/{BIO_MAX}
+                  <div className="space-y-3">
+                    {form.bio
+                      ? <p className="text-sm text-white/60 leading-relaxed">{form.bio}</p>
+                      : <p className="text-xs text-white/20 italic">No bio yet — tap Edit to add one</p>}
+                    {(form.genre || form.mood) && (
+                      <div className="flex flex-wrap gap-1.5 pt-1">
+                        {form.genre && (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-purple-500/10 text-purple-400 border border-purple-500/20">
+                            {form.genre}
                           </span>
-                        </div>
-                        <textarea rows={3} value={form.bio} maxLength={BIO_MAX}
-                          onChange={e => setForm({ ...form, bio: e.target.value })}
-                          className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none resize-none border border-white/[0.06] focus:border-white/20 transition" />
+                        )}
+                        {form.mood && (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                            {form.mood}
+                          </span>
+                        )}
                       </div>
-
-                      {/* Genre */}
-                      <div>
-                        <label className="block text-xs text-white/40 mb-2">
-                          Genre <span className="text-white/20">· used for Collab Radar matching</span>
-                        </label>
-                        <PillSelect
-                          options={GENRES}
-                          selected={form.genre}
-                          onToggle={(g) => setForm(prev => ({ ...prev, genre: prev.genre === g ? '' : g }))}
-                        />
-                      </div>
-
-                      {/* Mood */}
-                      <div>
-                        <label className="block text-xs text-white/40 mb-2">
-                          Mood <span className="text-white/20">· helps listeners find your vibe</span>
-                        </label>
-                        <PillSelect
-                          options={MOODS}
-                          selected={form.mood}
-                          onToggle={(m) => setForm(prev => ({ ...prev, mood: prev.mood === m ? '' : m }))}
-                        />
-                      </div>
-
-                      {/* PayPal Email for prize payouts */}
-                      <div>
-                        <label className="block text-xs text-white/40 mb-1">PayPal Email <span className="text-white/20">· for competition prize payouts</span></label>
-                        <input type="email" value={form.paypal_email}
-                          onChange={e => setForm({ ...form, paypal_email: e.target.value })}
-                          placeholder="your@paypal.com"
-                          className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none border border-white/[0.06] focus:border-white/20 transition" />
-                      </div>
-
-                      {profileImgFile && (
-                        <p className="text-xs text-green-400 flex items-center space-x-1">
-                          <Camera className="w-3 h-3" /><span>{profileImgFile.name} selected</span>
-                        </p>
-                      )}
-
-                      <button onClick={save} disabled={saving}
-                        className="w-full py-2.5 bg-white text-black rounded-xl font-semibold text-sm flex items-center justify-center space-x-2 disabled:opacity-50 transition active:scale-[0.98]">
-                        {saving ? <Loader className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                        <span>{saving ? 'Saving...' : 'Save Changes'}</span>
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="space-y-3">
-                      {form.bio
-                        ? <p className="text-sm text-white/60 leading-relaxed">{form.bio}</p>
-                        : <p className="text-xs text-white/20 italic">No bio yet — tap Edit to add one</p>}
-                      {(form.genre || form.mood) && (
-                        <div className="flex flex-wrap gap-1.5 pt-1">
-                          {form.genre && (
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-purple-500/10 text-purple-400 border border-purple-500/20">
-                              {form.genre}
-                            </span>
-                          )}
-                          {form.mood && (
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-blue-500/10 text-blue-400 border border-blue-500/20">
-                              {form.mood}
-                            </span>
-                          )}
-                        </div>
-                      )}
-                      {!form.genre && !form.mood && (
-                        <p className="text-xs text-white/20 italic">No genre or mood set — tap Edit to add</p>
-                      )}
-                    </div>
-                  )}
+                    )}
+                    {!form.genre && !form.mood && (
+                      <p className="text-xs text-white/20 italic">No genre or mood set — tap Edit →</p>
+                    )}
+                  </div>
                 </div>
               </div>
 

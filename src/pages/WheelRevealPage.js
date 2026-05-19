@@ -580,6 +580,20 @@ export default function WheelRevealPage() {
         </div>
       )}
 
+      {/* Sticky Enter Challenge bar — always visible when active comp exists */}
+      {mode === 'platform' && challenge?.competitions?.id &&
+       ['open', 'voting'].includes(challenge.competitions.status) && (
+        <div className="fixed bottom-16 left-0 right-0 md:left-64 px-4 pb-2 z-40"
+          style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.95) 60%, transparent)' }}>
+          <button
+            onClick={() => navigate(`/competition/${challenge.competitions.id}`)}
+            className="w-full py-3.5 rounded-2xl text-sm font-bold text-white bg-purple-600 hover:bg-purple-500 transition active:scale-[0.98] flex items-center justify-center space-x-2">
+            <Trophy className="w-4 h-4" />
+            <span>{challenge.competitions.status === 'voting' ? 'Vote Now — Voting Open' : 'Enter This Week's Challenge'}</span>
+          </button>
+        </div>
+      )}
+
       <style>{`
         @keyframes fadeUp {
           from { opacity: 0; transform: translateY(12px); }

@@ -106,10 +106,8 @@ export default function AppRouter() {
               <Route path="/upgrade" element={<TierUpgradePage />} />
               <Route path="/chat/:roomId" element={<ChatRoomView />} />
               <Route path="/competition/:competitionId" element={<CompetitionRoomPage />} />
-              <Route path="/wheel" element={<WheelRevealPage />} />
-              <Route path="/competitions" element={<CompetitionsPage />} />
-                <Route path="/@:slug" element={<ArtistProfileRedirect />} />
               <Route path="/session/:sessionId" element={<ListeningSessionPage />} />
+              <Route path="/@:slug" element={<ArtistProfileRedirect />} />
 
               {/* Legal pages — fixed titles */}
               <Route path="/privacy-policy" element={
@@ -126,6 +124,8 @@ export default function AppRouter() {
               <Route element={<AppLayout />}>
                 <Route path="/" element={<HomePage />} />
                 <Route path="/browse" element={<BrowsePage />} />
+                <Route path="/wheel" element={<WheelRevealPage />} />
+                <Route path="/competitions" element={<CompetitionsPage />} />
                 <Route path="/library" element={<LibraryPage />} />
                 <Route path="/library/likes" element={<LikedSongsPage />} />
                 <Route path="/library/downloads" element={<DownloadsPage />} />

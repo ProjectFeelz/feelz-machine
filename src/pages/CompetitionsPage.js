@@ -193,20 +193,28 @@ export default function CompetitionsPage() {
       setCompetitions(comps || []);
 
       // Past winners — last 5 completed with winner entry
-      const { data: past } = await supabase
+      // Fetch completed competitions then enrich with winner entry separately
+      const { data: completedComps } = await supabase
         .from('competitions')
-        .select(`
-          id, title,
-          competition_entries!competitions_winner_entry_id_fkey(
-            id, title, file_url, cover_artwork_url,
-            artists(id, artist_name, slug, profile_image_url)
-          )
-        `)
+        .select('id, title, winner_entry_id')
         .eq('status', 'completed')
         .not('winner_entry_id', 'is', null)
-        .order('winner_announced_at', { ascending: false })
+        .order('created_at', { ascending: false })
         .limit(5);
-      setPastWinners((past || []).filter(p => p.competition_entries));
+
+      if (completedComps?.length) {
+        const winnerIds = completedComps.map(c => c.winner_entry_id).filter(Boolean);
+        const { data: entries } = await supabase
+          .from('competition_entries')
+          .select('id, title, file_url, cover_artwork_url, artists(id, artist_name, slug, profile_image_url)')
+          .in('id', winnerIds);
+        const entryMap = {};
+        (entries || []).forEach(e => { entryMap[e.id] = e; });
+        setPastWinners(completedComps.map(c => ({
+          ...c,
+          competition_entries: entryMap[c.winner_entry_id] || null,
+        })).filter(c => c.competition_entries));
+      }
     } catch(err) { console.error('CompetitionsPage load error:', err); }
     setLoading(false);
   }, []);
