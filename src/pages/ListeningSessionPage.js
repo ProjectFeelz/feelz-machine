@@ -20,7 +20,7 @@ import { useAuth } from '../contexts/AuthContext';
 import {
   Play, Pause, SkipForward, X, Users, Music, Radio,
   Plus, Search, Loader, Send, Youtube, Mic, MicOff,
-  ChevronDown, Heart, Flame, Star, Zap, Trash2
+  ChevronDown, Heart, Flame, Star, Zap, Trash2, BarChart2
 } from 'lucide-react';
 
 const YOUTUBE_REGEX = /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:watch\?v=|live\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/;
@@ -127,6 +127,492 @@ function ChatMessage({ msg }) {
 }
 
 // ── Main page ─────────────────────────────────────────────────────────────────
+// ── Track Review Submission Queue ────────────────────────────────────────────
+
+// Listener: pick one of their own tracks to submit for review
+function SubmitForReviewModal({ sessionId, user, onClose, onSubmitted }) {
+  const [tracks, setTracks]         = useState([]);
+  const [loading, setLoading]       = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitted, setSubmitted]   = useState(null);
+  const [error, setError]           = useState('');
+  const [artistTier, setArtistTier] = useState('free');
+  const [alreadyBoosted, setAlreadyBoosted] = useState(false);
+  const [usePriority, setUsePriority] = useState(false);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    Promise.all([
+      supabase.from('tracks')
+        .select('id, title, cover_artwork_url, duration, artists(id, artist_name)')
+        .eq('is_published', true)
+        .eq('artists.user_id', user.id)
+        .limit(30),
+      supabase.from('artists')
+        .select('tier')
+        .eq('user_id', user.id)
+        .maybeSingle(),
+      supabase.from('session_priority_boosts')
+        .select('id')
+        .eq('session_id', sessionId)
+        .eq('user_id', user.id)
+        .maybeSingle(),
+    ]).then(([tracksRes, artistRes, boostRes]) => {
+      setTracks(tracksRes.data || []);
+      setArtistTier(artistRes.data?.tier || 'free');
+      setAlreadyBoosted(!!boostRes.data);
+      setLoading(false);
+    });
+  }, [user?.id, sessionId]); // eslint-disable-line
+
+  const submit = async (track) => {
+    setSubmitting(true); setError('');
+    try {
+      const artistId = track.artists?.id;
+      if (!artistId) throw new Error('Artist profile not found');
+
+      const isPriority = usePriority && ['pro','premium'].includes(artistTier) && !alreadyBoosted;
+
+      const { error: err } = await supabase.from('session_review_submissions').insert({
+        session_id:  sessionId,
+        user_id:     user.id,
+        artist_id:   artistId,
+        track_id:    track.id,
+        is_priority: isPriority,
+        boosted_at:  isPriority ? new Date().toISOString() : null,
+      });
+      if (err) {
+        if (err.code === '23505') throw new Error('This track is already in the review queue');
+        throw err;
+      }
+
+      // Record the boost usage so they can't do it again this session
+      if (isPriority) {
+        await supabase.from('session_priority_boosts').insert({
+          session_id: sessionId,
+          user_id:    user.id,
+        }).catch(() => {}); // ignore if already exists
+        setAlreadyBoosted(true);
+      }
+
+      setSubmitted(track);
+      setTimeout(() => { onSubmitted(); onClose(); }, 1500);
+    } catch (err) { setError(err.message); }
+    setSubmitting(false);
+  };
+
+  const fmt = (s) => { if (!s) return ''; const m = Math.floor(s/60); return `${m}:${String(Math.floor(s%60)).padStart(2,'0')}`; };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70" onClick={onClose}>
+      <div className="w-full max-w-lg bg-neutral-900 rounded-t-3xl p-5 border-t border-white/[0.08] max-h-[80vh] flex flex-col"
+        onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-1 flex-shrink-0">
+          <h3 className="text-sm font-bold text-white">Submit for Review</h3>
+          <button onClick={onClose}><X className="w-4 h-4 text-white/30" /></button>
+        </div>
+        <p className="text-[11px] text-white/30 mb-4 flex-shrink-0">Pick one of your tracks — the host will see it in their review queue</p>
+
+        {submitted ? (
+          <div className="flex-1 flex items-center justify-center">
+            <div className="text-center">
+              <div className="text-4xl mb-3">🎵</div>
+              <p className="text-sm font-bold text-white mb-1">Submitted!</p>
+              <p className="text-xs text-white/40">"{submitted.title}" is in the queue</p>
+            </div>
+          </div>
+        ) : loading ? (
+          <div className="flex-1 flex items-center justify-center">
+            <Loader className="w-5 h-5 animate-spin text-white/30" />
+          </div>
+        ) : tracks.length === 0 ? (
+          <div className="flex-1 flex items-center justify-center text-center px-4">
+            <div>
+              <Music className="w-8 h-8 text-white/20 mx-auto mb-3" />
+              <p className="text-sm font-semibold text-white mb-1">No published tracks</p>
+              <p className="text-xs text-white/30">Upload and publish a track first to submit for review</p>
+            </div>
+          </div>
+        ) : (
+          <div className="flex-1 overflow-y-auto space-y-1.5">
+            {/* Priority boost toggle — Pro/Premium only */}
+            {['pro','premium'].includes(artistTier) && (
+              <div className={`flex items-center justify-between p-3 rounded-xl border mb-2 transition ${
+                alreadyBoosted
+                  ? 'bg-white/[0.02] border-white/[0.05] opacity-50'
+                  : usePriority
+                  ? 'bg-purple-500/15 border-purple-500/30'
+                  : 'bg-white/[0.04] border-white/[0.06]'
+              }`}>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-bold text-white">
+                    ⚡ Float to top of queue
+                    {alreadyBoosted && <span className="text-white/30 font-normal ml-1">— used this session</span>}
+                  </p>
+                  <p className="text-[10px] text-white/30 mt-0.5">
+                    {alreadyBoosted
+                      ? 'One boost per session — yours was used'
+                      : `${artistTier === 'premium' ? 'Premium' : 'Pro'} perk · one use per session`}
+                  </p>
+                </div>
+                {!alreadyBoosted && (
+                  <button onClick={() => setUsePriority(v => !v)}
+                    className={`ml-3 w-10 h-6 rounded-full transition-colors flex-shrink-0 relative ${usePriority ? 'bg-purple-600' : 'bg-white/[0.12]'}`}>
+                    <div className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${usePriority ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                  </button>
+                )}
+              </div>
+            )}
+
+            {tracks.map(track => (
+              <button key={track.id} onClick={() => !submitting && submit(track)}
+                disabled={submitting}
+                className="w-full flex items-center space-x-3 p-3 rounded-xl bg-white/[0.04] hover:bg-white/[0.07] border border-white/[0.05] transition text-left active:scale-[0.98] disabled:opacity-50">
+                <div className="w-10 h-10 rounded-xl bg-white/[0.06] flex-shrink-0 overflow-hidden">
+                  {track.cover_artwork_url
+                    ? <img src={track.cover_artwork_url} alt="" className="w-full h-full object-cover" />
+                    : <Music className="w-4 h-4 text-white/20 m-auto mt-3" />}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-white truncate">{track.title}</p>
+                  {track.duration && <p className="text-[10px] text-white/30">{fmt(track.duration)}</p>}
+                </div>
+                <Plus className="w-4 h-4 text-white/30 flex-shrink-0" />
+              </button>
+            ))}
+          </div>
+        )}
+        {error && <p className="text-xs text-red-400 mt-3 flex-shrink-0">{error}</p>}
+      </div>
+    </div>
+  );
+}
+
+// Host: review queue panel
+function ReviewQueuePanel({ sessionId, artistId, onReviewTrack }) {
+  const [submissions, setSubmissions] = useState([]);
+  const [loading, setLoading]         = useState(true);
+
+  const load = useCallback(async () => {
+    const { data } = await supabase.from('session_review_submissions')
+      .select('*, tracks(id, title, cover_artwork_url, duration), artists(artist_name, slug, profile_image_url)')
+      .eq('session_id', sessionId)
+      .eq('status', 'pending')
+      .order('is_priority', { ascending: false })   // priority first
+      .order('boosted_at',  { ascending: true })     // earliest boost first among priority
+      .order('submitted_at', { ascending: true });   // FIFO for everyone else
+    setSubmissions(data || []);
+    setLoading(false);
+  }, [sessionId]);
+
+  useEffect(() => {
+    load();
+    const sub = supabase.channel(`review-queue-${sessionId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'session_review_submissions', filter: `session_id=eq.${sessionId}` }, load)
+      .subscribe();
+    return () => supabase.removeChannel(sub);
+  }, [sessionId, load]);
+
+  const dismiss = async (id) => {
+    await supabase.from('session_review_submissions').update({ status: 'dismissed' }).eq('id', id);
+    setSubmissions(prev => prev.filter(s => s.id !== id));
+  };
+
+  const fmt = (s) => { if (!s) return ''; const m = Math.floor(s/60); return `${m}:${String(Math.floor(s%60)).padStart(2,'0')}`; };
+
+  if (loading) return <div className="p-3 text-center"><Loader className="w-4 h-4 animate-spin text-white/30 mx-auto" /></div>;
+
+  return (
+    <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-3 space-y-2">
+      <div className="flex items-center justify-between">
+        <p className="text-[10px] text-white/30 uppercase tracking-widest font-semibold">
+          Review Queue {submissions.length > 0 && <span className="ml-1 text-purple-400">({submissions.length})</span>}
+        </p>
+      </div>
+      {submissions.length === 0 ? (
+        <p className="text-xs text-white/20 text-center py-2">No submissions yet</p>
+      ) : (
+        submissions.map(sub => (
+          <div key={sub.id} className="flex items-center space-x-2 p-2 rounded-xl bg-white/[0.04] border border-white/[0.05]">
+            <div className="w-9 h-9 rounded-lg bg-white/[0.06] flex-shrink-0 overflow-hidden">
+              {sub.tracks?.cover_artwork_url
+                ? <img src={sub.tracks.cover_artwork_url} alt="" className="w-full h-full object-cover" />
+                : <Music className="w-4 h-4 text-white/20 m-auto mt-2.5" />}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center space-x-1.5 min-w-0">
+                <p className="text-xs font-semibold text-white truncate">{sub.tracks?.title}</p>
+                {sub.is_priority && (
+                  <span className="flex-shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/25">⚡</span>
+                )}
+              </div>
+              <p className="text-[10px] text-white/30 truncate">
+                {sub.artists?.artist_name}{sub.tracks?.duration ? ` · ${fmt(sub.tracks.duration)}` : ''}
+              </p>
+            </div>
+            <button onClick={() => onReviewTrack(sub)}
+              className="flex-shrink-0 px-2.5 py-1.5 rounded-lg bg-purple-500/20 text-purple-300 text-[10px] font-bold hover:bg-purple-500/30 transition">
+              Review
+            </button>
+            <button onClick={() => dismiss(sub.id)}
+              className="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-lg hover:bg-red-500/20 transition">
+              <X className="w-3 h-3 text-white/20 hover:text-red-400" />
+            </button>
+          </div>
+        ))
+      )}
+    </div>
+  );
+}
+
+
+// ── Session Poll components ───────────────────────────────────────────────────
+
+const REVIEW_OPTIONS = [
+  { id: 'fire',  text: '🔥 Fire',  emoji: '🔥' },
+  { id: 'solid', text: '👍 Solid', emoji: '👍' },
+  { id: 'mid',   text: '😐 Mid',   emoji: '😐' },
+  { id: 'skip',  text: '❌ Skip',  emoji: '❌' },
+];
+
+function SessionPollCard({ poll, userId, onVote }) {
+  const expired    = new Date(poll.expires_at) < new Date();
+  const totalVotes = (poll.options || []).reduce((s, o) => s + (o.votes || 0), 0);
+  const myVote     = poll.my_vote;
+  const showResults = !!myVote || expired;
+  const isReview   = poll.poll_type === 'track_review';
+
+  return (
+    <div className="mx-2 my-2 p-3 rounded-xl bg-white/[0.04] border border-white/[0.06]">
+      <div className="flex items-center space-x-1.5 mb-2">
+        <BarChart2 className="w-3.5 h-3.5 text-purple-400" />
+        <span className="text-[10px] font-semibold text-purple-400 uppercase tracking-wide">
+          {isReview ? 'Track Review' : 'Poll'}
+        </span>
+        <span className="text-[10px] text-white/20 ml-auto">
+          {expired ? 'Ended' : 'Live'}
+        </span>
+      </div>
+
+      {/* Track info for review polls */}
+      {isReview && poll.track_title && (
+        <div className="flex items-center space-x-2 mb-2 p-2 rounded-lg bg-white/[0.03] border border-white/[0.04]">
+          <Music className="w-3.5 h-3.5 text-white/30 flex-shrink-0" />
+          <div className="min-w-0">
+            <p className="text-xs font-semibold text-white truncate">{poll.track_title}</p>
+            {poll.track_artist && <p className="text-[10px] text-white/30 truncate">{poll.track_artist}</p>}
+          </div>
+        </div>
+      )}
+
+      <p className="text-sm font-medium text-white mb-3">{poll.question}</p>
+
+      {/* Not logged in — gate */}
+      {!userId ? (
+        <div className="p-3 rounded-xl bg-purple-500/10 border border-purple-500/20 text-center">
+          <p className="text-xs font-semibold text-purple-300 mb-1">Sign in to vote</p>
+          <p className="text-[10px] text-white/30">Create a free account to rate tracks and join the session</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {(poll.options || []).map(opt => {
+            const pct = totalVotes > 0 ? Math.round((opt.votes || 0) / totalVotes * 100) : 0;
+            const isMyChoice = myVote === opt.id;
+            return (
+              <button key={opt.id} disabled={!!myVote || expired}
+                onClick={() => !myVote && !expired && onVote(poll.id, opt.id)}
+                className="w-full text-left relative overflow-hidden rounded-lg transition active:scale-[0.98]">
+                <div className="relative z-10 flex items-center justify-between px-3 py-2.5">
+                  <span className={`text-sm ${isMyChoice ? 'text-purple-300 font-semibold' : 'text-white/70'}`}>
+                    {opt.text}
+                  </span>
+                  {showResults && <span className="text-xs font-bold text-white/50">{pct}%</span>}
+                </div>
+                {showResults && (
+                  <div className="absolute inset-0 rounded-lg transition-all duration-500"
+                    style={{ width: `${pct}%`, background: isMyChoice ? 'rgba(139,92,246,0.25)' : 'rgba(255,255,255,0.04)' }} />
+                )}
+                {!showResults && <div className="absolute inset-0 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] transition" />}
+              </button>
+            );
+          })}
+        </div>
+      )}
+      <p className="text-[10px] text-white/20 mt-2">{totalVotes} vote{totalVotes !== 1 ? 's' : ''}</p>
+    </div>
+  );
+}
+
+function CreateReviewPollModal({ sessionId, artistId, onClose, onCreated }) {
+  const [mode, setMode]             = useState('review'); // 'review' | 'custom'
+  const [trackQuery, setTrackQuery] = useState('');
+  const [trackResults, setResults]  = useState([]);
+  const [selectedTrack, setTrack]   = useState(null);
+  const [searching, setSearching]   = useState(false);
+  const [customQ, setCustomQ]       = useState('');
+  const [customOpts, setCustomOpts] = useState(['', '']);
+  const [creating, setCreating]     = useState(false);
+  const [error, setError]           = useState('');
+
+  const searchTracks = async (q) => {
+    if (!q.trim()) { setResults([]); return; }
+    setSearching(true);
+    const { data } = await supabase.from('tracks')
+      .select('id, title, artists(artist_name)')
+      .eq('is_published', true)
+      .ilike('title', `%${q}%`)
+      .limit(8);
+    setResults(data || []);
+    setSearching(false);
+  };
+
+  const handleCreate = async () => {
+    setCreating(true); setError('');
+    try {
+      if (mode === 'review') {
+        if (!selectedTrack) throw new Error('Pick a track to review');
+        const opts = REVIEW_OPTIONS.map(o => ({ ...o, votes: 0 }));
+        const { error: err } = await supabase.from('session_polls').insert({
+          session_id:   sessionId,
+          artist_id:    artistId,
+          poll_type:    'track_review',
+          track_id:     selectedTrack.id,
+          track_title:  selectedTrack.title,
+          track_artist: selectedTrack.artists?.artist_name || '',
+          question:     `What do you think of "${selectedTrack.title}"?`,
+          options:      opts,
+          expires_at:   new Date(Date.now() + 4 * 3600000).toISOString(),
+        });
+        if (err) throw err;
+      } else {
+        if (!customQ.trim()) throw new Error('Add a question');
+        const valid = customOpts.filter(o => o.trim());
+        if (valid.length < 2) throw new Error('Need at least 2 options');
+        const opts = valid.map((text, i) => ({ id: String.fromCharCode(97 + i), text: text.trim(), votes: 0 }));
+        const { error: err } = await supabase.from('session_polls').insert({
+          session_id: sessionId,
+          artist_id:  artistId,
+          poll_type:  'custom',
+          question:   customQ.trim(),
+          options:    opts,
+          expires_at: new Date(Date.now() + 4 * 3600000).toISOString(),
+        });
+        if (err) throw err;
+      }
+      onCreated(); onClose();
+    } catch (err) { setError(err.message); }
+    setCreating(false);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70" onClick={onClose}>
+      <div className="w-full max-w-lg bg-neutral-900 rounded-t-3xl p-5 border-t border-white/[0.08] max-h-[85vh] overflow-y-auto"
+        onClick={e => e.stopPropagation()}>
+
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-sm font-bold text-white">Create Poll</h3>
+          <button onClick={onClose}><X className="w-4 h-4 text-white/30" /></button>
+        </div>
+
+        {/* Mode tabs */}
+        <div className="flex space-x-1 p-1 rounded-xl bg-white/[0.04] mb-4">
+          <button onClick={() => setMode('review')}
+            className={`flex-1 py-2 rounded-lg text-xs font-semibold transition ${mode === 'review' ? 'bg-white text-black' : 'text-white/40'}`}>
+            🎵 Track Review
+          </button>
+          <button onClick={() => setMode('custom')}
+            className={`flex-1 py-2 rounded-lg text-xs font-semibold transition ${mode === 'custom' ? 'bg-white text-black' : 'text-white/40'}`}>
+            ✏️ Custom Poll
+          </button>
+        </div>
+
+        {mode === 'review' ? (
+          <>
+            <p className="text-[10px] text-white/30 uppercase tracking-wide mb-2">Search for a track</p>
+            <div className="relative mb-3">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-white/25" />
+              <input value={trackQuery}
+                onChange={e => { setTrackQuery(e.target.value); searchTracks(e.target.value); }}
+                placeholder="Track title or artist..."
+                className="w-full pl-9 pr-4 py-2.5 bg-white/[0.06] rounded-xl text-sm text-white placeholder-white/20 outline-none border border-white/[0.06] focus:border-white/20" />
+              {searching && <Loader className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-white/30 animate-spin" />}
+            </div>
+
+            {trackResults.length > 0 && (
+              <div className="space-y-1 mb-3 max-h-40 overflow-y-auto">
+                {trackResults.map(t => (
+                  <button key={t.id} onClick={() => { setTrack(t); setResults([]); setTrackQuery(t.title); }}
+                    className={`w-full flex items-center space-x-2 px-3 py-2 rounded-xl text-left transition ${selectedTrack?.id === t.id ? 'bg-purple-500/20 border border-purple-500/30' : 'bg-white/[0.04] hover:bg-white/[0.07] border border-transparent'}`}>
+                    <Music className="w-3.5 h-3.5 text-white/30 flex-shrink-0" />
+                    <div className="min-w-0">
+                      <p className="text-sm text-white truncate">{t.title}</p>
+                      <p className="text-[10px] text-white/30">{t.artists?.artist_name}</p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {selectedTrack && (
+              <div className="p-3 rounded-xl bg-purple-500/10 border border-purple-500/20 mb-3">
+                <p className="text-[10px] text-purple-400 uppercase tracking-wide mb-0.5">Reviewing</p>
+                <p className="text-sm font-bold text-white">{selectedTrack.title}</p>
+                <p className="text-[10px] text-white/40">{selectedTrack.artists?.artist_name}</p>
+              </div>
+            )}
+
+            <div className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.05] mb-4">
+              <p className="text-[10px] text-white/30 mb-2">Fans will vote with:</p>
+              <div className="flex space-x-2">
+                {REVIEW_OPTIONS.map(o => (
+                  <span key={o.id} className="flex-1 text-center py-1.5 rounded-lg bg-white/[0.05] text-xs text-white/60">
+                    {o.text}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </>
+        ) : (
+          <>
+            <input value={customQ} onChange={e => setCustomQ(e.target.value)}
+              placeholder="Ask your fans something..."
+              className="w-full bg-white/[0.06] rounded-xl px-4 py-2.5 text-sm text-white placeholder-white/20 outline-none mb-3 border border-white/[0.06] focus:border-white/20" />
+            <div className="space-y-2 mb-3">
+              {customOpts.map((opt, i) => (
+                <div key={i} className="flex items-center space-x-2">
+                  <input value={opt} onChange={e => setCustomOpts(p => p.map((o, idx) => idx === i ? e.target.value : o))}
+                    placeholder={`Option ${i + 1}`}
+                    className="flex-1 bg-white/[0.06] rounded-lg px-3 py-2 text-sm text-white placeholder-white/20 outline-none" />
+                  {customOpts.length > 2 && (
+                    <button onClick={() => setCustomOpts(p => p.filter((_, idx) => idx !== i))}>
+                      <X className="w-4 h-4 text-white/20 hover:text-red-400 transition" />
+                    </button>
+                  )}
+                </div>
+              ))}
+              {customOpts.length < 6 && (
+                <button onClick={() => setCustomOpts(p => [...p, ''])}
+                  className="text-xs text-white/30 hover:text-white/50 flex items-center space-x-1 transition">
+                  <Plus className="w-3.5 h-3.5" /><span>Add option</span>
+                </button>
+              )}
+            </div>
+          </>
+        )}
+
+        {error && <p className="text-xs text-red-400 mb-3">{error}</p>}
+
+        <button onClick={handleCreate} disabled={creating}
+          className="w-full py-3 bg-purple-600 rounded-xl text-sm font-semibold text-white disabled:opacity-50 transition flex items-center justify-center space-x-2">
+          {creating ? <Loader className="w-4 h-4 animate-spin" /> : <BarChart2 className="w-4 h-4" />}
+          <span>{creating ? 'Creating...' : 'Launch Poll'}</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+
 export default function ListeningSessionPage() {
   const { sessionId } = useParams();
   const navigate = useNavigate();
@@ -154,6 +640,11 @@ export default function ListeningSessionPage() {
   const queueRef      = useRef([]);
 
   const isHost = artist && session?.artist_id === artist.id;
+  const [polls, setPolls]           = useState([]);
+  const [showPollModal, setShowPollModal]   = useState(false);
+  const [myVotes, setMyVotes]               = useState({});
+  const [showSubmitModal, setShowSubmitModal] = useState(false);
+  const [showReviewQueue, setShowReviewQueue] = useState(false);
 
   // Mirror queue state into a ref so syncAudio always has the latest data
   useEffect(() => { queueRef.current = queue; }, [queue]);
@@ -161,6 +652,7 @@ export default function ListeningSessionPage() {
   // ── Load session ────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!sessionId) return;
+    loadPolls();
     loadSession();
     loadMessages();
 
@@ -211,6 +703,21 @@ export default function ListeningSessionPage() {
     reactionChannelRef.current = reactionSub;
 
     // Realtime chat
+    // Poll subscription
+    const pollSub = supabase.channel(`session-polls-${sessionId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'session_polls', filter: `session_id=eq.${sessionId}` },
+        () => loadPolls())
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'session_poll_votes' },
+        (payload) => {
+          // Increment vote count locally for immediate feedback
+          const { poll_id, option_id } = payload.new;
+          setPolls(prev => prev.map(p => p.id === poll_id
+            ? { ...p, options: p.options.map(o => o.id === option_id ? { ...o, votes: (o.votes || 0) + 1 } : o) }
+            : p
+          ));
+        })
+      .subscribe();
+
     const chatSub = supabase.channel(`session-chat-${sessionId}`)
       .on('postgres_changes', {
         event: 'INSERT', schema: 'public', table: 'session_messages',
@@ -222,6 +729,7 @@ export default function ListeningSessionPage() {
 
     return () => {
       supabase.removeChannel(channel);
+      supabase.removeChannel(pollSub);
       supabase.removeChannel(sessionSub);
       supabase.removeChannel(chatSub);
       if (reactionChannelRef.current) supabase.removeChannel(reactionChannelRef.current);
@@ -229,6 +737,45 @@ export default function ListeningSessionPage() {
       audioRef.current.pause();
     };
   }, [sessionId, user?.id]);
+
+  const loadPolls = useCallback(async () => {
+    if (!sessionId) return;
+    const { data } = await supabase.from('session_polls')
+      .select('*')
+      .eq('session_id', sessionId)
+      .order('created_at', { ascending: false });
+    if (!data) return;
+
+    // Fetch my votes if logged in
+    if (user?.id) {
+      const pollIds = data.map(p => p.id);
+      const { data: votes } = await supabase.from('session_poll_votes')
+        .select('poll_id, option_id')
+        .eq('user_id', user.id)
+        .in('poll_id', pollIds);
+      const voteMap = {};
+      (votes || []).forEach(v => { voteMap[v.poll_id] = v.option_id; });
+      setMyVotes(voteMap);
+      setPolls(data.map(p => ({ ...p, my_vote: voteMap[p.id] || null })));
+    } else {
+      setPolls(data);
+    }
+  }, [sessionId, user?.id]); // eslint-disable-line
+
+  const castVote = async (pollId, optionId) => {
+    if (!user?.id) return;
+    const { error } = await supabase.from('session_poll_votes')
+      .insert({ poll_id: pollId, user_id: user.id, option_id: optionId });
+    if (!error) {
+      setMyVotes(prev => ({ ...prev, [pollId]: optionId }));
+      setPolls(prev => prev.map(p => p.id === pollId
+        ? { ...p, my_vote: optionId, options: p.options.map(o => o.id === optionId ? { ...o, votes: (o.votes || 0) + 1 } : o) }
+        : p
+      ));
+    }
+  };
+
+
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -549,6 +1096,33 @@ export default function ListeningSessionPage() {
                 <Plus className="w-3.5 h-3.5" />
               </button>
             )}
+            <div className="flex space-x-2">
+              <button onClick={() => setShowPollModal(true)}
+                className="flex-1 flex items-center justify-center space-x-1.5 px-3 py-2 rounded-xl bg-purple-500/10 border border-purple-500/20 text-xs text-purple-300 hover:bg-purple-500/15 transition">
+                <BarChart2 className="w-3.5 h-3.5" />
+                <span>Create Poll</span>
+              </button>
+              <button onClick={() => setShowReviewQueue(v => !v)}
+                className="flex-1 flex items-center justify-center space-x-1.5 px-3 py-2 rounded-xl bg-white/[0.06] border border-white/[0.08] text-xs text-white/50 hover:bg-white/[0.09] transition">
+                <Music className="w-3.5 h-3.5" />
+                <span>Review Queue</span>
+              </button>
+            </div>
+
+            {showReviewQueue && (
+              <ReviewQueuePanel
+                sessionId={sessionId}
+                artistId={artist?.id}
+                onReviewTrack={(sub) => {
+                  // Pre-populate the poll modal with this track
+                  setShowPollModal(true);
+                  setShowReviewQueue(false);
+                  // Mark as reviewing
+                  supabase.from('session_review_submissions')
+                    .update({ status: 'reviewing' }).eq('id', sub.id).then(() => {});
+                }}
+              />
+            )}
 
             {showQueue && session.mode === 'audio' && (
               <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-3 space-y-3">
@@ -582,6 +1156,15 @@ export default function ListeningSessionPage() {
           </div>
         </div>
 
+        {/* Active polls */}
+        {polls.length > 0 && (
+          <div className="flex-shrink-0 max-h-52 overflow-y-auto border-b border-white/[0.05]">
+            {polls.map(poll => (
+              <SessionPollCard key={poll.id} poll={poll} userId={user?.id} onVote={castVote} />
+            ))}
+          </div>
+        )}
+
         {/* Chat */}
         <div className="flex-1 overflow-y-auto min-h-0">
           <div className="py-2">
@@ -592,6 +1175,21 @@ export default function ListeningSessionPage() {
 
         {/* Reaction bar + chat input */}
         <div className="flex-shrink-0 px-4 pb-safe pb-4 pt-2 border-t border-white/[0.06] space-y-2">
+          {/* Submit for Review button — listeners only */}
+          {!isHost && user && (
+            <button onClick={() => setShowSubmitModal(true)}
+              className="w-full flex items-center justify-center space-x-2 py-2 rounded-xl bg-purple-500/10 border border-purple-500/20 text-xs text-purple-300 font-semibold hover:bg-purple-500/15 transition mb-2">
+              <Music className="w-3.5 h-3.5" />
+              <span>Submit Track for Review</span>
+            </button>
+          )}
+          {!isHost && !user && (
+            <div className="w-full flex items-center justify-center space-x-2 py-2 rounded-xl bg-white/[0.04] border border-white/[0.06] text-xs text-white/30 mb-2">
+              <Music className="w-3.5 h-3.5" />
+              <span>Sign in to submit your track for review</span>
+            </div>
+          )}
+
           <div className="flex items-center space-x-2">
             {REACTIONS.map(emoji => (
               <button key={emoji} onClick={() => sendReaction(emoji)}
@@ -620,6 +1218,24 @@ export default function ListeningSessionPage() {
           )}
         </div>
       </div>
+
+      {showPollModal && (
+        <CreateReviewPollModal
+          sessionId={sessionId}
+          artistId={artist?.id}
+          onClose={() => setShowPollModal(false)}
+          onCreated={() => { setShowPollModal(false); loadPolls(); }}
+        />
+      )}
+
+      {showSubmitModal && (
+        <SubmitForReviewModal
+          sessionId={sessionId}
+          user={user}
+          onClose={() => setShowSubmitModal(false)}
+          onSubmitted={() => setShowSubmitModal(false)}
+        />
+      )}
 
       <style>{`
         @keyframes float-up {

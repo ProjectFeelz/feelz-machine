@@ -4,8 +4,7 @@ import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import {
   Trophy, Plus, Loader, Crown, ChevronRight, Clock, Check,
-  AlertCircle, Upload, DollarSign, Users, X, Edit2, Zap, Play, ArrowLeft
-  Music,
+  AlertCircle, Upload, DollarSign, Users, X, Edit2, Zap, Play, ArrowLeft, Music,
 } from 'lucide-react';
 
 const STATUS_OPTIONS = ['upcoming', 'open', 'voting', 'closed', 'completed'];
