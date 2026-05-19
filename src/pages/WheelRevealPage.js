@@ -745,7 +745,7 @@ export default function WheelRevealPage() {
             onClick={() => navigate(`/competition/${challenge.competitions.id}`)}
             className="w-full py-3.5 rounded-2xl text-sm font-bold text-white bg-purple-600 hover:bg-purple-500 transition active:scale-[0.98] flex items-center justify-center space-x-2">
             <Trophy className="w-4 h-4" />
-            <span>{challenge.competitions.status === 'voting' ? 'Vote Now — Voting Open' : 'Enter This Week's Challenge'}</span>
+            <span>{challenge.competitions.status === 'voting' ? 'Vote Now — Voting Open' : "Enter This Week's Challenge"}</span>
           </button>
         </div>
       )}
