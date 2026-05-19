@@ -301,17 +301,17 @@ function HowItWorksPanel({ type, mode, votesAllowed, prize }) {
   const [open, setOpen] = useState(false);
 
   const steps = type === 'paid_collab' ? [
-    { icon: '🎧', title: 'Listen to the track',       body: 'Download the stems or beat provided. Get familiar with what's been built so far.' },
+    { icon: '🎧', title: 'Listen to the track',       body: "Download the stems or beat provided. Get familiar with what's been built so far." },
     { icon: '🎤', title: 'Record your part',           body: 'Create your verse, hook, drums — whatever the brief asks for. Brand new recording only, no existing tracks.' },
     { icon: '📤', title: 'Upload your entry',          body: 'Give it a title and submit before entries close. Your name stays hidden until the winner is revealed.' },
     { icon: '🗳️', title: 'Fans vote',                  body: `Each fan gets ${votesAllowed} vote${votesAllowed > 1 ? 's' : ''}. Most votes wins. Voting opens when entries close.` },
     { icon: '💰', title: 'Winner gets paid',           body: `${prize} paid automatically via PayPal — make sure your PayPal email is set in your profile. Both artists get collab credit on their profiles.` },
   ] : [
-    { icon: '🎲', title: 'This week's prompt',        body: `The wheel landed on a ${mode === 'singer' ? 'vocalist' : 'beatmaker'} challenge. Your track must be inspired by the prompt — original work only.` },
+    { icon: '🎲', title: "This week's prompt",        body: `The wheel landed on a ${mode === 'singer' ? 'vocalist' : 'beatmaker'} challenge. Your track must be inspired by the prompt — original work only.` },
     { icon: '🎵', title: 'Make something new',         body: 'Record or produce a brand new track for this challenge. No existing uploads — fresh work only.' },
     { icon: '📤', title: 'Submit before deadline',     body: 'Upload your entry with a title. Your name stays anonymous until a winner is crowned — judged purely on the music.' },
     { icon: '🗳️', title: 'Community votes',            body: `Every listener gets ${votesAllowed} vote${votesAllowed > 1 ? 's' : ''}. Most votes wins. Voting opens Sunday 5pm and closes Sunday 11:59pm.` },
-    { icon: '🏆', title: 'Winner's reward',           body: prize || '3 months Pro or Premium automatically applied — plus Verified badge on your profile.' },
+    { icon: '🏆', title: "Winner's reward",           body: prize || '3 months Pro or Premium automatically applied — plus Verified badge on your profile.' },
   ];
 
   const rules = type === 'paid_collab' ? [
@@ -319,7 +319,7 @@ function HowItWorksPanel({ type, mode, votesAllowed, prize }) {
     'The provided stems/beat must be used as the base',
     'Free, Pro and Premium accounts can all enter',
     'One entry per artist',
-    'Winner's PayPal email must be set in their profile before payout',
+    "Winner's PayPal email must be set in their profile before payout",
     'Disqualified entries do not receive the prize',
   ] : [
     'Entries must be original, newly created for this challenge',
