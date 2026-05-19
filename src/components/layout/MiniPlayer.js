@@ -21,8 +21,21 @@ export default function MiniPlayer() {
   const [radioSuggestions, setRadioSuggestions] = useState([]);
   const [showRadioEnd, setShowRadioEnd]         = useState(false);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+  const [trackToast, setTrackToast]             = useState(null);
+  const prevTrackIdRef                          = React.useRef(null);
 
   const isQueueEnd = queue.length > 0 && queueIndex >= queue.length - 1 && !isPlaying && currentTime > 0 && duration > 0 && currentTime >= duration - 2;
+
+  // Track change toast
+  useEffect(() => {
+    if (!currentTrack) return;
+    if (prevTrackIdRef.current && prevTrackIdRef.current !== currentTrack.id) {
+      setTrackToast({ title: currentTrack.title, artist: currentTrack.artist_name || currentTrack.artists?.artist_name });
+      const t = setTimeout(() => setTrackToast(null), 3000);
+      return () => clearTimeout(t);
+    }
+    prevTrackIdRef.current = currentTrack.id;
+  }, [currentTrack?.id]); // eslint-disable-line
 
   useEffect(() => {
     if (!isQueueEnd || !currentTrack) return;
@@ -94,6 +107,22 @@ export default function MiniPlayer() {
   };
 
   return (
+    <>
+      {/* Track change toast */}
+      {trackToast && (
+        <div className="fixed left-1/2 -translate-x-1/2 z-[400] pointer-events-none" style={{ bottom: '90px' }}>
+          <div className="flex items-center space-x-2.5 px-4 py-2.5 rounded-2xl shadow-2xl"
+            style={{ backgroundColor: 'rgba(20,20,28,0.95)', border: '1px solid rgba(139,92,246,0.25)', backdropFilter: 'blur(12px)' }}>
+            <div className="w-1.5 h-1.5 rounded-full bg-purple-400 flex-shrink-0" />
+            <div className="min-w-0">
+              <p className="text-xs font-semibold text-white truncate max-w-[200px]">{trackToast.title}</p>
+              {trackToast.artist && (
+                <p className="text-[10px] text-white/40 truncate max-w-[200px]">{trackToast.artist}</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     <div
       className="md:hidden fixed left-0 right-0 z-50"
       style={{ bottom: 'calc(56px + var(--safe-area-bottom, 0px))' }}
@@ -218,5 +247,6 @@ export default function MiniPlayer() {
         />
       )}
     </div>
+    </>
   );
 }
