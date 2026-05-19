@@ -4,7 +4,7 @@ import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import { useStreakContext } from '../contexts/StreakContext';
 import { usePlayer } from '../contexts/PlayerContext';
-import { Flame, Play, Pause, Music, Verified, MoreHorizontal, Disc, Sparkles, Users, Trophy, Compass, Headphones, Radio } from 'lucide-react';
+import { Flame, Play, Pause, Music, Verified, MoreHorizontal, Disc, Sparkles, Users, Trophy, Compass, Headphones, Radio, Zap } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import TrackActionSheet from '../components/TrackActionSheet';
 import { usePullToRefresh } from '../hooks/usePullToRefresh';
@@ -27,18 +27,6 @@ function limitPerArtist(items, totalArtists) {
     const key = item.artist_slug || item.artist_name || 'unknown';
     counts[key] = (counts[key] || 0) + 1;
     return counts[key] <= max;
-  });
-}
-
-// Track IDs seen across all home page sections to prevent duplicates
-const _seenTrackIds = new Set();
-function dedupeAcrossSections(items, reset = false) {
-  if (reset) _seenTrackIds.clear();
-  return items.filter(item => {
-    if (!item.id) return true; // albums without id pass through
-    if (_seenTrackIds.has(item.id)) return false;
-    _seenTrackIds.add(item.id);
-    return true;
   });
 }
 
@@ -246,14 +234,10 @@ export default function HomePage() {
         .sort((a, b) => b._boosted - a._boosted).slice(0, 8);
 
       const artistCount = (artists || []).length;
-      // Reset seen IDs then dedupe each section in priority order
-      const featuredDeduped  = dedupeAcrossSections(limitPerArtist(normTrack(featured), artistCount), true);
-      const trendingDeduped  = dedupeAcrossSections(limitPerArtist(trendingBoosted, artistCount));
-      const releasesDeduped  = dedupeAcrossSections(limitPerArtist(trackList, artistCount));
-      setFeaturedTracks(featuredDeduped);
-      setTrending(trendingDeduped);
-      setNewReleases(releasesDeduped);
-      setNewAlbums(limitPerArtist(albumList, artistCount)); // albums don't need track dedup
+      setFeaturedTracks(limitPerArtist(normTrack(featured), artistCount));
+      setNewReleases(limitPerArtist(trackList, artistCount));
+      setNewAlbums(limitPerArtist(albumList, artistCount));
+      setTrending(limitPerArtist(trendingBoosted, artistCount));
       setTopArtists(artists || []);
 
       if (user) {
@@ -302,16 +286,28 @@ export default function HomePage() {
     } catch (err) { console.error('Live sessions fetch error:', err); }
   };
 
+  const [wheelChallenge, setWheelChallenge] = useState(null);
+
   const fetchCompetitions = async () => {
     try {
       const { data } = await supabase
         .from('competitions')
-        .select('id, title, status, brief, prize_description, entries_close_at, voting_close_at')
+        .select('id, title, status, brief, prize_description, entries_close_at, voting_close_at, wheel_challenge, paid_collab')
         .in('status', ['open', 'voting'])
         .order('created_at', { ascending: false })
-        .limit(2);
+        .limit(4);
       setActiveCompetitions(data || []);
     } catch (err) { console.error('Competitions fetch error:', err); }
+
+    // Fetch current wheel challenge separately for the Roulette pill
+    try {
+      const { data: wc } = await supabase
+        .from('wheel_challenges')
+        .select('id, prompt, mode, competition_id, spun_at')
+        .eq('is_current', true)
+        .maybeSingle();
+      setWheelChallenge(wc || null);
+    } catch {}
   };
 
   const fetchWrapped = async () => {
@@ -615,7 +611,12 @@ export default function HomePage() {
       <div className="greeting-hero px-6 pt-14 md:pt-6 pb-6 border-b border-white/[0.05] mb-6">
         <div className="flex items-center justify-between mb-1">
           <p className="section-label">{new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</p>
-
+          {user && discoveryStreak > 1 && (
+            <div className="flex items-center space-x-1 px-2 py-1 rounded-full bg-blue-500/10 border border-blue-500/20">
+              <Compass className="w-3 h-3 text-blue-400" />
+              <span className="text-xs font-bold text-blue-400">{discoveryStreak}</span>
+            </div>
+          )}
         </div>
         <h1 className="text-2xl font-bold text-white">
           {user ? greeting() : 'Feelz Machine'}
@@ -638,31 +639,73 @@ export default function HomePage() {
       {/* On This Day — resurface a track from exactly 1 year ago */}
       <OnThisDay user={user} />
 
-      {/* Active Competitions banner */}
-      {activeCompetitions.length > 0 && (
+      {/* ── Collab Roulette pill — always visible if active ── */}
+      {wheelChallenge && (
+        <div className="px-6 mb-4">
+          <button
+            onClick={() => navigate('/wheel')}
+            className="w-full flex items-center space-x-3 px-4 py-3 rounded-2xl text-left transition active:scale-[0.98]"
+            style={{ background: 'linear-gradient(135deg, rgba(255,60,172,0.12), rgba(120,75,160,0.08))', border: '1px solid rgba(255,60,172,0.2)' }}
+          >
+            <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 text-lg"
+              style={{ background: 'linear-gradient(135deg, rgba(255,60,172,0.25), rgba(120,75,160,0.15))' }}>
+              🎲
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center space-x-2">
+                <p className="text-xs font-bold text-white">Collab Roulette</p>
+                <span className="text-[9px] px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wide"
+                  style={{ background: 'rgba(255,60,172,0.2)', color: '#FF3CAC' }}>
+                  {wheelChallenge.mode === 'singer' ? '🎤 Vocalist' : '🎛️ Producer'}
+                </span>
+              </div>
+              <p className="text-[11px] truncate mt-0.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                {wheelChallenge.prompt.split('
+').join(' ')}
+              </p>
+            </div>
+            <span className="text-[10px] font-bold flex-shrink-0" style={{ color: '#FF3CAC' }}>Enter →</span>
+          </button>
+        </div>
+      )}
+
+      {/* Active Competitions */}
+      {activeCompetitions.filter(c => !c.wheel_challenge).length > 0 && (
         <div className="mb-6">
           <div className="flex items-center justify-between mb-3 px-6">
             <div className="flex items-center space-x-2">
               <Trophy className="w-3.5 h-3.5 text-yellow-400/60" />
               <span className="section-label">Competitions</span>
             </div>
-            <button onClick={() => navigate('/chat')} className="text-[10px] text-white/25 hover:text-white/50 transition uppercase tracking-wider font-semibold">See All →</button>
           </div>
           <div className="flex space-x-3 overflow-x-auto px-6 scrollbar-hide">
-            {activeCompetitions.map(comp => (
+            {activeCompetitions.filter(c => !c.wheel_challenge).map(comp => (
               <button
                 key={comp.id}
                 onClick={() => navigate(`/competition/${comp.id}`)}
-                className="flex-shrink-0 w-56 p-4 rounded-2xl border border-yellow-500/20 bg-gradient-to-br from-yellow-500/10 to-transparent text-left hover:border-yellow-500/35 transition"
+                className="flex-shrink-0 w-52 p-3.5 rounded-2xl border text-left transition active:scale-[0.98]"
+                style={{
+                  borderColor: comp.paid_collab ? 'rgba(245,158,11,0.25)' : 'rgba(255,255,255,0.08)',
+                  background: comp.paid_collab
+                    ? 'linear-gradient(135deg, rgba(245,158,11,0.08), transparent)'
+                    : 'rgba(255,255,255,0.02)',
+                }}
               >
-                <div className="w-9 h-9 rounded-xl bg-yellow-500/15 flex items-center justify-center mb-3">
-                  <Trophy className="w-4.5 h-4.5 text-yellow-400" />
+                <div className="flex items-center space-x-2 mb-2">
+                  <span className="text-base">{comp.paid_collab ? '💰' : '🏆'}</span>
+                  <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${
+                    comp.status === 'voting'
+                      ? 'bg-blue-500/20 text-blue-400'
+                      : 'bg-green-500/20 text-green-400'
+                  }`}>
+                    {comp.status === 'voting' ? 'Vote Now' : 'Enter Now'}
+                  </span>
                 </div>
                 <p className="text-sm font-semibold text-white truncate mb-1">{comp.title}</p>
-                {comp.brief && <p className="text-xs text-white/35 truncate mb-2">{comp.brief}</p>}
-                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${comp.status === 'voting' ? 'bg-blue-500/20 text-blue-400' : 'bg-green-500/20 text-green-400'}`}>
-                  {comp.status === 'voting' ? 'Vote Now' : 'Enter Now'}
-                </span>
+                {comp.brief && <p className="text-[11px] text-white/35 truncate">{comp.brief}</p>}
+                {comp.paid_collab && (
+                  <p className="text-[10px] font-bold mt-1.5" style={{ color: '#F59E0B' }}>$50 USD Prize</p>
+                )}
               </button>
             ))}
           </div>
@@ -866,7 +909,36 @@ export default function HomePage() {
         </Section>
       )}
 
-
+      {/* You Might Also Like — artists in the user's genres they haven't heard yet */}
+      {similarArtists.length > 0 && (
+        <Section title="You Might Also Like" icon={Compass} onSeeAll={() => navigate('/browse?tab=artists')}>
+          <div className="flex space-x-3 overflow-x-auto px-6 scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
+            {similarArtists.map(a => (
+              <button key={a.id} onClick={() => navigate(`/artist/${a.slug}`)}
+                className="flex-shrink-0 w-36 md:w-44 text-center group">
+                <div className="w-36 h-36 md:w-44 md:h-44 rounded-2xl overflow-hidden bg-white/[0.06] mb-2 mx-auto relative">
+                  <img src={a.profile_image_url} alt={a.artist_name || ''}
+                    loading="lazy" decoding="async"
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                  {/* Genre badge overlay */}
+                  {a.genre && (
+                    <div className="absolute bottom-1.5 left-1.5 right-1.5">
+                      <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-black/60 backdrop-blur text-white/70 font-medium truncate block text-center">
+                        {a.genre}
+                      </span>
+                    </div>
+                  )}
+                </div>
+                <div className="flex items-center justify-center space-x-1">
+                  <p className="text-sm font-medium text-white truncate max-w-[130px]">{a.artist_name}</p>
+                  {a.is_verified && <Verified className="w-3 h-3 text-blue-400 flex-shrink-0" />}
+                </div>
+                <p className="text-xs text-white/30 mt-0.5">{a.follower_count > 0 ? `${formatNumber(a.follower_count)} followers` : 'New artist'}</p>
+              </button>
+            ))}
+          </div>
+        </Section>
+      )}
 
       {actionSheetTrack && (
         <TrackActionSheet

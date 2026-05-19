@@ -46,6 +46,7 @@ import CollabRadarPage from './pages/CollabRadarPage';
 import AdminDuplicates from './pages/AdminDuplicates';
 import CompetitionRoomPage from './pages/CompetitionRoomPage';
 import WheelRevealPage from './pages/WheelRevealPage';
+import CompetitionsPage from './pages/CompetitionsPage';
 import AdminCompetitions from './pages/AdminCompetitions';
 import AdminEngagement from './pages/AdminEngagement';
 
@@ -98,6 +99,7 @@ export default function AppRouter() {
               <Route path="/chat/:roomId" element={<ChatRoomView />} />
               <Route path="/competition/:competitionId" element={<CompetitionRoomPage />} />
               <Route path="/wheel" element={<WheelRevealPage />} />
+              <Route path="/competitions" element={<CompetitionsPage />} />
               <Route path="/session/:sessionId" element={<ListeningSessionPage />} />
 
               {/* Legal pages — fixed titles */}

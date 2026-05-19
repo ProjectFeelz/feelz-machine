@@ -1,15 +1,15 @@
 import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Home, Search, Library, LayoutDashboard, Users } from 'lucide-react';
+import { Home, Search, Library, LayoutDashboard, Trophy } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useHaptics } from '../../hooks/useHaptics';
 
 const navItems = [
-  { path: '/',          icon: Home,            label: 'Home',      tourKey: 'nav-home' },
-  { path: '/browse',    icon: Search,          label: 'Browse',    tourKey: 'nav-browse' },
-  { path: '/community', icon: Users,           label: 'Community', tourKey: 'nav-community' },
-  { path: '/library',   icon: Library,         label: 'Library',   tourKey: 'nav-library' },
-  { path: '/hub',       icon: LayoutDashboard, label: 'Hub',       tourKey: 'nav-hub' },
+  { path: '/',             icon: Home,            label: 'Home',        tourKey: 'nav-home' },
+  { path: '/browse',       icon: Search,          label: 'Browse',      tourKey: 'nav-browse' },
+  { path: '/competitions', icon: Trophy,          label: 'Win',         tourKey: 'nav-competitions' },
+  { path: '/library',      icon: Library,         label: 'Library',     tourKey: 'nav-library' },
+  { path: '/hub',          icon: LayoutDashboard, label: 'Hub',         tourKey: 'nav-hub' },
 ];
 
 export default function MobileNav() {
@@ -20,7 +20,7 @@ export default function MobileNav() {
 
   const handleNav = (path) => {
     tap();
-    if ((path === '/library' || path === '/community') && !user) {
+    if (path === '/library' && !user) {
       navigate('/login');
       return;
     }

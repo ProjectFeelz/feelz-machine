@@ -4,7 +4,7 @@ import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import {
   BarChart3, Download, Music, Loader,
-  Upload, ChevronLeft, Headphones, Heart, TrendingUp, Users
+  Upload, ChevronLeft, Headphones, Heart, TrendingUp, Users, Trophy, Zap
 } from 'lucide-react';
 import TrackUploadPanel from './TrackUploadPanel';
 import CollabRequests, { CollabBadge } from '../components/CollabRequests';
@@ -95,6 +95,7 @@ export default function ArtistDashboard() {
   const [activeTab, setActiveTab] = useState(
     new URLSearchParams(window.location.search).get('tab') || 'analytics'
   );
+  const [wheelChallenge, setWheelChallenge] = useState(null);
   const [stats, setStats] = useState({
     streams: 0, downloads: 0, followers: 0, tracks: 0, likes: 0,
   });
@@ -168,6 +169,14 @@ export default function ArtistDashboard() {
     if (activeTab === 'memos' && artist) fetchMemos();
   }, [activeTab, artist, fetchStats, fetchMemos]);
 
+  useEffect(() => {
+    if (!artist) return;
+    supabase.from('wheel_challenges')
+      .select('id, prompt, mode, competition_id, competitions(id, status, entries_close_at, voting_close_at, max_votes_per_user)')
+      .eq('is_current', true).maybeSingle()
+      .then(({ data }) => setWheelChallenge(data || null));
+  }, [artist?.id]); // eslint-disable-line
+
   // ── No artist guard ───────────────────────────────────────────────────────────
   if (!artist) {
     return (
@@ -200,9 +209,10 @@ export default function ArtistDashboard() {
   ];
 
   const tabs = [
-    { key: 'upload',    label: 'Upload',    icon: Upload },
-    { key: 'collabs',   label: 'Collabs',   icon: Users, hasBadge: true },
-    { key: 'analytics', label: 'Analytics', icon: BarChart3 },
+    { key: 'upload',     label: 'Upload',     icon: Upload },
+    { key: 'collabs',    label: 'Collabs',    icon: Users, hasBadge: true },
+    { key: 'challenges', label: 'Challenges', icon: Trophy, hasDot: !!wheelChallenge },
+    { key: 'analytics',  label: 'Analytics',  icon: BarChart3 },
     // Memos tab hidden from nav bar — accessible via Profile page Voice Memo button (?tab=memos)
   ];
 
@@ -231,7 +241,7 @@ export default function ArtistDashboard() {
 
         {/* ── Tab Bar ── */}
         <div className="flex space-x-1 bg-white/[0.03] rounded-lg p-1 mb-6">
-          {tabs.map(({ key, label, icon: Icon, hasBadge }) => (
+          {tabs.map(({ key, label, icon: Icon, hasBadge, hasDot }) => (
             <button
               key={key}
               onClick={() => setActiveTab(key)}
@@ -242,6 +252,9 @@ export default function ArtistDashboard() {
               <div className="relative">
                 <Icon className="w-4 h-4" />
                 {hasBadge && activeTab !== key && <CollabBadge />}
+                {hasDot && activeTab !== key && (
+                  <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-pink-500" />
+                )}
               </div>
               <span>{label}</span>
             </button>
@@ -266,6 +279,104 @@ export default function ArtistDashboard() {
             fetchMemos={fetchMemos}
             deleteMemo={deleteMemo}
           />
+        )}
+
+        {/* ── Challenges Tab ── */}
+        {activeTab === 'challenges' && (
+          <div className="space-y-4">
+            {wheelChallenge ? (
+              <>
+                {/* Current challenge card */}
+                <div className="rounded-2xl overflow-hidden"
+                  style={{ background: 'linear-gradient(135deg, rgba(255,60,172,0.12), rgba(120,75,160,0.06))', border: '1px solid rgba(255,60,172,0.2)' }}>
+                  <div className="p-5">
+                    <div className="flex items-center space-x-2 mb-3">
+                      <span className="text-xl">🎲</span>
+                      <div>
+                        <p className="text-xs font-bold text-white">This Week's Challenge</p>
+                        <p className="text-[10px]" style={{ color: 'rgba(255,255,255,0.35)' }}>
+                          {wheelChallenge.mode === 'singer' ? '🎤 Vocalist Challenge' : '🎛️ Producer Challenge'}
+                        </p>
+                      </div>
+                    </div>
+                    <p className="text-base font-bold text-white leading-relaxed mb-4"
+                      style={{ whiteSpace: 'pre-line' }}>
+                      {wheelChallenge.prompt}
+                    </p>
+                    {/* Prize */}
+                    <div className="flex items-center space-x-2 mb-4 p-2.5 rounded-xl"
+                      style={{ background: 'rgba(255,60,172,0.1)', border: '1px solid rgba(255,60,172,0.15)' }}>
+                      <Trophy className="w-3.5 h-3.5 flex-shrink-0" style={{ color: '#FF3CAC' }} />
+                      <p className="text-xs font-semibold" style={{ color: '#FF3CAC' }}>
+                        Win 3 months Pro or Premium — automatically applied
+                      </p>
+                    </div>
+                    {/* Deadlines */}
+                    {wheelChallenge.competitions && (
+                      <div className="grid grid-cols-2 gap-2 mb-4">
+                        {wheelChallenge.competitions.entries_close_at && (
+                          <div className="p-2.5 rounded-xl bg-white/[0.04] border border-white/[0.06] text-center">
+                            <p className="text-[9px] text-white/30 uppercase tracking-wide mb-1">Entries Close</p>
+                            <p className="text-xs font-bold text-white">
+                              {new Date(wheelChallenge.competitions.entries_close_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                            </p>
+                          </div>
+                        )}
+                        {wheelChallenge.competitions.voting_close_at && (
+                          <div className="p-2.5 rounded-xl bg-white/[0.04] border border-white/[0.06] text-center">
+                            <p className="text-[9px] text-white/30 uppercase tracking-wide mb-1">Voting Closes</p>
+                            <p className="text-xs font-bold text-white">
+                              {new Date(wheelChallenge.competitions.voting_close_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    <div className="flex space-x-2">
+                      {wheelChallenge.competitions?.id && (
+                        <button
+                          onClick={() => navigate(`/competition/${wheelChallenge.competitions.id}`)}
+                          className="flex-1 py-3 rounded-xl text-sm font-bold text-white transition active:scale-[0.98]"
+                          style={{ background: 'linear-gradient(135deg, #FF3CAC, #784BA0)' }}>
+                          {wheelChallenge.competitions.status === 'voting' ? '🗳️ Vote Now' : '🎵 Enter Challenge'}
+                        </button>
+                      )}
+                      <button
+                        onClick={() => navigate('/wheel')}
+                        className="px-4 py-3 rounded-xl text-sm font-medium text-white/50 bg-white/[0.04] border border-white/[0.06] transition hover:bg-white/[0.08]">
+                        See Wheel
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Rules summary */}
+                <div className="rounded-2xl p-4 bg-white/[0.02] border border-white/[0.06] space-y-2">
+                  <p className="text-[10px] font-bold text-white/30 uppercase tracking-wider">Rules</p>
+                  {[
+                    'Upload a brand new track inspired by the prompt',
+                    'Original work only — no existing tracks',
+                    'Your name stays hidden until the winner is revealed',
+                    'Fans get 2 votes each — most votes wins',
+                  ].map((rule, i) => (
+                    <div key={i} className="flex items-start space-x-2">
+                      <span className="text-white/20 text-xs mt-0.5">·</span>
+                      <p className="text-xs text-white/40 leading-relaxed">{rule}</p>
+                    </div>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <div className="text-center py-16">
+                <div className="w-16 h-16 rounded-3xl mx-auto mb-4 flex items-center justify-center text-3xl"
+                  style={{ background: 'rgba(255,60,172,0.1)' }}>
+                  🎲
+                </div>
+                <p className="text-sm font-semibold text-white mb-1">No active challenge</p>
+                <p className="text-xs text-white/30">New challenges drop every Sunday at 9am</p>
+              </div>
+            )}
+          </div>
         )}
 
         {/* ── Analytics Tab ── */}

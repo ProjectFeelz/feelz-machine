@@ -1,0 +1,559 @@
+/**
+ * CompetitionsPage.js
+ * Route: /competitions
+ *
+ * The main competitions hub — shows:
+ * - Current Collab Roulette wheel challenge (prominent, interactive)
+ * - Active Paid Collaborations
+ * - Active standard competitions
+ * - Past winners with their tracks
+ * - How it works explainer
+ */
+
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { supabase } from '../supabaseClient';
+import { useAuth } from '../contexts/AuthContext';
+import {
+  Trophy, Clock, ArrowRight, Music, Play, Pause,
+  ChevronDown, ChevronUp, Crown, Zap, Users, Star,
+} from 'lucide-react';
+import { usePlayer } from '../contexts/PlayerContext';
+
+// ── Prompts (must match weekly-wheel-spin.js) ─────────────────────────────────
+const ALL_PROMPTS = [
+  "Sing about falling in love\nwith your WiFi password",
+  "A heartbreak song about\nyour meal going cold",
+  "Serenade a parking ticket\nyou just received",
+  "Love song to your\n3AM fridge raid",
+  "Ballad of the last\npair of clean socks",
+  "Sing about missing someone\nbut it's your nap",
+  "Power anthem about\nforgetting your charger",
+  "Gospel song about finding\nmoney in old jeans",
+  "Sad song about your plant\nthat didn't survive",
+  "Bop about being stuck\nbehind a slow walker",
+  "A beat like a\nhaunted kitchen at midnight",
+  "Afrobeats meets elevator music\n— make it slap",
+  "Built around the sound\nof rain on tin roof",
+  "Jazz x Trap x something\nyour grandma approves of",
+  "Cinematic beat like\na heist in slow motion",
+  "Lo-fi but you're\nfloating on the moon",
+  "Amapiano but set\nin outer space",
+  "Trap beat using only\nkitchen sounds",
+  "A beat that feels\nlike a sunrise",
+  "Chaos slowly\nbecoming peace",
+];
+
+const SLICE_COLORS = [
+  ["#FF3CAC","#9b0055"],["#784BA0","#3d1460"],["#2B86C5","#0a4a80"],
+  ["#00C9FF","#006688"],["#FF6B6B","#991a1a"],["#FFE66D","#997700"],
+  ["#78ffa8","#00882e"],["#FF8C00","#883300"],["#00F5A0","#007744"],
+  ["#b57bff","#5500cc"],
+];
+
+function chime() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    [[523.25,0],[659.25,0.13],[783.99,0.26],[1046.5,0.39]].forEach(([freq,delay]) => {
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.connect(g); g.connect(ctx.destination);
+      o.type = 'sine'; o.frequency.value = freq;
+      const t = ctx.currentTime + delay;
+      g.gain.setValueAtTime(0,t);
+      g.gain.linearRampToValueAtTime(0.25,t+0.04);
+      g.gain.exponentialRampToValueAtTime(0.001,t+0.65);
+      o.start(t); o.stop(t+0.7);
+    });
+  } catch(e) {}
+}
+
+function polarToXY(deg, r, cx, cy) {
+  const rad = ((deg - 90) * Math.PI) / 180;
+  return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
+}
+
+function slicePath(i, total, cx, cy, r) {
+  const a = 360/total, s = i*a, e = s+a;
+  const p1 = polarToXY(s,r,cx,cy), p2 = polarToXY(e,r,cx,cy);
+  return `M${cx},${cy} L${p1.x},${p1.y} A${r},${r} 0 ${a>180?1:0},1 ${p2.x},${p2.y} Z`;
+}
+
+function MiniWheel({ prompts, rotation, size = 200 }) {
+  const cx = size/2, cy = size/2, r = size/2-4;
+  const total = prompts.length, sa = 360/total;
+  return (
+    <svg width={size} height={size} style={{ transform:`rotate(${rotation}deg)`, transition:'transform 0s', display:'block' }}>
+      <defs>
+        {SLICE_COLORS.map(([c1,c2],i) => (
+          <radialGradient key={i} id={`cpg${i}`} cx="35%" cy="25%" r="85%">
+            <stop offset="0%" stopColor={c1}/><stop offset="100%" stopColor={c2}/>
+          </radialGradient>
+        ))}
+        <radialGradient id="cpgloss" cx="50%" cy="15%" r="75%">
+          <stop offset="0%" stopColor="rgba(255,255,255,0.35)"/>
+          <stop offset="100%" stopColor="rgba(255,255,255,0)"/>
+        </radialGradient>
+        <radialGradient id="cphub" cx="40%" cy="30%" r="70%">
+          <stop offset="0%" stopColor="#3a0a2a"/><stop offset="100%" stopColor="#0a0a0f"/>
+        </radialGradient>
+      </defs>
+      {prompts.map((prompt,i) => {
+        const ci = i % SLICE_COLORS.length;
+        const midDeg = i*sa+sa/2;
+        const rad = ((midDeg-90)*Math.PI)/180;
+        const textR = r*0.62;
+        const tx = cx+textR*Math.cos(rad), ty = cy+textR*Math.sin(rad);
+        const lines = prompt.split('\n');
+        const fs = 5.5;
+        return (
+          <g key={i}>
+            <path d={slicePath(i,total,cx,cy,r)} fill={`url(#cpg${ci})`} stroke="rgba(0,0,0,0.3)" strokeWidth="1"/>
+            <g transform={`translate(${tx},${ty}) rotate(${midDeg-90})`}>
+              {lines.map((line,li) => (
+                <text key={li} x="0" y={li*(fs+2)-(lines.length-1)*(fs+2)/2}
+                  textAnchor="middle" dominantBaseline="middle"
+                  fontSize={fs} fontWeight="700" fontFamily="monospace" fill="#fff"
+                  style={{filter:'drop-shadow(0 1px 2px rgba(0,0,0,0.9))'}}>
+                  {line}
+                </text>
+              ))}
+            </g>
+          </g>
+        );
+      })}
+      <circle cx={cx} cy={cy} r={r} fill="url(#cpgloss)" opacity="0.4" style={{pointerEvents:'none'}}/>
+      <circle cx={cx} cy={cy} r={r} fill="none" stroke="rgba(255,255,255,0.2)" strokeWidth="1"/>
+      {prompts.map((_,i) => {
+        const p = polarToXY(i*sa,r,cx,cy);
+        return <line key={i} x1={cx} y1={cy} x2={p.x} y2={p.y} stroke="rgba(0,0,0,0.3)" strokeWidth="0.8"/>;
+      })}
+      <circle cx={cx} cy={cy} r={18} fill="url(#cphub)" stroke="rgba(255,255,255,0.15)" strokeWidth="1.5"/>
+      <circle cx={cx} cy={cy} r={10} fill="#FF3CAC" opacity="0.9"/>
+    </svg>
+  );
+}
+
+function timeLeft(date) {
+  if (!date) return null;
+  const ms = new Date(date).getTime() - Date.now();
+  if (ms <= 0) return 'Ended';
+  const d = Math.floor(ms/86400000);
+  const h = Math.floor((ms%86400000)/3600000);
+  const m = Math.floor((ms%3600000)/60000);
+  if (d > 0) return `${d}d ${h}h`;
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m}m`;
+}
+
+function HowItWorksSummary() {
+  const [open, setOpen] = useState(false);
+  const steps = [
+    { icon: '🎲', title: 'Wheel spins every Sunday 9am', body: 'A random challenge is picked — alternating between vocalist and producer prompts. Announced to the whole platform.' },
+    { icon: '🎵', title: 'Artists make something new', body: 'You have one week to create an original track inspired by the prompt. New recordings only — no existing uploads.' },
+    { icon: '🗳️', title: 'Fans vote Sunday 5pm–11:59pm', body: 'Entries are anonymous. Each listener gets 2 votes. Most votes wins. No gaming it — just the music.' },
+    { icon: '🏆', title: 'Winner gets rewarded', body: 'Free tier → 3 months Pro. Pro → 3 months Premium. Premium → 7-day featured placement. Plus Verified badge for all winners.' },
+    { icon: '💰', title: 'Paid Collaborations', body: 'Monthly — the platform drops stems and commissions a missing piece from the community. Winner gets $50 USD automatically via PayPal.' },
+  ];
+
+  return (
+    <div className="mx-4 mb-5 rounded-2xl border border-white/[0.06] overflow-hidden bg-white/[0.02]">
+      <button onClick={() => setOpen(p => !p)}
+        className="w-full flex items-center justify-between px-4 py-3.5 hover:bg-white/[0.03] transition">
+        <div className="flex items-center space-x-2">
+          <Star className="w-4 h-4 text-yellow-400/60" />
+          <p className="text-sm font-semibold text-white">How competitions work</p>
+        </div>
+        {open ? <ChevronUp className="w-4 h-4 text-white/30" /> : <ChevronDown className="w-4 h-4 text-white/30" />}
+      </button>
+      {open && (
+        <div className="px-4 pb-4 space-y-3 border-t border-white/[0.04]">
+          {steps.map((step, i) => (
+            <div key={i} className="flex items-start space-x-3 pt-3">
+              <div className="w-8 h-8 rounded-xl bg-white/[0.04] flex items-center justify-center flex-shrink-0 text-base">
+                {step.icon}
+              </div>
+              <div className="flex-1 pt-0.5">
+                <p className="text-xs font-bold text-white mb-0.5">{step.title}</p>
+                <p className="text-xs text-white/40 leading-relaxed">{step.body}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function CompetitionsPage() {
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const { playTrack, currentTrack, isPlaying, togglePlay } = usePlayer();
+
+  const [wheelChallenge, setWheelChallenge] = useState(null);
+  const [competitions, setCompetitions]     = useState([]);
+  const [pastWinners, setPastWinners]       = useState([]);
+  const [loading, setLoading]               = useState(true);
+  const [rotation, setRotation]             = useState(0);
+  const [spinning, setSpinning]             = useState(false);
+  const [revealed, setRevealed]             = useState(false);
+  const animRef = useRef(null);
+  const stRef   = useRef(null);
+
+  const prompts = ALL_PROMPTS;
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      // Current wheel challenge
+      const { data: wc } = await supabase
+        .from('wheel_challenges')
+        .select('*, competitions(id, status, entries_close_at, voting_close_at, max_votes_per_user)')
+        .eq('is_current', true)
+        .maybeSingle();
+      setWheelChallenge(wc || null);
+
+      // All active competitions
+      const { data: comps } = await supabase
+        .from('competitions')
+        .select('id, title, status, brief, prize_description, cash_prize_amount, entries_close_at, voting_close_at, wheel_challenge, paid_collab, stem_pack_url')
+        .in('status', ['open', 'voting', 'upcoming'])
+        .order('created_at', { ascending: false })
+        .limit(10);
+      setCompetitions(comps || []);
+
+      // Past winners — last 5 completed with winner entry
+      const { data: past } = await supabase
+        .from('competitions')
+        .select(`
+          id, title,
+          competition_entries!competitions_winner_entry_id_fkey(
+            id, title, file_url, cover_artwork_url,
+            artists(id, artist_name, slug, profile_image_url)
+          )
+        `)
+        .eq('status', 'completed')
+        .not('winner_entry_id', 'is', null)
+        .order('winner_announced_at', { ascending: false })
+        .limit(5);
+      setPastWinners((past || []).filter(p => p.competition_entries));
+    } catch(err) { console.error('CompetitionsPage load error:', err); }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  // Auto-spin to current prompt on load
+  useEffect(() => {
+    if (!wheelChallenge || spinning || revealed) return;
+    const idx = prompts.findIndex(p => p === wheelChallenge.prompt);
+    const targetIdx = idx >= 0 ? idx : 0;
+    const t = setTimeout(() => spinToIndex(targetIdx), 600);
+    return () => clearTimeout(t);
+  }, [wheelChallenge]); // eslint-disable-line
+
+  const easeOut = t => 1 - Math.pow(1 - t, 4);
+
+  const spinToIndex = (targetIdx) => {
+    setSpinning(true); setRevealed(false);
+    const total = prompts.length;
+    const sa = 360 / total;
+    const targetDeg = 360 - (targetIdx * sa + sa / 2);
+    const totalRotation = rotation + 5 * 360 + targetDeg;
+    const duration = 4800;
+    const startRot = rotation;
+    stRef.current = null;
+
+    const animate = (ts) => {
+      if (!stRef.current) stRef.current = ts;
+      const p = Math.min((ts - stRef.current) / duration, 1);
+      setRotation(startRot + easeOut(p) * (totalRotation - startRot));
+      if (p < 1) { animRef.current = requestAnimationFrame(animate); return; }
+      setRotation(totalRotation);
+      setSpinning(false);
+      chime();
+      setTimeout(() => setRevealed(true), 250);
+    };
+    animRef.current = requestAnimationFrame(animate);
+  };
+
+  useEffect(() => () => cancelAnimationFrame(animRef.current), []);
+
+  const size = typeof window !== 'undefined' ? Math.min(window.innerWidth - 80, 260) : 240;
+
+  const activeWheel = competitions.find(c => c.wheel_challenge);
+  const activePaidCollabs = competitions.filter(c => c.paid_collab);
+  const activeStandard = competitions.filter(c => !c.wheel_challenge && !c.paid_collab);
+
+  return (
+    <div className="pb-32 pt-14 md:pt-0">
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@700&display=swap');`}</style>
+
+      {/* Header */}
+      <div className="px-4 pt-4 pb-2 mb-2">
+        <h1 className="text-2xl font-bold text-white">Competitions</h1>
+        <p className="text-sm text-white/30 mt-0.5">Create, compete, collaborate — win real rewards</p>
+      </div>
+
+      {loading ? (
+        <div className="flex items-center justify-center py-20">
+          <div className="w-7 h-7 rounded-full border-2 border-white/10 border-t-white/60 animate-spin" />
+        </div>
+      ) : (
+        <>
+          {/* ── Collab Roulette wheel ── */}
+          <div className="mx-4 mb-5 rounded-3xl overflow-hidden"
+            style={{ background: 'linear-gradient(145deg, rgba(255,60,172,0.1), rgba(120,75,160,0.06))', border: '1px solid rgba(255,60,172,0.2)' }}>
+
+            {/* Header */}
+            <div className="px-5 pt-5 pb-3 flex items-center justify-between">
+              <div>
+                <div className="flex items-center space-x-2 mb-0.5">
+                  <p style={{ fontFamily: "'Space Mono', monospace", fontSize: 11, letterSpacing: 4, color: '#FF3CAC', textTransform: 'uppercase' }}>
+                    Collab Roulette
+                  </p>
+                  {wheelChallenge && (
+                    <span className="text-[9px] px-1.5 py-0.5 rounded-full font-bold"
+                      style={{ background: 'rgba(255,60,172,0.2)', color: '#FF3CAC' }}>
+                      {wheelChallenge.mode === 'singer' ? '🎤 Vocalist' : '🎛️ Producer'}
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-white/40">Every Sunday · Win Pro or Premium</p>
+              </div>
+              <button onClick={() => navigate('/wheel')}
+                className="text-[10px] font-bold px-3 py-1.5 rounded-full transition"
+                style={{ background: 'rgba(255,60,172,0.15)', color: '#FF3CAC', border: '1px solid rgba(255,60,172,0.25)' }}>
+                Full Page →
+              </button>
+            </div>
+
+            {/* Wheel + prompt side by side on wide, stacked on narrow */}
+            <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 px-5 pb-5">
+              {/* Wheel */}
+              <div className="relative flex-shrink-0">
+                <div style={{
+                  borderRadius: '50%', padding: 5,
+                  background: 'linear-gradient(145deg,rgba(255,255,255,0.15) 0%,rgba(0,0,0,0.2) 100%)',
+                  border: '1px solid rgba(255,255,255,0.12)',
+                  boxShadow: '0 8px 32px rgba(0,0,0,0.5), 0 0 40px rgba(255,60,172,0.1)',
+                }}>
+                  <MiniWheel prompts={prompts} rotation={rotation} size={size} />
+                </div>
+                {/* Pointer */}
+                <div style={{ position:'absolute', top:-2, left:'50%', transform:'translateX(-50%)', zIndex:10 }}>
+                  <div style={{
+                    width:0, height:0,
+                    borderLeft:'8px solid transparent', borderRight:'8px solid transparent',
+                    borderTop:'20px solid #FF3CAC',
+                    filter:'drop-shadow(0 0 6px rgba(255,60,172,0.8))',
+                  }}/>
+                </div>
+              </div>
+
+              {/* Prompt + CTA */}
+              <div className="flex-1 text-center sm:text-left sm:pt-2">
+                {spinning && (
+                  <p style={{ fontFamily:"'Space Mono',monospace", fontSize:9, letterSpacing:4, color:'#FF3CAC', textTransform:'uppercase', marginBottom:8 }}>
+                    SPINNING...
+                  </p>
+                )}
+                {revealed && wheelChallenge ? (
+                  <>
+                    <p className="text-[10px] text-white/30 uppercase tracking-wider mb-2">This week's challenge</p>
+                    <p className="text-base font-bold text-white leading-relaxed mb-4"
+                      style={{ whiteSpace: 'pre-line' }}>
+                      {wheelChallenge.prompt}
+                    </p>
+
+                    {/* Countdown */}
+                    {wheelChallenge.competitions && (
+                      <div className="flex gap-3 mb-4 justify-center sm:justify-start">
+                        {wheelChallenge.competitions.entries_close_at && wheelChallenge.competitions.status === 'open' && (
+                          <div className="text-center">
+                            <div className="flex items-center space-x-1">
+                              <Clock className="w-3 h-3 text-green-400" />
+                              <span className="text-[9px] text-green-400 uppercase tracking-wider">Entries</span>
+                            </div>
+                            <p className="text-xs font-bold text-white">{timeLeft(wheelChallenge.competitions.entries_close_at)}</p>
+                          </div>
+                        )}
+                        {wheelChallenge.competitions.voting_close_at && wheelChallenge.competitions.status === 'voting' && (
+                          <div className="text-center">
+                            <div className="flex items-center space-x-1">
+                              <Zap className="w-3 h-3 text-purple-400" />
+                              <span className="text-[9px] text-purple-400 uppercase tracking-wider">Voting</span>
+                            </div>
+                            <p className="text-xs font-bold text-white">{timeLeft(wheelChallenge.competitions.voting_close_at)}</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Prize */}
+                    <div className="flex items-center space-x-1.5 mb-4 justify-center sm:justify-start">
+                      <Crown className="w-3.5 h-3.5 flex-shrink-0" style={{ color: '#FF3CAC' }} />
+                      <p className="text-xs font-bold" style={{ color: '#FF3CAC' }}>Win 3 months Pro or Premium</p>
+                    </div>
+
+                    {wheelChallenge.competitions?.id && (
+                      <button
+                        onClick={() => navigate(`/competition/${wheelChallenge.competitions.id}`)}
+                        className="w-full sm:w-auto px-6 py-3 rounded-2xl text-sm font-bold text-white transition active:scale-[0.98]"
+                        style={{ background: 'linear-gradient(135deg,#FF3CAC,#784BA0)', boxShadow: '0 4px 16px rgba(255,60,172,0.3)' }}>
+                        {wheelChallenge.competitions.status === 'voting' ? '🗳️ Vote Now' :
+                         wheelChallenge.competitions.status === 'open'   ? '🎵 Enter Challenge' : 'View Challenge'}
+                      </button>
+                    )}
+                  </>
+                ) : !spinning && (
+                  <div className="text-center py-4">
+                    <p className="text-sm text-white/40">Next challenge spins Sunday 9am</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* ── Paid Collaborations ── */}
+          {activePaidCollabs.length > 0 && (
+            <div className="mb-5">
+              <div className="flex items-center justify-between px-4 mb-3">
+                <div className="flex items-center space-x-2">
+                  <span className="text-base">💰</span>
+                  <p className="text-sm font-bold text-white">Paid Collaborations</p>
+                </div>
+                <p className="text-[10px] text-white/25 uppercase tracking-wider">$50 USD prize</p>
+              </div>
+              <div className="space-y-2 px-4">
+                {activePaidCollabs.map(comp => (
+                  <button key={comp.id}
+                    onClick={() => navigate(`/competition/${comp.id}`)}
+                    className="w-full flex items-center space-x-4 p-4 rounded-2xl text-left transition active:scale-[0.98]"
+                    style={{ background: 'linear-gradient(135deg, rgba(245,158,11,0.08), transparent)', border: '1px solid rgba(245,158,11,0.2)' }}>
+                    <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 text-xl"
+                      style={{ background: 'rgba(245,158,11,0.15)' }}>💰</div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-bold text-white truncate mb-0.5">{comp.title}</p>
+                      {comp.brief && <p className="text-xs text-white/40 truncate">{comp.brief}</p>}
+                      <div className="flex items-center space-x-2 mt-1.5">
+                        <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${
+                          comp.status === 'voting' ? 'bg-blue-500/20 text-blue-400' : 'bg-green-500/20 text-green-400'
+                        }`}>
+                          {comp.status === 'voting' ? 'Vote Now' : 'Enter Now'}
+                        </span>
+                        {(comp.entries_close_at || comp.voting_close_at) && (
+                          <span className="text-[10px] text-white/25 flex items-center space-x-1">
+                            <Clock className="w-2.5 h-2.5" />
+                            <span>{timeLeft(comp.status === 'voting' ? comp.voting_close_at : comp.entries_close_at)} left</span>
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <ArrowRight className="w-4 h-4 text-white/20 flex-shrink-0" />
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ── Standard competitions ── */}
+          {activeStandard.length > 0 && (
+            <div className="mb-5">
+              <div className="flex items-center space-x-2 px-4 mb-3">
+                <Trophy className="w-4 h-4 text-yellow-400/60" />
+                <p className="text-sm font-bold text-white">Open Competitions</p>
+              </div>
+              <div className="space-y-2 px-4">
+                {activeStandard.map(comp => (
+                  <button key={comp.id}
+                    onClick={() => navigate(`/competition/${comp.id}`)}
+                    className="w-full flex items-center space-x-4 p-4 rounded-2xl text-left transition active:scale-[0.98] bg-white/[0.02] border border-white/[0.06] hover:bg-white/[0.04]">
+                    <div className="w-10 h-10 rounded-xl bg-yellow-500/10 flex items-center justify-center flex-shrink-0">
+                      <Trophy className="w-5 h-5 text-yellow-400/70" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-bold text-white truncate mb-0.5">{comp.title}</p>
+                      {comp.brief && <p className="text-xs text-white/40 truncate">{comp.brief}</p>}
+                      <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full mt-1 inline-block ${
+                        comp.status === 'voting' ? 'bg-blue-500/20 text-blue-400' : 'bg-green-500/20 text-green-400'
+                      }`}>
+                        {comp.status === 'voting' ? 'Vote Now' : comp.status === 'upcoming' ? 'Coming Soon' : 'Enter Now'}
+                      </span>
+                    </div>
+                    <ArrowRight className="w-4 h-4 text-white/20 flex-shrink-0" />
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ── Past winners ── */}
+          {pastWinners.length > 0 && (
+            <div className="mb-5">
+              <div className="flex items-center space-x-2 px-4 mb-3">
+                <Crown className="w-4 h-4 text-yellow-400/60" />
+                <p className="text-sm font-bold text-white">Past Winners</p>
+              </div>
+              <div className="flex space-x-3 overflow-x-auto px-4 scrollbar-hide">
+                {pastWinners.map(comp => {
+                  const entry = comp.competition_entries;
+                  const artist = entry?.artists;
+                  const isActive = currentTrack?.id === entry?.id;
+                  const isNowPlaying = isActive && isPlaying;
+                  return (
+                    <div key={comp.id} className="flex-shrink-0 w-36">
+                      <div className="relative aspect-square rounded-2xl overflow-hidden mb-2 cursor-pointer"
+                        style={{ background: 'rgba(255,255,255,0.05)' }}
+                        onClick={() => {
+                          if (!entry?.file_url) return;
+                          if (isActive) { togglePlay(); return; }
+                          playTrack({ ...entry, artist_name: artist?.artist_name, artist_slug: artist?.slug }, []);
+                        }}>
+                        {entry?.cover_artwork_url
+                          ? <img src={entry.cover_artwork_url} alt="" className="w-full h-full object-cover" />
+                          : <div className="w-full h-full flex items-center justify-center">
+                              <Music className="w-8 h-8 text-white/20" />
+                            </div>}
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+                          {isNowPlaying
+                            ? <Pause className="w-7 h-7 text-white drop-shadow-lg" fill="white" />
+                            : <Play className="w-7 h-7 text-white drop-shadow-lg" fill="white" />}
+                        </div>
+                        <div className="absolute top-2 left-2">
+                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-yellow-500/80 text-black">👑 Winner</span>
+                        </div>
+                      </div>
+                      <p className="text-xs font-semibold text-white truncate">{entry?.title || 'Untitled'}</p>
+                      {artist && (
+                        <button onClick={() => navigate(`/artist/${artist.slug}`)}
+                          className="text-[10px] text-white/40 hover:text-white/60 transition truncate block">
+                          {artist.artist_name}
+                        </button>
+                      )}
+                      <p className="text-[9px] text-white/20 truncate mt-0.5">{comp.title}</p>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* ── How it works ── */}
+          <HowItWorksSummary />
+
+          {/* ── Empty state ── */}
+          {!wheelChallenge && competitions.length === 0 && (
+            <div className="text-center py-16 px-4">
+              <div className="w-16 h-16 rounded-3xl mx-auto mb-4 flex items-center justify-center text-3xl"
+                style={{ background: 'rgba(255,60,172,0.1)' }}>
+                🎲
+              </div>
+              <p className="text-sm font-semibold text-white mb-1">No active competitions</p>
+              <p className="text-xs text-white/30">New Collab Roulette challenge drops every Sunday at 9am</p>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}

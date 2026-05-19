@@ -1,18 +1,18 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Home, Search, Library, LayoutDashboard, User, Users, Info } from 'lucide-react';
+import { Home, Search, Library, LayoutDashboard, User, Trophy, Info } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { Bell } from 'lucide-react';
 import useNotifications from '../../contexts/useNotifications';
 import { supabase } from '../../supabaseClient';
 
 const navItems = [
-  { path: '/', icon: Home, label: 'Home' },
-  { path: '/browse', icon: Search, label: 'Browse' },
-  { path: '/community', icon: Users, label: 'Community' },
-  { path: '/library', icon: Library, label: 'Library' },
-  { path: '/hub', icon: LayoutDashboard, label: 'Hub' },
-  { path: '/profile', icon: User, label: 'Profile' },
+  { path: '/',             icon: Home,            label: 'Home' },
+  { path: '/browse',       icon: Search,          label: 'Browse' },
+  { path: '/competitions', icon: Trophy,          label: 'Competitions' },
+  { path: '/library',      icon: Library,         label: 'Library' },
+  { path: '/hub',          icon: LayoutDashboard, label: 'Hub' },
+  { path: '/profile',      icon: User,            label: 'Profile' },
 ];
 
 function Logo() {

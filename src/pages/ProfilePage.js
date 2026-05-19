@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import {
-  LogOut, ChevronRight, User, Music, Globe, Shield,
+  LogOut, ChevronRight, User, Music, Globe, Shield, Trophy,
   Instagram, Twitter, Youtube, MessageCircle, Loader,
   Save, Palette, ExternalLink, DollarSign, Camera, Check,
   Link, Zap, Crown, Star, Trash2, AlertTriangle, Plus, Mic
@@ -967,6 +967,7 @@ export default function ProfilePage() {
       <div className="rounded-2xl border border-white/[0.06] overflow-hidden mb-4" style={{ background: 'rgba(255,255,255,0.02)' }}>
         {isArtist && <NavRow icon={Music} label="Artist Dashboard" iconColor="text-purple-400" onClick={() => nav('/dashboard')} />}
         {isAdmin  && <NavRow icon={Shield} label="Admin Panel" iconColor="text-yellow-400" onClick={() => nav('/admin')} border />}
+        <NavRow icon={Trophy} label="Competitions" iconColor="text-yellow-400" onClick={() => nav('/competitions')} border />
         <NavRow icon={Globe} label="Privacy Policy" onClick={() => nav('/privacy-policy')} border />
         <NavRow icon={Globe} label="Terms of Use"   onClick={() => nav('/terms-of-use')}   border />
       </div>
