@@ -195,7 +195,7 @@ export default function AdminEngagement() {
     setTriggering(true);
     setTriggerResult(null);
     try {
-      const res = await fetch('/.netlify/functions/engagement-drip', {
+      const res = await fetch('/.netlify/functions/engagement-drip-background', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
       });
