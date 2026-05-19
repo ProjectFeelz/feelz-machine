@@ -1,22 +1,21 @@
 /**
- * WheelRevealPage.js
- *
- * Public page at /wheel
- * Shows the Feelz Machine Collab Roulette wheel.
- * - Loads the current week's active wheel challenge
- * - Auto-spins to land on this week's prompt on load
- * - Shows countdown to entry deadline and voting deadline
- * - CTA links to that week's competition room
- * - Previous weeks scrollable at the bottom
+ * WheelRevealPage.js — /wheel
+ * Redesigned to match Feelz Machine's Pitch Black aesthetic.
+ * Dark slices, white/purple palette, no carnival colors.
+ * Also includes a personal spin mode for self-directed challenges.
  */
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
-import { Trophy, ArrowLeft, Clock, Music, ChevronRight, Star } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
+import {
+  ArrowLeft, Trophy, Clock, Music, ChevronRight,
+  RefreshCw, Shuffle, Lock,
+} from 'lucide-react';
 
-// ── Wheel data (must match weekly-wheel-spin.js) ──────────────────────────────
-const SINGER_PROMPTS = [
+// ── Full prompt library ───────────────────────────────────────────────────────
+export const SINGER_PROMPTS = [
   "Sing about falling in love\nwith your WiFi password",
   "A heartbreak song about\nyour meal going cold",
   "Serenade a parking ticket\nyou just received",
@@ -47,9 +46,20 @@ const SINGER_PROMPTS = [
   "Torch song for\na cancelled TV show",
   "Emotional send-off for\nyour dying laptop",
   "Stadium anthem about\ncooking with no gas",
+  // Afrocentric & SA themes
+  "Love song set at\na Sunday braai",
+  "Ballad about load\nshedding ruining the vibe",
+  "Anthem for surviving\nthe taxi rank",
+  "Song about your\nspaza shop owner",
+  "Gospel about finally\ngetting the bag",
+  "Lament about your\nfirst paycheck disappearing",
+  "Ode to Sunday\nchurch clothes you can't crease",
+  "Hype track for\nyour side hustle",
+  "Spiritual about your\nancestors watching over you",
+  "Love song to\nthe rain finally coming",
 ];
 
-const BEATMAKER_PROMPTS = [
+export const BEATMAKER_PROMPTS = [
   "A beat like a\nhaunted kitchen at midnight",
   "Afrobeats meets elevator music\n— make it slap",
   "Built around the sound\nof rain on tin roof",
@@ -80,15 +90,33 @@ const BEATMAKER_PROMPTS = [
   "Afrobeats but underwater\n— you heard me",
   "Score for a movie\nscene that doesn't exist",
   "Samples silence and\nsomehow makes it fire",
+  // New additions
+  "Amapiano x Jazz —\nmorning coffee session",
+  "Gqom x R&B —\nmidnight feels",
+  "Kwaito energy but\nit's 2025",
+  "Beat for a scene\nwhere someone gets their money",
+  "Township sounds meet\nfuture bass",
+  "Sunday morning\nchurch drums go hard",
+  "A beat that feels\nlike summer rain",
+  "Afrobeats x Classical —\nstrings and percussion",
+  "Lo-fi but it's\na taxi at 6am",
+  "Something that hits\ndifferent at 3am",
 ];
 
 export const ALL_PROMPTS = [...SINGER_PROMPTS, ...BEATMAKER_PROMPTS];
 
+// ── Slice colors — dark palette matching app aesthetic ───────────────────────
 const SLICE_COLORS = [
-  ["#FF3CAC","#9b0055"],["#784BA0","#3d1460"],["#2B86C5","#0a4a80"],
-  ["#00C9FF","#006688"],["#FF6B6B","#991a1a"],["#FFE66D","#997700"],
-  ["#78ffa8","#00882e"],["#FF8C00","#883300"],["#00F5A0","#007744"],
-  ["#b57bff","#5500cc"],
+  ['rgba(139,92,246,0.7)',  'rgba(109,40,217,0.9)'],   // purple
+  ['rgba(30,30,40,0.95)',   'rgba(15,15,25,1)'],        // near-black
+  ['rgba(79,70,229,0.7)',   'rgba(55,48,163,0.9)'],     // indigo
+  ['rgba(20,20,35,0.95)',   'rgba(10,10,20,1)'],        // deep black
+  ['rgba(124,58,237,0.65)', 'rgba(91,33,182,0.9)'],     // violet
+  ['rgba(25,25,40,0.95)',   'rgba(12,12,28,1)'],        // dark
+  ['rgba(67,56,202,0.65)',  'rgba(49,46,129,0.9)'],     // deep indigo
+  ['rgba(15,15,30,0.95)',   'rgba(8,8,18,1)'],          // darkest
+  ['rgba(109,40,217,0.6)',  'rgba(76,29,149,0.9)'],     // deep purple
+  ['rgba(22,22,38,0.95)',   'rgba(11,11,22,1)'],        // near-black 2
 ];
 
 function chime() {
@@ -100,7 +128,7 @@ function chime() {
       o.type = 'sine'; o.frequency.value = freq;
       const t = ctx.currentTime + delay;
       g.gain.setValueAtTime(0,t);
-      g.gain.linearRampToValueAtTime(0.28,t+0.04);
+      g.gain.linearRampToValueAtTime(0.2,t+0.04);
       g.gain.exponentialRampToValueAtTime(0.001,t+0.65);
       o.start(t); o.stop(t+0.7);
     });
@@ -118,59 +146,71 @@ function slicePath(i, total, cx, cy, r) {
   return `M${cx},${cy} L${p1.x},${p1.y} A${r},${r} 0 ${a>180?1:0},1 ${p2.x},${p2.y} Z`;
 }
 
-function WheelSVG({ prompts, rotation, size }) {
-  const cx = size/2, cy = size/2, r = size/2-6;
-  const total = prompts.length, sa = 360/total;
+// Fixed 12-slice wheel — no text, clean color blocks
+const WHEEL_SLICES = 12;
+const WHEEL_COLORS = [
+  ['rgba(139,92,246,0.85)',  'rgba(109,40,217,1)'],    // purple
+  ['rgba(30,30,50,0.95)',    'rgba(15,15,30,1)'],       // near-black
+  ['rgba(99,102,241,0.8)',   'rgba(67,56,202,1)'],      // indigo
+  ['rgba(20,20,40,0.95)',    'rgba(10,10,25,1)'],       // deep black
+  ['rgba(124,58,237,0.85)',  'rgba(91,33,182,1)'],      // violet
+  ['rgba(25,25,45,0.95)',    'rgba(12,12,28,1)'],       // dark
+  ['rgba(79,70,229,0.8)',    'rgba(55,48,163,1)'],      // deep indigo
+  ['rgba(15,15,35,0.95)',    'rgba(8,8,20,1)'],         // darkest
+  ['rgba(109,40,217,0.8)',   'rgba(76,29,149,1)'],      // deep purple
+  ['rgba(22,22,42,0.95)',    'rgba(11,11,24,1)'],       // near-black 2
+  ['rgba(167,139,250,0.5)',  'rgba(139,92,246,0.8)'],   // light purple
+  ['rgba(18,18,38,0.95)',    'rgba(9,9,20,1)'],         // darkest 2
+];
+
+function WheelSVG({ rotation, size }) {
+  const cx = size/2, cy = size/2, r = size/2 - 4;
+  const total = WHEEL_SLICES;
+  const sa = 360 / total;
+
   return (
-    <svg width={size} height={size} style={{ transform:`rotate(${rotation}deg)`, transition:'transform 0s', display:'block' }}>
+    <svg width={size} height={size}
+      style={{ transform: `rotate(${rotation}deg)`, transition: 'transform 0s', display: 'block' }}>
       <defs>
-        {SLICE_COLORS.map(([c1,c2],i) => (
-          <radialGradient key={i} id={`wg${i}`} cx="35%" cy="25%" r="85%">
-            <stop offset="0%" stopColor={c1}/><stop offset="100%" stopColor={c2}/>
+        {WHEEL_COLORS.map(([c1,c2],i) => (
+          <radialGradient key={i} id={`wfm${i}`} cx="35%" cy="25%" r="85%">
+            <stop offset="0%" stopColor={c1}/>
+            <stop offset="100%" stopColor={c2}/>
           </radialGradient>
         ))}
-        <radialGradient id="wgloss" cx="50%" cy="15%" r="75%">
-          <stop offset="0%" stopColor="rgba(255,255,255,0.4)"/>
-          <stop offset="60%" stopColor="rgba(255,255,255,0.05)"/>
+        <radialGradient id="wfmhub" cx="40%" cy="30%" r="70%">
+          <stop offset="0%" stopColor="rgba(139,92,246,0.5)"/>
+          <stop offset="100%" stopColor="rgba(0,0,0,0.95)"/>
+        </radialGradient>
+        <radialGradient id="wfmshine" cx="40%" cy="15%" r="65%">
+          <stop offset="0%" stopColor="rgba(255,255,255,0.07)"/>
           <stop offset="100%" stopColor="rgba(255,255,255,0)"/>
         </radialGradient>
-        <radialGradient id="whub" cx="40%" cy="30%" r="70%">
-          <stop offset="0%" stopColor="#3a0a2a"/><stop offset="100%" stopColor="#0a0a0f"/>
-        </radialGradient>
       </defs>
-      {prompts.map((prompt,i) => {
-        const ci = i % SLICE_COLORS.length;
-        const midDeg = i*sa+sa/2;
-        const rad = ((midDeg-90)*Math.PI)/180;
-        const textR = r*0.6;
-        const tx = cx+textR*Math.cos(rad), ty = cy+textR*Math.sin(rad);
-        const lines = prompt.split('\n');
-        const fs = total > 20 ? 6.5 : 8;
+
+      {Array.from({ length: total }).map((_, i) => {
+        const ci = i % WHEEL_COLORS.length;
         return (
-          <g key={i}>
-            <path d={slicePath(i,total,cx,cy,r)} fill={`url(#wg${ci})`} stroke="rgba(0,0,0,0.35)" strokeWidth="1.2"/>
-            <g transform={`translate(${tx},${ty}) rotate(${midDeg-90})`}>
-              {lines.map((line,li) => (
-                <text key={li} x="0" y={li*(fs+3)-(lines.length-1)*(fs+3)/2}
-                  textAnchor="middle" dominantBaseline="middle"
-                  fontSize={fs} fontWeight="700" fontFamily="'Space Mono',monospace" fill="#fff"
-                  style={{filter:'drop-shadow(0 1px 3px rgba(0,0,0,1))'}}>
-                  {line}
-                </text>
-              ))}
-            </g>
-          </g>
+          <path
+            key={i}
+            d={slicePath(i, total, cx, cy, r)}
+            fill={`url(#wfm${ci})`}
+            stroke="rgba(0,0,0,0.4)"
+            strokeWidth="1.2"
+          />
         );
       })}
-      <circle cx={cx} cy={cy} r={r} fill="url(#wgloss)" opacity="0.45" style={{pointerEvents:'none'}}/>
-      <circle cx={cx} cy={cy} r={r} fill="none" stroke="rgba(255,255,255,0.25)" strokeWidth="1.5"/>
-      {prompts.map((_,i) => {
-        const p = polarToXY(i*sa,r,cx,cy);
-        return <line key={i} x1={cx} y1={cy} x2={p.x} y2={p.y} stroke="rgba(0,0,0,0.4)" strokeWidth="1"/>;
-      })}
-      <circle cx={cx} cy={cy} r={26} fill="url(#whub)" stroke="rgba(255,255,255,0.2)" strokeWidth="2"/>
-      <circle cx={cx} cy={cy} r={14} fill="#FF3CAC" opacity="0.9"/>
-      <circle cx={cx-4} cy={cy-4} r={4} fill="rgba(255,255,255,0.55)"/>
+
+      {/* Subtle shine overlay */}
+      <circle cx={cx} cy={cy} r={r} fill="url(#wfmshine)" style={{ pointerEvents: 'none' }}/>
+
+      {/* Rim */}
+      <circle cx={cx} cy={cy} r={r} fill="none" stroke="rgba(139,92,246,0.25)" strokeWidth="1.5"/>
+
+      {/* Hub */}
+      <circle cx={cx} cy={cy} r={20} fill="url(#wfmhub)" stroke="rgba(139,92,246,0.35)" strokeWidth="1.5"/>
+      <circle cx={cx} cy={cy} r={9} fill="rgba(139,92,246,0.7)"/>
+      <circle cx={cx-3} cy={cy-3} r={3} fill="rgba(255,255,255,0.25)"/>
     </svg>
   );
 }
@@ -189,16 +229,32 @@ function timeLeft(date) {
 
 export default function WheelRevealPage() {
   const navigate = useNavigate();
-  const [challenge, setChallenge]     = useState(null);
-  const [pastChallenges, setPast]     = useState([]);
-  const [loading, setLoading]         = useState(true);
-  const [rotation, setRotation]       = useState(0);
-  const [spinning, setSpinning]       = useState(false);
-  const [revealed, setRevealed]       = useState(false);
+  const { user } = useAuth();
+
+  const [mode, setMode] = useState('platform'); // 'platform' | 'personal'
+  const [personalMode, setPersonalMode] = useState('both'); // 'singer' | 'beatmaker' | 'both'
+  const [challenge, setChallenge]       = useState(null);
+  const [pastChallenges, setPast]       = useState([]);
+  const [loading, setLoading]           = useState(true);
+  const [rotation, setRotation]         = useState(0);
+  const [spinning, setSpinning]         = useState(false);
+  const [revealed, setRevealed]         = useState(false);
+  const [personalResult, setPersonalResult] = useState(null);
+
   const animRef = useRef(null);
   const stRef   = useRef(null);
+  const rotRef  = useRef(0);
 
-  const prompts = ALL_PROMPTS;
+  const getPromptPool = () => {
+    if (mode === 'personal') {
+      if (personalMode === 'singer') return SINGER_PROMPTS;
+      if (personalMode === 'beatmaker') return BEATMAKER_PROMPTS;
+      return ALL_PROMPTS;
+    }
+    return ALL_PROMPTS;
+  };
+
+  const prompts = getPromptPool();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -211,277 +267,311 @@ export default function WheelRevealPage() {
 
     const { data: past } = await supabase
       .from('wheel_challenges')
-      .select('*, competitions(id, title, status, winner_entry_id)')
+      .select('*, competitions(id, title, status)')
       .eq('is_current', false)
       .order('spun_at', { ascending: false })
-      .limit(10);
+      .limit(8);
     setPast(past || []);
     setLoading(false);
   }, []);
 
   useEffect(() => { load(); }, [load]);
 
-  // Auto-spin to land on current week's prompt once loaded
+  // Auto-spin to current week's prompt on load
   useEffect(() => {
-    if (!challenge || spinning || revealed) return;
-    const promptIdx = prompts.indexOf(challenge.prompt);
-    if (promptIdx === -1) return;
-
-    // Delay slightly for dramatic effect
-    const t = setTimeout(() => {
-      spinToIndex(promptIdx);
-    }, 800);
-    return () => clearTimeout(t);
-  }, [challenge]); // eslint-disable-line
+    if (!challenge || spinning || revealed || mode !== 'platform') return;
+    const idx = ALL_PROMPTS.findIndex(p => p === challenge.prompt);
+    if (idx >= 0) {
+      const t = setTimeout(() => spinToIndex(idx, ALL_PROMPTS), 600);
+      return () => clearTimeout(t);
+    }
+  }, [challenge, mode]); // eslint-disable-line
 
   const easeOut = t => 1 - Math.pow(1 - t, 4);
 
-  const spinToIndex = (targetIdx) => {
+  const spinToIndex = (targetIdx, pool) => {
     setSpinning(true);
     setRevealed(false);
-    const total = prompts.length;
+    setPersonalResult(null);
+    // Map prompt index to one of the 12 wheel slices
+    const sliceIdx = targetIdx % WHEEL_SLICES;
+    const total = WHEEL_SLICES;
     const sa = 360 / total;
-    // Calculate rotation needed to land pointer (top) on target slice
-    // Pointer is at top (0°). Slice i occupies [i*sa, (i+1)*sa].
-    // To land slice center under pointer: rotate so that (360 - (targetIdx*sa + sa/2)) is at top
-    const targetDeg = 360 - (targetIdx * sa + sa / 2);
-    // Add multiple full rotations for drama
-    const fullSpins = 5 + Math.floor(Math.random() * 3);
-    const totalRotation = fullSpins * 360 + targetDeg;
-    const duration = 5500;
-
-    const startRot = rotation;
+    const targetDeg = 360 - (sliceIdx * sa + sa / 2);
+    const startRot = rotRef.current;
+    const totalRotation = startRot + 5 * 360 + ((targetDeg - startRot % 360) + 360) % 360;
+    const duration = mode === 'personal' ? 3500 : 4800;
     stRef.current = null;
 
     const animate = (ts) => {
       if (!stRef.current) stRef.current = ts;
       const p = Math.min((ts - stRef.current) / duration, 1);
-      const cur = startRot + easeOut(p) * (totalRotation - startRot + rotation);
+      const cur = startRot + easeOut(p) * (totalRotation - startRot);
       setRotation(cur);
+      rotRef.current = cur;
       if (p < 1) { animRef.current = requestAnimationFrame(animate); return; }
-      setRotation(startRot + (totalRotation - startRot + rotation));
+      setRotation(totalRotation);
+      rotRef.current = totalRotation;
       setSpinning(false);
       chime();
-      setTimeout(() => setRevealed(true), 300);
+      if (mode === 'personal') setPersonalResult(pool[targetIdx]);
+      setTimeout(() => setRevealed(true), 250);
     };
     animRef.current = requestAnimationFrame(animate);
   };
 
+  const spinPersonal = () => {
+    if (spinning) return;
+    const pool = getPromptPool();
+    const idx = Math.floor(Math.random() * pool.length);
+    spinToIndex(idx, pool);
+  };
+
   useEffect(() => () => cancelAnimationFrame(animRef.current), []);
 
-  const size = typeof window !== 'undefined' ? Math.min(window.innerWidth - 40, 340) : 320;
+  const size = typeof window !== 'undefined' ? Math.min(window.innerWidth - 48, 320) : 300;
 
   return (
-    <div style={{
-      minHeight: '100vh', background: '#07070d', color: '#fff',
-      fontFamily: "'Space Mono', monospace", overflowX: 'hidden',
-    }}>
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&display=swap');`}</style>
-
-      {/* Ambient blobs */}
-      {[
-        { top:'-15%', left:'-10%', color:'rgba(255,60,172,0.1)' },
-        { bottom:'-15%', right:'-10%', color:'rgba(43,134,197,0.1)' },
-      ].map((s,i) => (
-        <div key={i} style={{
-          position:'fixed', width:500, height:500, borderRadius:'50%', pointerEvents:'none',
-          background:`radial-gradient(circle,${s.color} 0%,transparent 70%)`, ...s,
-        }}/>
-      ))}
+    <div className="min-h-screen bg-black text-white pb-32">
 
       {/* Header */}
-      <div className="relative z-10 flex items-center justify-between px-4 pt-14 pb-4 md:pt-6">
+      <div className="flex items-center justify-between px-4 pt-14 pb-4 md:pt-6">
         <button onClick={() => navigate(-1)}
-          className="w-9 h-9 flex items-center justify-center rounded-full bg-white/[0.06] hover:bg-white/[0.1] transition">
+          className="w-9 h-9 flex items-center justify-center rounded-full bg-white/[0.06] hover:bg-white/[0.08] transition">
           <ArrowLeft className="w-4 h-4 text-white/60" />
         </button>
         <div className="text-center">
-          <p style={{ fontSize:8, letterSpacing:6, color:'#FF3CAC', textTransform:'uppercase' }}>
-            Feelz Machine
-          </p>
-          <h1 style={{ fontSize:'clamp(18px,5vw,28px)', fontWeight:900, letterSpacing:2, textShadow:'0 0 30px rgba(255,60,172,0.5)' }}>
-            COLLAB ROULETTE
-          </h1>
+          <h1 className="text-lg font-bold text-white">Collab Roulette</h1>
+          <p className="text-[10px] text-white/30 uppercase tracking-wider">Spin · Create · Drop It</p>
         </div>
         <div className="w-9" />
       </div>
 
-      {loading ? (
-        <div className="flex items-center justify-center py-32">
-          <div className="w-8 h-8 rounded-full border-2 border-white/20 border-t-pink-500 animate-spin" />
+      {/* Mode toggle */}
+      <div className="flex space-x-1 mx-4 mb-5 p-1 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+        {[
+          { key: 'platform', label: '🎲 Weekly Challenge' },
+          { key: 'personal', label: '🎯 Spin for Yourself' },
+        ].map(({ key, label }) => (
+          <button key={key} onClick={() => {
+            setMode(key);
+            setRevealed(false);
+            setPersonalResult(null);
+            setRotation(0);
+            rotRef.current = 0;
+          }}
+            className={`flex-1 py-2 rounded-lg text-xs font-semibold transition ${
+              mode === key ? 'bg-white text-black' : 'text-white/40 hover:text-white/60'
+            }`}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {/* Personal mode filter */}
+      {mode === 'personal' && (
+        <div className="flex space-x-2 mx-4 mb-4">
+          {[
+            { key: 'both', label: 'All' },
+            { key: 'singer', label: '🎤 Vocalist' },
+            { key: 'beatmaker', label: '🎛️ Producer' },
+          ].map(({ key, label }) => (
+            <button key={key} onClick={() => {
+              setPersonalMode(key);
+              setRevealed(false);
+              setPersonalResult(null);
+            }}
+              className={`px-3 py-1.5 rounded-full text-xs font-medium transition ${
+                personalMode === key
+                  ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
+                  : 'bg-white/[0.04] text-white/40 border border-white/[0.06]'
+              }`}>
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {loading && mode === 'platform' ? (
+        <div className="flex items-center justify-center py-20">
+          <div className="w-6 h-6 rounded-full border-2 border-white/10 border-t-purple-500 animate-spin" />
         </div>
       ) : (
-        <div className="flex flex-col items-center px-4 pb-16">
-
-          {/* Week label */}
-          {challenge && (
-            <p style={{ fontSize:9, letterSpacing:4, color:'rgba(255,255,255,0.3)', marginBottom:12, textTransform:'uppercase' }}>
-              Week of {new Date(challenge.spun_at).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' })}
-            </p>
-          )}
+        <div className="flex flex-col items-center px-4">
 
           {/* Wheel */}
-          <div style={{ position:'relative', marginBottom:24 }}>
-            {/* Shadow */}
-            <div style={{
-              position:'absolute', bottom:-16, left:'50%', transform:'translateX(-50%)',
-              width:'75%', height:20, borderRadius:'50%',
-              background:'radial-gradient(ellipse,rgba(255,60,172,0.3) 0%,transparent 70%)',
-              filter:'blur(8px)',
-            }}/>
+          <div className="relative mb-6">
+            {/* Subtle glow behind wheel */}
+            <div className="absolute inset-0 rounded-full blur-2xl opacity-20"
+              style={{ background: 'radial-gradient(circle, rgba(139,92,246,0.6) 0%, transparent 70%)' }} />
+
             {/* Bezel */}
-            <div style={{
-              borderRadius:'50%', padding:7,
-              background:'linear-gradient(145deg,rgba(255,255,255,0.2) 0%,rgba(255,255,255,0.03) 60%,rgba(0,0,0,0.3) 100%)',
-              border:'1px solid rgba(255,255,255,0.18)',
-              boxShadow:'0 12px 50px rgba(0,0,0,0.7), inset 0 1px 0 rgba(255,255,255,0.25), 0 0 60px rgba(255,60,172,0.1)',
+            <div className="relative" style={{
+              borderRadius: '50%',
+              padding: 6,
+              background: 'linear-gradient(145deg, rgba(255,255,255,0.08) 0%, rgba(0,0,0,0.4) 100%)',
+              border: '1px solid rgba(255,255,255,0.08)',
+              boxShadow: '0 8px 32px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.06)',
             }}>
-              <WheelSVG prompts={prompts} rotation={rotation} size={size} />
+              <WheelSVG rotation={rotation} size={size} />
             </div>
+
             {/* Pointer */}
-            <div style={{
-              position:'absolute', top:-2, left:'50%', transform:'translateX(-50%)',
-              zIndex:20, display:'flex', flexDirection:'column', alignItems:'center',
-            }}>
+            <div className="absolute" style={{ top: -4, left: '50%', transform: 'translateX(-50%)', zIndex: 20 }}>
               <div style={{
-                width:0, height:0,
-                borderLeft:'12px solid transparent', borderRight:'12px solid transparent',
-                borderTop:'28px solid #FF3CAC',
-                filter:'drop-shadow(0 0 10px rgba(255,60,172,0.9))',
+                width: 0, height: 0,
+                borderLeft: '9px solid transparent',
+                borderRight: '9px solid transparent',
+                borderTop: '22px solid rgba(139,92,246,0.9)',
+                filter: 'drop-shadow(0 0 6px rgba(139,92,246,0.6))',
               }}/>
             </div>
           </div>
 
           {/* Spinning indicator */}
           {spinning && (
-            <p style={{ fontSize:9, letterSpacing:4, color:'#FF3CAC', textTransform:'uppercase', marginBottom:16 }}>
-              SPINNING...
-            </p>
+            <p className="text-xs text-white/30 uppercase tracking-widest mb-4">Spinning...</p>
           )}
 
-          {/* Revealed prompt card */}
-          {revealed && challenge && (
-            <div style={{
-              background:'linear-gradient(145deg,rgba(255,255,255,0.1),rgba(255,255,255,0.03))',
-              border:'1px solid rgba(255,255,255,0.15)',
-              borderRadius:24, padding:'28px 24px',
-              maxWidth:340, width:'100%', textAlign:'center',
-              boxShadow:'0 0 60px rgba(255,60,172,0.2)',
-              marginBottom:20,
-              animation:'fadeUp 0.5s ease',
-            }}>
-              <p style={{ fontSize:8, letterSpacing:5, color:'#FF3CAC', textTransform:'uppercase', marginBottom:12 }}>
-                This Week's Challenge
-              </p>
-              <p style={{
-                fontSize:'clamp(16px,4.5vw,20px)', fontWeight:700, lineHeight:1.6,
-                whiteSpace:'pre-line', color:'#fff', marginBottom:20,
-                textShadow:'0 2px 12px rgba(0,0,0,0.5)',
-              }}>
+          {/* Platform mode — reveal */}
+          {mode === 'platform' && revealed && challenge && (
+            <div className="w-full max-w-sm rounded-2xl border border-white/[0.08] bg-white/[0.03] p-5 mb-4"
+              style={{ animation: 'fadeUp 0.4s ease' }}>
+              <div className="flex items-center space-x-2 mb-3">
+                <span className="text-[10px] text-white/30 uppercase tracking-wider">This week's challenge</span>
+                <span className="text-[9px] px-1.5 py-0.5 rounded-full font-bold bg-purple-500/15 text-purple-400 border border-purple-500/20">
+                  {challenge.mode === 'singer' ? '🎤 Vocalist' : '🎛️ Producer'}
+                </span>
+              </div>
+              <p className="text-lg font-bold text-white leading-relaxed mb-4"
+                style={{ whiteSpace: 'pre-line' }}>
                 {challenge.prompt}
-              </p>
-              <p style={{ fontSize:8, color:'rgba(255,255,255,0.3)', letterSpacing:3, marginBottom:16, textTransform:'uppercase' }}>
-                {challenge.mode === 'singer' ? '🎤 Vocalist Challenge' : '🎛️ Producer Challenge'}
               </p>
 
               {/* Timers */}
               {challenge.competitions && (
-                <div className="flex justify-center gap-4 mb-5">
-                  {challenge.competitions.entries_close_at && (
-                    <div className="text-center">
-                      <div className="flex items-center space-x-1 justify-center">
+                <div className="flex space-x-4 mb-4">
+                  {challenge.competitions.entries_close_at && challenge.competitions.status === 'open' && (
+                    <div>
+                      <p className="text-[9px] text-white/25 uppercase tracking-wider mb-0.5">Entries close</p>
+                      <p className="text-xs font-bold text-white flex items-center space-x-1">
                         <Clock className="w-3 h-3 text-green-400" />
-                        <span style={{ fontSize:9, color:'#10b981', letterSpacing:2, textTransform:'uppercase' }}>Entries</span>
-                      </div>
-                      <p style={{ fontSize:11, color:'#fff', marginTop:2 }}>
-                        {timeLeft(challenge.competitions.entries_close_at)}
+                        <span>{timeLeft(challenge.competitions.entries_close_at)}</span>
                       </p>
                     </div>
                   )}
-                  {challenge.competitions.voting_close_at && (
-                    <div className="text-center">
-                      <div className="flex items-center space-x-1 justify-center">
-                        <Star className="w-3 h-3 text-purple-400" />
-                        <span style={{ fontSize:9, color:'#8b5cf6', letterSpacing:2, textTransform:'uppercase' }}>Voting</span>
-                      </div>
-                      <p style={{ fontSize:11, color:'#fff', marginTop:2 }}>
-                        {timeLeft(challenge.competitions.voting_close_at)}
+                  {challenge.competitions.voting_close_at && challenge.competitions.status === 'voting' && (
+                    <div>
+                      <p className="text-[9px] text-white/25 uppercase tracking-wider mb-0.5">Voting closes</p>
+                      <p className="text-xs font-bold text-white flex items-center space-x-1">
+                        <Clock className="w-3 h-3 text-purple-400" />
+                        <span>{timeLeft(challenge.competitions.voting_close_at)}</span>
                       </p>
                     </div>
                   )}
                 </div>
               )}
 
-              {/* Prize badge */}
-              <div style={{
-                display:'inline-flex', alignItems:'center', gap:6,
-                padding:'8px 18px',
-                background:'linear-gradient(135deg,rgba(255,60,172,0.2),rgba(120,75,160,0.2))',
-                border:'1px solid rgba(255,60,172,0.3)',
-                borderRadius:32, marginBottom:20,
-              }}>
-                <Trophy className="w-3.5 h-3.5" style={{ color:'#FF3CAC' }} />
-                <span style={{ fontSize:9, color:'#fff', letterSpacing:2, textTransform:'uppercase', fontWeight:700 }}>
-                  3 Months Pro · Winner Prize
-                </span>
+              {/* Prize */}
+              <div className="flex items-center space-x-2 p-3 rounded-xl bg-white/[0.03] border border-white/[0.06] mb-4">
+                <Trophy className="w-4 h-4 text-yellow-400/70 flex-shrink-0" />
+                <p className="text-xs text-white/60">Win 3 months Pro or Premium — automatically applied</p>
               </div>
 
-              {/* CTA */}
               {challenge.competitions?.id && (
                 <button
                   onClick={() => navigate(`/competition/${challenge.competitions.id}`)}
-                  style={{
-                    width:'100%', padding:'14px 24px',
-                    background:'linear-gradient(135deg,#FF3CAC,#784BA0)',
-                    border:'none', borderRadius:32, cursor:'pointer',
-                    fontSize:11, fontWeight:700, color:'#fff', letterSpacing:3,
-                    textTransform:'uppercase',
-                    boxShadow:'0 6px 24px rgba(255,60,172,0.4)',
-                    fontFamily:"'Space Mono',monospace",
-                  }}>
-                  {challenge.competitions.status === 'voting' ? '🗳️ VOTE NOW' :
-                   challenge.competitions.status === 'open'   ? '🎵 ENTER NOW' :
-                   challenge.competitions.status === 'completed' ? '🏆 SEE WINNER' : 'VIEW CHALLENGE'}
+                  className="w-full py-3 rounded-xl text-sm font-bold text-white bg-purple-600 hover:bg-purple-500 transition active:scale-[0.98]">
+                  {challenge.competitions.status === 'voting' ? '🗳️ Vote Now' :
+                   challenge.competitions.status === 'open'   ? '🎵 Enter Challenge' : 'View Challenge'}
                 </button>
               )}
             </div>
           )}
 
-          {/* No current challenge */}
-          {!challenge && !loading && (
+          {/* Platform — no active challenge */}
+          {mode === 'platform' && !challenge && !loading && (
             <div className="text-center py-8">
-              <p style={{ color:'rgba(255,255,255,0.3)', fontSize:12, letterSpacing:2 }}>
-                Next challenge spins Monday 9am
-              </p>
+              <p className="text-sm text-white/30">Next challenge spins Sunday 9am</p>
             </div>
           )}
 
+          {/* Personal mode — spin button + result */}
+          {mode === 'personal' && (
+            <>
+              <button
+                onClick={spinPersonal}
+                disabled={spinning}
+                className="mb-5 flex items-center space-x-2 px-8 py-3 rounded-2xl text-sm font-bold transition active:scale-[0.98] disabled:opacity-40"
+                style={{
+                  background: spinning ? 'rgba(255,255,255,0.04)' : 'rgba(139,92,246,0.2)',
+                  border: '1px solid rgba(139,92,246,0.3)',
+                  color: spinning ? 'rgba(255,255,255,0.3)' : '#a78bfa',
+                }}>
+                <Shuffle className="w-4 h-4" />
+                <span>{spinning ? 'Spinning...' : 'Spin the Wheel'}</span>
+              </button>
+
+              {revealed && personalResult && (
+                <div className="w-full max-w-sm rounded-2xl border border-white/[0.08] bg-white/[0.03] p-5 mb-4"
+                  style={{ animation: 'fadeUp 0.4s ease' }}>
+                  <p className="text-[10px] text-white/30 uppercase tracking-wider mb-3">Your challenge</p>
+                  <p className="text-lg font-bold text-white leading-relaxed mb-4"
+                    style={{ whiteSpace: 'pre-line' }}>
+                    {personalResult}
+                  </p>
+                  <div className="flex space-x-2">
+                    <button onClick={spinPersonal}
+                      className="flex-1 flex items-center justify-center space-x-1.5 py-2.5 rounded-xl text-xs font-medium bg-white/[0.06] text-white/50 hover:bg-white/[0.1] transition border border-white/[0.06]">
+                      <RefreshCw className="w-3.5 h-3.5" />
+                      <span>Spin Again</span>
+                    </button>
+                    {user && (
+                      <button onClick={() => navigate('/dashboard?tab=upload')}
+                        className="flex-1 flex items-center justify-center space-x-1.5 py-2.5 rounded-xl text-xs font-bold bg-purple-600 text-white hover:bg-purple-500 transition">
+                        <Music className="w-3.5 h-3.5" />
+                        <span>Upload Track</span>
+                      </button>
+                    )}
+                  </div>
+                  <p className="text-[10px] text-white/20 text-center mt-3">
+                    Personal spins are just for fun — no competition entry
+                  </p>
+                </div>
+              )}
+
+              {!spinning && !revealed && (
+                <p className="text-xs text-white/20 text-center mb-4">
+                  {prompts.length} prompts · spin anytime for inspiration
+                </p>
+              )}
+            </>
+          )}
+
           {/* Past challenges */}
-          {pastChallenges.length > 0 && (
-            <div style={{ width:'100%', maxWidth:400, marginTop:16 }}>
-              <p style={{ fontSize:8, letterSpacing:5, color:'rgba(255,255,255,0.25)', textTransform:'uppercase', marginBottom:12, textAlign:'center' }}>
+          {mode === 'platform' && pastChallenges.length > 0 && (
+            <div className="w-full max-w-sm mt-2">
+              <p className="text-[10px] text-white/25 uppercase tracking-widest font-semibold mb-3">
                 Previous Challenges
               </p>
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 {pastChallenges.map(pc => (
                   <button key={pc.id}
                     onClick={() => pc.competitions?.id && navigate(`/competition/${pc.competitions.id}`)}
-                    className="w-full flex items-center space-x-3 p-3 rounded-2xl text-left transition hover:bg-white/[0.04] active:scale-[0.98]"
-                    style={{ background:'rgba(255,255,255,0.02)', border:'1px solid rgba(255,255,255,0.06)' }}>
-                    <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0"
-                      style={{ background:'linear-gradient(135deg,rgba(255,60,172,0.2),rgba(120,75,160,0.2))' }}>
-                      <Music className="w-4 h-4" style={{ color:'#FF3CAC' }} />
+                    className="w-full flex items-center space-x-3 p-3 rounded-xl text-left transition hover:bg-white/[0.03] active:scale-[0.98] bg-white/[0.02] border border-white/[0.04]">
+                    <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 bg-purple-500/10">
+                      <Music className="w-3.5 h-3.5 text-purple-400/60" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p style={{ fontSize:10, color:'#fff', fontWeight:700, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
+                      <p className="text-xs font-medium text-white/70 truncate">
                         {pc.prompt.split('\n').join(' ')}
                       </p>
-                      <p style={{ fontSize:8, color:'rgba(255,255,255,0.3)', letterSpacing:2, marginTop:2, textTransform:'uppercase' }}>
-                        {new Date(pc.spun_at).toLocaleDateString('en-US', { month:'short', day:'numeric' })} ·{' '}
-                        {pc.competitions?.status === 'completed' ? '🏆 Complete' : pc.competitions?.status || 'ended'}
+                      <p className="text-[9px] text-white/25 mt-0.5 uppercase tracking-wide">
+                        {new Date(pc.spun_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                        {pc.competitions?.status === 'completed' ? ' · Complete' : ''}
                       </p>
                     </div>
-                    <ChevronRight className="w-4 h-4 flex-shrink-0" style={{ color:'rgba(255,255,255,0.2)' }} />
+                    {pc.competitions?.id && <ChevronRight className="w-3.5 h-3.5 text-white/15 flex-shrink-0" />}
                   </button>
                 ))}
               </div>
@@ -492,8 +582,8 @@ export default function WheelRevealPage() {
 
       <style>{`
         @keyframes fadeUp {
-          from { opacity:0; transform:translateY(16px); }
-          to   { opacity:1; transform:translateY(0); }
+          from { opacity: 0; transform: translateY(12px); }
+          to   { opacity: 1; transform: translateY(0); }
         }
       `}</style>
     </div>

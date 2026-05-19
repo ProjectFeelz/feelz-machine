@@ -47,6 +47,17 @@ const SINGER_PROMPTS = [
   "Torch song for a cancelled TV show",
   "Emotional send-off for your dying laptop",
   "Stadium anthem about cooking with no gas",
+  // Afrocentric & SA themes
+  "Love song set at a Sunday braai",
+  "Ballad about load shedding ruining the vibe",
+  "Anthem for surviving the taxi rank",
+  "Song about your spaza shop owner",
+  "Gospel about finally getting the bag",
+  "Lament about your first paycheck disappearing",
+  "Ode to Sunday church clothes you can't crease",
+  "Hype track for your side hustle",
+  "Spiritual about your ancestors watching over you",
+  "Love song to the rain finally coming",
 ];
 
 const BEATMAKER_PROMPTS = [
@@ -80,6 +91,17 @@ const BEATMAKER_PROMPTS = [
   "Afrobeats but underwater — you heard me",
   "Score for a movie scene that doesn't exist",
   "Samples silence and somehow makes it fire",
+  // New additions
+  "Amapiano x Jazz — morning coffee session",
+  "Gqom x R&B — midnight feels",
+  "Kwaito energy but it's 2025",
+  "Beat for a scene where someone gets their money",
+  "Township sounds meet future bass",
+  "Sunday morning church drums go hard",
+  "A beat that feels like summer rain",
+  "Afrobeats x Classical — strings and percussion",
+  "Lo-fi but it's a taxi at 6am",
+  "Something that hits different at 3am",
 ];
 
 exports.handler = async () => {

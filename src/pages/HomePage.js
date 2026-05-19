@@ -645,17 +645,17 @@ export default function HomePage() {
           <button
             onClick={() => navigate('/wheel')}
             className="w-full flex items-center space-x-3 px-4 py-3 rounded-2xl text-left transition active:scale-[0.98]"
-            style={{ background: 'linear-gradient(135deg, rgba(255,60,172,0.12), rgba(120,75,160,0.08))', border: '1px solid rgba(255,60,172,0.2)' }}
+            style={{ background: 'rgba(139,92,246,0.08)', border: '1px solid rgba(139,92,246,0.2)' }}
           >
             <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 text-lg"
-              style={{ background: 'linear-gradient(135deg, rgba(255,60,172,0.25), rgba(120,75,160,0.15))' }}>
+              style={{ background: 'rgba(139,92,246,0.15)' }}>
               🎲
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center space-x-2">
                 <p className="text-xs font-bold text-white">Collab Roulette</p>
                 <span className="text-[9px] px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wide"
-                  style={{ background: 'rgba(255,60,172,0.2)', color: '#FF3CAC' }}>
+                  style={{ background: 'rgba(139,92,246,0.15)', color: '#a78bfa' }}>
                   {wheelChallenge.mode === 'singer' ? '🎤 Vocalist' : '🎛️ Producer'}
                 </span>
               </div>
@@ -663,7 +663,7 @@ export default function HomePage() {
                 {wheelChallenge.prompt.split('\n').join(' ')}
               </p>
             </div>
-            <span className="text-[10px] font-bold flex-shrink-0" style={{ color: '#FF3CAC' }}>Enter →</span>
+            <span className="text-[10px] font-bold flex-shrink-0" style={{ color: '#a78bfa' }}>Enter →</span>
           </button>
         </div>
       )}

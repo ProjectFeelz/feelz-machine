@@ -19,37 +19,11 @@ import {
   ChevronDown, ChevronUp, Crown, Zap, Users, Star,
 } from 'lucide-react';
 import { usePlayer } from '../contexts/PlayerContext';
+import { ALL_PROMPTS } from './WheelRevealPage';
 
-// ── Prompts (must match weekly-wheel-spin.js) ─────────────────────────────────
-const ALL_PROMPTS = [
-  "Sing about falling in love\nwith your WiFi password",
-  "A heartbreak song about\nyour meal going cold",
-  "Serenade a parking ticket\nyou just received",
-  "Love song to your\n3AM fridge raid",
-  "Ballad of the last\npair of clean socks",
-  "Sing about missing someone\nbut it's your nap",
-  "Power anthem about\nforgetting your charger",
-  "Gospel song about finding\nmoney in old jeans",
-  "Sad song about your plant\nthat didn't survive",
-  "Bop about being stuck\nbehind a slow walker",
-  "A beat like a\nhaunted kitchen at midnight",
-  "Afrobeats meets elevator music\n— make it slap",
-  "Built around the sound\nof rain on tin roof",
-  "Jazz x Trap x something\nyour grandma approves of",
-  "Cinematic beat like\na heist in slow motion",
-  "Lo-fi but you're\nfloating on the moon",
-  "Amapiano but set\nin outer space",
-  "Trap beat using only\nkitchen sounds",
-  "A beat that feels\nlike a sunrise",
-  "Chaos slowly\nbecoming peace",
-];
 
-const SLICE_COLORS = [
-  ["#FF3CAC","#9b0055"],["#784BA0","#3d1460"],["#2B86C5","#0a4a80"],
-  ["#00C9FF","#006688"],["#FF6B6B","#991a1a"],["#FFE66D","#997700"],
-  ["#78ffa8","#00882e"],["#FF8C00","#883300"],["#00F5A0","#007744"],
-  ["#b57bff","#5500cc"],
-];
+
+
 
 function chime() {
   try {
@@ -78,61 +52,58 @@ function slicePath(i, total, cx, cy, r) {
   return `M${cx},${cy} L${p1.x},${p1.y} A${r},${r} 0 ${a>180?1:0},1 ${p2.x},${p2.y} Z`;
 }
 
-function MiniWheel({ prompts, rotation, size = 200 }) {
-  const cx = size/2, cy = size/2, r = size/2-4;
-  const total = prompts.length, sa = 360/total;
+function MiniWheel({ rotation, size = 200 }) {
+  const cx = size / 2, cy = size / 2, r = size / 2 - 4;
+  const TOTAL = 12;
+  const sa = 360 / TOTAL;
+  const COLORS = [
+    ['rgba(139,92,246,0.85)', 'rgba(109,40,217,1)'],
+    ['rgba(25,25,45,0.95)',   'rgba(12,12,28,1)'],
+    ['rgba(99,102,241,0.8)',  'rgba(67,56,202,1)'],
+    ['rgba(15,15,35,0.95)',   'rgba(8,8,20,1)'],
+    ['rgba(124,58,237,0.85)','rgba(91,33,182,1)'],
+    ['rgba(20,20,40,0.95)',   'rgba(10,10,25,1)'],
+    ['rgba(79,70,229,0.8)',   'rgba(55,48,163,1)'],
+    ['rgba(12,12,28,0.95)',   'rgba(6,6,15,1)'],
+    ['rgba(109,40,217,0.8)',  'rgba(76,29,149,1)'],
+    ['rgba(18,18,38,0.95)',   'rgba(9,9,20,1)'],
+    ['rgba(167,139,250,0.5)','rgba(139,92,246,0.8)'],
+    ['rgba(15,15,30,0.95)',   'rgba(8,8,18,1)'],
+  ];
+  const slicePath = (i) => {
+    const s = i * sa, e = s + sa;
+    const p1x = cx + r * Math.cos(((s - 90) * Math.PI) / 180);
+    const p1y = cy + r * Math.sin(((s - 90) * Math.PI) / 180);
+    const p2x = cx + r * Math.cos(((e - 90) * Math.PI) / 180);
+    const p2y = cy + r * Math.sin(((e - 90) * Math.PI) / 180);
+    return `M${cx},${cy} L${p1x},${p1y} A${r},${r} 0 0,1 ${p2x},${p2y} Z`;
+  };
   return (
-    <svg width={size} height={size} style={{ transform:`rotate(${rotation}deg)`, transition:'transform 0s', display:'block' }}>
+    <svg width={size} height={size}
+      style={{ transform: `rotate(${rotation}deg)`, transition: 'transform 0s', display: 'block' }}>
       <defs>
-        {SLICE_COLORS.map(([c1,c2],i) => (
-          <radialGradient key={i} id={`cpg${i}`} cx="35%" cy="25%" r="85%">
-            <stop offset="0%" stopColor={c1}/><stop offset="100%" stopColor={c2}/>
+        {COLORS.map(([c1, c2], i) => (
+          <radialGradient key={i} id={`mpg${i}`} cx="35%" cy="25%" r="85%">
+            <stop offset="0%" stopColor={c1} />
+            <stop offset="100%" stopColor={c2} />
           </radialGradient>
         ))}
-        <radialGradient id="cpgloss" cx="50%" cy="15%" r="75%">
-          <stop offset="0%" stopColor="rgba(255,255,255,0.35)"/>
-          <stop offset="100%" stopColor="rgba(255,255,255,0)"/>
-        </radialGradient>
-        <radialGradient id="cphub" cx="40%" cy="30%" r="70%">
-          <stop offset="0%" stopColor="#3a0a2a"/><stop offset="100%" stopColor="#0a0a0f"/>
+        <radialGradient id="mphub" cx="40%" cy="30%" r="70%">
+          <stop offset="0%" stopColor="rgba(139,92,246,0.5)" />
+          <stop offset="100%" stopColor="rgba(0,0,0,0.95)" />
         </radialGradient>
       </defs>
-      {prompts.map((prompt,i) => {
-        const ci = i % SLICE_COLORS.length;
-        const midDeg = i*sa+sa/2;
-        const rad = ((midDeg-90)*Math.PI)/180;
-        const textR = r*0.62;
-        const tx = cx+textR*Math.cos(rad), ty = cy+textR*Math.sin(rad);
-        const lines = prompt.split('\n');
-        const fs = 5.5;
-        return (
-          <g key={i}>
-            <path d={slicePath(i,total,cx,cy,r)} fill={`url(#cpg${ci})`} stroke="rgba(0,0,0,0.3)" strokeWidth="1"/>
-            <g transform={`translate(${tx},${ty}) rotate(${midDeg-90})`}>
-              {lines.map((line,li) => (
-                <text key={li} x="0" y={li*(fs+2)-(lines.length-1)*(fs+2)/2}
-                  textAnchor="middle" dominantBaseline="middle"
-                  fontSize={fs} fontWeight="700" fontFamily="monospace" fill="#fff"
-                  style={{filter:'drop-shadow(0 1px 2px rgba(0,0,0,0.9))'}}>
-                  {line}
-                </text>
-              ))}
-            </g>
-          </g>
-        );
-      })}
-      <circle cx={cx} cy={cy} r={r} fill="url(#cpgloss)" opacity="0.4" style={{pointerEvents:'none'}}/>
-      <circle cx={cx} cy={cy} r={r} fill="none" stroke="rgba(255,255,255,0.2)" strokeWidth="1"/>
-      {prompts.map((_,i) => {
-        const p = polarToXY(i*sa,r,cx,cy);
-        return <line key={i} x1={cx} y1={cy} x2={p.x} y2={p.y} stroke="rgba(0,0,0,0.3)" strokeWidth="0.8"/>;
-      })}
-      <circle cx={cx} cy={cy} r={18} fill="url(#cphub)" stroke="rgba(255,255,255,0.15)" strokeWidth="1.5"/>
-      <circle cx={cx} cy={cy} r={10} fill="#FF3CAC" opacity="0.9"/>
+      {COLORS.map((_, i) => (
+        <path key={i} d={slicePath(i)}
+          fill={`url(#mpg${i})`}
+          stroke="rgba(0,0,0,0.4)" strokeWidth="1.2" />
+      ))}
+      <circle cx={cx} cy={cy} r={r} fill="none" stroke="rgba(139,92,246,0.2)" strokeWidth="1.5" />
+      <circle cx={cx} cy={cy} r={18} fill="url(#mphub)" stroke="rgba(139,92,246,0.3)" strokeWidth="1.5" />
+      <circle cx={cx} cy={cy} r={9} fill="rgba(139,92,246,0.7)" />
     </svg>
   );
 }
-
 function timeLeft(date) {
   if (!date) return null;
   const ms = new Date(date).getTime() - Date.now();
@@ -255,9 +226,9 @@ export default function CompetitionsPage() {
 
   const spinToIndex = (targetIdx) => {
     setSpinning(true); setRevealed(false);
-    const total = prompts.length;
-    const sa = 360 / total;
-    const targetDeg = 360 - (targetIdx * sa + sa / 2);
+    const sliceIdx = targetIdx % 12;
+    const sa = 360 / 12;
+    const targetDeg = 360 - (sliceIdx * sa + sa / 2);
     const totalRotation = rotation + 5 * 360 + targetDeg;
     const duration = 4800;
     const startRot = rotation;
@@ -302,18 +273,18 @@ export default function CompetitionsPage() {
         <>
           {/* ── Collab Roulette wheel ── */}
           <div className="mx-4 mb-5 rounded-3xl overflow-hidden"
-            style={{ background: 'linear-gradient(145deg, rgba(255,60,172,0.1), rgba(120,75,160,0.06))', border: '1px solid rgba(255,60,172,0.2)' }}>
+            style={{ background: 'linear-gradient(145deg, rgba(139,92,246,0.1), rgba(120,75,160,0.06))', border: '1px solid rgba(139,92,246,0.2)' }}>
 
             {/* Header */}
             <div className="px-5 pt-5 pb-3 flex items-center justify-between">
               <div>
                 <div className="flex items-center space-x-2 mb-0.5">
-                  <p style={{ fontFamily: "'Space Mono', monospace", fontSize: 11, letterSpacing: 4, color: '#FF3CAC', textTransform: 'uppercase' }}>
+                  <p style={{ fontSize: 10, letterSpacing: 3, color: 'rgba(139,92,246,0.8)', textTransform: 'uppercase', fontWeight: 600 }}>
                     Collab Roulette
                   </p>
                   {wheelChallenge && (
                     <span className="text-[9px] px-1.5 py-0.5 rounded-full font-bold"
-                      style={{ background: 'rgba(255,60,172,0.2)', color: '#FF3CAC' }}>
+                      style={{ background: 'rgba(139,92,246,0.2)', color: '#a78bfa' }}>
                       {wheelChallenge.mode === 'singer' ? '🎤 Vocalist' : '🎛️ Producer'}
                     </span>
                   )}
@@ -322,7 +293,7 @@ export default function CompetitionsPage() {
               </div>
               <button onClick={() => navigate('/wheel')}
                 className="text-[10px] font-bold px-3 py-1.5 rounded-full transition"
-                style={{ background: 'rgba(255,60,172,0.15)', color: '#FF3CAC', border: '1px solid rgba(255,60,172,0.25)' }}>
+                style={{ background: 'rgba(139,92,246,0.12)', color: '#a78bfa', border: '1px solid rgba(139,92,246,0.2)' }}>
                 Full Page →
               </button>
             </div>
@@ -335,17 +306,17 @@ export default function CompetitionsPage() {
                   borderRadius: '50%', padding: 5,
                   background: 'linear-gradient(145deg,rgba(255,255,255,0.15) 0%,rgba(0,0,0,0.2) 100%)',
                   border: '1px solid rgba(255,255,255,0.12)',
-                  boxShadow: '0 8px 32px rgba(0,0,0,0.5), 0 0 40px rgba(255,60,172,0.1)',
+                  boxShadow: '0 8px 32px rgba(0,0,0,0.5), 0 0 40px rgba(139,92,246,0.1)',
                 }}>
-                  <MiniWheel prompts={prompts} rotation={rotation} size={size} />
+                  <MiniWheel rotation={rotation} size={size} />
                 </div>
                 {/* Pointer */}
                 <div style={{ position:'absolute', top:-2, left:'50%', transform:'translateX(-50%)', zIndex:10 }}>
                   <div style={{
                     width:0, height:0,
                     borderLeft:'8px solid transparent', borderRight:'8px solid transparent',
-                    borderTop:'20px solid #FF3CAC',
-                    filter:'drop-shadow(0 0 6px rgba(255,60,172,0.8))',
+                    borderTop:'20px solid #a78bfa',
+                    filter:'drop-shadow(0 0 6px rgba(139,92,246,0.6))',
                   }}/>
                 </div>
               </div>
@@ -353,7 +324,7 @@ export default function CompetitionsPage() {
               {/* Prompt + CTA */}
               <div className="flex-1 text-center sm:text-left sm:pt-2">
                 {spinning && (
-                  <p style={{ fontFamily:"'Space Mono',monospace", fontSize:9, letterSpacing:4, color:'#FF3CAC', textTransform:'uppercase', marginBottom:8 }}>
+                  <p style={{ fontFamily:"'Space Mono',monospace", fontSize:9, letterSpacing:4, color:'#a78bfa', textTransform:'uppercase', marginBottom:8 }}>
                     SPINNING...
                   </p>
                 )}
@@ -391,15 +362,15 @@ export default function CompetitionsPage() {
 
                     {/* Prize */}
                     <div className="flex items-center space-x-1.5 mb-4 justify-center sm:justify-start">
-                      <Crown className="w-3.5 h-3.5 flex-shrink-0" style={{ color: '#FF3CAC' }} />
-                      <p className="text-xs font-bold" style={{ color: '#FF3CAC' }}>Win 3 months Pro or Premium</p>
+                      <Crown className="w-3.5 h-3.5 flex-shrink-0" style={{ color: '#a78bfa' }} />
+                      <p className="text-xs font-bold" style={{ color: '#a78bfa' }}>Win 3 months Pro or Premium</p>
                     </div>
 
                     {wheelChallenge.competitions?.id && (
                       <button
                         onClick={() => navigate(`/competition/${wheelChallenge.competitions.id}`)}
                         className="w-full sm:w-auto px-6 py-3 rounded-2xl text-sm font-bold text-white transition active:scale-[0.98]"
-                        style={{ background: 'linear-gradient(135deg,#FF3CAC,#784BA0)', boxShadow: '0 4px 16px rgba(255,60,172,0.3)' }}>
+                        style={{ background: 'linear-gradient(135deg,#a78bfa,#784BA0)', boxShadow: '0 4px 16px rgba(139,92,246,0.3)' }}>
                         {wheelChallenge.competitions.status === 'voting' ? '🗳️ Vote Now' :
                          wheelChallenge.competitions.status === 'open'   ? '🎵 Enter Challenge' : 'View Challenge'}
                       </button>
@@ -545,7 +516,7 @@ export default function CompetitionsPage() {
           {!wheelChallenge && competitions.length === 0 && (
             <div className="text-center py-16 px-4">
               <div className="w-16 h-16 rounded-3xl mx-auto mb-4 flex items-center justify-center text-3xl"
-                style={{ background: 'rgba(255,60,172,0.1)' }}>
+                style={{ background: 'rgba(139,92,246,0.1)' }}>
                 🎲
               </div>
               <p className="text-sm font-semibold text-white mb-1">No active competitions</p>

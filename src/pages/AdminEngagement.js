@@ -5,7 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import {
   Zap, Users, TrendingUp, Play, Pause, RefreshCw, Brain,
   ArrowLeft, Loader, Check, AlertCircle, ChevronDown, ChevronUp,
-  MessageSquare, Clock, BarChart2, Sparkles
+  MessageSquare, Clock, BarChart2, Sparkles, Megaphone
 } from 'lucide-react';
 
 const SEGMENT_LABELS = {
