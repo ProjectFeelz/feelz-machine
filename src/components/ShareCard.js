@@ -559,10 +559,34 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
         try { ffmpeg.FS('unlink', 'input.webm'); } catch {}
         try { ffmpeg.FS('unlink', 'output.mp4'); } catch {}
       } catch (err) {
-        console.error('FFmpeg.wasm conversion error:', err);
-        webmBlob._ext = 'webm';
-        setVideoBlob(webmBlob);
-        setVideoFormat('WEBM');
+        console.error('FFmpeg.wasm failed, trying server conversion:', err.message);
+        // Fall back to server-side conversion via convert-to-mp4 Netlify function
+        try {
+          const base64 = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload  = () => resolve(reader.result.split(',')[1]);
+            reader.onerror = reject;
+            reader.readAsDataURL(webmBlob);
+          });
+          const res = await fetch('/.netlify/functions/convert-to-mp4', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ video: base64, mimeType: mimeType }),
+          });
+          if (!res.ok) throw new Error(`Server conversion failed: ${res.status}`);
+          const { mp4 } = await res.json();
+          const bytes   = Uint8Array.from(atob(mp4), c => c.charCodeAt(0));
+          const mp4Blob = new window.Blob([bytes], { type: 'video/mp4' });
+          mp4Blob._ext  = 'mp4';
+          setVideoBlob(mp4Blob);
+          setVideoFormat('MP4');
+        } catch (serverErr) {
+          console.error('Server conversion also failed:', serverErr.message);
+          // Last resort — save WebM, at least the user gets something
+          webmBlob._ext = 'webm';
+          setVideoBlob(webmBlob);
+          setVideoFormat('WEBM');
+        }
       }
 
       setConverting(false);

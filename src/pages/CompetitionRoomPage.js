@@ -439,7 +439,12 @@ export default function CompetitionRoomPage() {
       }
 
       const { data: entryData } = await entryQuery;
-      setEntries(entryData || []);
+      // Randomise order during voting to prevent position bias
+      const raw = entryData || [];
+      const shuffled = competition?.status === 'voting' && !isAdmin
+        ? [...raw].sort(() => Math.random() - 0.5)
+        : raw;
+      setEntries(shuffled);
 
       // Find my entry
       if (artist) {
@@ -848,6 +853,28 @@ export default function CompetitionRoomPage() {
               <span className="text-[10px] text-purple-400/60 font-medium">Admin view — names visible</span>
             )}
           </div>
+
+          {/* Entry count + share */}
+          {visibleEntries.length > 0 && (
+            <div className="flex items-center justify-between mb-3 px-1">
+              <p className="text-xs text-white/40">
+                {visibleEntries.length} {visibleEntries.length === 1 ? 'artist' : 'artists'} entered
+                {competition.status === 'voting' && ' · order randomised'}
+              </p>
+              <button
+                onClick={() => {
+                  const url = window.location.origin + '/competitions';
+                  if (navigator.share) {
+                    navigator.share({ title: competition.title, text: 'Check out this challenge on Feelz Machine', url }).catch(() => {});
+                  } else {
+                    navigator.clipboard.writeText(url).then(() => showToast('Link copied!')).catch(() => {});
+                  }
+                }}
+                className="text-[10px] text-purple-400/60 hover:text-purple-400 transition">
+                Share challenge →
+              </button>
+            </div>
+          )}
 
           <div className="space-y-3">
             {visibleEntries.map((entry, i) => (

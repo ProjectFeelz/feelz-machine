@@ -17,7 +17,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useHaptics } from '../hooks/useHaptics';
 import {
   X, Plus, Upload, Loader, Play, Pause, Music, Image, Video,
-  Eye, Clock, Trash2,
+  Eye, Clock,
 } from 'lucide-react';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -31,7 +31,7 @@ function timeLeft(expiresAt) {
 }
 
 // ── Story Upload ──────────────────────────────────────────────────────────────
-export function StoryUpload({ artistId, onUploaded, inline = false }) {
+export function StoryUpload({ artistId, onUploaded }) {
   const { tap } = useHaptics();
   const [open, setOpen]         = useState(false);
   const [file, setFile]         = useState(null);
@@ -50,7 +50,32 @@ export function StoryUpload({ artistId, onUploaded, inline = false }) {
     if (f.size > MAX_MB * 1024 * 1024) { setError(`Max file size is ${MAX_MB}MB`); return; }
     setFile(f);
     setError('');
+    // Always create object URL for preview — works for all types
     setPreview(URL.createObjectURL(f));
+  };
+
+  const convertToMp4 = async (videoFile) => {
+    // Read file as base64
+    const base64 = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload  = () => resolve(reader.result.split(',')[1]);
+      reader.onerror = reject;
+      reader.readAsDataURL(videoFile);
+    });
+
+    const res = await fetch('/.netlify/functions/convert-to-mp4', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ video: base64, mimeType: videoFile.type }),
+    });
+
+    if (!res.ok) throw new Error('Video conversion failed — try uploading an MP4 directly');
+    const { mp4 } = await res.json();
+
+    // Convert base64 back to File
+    const bytes = Uint8Array.from(atob(mp4), c => c.charCodeAt(0));
+    const blob  = new Blob([bytes], { type: 'video/mp4' });
+    return new File([blob], videoFile.name.replace(/\.[^.]+$/, '.mp4'), { type: 'video/mp4' });
   };
 
   const mediaType = file
@@ -64,18 +89,30 @@ export function StoryUpload({ artistId, onUploaded, inline = false }) {
     setUploading(true);
     setError('');
     try {
-      const ext  = file.name.split('.').pop();
-      const path = `stories/${artistId}/${Date.now()}.${ext}`;
-      const { error: upErr } = await supabase.storage.from('stories').upload(path, file, { upsert: false });
+      let uploadFile = file;
+
+      // Convert WebM/video to MP4 for universal playback (Safari, iOS etc)
+      if (mediaType === 'video' && (file.type === 'video/webm' || file.name.endsWith('.webm'))) {
+        setError('Converting video…');
+        uploadFile = await convertToMp4(file);
+        setError('');
+      }
+
+      const ext  = uploadFile.name.split('.').pop().toLowerCase();
+      const storagePath = `stories/${artistId}/${Date.now()}.${ext}`;
+      const { error: upErr } = await supabase.storage
+        .from('stories')
+        .upload(storagePath, uploadFile, { upsert: false, contentType: uploadFile.type });
       if (upErr) throw upErr;
-      const { data: { publicUrl } } = supabase.storage.from('stories').getPublicUrl(path);
+
+      const { data: { publicUrl } } = supabase.storage.from('stories').getPublicUrl(storagePath);
 
       await supabase.from('artist_stories').insert({
-        artist_id:    artistId,
-        media_url:    publicUrl,
-        media_type:   mediaType,
-        caption:      caption.trim() || null,
-        expires_at:   new Date(Date.now() + 24 * 3600000).toISOString(),
+        artist_id:  artistId,
+        media_url:  publicUrl,
+        media_type: mediaType,
+        caption:    caption.trim() || null,
+        expires_at: new Date(Date.now() + 24 * 3600000).toISOString(),
       });
 
       setOpen(false);
@@ -87,10 +124,28 @@ export function StoryUpload({ artistId, onUploaded, inline = false }) {
     setUploading(false);
   };
 
-  // Inline form content — shared between inline and modal modes
-  const formContent = (
-    <div className="space-y-3">
-      <p className="text-xs text-white/30">Stories disappear after 24 hours. Max 5 per day, videos up to 60 seconds.</p>
+  return (
+    <>
+      <button
+        onClick={() => { tap(); setOpen(true); }}
+        className="flex-shrink-0 flex flex-col items-center space-y-1.5"
+      >
+        <div className="w-16 h-16 rounded-full border-2 border-dashed border-white/20 flex items-center justify-center bg-white/[0.04] hover:bg-white/[0.07] transition">
+          <Plus className="w-6 h-6 text-white/40" />
+        </div>
+        <span className="text-[10px] text-white/30">Add Story</span>
+      </button>
+
+      {open && (
+        <div className="fixed inset-0 z-[600] flex items-end justify-center bg-black/80 backdrop-blur-sm"
+          onClick={() => setOpen(false)}>
+          <div className="w-full max-w-lg bg-neutral-900 rounded-t-2xl p-5 border-t border-white/[0.08]"
+            onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-bold text-white">Add a Story</h3>
+              <button onClick={() => setOpen(false)}><X className="w-4 h-4 text-white/30" /></button>
+            </div>
+            <p className="text-xs text-white/30 mb-4">Stories disappear after 24 hours. Share audio clips, images, or short videos with your followers.</p>
 
             {/* File picker */}
             {!file ? (
@@ -98,6 +153,7 @@ export function StoryUpload({ artistId, onUploaded, inline = false }) {
                 className="w-full py-8 rounded-2xl border-2 border-dashed border-white/15 flex flex-col items-center space-y-2 text-white/30 hover:border-white/25 hover:text-white/50 transition mb-3">
                 <Upload className="w-8 h-8" />
                 <span className="text-sm">Tap to choose audio, image, or video</span>
+                <span className="text-[10px] text-white/20 mt-1">Videos convert to MP4 automatically</span>
                 <span className="text-xs">Max {MAX_MB}MB</span>
               </button>
             ) : (
@@ -128,41 +184,13 @@ export function StoryUpload({ artistId, onUploaded, inline = false }) {
               placeholder="Add a caption (optional)"
               className="w-full bg-white/[0.06] rounded-xl px-3 py-2.5 text-sm text-white placeholder-white/20 outline-none mb-3" />
 
-      {error && <p className="text-xs text-red-400">{error}</p>}
-      <button onClick={handleUpload} disabled={!file || uploading}
-        className="w-full py-3 bg-purple-600 rounded-xl text-sm font-semibold text-white disabled:opacity-40 transition flex items-center justify-center space-x-2">
-        {uploading ? <Loader className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-        <span>{uploading ? 'Uploading...' : 'Share Story'}</span>
-      </button>
-    </div>
-  );
+            {error && <p className="text-xs text-red-400 mb-3">{error}</p>}
 
-  // Inline mode — just the form, no trigger button or outer modal
-  if (inline) return formContent;
-
-  return (
-    <>
-      <button
-        onClick={() => { tap(); setOpen(true); }}
-        className="flex-shrink-0 flex flex-col items-center space-y-1.5"
-      >
-        <div className="w-16 h-16 rounded-full border-2 border-dashed border-white/20 flex items-center justify-center bg-white/[0.04] hover:bg-white/[0.07] transition">
-          <Plus className="w-6 h-6 text-white/40" />
-        </div>
-        <span className="text-[10px] text-white/30">Add Story</span>
-      </button>
-
-      {open && (
-        <div className="fixed inset-0 z-[600] flex items-center justify-center px-4 bg-black/80 backdrop-blur-sm"
-          onClick={() => setOpen(false)}>
-          <div className="w-full overflow-y-auto rounded-3xl p-5"
-            style={{ maxWidth: 400, maxHeight: '85vh', backgroundColor: '#0f0f0f', border: '1px solid rgba(255,255,255,0.08)', boxShadow: '0 32px 64px rgba(0,0,0,0.6)' }}
-            onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-bold text-white">Add a Story</h3>
-              <button onClick={() => setOpen(false)}><X className="w-4 h-4 text-white/30" /></button>
-            </div>
-            {formContent}
+            <button onClick={handleUpload} disabled={!file || uploading}
+              className="w-full py-3 bg-purple-600 rounded-xl text-sm font-semibold text-white disabled:opacity-40 transition flex items-center justify-center space-x-2">
+              {uploading ? <Loader className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+              <span>{uploading ? (error === 'Converting video…' ? 'Converting...' : 'Uploading...') : 'Share Story'}</span>
+            </button>
           </div>
         </div>
       )}
@@ -191,7 +219,7 @@ function StoryBubble({ artist, stories, viewed, onClick }) {
 }
 
 // ── Full-screen Story Viewer ──────────────────────────────────────────────────
-export function ArtistStoryView({ stories, artist, initialIndex = 0, onClose, allGroups, groupIdx, onNavigateGroup, isOwner, onDelete }) {
+export function ArtistStoryView({ stories, artist, initialIndex = 0, onClose }) {
   const { user } = useAuth();
   const { tap }  = useHaptics();
   const [idx, setIdx]             = useState(initialIndex);
@@ -237,38 +265,26 @@ export function ArtistStoryView({ stories, artist, initialIndex = 0, onClose, al
 
   const goNext = () => {
     tap();
-    if (idx < stories.length - 1) {
-      setIdx(p => p + 1);
-    } else if (onNavigateGroup && allGroups && groupIdx < allGroups.length - 1) {
-      onNavigateGroup(groupIdx + 1);
-    } else {
-      onClose();
-    }
+    if (idx < stories.length - 1) setIdx(p => p + 1);
+    else onClose();
   };
 
   const goPrev = () => {
     tap();
-    if (idx > 0) {
-      setIdx(p => p - 1);
-    } else if (onNavigateGroup && allGroups && groupIdx > 0) {
-      onNavigateGroup(groupIdx - 1);
-    }
+    if (idx > 0) setIdx(p => p - 1);
   };
 
   if (!story) return null;
 
   return (
     <div className="fixed inset-0 z-[700] bg-black flex flex-col">
-      {/* Progress bars — tappable to seek to that story */}
+      {/* Progress bars */}
       <div className="flex space-x-1 px-3 pt-safe pt-4 flex-shrink-0">
         {stories.map((s, i) => (
-          <button key={s.id} className="flex-1 h-3 flex items-center py-1 cursor-pointer"
-            onClick={() => setIdx(i)}>
-            <div className="w-full h-0.5 rounded-full bg-white/20 overflow-hidden">
-              <div className="h-full bg-white rounded-full transition-none"
-                style={{ width: i < idx ? '100%' : i === idx ? `${progress}%` : '0%' }} />
-            </div>
-          </button>
+          <div key={s.id} className="flex-1 h-0.5 rounded-full bg-white/20 overflow-hidden">
+            <div className="h-full bg-white rounded-full transition-none"
+              style={{ width: i < idx ? '100%' : i === idx ? `${progress}%` : '0%' }} />
+          </div>
         ))}
       </div>
 
@@ -295,14 +311,20 @@ export function ArtistStoryView({ stories, artist, initialIndex = 0, onClose, al
           </div>
         </div>
         <div className="flex items-center space-x-2">
-          {isOwner && onDelete && (
-            <button
-              onClick={() => onDelete(story.id)}
-              className="w-8 h-8 flex items-center justify-center rounded-full bg-red-500/20">
-              <Trash2 className="w-4 h-4 text-red-400" />
+          {(story.media_type === 'image' || story.media_type === 'video') && (
+            <button onClick={() => {
+              const a = document.createElement('a');
+              a.href = story.media_url;
+              a.download = `feelzmachine-story.${story.media_type === 'video' ? 'mp4' : 'png'}`;
+              a.target = '_blank';
+              document.body.appendChild(a); a.click(); document.body.removeChild(a);
+            }} className="w-8 h-8 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 transition">
+              <Download className="w-4 h-4 text-white/70" />
             </button>
           )}
-          <button onClick={onClose}><X className="w-5 h-5 text-white/60" /></button>
+          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 transition">
+            <X className="w-4 h-4 text-white/70" />
+          </button>
         </div>
       </div>
 
@@ -346,12 +368,14 @@ export function StoriesRail({ userId }) {
   const navigate                    = useNavigate();
   const [storyGroups, setStoryGroups] = useState([]); // [{ artist, stories }]
   const [viewedIds, setViewedIds]   = useState(new Set());
-  const [viewing, setViewing]       = useState(null); // { artist, stories, idx, groupIdx }
+  const [viewing, setViewing]       = useState(null); // { artist, stories, idx }
   const [loading, setLoading]       = useState(true);
 
   useEffect(() => {
     const load = async () => {
       try {
+        const platformArtistId = process.env.REACT_APP_PLATFORM_ARTIST_ID;
+
         // Get all active (non-expired) stories
         const { data: stories } = await supabase
           .from('artist_stories')
@@ -370,7 +394,16 @@ export function StoriesRail({ userId }) {
           if (!groups[aid]) groups[aid] = { artist: s.artists, stories: [] };
           groups[aid].stories.push(s);
         });
-        setStoryGroups(Object.values(groups));
+
+        const groupList = Object.values(groups);
+
+        // Pin platform story first if it exists
+        const platformIdx = groupList.findIndex(g => g.artist.id === platformArtistId);
+        if (platformIdx > 0) {
+          const [platform] = groupList.splice(platformIdx, 1);
+          groupList.unshift(platform);
+        }
+        setStoryGroups(groupList);
 
         // Get viewed story IDs for this user
         if (userId) {
@@ -390,7 +423,6 @@ export function StoriesRail({ userId }) {
 
   return (
     <>
-      <div className="pt-3 pb-4 mb-4" style={{ background: storyGroups.length ? 'linear-gradient(135deg, rgba(139,92,246,0.08) 0%, rgba(6,182,212,0.05) 100%)' : 'transparent', borderTop: storyGroups.length ? '1px solid rgba(139,92,246,0.1)' : 'none', borderBottom: storyGroups.length ? '1px solid rgba(6,182,212,0.08)' : 'none' }}>
       <div className="flex space-x-4 overflow-x-auto px-6 pb-1 scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
         {storyGroups.map(({ artist, stories }) => (
           <StoryBubble
@@ -398,10 +430,9 @@ export function StoriesRail({ userId }) {
             artist={artist}
             stories={stories}
             viewed={viewedIds}
-            onClick={() => setViewing({ artist, stories, idx: 0, groupIdx: storyGroups.indexOf(storyGroups.find(g => g.artist.id === artist.id)) })}
+            onClick={() => setViewing({ artist, stories, idx: 0 })}
           />
         ))}
-      </div>
       </div>
 
       {viewing && (
@@ -409,12 +440,6 @@ export function StoriesRail({ userId }) {
           stories={viewing.stories}
           artist={viewing.artist}
           initialIndex={viewing.idx}
-          allGroups={storyGroups}
-          groupIdx={viewing.groupIdx}
-          onNavigateGroup={(newGroupIdx) => {
-            const g = storyGroups[newGroupIdx];
-            if (g) setViewing({ artist: g.artist, stories: g.stories, idx: 0, groupIdx: newGroupIdx });
-          }}
           onClose={() => setViewing(null)}
         />
       )}
