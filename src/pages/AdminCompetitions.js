@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import {
   Trophy, Plus, Loader, Crown, ChevronRight, Clock, Check,
   AlertCircle, Upload, DollarSign, Users, X, Edit2, Zap, Play, ArrowLeft
+  Music,
 } from 'lucide-react';
 
 const STATUS_OPTIONS = ['upcoming', 'open', 'voting', 'closed', 'completed'];
@@ -40,7 +41,42 @@ const PAID_COLLAB_DEFAULTS = {
 
 function CompetitionForm({ initial, onSave, onCancel, saving }) {
   const [form, setForm] = useState(initial || BLANK_COMP);
+  const [stemUploading, setStemUploading]       = useState(false);
+  const [previewUploading, setPreviewUploading] = useState(false);
+  const [stemFileName, setStemFileName]         = useState('');
+  const [previewFileName, setPreviewFileName]   = useState('');
+  const stemRef    = useRef(null);
+  const previewRef = useRef(null);
   const set = (k, v) => setForm(prev => ({ ...prev, [k]: v }));
+
+  const uploadStem = async (file) => {
+    if (!file) return;
+    setStemUploading(true);
+    try {
+      const ext  = file.name.split('.').pop().toLowerCase();
+      const name = `competition-stems/${Date.now()}-${file.name.replace(/[^a-z0-9.]/gi, '_')}`;
+      const { error } = await supabase.storage.from('feelz-samples').upload(name, file, { upsert: true });
+      if (error) throw error;
+      const { data: { publicUrl } } = supabase.storage.from('feelz-samples').getPublicUrl(name);
+      set('stem_pack_url', publicUrl);
+      setStemFileName(file.name);
+    } catch (err) { alert('Stem upload failed: ' + err.message); }
+    setStemUploading(false);
+  };
+
+  const uploadPreview = async (file) => {
+    if (!file) return;
+    setPreviewUploading(true);
+    try {
+      const name = `competition-previews/${Date.now()}-${file.name.replace(/[^a-z0-9.]/gi, '_')}`;
+      const { error } = await supabase.storage.from('feelz-samples').upload(name, file, { upsert: true });
+      if (error) throw error;
+      const { data: { publicUrl } } = supabase.storage.from('feelz-samples').getPublicUrl(name);
+      set('mp3_preview_url', publicUrl);
+      setPreviewFileName(file.name);
+    } catch (err) { alert('Preview upload failed: ' + err.message); }
+    setPreviewUploading(false);
+  };
 
   return (
     <div className="space-y-4">
@@ -128,17 +164,39 @@ function CompetitionForm({ initial, onSave, onCancel, saving }) {
         </div>
 
         <div>
-          <label className="text-xs text-white/40 uppercase tracking-wide block mb-1.5">Stem Pack / Beat Download URL</label>
-          <input value={form.stem_pack_url} onChange={e => set('stem_pack_url', e.target.value)}
-            placeholder="https://drive.google.com/..."
-            className="w-full bg-white/[0.06] rounded-xl px-4 py-2.5 text-sm text-white placeholder-white/20 outline-none border border-white/[0.06] focus:border-white/20" />
+          <label className="text-xs text-white/40 uppercase tracking-wide block mb-1.5">Stem Pack / Beat File</label>
+          <input ref={stemRef} type="file" accept=".mp3,.wav,.zip,.aiff,.flac" className="hidden"
+            onChange={e => uploadStem(e.target.files[0])} />
+          <button type="button" onClick={() => stemRef.current?.click()}
+            disabled={stemUploading}
+            className="w-full flex items-center space-x-3 px-4 py-3 rounded-xl border border-white/[0.06] bg-white/[0.03] hover:bg-white/[0.06] transition text-left disabled:opacity-50">
+            {stemUploading
+              ? <Loader className="w-4 h-4 text-white/40 animate-spin flex-shrink-0" />
+              : <Upload className="w-4 h-4 text-white/30 flex-shrink-0" />}
+            <div className="flex-1 min-w-0">
+              {stemFileName || form.stem_pack_url
+                ? <p className="text-sm text-green-400 truncate">{stemFileName || 'File uploaded ✓'}</p>
+                : <p className="text-sm text-white/20">Upload ZIP, MP3, WAV or AIFF stems</p>}
+            </div>
+          </button>
         </div>
 
         <div>
-          <label className="text-xs text-white/40 uppercase tracking-wide block mb-1.5">MP3 Preview URL (your base track)</label>
-          <input value={form.mp3_preview_url} onChange={e => set('mp3_preview_url', e.target.value)}
-            placeholder="https://..."
-            className="w-full bg-white/[0.06] rounded-xl px-4 py-2.5 text-sm text-white placeholder-white/20 outline-none border border-white/[0.06] focus:border-white/20" />
+          <label className="text-xs text-white/40 uppercase tracking-wide block mb-1.5">Preview Track <span className="text-white/20 normal-case">· private reference for artists entering</span></label>
+          <input ref={previewRef} type="file" accept=".mp3,.wav,.aiff,.flac,.m4a" className="hidden"
+            onChange={e => uploadPreview(e.target.files[0])} />
+          <button type="button" onClick={() => previewRef.current?.click()}
+            disabled={previewUploading}
+            className="w-full flex items-center space-x-3 px-4 py-3 rounded-xl border border-white/[0.06] bg-white/[0.03] hover:bg-white/[0.06] transition text-left disabled:opacity-50">
+            {previewUploading
+              ? <Loader className="w-4 h-4 text-white/40 animate-spin flex-shrink-0" />
+              : <Music className="w-4 h-4 text-white/30 flex-shrink-0" />}
+            <div className="flex-1 min-w-0">
+              {previewFileName || form.mp3_preview_url
+                ? <p className="text-sm text-green-400 truncate">{previewFileName || 'File uploaded ✓'}</p>
+                : <p className="text-sm text-white/20">Upload MP3, WAV or M4A</p>}
+            </div>
+          </button>
         </div>
 
         <div>
