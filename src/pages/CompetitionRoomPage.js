@@ -4,7 +4,7 @@ import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import { useTier } from '../contexts/useTier';
 import {
-  ArrowLeft, Trophy, Download, Music, ChevronUp, Loader, Clock,
+  ArrowLeft, Trophy, Download, Music, ChevronUp, ChevronDown, Loader, Clock,
   Upload, AlertCircle, Check, Crown, Zap, Lock, Play, Pause,
   Star, Shield, X, Info
 } from 'lucide-react';
@@ -602,7 +602,7 @@ export default function CompetitionRoomPage() {
           user_id: winnerEntry.artists?.user_id,
           type: 'competition_winner',
           title: '🏆 You won the competition!',
-          message: `You've been crowned winner of "${competition?.title}". You're now Verified on Feelz Machine!${proMsg}`,
+          message: `You've been crowned winner of "${competition?.title}". You're now Verified on Feelz Machine!${tierRewardMsg}`,
           metadata: { competition_id: competitionId, competition_title: competition?.title, wheel_challenge: !!competition?.wheel_challenge },
         }).catch(() => {});
       }
