@@ -28,12 +28,24 @@ exports.handler = async (event) => {
     return { statusCode: 405, body: 'Method not allowed' };
   }
 
-  // Auth check
   let body;
-  try { body = JSON.parse(event.body); } catch { return { statusCode: 400, body: 'Invalid JSON' }; }
+  try { body = JSON.parse(event.body || '{}'); } catch { return { statusCode: 400, body: 'Invalid JSON' }; }
 
-  const secret = event.headers?.['x-internal-secret'] || body?.secret;
-  if (secret !== process.env.INTERNAL_FUNCTION_SECRET) {
+  // Auth: verify the caller is an admin via their Supabase JWT
+  const authHeader = event.headers?.authorization || '';
+  const token = authHeader.replace('Bearer ', '').trim() || body?.token;
+  if (token) {
+    const { createClient } = require('@supabase/supabase-js');
+    const userClient = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+    const { data: { user } } = await userClient.auth.getUser(token);
+    const adminEmails = ['stillflexhere@gmail.com'];
+    if (!user || !adminEmails.includes(user.email)) {
+      return { statusCode: 403, body: 'Forbidden' };
+    }
+  }
+  // Also accept internal secret for cron/server calls
+  const secret = event.headers?.['x-internal-secret'];
+  if (!token && secret !== process.env.INTERNAL_FUNCTION_SECRET) {
     return { statusCode: 403, body: 'Forbidden' };
   }
 
@@ -56,7 +68,7 @@ exports.handler = async (event) => {
       const { error } = await supabase.from('notifications').insert(
         batch.map(uid => ({
           user_id:  uid,
-          type:     'platform_update',
+          type:     'engagement',
           title:    blast.title,
           message:  blast.body,
           metadata: { platform_update: true, url: blast.url, tag: blast.tag },

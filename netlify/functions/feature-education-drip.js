@@ -195,7 +195,7 @@ exports.handler = async (event) => {
       notifBatch.push({
         user_id:  artist.user_id,
         artist_id: artist.id,
-        type:     'feature_tip',
+        type:     'engagement',
         title:    tip.title,
         message:  tip.body,
         metadata: { tip_id: tip.id, feature_education: true, url: tip.url },
@@ -220,7 +220,7 @@ exports.handler = async (event) => {
       const tip = unseen[0];
       notifBatch.push({
         user_id:  listener.user_id,
-        type:     'feature_tip',
+        type:     'engagement',
         title:    tip.title,
         message:  tip.body,
         metadata: { tip_id: tip.id, feature_education: true, url: tip.url },

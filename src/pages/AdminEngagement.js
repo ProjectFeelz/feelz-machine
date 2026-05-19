@@ -229,10 +229,14 @@ export default function AdminEngagement() {
     setBlasting(true); setBlastResult(null);
     try {
       const { data: { session } } = await supabase.auth.getSession();
+      const { data: { session } } = await supabase.auth.getSession();
       const res = await fetch('/.netlify/functions/platform-update-blast', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-internal-secret': process.env.REACT_APP_INTERNAL_FUNCTION_SECRET || '' },
-        body: JSON.stringify({ token: session?.access_token }),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.access_token || ''}`,
+        },
+        body: JSON.stringify({}),
       });
       const data = await res.json();
       setBlastResult(data);
