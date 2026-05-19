@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useParams, useNavigate } from 'react-router-dom';
 import { HelmetProvider } from 'react-helmet-async';
 import { AuthProvider } from './contexts/AuthContext';
 import { PlayerProvider } from './contexts/PlayerContext';
@@ -76,6 +76,14 @@ function PageTitle({ title, children }) {
   );
 }
 
+// Handles /@slug short URLs → redirects to /artist/:slug
+function ArtistProfileRedirect() {
+  const { slug } = useParams();
+  const navigate = useNavigate();
+  useEffect(() => { navigate('/artist/' + slug, { replace: true }); }, [slug, navigate]);
+  return null;
+}
+
 export default function AppRouter() {
   return (
     <HelmetProvider>
@@ -100,6 +108,7 @@ export default function AppRouter() {
               <Route path="/competition/:competitionId" element={<CompetitionRoomPage />} />
               <Route path="/wheel" element={<WheelRevealPage />} />
               <Route path="/competitions" element={<CompetitionsPage />} />
+                <Route path="/@:slug" element={<ArtistProfileRedirect />} />
               <Route path="/session/:sessionId" element={<ListeningSessionPage />} />
 
               {/* Legal pages — fixed titles */}

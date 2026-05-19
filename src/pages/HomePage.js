@@ -660,8 +660,7 @@ export default function HomePage() {
                 </span>
               </div>
               <p className="text-[11px] truncate mt-0.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
-                {wheelChallenge.prompt.split('
-').join(' ')}
+                {wheelChallenge.prompt.split('\n').join(' ')}
               </p>
             </div>
             <span className="text-[10px] font-bold flex-shrink-0" style={{ color: '#FF3CAC' }}>Enter →</span>

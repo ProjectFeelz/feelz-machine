@@ -110,6 +110,13 @@
   status = 200
   force = true
 
+# ── @username short URLs ──────────────────────────────────────────────────────
+# feelzmachine.com/@og-sfm → renders /artist/og-sfm
+[[redirects]]
+  from = "/@:slug"
+  to = "/artist/:slug"
+  status = 200
+
 [[redirects]]
   from = "/manifest.json"
   to = "/manifest.json"
