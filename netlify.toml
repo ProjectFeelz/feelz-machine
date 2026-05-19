@@ -13,6 +13,10 @@
   included_files = ["node_modules/ffmpeg-static/**"]
   timeout = 26
 
+[functions."convert-audio"]
+  included_files = ["node_modules/ffmpeg-static/**"]
+  timeout = 26
+
 # ── Cache headers ─────────────────────────────────────────────────────────────
 
 [[headers]]
@@ -101,6 +105,11 @@
 [[scheduled_functions]]
   name = "paid-collab-reminder"
   schedule = "0 9 * * 0"
+
+[[scheduled_functions]]
+  name = "feature-education-drip"
+  schedule = "0 10 * * 3"
+
 
 # ── Redirects ─────────────────────────────────────────────────────────────────
 

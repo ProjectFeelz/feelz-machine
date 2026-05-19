@@ -70,8 +70,11 @@ export default function AdminEngagement() {
   const [segmentCounts, setSegmentCounts] = useState({});
   const [recentMessages, setRecentMessages] = useState([]);
   const [loading, setLoading]         = useState(true);
-  const [triggering, setTriggering]   = useState(false);
+  const [triggering, setTriggering]       = useState(false);
   const [triggerResult, setTriggerResult] = useState(null);
+  const [blasting, setBlasting]           = useState(false);
+  const [blastResult, setBlastResult]     = useState(null);
+  const [eduTriggering, setEduTriggering] = useState(false);
   const [saving, setSaving]           = useState(false);
   const [toast, setToast]             = useState('');
 
@@ -206,6 +209,38 @@ export default function AdminEngagement() {
     setTriggering(false);
   };
 
+  const handleBlast = async () => {
+    if (!window.confirm('Send platform update blast to ALL users? This will notify everyone on the platform.')) return;
+    setBlasting(true); setBlastResult(null);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch('/.netlify/functions/platform-update-blast', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-internal-secret': process.env.REACT_APP_INTERNAL_FUNCTION_SECRET || '' },
+        body: JSON.stringify({ token: session?.access_token }),
+      });
+      const data = await res.json();
+      setBlastResult(data);
+      if (data.success) showToast(`Blast sent to ${data.sent} users`);
+      else showToast('Blast failed: ' + (data.error || 'unknown error'));
+    } catch (err) { showToast('Blast failed: ' + err.message); }
+    setBlasting(false);
+  };
+
+  const handleEduDrip = async () => {
+    setEduTriggering(true);
+    try {
+      const siteUrl = window.location.origin;
+      const res = await fetch('/.netlify/functions/feature-education-drip', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      const data = await res.json();
+      showToast(data.sent ? `Education tips sent to ${data.sent} users` : 'Done — all users already up to date');
+    } catch (err) { showToast('Failed: ' + err.message); }
+    setEduTriggering(false);
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -308,6 +343,28 @@ export default function AdminEngagement() {
               : <Play className="w-3.5 h-3.5" />}
             <span>{triggering ? 'Running...' : 'Run now'}</span>
           </button>
+        </div>
+
+        {/* ── Update Blast ── */}
+        <div className="pt-3 mt-3 border-t border-white/[0.05] space-y-2">
+          <p className="text-[10px] uppercase tracking-widest text-white/25 font-semibold">One-time blasts</p>
+          <div className="flex space-x-2">
+            <button onClick={handleBlast} disabled={blasting}
+              className="flex-1 flex items-center justify-center space-x-1.5 px-3 py-2.5 rounded-xl bg-purple-500/10 border border-purple-500/20 hover:bg-purple-500/15 transition text-xs text-purple-300 font-semibold disabled:opacity-40">
+              {blasting ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <Megaphone className="w-3.5 h-3.5" />}
+              <span>{blasting ? 'Sending...' : '📣 Send Platform Update'}</span>
+            </button>
+            <button onClick={handleEduDrip} disabled={eduTriggering}
+              className="flex-1 flex items-center justify-center space-x-1.5 px-3 py-2.5 rounded-xl bg-blue-500/10 border border-blue-500/20 hover:bg-blue-500/15 transition text-xs text-blue-300 font-semibold disabled:opacity-40">
+              {eduTriggering ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
+              <span>{eduTriggering ? 'Sending...' : '💡 Send Feature Tips'}</span>
+            </button>
+          </div>
+          {blastResult?.success && (
+            <p className="text-[10px] text-green-400 text-center">
+              Blast sent to {blastResult.sent} users ✓
+            </p>
+          )}
         </div>
 
         {/* Manual trigger result */}

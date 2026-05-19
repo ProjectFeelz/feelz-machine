@@ -137,7 +137,6 @@ exports.handler = async () => {
         max_votes_per_user: 2,
         wheel_challenge: true,
         competition_type: 'wheel',
-        max_votes_per_user: 2,
         created_at: now.toISOString(),
         updated_at: now.toISOString(),
       })

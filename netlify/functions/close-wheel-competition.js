@@ -206,7 +206,7 @@ exports.handler = async () => {
             artist_id: winner.artist_id,
             type: 'payout_pending',
             title: '💰 Your $50 prize is waiting!',
-            message: 'You won the Paid Collaboration but your PayPal email isn't set. Go to Profile → Edit and add your PayPal email to receive your $50 USD prize.',
+            message: "You won the Paid Collaboration but your PayPal email isn't set. Go to Profile → Edit and add your PayPal email to receive your $50 USD prize.",
             metadata: { competition_id: challenge.competition_id, amount: 50, currency: 'USD' },
           }).catch(() => {});
         }

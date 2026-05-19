@@ -32,7 +32,7 @@ export function PlayerProvider({ children }) {
   const audioRef        = useRef(new Audio());
   const audioRefB       = useRef(new Audio());  // second element for crossfade
   const crossfadingRef  = useRef(false);
-  const CROSSFADE_SECS  = 3; // seconds of overlap
+  const CROSSFADE_SECS  = 1.5; // seconds of overlap — short enough to not echo
   const streamLoggedRef = useRef(false);
   const queueRef        = useRef([]);
   const queueIndexRef   = useRef(-1);
@@ -95,7 +95,14 @@ export function PlayerProvider({ children }) {
     if (q.length === 0) return;
     let nextIndex;
     if (isShuffled) {
-      nextIndex = Math.floor(Math.random() * q.length);
+      // Exclude current track from shuffle pick
+      if (q.length === 1) {
+        nextIndex = 0;
+      } else {
+        do {
+          nextIndex = Math.floor(Math.random() * q.length);
+        } while (nextIndex === idx);
+      }
     } else {
       nextIndex = idx + 1;
       if (nextIndex >= q.length) {
@@ -115,16 +122,23 @@ export function PlayerProvider({ children }) {
       const targetVol    = volumeRef.current;
       crossfadingRef.current = true;
 
-      // Clone current playback into the secondary element so it can fade out
-      const fadeOutAudio  = audioRefB.current;
-      fadeOutAudio.src    = primaryAudio.src;
+      // Clone current position into fadeOut BEFORE pausing primary
+      const fadeOutAudio    = audioRefB.current;
+      const currentSrc      = primaryAudio.src;
+      const currentPosition = primaryAudio.currentTime;
+
+      // Pause primary immediately — prevents echo from two elements on same src
+      primaryAudio.pause();
+
+      // Set fadeOut to the OLD track at the exact playback position
+      fadeOutAudio.src    = currentSrc;
       fadeOutAudio.volume = targetVol;
       try {
-        fadeOutAudio.currentTime = primaryAudio.currentTime;
+        fadeOutAudio.currentTime = currentPosition;
         fadeOutAudio.play().catch(() => {});
       } catch {}
 
-      // Switch the primary element to the new track immediately (silent)
+      // Now switch primary to the NEW track (silent, fades in)
       primaryAudio.src    = nextTrack.file_url;
       primaryAudio.volume = 0;
       primaryAudio.play().catch(console.error);
@@ -201,8 +215,9 @@ export function PlayerProvider({ children }) {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const userId = session?.user?.id || null;
+      if (!userId) return;
 
-      // 1. Fetch track + artist FIRST
+      // 1. Fetch track + artist FIRST so we can gate on ownership before touching anything
       const { data: track } = await supabase
         .from('tracks')
         .select('stream_count, artist_id, title')
@@ -217,17 +232,11 @@ export function PlayerProvider({ children }) {
         .eq('id', track.artist_id)
         .single();
 
-      // STREAM GUARD: owner plays never count
-      if (userId && art?.user_id === userId) return;
+      // STREAM GUARD: if the listener IS the track owner, bail out entirely —
+      // don't insert into streams, don't increment counts, don't fire milestones.
+      if (art?.user_id === userId) return;
 
-      // Always increment counts — logged in or anonymous
-      await supabase.rpc('increment_stream_count', { track_id: trackId });
-      await supabase.rpc('increment_artist_streams', { artist_id: track.artist_id });
-
-      // Anonymous listeners stop here — no streams table insert, no milestones
-      if (!userId) return;
-
-      // 2. Insert stream record (logged-in listeners only)
+      // 2. Insert stream record (only for genuine third-party listeners)
       await supabase.from('streams').insert({
         track_id: trackId,
         user_id: userId,
@@ -237,6 +246,11 @@ export function PlayerProvider({ children }) {
         device_type: /Mobi|Android/i.test(navigator.userAgent) ? 'mobile' : 'desktop',
       });
 
+      // 3. Increment stream_count on the track (atomic — avoids race conditions)
+      await supabase.rpc('increment_stream_count', { track_id: trackId });
+
+      // 4. Increment artist total_streams
+      await supabase.rpc('increment_artist_streams', { artist_id: track.artist_id });
 
       // 5. Stream milestone notifications for the artist are handled by DB trigger.
 
@@ -398,9 +412,9 @@ export function PlayerProvider({ children }) {
   const toggleShuffle = useCallback(() => setShuffle(prev => !prev), []);
   const toggleRepeat  = useCallback(() => {
     setRepeat(prev => {
-      if (prev === 'none') return 'all';
-      if (prev === 'all')  return 'one';
-      return 'none';
+      if (prev === 'none') return 'one'; // none → one (repeat current track)
+      if (prev === 'one')  return 'all'; // one  → all (repeat queue)
+      return 'none';                     // all  → none
     });
   }, []);
 
