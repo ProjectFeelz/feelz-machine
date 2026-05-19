@@ -315,19 +315,19 @@ function HowItWorksPanel({ type, mode, votesAllowed, prize }) {
   ];
 
   const rules = type === 'paid_collab' ? [
-    'Entries must be original, newly recorded for this competition',
-    'The provided stems/beat must be used as the base',
-    'Free, Pro and Premium accounts can all enter',
-    'One entry per artist',
+    "Entries must be original, newly recorded for this competition",
+    "The provided stems/beat must be used as the base",
+    "Free, Pro and Premium accounts can all enter",
+    "One entry per artist",
     "Winner's PayPal email must be set in their profile before payout",
-    'Disqualified entries do not receive the prize',
+    "Disqualified entries do not receive the prize",
   ] : [
-    'Entries must be original, newly created for this challenge',
-    'Track must be genuinely inspired by the prompt — not a stretch',
+    "Entries must be original, newly created for this challenge",
+    "Track must be genuinely inspired by the prompt — not a stretch",
     'Free, Pro and Premium accounts can all enter',
-    'One entry per artist per week',
-    'Entries are anonymous until the winner is revealed',
-    'Admin can disqualify entries that don't follow the brief',
+    "One entry per artist per week",
+    "Entries are anonymous until the winner is revealed",
+    "Admin can disqualify entries that don't follow the brief",
   ];
 
   return (
