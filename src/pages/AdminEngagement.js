@@ -229,7 +229,6 @@ export default function AdminEngagement() {
     setBlasting(true); setBlastResult(null);
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      const { data: { session } } = await supabase.auth.getSession();
       const res = await fetch('/.netlify/functions/platform-update-blast', {
         method: 'POST',
         headers: {
