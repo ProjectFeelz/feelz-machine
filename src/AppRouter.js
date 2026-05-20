@@ -140,8 +140,9 @@ export default function AppRouter() {
               } />
 
               <Route element={<AppLayout />}>
-                <Route path="/" element={<HomePage />} />
-                <Route path="/for-you" element={<ForYouPage />} />
+                <Route path="/" element={<ForYouPage />} />
+                <Route path="/home" element={<HomePage />} />
+                <Route path="/for-you" element={<Navigate to="/" replace />} />
                 <Route path="/browse" element={<BrowsePage />} />
                 <Route path="/wheel" element={<WheelRevealPage />} />
                 <Route path="/competitions" element={<CompetitionsPage />} />

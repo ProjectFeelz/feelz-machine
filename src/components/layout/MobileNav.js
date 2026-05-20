@@ -5,7 +5,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useHaptics } from '../../hooks/useHaptics';
 
 const navItems = [
-  { path: '/for-you',      icon: Sparkles,        label: 'For You',     tourKey: 'nav-foryou' },
+  { path: '/',             icon: Sparkles,        label: 'For You',     tourKey: 'nav-foryou' },
   { path: '/browse',       icon: Search,          label: 'Browse',      tourKey: 'nav-browse' },
   { path: '/competitions', icon: Trophy,          label: 'Win',         tourKey: 'nav-competitions' },
   { path: '/library',      icon: Library,         label: 'Library',     tourKey: 'nav-library' },
@@ -38,7 +38,7 @@ export default function MobileNav() {
         {navItems.map(({ path, icon: Icon, label, tourKey }) => {
           const isActive  = location.pathname === path ||
             (path !== '/' && location.pathname.startsWith(path)) ||
-            (path === '/for-you' && location.pathname === '/');
+            (path === '/' && location.pathname === '/for-you');
           return (
             <button
               key={path}
