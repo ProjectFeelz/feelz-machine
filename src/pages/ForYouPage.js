@@ -311,7 +311,7 @@ function StoryFeedCard({ item, isActive, onOpen, navigate }) {
 
 // ── Single card ───────────────────────────────────────────────────────────────
 function ForYouCard({ track, isActive, user, navigate }) {
-  const { currentTrack, isPlaying, playTrack, currentTime } = usePlayer();
+  const { currentTrack, isPlaying, currentTime } = usePlayer();
   const hasVideo  = !!track.youtube_url;
   const isThisOne = currentTrack?.id === track.id;
   const playing   = isThisOne && isPlaying;
@@ -558,6 +558,7 @@ function ForYouCard({ track, isActive, user, navigate }) {
 export default function ForYouPage() {
   const { user }    = useAuth();
   const navigate    = useNavigate();
+  const { playTrack } = usePlayer();
 
 
   const [tracks, setTracks]           = useState([]);
@@ -683,6 +684,19 @@ export default function ForYouPage() {
       audio.src = next.file_url;
     }
   }, [idx, tracks]);
+
+  // Single source of truth for playback — fires when idx changes
+  const lastPlayedIdx = React.useRef(-1);
+  useEffect(() => {
+    if (!tracks.length) return;
+    const item = tracks[idx];
+    if (!item || item._type === 'story') return; // skip story cards
+    if (idx === lastPlayedIdx.current) return;   // already played this idx
+    lastPlayedIdx.current = idx;
+    if (item.file_url && !item.youtube_url) {
+      playTrack(item, [item]);
+    }
+  }, [idx, tracks]); // eslint-disable-line
 
   const goTo = useCallback((newIdx) => {
     if (newIdx < 0 || newIdx >= tracks.length) return;
