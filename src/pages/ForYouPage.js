@@ -263,35 +263,54 @@ function FloatingHearts({ trackId }) {
     if (!trackId) return;
     const poll = async () => {
       try {
-        const since = new Date(Date.now() - 15000).toISOString(); // last 15s
-        const { data } = await supabase
+        const since = new Date(Date.now() - 15000).toISOString();
+        const { data: likes } = await supabase
           .from('track_likes')
-          .select('id, user_id, created_at, user_profiles(name, avatar_url), artists(artist_name, profile_image_url)')
+          .select('id, user_id, created_at')
           .eq('track_id', trackId)
           .gte('created_at', since)
           .limit(5);
 
-        if (data?.length) {
-          // Spawn hearts
-          const newHearts = data.map((_, i) => ({
-            id: Date.now() + i,
-            x: 15 + Math.random() * 60,
-            color: HEART_COLORS[Math.floor(Math.random() * HEART_COLORS.length)],
-            size: 16 + Math.random() * 14,
-            delay: i * 150,
-          }));
-          setHearts(prev => [...prev, ...newHearts]);
-          setTimeout(() => setHearts(prev => prev.filter(h => !newHearts.find(n => n.id === h.id))), 3000);
+        if (!likes?.length) return;
 
-          // Spawn listener bubble for the most recent liker
-          const liker = data[0];
-          const name = liker.artists?.artist_name || liker.user_profiles?.name || '';
-          const avatar = liker.artists?.profile_image_url || liker.user_profiles?.avatar_url || null;
-          if (name) {
-            const bubble = { id: Date.now(), name, avatar };
-            setBubbles(prev => [...prev, bubble]);
-            setTimeout(() => setBubbles(prev => prev.filter(b => b.id !== bubble.id)), 3500);
-          }
+        // Spawn hearts
+        const newHearts = likes.map((_, i) => ({
+          id: Date.now() + i,
+          x: 15 + Math.random() * 60,
+          color: HEART_COLORS[Math.floor(Math.random() * HEART_COLORS.length)],
+          size: 16 + Math.random() * 14,
+          delay: i * 150,
+        }));
+        setHearts(prev => [...prev, ...newHearts]);
+        setTimeout(() => setHearts(prev => prev.filter(h => !newHearts.find(n => n.id === h.id))), 3000);
+
+        // Get liker profile — try artists first, then user_profiles
+        const likerId = likes[0].user_id;
+        if (!likerId) return;
+
+        let name = '', avatar = null;
+        const { data: artist } = await supabase
+          .from('artists')
+          .select('artist_name, profile_image_url')
+          .eq('user_id', likerId)
+          .maybeSingle();
+
+        if (artist) {
+          name = artist.artist_name || '';
+          avatar = artist.profile_image_url || null;
+        } else {
+          const { data: profile } = await supabase
+            .from('user_profiles')
+            .select('name, avatar_url')
+            .eq('user_id', likerId)
+            .maybeSingle();
+          if (profile) { name = profile.name || ''; avatar = profile.avatar_url || null; }
+        }
+
+        if (name) {
+          const bubble = { id: Date.now(), name, avatar };
+          setBubbles(prev => [...prev, bubble]);
+          setTimeout(() => setBubbles(prev => prev.filter(b => b.id !== bubble.id)), 3500);
         }
       } catch {}
     };
@@ -411,6 +430,8 @@ function StoryFeedCard({ item, isActive, onOpen, navigate }) {
 // ── Single card ───────────────────────────────────────────────────────────────
 function ForYouCard({ track, isActive, user, navigate }) {
   const { currentTrack, isPlaying, currentTime, setIsMinimized } = usePlayer();
+  const { artist: myArtist } = useAuth();
+  const isOwnTrack = myArtist?.id === track.artist_id;
   const hasVideo  = !!track.youtube_url;
   const isThisOne = currentTrack?.id === track.id;
   const playing   = isThisOne && isPlaying;
@@ -452,11 +473,17 @@ function ForYouCard({ track, isActive, user, navigate }) {
   const handleFollow = async () => {
     if (!user) { navigate('/login'); return; }
     if (!track.artist_id) return;
+    if (isOwnTrack) return; // can't follow yourself
     if (following) {
       await supabase.from('follows').delete().eq('artist_id', track.artist_id).eq('follower_id', user.id);
       setFollowing(false);
     } else {
-      await supabase.from('follows').insert({ artist_id: track.artist_id, follower_id: user.id });
+      // Prevent duplicate follows
+      const { data: existing } = await supabase.from('follows')
+        .select('id').eq('artist_id', track.artist_id).eq('follower_id', user.id).maybeSingle();
+      if (!existing) {
+        await supabase.from('follows').insert({ artist_id: track.artist_id, follower_id: user.id });
+      }
       setFollowing(true);
     }
   };
@@ -553,13 +580,15 @@ function ForYouCard({ track, isActive, user, navigate }) {
               ? <img src={track.artist_image} alt="" className="w-full h-full object-cover" />
               : <div className="w-full h-full bg-purple-500/30 flex items-center justify-center text-sm font-bold text-white">{track.artist_name?.[0]}</div>}
           </button>
-          <button onClick={handleFollow}
-            className="w-5 h-5 rounded-full flex items-center justify-center -mt-2.5 border border-white transition"
-            style={{ background: following ? '#22c55e' : '#ef4444' }}>
-            {following
-              ? <UserCheck className="w-2.5 h-2.5 text-white" />
-              : <span className="text-white text-[10px] font-black leading-none">+</span>}
-          </button>
+          {!isOwnTrack && (
+            <button onClick={handleFollow}
+              className="w-5 h-5 rounded-full flex items-center justify-center -mt-2.5 border border-white transition"
+              style={{ background: following ? '#22c55e' : '#ef4444' }}>
+              {following
+                ? <UserCheck className="w-2.5 h-2.5 text-white" />
+                : <span className="text-white text-[10px] font-black leading-none">+</span>}
+            </button>
+          )}
         </div>
 
         {/* Like */}

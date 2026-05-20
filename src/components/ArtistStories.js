@@ -39,10 +39,24 @@ export function StoryUpload({ artistId, onUploaded }) {
   const [uploading, setUploading] = useState(false);
   const [error, setError]       = useState('');
   const [preview, setPreview]   = useState(null);
+  const [taggedTrack, setTaggedTrack] = useState(null); // { id, title, file_url }
+  const [showTrackPicker, setShowTrackPicker] = useState(false);
+  const [myTracks, setMyTracks] = useState([]);
   const fileRef                 = useRef(null);
 
   const ACCEPT = 'image/*,audio/*,video/mp4,video/webm';
   const MAX_MB = 50;
+
+  const openTrackPicker = async () => {
+    if (!myTracks.length) {
+      const { data } = await supabase.from('tracks')
+        .select('id, title, cover_artwork_url, file_url')
+        .eq('artist_id', artistId).eq('is_published', true)
+        .order('created_at', { ascending: false }).limit(30);
+      setMyTracks(data || []);
+    }
+    setShowTrackPicker(true);
+  };
 
   const handleFile = (e) => {
     const f = e.target.files[0];
@@ -108,17 +122,19 @@ export function StoryUpload({ artistId, onUploaded }) {
       const { data: { publicUrl } } = supabase.storage.from('stories').getPublicUrl(storagePath);
 
       await supabase.from('artist_stories').insert({
-        artist_id:  artistId,
-        media_url:  publicUrl,
-        media_type: mediaType,
-        caption:    caption.trim() || null,
-        expires_at: new Date(Date.now() + 24 * 3600000).toISOString(),
+        artist_id:       artistId,
+        media_url:       publicUrl,
+        media_type:      mediaType,
+        caption:         caption.trim() || null,
+        tagged_track_id: taggedTrack?.id || null,
+        expires_at:      new Date(Date.now() + 24 * 3600000).toISOString(),
       });
 
       setOpen(false);
       setFile(null);
       setCaption('');
       setPreview(null);
+      setTaggedTrack(null);
       onUploaded?.();
     } catch (err) { setError(err.message); }
     setUploading(false);
@@ -225,14 +241,11 @@ export function ArtistStoryView({ stories, artist, initialIndex = 0, onClose }) 
   const [idx, setIdx]             = useState(initialIndex);
   const [playing, setPlaying]     = useState(false);
   const [progress, setProgress]   = useState(0);
-  const [storyReactions, setStoryReactions] = useState({}); // { emoji: count }
-  const [myStoryReactions, setMyStoryReactions] = useState(new Set());
-  const [reactionBurst, setReactionBurst] = useState(null); // emoji for animation
+  const taggedAudioRef            = useRef(null);
   const audioRef                  = useRef(null);
   const videoRef                  = useRef(null);
   const progressRef               = useRef(null);
   const DURATION_IMAGE_MS         = 5000;
-  const REACTION_EMOJIS           = ['🔥','❤️','🎵','💯','😮'];
 
   const story = stories[idx];
 
@@ -246,43 +259,9 @@ export function ArtistStoryView({ stories, artist, initialIndex = 0, onClose }) 
     } catch {}
   }, [user, story?.view_count]);
 
-  const fetchReactions = useCallback(async (storyId) => {
-    try {
-      const { data } = await supabase.from('story_reactions').select('emoji, user_id').eq('story_id', storyId);
-      const counts = {};
-      const mine = new Set();
-      (data || []).forEach(r => {
-        counts[r.emoji] = (counts[r.emoji] || 0) + 1;
-        if (r.user_id === user?.id) mine.add(r.emoji);
-      });
-      setStoryReactions(counts);
-      setMyStoryReactions(mine);
-    } catch {}
-  }, [user?.id]);
-
-  const handleReact = async (emoji) => {
-    if (!user) return;
-    const storyId = stories[idx]?.id;
-    if (!storyId) return;
-    setReactionBurst(emoji);
-    setTimeout(() => setReactionBurst(null), 700);
-    if (myStoryReactions.has(emoji)) {
-      // Remove
-      await supabase.from('story_reactions').delete().eq('story_id', storyId).eq('user_id', user.id).eq('emoji', emoji);
-      setStoryReactions(prev => ({ ...prev, [emoji]: Math.max((prev[emoji] || 1) - 1, 0) }));
-      setMyStoryReactions(prev => { const n = new Set(prev); n.delete(emoji); return n; });
-    } else {
-      // Add
-      await supabase.from('story_reactions').upsert({ story_id: storyId, user_id: user.id, emoji }, { onConflict: 'story_id,user_id,emoji', ignoreDuplicates: true });
-      setStoryReactions(prev => ({ ...prev, [emoji]: (prev[emoji] || 0) + 1 }));
-      setMyStoryReactions(prev => new Set([...prev, emoji]));
-    }
-  };
-
   useEffect(() => {
     if (!story) return;
     markViewed(story.id);
-    fetchReactions(story.id);
     setProgress(0);
     setPlaying(false);
 
@@ -316,13 +295,6 @@ export function ArtistStoryView({ stories, artist, initialIndex = 0, onClose }) 
 
   return (
     <div className="fixed inset-0 z-[700] bg-black flex flex-col">
-      <style>{`
-        @keyframes reactionBurst {
-          0%   { transform: scale(0.5); opacity: 1; }
-          60%  { transform: scale(1.3); opacity: 1; }
-          100% { transform: scale(2);   opacity: 0; }
-        }
-      `}</style>
       {/* Progress bars */}
       <div className="flex space-x-1 px-3 pt-safe pt-4 flex-shrink-0">
         {stories.map((s, i) => (
@@ -389,41 +361,29 @@ export function ArtistStoryView({ stories, artist, initialIndex = 0, onClose }) 
           </div>
         )}
         {story.media_type === 'video' && (
-          <video ref={videoRef} src={story.media_url} controls autoPlay
+          <video
+            muted={!!story.tracks?.file_url} ref={videoRef} src={story.media_url} controls autoPlay
             className="max-w-full max-h-full" onEnded={goNext} />
         )}
 
         {/* Tap zones for navigation */}
         <button className="absolute left-0 top-0 bottom-0 w-1/3" onClick={goPrev} />
         <button className="absolute right-0 top-0 bottom-0 w-1/3" onClick={goNext} />
-
-        {/* Reaction burst animation */}
-        {reactionBurst && (
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10"
-            style={{ animation: 'reactionBurst 0.7s ease-out forwards' }}>
-            <span style={{ fontSize: 72 }}>{reactionBurst}</span>
-          </div>
-        )}
-
-        {/* Reaction buttons — right side, Instagram-style */}
-        <div className="absolute right-3 top-1/2 -translate-y-1/2 flex flex-col space-y-3 z-10">
-          {REACTION_EMOJIS.map(emoji => {
-            const count = storyReactions[emoji] || 0;
-            const reacted = myStoryReactions.has(emoji);
-            return (
-              <button key={emoji} onClick={(e) => { e.stopPropagation(); handleReact(emoji); }}
-                className="flex flex-col items-center space-y-0.5 transition active:scale-90"
-                style={{ filter: reacted ? 'none' : 'grayscale(40%) opacity(0.7)' }}>
-                <div className="w-11 h-11 rounded-full flex items-center justify-center"
-                  style={{ background: reacted ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.35)', backdropFilter: 'blur(8px)', border: reacted ? '1px solid rgba(255,255,255,0.3)' : '1px solid rgba(255,255,255,0.1)', transform: reacted ? 'scale(1.1)' : 'scale(1)', transition: 'all 0.2s' }}>
-                  <span style={{ fontSize: 20 }}>{emoji}</span>
-                </div>
-                {count > 0 && <span className="text-[10px] font-bold text-white/80">{count}</span>}
-              </button>
-            );
-          })}
-        </div>
       </div>
+
+      {/* Tagged track pill */}
+      {story.tracks && (
+        <div className="absolute bottom-20 left-4 right-4 z-20">
+          <div className="inline-flex items-center space-x-2 px-3 py-1.5 rounded-full"
+            style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)', border: '1px solid rgba(255,255,255,0.15)' }}>
+            <span className="text-sm">🎵</span>
+            <div className="flex flex-col min-w-0">
+              <p className="text-[11px] font-bold text-white truncate max-w-[160px]">{story.tracks.title}</p>
+              <p className="text-[9px] text-white/40 uppercase tracking-wider">Tagged track</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Caption */}
       {story.caption && (
@@ -451,7 +411,7 @@ export function StoriesRail({ userId }) {
         // Get all active (non-expired) stories
         const { data: stories } = await supabase
           .from('artist_stories')
-          .select('*, artists(id, artist_name, slug, profile_image_url)')
+          .select('*, tracks:tagged_track_id(id, title, file_url, cover_artwork_url), artists(id, artist_name, slug, profile_image_url)')
           .gt('expires_at', new Date().toISOString())
           .order('created_at', { ascending: false })
           .limit(100);
