@@ -565,6 +565,17 @@ export default function CompetitionsPage() {
                 )}
               </div>
             </div>
+
+            {/* Full Page button — bottom of card */}
+            <div className="px-5 pb-5">
+              <button onClick={() => navigate('/wheel')}
+                className="w-full py-3 rounded-2xl text-sm font-bold transition active:scale-[0.98] flex items-center justify-center space-x-2"
+                style={{ background: 'rgba(139,92,246,0.15)', color: '#a78bfa', border: '1px solid rgba(139,92,246,0.3)' }}>
+                <span>🎡</span>
+                <span>Open Full Wheel Page</span>
+                <span>→</span>
+              </button>
+            </div>
           </div>
 
           {/* ── Paid Collaborations ── */}

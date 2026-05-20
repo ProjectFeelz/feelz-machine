@@ -141,7 +141,7 @@ function ThoughtBlock({ thought, isOwner, secondaryColor, textColor, bgColor, us
       .in('user_id', userIds);
     const artistMap = {};
     (artistsData || []).forEach(a => { artistMap[a.user_id] = a; });
-    const missingIds = userIds.filter(id => !artistMap[id]);
+    const missingIds = userIds.filter(id => id && !artistMap[id]);
     const profileMap = {};
     if (missingIds.length > 0) {
       const { data: profilesData } = await supabase
@@ -449,7 +449,8 @@ export default function ArtistProfilePage() {
         .map(([uid, count]) => ({ user_id: uid, count }));
 
       // Enrich with profile data
-      const uids = top5.map(t => t.user_id);
+      const uids = top5.map(t => t.user_id).filter(Boolean);
+      if (!uids.length) return;
       const [{ data: artistProfiles }, { data: listenerProfiles }] = await Promise.all([
         supabase.from('artists').select('user_id, artist_name, profile_image_url, slug').in('user_id', uids),
         supabase.from('user_profiles').select('user_id, name, avatar_url').in('user_id', uids),
