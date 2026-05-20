@@ -154,15 +154,7 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
 
   useEffect(() => {
     setReady(false); drawImageCard();
-    else {
-      setReady(true);
-      if (audioUrl) {
-        const a = new window.Audio();
-        a.src = audioUrl;
-        a.onloadedmetadata = () => setDuration(Math.floor(a.duration) || 30);
-      }
-    }
-  }, [tab, drawImageCard, audioUrl]);
+  }, [drawImageCard]);
 
   // ── SVG vinyl to canvas image ────────────────────────────────────────────────
   // Renders the VinylRecord SVG to an HTMLImageElement so the canvas draw

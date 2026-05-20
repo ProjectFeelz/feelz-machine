@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import {
-  Upload, Trash2, Loader, Plus, Save, Music, Video,
+  Upload, Trash2, Loader, Plus, Save, Music, Film,
   Edit, Search, X, Zap, Disc, AlertCircle, Youtube, HelpCircle,
 } from 'lucide-react';
 import CollaboratorSearch from '../components/CollaboratorSearch';
@@ -130,52 +130,24 @@ function FSelect({ children, className = '', ...props }) {
 
 function YoutubeField({ value, onChange }) {
   const [uploading, setUploading] = React.useState(false);
-  const [progress, setProgress]   = React.useState('');
   const [error, setError]         = React.useState('');
   const fileRef                   = React.useRef(null);
   const hasVideo                  = !!(value && value.includes('supabase'));
 
-
   const handleVideoFile = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    const MAX_MB = 200;
-    if (file.size > MAX_MB * 1024 * 1024) { setError(`Max video size is ${MAX_MB}MB`); return; }
-    setUploading(true); setError(''); setProgress('Preparing…');
+    if (file.type !== 'video/mp4') { setError('MP4 only. Please convert your video first.'); return; }
+    if (file.size > 300 * 1024 * 1024) { setError('Max size is 300MB'); return; }
+    setUploading(true); setError('');
     try {
-      // Convert to mp4 if needed
-      let uploadFile = file;
-      if (file.type !== 'video/mp4' || file.name.endsWith('.webm') || file.name.endsWith('.mov')) {
-        setProgress('Converting to MP4…');
-        const base64 = await new Promise((res, rej) => {
-          const r = new FileReader();
-          r.onload = () => res(r.result.split(',')[1]);
-          r.onerror = rej;
-          r.readAsDataURL(file);
-        });
-        const resp = await fetch('/.netlify/functions/convert-to-mp4', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ video: base64, mimeType: file.type }),
-        });
-        if (!resp.ok) throw new Error('Conversion failed — try uploading an MP4 directly');
-        const { mp4 } = await resp.json();
-        const bytes = Uint8Array.from(atob(mp4), c => c.charCodeAt(0));
-        const blob  = new Blob([bytes], { type: 'video/mp4' });
-        uploadFile  = new File([blob], file.name.replace(/\.[^.]+$/, '.mp4'), { type: 'video/mp4' });
-      }
-      setProgress('Uploading…');
-      const { createClient } = await import('@supabase/supabase-js');
-      const sb = createClient(
-        process.env.REACT_APP_SUPABASE_URL,
-        process.env.REACT_APP_SUPABASE_ANON_KEY
-      );
-      const path = `track-videos/${Date.now()}-${Math.random().toString(36).slice(2)}.mp4`;
-      const { error: upErr } = await sb.storage.from('feelz-samples').upload(path, uploadFile, { contentType: 'video/mp4' });
+      const path = `${Date.now()}-${Math.random().toString(36).slice(2)}.mp4`;
+      const { error: upErr } = await supabase.storage
+        .from('track-videos')
+        .upload(path, file, { contentType: 'video/mp4', upsert: false });
       if (upErr) throw upErr;
-      const { data: { publicUrl } } = sb.storage.from('feelz-samples').getPublicUrl(path);
+      const { data: { publicUrl } } = supabase.storage.from('track-videos').getPublicUrl(path);
       onChange(publicUrl);
-      setProgress('');
     } catch (err) { setError(err.message || 'Upload failed'); }
     setUploading(false);
   };
@@ -184,11 +156,10 @@ function YoutubeField({ value, onChange }) {
     <div>
       <FieldLabel>
         <span className="flex items-center space-x-1.5">
-          <Video className="w-3 h-3 text-purple-400" />
-          <span>Music Video <span className="text-white/20">(optional)</span></span>
+          <Film className="w-3 h-3 text-purple-400" />
+          <span>Music Video <span className="text-white/20">(optional, MP4 only)</span></span>
         </span>
       </FieldLabel>
-
       {hasVideo ? (
         <div className="flex items-center space-x-3 p-3 bg-white/[0.04] rounded-xl border border-white/[0.08]">
           <video src={value} className="w-16 h-10 object-cover rounded-lg bg-black" muted />
@@ -203,19 +174,19 @@ function YoutubeField({ value, onChange }) {
           className="w-full flex items-center space-x-3 px-3 py-3 bg-white/[0.04] rounded-xl border border-dashed border-white/[0.12] hover:bg-white/[0.07] transition text-left">
           {uploading
             ? <Loader className="w-4 h-4 text-purple-400 animate-spin flex-shrink-0" />
-            : <Video className="w-4 h-4 text-white/30 flex-shrink-0" />}
+            : <Film className="w-4 h-4 text-white/30 flex-shrink-0" />}
           <div>
             <p className="text-xs text-white/50">{uploading ? 'Uploading…' : 'Upload music video'}</p>
-            <p className="text-[10px] text-white/20 mt-0.5">MP4 only · Max 300MB · Vertical recommended</p>
+            <p className="text-[10px] text-white/20 mt-0.5">MP4 only · Max 300MB · Vertical recommended · Convert before uploading</p>
           </div>
         </button>
       )}
-
       <input ref={fileRef} type="file" accept="video/mp4" onChange={handleVideoFile} className="hidden" />
       {error && <p className="text-[10px] text-red-400 mt-1">{error}</p>}
     </div>
   );
 }
+
 
 // ─── Versions editor ──────────────────────────────────────────────────────────
 
