@@ -744,6 +744,22 @@ export default function ForYouPage() {
     return () => window.removeEventListener('keydown', onKey);
   }, [idx, goTo]);
 
+  // Mouse wheel / trackpad scroll on desktop
+  const wheelLocked = React.useRef(false);
+  useEffect(() => {
+    const onWheel = (e) => {
+      e.preventDefault();
+      if (wheelLocked.current) return;
+      wheelLocked.current = true;
+      if (e.deltaY > 30)       goTo(idx + 1); // scroll down = next
+      else if (e.deltaY < -30) goTo(idx - 1); // scroll up = prev
+      // Debounce — prevent rapid firing on trackpad momentum
+      setTimeout(() => { wheelLocked.current = false; }, 600);
+    };
+    window.addEventListener('wheel', onWheel, { passive: false });
+    return () => window.removeEventListener('wheel', onWheel);
+  }, [idx, goTo]);
+
   const visibleRange = useMemo(() => {
     const start = Math.max(0, idx - 1);
     const end   = Math.min(tracks.length - 1, idx + PRELOAD_AHEAD);
