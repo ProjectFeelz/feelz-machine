@@ -18,6 +18,7 @@ import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import { usePlayer } from '../contexts/PlayerContext';
 import VinylRecord from '../components/VinylRecord';
+import { ArtistStoryView } from '../components/ArtistStories';
 import {
   Heart, MessageCircle, ListMusic, UserCheck,
   Share2, Play, Pause, Loader, X, Send, ChevronUp,
@@ -429,11 +430,16 @@ export default function ForYouPage() {
   const [idx, setIdx]                 = useState(0);
   const [loading, setLoading]         = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [viewingStory, setViewingStory] = useState(null); // { artist, stories }
 
   const touchStartY  = useRef(null);
   const touchStartX  = useRef(null);
+  const touchStartT  = useRef(0);      // timestamp for velocity calc
+  const lastY        = useRef(0);       // last Y position
   const dragging     = useRef(false);
   const dragYRef     = useRef(0);
+  const velocityRef  = useRef(0);       // px/ms at release
+  const preloadedRef = useRef(new Set()); // track IDs already preloaded
   const [dragOffset, setDragOffset]   = useState(0);
 
   const loadTracks = useCallback(async (offset = 0) => {
@@ -478,6 +484,46 @@ export default function ForYouPage() {
         }))];
       }
 
+      // Fetch stories from followed artists — inject every 5 tracks
+      if (offset === 0 && user) {
+        try {
+          const { data: follows } = await supabase
+            .from('follows').select('artist_id').eq('follower_id', user.id).limit(20);
+          if (follows?.length) {
+            const artistIds = follows.map(f => f.artist_id);
+            const { data: stories } = await supabase
+              .from('artist_stories')
+              .select('id, media_url, media_type, caption, expires_at, view_count, artist_id, artists(id, artist_name, slug, profile_image_url)')
+              .in('artist_id', artistIds)
+              .gt('expires_at', new Date().toISOString())
+              .order('created_at', { ascending: false })
+              .limit(10);
+            if (stories?.length) {
+              // Group by artist
+              const byArtist = {};
+              stories.forEach(s => {
+                const aid = s.artist_id;
+                if (!byArtist[aid]) byArtist[aid] = { artist: s.artists, stories: [] };
+                byArtist[aid].stories.push(s);
+              });
+              // Build story cards and splice every 5 tracks
+              const storyCards = Object.values(byArtist).map(g => ({
+                _type: 'story',
+                _id: `story-${g.artist.id}`,
+                artist: g.artist,
+                stories: g.stories,
+              }));
+              let result = [...fetched];
+              storyCards.forEach((card, i) => {
+                const pos = Math.min((i + 1) * 5, result.length);
+                result.splice(pos, 0, card);
+              });
+              fetched = result;
+            }
+          }
+        } catch {}
+      }
+
       if (offset === 0 && fetched.length > 0) fetched[0]._isFirst = true;
       setTracks(prev => offset === 0 ? fetched : [...prev, ...fetched]);
     } catch (err) {
@@ -493,6 +539,17 @@ export default function ForYouPage() {
     if (idx >= tracks.length - 3 && !loadingMore && tracks.length > 0) loadTracks(tracks.length);
   }, [idx, tracks.length, loadingMore, loadTracks]);
 
+  // Preload next track's audio so it starts instantly when swiped to
+  useEffect(() => {
+    const next = tracks[idx + 1];
+    if (next?.file_url && !next.youtube_url && !preloadedRef.current.has(next.id)) {
+      preloadedRef.current.add(next.id);
+      const audio = new Audio();
+      audio.preload = 'metadata';
+      audio.src = next.file_url;
+    }
+  }, [idx, tracks]);
+
   const goTo = useCallback((newIdx) => {
     if (newIdx < 0 || newIdx >= tracks.length) return;
     setIdx(newIdx);
@@ -502,8 +559,11 @@ export default function ForYouPage() {
   const onTouchStart = useCallback((e) => {
     touchStartY.current = e.touches[0].clientY;
     touchStartX.current = e.touches[0].clientX;
+    touchStartT.current = Date.now();
+    lastY.current = e.touches[0].clientY;
     dragging.current = false;
     dragYRef.current = 0;
+    velocityRef.current = 0;
   }, []);
 
   const onTouchMove = useCallback((e) => {
@@ -515,18 +575,30 @@ export default function ForYouPage() {
       dragging.current = true;
     }
     e.preventDefault();
+    // Track velocity: px per ms over last move
+    const now = Date.now();
+    const dt  = now - touchStartT.current;
+    if (dt > 0) velocityRef.current = (e.touches[0].clientY - lastY.current) / Math.max(dt, 16);
+    lastY.current = e.touches[0].clientY;
+    touchStartT.current = now;
     dragYRef.current = dy;
-    setDragOffset(dy * 0.3);
+    // Rubber band: feels natural, less resistance at start
+    setDragOffset(dy * 0.35);
   }, []);
 
   const onTouchEnd = useCallback(() => {
     if (!dragging.current) return;
-    const dy = dragYRef.current;
-    if (dy < -SWIPE_THRESHOLD) goTo(idx + 1);
-    else if (dy > SWIPE_THRESHOLD) goTo(idx - 1);
+    const dy  = dragYRef.current;
+    const vel = velocityRef.current; // px/ms — negative = moving up (next)
+    // Fast flick (>0.3px/ms) only needs 20px. Slow drag needs full threshold.
+    const speed     = Math.abs(vel);
+    const threshold = speed > 0.3 ? 20 : SWIPE_THRESHOLD;
+    if      (dy < -threshold) goTo(idx + 1);
+    else if (dy >  threshold) goTo(idx - 1);
     else setDragOffset(0);
     dragging.current = false;
     touchStartY.current = null;
+    velocityRef.current = 0;
   }, [idx, goTo]);
 
   useEffect(() => {
@@ -578,15 +650,52 @@ export default function ForYouPage() {
         className="relative w-full h-full"
         style={{
           transform: `translateY(${-idx * vh + dragOffset}px)`,
-          transition: dragging.current ? 'none' : 'transform 0.35s cubic-bezier(0.25,0.46,0.45,0.94)',
+          // Snappy spring — 0.2s feels instant, still smooth
+          transition: dragging.current ? 'none' : 'transform 0.2s cubic-bezier(0.32,0.72,0,1)',
           willChange: 'transform',
         }}
       >
-        {visibleRange.map(i => (
-          <div key={tracks[i].id} className="absolute inset-x-0" style={{ top: i * vh, height: vh }}>
-            <ForYouCard track={tracks[i]} isActive={i === idx} user={user} navigate={navigate} />
-          </div>
-        ))}
+        {visibleRange.map(i => {
+          const item = tracks[i];
+          const isStoryCard = item?._type === 'story';
+          const isCurrentCard = i === idx;
+          const isDraggingDown = dragOffset > 0;
+          const isDraggingUp   = dragOffset < 0;
+          // Current card scales down slightly while dragging, confirms gesture
+          const scale = isCurrentCard && Math.abs(dragOffset) > 8
+            ? Math.max(0.96, 1 - Math.abs(dragOffset) / (vh * 6))
+            : 1;
+          // Next/prev card fades in from edge as you drag toward it
+          const isNextCard = i === idx + 1;
+          const isPrevCard = i === idx - 1;
+          const peekOpacity = isNextCard && isDraggingUp
+            ? Math.min(1, Math.abs(dragOffset) / 80)
+            : isPrevCard && isDraggingDown
+              ? Math.min(1, dragOffset / 80)
+              : isCurrentCard ? 1 : 0.6;
+          return (
+            <div key={tracks[i].id} className="absolute inset-x-0"
+              style={{
+                top: i * vh, height: vh,
+                transform: `scale(${scale})`,
+                opacity: peekOpacity,
+                transition: dragging.current ? 'none' : 'transform 0.2s ease, opacity 0.2s ease',
+                borderRadius: isCurrentCard && scale < 1 ? '16px' : '0',
+                overflow: 'hidden',
+              }}>
+              {isStoryCard ? (
+                <StoryFeedCard
+                  item={tracks[i]}
+                  isActive={i === idx}
+                  onOpen={() => setViewingStory({ artist: tracks[i].artist, stories: tracks[i].stories })}
+                  navigate={navigate}
+                />
+              ) : (
+                <ForYouCard track={tracks[i]} isActive={i === idx} user={user} navigate={navigate} />
+              )}
+            </div>
+          );
+        })}
       </div>
 
       {/* Status bar gradient */}
@@ -596,6 +705,17 @@ export default function ForYouPage() {
       {loadingMore && (
         <div className="absolute bottom-24 left-1/2 -translate-x-1/2 z-30">
           <Loader className="w-4 h-4 animate-spin text-white/30" />
+        </div>
+      )}
+
+      {/* Full-screen story viewer */}
+      {viewingStory && (
+        <div className="absolute inset-0 z-50">
+          <ArtistStoryView
+            stories={viewingStory.stories}
+            artist={viewingStory.artist}
+            onClose={() => setViewingStory(null)}
+          />
         </div>
       )}
     </div>
