@@ -96,7 +96,7 @@ export default function DesktopSidebar() {
 
   return (
     <aside
-      className="hidden md:flex flex-col w-64 fixed left-0 top-0 bottom-0 z-40"
+      className="hidden md:flex flex-col w-64 fixed left-0 top-0 bottom-0 z-40 border-r border-white/[0.06]"
       style={{
         background: 'rgba(10,10,10,0.85)',
         backdropFilter: 'blur(24px)',

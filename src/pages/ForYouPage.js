@@ -680,7 +680,7 @@ export default function ForYouPage() {
 
   return (
     <div
-      className="fixed inset-0 bg-black overflow-hidden"
+      className="fixed inset-0 bg-black overflow-hidden md:left-64"
       onTouchStart={onTouchStart}
       onTouchMove={onTouchMove}
       onTouchEnd={onTouchEnd}
