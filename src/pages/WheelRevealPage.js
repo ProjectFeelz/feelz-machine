@@ -630,7 +630,7 @@ export default function WheelRevealPage() {
 
       {/* Header — sticky */}
       <div className="sticky top-0 z-30 bg-black/90 backdrop-blur-sm flex items-center justify-between px-4 pt-14 pb-4 md:pt-6 border-b border-white/[0.04]">
-        <button onClick={() => navigate(-1)}
+        <button onClick={() => navigate('/competitions')}
           className="w-9 h-9 flex items-center justify-center rounded-full bg-white/[0.06] hover:bg-white/[0.08] transition">
           <ArrowLeft className="w-4 h-4 text-white/60" />
         </button>

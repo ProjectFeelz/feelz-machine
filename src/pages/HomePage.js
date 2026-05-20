@@ -645,7 +645,7 @@ export default function HomePage() {
           <button
             onClick={() => navigate('/wheel')}
             className="w-full flex items-center space-x-3 px-4 py-3 rounded-2xl text-left transition active:scale-[0.98]"
-            style={{ background: 'rgba(139,92,246,0.08)', border: '1px solid rgba(139,92,246,0.2)' }}
+            style={{ background: 'linear-gradient(135deg, rgba(139,92,246,0.25), rgba(120,75,160,0.20))', border: '1px solid rgba(139,92,246,0.45)', boxShadow: '0 2px 12px rgba(139,92,246,0.15)' }}
           >
             <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 text-lg"
               style={{ background: 'rgba(139,92,246,0.15)' }}>

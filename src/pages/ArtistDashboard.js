@@ -4,7 +4,7 @@ import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import {
   BarChart3, Download, Music, Loader,
-  Upload, ChevronLeft, Headphones, Heart, TrendingUp, Users, Zap, Trophy
+  Upload, ChevronLeft, Headphones, Heart, TrendingUp, Users, Trophy, Zap
 } from 'lucide-react';
 import TrackUploadPanel from './TrackUploadPanel';
 import CollabRequests, { CollabBadge } from '../components/CollabRequests';
@@ -211,6 +211,7 @@ export default function ArtistDashboard() {
   const tabs = [
     { key: 'upload',     label: 'Upload',     icon: Upload },
     { key: 'collabs',    label: 'Collabs',    icon: Users, hasBadge: true },
+    { key: 'challenges', label: 'Challenges', icon: Trophy, hasDot: !!wheelChallenge },
     { key: 'analytics',  label: 'Analytics',  icon: BarChart3 },
     // Memos tab hidden from nav bar — accessible via Profile page Voice Memo button (?tab=memos)
   ];
@@ -222,7 +223,7 @@ export default function ArtistDashboard() {
         {/* ── Header ── */}
         <div className="flex items-center space-x-3 mb-6">
           <button
-            onClick={() => navigate('/')}
+            onClick={() => navigate('/hub')}
             className="w-9 h-9 flex items-center justify-center rounded-full bg-white/[0.06] hover:bg-white/[0.1] transition"
           >
             <ChevronLeft className="w-5 h-5 text-white" />

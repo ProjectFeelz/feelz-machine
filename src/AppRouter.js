@@ -79,9 +79,7 @@ function PageTitle({ title, children }) {
 // Handles /@slug short URLs → redirects to /artist/:slug
 function ArtistProfileRedirect() {
   const { slug } = useParams();
-  const navigate = useNavigate();
-  useEffect(() => { navigate('/artist/' + slug, { replace: true }); }, [slug, navigate]);
-  return null;
+  return <Navigate to={`/artist/${slug}`} replace />;
 }
 
 export default function AppRouter() {

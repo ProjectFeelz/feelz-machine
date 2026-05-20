@@ -384,6 +384,7 @@ export default function ArtistProfilePage() {
   const [addedTo, setAddedTo] = useState({});
   const [recommendedTracks, setRecommendedTracks] = useState([]);
   const [similarArtists, setSimilarArtists] = useState([]);
+  const [artistPlaylists, setArtistPlaylists] = useState([]);
   const [thoughts, setThoughts] = useState([]);
   const [highlightedTrackId, setHighlightedTrackId] = useState(null);
   const [voiceMemos, setVoiceMemos] = useState([]);
@@ -592,6 +593,15 @@ export default function ArtistProfilePage() {
         (likes || []).forEach(l => { likeMap[l.track_id] = true; });
         setLikedTracks(likeMap);
       }
+      // Fetch artist's own playlists
+      const { data: playlistData } = await supabase
+        .from('playlists')
+        .select('id, name, cover_url, user_id, created_at')
+        .eq('user_id', artistData.user_id)
+        .order('created_at', { ascending: false })
+        .limit(10);
+      setArtistPlaylists(playlistData || []);
+
       const { data: albumData } = await supabase
         .from('albums').select('*').eq('artist_id', artistData.id).eq('is_published', true)
         .order('release_date', { ascending: false });
@@ -1104,9 +1114,9 @@ export default function ArtistProfilePage() {
   const socialEntries  = Object.entries(socials).filter(([_, v]) => v);
   const headingFont    = theme?.heading_font || 'Inter';
   const bodyFont       = theme?.body_font || 'Inter';
-  const visibleTracks  = showAllTracks ? tracks : tracks.slice(0, 5);
+  const visibleTracks  = showAllTracks ? tracks : tracks.slice(0, 10);
   const isProfileOwner = user && myArtist && myArtist.id === artist.id;
-  const pageUrl        = `${BASE_URL}/artist/${slug}`;
+  const pageUrl        = `${BASE_URL}/@${slug}`;
   const ogImage        = artist.profile_image_url || `${BASE_URL}/og-default.png`;
   const pageTitle      = `${artist.artist_name} · Feelz Machine`;
   const pageDesc       = artist.bio
@@ -1816,6 +1826,39 @@ export default function ArtistProfilePage() {
                 </button>
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Artist Playlists */}
+      {artistPlaylists.length > 0 && (
+        <div className="mb-8 px-6">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-lg font-bold" style={{ fontFamily: `"${headingFont}", sans-serif` }}>Playlists</h2>
+            {isProfileOwner && (
+              <button onClick={() => navigate('/library/playlists')}
+                className="w-7 h-7 rounded-full flex items-center justify-center transition hover:opacity-80"
+                style={{ background: `${secondaryColor}20`, border: `1px solid ${secondaryColor}30` }}>
+                <span className="text-sm" style={{ color: secondaryColor }}>+</span>
+              </button>
+            )}
+          </div>
+          <div className="flex space-x-3 overflow-x-auto scrollbar-hide -mx-6 px-6">
+            {artistPlaylists.map(pl => (
+              <div key={pl.id} className="flex-shrink-0 w-36 cursor-pointer group"
+                onClick={() => navigate(`/library/playlists/${pl.id}`)}>
+                <div className="aspect-square rounded-xl overflow-hidden mb-2" style={{ backgroundColor: `${textColor}08` }}>
+                  {pl.cover_url
+                    ? <img src={pl.cover_url} alt={pl.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                    : <div className="w-full h-full flex items-center justify-center" style={{ background: `linear-gradient(135deg, ${secondaryColor}40, ${accentColor}20)` }}>
+                        <Music className="w-8 h-8" style={{ color: `${textColor}20` }} />
+                      </div>
+                  }
+                </div>
+                <p className="text-sm font-medium truncate" style={{ color: textColor }}>{pl.name}</p>
+                <p className="text-xs truncate" style={{ color: `${textColor}50` }}>Playlist</p>
+              </div>
+            ))}
           </div>
         </div>
       )}

@@ -23,6 +23,138 @@ import { ALL_PROMPTS } from './WheelRevealPage';
 
 
 
+const SPIN_CAP = 5;
+
+const TIER_WEIGHTS = { Common: 50, Rare: 30, Epic: 15, Legendary: 5 };
+const TIER_STYLES = {
+  Common:    { color: '#9ca3af', bg: 'rgba(156,163,175,0.12)', border: 'rgba(156,163,175,0.25)' },
+  Rare:      { color: '#60a5fa', bg: 'rgba(96,165,250,0.12)',  border: 'rgba(96,165,250,0.25)'  },
+  Epic:      { color: '#a78bfa', bg: 'rgba(167,139,250,0.12)', border: 'rgba(167,139,250,0.25)' },
+  Legendary: { color: '#fbbf24', bg: 'rgba(251,191,36,0.12)',  border: 'rgba(251,191,36,0.35)'  },
+};
+const GENERIC_MODS = [
+  "You have exactly 20 minutes to finish this.",
+  "Use only one microphone for the entire session.",
+  "Don't listen back until the whole project is exported.",
+  "The first take is the final take. No do-overs.",
+  "Finish it tonight — no saving for tomorrow.",
+  "Share a 30-second clip before midnight.",
+  "Name the track before you start making it.",
+  "Dedicate it to someone specific before you begin.",
+  "The final track must be under 2 minutes.",
+  "No compression anywhere in the mix.",
+];
+
+// Inline challenge pool (subset for the spin tab)
+const SINGER_POOL = [
+  { id:'s01', tier:'Common',    points:100,  prompt:'Write a love song set at a Sunday braai — no chorus.',                                   modifier:'Include the sound of tongs clicking twice.' },
+  { id:'s02', tier:'Common',    points:100,  prompt:'Write an anthem for your first paycheque disappearing in exactly 3 days.',               modifier:'Tempo must be fast and chaotic.' },
+  { id:'s03', tier:'Common',    points:100,  prompt:'Write a power anthem about being stuck on the pavement behind a slow walker.',            modifier:'The chorus must feel like an absolute stampede.' },
+  { id:'s04', tier:'Rare',      points:250,  prompt:'Write a full song with absolutely no pronouns — no I, you, we, or they.',                modifier:'Focus entirely on objects, locations, and descriptions.' },
+  { id:'s05', tier:'Rare',      points:250,  prompt:'Write a hook so simple it almost embarrasses you — then belt it out.',                   modifier:'Repeat the hook four times consecutively with increasing energy.' },
+  { id:'s06', tier:'Rare',      points:250,  prompt:'Write a song in the second person — address the listener directly the whole way.',        modifier:'Make it feel like a face-to-face confrontation.' },
+  { id:'s07', tier:'Epic',      points:500,  prompt:'Write a chorus that seamlessly works as both an R&B love song and a Sunday prayer.',      modifier:'Use heavy reverb to simulate an empty church hall.' },
+  { id:'s08', tier:'Epic',      points:500,  prompt:'Write a song set in 2075 Johannesburg — what are the inner-city heartbreaks like?',       modifier:'Apply a heavy futuristic vocal effect or vocoder to the bridge.' },
+  { id:'s09', tier:'Legendary', points:1000, prompt:"Write the exact song you've been too terrified to write — and commit to it.",           modifier:"One-take recording only. No vocal tuning or editing allowed." },
+  { id:'s10', tier:'Legendary', points:1000, prompt:"Write the sincere apology you've never been able to say out loud.",                     modifier:'The track must end mid-word, like a cut phone call.' },
+];
+const BEATMAKER_POOL = [
+  { id:'b01', tier:'Common',    points:100,  prompt:'Make a beat for a braai at 6:00 PM when the energy is transitioning perfectly.',         modifier:'Incorporate the hiss of lighter fluid or fire crackle into the riser.' },
+  { id:'b02', tier:'Common',    points:100,  prompt:'Make a trap beat where the primary percussion is entirely kitchen sounds.',               modifier:'Replace the hi-hats with the sound of silverware clinking.' },
+  { id:'b03', tier:'Common',    points:100,  prompt:'Make a Sunday morning beat with heavy church drums, but make them knock like a club track.', modifier:'Add a deep distorted sub-bass underneath an organ progression.' },
+  { id:'b04', tier:'Rare',      points:250,  prompt:"Make a beat using only 3 distinct sound sources — make every one carry its weight.",      modifier:'Manipulate pitch, delay, and filtering to turn one sound into multiple roles.' },
+  { id:'b05', tier:'Rare',      points:250,  prompt:'Make a beat with absolutely no kick drum at all.',                                       modifier:'Find an alternative transient or low-end drop to ground the 1.' },
+  { id:'b06', tier:'Rare',      points:250,  prompt:'Make a beat where an aggressive bassline carries the entire emotional weight.',           modifier:'The melody instruments must remain stark, thin, and cold.' },
+  { id:'b07', tier:'Epic',      points:500,  prompt:'Make an Amapiano track that feels simultaneously like a somber funeral and a celebration.', modifier:'Juxtapose a minor-key chord progression with an explosive high-energy log drum.' },
+  { id:'b08', tier:'Epic',      points:500,  prompt:'Make a drill beat that samples a traditional lullaby — keep both distinct energies fully intact.', modifier:'The slide bass must glide underneath the delicate melody without drowning it.' },
+  { id:'b09', tier:'Legendary', points:1000, prompt:"Open the oldest most intimidating unfinished masterpiece you have — and finally export the master.", modifier:"No adding sections. Arrange what you have, mix it down, call it complete." },
+  { id:'b10', tier:'Legendary', points:1000, prompt:'Create a complete hard-hitting beat using exclusively samples generated by your own voice.', modifier:'Click your tongue for percussion, hum the sub-bass, snap for claps.' },
+];
+
+function pickChallenge(mode) {
+  const pool = mode === 'singer' ? SINGER_POOL : BEATMAKER_POOL;
+  const total = pool.reduce((s, p) => s + (TIER_WEIGHTS[p.tier] || 10), 0);
+  let rand = Math.random() * total;
+  let base = pool[pool.length - 1];
+  for (const p of pool) { rand -= (TIER_WEIGHTS[p.tier] || 10); if (rand <= 0) { base = p; break; } }
+  const extra = Math.random() < 0.5 ? ' Also: ' + GENERIC_MODS[Math.floor(Math.random() * GENERIC_MODS.length)] : '';
+  return { ...base, modifier: base.modifier + extra };
+}
+
+function SpinForYourselfTab() {
+  const [mode, setMode]           = React.useState('singer');
+  const [result, setResult]       = React.useState(null);
+  const [spinning, setSpinning]   = React.useState(false);
+  const [spins, setSpins]         = React.useState(0);
+  const navigate                  = useNavigate();
+
+  const spin = () => {
+    if (spinning || spins >= SPIN_CAP) return;
+    setSpinning(true);
+    setResult(null);
+    setTimeout(() => {
+      setResult(pickChallenge(mode));
+      setSpins(s => s + 1);
+      setSpinning(false);
+    }, 800);
+  };
+
+  const tc = result ? (TIER_STYLES[result.tier] || TIER_STYLES.Common) : null;
+
+  return (
+    <div className="px-4 pb-6">
+      {/* Mode toggle */}
+      <div className="flex space-x-2 mb-5">
+        {[{key:'singer',label:'🎤 Vocalist'},{key:'beatmaker',label:'🎛️ Producer'}].map(({key,label}) => (
+          <button key={key} onClick={() => { setMode(key); setResult(null); }}
+            className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition ${
+              mode === key ? 'bg-white text-black' : 'bg-white/[0.04] text-white/40 border border-white/[0.08]'
+            }`}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {/* Result card */}
+      {result && tc && (
+        <div className="rounded-2xl p-4 mb-5" style={{ background: tc.bg, border: `1px solid ${tc.border}`, animation: 'fadeUp 0.4s ease' }}>
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full" style={{ color: tc.color, background: tc.bg, border: `1px solid ${tc.border}` }}>{result.tier}</span>
+            <span className="text-[11px] font-bold" style={{ color: tc.color }}>+{result.points} XP</span>
+          </div>
+          <p className="text-base font-bold text-white leading-relaxed mb-3">{result.prompt}</p>
+          <div className="rounded-xl px-3 py-2 mb-4" style={{ background: 'rgba(0,0,0,0.2)', border: `1px solid ${tc.border}` }}>
+            <p className="text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: tc.color }}>Modifier</p>
+            <p className="text-xs text-white/70">{result.modifier}</p>
+          </div>
+          <button onClick={() => navigate('/dashboard?tab=upload')}
+            className="w-full py-2.5 rounded-xl text-xs font-bold text-white transition"
+            style={{ background: tc.color }}>
+            Upload Track to Claim XP
+          </button>
+        </div>
+      )}
+
+      {/* Spin button */}
+      <button onClick={spin} disabled={spinning || spins >= SPIN_CAP}
+        className="w-full py-4 rounded-2xl text-sm font-bold transition active:scale-[0.98] disabled:opacity-40 flex items-center justify-center space-x-2"
+        style={{ background: spinning ? 'rgba(139,92,246,0.1)' : 'linear-gradient(135deg,rgba(139,92,246,0.3),rgba(120,75,160,0.2))', border: '1px solid rgba(139,92,246,0.4)', color: '#a78bfa' }}>
+        <span style={{ fontSize: 20 }}>{spinning ? '⏳' : '🎲'}</span>
+        <span>{spinning ? 'Spinning...' : spins >= SPIN_CAP ? 'Come back tomorrow' : result ? 'Spin Again' : 'Spin the Wheel'}</span>
+      </button>
+      {spins > 0 && spins < SPIN_CAP && (
+        <p className="text-xs text-white/25 text-center mt-2">{SPIN_CAP - spins} spin{SPIN_CAP - spins !== 1 ? 's' : ''} left today</p>
+      )}
+      {spins >= SPIN_CAP && (
+        <p className="text-xs text-white/25 text-center mt-2">Daily limit reached · resets at midnight</p>
+      )}
+      <p className="text-[10px] text-white/15 text-center mt-3">Personal spins are for fun — upload a track to earn XP</p>
+    </div>
+  );
+}
+
+
+
 
 
 function chime() {
@@ -298,14 +430,16 @@ export default function CompetitionsPage() {
       {/* Tab bar */}
       <div className="flex space-x-1 mx-4 mb-4 p-1 rounded-xl bg-white/[0.03] border border-white/[0.06]">
         {[
-          { key: 'competitions', label: '🏆 Competitions' },
-          { key: 'leaderboard',  label: '⚡ XP Leaderboard' },
-        ].map(({ key, label }) => (
+          { key: 'competitions', label: 'Competitions', emoji: '🏆' },
+          { key: 'spin',         label: 'Spin',         emoji: '🎲' },
+          { key: 'leaderboard',  label: 'Leaderboard',  emoji: '⚡' },
+        ].map(({ key, label, emoji }) => (
           <button key={key} onClick={() => setActiveTab(key)}
-            className={`flex-1 py-2 rounded-lg text-xs font-semibold transition ${
+            className={`flex-1 py-2 rounded-lg text-xs font-semibold transition flex flex-col items-center leading-tight ${
               activeTab === key ? 'bg-white text-black' : 'text-white/40 hover:text-white/60'
             }`}>
-            {label}
+            <span className="text-sm">{emoji}</span>
+            <span className="hidden sm:inline mt-0.5">{label}</span>
           </button>
         ))}
       </div>
@@ -651,6 +785,11 @@ export default function CompetitionsPage() {
             </div>
           )}
         </div>
+      )}
+
+      {/* ── Spin for Yourself tab ── */}
+      {activeTab === 'spin' && (
+        <SpinForYourselfTab />
       )}
     </div>
   );
