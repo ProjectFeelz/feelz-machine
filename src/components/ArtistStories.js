@@ -17,7 +17,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useHaptics } from '../hooks/useHaptics';
 import {
   X, Plus, Upload, Loader, Play, Pause, Music, Image, Video,
-  Eye, Clock,
+  Eye, Clock, Download,
 } from 'lucide-react';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
