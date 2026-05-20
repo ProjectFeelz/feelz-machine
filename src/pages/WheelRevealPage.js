@@ -11,7 +11,7 @@ import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import {
   ArrowLeft, Trophy, Clock, Music, ChevronRight,
-  RefreshCw, Shuffle, Lock,
+  RefreshCw, Shuffle, Lock, Upload, Check, X,
 } from 'lucide-react';
 
 // ── Full prompt library (tiered, with modifiers) ────────────────────────────
@@ -293,6 +293,223 @@ function timeLeft(date) {
   return `${m}m left`;
 }
 
+
+
+// ── ChallengeUploadSheet ──────────────────────────────────────────────────────
+// Bottom sheet that appears when "Upload + Complete" is tapped on a personal
+// challenge card. Only shows title, audio upload, and cover — all other upload
+// features are locked. On submit: saves track, records challenge_completion,
+// and upserts challenge_xp.
+
+import { supabase as sb } from '../supabaseClient';
+
+function ChallengeUploadSheet({ challenge, user, onClose, onComplete }) {
+  const [title, setTitle]       = useState('');
+  const [audioFile, setAudio]   = useState(null);
+  const [coverFile, setCover]   = useState(null);
+  const [coverPreview, setCP]   = useState(null);
+  const [uploading, setUploading] = useState(false);
+  const [error, setError]       = useState('');
+  const audioRef                = React.useRef();
+  const coverRef                = React.useRef();
+
+  const tc = {
+    Common:    { color: '#9ca3af', bg: 'rgba(156,163,175,0.12)', border: 'rgba(156,163,175,0.25)' },
+    Rare:      { color: '#60a5fa', bg: 'rgba(96,165,250,0.12)',  border: 'rgba(96,165,250,0.25)'  },
+    Epic:      { color: '#a78bfa', bg: 'rgba(167,139,250,0.12)', border: 'rgba(167,139,250,0.25)' },
+    Legendary: { color: '#fbbf24', bg: 'rgba(251,191,36,0.12)',  border: 'rgba(251,191,36,0.3)'   },
+  }[challenge.tier] || { color: '#9ca3af', bg: 'rgba(156,163,175,0.12)', border: 'rgba(156,163,175,0.25)' };
+
+  const handleCover = e => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    setCover(f);
+    setCP(URL.createObjectURL(f));
+  };
+
+  const handleSubmit = async () => {
+    if (!title.trim()) { setError('Track title is required.'); return; }
+    if (!audioFile)    { setError('Please select an audio file.'); return; }
+    setError('');
+    setUploading(true);
+
+    try {
+      const { data: { user: u } } = await sb.auth.getUser();
+      if (!u) throw new Error('Not logged in');
+
+      // Get artist
+      const { data: artist } = await sb.from('artists').select('id').eq('user_id', u.id).maybeSingle();
+      if (!artist) throw new Error('Artist profile not found');
+
+      // Upload audio
+      const audioExt = audioFile.name.split('.').pop();
+      const audioPath = `${u.id}/${Date.now()}_challenge.${audioExt}`;
+      const { error: audioErr } = await sb.storage.from('tracks').upload(audioPath, audioFile);
+      if (audioErr) throw audioErr;
+      const { data: { publicUrl: audioUrl } } = sb.storage.from('tracks').getPublicUrl(audioPath);
+
+      // Upload cover (optional)
+      let coverUrl = null;
+      if (coverFile) {
+        const coverExt = coverFile.name.split('.').pop();
+        const coverPath = `${u.id}/${Date.now()}_challenge_cover.${coverExt}`;
+        const { error: covErr } = await sb.storage.from('covers').upload(coverPath, coverFile);
+        if (!covErr) {
+          const { data: { publicUrl } } = sb.storage.from('covers').getPublicUrl(coverPath);
+          coverUrl = publicUrl;
+        }
+      }
+
+      // Insert track — challenge-tagged, other features locked off
+      const { data: track, error: trackErr } = await sb.from('tracks').insert({
+        artist_id:         artist.id,
+        title:             title.trim(),
+        audio_url:         audioUrl,
+        cover_artwork_url: coverUrl,
+        is_published:      true,
+        is_explicit:       false,
+        is_downloadable:   false,
+        is_premium:        false,
+        pay_what_you_want: false,
+        is_preorder:       false,
+        created_at:        new Date().toISOString(),
+        updated_at:        new Date().toISOString(),
+      }).select().single();
+      if (trackErr) throw trackErr;
+
+      // Record completion
+      await sb.from('challenge_completions').insert({
+        user_id:          u.id,
+        challenge_id:     challenge.id,
+        challenge_tier:   challenge.tier,
+        challenge_points: challenge.points,
+        challenge_prompt: challenge.prompt,
+        track_id:         track.id,
+        completed_at:     new Date().toISOString(),
+      });
+
+      // Upsert XP
+      const tierCol = `${challenge.tier.toLowerCase()}_count`;
+      const { data: existing } = await sb.from('challenge_xp').select('*').eq('user_id', u.id).maybeSingle();
+      if (existing) {
+        await sb.from('challenge_xp').update({
+          total_xp:    existing.total_xp + challenge.points,
+          [tierCol]:   (existing[tierCol] || 0) + 1,
+          updated_at:  new Date().toISOString(),
+        }).eq('user_id', u.id);
+      } else {
+        await sb.from('challenge_xp').insert({
+          user_id:    u.id,
+          total_xp:   challenge.points,
+          [tierCol]:  1,
+          updated_at: new Date().toISOString(),
+        });
+      }
+
+      onComplete();
+    } catch (err) {
+      setError(err.message || 'Upload failed. Please try again.');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[600] flex items-end justify-center bg-black/70 backdrop-blur-sm"
+      onClick={onClose}>
+      <div className="w-full max-w-lg bg-neutral-900 rounded-t-2xl border-t border-white/[0.08]"
+        onClick={e => e.stopPropagation()}>
+
+        {/* Handle */}
+        <div className="flex justify-center pt-3 pb-1">
+          <div className="w-10 h-1 rounded-full bg-white/10" />
+        </div>
+
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 pt-2 pb-4 border-b border-white/[0.06]">
+          <div>
+            <h3 className="text-sm font-bold text-white">Submit Challenge Track</h3>
+            <p className="text-[11px] text-white/30 mt-0.5">Upload your track to claim your XP</p>
+          </div>
+          <button onClick={onClose}><X className="w-4 h-4 text-white/30" /></button>
+        </div>
+
+        <div className="px-5 py-4 overflow-y-auto max-h-[75vh] space-y-4">
+
+          {/* Challenge recap */}
+          <div className="rounded-xl p-3" style={{ background: tc.bg, border: `1px solid ${tc.border}` }}>
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: tc.color }}>{challenge.tier}</span>
+              <span className="text-[10px] font-bold" style={{ color: tc.color }}>+{challenge.points} XP</span>
+            </div>
+            <p className="text-xs text-white/70 leading-relaxed">{challenge.prompt}</p>
+          </div>
+
+          {/* Title */}
+          <div>
+            <label className="text-[11px] text-white/40 uppercase tracking-wider block mb-1.5">Track Title *</label>
+            <input
+              value={title}
+              onChange={e => setTitle(e.target.value)}
+              placeholder="Name your track"
+              maxLength={100}
+              className="w-full bg-white/[0.06] rounded-xl px-3 py-2.5 text-sm text-white placeholder-white/20 outline-none border border-white/[0.06] focus:border-white/20"
+            />
+          </div>
+
+          {/* Audio upload */}
+          <div>
+            <label className="text-[11px] text-white/40 uppercase tracking-wider block mb-1.5">Audio File *</label>
+            <button onClick={() => audioRef.current?.click()}
+              className="w-full rounded-xl px-3 py-3 text-sm border border-dashed border-white/[0.12] bg-white/[0.03] text-white/40 hover:bg-white/[0.06] transition flex items-center justify-center space-x-2">
+              <Upload className="w-4 h-4" />
+              <span>{audioFile ? audioFile.name : 'Choose MP3, WAV, or AAC'}</span>
+            </button>
+            <input ref={audioRef} type="file" accept="audio/*" className="hidden" onChange={e => setAudio(e.target.files?.[0] || null)} />
+          </div>
+
+          {/* Cover (optional) */}
+          <div>
+            <label className="text-[11px] text-white/40 uppercase tracking-wider block mb-1.5">Cover Art <span className="normal-case text-white/20">(optional)</span></label>
+            <div className="flex items-center space-x-3">
+              {coverPreview
+                ? <img src={coverPreview} alt="" className="w-14 h-14 rounded-xl object-cover border border-white/10" />
+                : <div className="w-14 h-14 rounded-xl bg-white/[0.06] border border-dashed border-white/[0.10] flex items-center justify-center">
+                    <Music className="w-5 h-5 text-white/20" />
+                  </div>
+              }
+              <button onClick={() => coverRef.current?.click()}
+                className="text-xs text-white/40 hover:text-white/60 transition">
+                {coverPreview ? 'Change image' : 'Upload image'}
+              </button>
+            </div>
+            <input ref={coverRef} type="file" accept="image/*" className="hidden" onChange={handleCover} />
+          </div>
+
+          {/* Locked features notice */}
+          <div className="rounded-xl px-3 py-2.5 bg-white/[0.02] border border-white/[0.05]">
+            <p className="text-[10px] text-white/25 leading-relaxed">
+              This is a challenge upload. Album assignment, download pricing, collaborators, and presave are not available here. Use the full upload panel from your dashboard for those features.
+            </p>
+          </div>
+
+          {error && <p className="text-xs text-red-400">{error}</p>}
+
+          {/* Submit */}
+          <button onClick={handleSubmit} disabled={uploading}
+            className="w-full py-3 rounded-xl text-sm font-bold text-white transition disabled:opacity-40 flex items-center justify-center space-x-2"
+            style={{ background: tc.color }}>
+            {uploading
+              ? <><div className="w-4 h-4 rounded-full border-2 border-white/20 border-t-white animate-spin" /><span>Uploading...</span></>
+              : <><Upload className="w-4 h-4" /><span>Upload & Claim {challenge.points} XP</span></>
+            }
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function WheelRevealPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -305,7 +522,9 @@ export default function WheelRevealPage() {
   const [rotation, setRotation]         = useState(0);
   const [spinning, setSpinning]         = useState(false);
   const [revealed, setRevealed]         = useState(false);
-  const [personalResult, setPersonalResult] = useState(null); // { prompt, modifier, tier, points, id }
+  const [personalResult, setPersonalResult]       = useState(null); // { prompt, modifier, tier, points, id }
+  const [showChallengeUpload, setShowChallengeUpload] = useState(false);
+  const [completionSaved, setCompletionSaved]         = useState(false);
   const [spinsUsed, setSpinsUsed]           = useState(0);
   const SPIN_CAP = 5;
 
@@ -561,13 +780,19 @@ export default function WheelRevealPage() {
                     <RefreshCw className="w-3.5 h-3.5" />
                     <span>{spinsUsed >= SPIN_CAP ? 'Done for today' : 'Spin Again'}</span>
                   </button>
-                  {user && (
-                    <button onClick={() => navigate('/dashboard?tab=upload')}
+                  {user && !completionSaved && (
+                    <button onClick={() => setShowChallengeUpload(true)}
                       className="flex-1 flex items-center justify-center space-x-1.5 py-2.5 rounded-xl text-xs font-bold text-white transition"
                       style={{ background: tc.color }}>
-                      <Music className="w-3.5 h-3.5" />
-                      <span>Upload Track</span>
+                      <Upload className="w-3.5 h-3.5" />
+                      <span>Upload + Complete</span>
                     </button>
+                  )}
+                  {completionSaved && (
+                    <div className="flex-1 flex items-center justify-center space-x-1.5 py-2.5 rounded-xl text-xs font-bold text-white/60 bg-white/[0.04] border border-white/[0.06]">
+                      <Check className="w-3.5 h-3.5 text-green-400" />
+                      <span>XP Saved!</span>
+                    </div>
                   )}
                 </div>
                 <p className="text-[10px] text-white/20 text-center mt-3">
@@ -684,6 +909,19 @@ export default function WheelRevealPage() {
             </div>
           )}
         </div>
+      )}
+
+      {/* Challenge upload sheet */}
+      {showChallengeUpload && personalResult && (
+        <ChallengeUploadSheet
+          challenge={personalResult}
+          user={user}
+          onClose={() => setShowChallengeUpload(false)}
+          onComplete={() => {
+            setShowChallengeUpload(false);
+            setCompletionSaved(true);
+          }}
+        />
       )}
 
       {/* Sticky Enter Challenge bar — always visible when active comp exists */}

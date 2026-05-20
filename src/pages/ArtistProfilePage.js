@@ -25,6 +25,7 @@ import TipGoal from '../components/TipGoal';
 import { ArtistStoryView, StoryUpload } from '../components/ArtistStories';
 import PreSaveButton from '../components/PreSaveButton';
 import ArtistGuestbook from '../components/ArtistGuestbook';
+import ChallengeXPModal from '../components/ChallengeXPModal';
 
 const PAYPAL_CLIENT_ID = process.env.REACT_APP_PAYPAL_CLIENT_ID;
 const EMOJI_REACTIONS = ['🔥', '❤️', '👏', '😮', '😂', '🎵'];
@@ -411,6 +412,8 @@ export default function ArtistProfilePage() {
   const [liveSession, setLiveSession] = useState(null);
   const [radioLoading, setRadioLoading] = useState(false);
   const [showDMModal, setShowDMModal] = useState(false);
+  const [showXPModal, setShowXPModal]   = useState(false);
+  const [xpData, setXpData]             = useState(null);
   const [dmMessage, setDmMessage]     = useState('');
   const [dmSending, setDmSending]     = useState(false);
   const [dmSent, setDmSent]           = useState(false);
@@ -1209,6 +1212,14 @@ export default function ArtistProfilePage() {
           <span className="text-sm" style={{ color: `${textColor}80` }}>{formatNumber(followerCount)} followers</span>
           <span className="text-sm" style={{ color: `${textColor}80` }}>{tracks.length} track{tracks.length !== 1 ? 's' : ''}</span>
           <span className="text-sm" style={{ color: `${textColor}80` }}>{formatNumber(artist.total_streams)} streams</span>
+          {xpData?.total_xp > 0 && (
+            <button onClick={() => setShowXPModal(true)}
+              className="flex items-center space-x-1 px-2.5 py-1 rounded-full text-xs font-bold transition hover:opacity-80"
+              style={{ background: 'rgba(251,191,36,0.12)', border: '1px solid rgba(251,191,36,0.25)', color: '#fbbf24' }}>
+              <span>⚡</span>
+              <span>{xpData.total_xp.toLocaleString()} XP</span>
+            </button>
+          )}
         </div>
 
 
@@ -1271,6 +1282,14 @@ export default function ArtistProfilePage() {
         />
 
 
+
+        {/* Challenge XP Modal */}
+        {showXPModal && (
+          <ChallengeXPModal
+            userId={artist?.user_id}
+            onClose={() => setShowXPModal(false)}
+          />
+        )}
 
         {/* DM Modal */}
         {showDMModal && user?.id === artist.user_id && (

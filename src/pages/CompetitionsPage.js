@@ -160,9 +160,12 @@ export default function CompetitionsPage() {
   const { user } = useAuth();
   const { playTrack, currentTrack, isPlaying, togglePlay } = usePlayer();
 
+  const [activeTab, setActiveTab]           = useState('competitions');
   const [wheelChallenge, setWheelChallenge] = useState(null);
   const [competitions, setCompetitions]     = useState([]);
   const [pastWinners, setPastWinners]       = useState([]);
+  const [leaderboard, setLeaderboard]       = useState([]);
+  const [lbLoading, setLbLoading]           = useState(false);
   const [loading, setLoading]               = useState(true);
   const [rotation, setRotation]             = useState(0);
   const [spinning, setSpinning]             = useState(false);
@@ -221,6 +224,29 @@ export default function CompetitionsPage() {
 
   useEffect(() => { load(); }, [load]);
 
+  const loadLeaderboard = useCallback(async () => {
+    setLbLoading(true);
+    const { data } = await supabase
+      .from('challenge_xp')
+      .select('user_id, total_xp, common_count, rare_count, epic_count, legendary_count')
+      .order('total_xp', { ascending: false })
+      .limit(50);
+    if (!data) { setLbLoading(false); return; }
+    // Fetch display names
+    const ids = data.map(r => r.user_id);
+    const { data: profiles } = await supabase
+      .from('artists')
+      .select('user_id, name, cover_artwork_url, slug')
+      .in('user_id', ids);
+    const profileMap = Object.fromEntries((profiles || []).map(p => [p.user_id, p]));
+    setLeaderboard(data.map((r, i) => ({ ...r, rank: i + 1, artist: profileMap[r.user_id] || null })));
+    setLbLoading(false);
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === 'leaderboard') loadLeaderboard();
+  }, [activeTab, loadLeaderboard]);
+
   // Auto-spin to current prompt on load
   useEffect(() => {
     if (!wheelChallenge || spinning || revealed) return;
@@ -267,12 +293,30 @@ export default function CompetitionsPage() {
     <div className="pb-32 pt-14 md:pt-0">
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@700&display=swap');`}</style>
 
+
+
+      {/* Tab bar */}
+      <div className="flex space-x-1 mx-4 mb-4 p-1 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+        {[
+          { key: 'competitions', label: '🏆 Competitions' },
+          { key: 'leaderboard',  label: '⚡ XP Leaderboard' },
+        ].map(({ key, label }) => (
+          <button key={key} onClick={() => setActiveTab(key)}
+            className={`flex-1 py-2 rounded-lg text-xs font-semibold transition ${
+              activeTab === key ? 'bg-white text-black' : 'text-white/40 hover:text-white/60'
+            }`}>
+            {label}
+          </button>
+        ))}
+      </div>
       {/* Header */}
       <div className="px-4 pt-4 pb-2 mb-2">
         <h1 className="text-2xl font-bold text-white">Competitions</h1>
         <p className="text-sm text-white/30 mt-0.5">Create, compete, collaborate — win real rewards</p>
       </div>
 
+      {activeTab === 'competitions' && (
+        <>
       {loading ? (
         <div className="flex items-center justify-center py-20">
           <div className="w-7 h-7 rounded-full border-2 border-white/10 border-t-white/60 animate-spin" />
@@ -532,6 +576,74 @@ export default function CompetitionsPage() {
             </div>
           )}
         </>
+      )}
+
+        </>
+      )}
+
+      {activeTab === 'leaderboard' && (
+        <div className="px-4">
+          {lbLoading ? (
+            <div className="flex justify-center py-16">
+              <div className="w-5 h-5 rounded-full border-2 border-white/10 border-t-purple-500 animate-spin" />
+            </div>
+          ) : leaderboard.length === 0 ? (
+            <div className="text-center py-16">
+              <p className="text-sm text-white/20">No challenge completions yet.</p>
+              <p className="text-xs text-white/10 mt-1">Spin the wheel and upload a track to get on the board.</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {leaderboard.map((entry, i) => {
+                const rankColor = entry.total_xp >= 10000 ? '#fbbf24'
+                  : entry.total_xp >= 5000 ? '#a78bfa'
+                  : entry.total_xp >= 2000 ? '#60a5fa'
+                  : entry.total_xp >= 500  ? '#34d399'
+                  : '#9ca3af';
+                const rankLabel = entry.total_xp >= 10000 ? 'Legend'
+                  : entry.total_xp >= 5000 ? 'Elite'
+                  : entry.total_xp >= 2000 ? 'Pro'
+                  : entry.total_xp >= 500  ? 'Rising'
+                  : 'Rookie';
+                return (
+                  <div key={entry.user_id}
+                    className="flex items-center space-x-3 rounded-2xl px-4 py-3"
+                    style={{ background: i < 3 ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                    {/* Rank number */}
+                    <div className="w-7 text-center flex-shrink-0">
+                      {i === 0 ? <span className="text-base">🥇</span>
+                       : i === 1 ? <span className="text-base">🥈</span>
+                       : i === 2 ? <span className="text-base">🥉</span>
+                       : <span className="text-xs text-white/30 font-bold">#{i + 1}</span>}
+                    </div>
+                    {/* Avatar */}
+                    {entry.artist?.cover_artwork_url
+                      ? <img src={entry.artist.cover_artwork_url} alt="" className="w-9 h-9 rounded-xl object-cover flex-shrink-0" />
+                      : <div className="w-9 h-9 rounded-xl bg-white/[0.06] flex-shrink-0" />
+                    }
+                    {/* Name + rank */}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-white truncate">
+                        {entry.artist?.name || 'Unknown Artist'}
+                      </p>
+                      <p className="text-[10px] font-bold" style={{ color: rankColor }}>{rankLabel}</p>
+                    </div>
+                    {/* XP + breakdown */}
+                    <div className="text-right flex-shrink-0">
+                      <p className="text-sm font-black text-white">{entry.total_xp.toLocaleString()} XP</p>
+                      <p className="text-[9px] text-white/20">
+                        {entry.legendary_count > 0 && `${entry.legendary_count}L `}
+                        {entry.epic_count > 0 && `${entry.epic_count}E `}
+                        {entry.rare_count > 0 && `${entry.rare_count}R `}
+                        {entry.common_count > 0 && `${entry.common_count}C`}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
       )}
     </div>
   );
