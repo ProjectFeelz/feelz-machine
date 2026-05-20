@@ -31,7 +31,6 @@ function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
   ctx.fillText(line.trim(), x, lineY);
 }
 
-
 /**
  * ShareCard
  *
@@ -48,14 +47,12 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
   const [ready, setReady]           = useState(false);
   const [sharing, setSharing]       = useState(false);
   const [copied, setCopied]         = useState(false);
-  const [recording, setRecording]     = useState(false);
   const [startTime, setStartTime]     = useState(0);
-  const [duration, setDuration]       = useState(30);
   const [videoFormat, setVideoFormat]   = useState('');
+  const [converting, setConverting]     = useState(false);
   const [bgColor, setBgColor]           = useState('#0d0d0d');
 
   const canvasRef    = useRef(null);
-  const videoRef     = useRef(null);
   const previewRef   = useRef(null); // live preview canvas
   const animFrameRef = useRef(null);
   const recorderRef  = useRef(null);
@@ -72,7 +69,7 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
   // ── Image card ───────────────────────────────────────────────────────────────
   const drawImageCard = useCallback(async () => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!canvas || tab !== 'image') return;
     const ctx = canvas.getContext('2d');
     const W = 1080, H = 1080;
     canvas.width  = W;
@@ -354,6 +351,27 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
     ctx.beginPath(); ctx.arc(W/2 + 220, H - 54, 5, 0, Math.PI*2); ctx.fill();
   }, [title, subtitle, artworkUrl, displayUrl, bgColor]);
 
+  // Render a static preview frame when on video tab
+  useEffect(() => {
+    if (tab !== 'video' || recording) return;
+    const canvas = previewRef.current;
+    if (!canvas) return;
+    canvas.width  = 1080;
+    canvas.height = 1920;
+    const ctx = canvas.getContext('2d');
+    let cancelled = false;
+    (async () => {
+      let artImg = null;
+      if (artworkUrl) { try { artImg = await loadImage(artworkUrl); } catch {} }
+      if (cancelled) return;
+      const vinylImg = await buildVinylImage(artImg, 840);
+      if (cancelled) return;
+      await drawVideoFrame(ctx, artImg, vinylImg, 0, bgColor);
+    })();
+    return () => { cancelled = true; };
+  }, [tab, artworkUrl, recording, buildVinylImage, drawVideoFrame]);
+
+  // ── Record video ─────────────────────────────────────────────────────────────
   const handleDownloadImage = () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -413,7 +431,8 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
         </button>
 
         <div className="p-5 pb-2">
-          <div className="relative rounded-2xl overflow-hidden bg-white/[0.04] aspect-square">
+
+            <div className="relative rounded-2xl overflow-hidden bg-white/[0.04] aspect-square">
               <canvas ref={canvasRef} className="w-full h-full"
                 style={{ opacity: ready ? 1 : 0, transition: 'opacity 0.3s' }} />
               {!ready && (
@@ -422,6 +441,8 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
                 </div>
               )}
             </div>
+
+          {/* (video tab removed) */}
         </div>
 
         {/* Actions */}
@@ -446,7 +467,6 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
               <p className="text-[10px] text-white/20 text-center leading-relaxed">
                 For Instagram Stories: save the card, open Instagram, then paste the link in your story.
               </p>
-            </>
           </>
         </div>
       </div>
