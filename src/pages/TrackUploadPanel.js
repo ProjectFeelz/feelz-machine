@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import {
-  Upload, Trash2, Loader, Plus, Save, Music, Film,
+  Upload, Trash2, Loader, Plus, Save, Music,
   Edit, Search, X, Zap, Disc, AlertCircle, Youtube, HelpCircle,
 } from 'lucide-react';
 import CollaboratorSearch from '../components/CollaboratorSearch';
@@ -156,7 +156,7 @@ function YoutubeField({ value, onChange }) {
     <div>
       <FieldLabel>
         <span className="flex items-center space-x-1.5">
-          <Film className="w-3 h-3 text-purple-400" />
+          <Upload className="w-3 h-3 text-purple-400" />
           <span>Music Video <span className="text-white/20">(optional, MP4 only)</span></span>
         </span>
       </FieldLabel>
@@ -174,7 +174,7 @@ function YoutubeField({ value, onChange }) {
           className="w-full flex items-center space-x-3 px-3 py-3 bg-white/[0.04] rounded-xl border border-dashed border-white/[0.12] hover:bg-white/[0.07] transition text-left">
           {uploading
             ? <Loader className="w-4 h-4 text-purple-400 animate-spin flex-shrink-0" />
-            : <Film className="w-4 h-4 text-white/30 flex-shrink-0" />}
+            : <Upload className="w-4 h-4 text-white/30 flex-shrink-0" />}
           <div>
             <p className="text-xs text-white/50">{uploading ? 'Uploading…' : 'Upload music video'}</p>
             <p className="text-[10px] text-white/20 mt-0.5">MP4 only · Max 300MB · Vertical recommended · Convert before uploading</p>
