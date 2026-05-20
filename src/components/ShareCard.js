@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
-import { Download, Share2, X, Loader, Link, Check, Film, Image } from 'lucide-react';
+import { Download, Share2, X, Loader, Link, Check, Image } from 'lucide-react';
 
 // ── Helper functions — all defined as hoisted function declarations ──────────
 
@@ -31,66 +31,6 @@ function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
   ctx.fillText(line.trim(), x, lineY);
 }
 
-// Load ffmpeg.wasm v0.11 via CDN script tag — avoids bundler issues
-let _ffmpegLoaded = false;
-function loadFFmpegScript() {
-  return new Promise((resolve, reject) => {
-    if (_ffmpegLoaded || window.FFmpeg) { _ffmpegLoaded = true; resolve(); return; }
-    const script = document.createElement('script');
-    script.src = 'https://unpkg.com/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js';
-    script.crossOrigin = 'anonymous';
-    script.onload  = () => { _ffmpegLoaded = true; resolve(); };
-    script.onerror = reject;
-    document.head.appendChild(script);
-  });
-}
-
-function proxyUrl(src) {
-  return '/.netlify/functions/image-proxy?url=' + encodeURIComponent(src);
-}
-
-function loadImage(src) {
-  return new Promise(function(resolve, reject) {
-    // Try direct load first with cache-bust to prevent stale responses
-    var img = new window.Image();
-    img.crossOrigin = 'anonymous';
-    img.onload  = function() { resolve(img); };
-    img.onerror = function() {
-      // Fallback: try via proxy
-      var img2 = new window.Image();
-      img2.crossOrigin = 'anonymous';
-      img2.onload  = function() { resolve(img2); };
-      img2.onerror = reject;
-      img2.src = proxyUrl(src);
-    };
-    // Cache-bust so each unique URL gets a fresh load
-    img.src = src + (src.includes('?') ? '&' : '?') + '_cb=' + Date.now();
-  });
-}
-
-// FM logo cache and loader
-var _fmLogoImg = null;
-function getFMLogo() {
-  return new Promise(function(resolve) {
-    if (_fmLogoImg) { resolve(_fmLogoImg); return; }
-    var img = new window.Image();
-    img.crossOrigin = 'anonymous';
-    img.onload  = function() { _fmLogoImg = img; resolve(img); };
-    img.onerror = function() { resolve(null); };
-    img.src = '/logo.png';
-  });
-}
-
-function drawFMLogo(ctx, x, y, size) {
-  return getFMLogo().then(function(img) {
-    if (!img) return;
-    ctx.save();
-    roundRect(ctx, x, y, size, size, size * 0.22);
-    ctx.clip();
-    ctx.drawImage(img, x, y, size, size);
-    ctx.restore();
-  });
-}
 
 /**
  * ShareCard
@@ -105,18 +45,13 @@ function drawFMLogo(ctx, x, y, size) {
  *   onClose  - close handler
  */
 export default function ShareCard({ track, artist, shareUrl, onClose }) {
-  const [tab, setTab]               = useState('image'); // 'image' | 'video'
   const [ready, setReady]           = useState(false);
   const [sharing, setSharing]       = useState(false);
   const [copied, setCopied]         = useState(false);
   const [recording, setRecording]     = useState(false);
-  const [videoBlob, setVideoBlob]     = useState(null);
-  const [videoProgress, setVideoProgress] = useState(0);
-  const [videoError, setVideoError]   = useState('');
   const [startTime, setStartTime]     = useState(0);
   const [duration, setDuration]       = useState(30);
   const [videoFormat, setVideoFormat]   = useState('');
-  const [converting, setConverting]     = useState(false);
   const [bgColor, setBgColor]           = useState('#0d0d0d');
 
   const canvasRef    = useRef(null);
@@ -137,7 +72,7 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
   // ── Image card ───────────────────────────────────────────────────────────────
   const drawImageCard = useCallback(async () => {
     const canvas = canvasRef.current;
-    if (!canvas || tab !== 'image') return;
+    if (!canvas) return;
     const ctx = canvas.getContext('2d');
     const W = 1080, H = 1080;
     canvas.width  = W;
@@ -218,7 +153,7 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
   }, [tab, title, subtitle, artworkUrl, displayUrl]);
 
   useEffect(() => {
-    if (tab === 'image') { setReady(false); drawImageCard(); }
+    setReady(false); drawImageCard();
     else {
       setReady(true);
       if (audioUrl) {
@@ -427,208 +362,6 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
     ctx.beginPath(); ctx.arc(W/2 + 220, H - 54, 5, 0, Math.PI*2); ctx.fill();
   }, [title, subtitle, artworkUrl, displayUrl, bgColor]);
 
-  // Render a static preview frame when on video tab
-  useEffect(() => {
-    if (tab !== 'video' || recording) return;
-    const canvas = previewRef.current;
-    if (!canvas) return;
-    canvas.width  = 1080;
-    canvas.height = 1920;
-    const ctx = canvas.getContext('2d');
-    let cancelled = false;
-    (async () => {
-      let artImg = null;
-      if (artworkUrl) { try { artImg = await loadImage(artworkUrl); } catch {} }
-      if (cancelled) return;
-      const vinylImg = await buildVinylImage(artImg, 840);
-      if (cancelled) return;
-      await drawVideoFrame(ctx, artImg, vinylImg, 0, bgColor);
-    })();
-    return () => { cancelled = true; };
-  }, [tab, artworkUrl, recording, buildVinylImage, drawVideoFrame]);
-
-  // ── Record video ─────────────────────────────────────────────────────────────
-  const recordVideo = useCallback(async () => {
-    setRecording(true);
-    setVideoBlob(null);
-    setVideoError('');
-    setVideoProgress(0);
-    chunksRef.current = [];
-
-    const canvas = videoRef.current;
-    if (!canvas) { setRecording(false); return; }
-
-    canvas.width  = 1080;
-    canvas.height = 1920;
-    const ctx = canvas.getContext('2d');
-
-    let artImg = null;
-    if (artworkUrl) {
-      try { artImg = await loadImage(artworkUrl); } catch {}
-    }
-
-    // Build the vinyl SVG image once — reused every frame
-    const vinylImg = await buildVinylImage(artImg, 840);
-
-    const DURATION = 30; // seconds
-    const FPS      = 30;
-    // Match VinylRecord.js: one full rotation every 2.4s
-    const radsPerFrame = (2 * Math.PI / 2.4) / FPS;
-
-    // Audio — start from user-selected time offset
-    let audioStream = null;
-    let audioCtx    = null;
-    let sourceNode  = null;
-    if (audioUrl) {
-      try {
-        audioCtx  = new (window.AudioContext || window.webkitAudioContext)();
-        const res = await fetch(audioUrl);
-        const buf = await res.arrayBuffer();
-        const decoded = await audioCtx.decodeAudioData(buf);
-        const dest    = audioCtx.createMediaStreamDestination();
-        sourceNode    = audioCtx.createBufferSource();
-        sourceNode.buffer = decoded;
-        sourceNode.connect(dest);
-        sourceNode.connect(audioCtx.destination);
-        sourceNode.start(0, startTime); // start from selected offset
-        audioStream = dest.stream;
-      } catch (e) {
-        console.warn('Audio capture failed:', e.message);
-      }
-    }
-
-    // Combine canvas + audio into one stream
-    const canvasStream = canvas.captureStream(FPS);
-    const combinedTracks = [...canvasStream.getTracks()];
-    if (audioStream) combinedTracks.push(...audioStream.getTracks());
-    const combined = new MediaStream(combinedTracks);
-
-    // Pick best supported codec
-    // WebM with VP9+Opus — universally supported by Chrome on all platforms
-    const mimeType = [
-      'video/webm;codecs=vp9,opus',
-      'video/webm;codecs=vp8,opus',
-      'video/webm',
-    ].find(t => window.MediaRecorder && window.MediaRecorder.isTypeSupported(t)) || 'video/webm';
-    const fileExt = 'webm';
-
-    const recorder = new window.MediaRecorder(combined, { mimeType, videoBitsPerSecond: 8000000 });
-    recorderRef.current = recorder;
-    setVideoFormat(fileExt.toUpperCase());
-
-    recorder.ondataavailable = e => { if (e.data.size > 0) chunksRef.current.push(e.data); };
-    recorder.onstop = async () => {
-      const webmBlob = new window.Blob(chunksRef.current, { type: mimeType });
-      setRecording(false);
-      setVideoFormat('CONVERTING');
-      setConverting(true);
-
-      if (sourceNode) try { sourceNode.stop(); } catch {}
-      if (audioCtx)   try { audioCtx.close();  } catch {}
-
-      // Convert WebM → MP4 using ffmpeg.wasm v0.11 via CDN script tag
-      try {
-        await loadFFmpegScript();
-        const { createFFmpeg, fetchFile } = window.FFmpeg;
-        const ffmpeg = createFFmpeg({
-          corePath: 'https://unpkg.com/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js',
-          log: false,
-          mainName: 'main',
-        });
-        await ffmpeg.load();
-
-        ffmpeg.FS('writeFile', 'input.webm', await fetchFile(webmBlob));
-
-        await ffmpeg.run(
-          '-i', 'input.webm',
-          '-c:v', 'libx264',
-          '-preset', 'ultrafast',
-          '-crf', '23',
-          '-c:a', 'aac',
-          '-b:a', '128k',
-          '-movflags', '+faststart',
-          '-pix_fmt', 'yuv420p',
-          'output.mp4'
-        );
-
-        const mp4Data = ffmpeg.FS('readFile', 'output.mp4');
-        const mp4Blob = new window.Blob([mp4Data.buffer], { type: 'video/mp4' });
-        mp4Blob._ext  = 'mp4';
-        setVideoBlob(mp4Blob);
-        setVideoFormat('MP4');
-        try { ffmpeg.FS('unlink', 'input.webm'); } catch {}
-        try { ffmpeg.FS('unlink', 'output.mp4'); } catch {}
-      } catch (err) {
-        console.error('FFmpeg.wasm failed, trying server conversion:', err.message);
-        // Fall back to server-side conversion via convert-to-mp4 Netlify function
-        try {
-          const base64 = await new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload  = () => resolve(reader.result.split(',')[1]);
-            reader.onerror = reject;
-            reader.readAsDataURL(webmBlob);
-          });
-          const res = await fetch('/.netlify/functions/convert-to-mp4', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ video: base64, mimeType: mimeType }),
-          });
-          if (!res.ok) throw new Error(`Server conversion failed: ${res.status}`);
-          const { mp4 } = await res.json();
-          const bytes   = Uint8Array.from(atob(mp4), c => c.charCodeAt(0));
-          const mp4Blob = new window.Blob([bytes], { type: 'video/mp4' });
-          mp4Blob._ext  = 'mp4';
-          setVideoBlob(mp4Blob);
-          setVideoFormat('MP4');
-        } catch (serverErr) {
-          console.error('Server conversion also failed:', serverErr.message);
-          // Last resort — save WebM, at least the user gets something
-          webmBlob._ext = 'webm';
-          setVideoBlob(webmBlob);
-          setVideoFormat('WEBM');
-        }
-      }
-
-      setConverting(false);
-      setVideoProgress(100);
-    };
-
-    recorder.start(100);
-
-    // Animate
-    let frame    = 0;
-    let angle    = 0;
-    const totalFrames = DURATION * FPS;
-
-    const FRAME_MS = 1000 / FPS; // 33.33ms per frame for consistent timing
-    const animate = async () => {
-      if (frame >= totalFrames) {
-        recorder.stop();
-        return;
-      }
-      const frameStart = performance.now();
-      await drawVideoFrame(ctx, artImg, vinylImg, angle, bgColor);
-      angle += radsPerFrame;
-      frame++;
-      setVideoProgress(Math.round((frame / totalFrames) * 95));
-      // Use setTimeout for consistent frame rate instead of rAF
-      // rAF runs as fast as the display refresh which causes short videos
-      const elapsed = performance.now() - frameStart;
-      const delay = Math.max(0, FRAME_MS - elapsed);
-      animFrameRef.current = setTimeout(animate, delay);
-    };
-    animate();
-  }, [audioUrl, artworkUrl, drawVideoFrame, startTime]);
-
-  const stopRecording = () => {
-    if (animFrameRef.current) clearTimeout(animFrameRef.current);
-    if (recorderRef.current && recorderRef.current.state !== 'inactive') recorderRef.current.stop();
-    setRecording(false);
-  };
-
-  useEffect(() => () => stopRecording(), []); // cleanup on unmount
-
-  // ── Share / download handlers ─────────────────────────────────────────────────
   const handleDownloadImage = () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -660,42 +393,6 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
     setSharing(false);
   };
 
-  const handleDownloadVideo = () => {
-    if (!videoBlob) return;
-    const url  = URL.createObjectURL(videoBlob);
-    const link = document.createElement('a');
-    const ext = videoBlob._ext || 'webm';
-    link.download = `${title.replace(/[^a-z0-9]/gi, '-').toLowerCase()}-feelzmachine.${ext}`;
-    link.href = url;
-    link.click();
-    setTimeout(() => URL.revokeObjectURL(url), 5000);
-  };
-
-  const handleShareVideo = async () => {
-    if (!videoBlob) return;
-    setSharing(true);
-    try {
-      const ext2 = videoBlob._ext || 'webm';
-      const file = new File([videoBlob], `${title}-feelzmachine.${ext2}`, { type: videoBlob.type });
-      const shareData = {
-        files: [file],
-        title,
-        text: track ? `Listen to ${title} by ${track.artist_name} on Feelz Machine` : `Listen to ${title} on Feelz Machine`,
-        url: shareUrl || window.location.href,
-      };
-      if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        await navigator.share(shareData);
-      } else {
-        // Desktop or unsupported — download instead
-        handleDownloadVideo();
-      }
-    } catch (e) {
-      // User cancelled or share failed — fall back to download
-      if (e.name !== 'AbortError') handleDownloadVideo();
-    }
-    setSharing(false);
-  };
-
   const handleCopyLink = async () => {
     const url = shareUrl || window.location.href;
     try {
@@ -724,25 +421,7 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
         </button>
 
         <div className="p-5 pb-2">
-          {/* Tabs */}
-          <div className="flex bg-white/[0.05] rounded-xl p-1 mb-4">
-            {[
-              { id: 'image', label: 'Image', icon: Image  },
-              { id: 'video', label: 'Story Video', icon: Film },
-            ].map(t => (
-              <button key={t.id} onClick={() => { setTab(t.id); setVideoBlob(null); }}
-                className={`flex-1 flex items-center justify-center space-x-1.5 py-2 rounded-lg text-xs font-semibold transition ${
-                  tab === t.id ? 'bg-white text-black' : 'text-white/40 hover:text-white/60'
-                }`}>
-                <t.icon className="w-3.5 h-3.5" />
-                <span>{t.label}</span>
-              </button>
-            ))}
-          </div>
-
-          {/* Image tab */}
-          {tab === 'image' && (
-            <div className="relative rounded-2xl overflow-hidden bg-white/[0.04] aspect-square">
+          <div className="relative rounded-2xl overflow-hidden bg-white/[0.04] aspect-square">
               <canvas ref={canvasRef} className="w-full h-full"
                 style={{ opacity: ready ? 1 : 0, transition: 'opacity 0.3s' }} />
               {!ready && (
@@ -751,111 +430,11 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
                 </div>
               )}
             </div>
-          )}
-
-          {/* Video tab */}
-          {tab === 'video' && (
-            <div className="space-y-3">
-              {/* Hidden recording canvas */}
-              <canvas ref={videoRef} className="hidden" />
-
-              {/* Preview — shows a static frame of how the video will look */}
-              <div className="rounded-2xl bg-black aspect-[9/16] relative overflow-hidden flex items-center justify-center">
-                <canvas ref={previewRef} className="w-full h-full object-contain" />
-                {(recording || converting) && (
-                  <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/60 space-y-3">
-                    <div className="w-16 h-16 relative">
-                      <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
-                        <circle cx="18" cy="18" r="15.9" fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="2" />
-                        <circle cx="18" cy="18" r="15.9" fill="none" stroke="#8B5CF6" strokeWidth="2"
-                          strokeDasharray={`${converting ? 100 : videoProgress} 100`} strokeLinecap="round"
-                          style={converting ? { animation: 'spin 1s linear infinite' } : {}} />
-                      </svg>
-                      {!converting && <span className="absolute inset-0 flex items-center justify-center text-xs font-bold text-white">{videoProgress}%</span>}
-                    </div>
-                    <p className="text-xs text-white/60">
-                      {converting ? 'Converting to MP4 for Instagram...' : 'Rendering...'}
-                    </p>
-                    {converting && (
-                      <p className="text-[10px] text-white/30 px-8 text-center">
-                        This takes 30–60s. Don't close the app.
-                      </p>
-                    )}
-                  </div>
-                )}
-                {videoBlob && !recording && (
-                  <div className="absolute bottom-4 left-0 right-0 flex flex-col items-center space-y-2">
-                    <div className="px-3 py-1.5 rounded-full bg-green-500/20 border border-green-500/30 flex items-center space-x-1.5">
-                      <Check className="w-3 h-3 text-green-400" />
-                      <span className="text-xs font-semibold text-green-400">Ready to share</span>
-                    </div>
-                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/[0.06] text-white/30">
-                      Save → open Instagram → share as story
-                    </span>
-                  </div>
-                )}
-              </div>
-
-              {/* Background colour picker */}
-              {!recording && (
-                <div className="space-y-2">
-                  <p className="text-[11px] text-white/40">Background</p>
-                  <div className="flex space-x-2">
-                    {[
-                      { color: '#0d0d0d', label: 'Black' },
-                      { color: '#0a0a1a', label: 'Dark Blue' },
-                      { color: '#0d0a14', label: 'Dark Purple' },
-                      { color: '#0a140a', label: 'Dark Green' },
-                      { color: '#14080a', label: 'Dark Red' },
-                      { color: '#1a1008', label: 'Dark Amber' },
-                    ].map(({ color, label }) => (
-                      <button
-                        key={color}
-                        onClick={() => { setBgColor(color); setVideoBlob(null); setVideoProgress(0); }}
-                        title={label}
-                        className="w-8 h-8 rounded-lg border-2 transition"
-                        style={{
-                          backgroundColor: color,
-                          borderColor: bgColor === color ? '#8CAB2E' : 'rgba(255,255,255,0.1)',
-                        }}
-                      />
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Start time picker */}
-              {audioUrl && !recording && (
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <p className="text-[11px] text-white/40">Start from</p>
-                    <p className="text-[11px] text-white/60 font-medium">
-                      {Math.floor(startTime / 60)}:{String(startTime % 60).padStart(2, '0')}
-                    </p>
-                  </div>
-                  <input
-                    type="range"
-                    min={0}
-                    max={Math.max(0, duration - 30)}
-                    value={startTime}
-                    onChange={e => { setStartTime(Number(e.target.value)); setVideoBlob(null); }}
-                    className="w-full accent-purple-500"
-                  />
-                  <p className="text-[10px] text-white/20">Drag to choose which 30 seconds to use</p>
-                </div>
-              )}
-
-              {!audioUrl && (
-                <p className="text-[10px] text-amber-400/60 text-center">No audio — video will be visual only</p>
-              )}
-            </div>
-          )}
         </div>
 
         {/* Actions */}
         <div className="px-5 pb-7 pt-3 space-y-3">
-          {tab === 'image' ? (
-            <>
+          <>
               <div className="flex space-x-3">
                 <button onClick={handleDownloadImage} disabled={!ready}
                   className="flex-1 flex items-center justify-center space-x-2 py-3 rounded-2xl bg-white/[0.06] hover:bg-white/[0.1] transition disabled:opacity-30 text-sm font-semibold text-white">
@@ -876,44 +455,7 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
                 For Instagram Stories: save the card, open Instagram, then paste the link in your story.
               </p>
             </>
-          ) : (
-            <>
-              {!videoBlob && !recording && !converting && (
-                <button onClick={recordVideo}
-                  className="w-full flex items-center justify-center space-x-2 py-3 rounded-2xl bg-purple-600 hover:bg-purple-500 transition text-sm font-semibold text-white">
-                  <Film className="w-4 h-4" /><span>Generate Story Video</span>
-                </button>
-              )}
-              {recording && (
-                <button onClick={stopRecording}
-                  className="w-full flex items-center justify-center space-x-2 py-3 rounded-2xl bg-red-500/20 border border-red-500/30 transition text-sm font-semibold text-red-400">
-                  <span>Cancel</span>
-                </button>
-              )}
-              {videoBlob && !recording && !converting && (
-                <div className={videoFormat === 'MP4' ? 'flex space-x-3' : ''}>
-                  <button onClick={handleDownloadVideo}
-                    className={`flex items-center justify-center space-x-2 py-3 rounded-2xl bg-white/[0.06] hover:bg-white/[0.1] transition text-sm font-semibold text-white ${videoFormat === 'MP4' ? 'flex-1' : 'w-full'}`}>
-                    <Download className="w-4 h-4" />
-                    <span>{videoFormat === 'MP4' ? 'Save' : 'Save to device'}</span>
-                  </button>
-                  {videoFormat === 'MP4' && (
-                    <button onClick={handleShareVideo} disabled={sharing}
-                      className="flex-1 flex items-center justify-center space-x-2 py-3 rounded-2xl bg-purple-600 hover:bg-purple-500 transition disabled:opacity-30 text-sm font-semibold text-white">
-                      {sharing ? <Loader className="w-4 h-4 animate-spin" /> : <><Share2 className="w-4 h-4" /><span>Share</span></>}
-                    </button>
-                  )}
-                </div>
-              )}
-              {videoBlob && (
-                <button onClick={() => { setVideoBlob(null); setVideoProgress(0); }}
-                  className="w-full text-center text-xs text-white/20 hover:text-white/40 py-1 transition">
-                  Regenerate
-                </button>
-              )}
-              {videoError && <p className="text-xs text-red-400 text-center">{videoError}</p>}
-            </>
-          )}
+          </>
         </div>
       </div>
     </div>
