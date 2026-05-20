@@ -218,9 +218,9 @@ export default function DesktopSidebar() {
         {!user && (
           <button
             onClick={() => navigate('/login')}
-            className="w-full px-3 py-2.5 rounded-xl text-xs text-white/50 hover:text-white/80 transition-all"
-            style={{ border: '1px solid rgba(255,255,255,0.08)' }}>
-            Sign in to continue
+            className="w-full px-4 py-3 rounded-xl text-sm font-bold text-black transition hover:opacity-90 active:scale-[0.98]"
+            style={{ background: 'white' }}>
+            Sign in
           </button>
         )}
       </div>

@@ -1070,6 +1070,26 @@ export default function ForYouPage() {
       <div className="absolute top-0 inset-x-0 h-20 pointer-events-none z-30"
         style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,0.5), transparent)' }} />
 
+      {/* Sign-in nudge for unauthenticated users */}
+      {!user && (
+        <div className="absolute bottom-20 inset-x-0 z-40 flex justify-center px-6 pointer-events-none">
+          <div className="w-full max-w-sm rounded-2xl overflow-hidden pointer-events-auto"
+            style={{ background: 'rgba(10,10,10,0.85)', backdropFilter: 'blur(20px)', border: '1px solid rgba(255,255,255,0.1)' }}>
+            <div className="px-5 py-4 flex items-center space-x-4">
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-bold text-white">Join Feelz Machine</p>
+                <p className="text-[11px] text-white/40 mt-0.5">Follow artists, like tracks & more</p>
+              </div>
+              <button onClick={() => navigate('/login')}
+                className="flex-shrink-0 px-4 py-2 rounded-xl text-sm font-bold text-black transition active:scale-95"
+                style={{ background: 'white' }}>
+                Sign in
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {loadingMore && (
         <div className="absolute bottom-24 left-1/2 -translate-x-1/2 z-30">
           <Loader className="w-4 h-4 animate-spin text-white/30" />
