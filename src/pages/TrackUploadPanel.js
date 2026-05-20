@@ -130,63 +130,82 @@ function FSelect({ children, className = '', ...props }) {
 
 function YoutubeField({ value, onChange }) {
   const [uploading, setUploading] = React.useState(false);
-  const [error, setError]         = React.useState('');
-  const fileRef                   = React.useRef(null);
-  const hasVideo                  = !!(value && value.includes('supabase'));
+  const [uploadError, setUploadError] = React.useState('');
+  const fileRef = React.useRef(null);
+  const hasUploadedVideo = !!(value && value.includes('supabase') && !value.includes('youtube'));
 
   const handleVideoFile = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    if (file.type !== 'video/mp4') { setError('MP4 only. Please convert your video first.'); return; }
-    if (file.size > 300 * 1024 * 1024) { setError('Max size is 300MB'); return; }
-    setUploading(true); setError('');
+    if (file.type !== 'video/mp4') { setUploadError('MP4 only. Convert your video first.'); return; }
+    if (file.size > 300 * 1024 * 1024) { setUploadError('Max 300MB'); return; }
+    setUploading(true); setUploadError('');
     try {
-      const path = `${Date.now()}-${Math.random().toString(36).slice(2)}.mp4`;
-      const { error: upErr } = await supabase.storage
-        .from('track-videos')
-        .upload(path, file, { contentType: 'video/mp4', upsert: false });
+      const path = Date.now() + '-' + Math.random().toString(36).slice(2) + '.mp4';
+      const { error: upErr } = await supabase.storage.from('track-videos').upload(path, file, { contentType: 'video/mp4' });
       if (upErr) throw upErr;
       const { data: { publicUrl } } = supabase.storage.from('track-videos').getPublicUrl(path);
       onChange(publicUrl);
-    } catch (err) { setError(err.message || 'Upload failed'); }
+    } catch (err) { setUploadError(err.message || 'Upload failed'); }
     setUploading(false);
   };
 
   return (
-    <div>
-      <FieldLabel>
-        <span className="flex items-center space-x-1.5">
-          <Upload className="w-3 h-3 text-purple-400" />
-          <span>Music Video <span className="text-white/20">(optional, MP4 only)</span></span>
-        </span>
-      </FieldLabel>
-      {hasVideo ? (
-        <div className="flex items-center space-x-3 p-3 bg-white/[0.04] rounded-xl border border-white/[0.08]">
-          <video src={value} className="w-16 h-10 object-cover rounded-lg bg-black" muted />
-          <div className="flex-1 min-w-0">
-            <p className="text-xs text-white/70">Video uploaded ✓</p>
-            <p className="text-[10px] text-white/30">Shows in For You feed</p>
+    <div className="space-y-3">
+      {/* Original YouTube field — greyed out, still works */}
+      <div className="opacity-50">
+        <FieldLabel>
+          <span className="flex items-center space-x-1.5">
+            <Youtube className="w-3 h-3 text-red-400" />
+            <span>YouTube Video URL <span className="text-white/20">(optional, limited support)</span></span>
+          </span>
+        </FieldLabel>
+        <FInput
+          type="url"
+          value={(!hasUploadedVideo && value) ? value : ''}
+          onChange={e => onChange(e.target.value)}
+          placeholder="https://youtube.com/watch?v=..."
+        />
+        <p className="text-[10px] text-white/20 mt-1">
+          Note: some YouTube videos block embedding. Use direct upload below for reliable playback.
+        </p>
+      </div>
+
+      {/* Direct MP4 upload */}
+      <div>
+        <FieldLabel>
+          <span className="flex items-center space-x-1.5">
+            <Upload className="w-3 h-3 text-purple-400" />
+            <span>Direct Video Upload <span className="text-white/20">(MP4 only, recommended)</span></span>
+          </span>
+        </FieldLabel>
+        {hasUploadedVideo ? (
+          <div className="flex items-center space-x-3 p-3 bg-white/[0.04] rounded-xl border border-white/[0.08]">
+            <video src={value} className="w-16 h-10 object-cover rounded-lg bg-black" muted />
+            <div className="flex-1 min-w-0">
+              <p className="text-xs text-white/70">Video uploaded ✓</p>
+              <p className="text-[10px] text-white/30">Shows in For You feed</p>
+            </div>
+            <button type="button" onClick={() => onChange('')} className="text-white/30 hover:text-white/60 text-xs transition">Remove</button>
           </div>
-          <button onClick={() => onChange('')} className="text-white/30 hover:text-white/60 text-xs transition">Remove</button>
-        </div>
-      ) : (
-        <button type="button" onClick={() => !uploading && fileRef.current?.click()}
-          className="w-full flex items-center space-x-3 px-3 py-3 bg-white/[0.04] rounded-xl border border-dashed border-white/[0.12] hover:bg-white/[0.07] transition text-left">
-          {uploading
-            ? <Loader className="w-4 h-4 text-purple-400 animate-spin flex-shrink-0" />
-            : <Upload className="w-4 h-4 text-white/30 flex-shrink-0" />}
-          <div>
-            <p className="text-xs text-white/50">{uploading ? 'Uploading…' : 'Upload music video'}</p>
-            <p className="text-[10px] text-white/20 mt-0.5">MP4 only · Max 300MB · Vertical recommended · Convert before uploading</p>
-          </div>
-        </button>
-      )}
-      <input ref={fileRef} type="file" accept="video/mp4" onChange={handleVideoFile} className="hidden" />
-      {error && <p className="text-[10px] text-red-400 mt-1">{error}</p>}
+        ) : (
+          <button type="button" onClick={() => !uploading && fileRef.current?.click()}
+            className="w-full flex items-center space-x-3 px-3 py-3 bg-white/[0.04] rounded-xl border border-dashed border-white/[0.12] hover:bg-white/[0.07] transition text-left">
+            {uploading
+              ? <Loader className="w-4 h-4 text-purple-400 animate-spin flex-shrink-0" />
+              : <Upload className="w-4 h-4 text-white/30 flex-shrink-0" />}
+            <div>
+              <p className="text-xs text-white/50">{uploading ? 'Uploading…' : 'Upload music video'}</p>
+              <p className="text-[10px] text-white/20 mt-0.5">MP4 · Max 300MB · Vertical recommended · Plays in For You feed</p>
+            </div>
+          </button>
+        )}
+        <input ref={fileRef} type="file" accept="video/mp4" onChange={handleVideoFile} className="hidden" />
+        {uploadError && <p className="text-[10px] text-red-400 mt-1">{uploadError}</p>}
+      </div>
     </div>
   );
 }
-
 
 // ─── Versions editor ──────────────────────────────────────────────────────────
 
