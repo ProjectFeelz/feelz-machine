@@ -176,6 +176,67 @@ function PlaylistSheet({ track, user, onClose, navigate }) {
   );
 }
 
+
+// ── Story feed card ───────────────────────────────────────────────────────────
+function StoryFeedCard({ item, isActive, onOpen, navigate }) {
+  const { artist, stories } = item;
+  const first = stories[0];
+  const thumb = first?.media_url;
+
+  return (
+    <div className="relative w-full h-full flex items-center justify-center select-none"
+      onClick={onOpen}>
+      <div className="absolute inset-0 overflow-hidden">
+        {thumb && first?.media_type === 'image' && (
+          <img src={thumb} alt="" className="w-full h-full object-cover"
+            style={{ filter: 'blur(30px) brightness(0.3)', transform: 'scale(1.15)' }} />
+        )}
+        <div className="absolute inset-0 bg-black/50" />
+      </div>
+      <div className="absolute top-16 left-4 z-20">
+        <span className="text-[10px] font-black uppercase tracking-widest px-2.5 py-1 rounded-full"
+          style={{ background: 'linear-gradient(135deg,#a855f7,#ec4899)', color: '#fff' }}>
+          STORY
+        </span>
+      </div>
+      <div className="relative z-10 flex flex-col items-center space-y-4 px-8">
+        <div className="w-24 h-24 rounded-full p-0.5 bg-gradient-to-tr from-purple-500 to-pink-400">
+          <div className="w-full h-full rounded-full overflow-hidden bg-black border-2 border-black">
+            {artist.profile_image_url
+              ? <img src={artist.profile_image_url} alt={artist.artist_name} className="w-full h-full object-cover" />
+              : <div className="w-full h-full bg-purple-500/30 flex items-center justify-center text-2xl font-bold text-white">{artist.artist_name?.[0]}</div>}
+          </div>
+        </div>
+        <div className="flex flex-col items-center space-y-1">
+          <p className="text-base font-bold text-white">{artist.artist_name}</p>
+          <span className="text-xs text-white/50">{stories.length} new {stories.length === 1 ? 'story' : 'stories'}</span>
+        </div>
+        {stories.length > 1 && (
+          <div className="flex space-x-2">
+            {stories.slice(0, 3).map(s => (
+              <div key={s.id} className="w-16 h-16 rounded-xl overflow-hidden bg-white/10 border border-white/20">
+                {s.media_type === 'image'
+                  ? <img src={s.media_url} alt="" className="w-full h-full object-cover" />
+                  : <div className="w-full h-full flex items-center justify-center text-2xl">{s.media_type === 'audio' ? '🎵' : '▶️'}</div>}
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="px-6 py-3 rounded-2xl text-sm font-bold text-white"
+          style={{ background: 'linear-gradient(135deg,rgba(139,92,246,0.4),rgba(236,72,153,0.3))', border: '1px solid rgba(167,139,250,0.4)' }}>
+          Tap to view
+        </div>
+      </div>
+      <div className="absolute bottom-8 left-4 right-4 z-20 text-center">
+        <button onClick={e => { e.stopPropagation(); navigate('/artist/' + artist.slug); }}
+          className="text-xs text-white/40 hover:text-white/70 transition">
+          @{artist.slug}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ── Single card ───────────────────────────────────────────────────────────────
 function ForYouCard({ track, isActive, user, navigate }) {
   const { currentTrack, isPlaying, playTrack, togglePlay } = usePlayer();
