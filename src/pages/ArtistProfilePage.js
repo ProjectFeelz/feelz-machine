@@ -2022,16 +2022,16 @@ export default function ArtistProfilePage() {
               {createTab === 'menu' && (
                 <>
                   {[
-                    { id: 'story',   icon: '📸', label: 'Add Story',          sub: 'Share a 24hr clip with fans',           color: 'purple' },
-                    { id: 'thought', icon: '💭', label: 'Thought of the Day',  sub: "Share what's on your mind",            color: 'blue' },
-                    { id: 'memo',    icon: '🎙️', label: 'Voice Memo',          sub: 'Record a message for your fans',        color: 'pink' },
-                    { id: 'dm',      icon: '📣', label: 'Message Fans',        sub: 'Send a notification to all followers',  color: 'green' },
-                    { id: 'live',    icon: '🔴', label: 'Go Live',             sub: 'Start a live session',                  color: 'red' },
                     { id: 'upload',  icon: '🎵', label: 'Upload Track',        sub: 'Add new music to your profile',         color: 'yellow' },
+                    { id: 'story',   icon: '📸', label: 'Add Story',           sub: 'Share a 24hr clip with fans',           color: 'purple' },
+                    { id: 'thought', icon: '💭', label: 'Thought of the Day',  sub: "Share what's on your mind",            color: 'blue' },
                     { id: 'edit',    icon: '✏️', label: 'Edit Profile',        sub: 'Update your bio, photo and links',      color: 'gray' },
                     isPremium
                       ? { id: 'merch',        icon: '🛍️', label: 'Merch Store',    sub: 'Connect Printful · sell to your fans', color: 'purple' }
                       : { id: 'merch_locked', icon: '🛍️', label: 'Merch Store',    sub: 'Premium only — upgrade to unlock',     color: 'gray'   },
+                    { id: 'dm',      icon: '📣', label: 'Message Fans',        sub: 'Send a notification to all followers',  color: 'green' },
+                    { id: 'memo',    icon: '🎙️', label: 'Voice Memo',          sub: 'Record a message for your fans',        color: 'pink' },
+                    { id: 'live',    icon: '🔴', label: 'Go Live',             sub: 'Start a live session',                  color: 'red' },
                   ].map(({ id, icon, label, sub, color }) => (
                     <button key={id}
                       onClick={() => {
