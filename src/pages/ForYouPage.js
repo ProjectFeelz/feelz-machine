@@ -311,7 +311,7 @@ function StoryFeedCard({ item, isActive, onOpen, navigate }) {
 
 // ── Single card ───────────────────────────────────────────────────────────────
 function ForYouCard({ track, isActive, user, navigate }) {
-  const { currentTrack, isPlaying, currentTime } = usePlayer();
+  const { currentTrack, isPlaying, currentTime, setIsMinimized } = usePlayer();
   const hasVideo  = !!track.youtube_url;
   const isThisOne = currentTrack?.id === track.id;
   const playing   = isThisOne && isPlaying;
@@ -375,10 +375,14 @@ function ForYouCard({ track, isActive, user, navigate }) {
     }
   }, [isActive]); // eslint-disable-line
 
+  const goToArtist = () => {
+    setIsMinimized(true);
+    navigate(`/artist/${track.artist_slug}`);
+  };
+
   const handleTap = () => {
     if (sheet) { setSheet(null); return; }
-    // Tap goes to artist profile — feed is a discovery funnel
-    if (!sheet) navigate(`/artist/${track.artist_slug}`);
+    goToArtist();
   };
 
   const vinylSize = Math.min(window.innerWidth - 120, window.innerHeight * 0.42);
@@ -435,7 +439,7 @@ function ForYouCard({ track, isActive, user, navigate }) {
 
         {/* Artist avatar */}
         <div className="flex flex-col items-center space-y-1">
-          <button onClick={() => navigate(`/artist/${track.artist_slug}`)}
+          <button onClick={goToArtist}
             className="w-11 h-11 rounded-full overflow-hidden border-2 border-white/30">
             {track.artist_image
               ? <img src={track.artist_image} alt="" className="w-full h-full object-cover" />
@@ -490,7 +494,7 @@ function ForYouCard({ track, isActive, user, navigate }) {
 
       {/* Bottom info */}
       <div className="absolute bottom-8 left-4 right-16 z-20" onClick={e => e.stopPropagation()}>
-        <button onClick={() => navigate(`/artist/${track.artist_slug}`)}
+        <button onClick={goToArtist}
           className="text-[13px] font-bold text-white/60 mb-1 text-left hover:text-white transition block">
           @{track.artist_slug || track.artist_name}
         </button>
@@ -558,7 +562,7 @@ function ForYouCard({ track, isActive, user, navigate }) {
 export default function ForYouPage() {
   const { user }    = useAuth();
   const navigate    = useNavigate();
-  const { playTrack } = usePlayer();
+  const { playTrack, setIsMinimized } = usePlayer();
 
 
   const [tracks, setTracks]           = useState([]);
@@ -695,6 +699,7 @@ export default function ForYouPage() {
     lastPlayedIdx.current = idx;
     if (item.file_url && !item.youtube_url) {
       playTrack(item, [item]);
+      setIsMinimized(true); // keep player hidden while on feed
     }
   }, [idx, tracks]); // eslint-disable-line
 
