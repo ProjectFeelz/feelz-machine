@@ -127,10 +127,10 @@
   force = true
 
 # ── @username short URLs ──────────────────────────────────────────────────────
-# feelzmachine.com/@og-sfm → renders /artist/og-sfm
+# feelzmachine.com/@og-sfm → loads SPA, React Router handles /@:slug route
 [[redirects]]
   from = "/@:slug"
-  to = "/artist/:slug"
+  to = "/index.html"
   status = 200
 
 [[redirects]]
