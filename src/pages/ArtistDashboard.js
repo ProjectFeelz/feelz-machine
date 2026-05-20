@@ -219,6 +219,68 @@ export default function ArtistDashboard() {
     <div className="min-h-screen bg-black text-white">
       <div className="max-w-4xl mx-auto px-6 py-8 pb-32">
 
+        {/* ── Header ── */}
+        <div className="flex items-center space-x-3 mb-6">
+          <button
+            onClick={() => navigate('/')}
+            className="w-9 h-9 flex items-center justify-center rounded-full bg-white/[0.06] hover:bg-white/[0.1] transition"
+          >
+            <ChevronLeft className="w-5 h-5 text-white" />
+          </button>
+          <div className="flex-1">
+            <div className="flex items-center space-x-2">
+              <h1 className="text-xl font-bold text-white">Dashboard</h1>
+              <TierBadge size="xs" />
+            </div>
+            <p className="text-xs text-white/40">
+              {artist.artist_name} {isMaster ? '(Master)' : ''}
+            </p>
+          </div>
+        </div>
+
+        {/* ── Tab Bar ── */}
+        <div className="flex space-x-1 bg-white/[0.03] rounded-lg p-1 mb-6">
+          {tabs.map(({ key, label, icon: Icon, hasBadge, hasDot }) => (
+            <button
+              key={key}
+              onClick={() => setActiveTab(key)}
+              className={`flex-1 flex items-center justify-center space-x-2 py-2.5 rounded-md text-sm font-medium transition relative ${
+                activeTab === key ? 'bg-white text-black' : 'text-white/50 hover:text-white/70'
+              }`}
+            >
+              <div className="relative">
+                <Icon className="w-4 h-4" />
+                {hasBadge && activeTab !== key && <CollabBadge />}
+                {hasDot && activeTab !== key && (
+                  <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-pink-500" />
+                )}
+              </div>
+              <span>{label}</span>
+            </button>
+          ))}
+        </div>
+
+        {/* ── Upload Tab ── */}
+        {activeTab === 'upload' && (
+          <UploadGate>
+            <TrackUploadPanel />
+          </UploadGate>
+        )}
+
+        {/* ── Collabs Tab ── */}
+        {activeTab === 'collabs' && <CollabRequests />}
+
+        {/* ── Voice Memos Tab ── */}
+        {activeTab === 'memos' && (
+          <MemoTabPanel
+            artist={artist}
+            memos={memos}
+            fetchMemos={fetchMemos}
+            deleteMemo={deleteMemo}
+          />
+        )}
+
+
         {/* ── Analytics Tab ── */}
         {activeTab === 'analytics' && (
           <TierGate feature="analytics">
