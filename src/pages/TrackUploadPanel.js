@@ -132,7 +132,7 @@ function YoutubeField({ value, onChange }) {
   const [uploading, setUploading] = React.useState(false);
   const [uploadError, setUploadError] = React.useState('');
   const fileRef = React.useRef(null);
-  const hasUploadedVideo = !!(value && value.includes('supabase') && !value.includes('youtube'));
+  const isUploaded = !!(value && value.includes('supabase') && !value.includes('youtube'));
 
   const handleVideoFile = async (e) => {
     const file = e.target.files[0];
@@ -152,34 +152,28 @@ function YoutubeField({ value, onChange }) {
 
   return (
     <div className="space-y-3">
-      {/* Original YouTube field — greyed out, still works */}
       <div className="opacity-50">
         <FieldLabel>
           <span className="flex items-center space-x-1.5">
             <Youtube className="w-3 h-3 text-red-400" />
-            <span>YouTube Video URL <span className="text-white/20">(optional, limited support)</span></span>
+            <span>YouTube Video URL <span className="text-white/20">(limited — some videos block embedding)</span></span>
           </span>
         </FieldLabel>
         <FInput
           type="url"
-          value={(!hasUploadedVideo && value) ? value : ''}
+          value={isUploaded ? '' : (value || '')}
           onChange={e => onChange(e.target.value)}
           placeholder="https://youtube.com/watch?v=..."
         />
-        <p className="text-[10px] text-white/20 mt-1">
-          Note: some YouTube videos block embedding. Use direct upload below for reliable playback.
-        </p>
       </div>
-
-      {/* Direct MP4 upload */}
       <div>
         <FieldLabel>
           <span className="flex items-center space-x-1.5">
             <Upload className="w-3 h-3 text-purple-400" />
-            <span>Direct Video Upload <span className="text-white/20">(MP4 only, recommended)</span></span>
+            <span>Direct Video Upload <span className="text-white/20">(MP4 · recommended · plays in For You feed)</span></span>
           </span>
         </FieldLabel>
-        {hasUploadedVideo ? (
+        {isUploaded ? (
           <div className="flex items-center space-x-3 p-3 bg-white/[0.04] rounded-xl border border-white/[0.08]">
             <video src={value} className="w-16 h-10 object-cover rounded-lg bg-black" muted />
             <div className="flex-1 min-w-0">
@@ -196,7 +190,7 @@ function YoutubeField({ value, onChange }) {
               : <Upload className="w-4 h-4 text-white/30 flex-shrink-0" />}
             <div>
               <p className="text-xs text-white/50">{uploading ? 'Uploading…' : 'Upload music video'}</p>
-              <p className="text-[10px] text-white/20 mt-0.5">MP4 · Max 300MB · Vertical recommended · Plays in For You feed</p>
+              <p className="text-[10px] text-white/20 mt-0.5">MP4 only · Max 300MB · Vertical recommended</p>
             </div>
           </button>
         )}
