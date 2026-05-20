@@ -234,10 +234,10 @@ export default function CompetitionsPage() {
     if (!data) { setLbLoading(false); return; }
     // Fetch display names
     const ids = data.map(r => r.user_id);
-    const { data: profiles } = await supabase
-      .from('artists')
-      .select('user_id, name, cover_artwork_url, slug')
-      .in('user_id', ids);
+    const profiles_res = ids.length > 0
+      ? await supabase.from('artists').select('user_id, artist_name, cover_artwork_url, slug').in('user_id', ids)
+      : { data: [] };
+    const { data: profiles } = profiles_res;
     const profileMap = Object.fromEntries((profiles || []).map(p => [p.user_id, p]));
     setLeaderboard(data.map((r, i) => ({ ...r, rank: i + 1, artist: profileMap[r.user_id] || null })));
     setLbLoading(false);
@@ -624,7 +624,7 @@ export default function CompetitionsPage() {
                     {/* Name + rank */}
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-semibold text-white truncate">
-                        {entry.artist?.name || 'Unknown Artist'}
+                        {entry.artist?.artist_name || 'Unknown Artist'}
                       </p>
                       <p className="text-[10px] font-bold" style={{ color: rankColor }}>{rankLabel}</p>
                     </div>
