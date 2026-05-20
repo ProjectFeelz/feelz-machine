@@ -21,7 +21,7 @@ import VinylRecord from '../components/VinylRecord';
 import { ArtistStoryView } from '../components/ArtistStories';
 import {
   Heart, MessageCircle, ListMusic, UserCheck,
-  Share2, Play, Pause, Loader, X, Send, ChevronUp,
+  Share2, Loader, X, Send, ChevronUp,
   Sparkles, Volume2, VolumeX,
 } from 'lucide-react';
 
@@ -239,7 +239,7 @@ function StoryFeedCard({ item, isActive, onOpen, navigate }) {
 
 // ── Single card ───────────────────────────────────────────────────────────────
 function ForYouCard({ track, isActive, user, navigate }) {
-  const { currentTrack, isPlaying, playTrack, togglePlay } = usePlayer();
+  const { currentTrack, isPlaying } = usePlayer();
   const hasVideo  = !!track.youtube_url;
   const isThisOne = currentTrack?.id === track.id;
   const playing   = isThisOne && isPlaying;
@@ -266,13 +266,6 @@ function ForYouCard({ track, isActive, user, navigate }) {
     supabase.from('track_comments').select('*', { count: 'exact', head: true }).eq('track_id', track.id)
       .then(({ count }) => setCommentCount(count || 0));
   }, [track.id, user?.id, track.artist_id]);
-
-  useEffect(() => {
-    if (isActive && !hasVideo) {
-      if (!isThisOne) playTrack(track, [track]);
-      else if (!isPlaying) togglePlay();
-    }
-  }, [isActive]); // eslint-disable-line
 
   const handleLike = async () => {
     if (!user) { navigate('/login'); return; }
@@ -305,9 +298,6 @@ function ForYouCard({ track, isActive, user, navigate }) {
 
   const handleTap = () => {
     if (sheet) { setSheet(null); return; }
-    if (hasVideo) return;
-    if (!isThisOne) { playTrack(track, [track]); return; }
-    togglePlay();
   };
 
   const vinylSize = Math.min(window.innerWidth - 120, window.innerHeight * 0.42);
@@ -349,14 +339,7 @@ function ForYouCard({ track, isActive, user, navigate }) {
       {!hasVideo && (
         <div className="relative z-10 flex items-center justify-center">
           <VinylRecord coverUrl={track.cover_artwork_url} isPlaying={playing} size={vinylSize} />
-          {!playing && (
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-              <div className="w-16 h-16 rounded-full bg-black/50 backdrop-blur flex items-center justify-center"
-                style={{ animation: 'fadeOutHint 1.5s ease forwards' }}>
-                <Play className="w-7 h-7 text-white ml-1" />
-              </div>
-            </div>
-          )}
+
         </div>
       )}
 
@@ -485,7 +468,7 @@ function ForYouCard({ track, isActive, user, navigate }) {
 export default function ForYouPage() {
   const { user }    = useAuth();
   const navigate    = useNavigate();
-  const { togglePlay } = usePlayer();
+
 
   const [tracks, setTracks]           = useState([]);
   const [idx, setIdx]                 = useState(0);
@@ -666,11 +649,10 @@ export default function ForYouPage() {
     const onKey = (e) => {
       if (e.key === 'ArrowUp')   goTo(idx - 1);
       if (e.key === 'ArrowDown') goTo(idx + 1);
-      if (e.key === ' ')         togglePlay();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [idx, goTo, togglePlay]);
+  }, [idx, goTo]);
 
   const visibleRange = useMemo(() => {
     const start = Math.max(0, idx - 1);
