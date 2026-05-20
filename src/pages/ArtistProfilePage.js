@@ -1121,7 +1121,7 @@ export default function ArtistProfilePage() {
   const bodyFont       = theme?.body_font || 'Inter';
   const visibleTracks  = showAllTracks ? tracks : tracks.slice(0, 10);
   const isProfileOwner = user && myArtist && myArtist.id === artist.id;
-  const pageUrl        = `${BASE_URL}/@${slug}`;
+  const pageUrl        = `${BASE_URL}/artist/${slug}`;
   const ogImage        = artist.profile_image_url || `${BASE_URL}/og-default.png`;
   const pageTitle      = `${artist.artist_name} · Feelz Machine`;
   const pageDesc       = artist.bio

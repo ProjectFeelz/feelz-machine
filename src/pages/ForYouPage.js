@@ -214,7 +214,7 @@ function LyricsCaption({ lyrics, currentTime, isActive }) {
     const nextLine   = activeIdx >= 0 && activeIdx + 1 < lrcLines.length ? lrcLines[activeIdx + 1] : null;
     if (!activeLine?.text && !nextLine?.text) return null;
     return (
-      <div className="absolute bottom-28 left-4 right-20 z-20 pointer-events-none">
+      <div className="absolute bottom-52 left-4 right-20 z-20 pointer-events-none text-center">
         {activeLine?.text && (
           <p key={activeIdx} className="text-center text-white text-base font-bold leading-snug mb-1 drop-shadow-lg"
             style={{ textShadow: '0 2px 8px rgba(0,0,0,0.9), 0 0 20px rgba(0,0,0,0.7)', animation: 'lyricFade 0.3s ease' }}>
@@ -245,6 +245,105 @@ function LyricsCaption({ lyrics, currentTime, isActive }) {
         style={{ textShadow: '0 2px 8px rgba(0,0,0,0.9), 0 0 20px rgba(0,0,0,0.7)', animation: 'lyricFade 0.3s ease' }}>
         {line}
       </p>
+    </div>
+  );
+}
+
+
+// ── Floating hearts + listener bubbles ───────────────────────────────────────
+const HEART_COLORS = ['#ef4444','#f472b6','#fb923c','#a78bfa','#f43f5e'];
+
+function FloatingHearts({ trackId }) {
+  const [hearts, setHearts] = React.useState([]);
+  const [bubbles, setBubbles] = React.useState([]);
+  const timerRef = React.useRef(null);
+
+  // Poll for recent likes on this track every 8 seconds
+  React.useEffect(() => {
+    if (!trackId) return;
+    const poll = async () => {
+      try {
+        const since = new Date(Date.now() - 15000).toISOString(); // last 15s
+        const { data } = await supabase
+          .from('track_likes')
+          .select('id, user_id, created_at, user_profiles(name, avatar_url), artists(artist_name, profile_image_url)')
+          .eq('track_id', trackId)
+          .gte('created_at', since)
+          .limit(5);
+
+        if (data?.length) {
+          // Spawn hearts
+          const newHearts = data.map((_, i) => ({
+            id: Date.now() + i,
+            x: 15 + Math.random() * 60,
+            color: HEART_COLORS[Math.floor(Math.random() * HEART_COLORS.length)],
+            size: 16 + Math.random() * 14,
+            delay: i * 150,
+          }));
+          setHearts(prev => [...prev, ...newHearts]);
+          setTimeout(() => setHearts(prev => prev.filter(h => !newHearts.find(n => n.id === h.id))), 3000);
+
+          // Spawn listener bubble for the most recent liker
+          const liker = data[0];
+          const name = liker.artists?.artist_name || liker.user_profiles?.name || '';
+          const avatar = liker.artists?.profile_image_url || liker.user_profiles?.avatar_url || null;
+          if (name) {
+            const bubble = { id: Date.now(), name, avatar };
+            setBubbles(prev => [...prev, bubble]);
+            setTimeout(() => setBubbles(prev => prev.filter(b => b.id !== bubble.id)), 3500);
+          }
+        }
+      } catch {}
+    };
+
+    poll();
+    timerRef.current = setInterval(poll, 8000);
+    return () => clearInterval(timerRef.current);
+  }, [trackId]);
+
+  if (!hearts.length && !bubbles.length) return null;
+
+  return (
+    <div className="absolute inset-0 pointer-events-none z-25 overflow-hidden">
+      {/* Floating hearts */}
+      {hearts.map(h => (
+        <div key={h.id} className="absolute bottom-32"
+          style={{
+            left: `${h.x}%`,
+            animation: `floatHeart 2.5s ease-out ${h.delay}ms forwards`,
+            fontSize: h.size,
+          }}>
+          <span style={{ color: h.color, filter: 'drop-shadow(0 0 4px rgba(239,68,68,0.5))' }}>❤️</span>
+        </div>
+      ))}
+
+      {/* Listener bubble — bottom left, fades in and out */}
+      {bubbles.map(b => (
+        <div key={b.id} className="absolute bottom-32 left-4 flex items-center space-x-2 rounded-full px-3 py-1.5"
+          style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)', border: '1px solid rgba(255,255,255,0.12)', animation: 'bubblePop 3.5s ease forwards' }}>
+          <div className="w-6 h-6 rounded-full overflow-hidden bg-white/10 flex-shrink-0">
+            {b.avatar
+              ? <img src={b.avatar} alt="" className="w-full h-full object-cover" />
+              : <div className="w-full h-full flex items-center justify-center text-[10px] font-bold text-white/50">{b.name[0]}</div>}
+          </div>
+          <span className="text-[11px] font-semibold text-white/90 max-w-[120px] truncate">{b.name} liked this</span>
+          <span>❤️</span>
+        </div>
+      ))}
+
+      <style>{`
+        @keyframes floatHeart {
+          0%   { transform: translateY(0) scale(0.5) rotate(-15deg); opacity: 1; }
+          50%  { transform: translateY(-120px) scale(1.1) rotate(10deg); opacity: 0.9; }
+          100% { transform: translateY(-240px) scale(0.7) rotate(-5deg); opacity: 0; }
+        }
+        @keyframes bubblePop {
+          0%   { opacity: 0; transform: translateY(10px) scale(0.8); }
+          15%  { opacity: 1; transform: translateY(0) scale(1); }
+          70%  { opacity: 1; }
+          100% { opacity: 0; transform: translateY(-8px); }
+        }
+      `}</style>
     </div>
   );
 }
@@ -439,8 +538,11 @@ function ForYouCard({ track, isActive, user, navigate }) {
         <LyricsCaption lyrics={track.lyrics} currentTime={currentTime} isActive={isActive} />
       )}
 
+      {/* Floating hearts — only on active card */}
+      {isActive && isThisOne && <FloatingHearts trackId={track.id} />}
+
       {/* Right action bar */}
-      <div className="absolute right-3 bottom-36 z-20 flex flex-col items-center space-y-5"
+      <div className="absolute right-3 bottom-32 z-20 flex flex-col items-center space-y-5"
         onClick={e => e.stopPropagation()}>
 
         {/* Artist avatar */}
@@ -499,7 +601,7 @@ function ForYouCard({ track, isActive, user, navigate }) {
       </div>
 
       {/* Bottom info */}
-      <div className="absolute bottom-8 left-4 right-16 z-20" onClick={e => e.stopPropagation()}>
+      <div className="absolute bottom-24 left-4 right-16 z-20" onClick={e => e.stopPropagation()}>
         <button onClick={goToArtist}
           className="text-[13px] font-bold text-white/60 mb-1 text-left hover:text-white transition block">
           @{track.artist_slug || track.artist_name}
@@ -613,12 +715,33 @@ export default function ForYouPage() {
 
       if (fetched.length < PAGE_SIZE) {
         const existingIds = fetched.map(t => t.id);
-        let query = supabase.from('tracks')
+        // Mix: half by engagement, half by recency so new releases get exposure
+        const halfPage = Math.ceil((PAGE_SIZE - fetched.length) / 2);
+        const existingIdsStr = existingIds.length > 0 ? `(${existingIds.join(',')})` : null;
+
+        let recentQuery = supabase.from('tracks')
+          .select('id, title, genre, mood, cover_artwork_url, file_url, youtube_url, duration, lyrics, artist_id, artists(artist_name, slug, profile_image_url)')
+          .eq('is_published', true)
+          .order('created_at', { ascending: false })
+          .limit(halfPage);
+        if (existingIdsStr) recentQuery = recentQuery.not('id', 'in', existingIdsStr);
+
+        let topQuery = supabase.from('tracks')
           .select('id, title, genre, mood, cover_artwork_url, file_url, youtube_url, duration, lyrics, artist_id, artists(artist_name, slug, profile_image_url)')
           .eq('is_published', true)
           .order('engagement_score', { ascending: false })
           .limit(PAGE_SIZE - fetched.length);
-        if (existingIds.length > 0) query = query.not('id', 'in', `(${existingIds.join(',')})`);
+
+        const [{ data: recentTracks }, { data: topTracks }] = await Promise.all([recentQuery, topQuery]);
+
+        // Merge deduped
+        const seen = new Set(existingIds);
+        const merged = [];
+        for (const t of [...(recentTracks || []), ...(topTracks || [])]) {
+          if (!seen.has(t.id)) { seen.add(t.id); merged.push(t); }
+        }
+
+        let query = { then: (fn) => fn({ data: merged.slice(0, PAGE_SIZE - fetched.length) }) };
         const { data: trending } = await query;
         fetched = [...fetched, ...(trending || []).map(t => ({
           ...t,
