@@ -422,13 +422,13 @@ export default function CompetitionsPage() {
   const activeStandard = competitions.filter(c => !c.wheel_challenge && !c.paid_collab);
 
   return (
-    <div className="pb-32 pt-14 md:pt-0">
+    <div className="pb-32 pt-0">
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@700&display=swap');`}</style>
 
-
-
-      {/* Tab bar */}
-      <div className="flex space-x-1 mx-4 mb-4 p-1 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+      {/* Sticky header with tabs */}
+      <div className="sticky top-0 z-20 bg-black/95 backdrop-blur-xl border-b border-white/[0.04] px-4 pt-14 md:pt-4 pb-2">
+        <h1 className="text-xl font-bold text-white mb-2">Competitions</h1>
+        <div className="flex space-x-1 p-1 rounded-xl bg-white/[0.03] border border-white/[0.06]">
         {[
           { key: 'competitions', label: 'Competitions', emoji: '🏆' },
           { key: 'spin',         label: 'Spin',         emoji: '🎲' },
@@ -442,11 +442,7 @@ export default function CompetitionsPage() {
             <span className="hidden sm:inline mt-0.5">{label}</span>
           </button>
         ))}
-      </div>
-      {/* Header */}
-      <div className="px-4 pt-4 pb-2 mb-2">
-        <h1 className="text-2xl font-bold text-white">Competitions</h1>
-        <p className="text-sm text-white/30 mt-0.5">Create, compete, collaborate — win real rewards</p>
+        </div>
       </div>
 
       {activeTab === 'competitions' && (
@@ -480,9 +476,19 @@ export default function CompetitionsPage() {
 
             </div>
 
-            {/* Wheel + prompt side by side on wide, stacked on narrow */}
-            <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 px-5 pb-5">
-              {/* Wheel */}
+            {/* Challenge text — always at top */}
+            {revealed && wheelChallenge && (
+              <div className="px-5 pb-3">
+                <p className="text-[10px] text-white/30 uppercase tracking-wider mb-1">This week's challenge</p>
+                <p className="text-base font-bold text-white leading-relaxed"
+                  style={{ whiteSpace: 'pre-line' }}>
+                  {wheelChallenge.prompt}
+                </p>
+              </div>
+            )}
+
+            {/* Wheel centred */}
+            <div className="flex flex-col items-center gap-4 px-5 pb-5">
               <div className="relative flex-shrink-0">
                 <div style={{
                   borderRadius: '50%', padding: 5,
@@ -503,8 +509,8 @@ export default function CompetitionsPage() {
                 </div>
               </div>
 
-              {/* Prompt + CTA */}
-              <div className="flex-1 text-center sm:text-left sm:pt-2">
+              {/* CTA below wheel */}
+              <div className="w-full text-center">
                 {spinning && (
                   <p style={{ fontFamily:"'Space Mono',monospace", fontSize:9, letterSpacing:4, color:'#a78bfa', textTransform:'uppercase', marginBottom:8 }}>
                     SPINNING...
@@ -512,12 +518,6 @@ export default function CompetitionsPage() {
                 )}
                 {revealed && wheelChallenge ? (
                   <>
-                    <p className="text-[10px] text-white/30 uppercase tracking-wider mb-2">This week's challenge</p>
-                    <p className="text-base font-bold text-white leading-relaxed mb-4"
-                      style={{ whiteSpace: 'pre-line' }}>
-                      {wheelChallenge.prompt}
-                    </p>
-
                     {/* Countdown */}
                     {wheelChallenge.competitions && (
                       <div className="flex gap-3 mb-4 justify-center sm:justify-start">
@@ -566,16 +566,7 @@ export default function CompetitionsPage() {
               </div>
             </div>
 
-            {/* Full Page button — bottom of card */}
-            <div className="px-5 pb-5">
-              <button onClick={() => navigate('/wheel')}
-                className="w-full py-3 rounded-2xl text-sm font-bold transition active:scale-[0.98] flex items-center justify-center space-x-2"
-                style={{ background: 'rgba(139,92,246,0.15)', color: '#a78bfa', border: '1px solid rgba(139,92,246,0.3)' }}>
-                <span>🎡</span>
-                <span>Open Full Wheel Page</span>
-                <span>→</span>
-              </button>
-            </div>
+
           </div>
 
           {/* ── Paid Collaborations ── */}

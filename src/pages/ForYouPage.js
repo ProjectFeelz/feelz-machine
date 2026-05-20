@@ -398,10 +398,23 @@ function ForYouCard({ track, isActive, user, navigate }) {
       {hasVideo && isActive && (
         <div className="absolute inset-0 z-10">
           <ReactPlayer
-            url={track.youtube_url} playing={isActive} muted={muted} loop
-            width="100%" height="100%"
+            url={track.youtube_url}
+            playing={isActive}
+            muted={muted}
+            loop
+            playsinline
+            width="100%"
+            height="100%"
             style={{ position: 'absolute', top: 0, left: 0 }}
-            config={{ youtube: { playerVars: { controls: 0, modestbranding: 1, rel: 0, showinfo: 0, iv_load_policy: 3, playsinline: 1, autoplay: 1 } } }}
+            config={{
+              youtube: {
+                playerVars: {
+                  controls: 0, modestbranding: 1, rel: 0,
+                  showinfo: 0, iv_load_policy: 3, playsinline: 1,
+                  autoplay: 1, mute: muted ? 1 : 0,
+                },
+              },
+            }}
           />
           <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/70 z-10 pointer-events-none" />
           <button
@@ -654,6 +667,14 @@ export default function ForYouPage() {
             }
           }
         } catch {}
+      }
+
+      // Shuffle so feed feels fresh on every open
+      if (offset === 0) {
+        for (let i = fetched.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [fetched[i], fetched[j]] = [fetched[j], fetched[i]];
+        }
       }
 
       if (offset === 0 && fetched.length > 0) fetched[0]._isFirst = true;
