@@ -301,7 +301,6 @@ function timeLeft(date) {
 // features are locked. On submit: saves track, records challenge_completion,
 // and upserts challenge_xp.
 
-import { supabase as sb } from '../supabaseClient';
 
 function ChallengeUploadSheet({ challenge, user, onClose, onComplete }) {
   const [title, setTitle]       = useState('');
@@ -334,34 +333,34 @@ function ChallengeUploadSheet({ challenge, user, onClose, onComplete }) {
     setUploading(true);
 
     try {
-      const { data: { user: u } } = await sb.auth.getUser();
+      const { data: { user: u } } = await supabase.auth.getUser();
       if (!u) throw new Error('Not logged in');
 
       // Get artist
-      const { data: artist } = await sb.from('artists').select('id').eq('user_id', u.id).maybeSingle();
+      const { data: artist } = await supabase.from('artists').select('id').eq('user_id', u.id).maybeSingle();
       if (!artist) throw new Error('Artist profile not found');
 
       // Upload audio
       const audioExt = audioFile.name.split('.').pop();
       const audioPath = `${u.id}/${Date.now()}_challenge.${audioExt}`;
-      const { error: audioErr } = await sb.storage.from('tracks').upload(audioPath, audioFile);
+      const { error: audioErr } = await supabase.storage.from('tracks').upload(audioPath, audioFile);
       if (audioErr) throw audioErr;
-      const { data: { publicUrl: audioUrl } } = sb.storage.from('tracks').getPublicUrl(audioPath);
+      const { data: { publicUrl: audioUrl } } = supabase.storage.from('tracks').getPublicUrl(audioPath);
 
       // Upload cover (optional)
       let coverUrl = null;
       if (coverFile) {
         const coverExt = coverFile.name.split('.').pop();
         const coverPath = `${u.id}/${Date.now()}_challenge_cover.${coverExt}`;
-        const { error: covErr } = await sb.storage.from('covers').upload(coverPath, coverFile);
+        const { error: covErr } = await supabase.storage.from('covers').upload(coverPath, coverFile);
         if (!covErr) {
-          const { data: { publicUrl } } = sb.storage.from('covers').getPublicUrl(coverPath);
+          const { data: { publicUrl } } = supabase.storage.from('covers').getPublicUrl(coverPath);
           coverUrl = publicUrl;
         }
       }
 
       // Insert track — challenge-tagged, other features locked off
-      const { data: track, error: trackErr } = await sb.from('tracks').insert({
+      const { data: track, error: trackErr } = await supabase.from('tracks').insert({
         artist_id:         artist.id,
         title:             title.trim(),
         audio_url:         audioUrl,
@@ -378,7 +377,7 @@ function ChallengeUploadSheet({ challenge, user, onClose, onComplete }) {
       if (trackErr) throw trackErr;
 
       // Record completion
-      await sb.from('challenge_completions').insert({
+      await supabase.from('challenge_completions').insert({
         user_id:          u.id,
         challenge_id:     challenge.id,
         challenge_tier:   challenge.tier,
@@ -390,15 +389,15 @@ function ChallengeUploadSheet({ challenge, user, onClose, onComplete }) {
 
       // Upsert XP
       const tierCol = `${challenge.tier.toLowerCase()}_count`;
-      const { data: existing } = await sb.from('challenge_xp').select('*').eq('user_id', u.id).maybeSingle();
+      const { data: existing } = await supabase.from('challenge_xp').select('*').eq('user_id', u.id).maybeSingle();
       if (existing) {
-        await sb.from('challenge_xp').update({
+        await supabase.from('challenge_xp').update({
           total_xp:    existing.total_xp + challenge.points,
           [tierCol]:   (existing[tierCol] || 0) + 1,
           updated_at:  new Date().toISOString(),
         }).eq('user_id', u.id);
       } else {
-        await sb.from('challenge_xp').insert({
+        await supabase.from('challenge_xp').insert({
           user_id:    u.id,
           total_xp:   challenge.points,
           [tierCol]:  1,
