@@ -214,7 +214,7 @@ function LyricsCaption({ lyrics, currentTime, isActive }) {
     const nextLine   = activeIdx >= 0 && activeIdx + 1 < lrcLines.length ? lrcLines[activeIdx + 1] : null;
     if (!activeLine?.text && !nextLine?.text) return null;
     return (
-      <div className="absolute bottom-52 left-4 right-20 z-20 pointer-events-none text-center">
+      <div className="absolute bottom-44 left-4 right-20 z-20 pointer-events-none text-center">
         {activeLine?.text && (
           <p key={activeIdx} className="text-center text-white text-base font-bold leading-snug mb-1 drop-shadow-lg"
             style={{ textShadow: '0 2px 8px rgba(0,0,0,0.9), 0 0 20px rgba(0,0,0,0.7)', animation: 'lyricFade 0.3s ease' }}>
@@ -240,7 +240,7 @@ function LyricsCaption({ lyrics, currentTime, isActive }) {
   const line = lines[lineIdx];
   if (!line) return null;
   return (
-    <div className="absolute bottom-28 left-4 right-20 z-20 pointer-events-none">
+    <div className="absolute bottom-44 left-4 right-20 z-20 pointer-events-none text-center">
       <p key={lineIdx} className="text-center text-white text-base font-bold leading-snug drop-shadow-lg"
         style={{ textShadow: '0 2px 8px rgba(0,0,0,0.9), 0 0 20px rgba(0,0,0,0.7)', animation: 'lyricFade 0.3s ease' }}>
         {line}
@@ -432,6 +432,34 @@ function ForYouCard({ track, isActive, user, navigate }) {
   const { currentTrack, isPlaying, currentTime, setIsMinimized } = usePlayer();
   const { artist: myArtist } = useAuth();
   const isOwnTrack = myArtist?.id === track.artist_id;
+
+  // Extract dominant color from cover art for background tinting
+  const [dominantColor, setDominantColor] = React.useState('0,0,0');
+  React.useEffect(() => {
+    if (!track.cover_artwork_url) return;
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = 8; canvas.height = 8;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, 8, 8);
+        const d = ctx.getImageData(0, 0, 8, 8).data;
+        let r = 0, g = 0, b = 0, count = 0;
+        for (let i = 0; i < d.length; i += 16) {
+          // Skip near-black and near-white pixels
+          const pr = d[i], pg = d[i+1], pb = d[i+2];
+          const brightness = (pr + pg + pb) / 3;
+          if (brightness > 20 && brightness < 235) {
+            r += pr; g += pg; b += pb; count++;
+          }
+        }
+        if (count > 0) setDominantColor(`${Math.round(r/count)},${Math.round(g/count)},${Math.round(b/count)}`);
+      } catch {}
+    };
+    img.src = track.cover_artwork_url;
+  }, [track.cover_artwork_url]);
   const hasVideo  = !!track.youtube_url;
   const isThisOne = currentTrack?.id === track.id;
   const playing   = isThisOne && isPlaying;
@@ -510,14 +538,20 @@ function ForYouCard({ track, isActive, user, navigate }) {
   return (
     <div className="relative w-full h-full flex items-center justify-center select-none" onClick={handleTap}>
 
-      {/* Blurred background */}
+      {/* Blurred background with dominant color tint */}
       <div className="absolute inset-0 overflow-hidden">
         {track.cover_artwork_url && (
           <img src={track.cover_artwork_url} alt=""
             className="w-full h-full object-cover"
-            style={{ filter: 'blur(40px) brightness(0.25)', transform: 'scale(1.15)' }} />
+            style={{ filter: 'blur(48px) brightness(0.3) saturate(1.4)', transform: 'scale(1.2)' }} />
         )}
-        <div className="absolute inset-0 bg-black/60" />
+        {/* Color tint overlay — pulls the dominant color through */}
+        <div className="absolute inset-0" style={{
+          background: `linear-gradient(180deg,
+            rgba(${dominantColor},0.45) 0%,
+            rgba(${dominantColor},0.25) 40%,
+            rgba(0,0,0,0.7) 100%)`
+        }} />
       </div>
 
       {/* YouTube video */}
@@ -552,9 +586,9 @@ function ForYouCard({ track, isActive, user, navigate }) {
         </div>
       )}
 
-      {/* Vinyl */}
+      {/* Vinyl — positioned in upper 55% of screen */}
       {!hasVideo && (
-        <div className="relative z-10 flex items-center justify-center">
+        <div className="relative z-10 flex items-center justify-center" style={{ marginTop: '-12vh' }}>
           <VinylRecord coverUrl={track.cover_artwork_url} isPlaying={playing} size={vinylSize} />
 
         </div>
@@ -1042,15 +1076,13 @@ export default function ForYouPage() {
         </div>
       )}
 
-      {/* Full-screen story viewer */}
+      {/* Full-screen story viewer — rendered at root level so fixed inset-0 takes full screen */}
       {viewingStory && (
-        <div className="absolute inset-0 z-50">
-          <ArtistStoryView
-            stories={viewingStory.stories}
-            artist={viewingStory.artist}
-            onClose={() => setViewingStory(null)}
-          />
-        </div>
+        <ArtistStoryView
+          stories={viewingStory.stories}
+          artist={viewingStory.artist}
+          onClose={() => setViewingStory(null)}
+        />
       )}
     </div>
   );

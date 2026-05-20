@@ -18,13 +18,16 @@ export default function PlaylistsPage() {
   const [joining, setJoining]             = useState(false);
   const [joinError, setJoinError]         = useState('');
   const [copiedId, setCopiedId]           = useState(null);
+  const [coverFile, setCoverFile]         = useState(null);
+  const [coverPreview, setCoverPreview]   = useState(null);
+  const coverRef                          = React.useRef(null);
 
   useEffect(() => { if (user) fetchPlaylists(); }, [user]);
 
   const fetchPlaylists = async () => {
     const [{ data: mine }, { data: collab }] = await Promise.all([
       supabase.from('playlists')
-        .select('*, playlist_tracks(count)')
+        .select('id, name, cover_url, is_shared, is_public, user_id, created_at, playlist_tracks(count)')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false }),
       supabase.from('playlist_collaborators')
@@ -39,13 +42,30 @@ export default function PlaylistsPage() {
   const createPlaylist = async () => {
     if (!newName.trim()) return;
     setSaving(true);
-    const { error } = await supabase.from('playlists').insert({
-      user_id: user.id,
-      name: newName.trim(),
-      is_public: false,
-      is_shared: newShared,
-    });
-    if (!error) { setNewName(''); setCreating(false); setNewShared(false); fetchPlaylists(); }
+    try {
+      let cover_url = null;
+      if (coverFile) {
+        const ext  = coverFile.name.split('.').pop();
+        const path = `playlist-covers/${user.id}/${Date.now()}.${ext}`;
+        const { error: upErr } = await supabase.storage.from('artist-images').upload(path, coverFile, { upsert: true });
+        if (!upErr) {
+          const { data: { publicUrl } } = supabase.storage.from('artist-images').getPublicUrl(path);
+          cover_url = publicUrl;
+        }
+      }
+      const { error } = await supabase.from('playlists').insert({
+        user_id:   user.id,
+        name:      newName.trim(),
+        is_public: false,
+        is_shared: newShared,
+        cover_url,
+      });
+      if (!error) {
+        setNewName(''); setCreating(false); setNewShared(false);
+        setCoverFile(null); setCoverPreview(null);
+        fetchPlaylists();
+      }
+    } catch {}
     setSaving(false);
   };
 
@@ -91,8 +111,10 @@ export default function PlaylistsPage() {
       onClick={() => navigate(`/library/playlists/${playlist.id}`)}
       className="flex items-center space-x-3 p-3 rounded-xl hover:bg-white/[0.04] transition group cursor-pointer"
     >
-      <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-purple-600/30 to-blue-600/20 flex items-center justify-center flex-shrink-0 relative">
-        <Music className="w-5 h-5 text-white/30" />
+      <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-purple-600/30 to-blue-600/20 flex items-center justify-center flex-shrink-0 relative overflow-hidden">
+        {playlist.cover_url
+          ? <img src={playlist.cover_url} alt="" className="w-full h-full object-cover" />
+          : <Music className="w-5 h-5 text-white/30" />}
         {(playlist.is_shared || isCollab) && (
           <div className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-blue-500/80 flex items-center justify-center">
             <Users className="w-2.5 h-2.5 text-white" />

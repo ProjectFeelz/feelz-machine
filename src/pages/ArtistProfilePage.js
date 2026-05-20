@@ -598,14 +598,25 @@ export default function ArtistProfilePage() {
         (likes || []).forEach(l => { likeMap[l.track_id] = true; });
         setLikedTracks(likeMap);
       }
-      // Fetch artist's own playlists
-      const { data: playlistData } = await supabase
-        .from('playlists')
-        .select('id, name, cover_url, user_id, created_at')
-        .eq('user_id', artistData.user_id)
-        .order('created_at', { ascending: false })
-        .limit(10);
-      setArtistPlaylists(playlistData || []);
+      // Fetch artist's own playlists + collaborative playlists
+      const [{ data: ownPlaylists }, { data: collabPlaylists }] = await Promise.all([
+        supabase.from('playlists')
+          .select('id, name, cover_url, user_id, created_at, is_shared')
+          .eq('user_id', artistData.user_id)
+          .order('created_at', { ascending: false })
+          .limit(10),
+        supabase.from('playlist_collaborators')
+          .select('playlists(id, name, cover_url, user_id, created_at, is_shared)')
+          .eq('user_id', artistData.user_id),
+      ]);
+      const collabFlat = (collabPlaylists || []).map(c => c.playlists).filter(Boolean);
+      // Merge, deduplicate by id
+      const seen = new Set();
+      const merged = [...(ownPlaylists || []), ...collabFlat].filter(p => {
+        if (!p || seen.has(p.id)) return false;
+        seen.add(p.id); return true;
+      });
+      setArtistPlaylists(merged);
 
       const { data: albumData } = await supabase
         .from('albums').select('*').eq('artist_id', artistData.id).eq('is_published', true)
@@ -1878,7 +1889,7 @@ export default function ArtistProfilePage() {
                   }
                 </div>
                 <p className="text-sm font-medium truncate" style={{ color: textColor }}>{pl.name}</p>
-                <p className="text-xs truncate" style={{ color: `${textColor}50` }}>Playlist</p>
+                <p className="text-xs truncate" style={{ color: `${textColor}50` }}>{pl.user_id !== artistData?.user_id ? '👥 Collab' : 'Playlist'}</p>
               </div>
             ))}
           </div>
