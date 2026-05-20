@@ -271,9 +271,9 @@ export default function AppLayout() {
           </div>
         </main>
 
-        <FullPlayer />
-        <DesktopPlayer />
-        <MiniPlayer />
+        {location.pathname !== "/" && <FullPlayer />}
+        {location.pathname !== "/" && <DesktopPlayer />}
+        {location.pathname !== "/" && <MiniPlayer />}
         <MobileNav />
 
         {showTour && splashDone && !loading && hasProfile && (

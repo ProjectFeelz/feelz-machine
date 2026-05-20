@@ -177,6 +177,78 @@ function PlaylistSheet({ track, user, onClose, navigate }) {
 }
 
 
+
+// ── LRC parser (same as FullPlayer) ──────────────────────────────────────────
+function parseLRC(raw) {
+  if (!raw) return null;
+  const lines = raw.split('\n');
+  const parsed = [];
+  const LRC_RE = /^\[(\d{1,2}):(\d{2})(?:[.:](\ d{1,3}))?\]\s*(.*)$/;
+  let matched = 0;
+  for (const line of lines) {
+    const m = line.match(/^\[(\d{1,2}):(\d{2})(?:[.:](\d{1,3}))?\]\s*(.*)$/);
+    if (m) {
+      matched++;
+      const mins = parseInt(m[1], 10);
+      const secs = parseInt(m[2], 10);
+      const ms   = m[3] ? parseInt(m[3].padEnd(3, '0'), 10) : 0;
+      const text = m[4].trim();
+      parsed.push({ time: mins * 60 + secs + ms / 1000, text });
+    }
+  }
+  return matched >= 2 ? parsed.sort((a, b) => a.time - b.time) : null;
+}
+
+// ── Caption overlay ───────────────────────────────────────────────────────────
+function LyricsCaption({ lyrics, currentTime, isActive }) {
+  const [visible, setVisible] = React.useState(true);
+  if (!lyrics || !isActive) return null;
+
+  const lrcLines = parseLRC(lyrics);
+
+  if (lrcLines) {
+    // Timestamped LRC — show active line
+    const activeIdx = lrcLines.reduce((best, line, i) =>
+      line.time <= currentTime ? i : best, -1);
+    const activeLine = activeIdx >= 0 ? lrcLines[activeIdx] : null;
+    const nextLine   = activeIdx >= 0 && activeIdx + 1 < lrcLines.length ? lrcLines[activeIdx + 1] : null;
+    if (!activeLine?.text && !nextLine?.text) return null;
+    return (
+      <div className="absolute bottom-28 left-4 right-20 z-20 pointer-events-none">
+        {activeLine?.text && (
+          <p key={activeIdx} className="text-center text-white text-base font-bold leading-snug mb-1 drop-shadow-lg"
+            style={{ textShadow: '0 2px 8px rgba(0,0,0,0.9), 0 0 20px rgba(0,0,0,0.7)', animation: 'lyricFade 0.3s ease' }}>
+            {activeLine.text}
+          </p>
+        )}
+        {nextLine?.text && (
+          <p className="text-center text-white/40 text-sm leading-snug drop-shadow-lg"
+            style={{ textShadow: '0 2px 8px rgba(0,0,0,0.9)' }}>
+            {nextLine.text}
+          </p>
+        )}
+      </div>
+    );
+  }
+
+  // Plain text — show lines based on time position
+  const lines = lyrics.split('\n').map(l => l.trim()).filter(Boolean);
+  if (!lines.length) return null;
+  const totalLines = lines.length;
+  // Rough estimate: show one line every 4 seconds
+  const lineIdx = Math.min(Math.floor(currentTime / 4), totalLines - 1);
+  const line = lines[lineIdx];
+  if (!line) return null;
+  return (
+    <div className="absolute bottom-28 left-4 right-20 z-20 pointer-events-none">
+      <p key={lineIdx} className="text-center text-white text-base font-bold leading-snug drop-shadow-lg"
+        style={{ textShadow: '0 2px 8px rgba(0,0,0,0.9), 0 0 20px rgba(0,0,0,0.7)', animation: 'lyricFade 0.3s ease' }}>
+        {line}
+      </p>
+    </div>
+  );
+}
+
 // ── Story feed card ───────────────────────────────────────────────────────────
 function StoryFeedCard({ item, isActive, onOpen, navigate }) {
   const { artist, stories } = item;
@@ -239,7 +311,7 @@ function StoryFeedCard({ item, isActive, onOpen, navigate }) {
 
 // ── Single card ───────────────────────────────────────────────────────────────
 function ForYouCard({ track, isActive, user, navigate }) {
-  const { currentTrack, isPlaying } = usePlayer();
+  const { currentTrack, isPlaying, playTrack, currentTime } = usePlayer();
   const hasVideo  = !!track.youtube_url;
   const isThisOne = currentTrack?.id === track.id;
   const playing   = isThisOne && isPlaying;
@@ -296,8 +368,17 @@ function ForYouCard({ track, isActive, user, navigate }) {
     else navigator.clipboard.writeText(url);
   };
 
+  // Auto-play when card becomes active
+  useEffect(() => {
+    if (isActive && !hasVideo && track.file_url) {
+      if (!isThisOne) playTrack(track, [track]);
+    }
+  }, [isActive]); // eslint-disable-line
+
   const handleTap = () => {
     if (sheet) { setSheet(null); return; }
+    // Tap goes to artist profile — feed is a discovery funnel
+    if (!sheet) navigate(`/artist/${track.artist_slug}`);
   };
 
   const vinylSize = Math.min(window.innerWidth - 120, window.innerHeight * 0.42);
@@ -341,6 +422,11 @@ function ForYouCard({ track, isActive, user, navigate }) {
           <VinylRecord coverUrl={track.cover_artwork_url} isPlaying={playing} size={vinylSize} />
 
         </div>
+      )}
+
+      {/* Lyrics captions */}
+      {isThisOne && track.lyrics && (
+        <LyricsCaption lyrics={track.lyrics} currentTime={currentTime} isActive={isActive} />
       )}
 
       {/* Right action bar */}
@@ -453,6 +539,10 @@ function ForYouCard({ track, isActive, user, navigate }) {
           60%  { opacity: 1; }
           100% { opacity: 0; }
         }
+        @keyframes lyricFade {
+          from { opacity: 0; transform: translateY(4px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
         @keyframes swipeHint {
           0%   { opacity: 0; transform: translateY(0); }
           20%  { opacity: 1; }
@@ -494,7 +584,7 @@ export default function ForYouPage() {
       if (user) {
         const { data: recData } = await supabase
           .from('listener_recommendations')
-          .select('score, reason, tracks(id, title, genre, mood, cover_artwork_url, file_url, youtube_url, duration, artist_id, artists(artist_name, slug, profile_image_url))')
+          .select('score, reason, tracks(id, title, genre, mood, cover_artwork_url, file_url, youtube_url, duration, lyrics, artist_id, artists(artist_name, slug, profile_image_url))')
           .eq('user_id', user.id)
           .order('score', { ascending: false })
           .range(offset, offset + PAGE_SIZE - 1);
@@ -513,7 +603,7 @@ export default function ForYouPage() {
       if (fetched.length < PAGE_SIZE) {
         const existingIds = fetched.map(t => t.id);
         let query = supabase.from('tracks')
-          .select('id, title, genre, mood, cover_artwork_url, file_url, youtube_url, duration, artist_id, artists(artist_name, slug, profile_image_url)')
+          .select('id, title, genre, mood, cover_artwork_url, file_url, youtube_url, duration, lyrics, artist_id, artists(artist_name, slug, profile_image_url)')
           .eq('is_published', true)
           .order('engagement_score', { ascending: false })
           .limit(PAGE_SIZE - fetched.length);
