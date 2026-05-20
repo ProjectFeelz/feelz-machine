@@ -74,16 +74,6 @@ export default function HubPage() {
   const [dmSearch, setDmSearch]                 = useState('');
   const [dmResults, setDmResults]               = useState([]);
   const [dmSearching, setDmSearching]           = useState(false);
-  const addToQueue = (track) => {
-    setQueueTracks(prev => [...prev, track]);
-    setTrackSearch('');
-    setTrackResults([]);
-  };
-
-  const removeFromQueue = (trackId) => {
-    setQueueTracks(prev => prev.filter(t => t.id !== trackId));
-  };
-
   const fmtDuration = (s) => {
     if (!s) return '';
     const m = Math.floor(s / 60);
