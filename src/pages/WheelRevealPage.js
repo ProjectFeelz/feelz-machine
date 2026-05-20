@@ -14,92 +14,162 @@ import {
   RefreshCw, Shuffle, Lock,
 } from 'lucide-react';
 
-// ── Full prompt library ───────────────────────────────────────────────────────
-export const SINGER_PROMPTS = [
-  "Sing about falling in love\nwith your WiFi password",
-  "A heartbreak song about\nyour meal going cold",
-  "Serenade a parking ticket\nyou just received",
-  "Love song to your\n3AM fridge raid",
-  "Ballad of the last\npair of clean socks",
-  "Sing about missing someone\nbut it's your nap",
-  "Power anthem about\nforgetting your charger",
-  "Gospel song about finding\nmoney in old jeans",
-  "Sad song about your plant\nthat didn't survive",
-  "Bop about being stuck\nbehind a slow walker",
-  "Sing about autocorrect\nruining your life",
-  "A lullaby for your\ndead phone battery",
-  "Ode to the person\nwho ate your food",
-  "Breakup song to\nyour alarm clock",
-  "Anthem for surviving\na Monday morning",
-  "Sing about being ghosted\nby your delivery driver",
-  "Love song to\nthe snooze button",
-  "Aria about running\nout of mobile data",
-  "Your ex but they're\na streaming service",
-  "Protest song about\nthe queue at the bank",
-  "Ballad about your\nfavourite takeaway order",
-  "Sad song about\nWiFi dropping mid-call",
-  "Hype track for\ncleaning your room",
-  "Blues song about\nslow internet connection",
-  "Victory song for\nfinding a parking spot",
-  "Lament about your\nlaundry pile growing",
-  "Bop about being\non hold forever",
-  "Torch song for\na cancelled TV show",
-  "Emotional send-off for\nyour dying laptop",
-  "Stadium anthem about\ncooking with no gas",
-  "Love song set at\na Sunday braai",
-  "Ballad about load\nshedding ruining the vibe",
-  "Anthem for surviving\nthe taxi rank",
-  "Song about your\nspaza shop owner",
-  "Gospel about finally\ngetting the bag",
-  "Lament about your\nfirst paycheck disappearing",
-  "Ode to Sunday\nchurch clothes you can't crease",
-  "Hype track for\nyour side hustle",
-  "Spiritual about your\nancestors watching over you",
-  "Love song to\nthe rain finally coming",
+// ── Full prompt library (tiered, with modifiers) ────────────────────────────
+// ── Full prompt library (tiered, with modifiers) ────────────────────────────
+
+const SINGER_PROMPTS = [
+  // --- COMMON (100 XP) ---
+  { id:"sing_common_01", tier:"Common",    points:100,  prompt:"Write a love song set at a Sunday braai — no chorus.",                                              modifier:"Include the sound of tongs clicking twice." },
+  { id:"sing_common_02", tier:"Common",    points:100,  prompt:"Write a breakup song told entirely from your local taxi's point of view.",                          modifier:"Must use a sliding door sound effect as a transition." },
+  { id:"sing_common_03", tier:"Common",    points:100,  prompt:"Write a hook about stage 6 load shedding that somehow makes people feel hopeful.",                   modifier:"Record the initial take completely in the dark." },
+  { id:"sing_common_04", tier:"Common",    points:100,  prompt:"Write an anthem for your first paycheque disappearing in exactly 3 days.",                          modifier:"Tempo must be fast and chaotic." },
+  { id:"sing_common_05", tier:"Common",    points:100,  prompt:"Write a heartbreak song about your favourite late-night meal going cold.",                           modifier:"Deliver the verses in a half-spoken, dramatic monotone." },
+  { id:"sing_common_06", tier:"Common",    points:100,  prompt:"Write a power anthem about being stuck on the pavement behind a slow walker.",                       modifier:"The chorus must feel like an absolute stampede." },
+  { id:"sing_common_07", tier:"Common",    points:100,  prompt:"Write a song about being ghosted by your food delivery driver at 11:30 PM.",                        modifier:"Incorporate mock-crying into the ad-libs." },
+  { id:"sing_common_08", tier:"Common",    points:100,  prompt:"Write a love song to the snooze button — make it deeply sincere.",                                  modifier:"Layer your vocals to sound like a drowsy choir." },
+  { id:"sing_common_09", tier:"Common",    points:100,  prompt:"Write a short track celebrating the exact moment the power comes back on.",                         modifier:"The first word must be shouted at the top of your lungs." },
+  { id:"sing_common_10", tier:"Common",    points:100,  prompt:"Write a song about losing your keys when you're already 15 minutes late.",                          modifier:"Deliver the verses with an increasing, breathless panic." },
+  { id:"sing_common_11", tier:"Common",    points:100,  prompt:"Write an ode to the local car wash on a scorching Saturday morning.",                               modifier:"Use phonetic 'shhh' spray sounds as background percussion." },
+  { id:"sing_common_12", tier:"Common",    points:100,  prompt:"Write a hook about scrolling through your ex's new vacation photos.",                               modifier:"Keep your vocal performance completely monotone and unbothered (fake it)." },
+  { id:"sing_common_13", tier:"Common",    points:100,  prompt:"Write a song dedicated to the cozy warmth of a heavy winter blanket.",                              modifier:"Muffle your microphone slightly with a piece of cloth to make it sound warm." },
+  // --- RARE (250 XP) ---
+  { id:"sing_rare_01",   tier:"Rare",      points:250,  prompt:"Write a song to your local spaza shop owner using only 4 chords.",                                  modifier:"Shout out at least three specific snacks." },
+  { id:"sing_rare_02",   tier:"Rare",      points:250,  prompt:"Write a lullaby for your phone battery dying at 2%.",                                               modifier:"Whisper-sing the entire track." },
+  { id:"sing_rare_03",   tier:"Rare",      points:250,  prompt:"Write a love song matching the rhythm of heavy rain on a tin roof.",                                modifier:"No synthetic percussion allowed; use your own snaps and claps." },
+  { id:"sing_rare_04",   tier:"Rare",      points:250,  prompt:"Write a full song with absolutely no pronouns — no I, you, we, or they.",                           modifier:"Focus entirely on objects, locations, and descriptions." },
+  { id:"sing_rare_05",   tier:"Rare",      points:250,  prompt:"Write a hook so simple it almost embarrasses you — then belt it out.",                              modifier:"Repeat the hook four times consecutively with increasing energy." },
+  { id:"sing_rare_06",   tier:"Rare",      points:250,  prompt:"Write a verse about a memory that still hits different — absolutely zero metaphors.",                modifier:"State only cold, hard facts of what happened." },
+  { id:"sing_rare_07",   tier:"Rare",      points:250,  prompt:"Write a song about autocorrect completely ruining the most important text of your life.",            modifier:"Use the actual dynamic pacing of typing and waiting for a reply." },
+  { id:"sing_rare_08",   tier:"Rare",      points:250,  prompt:"Write a song in the second person — address the listener directly the whole way.",                   modifier:"Make it feel like a face-to-face confrontation." },
+  { id:"sing_rare_09",   tier:"Rare",      points:250,  prompt:"Write an entire 16-bar verse in a single breath.",                                                  modifier:"No digital edits or vocal chops to hide gaps — do it live." },
+  { id:"sing_rare_10",   tier:"Rare",      points:250,  prompt:"Write a melody that strictly avoids using any plosives (no words starting with P, T, B, K).",      modifier:"Focus on soft, sweeping vowel sounds." },
+  { id:"sing_rare_11",   tier:"Rare",      points:250,  prompt:"Write a response track to a famous local song, telling the other side of the story.",               modifier:"Borrow the exact cadence of the original song's chorus." },
+  { id:"sing_rare_12",   tier:"Rare",      points:250,  prompt:"Write a hook using code-switching — switch between two or three languages seamlessly.",              modifier:"Every language shift must happen exactly on the downbeat." },
+  { id:"sing_rare_13",   tier:"Rare",      points:250,  prompt:"Write a song entirely in falsetto or head voice.",                                                  modifier:"Keep the instrumentation completely stripped back to just a sub-bass or 808." },
+  // --- EPIC (500 XP) ---
+  { id:"sing_epic_01",   tier:"Epic",      points:500,  prompt:"Write a gospel-style grand outro for a track about finally making it out.",                          modifier:"Stack at least 5 layers of harmony on the final chord." },
+  { id:"sing_epic_02",   tier:"Epic",      points:500,  prompt:"Write a duet where both voices never actually agree on the narrative.",                              modifier:"Record both vocal parts yourself using two distinct tones or pitches." },
+  { id:"sing_epic_03",   tier:"Epic",      points:500,  prompt:"Write a chorus that seamlessly works as both an R&B love song and a Sunday prayer.",                 modifier:"Use heavy reverb to simulate an empty church hall." },
+  { id:"sing_epic_04",   tier:"Epic",      points:500,  prompt:"Write a song set in 2075 Johannesburg — what are the inner-city heartbreaks like?",                  modifier:"Apply a heavy, futuristic vocal effect or vocoder to the bridge." },
+  { id:"sing_epic_05",   tier:"Epic",      points:500,  prompt:"Write a topline over an Amapiano log drum groove you've never heard before.",                        modifier:"The vocal rhythm must syncopate perfectly between the log drum hits." },
+  { id:"sing_epic_06",   tier:"Epic",      points:500,  prompt:"Write a bridge that completely flips the emotional meaning of the entire song.",                     modifier:"Change your vocal delivery from vulnerable to aggressive mid-sentence." },
+  { id:"sing_epic_07",   tier:"Epic",      points:500,  prompt:"Write a track that only makes sense to listen to at exactly 3:00 AM.",                              modifier:"Keep the vocal delivery right up against the mic capsule — ultra-intimate." },
+  { id:"sing_epic_08",   tier:"Epic",      points:500,  prompt:"Write a track where the melody moves counter to the beat (syncopation challenge).",                  modifier:"If the beat goes up, your vocal pitch must drop instantly." },
+  { id:"sing_epic_09",   tier:"Epic",      points:500,  prompt:"Write a storytelling track that spans three distinct generations of a single family.",               modifier:"Alter your vocal tone/age delivery for each verse." },
+  { id:"sing_epic_10",   tier:"Epic",      points:500,  prompt:"Write a fast-paced trap topline that transitions into a traditional choral arrangement at the end.", modifier:"Layer at least 4 tracking takes of yourself to create a mini-choir effect." },
+  { id:"sing_epic_11",   tier:"Epic",      points:500,  prompt:"Write a song about an intense conversation held entirely through a locked door.",                    modifier:"Mix the first verse to sound like it's bleeding through a physical wall." },
+  // --- LEGENDARY (1000 XP) ---
+  { id:"sing_legend_01", tier:"Legendary", points:1000, prompt:"Write the exact song you've been too terrified to write — and commit to it.",                        modifier:"One-take recording only. No vocal tuning or editing allowed." },
+  { id:"sing_legend_02", tier:"Legendary", points:1000, prompt:"Write a song to someone who will genuinely never hear it.",                                          modifier:"Use their real initials somewhere hidden in the lyrics." },
+  { id:"sing_legend_03", tier:"Legendary", points:1000, prompt:"Write the sincere apology you've never been able to say out loud.",                                  modifier:"The track must end mid-word, like a cut phone call." },
+  { id:"sing_legend_04", tier:"Legendary", points:1000, prompt:"Write a love song to the raw, unfiltered version of yourself you left behind years ago.",            modifier:"Incorporate an old voice note or archival audio clip if you have one." },
+  { id:"sing_legend_05", tier:"Legendary", points:1000, prompt:"Write a song about a childhood dream you had to actively let go of to survive.",                     modifier:"No tracking over a click or metronome — sing completely free-tempo." },
+  { id:"sing_legend_06", tier:"Legendary", points:1000, prompt:"Write a hook using absolutely no real words — only raw, emotional vocalizations.",                   modifier:"It must convey deep heartbreak purely through the tone and delivery of the melody." },
 ];
-export const BEATMAKER_PROMPTS = [
-  "A beat like a\nhaunted kitchen at midnight",
-  "Afrobeats meets elevator music\n— make it slap",
-  "Built around the sound\nof rain on tin roof",
-  "Jazz x Trap x something\nyour grandma approves of",
-  "Cinematic beat like\na heist in slow motion",
-  "Lo-fi but you're\nfloating on the moon",
-  "Drill beat with\na lullaby melody twist",
-  "Sounds like the\nocean is rapping",
-  "Build a beat around\nan animal sound",
-  "A beat so weird\nit somehow works",
-  "Amapiano but set\nin outer space",
-  "Trap beat using only\nkitchen sounds",
-  "A beat that feels\nlike a sunrise",
-  "Afro-fusion meets\ncold winter vibes",
-  "Slaps but also\nsomehow makes you cry",
-  "A beat your ancestors\nwould dance to",
-  "Highlife x Phonk\n— trust the vision",
-  "A carnival beat\nthat feels lonely",
-  "Percussion-only beat\nthat tells a story",
-  "Chaos slowly\nbecoming peace",
-  "Beat inspired by\nthe sound of traffic",
-  "Gqom meets classical\norchestra — go wild",
-  "A beat that sounds\nlike falling in love",
-  "Lo-fi hip hop set\nin Lagos circa 1975",
-  "A beat that feels\nlike pure nostalgia",
-  "Makes you want to\njust sprint somewhere",
-  "Starts gentle then\nhits like a truck",
-  "Afrobeats but underwater\n— you heard me",
-  "Score for a movie\nscene that doesn't exist",
-  "Samples silence and\nsomehow makes it fire",
-  "Amapiano x Jazz —\nmorning coffee session",
-  "Gqom x R&B —\nmidnight feels",
-  "Kwaito energy but\nit's 2025",
-  "Beat for a scene\nwhere someone gets their money",
-  "Township sounds meet\nfuture bass",
-  "Sunday morning\nchurch drums go hard",
-  "A beat that feels\nlike summer rain",
-  "Afrobeats x Classical —\nstrings and percussion",
-  "Lo-fi but it's\na taxi at 6am",
-  "Something that hits\ndifferent at 3am",
+
+const BEATMAKER_PROMPTS = [
+  // --- COMMON (100 XP) ---
+  { id:"beat_common_01", tier:"Common",    points:100,  prompt:"Make a beat for a braai at 6:00 PM when the energy is transitioning perfectly.",                    modifier:"Incorporate the distinct hiss of lighter fluid or fire crackle into the riser." },
+  { id:"beat_common_02", tier:"Common",    points:100,  prompt:"Make a trap beat where the primary percussion is entirely kitchen sounds.",                          modifier:"Replace the hi-hats with the sound of silverware clinking." },
+  { id:"beat_common_03", tier:"Common",    points:100,  prompt:"Make a beat that sounds like falling in love in the back row of a taxi.",                            modifier:"Use a rhythmic 3-chord repeating rhodes loop to simulate tires on asphalt." },
+  { id:"beat_common_04", tier:"Common",    points:100,  prompt:"Make a Sunday morning beat with heavy church drums, but make them knock like a club track.",         modifier:"Add a deep, distorted sub-bass underneath an organ progression." },
+  { id:"beat_common_05", tier:"Common",    points:100,  prompt:"Make a beat in under 2 hours and force yourself to close the project forever.",                      modifier:"No fine-tuning mixes; trust your first instincts on leveling." },
+  { id:"beat_common_06", tier:"Common",    points:100,  prompt:"Take your absolute worst, abandoned project file and fix exactly one element to save it.",           modifier:"You cannot add new tracks — only swap or process what's already there." },
+  { id:"beat_common_07", tier:"Common",    points:100,  prompt:"Make a hard-hitting beat using a car alarm sound effect as your main transition riser.",             modifier:"Pitch-bend the alarm up right before the drop." },
+  { id:"beat_common_08", tier:"Common",    points:100,  prompt:"Make a high-energy beat tailored for blasting out of a car with old, blown-out speakers.",           modifier:"Focus all your energy on making the 80–120Hz frequency range thump." },
+  { id:"beat_common_09", tier:"Common",    points:100,  prompt:"Make a lo-fi beat that samples the clicking sound of a pocket lighter.",                             modifier:"Use the click as a subtle pre-snare or pocket element." },
+  { id:"beat_common_10", tier:"Common",    points:100,  prompt:"Make a 4-bar loop so catchy that it doesn't need a single arrangement change to stay interesting.",  modifier:"Use subtle panning automation on the percussion to keep it moving." },
+  // --- RARE (250 XP) ---
+  { id:"beat_rare_01",   tier:"Rare",      points:250,  prompt:"Make a beat using only 3 distinct sound sources — make every single one carry its weight.",          modifier:"Manipulate pitch, delay, and filtering to turn one sound into multiple roles." },
+  { id:"beat_rare_02",   tier:"Rare",      points:250,  prompt:"Make a heavy beat with absolutely no kick drum at all.",                                              modifier:"Find an alternative transient or low-end drop to ground the 1." },
+  { id:"beat_rare_03",   tier:"Rare",      points:250,  prompt:"Make a full, evolving instrumental using nothing longer than a strict 2-bar loop.",                   modifier:"Keep it dynamic using automated filters, mute groups, and live arrangement shifts." },
+  { id:"beat_rare_04",   tier:"Rare",      points:250,  prompt:"Make a beat at a crawling 70 BPM, but configure the percussion to make it feel incredibly fast.",    modifier:"Utilize double-time triplet hi-hats and rapid rimshots." },
+  { id:"beat_rare_05",   tier:"Rare",      points:250,  prompt:"Make a beat at a frantic 140 BPM, but structure the melodies to make it feel deeply relaxed.",       modifier:"Use long, sweeping pads and half-time basslines." },
+  { id:"beat_rare_06",   tier:"Rare",      points:250,  prompt:"Make a beat where the main vocal sample becomes completely unrecognizable by the drop.",              modifier:"Chop, reverse, and stretch it beyond human recognition." },
+  { id:"beat_rare_07",   tier:"Rare",      points:250,  prompt:"Make a beat where an aggressive bassline carries the entire emotional weight of the song.",           modifier:"The melody instruments must remain stark, thin, and cold." },
+  { id:"beat_rare_08",   tier:"Rare",      points:250,  prompt:"Make a modern hip-hop beat, but you are forbidden from using any stock or custom hi-hats.",           modifier:"Find an organic sound (shaker, key jangle, or rustle) to fill the high-end gap." },
+  { id:"beat_rare_09",   tier:"Rare",      points:250,  prompt:"Sidechain your entire master channel to a transient percussion instrument.",                          modifier:"Make the whole track duck aggressively whenever that accent hits." },
+  { id:"beat_rare_10",   tier:"Rare",      points:250,  prompt:"Make a heavy trap beat, but you can only use stock plugins from your DAW for processing.",            modifier:"No third-party plugins — rely strictly on creative leveling and stock saturation." },
+  { id:"beat_rare_11",   tier:"Rare",      points:250,  prompt:"Design a massive 808 bass slide that functions as the actual melody of the track.",                   modifier:"The mid-range instruments must stay entirely static while the bass jumps octaves." },
+  { id:"beat_rare_12",   tier:"Rare",      points:250,  prompt:"Make a track in 3/4 or 6/8 time signature, but force it to feel like a dancefloor track.",           modifier:"Keep a heavy transient hit on the first beat of every bar." },
+  // --- EPIC (500 XP) ---
+  { id:"beat_epic_01",   tier:"Epic",      points:500,  prompt:"Make an Amapiano track that feels simultaneously like a somber funeral and a massive celebration.",   modifier:"Juxtapose a minor-key chord progression with an explosive, high-energy log drum." },
+  { id:"beat_epic_02",   tier:"Epic",      points:500,  prompt:"Make a drill beat that samples a traditional lullaby — keep both distinct energies fully intact.",    modifier:"The slide bass must glide underneath the delicate melody without drowning it out." },
+  { id:"beat_epic_03",   tier:"Epic",      points:500,  prompt:"Make a heavy gqom beat for a high-intensity scene taking place underwater.",                          modifier:"Apply low-pass filters that open and close like a diver surfacing." },
+  { id:"beat_epic_04",   tier:"Epic",      points:500,  prompt:"Make an Afrobeats track featuring a complex, authentic classical string arrangement underneath.",     modifier:"Let the violins lead the call-and-response pattern instead of a synth." },
+  { id:"beat_epic_05",   tier:"Epic",      points:500,  prompt:"Make a beat that kicks off as classic 90s kwaito and mutates into something unrecognizable by the end.", modifier:"Gradually accelerate the BPM by 15–20 beats over the course of the arrangement." },
+  { id:"beat_epic_06",   tier:"Epic",      points:500,  prompt:"Create a Highlife x Phonk crossover track.",                                                          modifier:"Blend clean West African guitar riffs with blown-out, cowbell-driven 808s." },
+  { id:"beat_epic_07",   tier:"Epic",      points:500,  prompt:"An Afrofuturist anthem — what does South African electronic music sound like in the year 2080?",      modifier:"Build sound patches using heavily processed real-world metallic field recordings." },
+  { id:"beat_epic_08",   tier:"Epic",      points:500,  prompt:"Mashup: Create a heavy Gqom track infused with golden-era 90s Boom-Bap jazz chords.",                modifier:"The bass must be dark and industrial, but the Rhodes keys must stay smooth and soulful." },
+  { id:"beat_epic_09",   tier:"Epic",      points:500,  prompt:"Make an Amapiano track, but replace the iconic log drum with a live or synthesized funk slap-bass.",  modifier:"Keep the exact same rhythmic patterns, but shift the sonic texture entirely." },
+  { id:"beat_epic_10",   tier:"Epic",      points:500,  prompt:"Produce an entire instrumental that relies entirely on a single chord progression throughout.",        modifier:"Create energy shifts solely by adding or subtracting frequency ranges and layers." },
+  { id:"beat_epic_11",   tier:"Epic",      points:500,  prompt:"Make a beat that encapsulates the eerie, quiet stillness of a city street during a blackout.",        modifier:"Use long, spacey delays and sparse, echoing percussive hits." },
+  // --- LEGENDARY (1000 XP) ---
+  { id:"beat_legend_01", tier:"Legendary", points:1000, prompt:"Open the oldest, most intimidating unfinished masterpiece you have — and finally export the master.", modifier:"No adding sections. Arrange what you have, mix it down, and call it complete." },
+  { id:"beat_legend_02", tier:"Legendary", points:1000, prompt:"Remake a legendary, classic local radio instrumental entirely from pure memory.",                     modifier:"Absolutely no looking up the original track, key, samples, or reference material." },
+  { id:"beat_legend_03", tier:"Legendary", points:1000, prompt:"Create a complete, hard-hitting beat using exclusively samples generated by your own voice.",         modifier:"Click your tongue for percussion, hum the sub-bass, and snap for claps." },
+  { id:"beat_legend_04", tier:"Legendary", points:1000, prompt:"Step out of bounds: produce a track in a genre you have openly disliked or never attempted.",         modifier:"Research its core rhythms for 10 minutes, then build it from scratch." },
+  { id:"beat_legend_05", tier:"Legendary", points:1000, prompt:"Create a rich, complex melodic beat using only white noise and filters.",                             modifier:"Synthesize your own kicks, snares, and melodies out of pure static using heavy automation." },
+  { id:"beat_legend_06", tier:"Legendary", points:1000, prompt:"Make a track that smoothly accelerates from 90 BPM to 130 BPM across the entire arrangement.",       modifier:"Start at a slow crawl and finish at a frantic sprint — no jarring jump cuts." },
 ];
-export const ALL_PROMPTS = [...SINGER_PROMPTS, ...BEATMAKER_PROMPTS];
+
+// ── Tier config ───────────────────────────────────────────────────────────────
+const TIER_CONFIG = {
+  Common:    { color: '#9ca3af', bg: 'rgba(156,163,175,0.15)', border: 'rgba(156,163,175,0.3)',  weight: 50 },
+  Rare:      { color: '#60a5fa', bg: 'rgba(96,165,250,0.15)',  border: 'rgba(96,165,250,0.3)',   weight: 30 },
+  Epic:      { color: '#a78bfa', bg: 'rgba(167,139,250,0.15)', border: 'rgba(167,139,250,0.3)',  weight: 15 },
+  Legendary: { color: '#fbbf24', bg: 'rgba(251,191,36,0.15)',  border: 'rgba(251,191,36,0.4)',   weight: 5  },
+};
+
+// ── Generic modifiers (combinator pool) ───────────────────────────────────────
+const GENERIC_MODIFIERS = [
+  "You have exactly 20 minutes to finish this.",
+  "Use only one microphone for the entire session.",
+  "You can't listen back until the whole project is exported.",
+  "Pitch down your final master by 2 semitones.",
+  "Upload the raw, unmixed export directly — no final polish.",
+  "No headphones — monitor on speakers only.",
+  "Start recording within 5 minutes of reading this.",
+  "The first take is the final take. No do-overs.",
+  "Record in one room with zero acoustic treatment.",
+  "Finish it tonight — no saving for tomorrow.",
+  "Share a 30-second clip before midnight.",
+  "Name the track before you start making it.",
+  "No loops — every element must be played or recorded live.",
+  "Dedicate it to someone specific before you begin.",
+  "The final track must be under 2 minutes.",
+  "No compression anywhere in the mix.",
+  "Bounce to mono only — no stereo.",
+  "You must collaborate with at least one other person on this.",
+  "Record somewhere outside your usual setup.",
+  "Post your process in real time while you make it.",
+];
+
+// ── Combinator engine ─────────────────────────────────────────────────────────
+function generateChallenge(mode) {
+  const pool = mode === 'singer' ? SINGER_PROMPTS : BEATMAKER_PROMPTS;
+
+  // Weighted random pick by tier
+  const totalWeight = pool.reduce((sum, p) => sum + TIER_CONFIG[p.tier].weight, 0);
+  let rand = Math.random() * totalWeight;
+  let base = pool[pool.length - 1];
+  for (const p of pool) {
+    rand -= TIER_CONFIG[p.tier].weight;
+    if (rand <= 0) { base = p; break; }
+  }
+
+  // Append a generic modifier (50% chance)
+  const extraMod = Math.random() < 0.5
+    ? ' ALSO: ' + GENERIC_MODIFIERS[Math.floor(Math.random() * GENERIC_MODIFIERS.length)]
+    : '';
+
+  return { ...base, modifier: base.modifier + extraMod };
+}
+
+// Flat exports for weekly-wheel-spin.js compatibility
+export const ALL_SINGER_PROMPTS = SINGER_PROMPTS.map(p => p.prompt);
+export const ALL_BEATMAKER_PROMPTS = BEATMAKER_PROMPTS.map(p => p.prompt);
+export const ALL_PROMPTS = [...ALL_SINGER_PROMPTS, ...ALL_BEATMAKER_PROMPTS];
 
 // ── Slice colors — dark palette matching app aesthetic ───────────────────────
 const SLICE_COLORS = [
@@ -235,11 +305,12 @@ export default function WheelRevealPage() {
   const [rotation, setRotation]         = useState(0);
   const [spinning, setSpinning]         = useState(false);
   const [revealed, setRevealed]         = useState(false);
-  const [personalResult, setPersonalResult] = useState(null);
+  const [personalResult, setPersonalResult] = useState(null); // { prompt, modifier, tier, points, id }
   const [spinsUsed, setSpinsUsed]           = useState(0);
   const SPIN_CAP = 5;
 
   const animRef = useRef(null);
+  const pendingChallengeRef = useRef(null);
   const stRef   = useRef(null);
   const rotRef  = useRef(0);
 
@@ -312,7 +383,7 @@ export default function WheelRevealPage() {
       rotRef.current = totalRotation;
       setSpinning(false);
       chime();
-      if (mode === 'personal') setPersonalResult(pool[targetIdx]);
+      if (mode === 'personal') setPersonalResult(pendingChallengeRef.current || { prompt: pool[targetIdx], tier: 'Common', points: 100, modifier: '' });
       setTimeout(() => setRevealed(true), 250);
     };
     animRef.current = requestAnimationFrame(animate);
@@ -321,8 +392,13 @@ export default function WheelRevealPage() {
   const spinPersonal = () => {
     if (spinning) return;
     if (spinsUsed >= SPIN_CAP) return;
+    const challengeMode = personalMode === 'beatmaker' ? 'beatmaker' : 'singer';
+    const challenge = generateChallenge(challengeMode);
+    // Map to a wheel slice index for animation
     const pool = getPromptPool();
     const idx = Math.floor(Math.random() * pool.length);
+    // Store the full challenge object, spin the wheel
+    pendingChallengeRef.current = challenge;
     spinToIndex(idx, pool);
     setSpinsUsed(prev => prev + 1);
   };
@@ -334,8 +410,8 @@ export default function WheelRevealPage() {
   return (
     <div className="min-h-screen bg-black text-white pb-32">
 
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 pt-14 pb-4 md:pt-6">
+      {/* Header — sticky */}
+      <div className="sticky top-0 z-30 bg-black/90 backdrop-blur-sm flex items-center justify-between px-4 pt-14 pb-4 md:pt-6 border-b border-white/[0.04]">
         <button onClick={() => navigate(-1)}
           className="w-9 h-9 flex items-center justify-center rounded-full bg-white/[0.06] hover:bg-white/[0.08] transition">
           <ArrowLeft className="w-4 h-4 text-white/60" />
@@ -399,6 +475,108 @@ export default function WheelRevealPage() {
       ) : (
         <div className="flex flex-col items-center px-4">
 
+          {/* Reveal card — shown ABOVE the wheel after spin */}
+          {mode === 'platform' && revealed && challenge && (
+            <div className="w-full max-w-sm rounded-2xl border border-white/[0.08] bg-white/[0.03] p-5 mb-5"
+              style={{ animation: 'fadeUp 0.4s ease' }}>
+              <div className="flex items-center space-x-2 mb-3">
+                <span className="text-[10px] text-white/30 uppercase tracking-wider">This week's challenge</span>
+                <span className="text-[9px] px-1.5 py-0.5 rounded-full font-bold bg-purple-500/15 text-purple-400 border border-purple-500/20">
+                  {challenge.mode === 'singer' ? '🎤 Vocalist' : '🎛️ Producer'}
+                </span>
+              </div>
+              <p className="text-lg font-bold text-white leading-relaxed mb-4"
+                style={{ whiteSpace: 'pre-line' }}>
+                {challenge.prompt}
+              </p>
+              {challenge.competitions && (
+                <div className="flex space-x-4 mb-4">
+                  {challenge.competitions.entries_close_at && challenge.competitions.status === 'open' && (
+                    <div>
+                      <p className="text-[9px] text-white/25 uppercase tracking-wider mb-0.5">Entries close</p>
+                      <p className="text-xs font-bold text-white flex items-center space-x-1">
+                        <Clock className="w-3 h-3 text-green-400" />
+                        <span>{timeLeft(challenge.competitions.entries_close_at)}</span>
+                      </p>
+                    </div>
+                  )}
+                  {challenge.competitions.voting_close_at && challenge.competitions.status === 'voting' && (
+                    <div>
+                      <p className="text-[9px] text-white/25 uppercase tracking-wider mb-0.5">Voting closes</p>
+                      <p className="text-xs font-bold text-white flex items-center space-x-1">
+                        <Clock className="w-3 h-3 text-purple-400" />
+                        <span>{timeLeft(challenge.competitions.voting_close_at)}</span>
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+              <div className="flex items-center space-x-2 p-3 rounded-xl bg-white/[0.03] border border-white/[0.06] mb-4">
+                <Trophy className="w-4 h-4 text-yellow-400/70 flex-shrink-0" />
+                <p className="text-xs text-white/60">Win 3 months Pro or Premium — automatically applied</p>
+              </div>
+              {challenge.competitions?.id && (
+                <button
+                  onClick={() => navigate(`/competition/${challenge.competitions.id}`)}
+                  className="w-full py-3 rounded-xl text-sm font-bold text-white bg-purple-600 hover:bg-purple-500 transition active:scale-[0.98]">
+                  {challenge.competitions.status === 'voting' ? '🗳️ Vote Now' :
+                   challenge.competitions.status === 'open'   ? '🎵 Enter Challenge' : 'View Challenge'}
+                </button>
+              )}
+            </div>
+          )}
+
+          {mode === 'personal' && revealed && personalResult && (() => {
+            const tier = personalResult.tier || 'Common';
+            const tc = TIER_CONFIG[tier] || TIER_CONFIG.Common;
+            const pts = personalResult.points || 100;
+            return (
+              <div className="w-full max-w-sm rounded-2xl p-5 mb-5"
+                style={{ animation: 'fadeUp 0.4s ease', background: 'rgba(255,255,255,0.03)', border: `1px solid ${tc.border}` }}>
+                {/* Tier + XP */}
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full"
+                    style={{ color: tc.color, background: tc.bg, border: `1px solid ${tc.border}` }}>
+                    {tier}
+                  </span>
+                  <span className="text-[10px] font-bold" style={{ color: tc.color }}>+{pts} XP</span>
+                </div>
+                {/* Prompt */}
+                <p className="text-lg font-bold text-white leading-relaxed mb-3"
+                  style={{ whiteSpace: 'pre-line' }}>
+                  {personalResult.prompt}
+                </p>
+                {/* Modifier */}
+                {personalResult.modifier && (
+                  <div className="rounded-xl px-3 py-2 mb-4"
+                    style={{ background: tc.bg, border: `1px solid ${tc.border}` }}>
+                    <p className="text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: tc.color }}>Modifier</p>
+                    <p className="text-xs text-white/70">{personalResult.modifier}</p>
+                  </div>
+                )}
+                <div className="flex space-x-2">
+                  <button onClick={spinPersonal}
+                    disabled={spinsUsed >= SPIN_CAP}
+                    className="flex-1 flex items-center justify-center space-x-1.5 py-2.5 rounded-xl text-xs font-medium bg-white/[0.06] text-white/50 hover:bg-white/[0.1] transition border border-white/[0.06] disabled:opacity-30">
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    <span>{spinsUsed >= SPIN_CAP ? 'Done for today' : 'Spin Again'}</span>
+                  </button>
+                  {user && (
+                    <button onClick={() => navigate('/dashboard?tab=upload')}
+                      className="flex-1 flex items-center justify-center space-x-1.5 py-2.5 rounded-xl text-xs font-bold text-white transition"
+                      style={{ background: tc.color }}>
+                      <Music className="w-3.5 h-3.5" />
+                      <span>Upload Track</span>
+                    </button>
+                  )}
+                </div>
+                <p className="text-[10px] text-white/20 text-center mt-3">
+                  Personal spins are just for fun — no competition entry
+                </p>
+              </div>
+            );
+          })()}
+
           {/* Wheel */}
           <div className="relative mb-6">
             {/* Subtle glow behind wheel */}
@@ -433,61 +611,7 @@ export default function WheelRevealPage() {
             <p className="text-xs text-white/30 uppercase tracking-widest mb-4">Spinning...</p>
           )}
 
-          {/* Platform mode — reveal */}
-          {mode === 'platform' && revealed && challenge && (
-            <div className="w-full max-w-sm rounded-2xl border border-white/[0.08] bg-white/[0.03] p-5 mb-4"
-              style={{ animation: 'fadeUp 0.4s ease' }}>
-              <div className="flex items-center space-x-2 mb-3">
-                <span className="text-[10px] text-white/30 uppercase tracking-wider">This week's challenge</span>
-                <span className="text-[9px] px-1.5 py-0.5 rounded-full font-bold bg-purple-500/15 text-purple-400 border border-purple-500/20">
-                  {challenge.mode === 'singer' ? '🎤 Vocalist' : '🎛️ Producer'}
-                </span>
-              </div>
-              <p className="text-lg font-bold text-white leading-relaxed mb-4"
-                style={{ whiteSpace: 'pre-line' }}>
-                {challenge.prompt}
-              </p>
 
-              {/* Timers */}
-              {challenge.competitions && (
-                <div className="flex space-x-4 mb-4">
-                  {challenge.competitions.entries_close_at && challenge.competitions.status === 'open' && (
-                    <div>
-                      <p className="text-[9px] text-white/25 uppercase tracking-wider mb-0.5">Entries close</p>
-                      <p className="text-xs font-bold text-white flex items-center space-x-1">
-                        <Clock className="w-3 h-3 text-green-400" />
-                        <span>{timeLeft(challenge.competitions.entries_close_at)}</span>
-                      </p>
-                    </div>
-                  )}
-                  {challenge.competitions.voting_close_at && challenge.competitions.status === 'voting' && (
-                    <div>
-                      <p className="text-[9px] text-white/25 uppercase tracking-wider mb-0.5">Voting closes</p>
-                      <p className="text-xs font-bold text-white flex items-center space-x-1">
-                        <Clock className="w-3 h-3 text-purple-400" />
-                        <span>{timeLeft(challenge.competitions.voting_close_at)}</span>
-                      </p>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Prize */}
-              <div className="flex items-center space-x-2 p-3 rounded-xl bg-white/[0.03] border border-white/[0.06] mb-4">
-                <Trophy className="w-4 h-4 text-yellow-400/70 flex-shrink-0" />
-                <p className="text-xs text-white/60">Win 3 months Pro or Premium — automatically applied</p>
-              </div>
-
-              {challenge.competitions?.id && (
-                <button
-                  onClick={() => navigate(`/competition/${challenge.competitions.id}`)}
-                  className="w-full py-3 rounded-xl text-sm font-bold text-white bg-purple-600 hover:bg-purple-500 transition active:scale-[0.98]">
-                  {challenge.competitions.status === 'voting' ? '🗳️ Vote Now' :
-                   challenge.competitions.status === 'open'   ? '🎵 Enter Challenge' : 'View Challenge'}
-                </button>
-              )}
-            </div>
-          )}
 
           {/* Platform — no active challenge */}
           {mode === 'platform' && !challenge && !loading && (
@@ -520,34 +644,7 @@ export default function WheelRevealPage() {
                 )}
               </div>
 
-              {revealed && personalResult && (
-                <div className="w-full max-w-sm rounded-2xl border border-white/[0.08] bg-white/[0.03] p-5 mb-4"
-                  style={{ animation: 'fadeUp 0.4s ease' }}>
-                  <p className="text-[10px] text-white/30 uppercase tracking-wider mb-3">Your challenge</p>
-                  <p className="text-lg font-bold text-white leading-relaxed mb-4"
-                    style={{ whiteSpace: 'pre-line' }}>
-                    {personalResult}
-                  </p>
-                  <div className="flex space-x-2">
-                    <button onClick={spinPersonal}
-                      disabled={spinsUsed >= SPIN_CAP}
-                      className="flex-1 flex items-center justify-center space-x-1.5 py-2.5 rounded-xl text-xs font-medium bg-white/[0.06] text-white/50 hover:bg-white/[0.1] transition border border-white/[0.06] disabled:opacity-30">
-                      <RefreshCw className="w-3.5 h-3.5" />
-                      <span>{spinsUsed >= SPIN_CAP ? 'Done for today' : 'Spin Again'}</span>
-                    </button>
-                    {user && (
-                      <button onClick={() => navigate('/dashboard?tab=upload')}
-                        className="flex-1 flex items-center justify-center space-x-1.5 py-2.5 rounded-xl text-xs font-bold bg-purple-600 text-white hover:bg-purple-500 transition">
-                        <Music className="w-3.5 h-3.5" />
-                        <span>Upload Track</span>
-                      </button>
-                    )}
-                  </div>
-                  <p className="text-[10px] text-white/20 text-center mt-3">
-                    Personal spins are just for fun — no competition entry
-                  </p>
-                </div>
-              )}
+
 
               {!spinning && !revealed && (
                 <p className="text-xs text-white/20 text-center mb-4">
