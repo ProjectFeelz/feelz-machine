@@ -343,11 +343,7 @@ export default function CompetitionsPage() {
                 </div>
                 <p className="text-xs text-white/40">Every Sunday · Win Pro or Premium</p>
               </div>
-              <button onClick={() => navigate('/wheel')}
-                className="text-[10px] font-bold px-3 py-1.5 rounded-full transition"
-                style={{ background: 'rgba(139,92,246,0.12)', color: '#a78bfa', border: '1px solid rgba(139,92,246,0.2)' }}>
-                Full Page →
-              </button>
+
             </div>
 
             {/* Wheel + prompt side by side on wide, stacked on narrow */}
@@ -434,6 +430,17 @@ export default function CompetitionsPage() {
                   </div>
                 )}
               </div>
+            </div>
+
+            {/* Full Page button — bottom of card */}
+            <div className="px-5 pb-5">
+              <button onClick={() => navigate('/wheel')}
+                className="w-full py-3 rounded-2xl text-sm font-bold transition active:scale-[0.98] flex items-center justify-center space-x-2"
+                style={{ background: 'rgba(139,92,246,0.15)', color: '#a78bfa', border: '1px solid rgba(139,92,246,0.3)' }}>
+                <span>🎡</span>
+                <span>Open Full Wheel Page</span>
+                <span>→</span>
+              </button>
             </div>
           </div>
 

@@ -59,7 +59,6 @@ const ARTIST_TABS = [
   { key: 'profile',  label: 'Profile',  icon: User },
   { key: 'edit',     label: 'Edit',     icon: Camera },
   { key: 'theme',    label: 'Theme',    icon: Palette },
-  { key: 'links',    label: 'Links',    icon: Link },
   { key: 'payments', label: 'Payments', icon: DollarSign },
 ];
 
@@ -158,9 +157,6 @@ export default function ProfilePage() {
   // Edit tab state (unified from UserProfilePage)
   const editFileRef = React.useRef(null);
   const [editDisplayName, setEditDisplayName] = useState('');
-  const [editSlug, setEditSlug]               = useState('');
-  const [slugChecking, setSlugChecking]       = useState(false);
-  const [slugAvailable, setSlugAvailable]     = useState(null); // null=unchecked, true, false
   const [editBio, setEditBio]                 = useState('');
   const [editGenres, setEditGenres]           = useState([]);
   const [editMood, setEditMood]               = useState('');
@@ -267,8 +263,6 @@ export default function ProfilePage() {
           setEditMood(data.mood || artist?.mood || '');
         } else {
           setEditDisplayName(artist?.artist_name || '');
-        setEditSlug(artist?.slug || '');
-        setSlugAvailable(null);
           setEditBio(artist?.bio || '');
           setEditGenres(artist?.genre ? [artist.genre] : []);
           setEditMood(artist?.mood || '');
@@ -350,23 +344,21 @@ export default function ProfilePage() {
         newAvatarUrl = urlData.publicUrl;
       }
       // Update artist profile
-      // Validate slug if changed
-      const cleanSlug = editSlug.trim().toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
-      if (cleanSlug && cleanSlug !== artist?.slug) {
-        const { data: existing } = await supabase.from('artists').select('id').eq('slug', cleanSlug).maybeSingle();
-        if (existing) throw new Error('That username is already taken. Please choose another.');
-      }
       const artistUpdate = {
         artist_name: editDisplayName.trim() || artist?.artist_name,
         bio:         editBio.trim() || null,
         genre:       editGenres[0] || null,
         mood:        editMood || null,
         updated_at:  new Date().toISOString(),
-        ...(cleanSlug && cleanSlug !== artist?.slug ? { slug: cleanSlug } : {}),
       };
       if (newAvatarUrl && newAvatarUrl !== artist?.profile_image_url) {
         artistUpdate.profile_image_url = newAvatarUrl;
       }
+      // Save social links from form
+      const sl = {};
+      SOCIALS.forEach(p => { if (form[p.key]?.trim()) sl[p.key] = form[p.key].trim(); });
+      artistUpdate.social_links = sl;
+
       await supabase.from('artists').update(artistUpdate).eq('id', artist.id);
       // Also upsert user_profiles for listener side
       await supabase.from('user_profiles').upsert({
@@ -509,11 +501,11 @@ export default function ProfilePage() {
 
           {isArtist && artist?.slug && (
             <div className="flex items-center justify-between mt-4 pt-3 border-t border-white/[0.05]">
-              <button onClick={() => nav(`/@${artist.slug}`)}
+              <button onClick={() => nav(`/artist/${artist.slug}`)}
                 className="flex items-center space-x-1.5 text-xs text-white/30 hover:text-white/50 transition">
-                <ExternalLink className="w-3 h-3" /><span>/@{artist.slug}</span>
+                <ExternalLink className="w-3 h-3" /><span>/artist/{artist.slug}</span>
               </button>
-              <button onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/@${artist.slug}`); }}
+              <button onClick={() => navigator.clipboard.writeText(`${window.location.origin}/artist/${artist.slug}`)}
                 className="text-xs text-white/20 hover:text-white/40 transition">Copy link</button>
             </div>
           )}
@@ -694,34 +686,6 @@ export default function ProfilePage() {
                     className="w-full px-3 py-2.5 bg-white/[0.06] rounded-xl text-white text-sm outline-none border border-white/[0.06] focus:border-white/20 transition placeholder-white/20" />
                 </div>
 
-                {/* Username / slug */}
-                <div>
-                  <label className="block text-xs text-white/40 mb-1.5 font-semibold uppercase tracking-wider">Username (your @handle)</label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-white/30">@</span>
-                    <input type="text" value={editSlug}
-                      onChange={async e => {
-                        const val = e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-');
-                        setEditSlug(val);
-                        setSlugAvailable(null);
-                        if (val && val !== artist?.slug && val.length >= 3) {
-                          setSlugChecking(true);
-                          const { data } = await supabase.from('artists').select('id').eq('slug', val).maybeSingle();
-                          setSlugAvailable(!data);
-                          setSlugChecking(false);
-                        }
-                      }}
-                      maxLength={30} placeholder={artist?.slug || 'your-handle'}
-                      className="w-full pl-7 pr-10 py-2.5 bg-white/[0.06] rounded-xl text-white text-sm outline-none border border-white/[0.06] focus:border-white/20 transition placeholder-white/20" />
-                    <div className="absolute right-3 top-1/2 -translate-y-1/2 text-xs">
-                      {slugChecking && <span className="text-white/30">...</span>}
-                      {!slugChecking && slugAvailable === true && editSlug !== artist?.slug && <span className="text-green-400">✓</span>}
-                      {!slugChecking && slugAvailable === false && <span className="text-red-400">✗</span>}
-                    </div>
-                  </div>
-                  <p className="text-[11px] text-white/25 mt-1">This changes your profile URL — feelzmachine.com/@{editSlug || artist?.slug}</p>
-                </div>
-
                 {/* Bio */}
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
@@ -773,6 +737,27 @@ export default function ProfilePage() {
                   </div>
                 </div>
 
+                {/* Social Links */}
+                <div>
+                  <label className="block text-xs text-white/40 mb-2 font-semibold uppercase tracking-wider">Social Links</label>
+                  <div className="space-y-2">
+                    {SOCIALS.map(({ key, label, icon: Icon, ph }) => (
+                      <div key={key}>
+                        <label className="block text-xs text-white/25 mb-1">{label}</label>
+                        <div className="flex items-center space-x-2">
+                          <div className="w-8 h-8 rounded-lg bg-white/[0.04] flex items-center justify-center flex-shrink-0 border border-white/[0.06]">
+                            <Icon className="w-3.5 h-3.5 text-white/30" />
+                          </div>
+                          <input type="text" value={form[key]}
+                            onChange={e => setForm({ ...form, [key]: e.target.value })}
+                            placeholder={ph}
+                            className="flex-1 px-3 py-2 bg-white/[0.06] rounded-lg text-white text-sm outline-none border border-white/[0.06] focus:border-white/20 transition placeholder-white/15" />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
                 {editError && <p className="text-xs text-red-400">{editError}</p>}
 
                 <button onClick={handleEditSave} disabled={editSaving}
@@ -803,77 +788,7 @@ export default function ProfilePage() {
             </div>
           )}
 
-          {/* ── Links tab ── */}
-          {activeTab === 'links' && (
-            <div className="rounded-2xl border border-white/[0.06] overflow-hidden mb-4" style={{ background: 'rgba(255,255,255,0.02)' }}>
-              <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.05]">
-                <p className="text-sm font-semibold text-white">Social Links</p>
-                {!editing && hasAnyLinks && (
-                  <button onClick={() => setEditing(true)}
-                    className="text-xs text-white/40 hover:text-white/60 transition px-2 py-1 rounded-lg hover:bg-white/[0.04]">Edit</button>
-                )}
-                {editing && (
-                  <button onClick={() => { setEditing(false); setMsg(''); }}
-                    className="text-xs text-white/40 hover:text-white/60 transition px-2 py-1 rounded-lg hover:bg-white/[0.04]">Cancel</button>
-                )}
-              </div>
-              <div className="p-4">
-                {editing ? (
-                  <div className="space-y-3">
-                    {SOCIALS.map(({ key, label, icon: Icon, ph }) => (
-                      <div key={key}>
-                        <label className="block text-xs text-white/30 mb-1">{label}</label>
-                        <div className="flex items-center space-x-2">
-                          <div className="w-8 h-8 rounded-lg bg-white/[0.04] flex items-center justify-center flex-shrink-0 border border-white/[0.06]">
-                            <Icon className="w-3.5 h-3.5 text-white/30" />
-                          </div>
-                          <input type="text" value={form[key]}
-                            onChange={e => setForm({ ...form, [key]: e.target.value })}
-                            placeholder={ph}
-                            className="flex-1 px-3 py-2 bg-white/[0.06] rounded-lg text-white text-sm outline-none border border-white/[0.06] focus:border-white/20 transition placeholder-white/15" />
-                        </div>
-                      </div>
-                    ))}
-                    <div className="flex space-x-2 pt-1">
-                      <button onClick={() => { setEditing(false); setMsg(''); }}
-                        className="flex-1 py-2.5 rounded-xl text-sm font-medium text-white/40 border border-white/[0.08] hover:bg-white/[0.04] transition">Cancel</button>
-                      <button onClick={save} disabled={saving}
-                        className="flex-1 py-2.5 bg-white text-black rounded-xl font-semibold text-sm flex items-center justify-center space-x-2 disabled:opacity-50 transition active:scale-[0.98]">
-                        {saving ? <Loader className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                        <span>{saving ? 'Saving...' : 'Save'}</span>
-                      </button>
-                    </div>
-                  </div>
-                ) : hasAnyLinks ? (
-                  <div className="space-y-2">
-                    {SOCIALS.filter(p => form[p.key]).map(({ key, label, icon: Icon }) => (
-                      <div key={key} className="flex items-center space-x-3 py-1.5">
-                        <div className="w-7 h-7 rounded-lg bg-white/[0.04] flex items-center justify-center border border-white/[0.06]">
-                          <Icon className="w-3.5 h-3.5 text-white/40" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-[10px] text-white/30 mb-0.5">{label}</p>
-                          <p className="text-xs text-white/60 truncate">{form[key]}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="py-6 text-center">
-                    <div className="w-10 h-10 rounded-xl bg-white/[0.04] flex items-center justify-center mx-auto mb-3 border border-white/[0.06]">
-                      <Link className="w-4 h-4 text-white/20" />
-                    </div>
-                    <p className="text-sm text-white/40 mb-1">No social links yet</p>
-                    <p className="text-xs text-white/20 mb-4">Add your socials so fans can find you everywhere</p>
-                    <button onClick={() => setEditing(true)}
-                      className="inline-flex items-center space-x-1.5 px-4 py-2 rounded-lg bg-white/[0.06] hover:bg-white/[0.1] transition text-sm text-white/60 font-medium">
-                      <Plus className="w-3.5 h-3.5" /><span>Add Links</span>
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
+
 
           {/* ── Payments tab ── */}
           {activeTab === 'payments' && (
