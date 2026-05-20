@@ -16,7 +16,7 @@ import { useEffect } from 'react';
  * Usage:
  *   useMediaSession({ currentTrack, isPlaying, togglePlay, playNext, playPrev });
  */
-export function useMediaSession({ currentTrack, isPlaying, togglePlay, playNext, playPrev }) {
+export function useMediaSession({ currentTrack, isPlaying, togglePlay, playNext, playPrev, seek, currentTime, duration }) {
   // Set metadata when track changes
   useEffect(() => {
     if (!('mediaSession' in navigator)) return;
@@ -39,22 +39,36 @@ export function useMediaSession({ currentTrack, isPlaying, togglePlay, playNext,
     });
   }, [currentTrack?.id]);
 
-  // Update playback state when isPlaying changes
+  // Update playback state and position for CarPlay/Android Auto scrubbing
   useEffect(() => {
     if (!('mediaSession' in navigator)) return;
     navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
   }, [isPlaying]);
+
+  useEffect(() => {
+    if (!('mediaSession' in navigator) || !duration) return;
+    try {
+      navigator.mediaSession.setPositionState({
+        duration:     duration,
+        playbackRate: 1,
+        position:     Math.min(currentTime || 0, duration),
+      });
+    } catch {} // setPositionState not supported in all browsers
+  }, [currentTime, duration, isPlaying]);
 
   // Register action handlers
   useEffect(() => {
     if (!('mediaSession' in navigator)) return;
 
     const handlers = [
-      ['play',          () => { if (!isPlaying) togglePlay(); }],
-      ['pause',         () => { if (isPlaying)  togglePlay(); }],
-      ['nexttrack',     () => playNext()],
-      ['previoustrack', () => playPrev()],
-      ['stop',          () => { if (isPlaying) togglePlay(); }],
+      ['play',           () => { if (!isPlaying) togglePlay(); }],
+      ['pause',          () => { if (isPlaying)  togglePlay(); }],
+      ['nexttrack',      () => playNext()],
+      ['previoustrack',  () => playPrev()],
+      ['stop',           () => { if (isPlaying) togglePlay(); }],
+      ['seekto',         (e) => { if (seek && e.seekTime != null) seek(e.seekTime); }],
+      ['seekforward',    (e) => { if (seek) seek(Math.min((currentTime || 0) + (e.seekOffset || 10), duration || 0)); }],
+      ['seekbackward',   (e) => { if (seek) seek(Math.max((currentTime || 0) - (e.seekOffset || 10), 0)); }],
     ];
 
     handlers.forEach(([action, handler]) => {
@@ -68,5 +82,5 @@ export function useMediaSession({ currentTrack, isPlaying, togglePlay, playNext,
         catch {}
       });
     };
-  }, [isPlaying, togglePlay, playNext, playPrev]);
+  }, [isPlaying, togglePlay, playNext, playPrev, seek, currentTime, duration]);
 }

@@ -13,7 +13,7 @@ function preloadCover(track) {
 const PlayerContext = createContext({});
 
 function PlayerProviderInner({ children, value, isPlaying, togglePlay, playNext, playPrev, currentTrack }) {
-  useMediaSession({ currentTrack, isPlaying, togglePlay, playNext, playPrev });
+  useMediaSession({ currentTrack, isPlaying, togglePlay, playNext, playPrev, seek, currentTime, duration });
   return <PlayerContext.Provider value={value}>{children}</PlayerContext.Provider>;
 }
 
@@ -141,7 +141,12 @@ export function PlayerProvider({ children }) {
       // Now switch primary to the NEW track (silent, fades in)
       primaryAudio.src    = nextTrack.file_url;
       primaryAudio.volume = 0;
-      primaryAudio.play().catch(console.error);
+      primaryAudio.load();
+      const startFadeIn = () => {
+        primaryAudio.play().catch(() => {});
+        primaryAudio.removeEventListener('canplay', startFadeIn);
+      };
+      primaryAudio.addEventListener('canplay', startFadeIn);
 
       setCurrentTrack(nextTrack);
       preloadCover(nextTrack);
@@ -324,9 +329,15 @@ export function PlayerProvider({ children }) {
       return;
     }
     streamLoggedRef.current = false;
+    audio.pause();
     audio.src = track.file_url;
     audio.volume = volumeRef.current;
-    audio.play().catch(console.error);
+    audio.load();
+    const playWhenReady = () => {
+      audio.play().catch(() => {});
+      audio.removeEventListener('canplay', playWhenReady);
+    };
+    audio.addEventListener('canplay', playWhenReady);
     setCurrentTrack(track);
     preloadCover(track);
     setCurrentTime(0);
@@ -379,9 +390,15 @@ export function PlayerProvider({ children }) {
     const prevTrack = q[prevIndex];
     if (prevTrack?.file_url) {
       streamLoggedRef.current = false;
+      audioRef.current.pause();
       audioRef.current.src = prevTrack.file_url;
       audioRef.current.volume = volumeRef.current;
-      audioRef.current.play().catch(console.error);
+      audioRef.current.load();
+      const playPrevWhenReady = () => {
+        audioRef.current.play().catch(() => {});
+        audioRef.current.removeEventListener('canplay', playPrevWhenReady);
+      };
+      audioRef.current.addEventListener('canplay', playPrevWhenReady);
       setCurrentTrack(prevTrack);
       setQueueIndex(prevIndex);
       setCurrentTime(0);

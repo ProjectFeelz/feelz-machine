@@ -6,6 +6,7 @@ import TrackVersions from '../components/TrackVersions';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
+import { useTier } from '../contexts/useTier';
 import { usePlayer } from '../contexts/PlayerContext';
 import {
   ArrowLeft, Calendar, Play, Pause, Share2,
@@ -352,6 +353,7 @@ export default function ArtistProfilePage() {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, artist: myArtist } = useAuth();
+  const { isPremium } = useTier();
   const { playTrack, addToQueue, currentTrack, isPlaying, togglePlay } = usePlayer();
 
   const [artist, setArtist] = useState(null);
@@ -1283,7 +1285,7 @@ export default function ArtistProfilePage() {
           {artist.merch_enabled && (
             <button onClick={() => navigate(`/artist/${slug}/merch`)}
               className="flex items-center space-x-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all active:scale-95"
-              style={{ background: 'rgba(167,139,250,0.15)', border: '1px solid rgba(167,139,250,0.3)', color: '#a78bfa' }}>
+              style={{ backgroundColor: `${accentColor}25`, border: `1px solid ${accentColor}50`, color: accentColor }}>
               <ShoppingBag className="w-3.5 h-3.5" />
               <span>Merch</span>
             </button>
@@ -2027,7 +2029,9 @@ export default function ArtistProfilePage() {
                     { id: 'live',    icon: '🔴', label: 'Go Live',             sub: 'Start a live session',                  color: 'red' },
                     { id: 'upload',  icon: '🎵', label: 'Upload Track',        sub: 'Add new music to your profile',         color: 'yellow' },
                     { id: 'edit',    icon: '✏️', label: 'Edit Profile',        sub: 'Update your bio, photo and links',      color: 'gray' },
-                    { id: 'merch',   icon: '🛍️', label: 'Merch Store',          sub: 'Connect Printful · sell to your fans',  color: 'purple' },
+                    isPremium
+                      ? { id: 'merch',        icon: '🛍️', label: 'Merch Store',    sub: 'Connect Printful · sell to your fans', color: 'purple' }
+                      : { id: 'merch_locked', icon: '🛍️', label: 'Merch Store',    sub: 'Premium only — upgrade to unlock',     color: 'gray'   },
                   ].map(({ id, icon, label, sub, color }) => (
                     <button key={id}
                       onClick={() => {
@@ -2035,7 +2039,8 @@ export default function ArtistProfilePage() {
                         else if (id === 'memo')   { setCreateTab('memo'); }
                         else if (id === 'upload') { setShowCreateModal(false); setCreateTab('menu'); navigate('/dashboard?tab=upload'); }
                         else if (id === 'edit')   { setShowCreateModal(false); setCreateTab('menu'); navigate('/profile/edit'); }
-                        else if (id === 'merch')  { setShowCreateModal(false); setCreateTab('menu'); setShowMerchConnect(true); }
+                        else if (id === 'merch')        { setShowCreateModal(false); setCreateTab('menu'); setShowMerchConnect(true); }
+                        else if (id === 'merch_locked') { setShowCreateModal(false); setCreateTab('menu'); navigate('/upgrade'); }
                         else setCreateTab(id);
                       }}
                       className={`w-full flex items-center space-x-3 p-4 rounded-2xl border transition active:scale-[0.98] text-left`}

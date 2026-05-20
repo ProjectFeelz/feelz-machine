@@ -12,6 +12,7 @@
 [functions."convert-to-mp4"]
   included_files = ["node_modules/ffmpeg-static/**"]
   timeout = 26
+  memory = 3008
 
 [functions."convert-audio"]
   included_files = ["node_modules/ffmpeg-static/**"]
@@ -33,6 +34,8 @@
   for = "/index.html"
   [headers.values]
     Cache-Control = "no-cache, no-store, must-revalidate"
+    Cross-Origin-Opener-Policy = "same-origin"
+    Cross-Origin-Embedder-Policy = "require-corp"
 
 [[headers]]
   for = "/static/js/*.js"
