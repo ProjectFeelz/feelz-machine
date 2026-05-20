@@ -1889,7 +1889,7 @@ export default function ArtistProfilePage() {
                   }
                 </div>
                 <p className="text-sm font-medium truncate" style={{ color: textColor }}>{pl.name}</p>
-                <p className="text-xs truncate" style={{ color: `${textColor}50` }}>{pl.user_id !== artistData?.user_id ? '👥 Collab' : 'Playlist'}</p>
+                <p className="text-xs truncate" style={{ color: `${textColor}50` }}>{pl.user_id !== artist?.user_id ? '👥 Collab' : 'Playlist'}</p>
               </div>
             ))}
           </div>
