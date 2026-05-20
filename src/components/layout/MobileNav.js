@@ -1,11 +1,11 @@
 import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Home, Search, Library, LayoutDashboard, Trophy } from 'lucide-react';
+import { Home, Search, Library, LayoutDashboard, Trophy, Sparkles } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useHaptics } from '../../hooks/useHaptics';
 
 const navItems = [
-  { path: '/',             icon: Home,            label: 'Home',        tourKey: 'nav-home' },
+  { path: '/for-you',      icon: Sparkles,        label: 'For You',     tourKey: 'nav-foryou' },
   { path: '/browse',       icon: Search,          label: 'Browse',      tourKey: 'nav-browse' },
   { path: '/competitions', icon: Trophy,          label: 'Win',         tourKey: 'nav-competitions' },
   { path: '/library',      icon: Library,         label: 'Library',     tourKey: 'nav-library' },
@@ -37,7 +37,8 @@ export default function MobileNav() {
       <div className="flex items-center justify-around h-16 w-full mx-auto px-1">
         {navItems.map(({ path, icon: Icon, label, tourKey }) => {
           const isActive  = location.pathname === path ||
-            (path !== '/' && location.pathname.startsWith(path));
+            (path !== '/' && location.pathname.startsWith(path)) ||
+            (path === '/for-you' && location.pathname === '/');
           return (
             <button
               key={path}

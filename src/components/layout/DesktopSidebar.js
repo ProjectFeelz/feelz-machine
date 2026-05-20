@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Home, Search, Library, LayoutDashboard, User, Trophy, Info } from 'lucide-react';
+import { Home, Search, Library, LayoutDashboard, User, Trophy, Info, Sparkles } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { Bell } from 'lucide-react';
 import useNotifications from '../../contexts/useNotifications';
 import { supabase } from '../../supabaseClient';
 
 const navItems = [
+  { path: '/for-you',      icon: Sparkles,        label: 'For You' },
   { path: '/',             icon: Home,            label: 'Home' },
   { path: '/browse',       icon: Search,          label: 'Browse' },
   { path: '/competitions', icon: Trophy,          label: 'Competitions' },
@@ -118,7 +119,7 @@ export default function DesktopSidebar() {
       {/* Nav links */}
       <nav className="flex-1 px-4 space-y-0.5 overflow-y-auto">
         {navItems.map(({ path, icon: Icon, label }) => {
-          const isActive = location.pathname === path || (path !== '/' && location.pathname.startsWith(path));
+          const isActive = location.pathname === path || (path !== '/' && location.pathname.startsWith(path)) || (path === '/for-you' && location.pathname === '/');
           return (
             <button
               key={path}

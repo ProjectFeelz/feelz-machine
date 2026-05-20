@@ -46,6 +46,7 @@ import CollabRadarPage from './pages/CollabRadarPage';
 import AdminDuplicates from './pages/AdminDuplicates';
 import CompetitionRoomPage from './pages/CompetitionRoomPage';
 import WheelRevealPage from './pages/WheelRevealPage';
+import ForYouPage from './pages/ForYouPage';
 import MerchPage from './pages/MerchPage';
 import MerchCheckoutPage from './pages/MerchCheckoutPage';
 import CompetitionsPage from './pages/CompetitionsPage';
@@ -140,6 +141,7 @@ export default function AppRouter() {
 
               <Route element={<AppLayout />}>
                 <Route path="/" element={<HomePage />} />
+                <Route path="/for-you" element={<ForYouPage />} />
                 <Route path="/browse" element={<BrowsePage />} />
                 <Route path="/wheel" element={<WheelRevealPage />} />
                 <Route path="/competitions" element={<CompetitionsPage />} />

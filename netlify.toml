@@ -113,6 +113,10 @@
   schedule = "0 9 * * 0"
 
 [[scheduled_functions]]
+  name = "compute-recommendations"
+  schedule = "0 3 * * *"
+
+[[scheduled_functions]]
   name = "platform-daily-story"
   schedule = "0 8 * * *"
 
