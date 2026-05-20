@@ -99,6 +99,7 @@ const TIER_FEATURES = {
       { text: 'Featured track placement', included: true },
       { text: 'Live streaming to followers', included: true },
       { text: 'Tip goals & fan fundraising', included: true },
+      { text: 'Merch store (Printful integration)', included: true },
     ],
   },
 };

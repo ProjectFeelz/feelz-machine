@@ -46,6 +46,8 @@ import CollabRadarPage from './pages/CollabRadarPage';
 import AdminDuplicates from './pages/AdminDuplicates';
 import CompetitionRoomPage from './pages/CompetitionRoomPage';
 import WheelRevealPage from './pages/WheelRevealPage';
+import MerchPage from './pages/MerchPage';
+import MerchCheckoutPage from './pages/MerchCheckoutPage';
 import CompetitionsPage from './pages/CompetitionsPage';
 import AdminCompetitions from './pages/AdminCompetitions';
 import AdminEngagement from './pages/AdminEngagement';
@@ -82,6 +84,22 @@ function ArtistProfileRedirect() {
   return <Navigate to={`/artist/${slug}`} replace />;
 }
 
+// Handles Printful OAuth redirect — passes code back to artist profile
+function MerchConnectCallback() {
+  const navigate = useNavigate();
+  React.useEffect(() => {
+    const params  = new URLSearchParams(window.location.search);
+    const code    = params.get('code');
+    const state   = params.get('state'); // artist slug stored in state param
+    if (code && state) {
+      navigate(`/artist/${state}?printful_code=${code}`, { replace: true });
+    } else {
+      navigate('/', { replace: true });
+    }
+  }, []); // eslint-disable-line
+  return null;
+}
+
 export default function AppRouter() {
   return (
     <HelmetProvider>
@@ -106,6 +124,7 @@ export default function AppRouter() {
               <Route path="/competition/:competitionId" element={<CompetitionRoomPage />} />
               <Route path="/session/:sessionId" element={<ListeningSessionPage />} />
               <Route path="/@:slug" element={<ArtistProfileRedirect />} />
+              <Route path="/merch-connect-callback" element={<MerchConnectCallback />} />
 
               {/* Legal pages — fixed titles */}
               <Route path="/privacy-policy" element={
@@ -142,6 +161,8 @@ export default function AppRouter() {
                 <Route path="/about" element={<AboutPage />} />
                 <Route path="/album/:id" element={<AlbumDetailPage />} />
                 <Route path="/artist/:slug" element={<ArtistProfilePage />} />
+                <Route path="/artist/:slug/merch" element={<MerchPage />} />
+                <Route path="/artist/:slug/merch/checkout" element={<MerchCheckoutPage />} />
                 <Route path="/track/:slug" element={<TrackPage />} />
                 <Route path="/collab-radar" element={<CollabRadarPage />} />
                 <Route path="/admin" element={<AdminDashboard />} />

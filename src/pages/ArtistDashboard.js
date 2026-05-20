@@ -341,11 +341,7 @@ export default function ArtistDashboard() {
                           {wheelChallenge.competitions.status === 'voting' ? '🗳️ Vote Now' : '🎵 Enter Challenge'}
                         </button>
                       )}
-                      <button
-                        onClick={() => navigate('/wheel')}
-                        className="px-4 py-3 rounded-xl text-sm font-medium text-white/50 bg-white/[0.04] border border-white/[0.06] transition hover:bg-white/[0.08]">
-                        See Wheel
-                      </button>
+          
                     </div>
                   </div>
                 </div>
