@@ -368,13 +368,6 @@ function ForYouCard({ track, isActive, user, navigate }) {
     else navigator.clipboard.writeText(url);
   };
 
-  // Auto-play when card becomes active
-  useEffect(() => {
-    if (isActive && !hasVideo && track.file_url) {
-      if (!isThisOne) playTrack(track, [track]);
-    }
-  }, [isActive]); // eslint-disable-line
-
   const goToArtist = () => {
     setIsMinimized(true);
     navigate(`/artist/${track.artist_slug}`);
