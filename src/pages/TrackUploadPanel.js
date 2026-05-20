@@ -190,20 +190,28 @@ function YoutubeField({ value, onChange }) {
       </FieldLabel>
 
       {hasVideo ? (
+        <div className="flex items-center space-x-3 p-3 bg-white/[0.04] rounded-xl border border-white/[0.08]">
+          <video src={value} className="w-16 h-10 object-cover rounded-lg bg-black" muted />
+          <div className="flex-1 min-w-0">
+            <p className="text-xs text-white/70">Video uploaded ✓</p>
+            <p className="text-[10px] text-white/30">Shows in For You feed</p>
+          </div>
+          <button onClick={() => onChange('')} className="text-white/30 hover:text-white/60 text-xs transition">Remove</button>
+        </div>
+      ) : (
         <button type="button" onClick={() => !uploading && fileRef.current?.click()}
           className="w-full flex items-center space-x-3 px-3 py-3 bg-white/[0.04] rounded-xl border border-dashed border-white/[0.12] hover:bg-white/[0.07] transition text-left">
           {uploading
             ? <Loader className="w-4 h-4 text-purple-400 animate-spin flex-shrink-0" />
             : <Video className="w-4 h-4 text-white/30 flex-shrink-0" />}
           <div>
-            <p className="text-xs text-white/50">{uploading ? progress : 'Upload music video (MP4, MOV, WebM)'}</p>
-            <p className="text-[10px] text-white/20 mt-0.5">Max 200MB · Vertical videos recommended · Shows in For You feed</p>
+            <p className="text-xs text-white/50">{uploading ? 'Uploading…' : 'Upload music video'}</p>
+            <p className="text-[10px] text-white/20 mt-0.5">MP4 only · Max 300MB · Vertical recommended</p>
           </div>
         </button>
       )}
 
-      <input ref={fileRef} type="file" accept="video/mp4,video/webm,video/quicktime,video/mov"
-        onChange={handleVideoFile} className="hidden" />
+      <input ref={fileRef} type="file" accept="video/mp4" onChange={handleVideoFile} className="hidden" />
       {error && <p className="text-[10px] text-red-400 mt-1">{error}</p>}
     </div>
   );
