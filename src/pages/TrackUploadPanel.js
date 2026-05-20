@@ -189,17 +189,7 @@ function YoutubeField({ value, onChange }) {
         </span>
       </FieldLabel>
 
-      {/* Show current video or upload button */}
-      {value && !isUrl ? (
-        <div className="flex items-center space-x-3 p-3 bg-white/[0.04] rounded-xl border border-white/[0.08]">
-          <video src={value} className="w-16 h-10 object-cover rounded-lg bg-black" muted />
-          <div className="flex-1 min-w-0">
-            <p className="text-xs text-white/70 truncate">Video uploaded</p>
-            <p className="text-[10px] text-white/30">Plays in the For You feed</p>
-          </div>
-          <button onClick={() => onChange('')} className="text-white/30 hover:text-white/60 text-xs transition">Remove</button>
-        </div>
-      ) : (
+      {hasVideo ? (
         <button type="button" onClick={() => !uploading && fileRef.current?.click()}
           className="w-full flex items-center space-x-3 px-3 py-3 bg-white/[0.04] rounded-xl border border-dashed border-white/[0.12] hover:bg-white/[0.07] transition text-left">
           {uploading
