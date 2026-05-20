@@ -445,7 +445,7 @@ export default function CompetitionsPage() {
                   <span className="text-base">💰</span>
                   <p className="text-sm font-bold text-white">Paid Collaborations</p>
                 </div>
-                <p className="text-[10px] text-white/25 uppercase tracking-wider">$50 USD prize</p>
+                <p className="text-[10px] text-white/50 uppercase tracking-wider">$50 USD prize</p>
               </div>
               <div className="space-y-2 px-4">
                 {activePaidCollabs.map(comp => (
@@ -465,14 +465,14 @@ export default function CompetitionsPage() {
                           {comp.status === 'voting' ? 'Vote Now' : 'Enter Now'}
                         </span>
                         {(comp.entries_close_at || comp.voting_close_at) && (
-                          <span className="text-[10px] text-white/25 flex items-center space-x-1">
+                          <span className="text-[10px] text-white/50 flex items-center space-x-1">
                             <Clock className="w-2.5 h-2.5" />
                             <span>{timeLeft(comp.status === 'voting' ? comp.voting_close_at : comp.entries_close_at)} left</span>
                           </span>
                         )}
                       </div>
                     </div>
-                    <ArrowRight className="w-4 h-4 text-white/20 flex-shrink-0" />
+                    <ArrowRight className="w-4 h-4 text-white/45 flex-shrink-0" />
                   </button>
                 ))}
               </div>
@@ -503,7 +503,7 @@ export default function CompetitionsPage() {
                         {comp.status === 'voting' ? 'Vote Now' : comp.status === 'upcoming' ? 'Coming Soon' : 'Enter Now'}
                       </span>
                     </div>
-                    <ArrowRight className="w-4 h-4 text-white/20 flex-shrink-0" />
+                    <ArrowRight className="w-4 h-4 text-white/45 flex-shrink-0" />
                   </button>
                 ))}
               </div>
@@ -535,7 +535,7 @@ export default function CompetitionsPage() {
                         {entry?.cover_artwork_url
                           ? <img src={entry.cover_artwork_url} alt="" className="w-full h-full object-cover" />
                           : <div className="w-full h-full flex items-center justify-center">
-                              <Music className="w-8 h-8 text-white/20" />
+                              <Music className="w-8 h-8 text-white/45" />
                             </div>}
                         <div className="absolute inset-0 flex items-center justify-center bg-black/30">
                           {isNowPlaying
@@ -553,7 +553,7 @@ export default function CompetitionsPage() {
                           {artist.artist_name}
                         </button>
                       )}
-                      <p className="text-[9px] text-white/20 truncate mt-0.5">{comp.title}</p>
+                      <p className="text-[9px] text-white/45 truncate mt-0.5">{comp.title}</p>
                     </div>
                   );
                 })}
@@ -589,7 +589,7 @@ export default function CompetitionsPage() {
             </div>
           ) : leaderboard.length === 0 ? (
             <div className="text-center py-16">
-              <p className="text-sm text-white/20">No challenge completions yet.</p>
+              <p className="text-sm text-white/45">No challenge completions yet.</p>
               <p className="text-xs text-white/10 mt-1">Spin the wheel and upload a track to get on the board.</p>
             </div>
           ) : (
@@ -631,7 +631,7 @@ export default function CompetitionsPage() {
                     {/* XP + breakdown */}
                     <div className="text-right flex-shrink-0">
                       <p className="text-sm font-black text-white">{entry.total_xp.toLocaleString()} XP</p>
-                      <p className="text-[9px] text-white/20">
+                      <p className="text-[9px] text-white/45">
                         {entry.legendary_count > 0 && `${entry.legendary_count}L `}
                         {entry.epic_count > 0 && `${entry.epic_count}E `}
                         {entry.rare_count > 0 && `${entry.rare_count}R `}

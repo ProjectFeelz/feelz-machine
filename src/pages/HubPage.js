@@ -21,16 +21,16 @@ function LinkCard({ icon: Icon, label, description, path, color, onClick }) {
   return (
     <button
       onClick={() => onClick ? onClick() : navigate(path)}
-      className="w-full flex items-center space-x-4 p-4 bg-white/[0.03] rounded-xl border border-white/[0.06] hover:bg-white/[0.06] active:bg-white/[0.08] transition text-left group"
+      className="w-full flex items-center space-x-4 p-4 bg-white/[0.05] rounded-xl border border-white/[0.10] hover:bg-white/[0.08] active:bg-white/[0.10] transition text-left group"
     >
       <div className={`w-11 h-11 rounded-lg ${color} flex items-center justify-center flex-shrink-0`}>
         <Icon className="w-5 h-5 text-white" />
       </div>
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium text-white">{label}</p>
-        {description && <p className="text-[11px] text-white/30 mt-0.5">{description}</p>}
+        {description && <p className="text-xs text-white/50 mt-0.5">{description}</p>}
       </div>
-      <ChevronRight className="w-4 h-4 text-white/15 group-hover:text-white/30 transition flex-shrink-0" />
+      <ChevronRight className="w-4 h-4 text-white/30 group-hover:text-white/50 transition flex-shrink-0" />
     </button>
   );
 }
@@ -75,8 +75,6 @@ export default function HubPage() {
   const [trackSearch, setTrackSearch]           = useState('');
   const [trackResults, setTrackResults]         = useState([]);
   const [searchingTracks, setSearchingTracks]   = useState(false);
-  const [testPushSending, setTestPushSending]   = useState(false);
-  const [testPushResult, setTestPushResult]     = useState(null);
   const [showDMModal, setShowDMModal]           = useState(false);
   const [dmUserId, setDmUserId]                 = useState('');
   const [dmArtistId, setDmArtistId]             = useState('');
@@ -87,32 +85,7 @@ export default function HubPage() {
   const [dmSearch, setDmSearch]                 = useState('');
   const [dmResults, setDmResults]               = useState([]);
   const [dmSearching, setDmSearching]           = useState(false);
-
-  const sendTestPush = async () => {
-    if (testPushSending || !artist?.id) return;
-    setTestPushSending(true);
-    setTestPushResult(null);
-    try {
-      const { data: { session: authSession } } = await supabase.auth.getSession();
-      const res = await fetch('/.netlify/functions/notify-new-track', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          track_id:    'test-push-' + Date.now(),
-          track_title: '🔔 Test notification',
-          artist_id:   artist.id,
-          artist_slug: artist.slug,
-          token:       authSession?.access_token,
-        }),
-      });
-      const result = await res.json();
-      setTestPushResult(`Sent to ${result.notified ?? 0} follower(s)`);
-    } catch (err) {
-      setTestPushResult('Failed: ' + err.message);
-    }
-    setTestPushSending(false);
-    setTimeout(() => setTestPushResult(null), 5000);
-  };
+;
 
   const openLiveModal = () => {
     if (!artist) return;
@@ -341,23 +314,7 @@ export default function HubPage() {
           {isAdmin && (
             <Section title="Admin" icon={Shield}>
               <LinkCard icon={Shield} label="Admin Panel" description="Broadcast · Analytics · Moderation · Users" path="/admin" color="bg-yellow-500/20" />
-              <button
-                onClick={sendTestPush}
-                disabled={testPushSending}
-                className="w-full flex items-center space-x-4 p-4 bg-green-500/10 rounded-xl border border-green-500/20 hover:bg-green-500/15 active:bg-green-500/20 transition text-left disabled:opacity-50"
-              >
-                <div className="w-11 h-11 rounded-lg bg-green-500/20 flex items-center justify-center flex-shrink-0">
-                  {testPushSending
-                    ? <Loader className="w-5 h-5 text-green-400 animate-spin" />
-                    : <Send className="w-5 h-5 text-green-400" />}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-white">Test Push Notification</p>
-                  <p className="text-[11px] text-white/30 mt-0.5">
-                    {testPushResult || 'Fire a test push to all your followers'}
-                  </p>
-                </div>
-              </button>
+
             </Section>
           )}
 
@@ -367,7 +324,7 @@ export default function HubPage() {
               <LinkCard icon={Music}         label="Browse Music"     description="Find new tracks and artists"   path="/browse"             color="bg-purple-500/20" />
               <LinkCard icon={Mic2}          label="Discover Artists" description="Find and follow new artists"   path="/browse?tab=artists" color="bg-indigo-500/20" />
               <LinkCard icon={Users}         label="Following"        description="Artists you follow"            path="/library/following"  color="bg-cyan-500/20" />
-              <LinkCard icon={MessageCircle} label="Community"        description="Feed and chat rooms"           path="/community"          color="bg-teal-500/20" />
+              <LinkCard icon={MessageCircle} label="Community"        description="Feed, posts and artist updates" path="/community"          color="bg-teal-500/20" />
               <LinkCard icon={Star}          label="Liked Songs"      description="Your saved tracks"             path="/library/likes"      color="bg-pink-500/20" />
             </Section>
           )}
@@ -379,7 +336,6 @@ export default function HubPage() {
               <LinkCard icon={Radio}          label="Collab Radar"   description="Find artists who vibe with your sound"  onClick={() => navigate('/collab-radar')} color="bg-purple-500/20" />
               <LinkCard icon={HeartHandshake} label="Collaborations" description="Manage collab requests and credits"     onClick={() => setActiveTab('collabs')}   color="bg-cyan-500/20" />
               <LinkCard icon={BarChart3}      label="Analytics"      description="Track performance and stream data"      path="/dashboard?tab=analytics" color="bg-indigo-500/20" />
-              <LinkCard icon={MessageCircle}  label="Chat Rooms"     description="Community conversations"                path="/chat"                    color="bg-violet-500/20" />
               {isPremium ? (
                 <button
                   onClick={openLiveModal}

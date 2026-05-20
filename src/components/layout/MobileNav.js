@@ -34,7 +34,7 @@ export default function MobileNav() {
       className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-black/95 backdrop-blur-xl"
       style={{ paddingBottom: 'var(--safe-area-bottom, 0px)' }}
     >
-      <div className="flex items-center justify-around h-14 w-full mx-auto px-1">
+      <div className="flex items-center justify-around h-16 w-full mx-auto px-1">
         {navItems.map(({ path, icon: Icon, label, tourKey }) => {
           const isActive  = location.pathname === path ||
             (path !== '/' && location.pathname.startsWith(path));
@@ -52,7 +52,7 @@ export default function MobileNav() {
                 />
 
               </div>
-              <span className={`text-[9px] mt-0.5 transition-colors ${isActive ? 'text-white font-medium' : 'text-white/40'}`}>
+              <span className={`text-[11px] mt-0.5 transition-colors ${isActive ? 'text-white font-semibold' : 'text-white/55'}`}>
                 {label}
               </span>
             </button>

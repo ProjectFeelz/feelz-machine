@@ -158,6 +158,9 @@ export default function ProfilePage() {
   // Edit tab state (unified from UserProfilePage)
   const editFileRef = React.useRef(null);
   const [editDisplayName, setEditDisplayName] = useState('');
+  const [editSlug, setEditSlug]               = useState('');
+  const [slugChecking, setSlugChecking]       = useState(false);
+  const [slugAvailable, setSlugAvailable]     = useState(null); // null=unchecked, true, false
   const [editBio, setEditBio]                 = useState('');
   const [editGenres, setEditGenres]           = useState([]);
   const [editMood, setEditMood]               = useState('');
@@ -264,6 +267,8 @@ export default function ProfilePage() {
           setEditMood(data.mood || artist?.mood || '');
         } else {
           setEditDisplayName(artist?.artist_name || '');
+        setEditSlug(artist?.slug || '');
+        setSlugAvailable(null);
           setEditBio(artist?.bio || '');
           setEditGenres(artist?.genre ? [artist.genre] : []);
           setEditMood(artist?.mood || '');
@@ -345,12 +350,19 @@ export default function ProfilePage() {
         newAvatarUrl = urlData.publicUrl;
       }
       // Update artist profile
+      // Validate slug if changed
+      const cleanSlug = editSlug.trim().toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+      if (cleanSlug && cleanSlug !== artist?.slug) {
+        const { data: existing } = await supabase.from('artists').select('id').eq('slug', cleanSlug).maybeSingle();
+        if (existing) throw new Error('That username is already taken. Please choose another.');
+      }
       const artistUpdate = {
         artist_name: editDisplayName.trim() || artist?.artist_name,
         bio:         editBio.trim() || null,
         genre:       editGenres[0] || null,
         mood:        editMood || null,
         updated_at:  new Date().toISOString(),
+        ...(cleanSlug && cleanSlug !== artist?.slug ? { slug: cleanSlug } : {}),
       };
       if (newAvatarUrl && newAvatarUrl !== artist?.profile_image_url) {
         artistUpdate.profile_image_url = newAvatarUrl;
@@ -497,11 +509,11 @@ export default function ProfilePage() {
 
           {isArtist && artist?.slug && (
             <div className="flex items-center justify-between mt-4 pt-3 border-t border-white/[0.05]">
-              <button onClick={() => nav(`/artist/${artist.slug}`)}
+              <button onClick={() => nav(`/@${artist.slug}`)}
                 className="flex items-center space-x-1.5 text-xs text-white/30 hover:text-white/50 transition">
-                <ExternalLink className="w-3 h-3" /><span>/artist/{artist.slug}</span>
+                <ExternalLink className="w-3 h-3" /><span>/@{artist.slug}</span>
               </button>
-              <button onClick={() => navigator.clipboard.writeText(`${window.location.origin}/artist/${artist.slug}`)}
+              <button onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/@${artist.slug}`); }}
                 className="text-xs text-white/20 hover:text-white/40 transition">Copy link</button>
             </div>
           )}
@@ -680,6 +692,34 @@ export default function ProfilePage() {
                   <input type="text" value={editDisplayName} onChange={e => setEditDisplayName(e.target.value)}
                     maxLength={50} placeholder="Your artist name"
                     className="w-full px-3 py-2.5 bg-white/[0.06] rounded-xl text-white text-sm outline-none border border-white/[0.06] focus:border-white/20 transition placeholder-white/20" />
+                </div>
+
+                {/* Username / slug */}
+                <div>
+                  <label className="block text-xs text-white/40 mb-1.5 font-semibold uppercase tracking-wider">Username (your @handle)</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-white/30">@</span>
+                    <input type="text" value={editSlug}
+                      onChange={async e => {
+                        const val = e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+                        setEditSlug(val);
+                        setSlugAvailable(null);
+                        if (val && val !== artist?.slug && val.length >= 3) {
+                          setSlugChecking(true);
+                          const { data } = await supabase.from('artists').select('id').eq('slug', val).maybeSingle();
+                          setSlugAvailable(!data);
+                          setSlugChecking(false);
+                        }
+                      }}
+                      maxLength={30} placeholder={artist?.slug || 'your-handle'}
+                      className="w-full pl-7 pr-10 py-2.5 bg-white/[0.06] rounded-xl text-white text-sm outline-none border border-white/[0.06] focus:border-white/20 transition placeholder-white/20" />
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2 text-xs">
+                      {slugChecking && <span className="text-white/30">...</span>}
+                      {!slugChecking && slugAvailable === true && editSlug !== artist?.slug && <span className="text-green-400">✓</span>}
+                      {!slugChecking && slugAvailable === false && <span className="text-red-400">✗</span>}
+                    </div>
+                  </div>
+                  <p className="text-[11px] text-white/25 mt-1">This changes your profile URL — feelzmachine.com/@{editSlug || artist?.slug}</p>
                 </div>
 
                 {/* Bio */}

@@ -70,7 +70,7 @@ function SectionLabel({ icon: Icon, title, subtitle }) {
       )}
       <div>
         <p className="section-label">{title}</p>
-        {subtitle && <p className="text-[10px] text-white/20 mt-0.5">{subtitle}</p>}
+        {subtitle && <p className="text-xs text-white/45 mt-0.5">{subtitle}</p>}
       </div>
     </div>
   );
@@ -323,7 +323,7 @@ export default function BrowsePage() {
           {tabs.map(({ key, label, icon: Icon }) => (
             <button key={key} role="tab" aria-selected={activeTab === key}
               onClick={() => setActiveTab(key)}
-              className={`flex-shrink-0 flex items-center space-x-1.5 px-3 py-2 rounded-lg text-xs font-semibold transition ${
+              className={`flex-shrink-0 flex items-center space-x-1.5 px-3 py-2 rounded-lg text-sm font-semibold transition ${
                 activeTab === key ? 'bg-white text-black' : 'text-white/35 hover:text-white/60'
               }`}>
               <Icon className="w-3.5 h-3.5" />
@@ -417,7 +417,7 @@ export default function BrowsePage() {
             ) : (
               <div className="text-center py-16">
                 <Star className="w-12 h-12 mx-auto text-white/10 mb-3" />
-                <p className="text-sm text-white/30">No featured tracks yet</p>
+                <p className="text-sm text-white/50">No featured tracks yet</p>
               </div>
             )}
           </div>
@@ -466,7 +466,7 @@ export default function BrowsePage() {
             ) : (
               <div className="text-center py-16">
                 <Sparkles className="w-12 h-12 mx-auto text-white/10 mb-3" />
-                <p className="text-sm text-white/30">No releases yet</p>
+                <p className="text-sm text-white/50">No releases yet</p>
               </div>
             )}
           </div>
@@ -500,7 +500,7 @@ export default function BrowsePage() {
             ) : (
               <div className="text-center py-16">
                 <TrendingUp className="w-12 h-12 mx-auto text-white/10 mb-3" />
-                <p className="text-sm text-white/30">No trending tracks yet</p>
+                <p className="text-sm text-white/50">No trending tracks yet</p>
               </div>
             )}
             <div className="mt-6 rounded-xl bg-white/[0.02] border border-white/[0.04] p-4">
@@ -530,8 +530,8 @@ export default function BrowsePage() {
                               className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
                           : <div className="w-full h-full flex items-center justify-center"><Music className="w-6 h-6 text-white/15" /></div>}
                       </div>
-                      <p className="text-xs font-medium text-white truncate">{track.title}</p>
-                      <p className="text-[10px] text-white/30 truncate">{track.artist_name}</p>
+                      <p className="text-sm font-medium text-white truncate">{track.title}</p>
+                      <p className="text-xs text-white/55 truncate">{track.artist_name}</p>
                     </div>
                   ))}
                 </div>

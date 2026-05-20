@@ -487,7 +487,7 @@ function ChallengeUploadSheet({ challenge, user, onClose, onComplete }) {
 
           {/* Locked features notice */}
           <div className="rounded-xl px-3 py-2.5 bg-white/[0.02] border border-white/[0.05]">
-            <p className="text-[10px] text-white/25 leading-relaxed">
+            <p className="text-xs text-white/50 leading-relaxed">
               This is a challenge upload. Album assignment, download pricing, collaborators, and presave are not available here. Use the full upload panel from your dashboard for those features.
             </p>
           </div>
@@ -636,7 +636,7 @@ export default function WheelRevealPage() {
         </button>
         <div className="text-center">
           <h1 className="text-lg font-bold text-white">Collab Roulette</h1>
-          <p className="text-[10px] text-white/30 uppercase tracking-wider">Spin · Create · Drop It</p>
+          <p className="text-xs text-white/50 uppercase tracking-wider">Spin · Create · Drop It</p>
         </div>
         <div className="w-9" />
       </div>
@@ -698,8 +698,8 @@ export default function WheelRevealPage() {
             <div className="w-full max-w-sm rounded-2xl border border-white/[0.08] bg-white/[0.03] p-5 mb-5"
               style={{ animation: 'fadeUp 0.4s ease' }}>
               <div className="flex items-center space-x-2 mb-3">
-                <span className="text-[10px] text-white/30 uppercase tracking-wider">This week's challenge</span>
-                <span className="text-[9px] px-1.5 py-0.5 rounded-full font-bold bg-purple-500/15 text-purple-400 border border-purple-500/20">
+                <span className="text-xs text-white/50 uppercase tracking-wider">This week's challenge</span>
+                <span className="text-[11px] px-1.5 py-0.5 rounded-full font-bold bg-purple-500/15 text-purple-400 border border-purple-500/20">
                   {challenge.mode === 'singer' ? '🎤 Vocalist' : '🎛️ Producer'}
                 </span>
               </div>
@@ -711,7 +711,7 @@ export default function WheelRevealPage() {
                 <div className="flex space-x-4 mb-4">
                   {challenge.competitions.entries_close_at && challenge.competitions.status === 'open' && (
                     <div>
-                      <p className="text-[9px] text-white/25 uppercase tracking-wider mb-0.5">Entries close</p>
+                      <p className="text-[11px] text-white/25 uppercase tracking-wider mb-0.5">Entries close</p>
                       <p className="text-xs font-bold text-white flex items-center space-x-1">
                         <Clock className="w-3 h-3 text-green-400" />
                         <span>{timeLeft(challenge.competitions.entries_close_at)}</span>
@@ -720,7 +720,7 @@ export default function WheelRevealPage() {
                   )}
                   {challenge.competitions.voting_close_at && challenge.competitions.status === 'voting' && (
                     <div>
-                      <p className="text-[9px] text-white/25 uppercase tracking-wider mb-0.5">Voting closes</p>
+                      <p className="text-[11px] text-white/25 uppercase tracking-wider mb-0.5">Voting closes</p>
                       <p className="text-xs font-bold text-white flex items-center space-x-1">
                         <Clock className="w-3 h-3 text-purple-400" />
                         <span>{timeLeft(challenge.competitions.voting_close_at)}</span>
@@ -794,7 +794,7 @@ export default function WheelRevealPage() {
                     </div>
                   )}
                 </div>
-                <p className="text-[10px] text-white/20 text-center mt-3">
+                <p className="text-xs text-white/45 text-center mt-3">
                   Personal spins are just for fun — no competition entry
                 </p>
               </div>
@@ -861,10 +861,10 @@ export default function WheelRevealPage() {
                   <span>{spinning ? 'Spinning...' : spinsUsed >= SPIN_CAP ? 'Come back tomorrow' : 'Spin the Wheel'}</span>
                 </button>
                 {spinsUsed > 0 && spinsUsed < SPIN_CAP && (
-                  <p className="text-[10px] text-white/20">{SPIN_CAP - spinsUsed} spin{SPIN_CAP - spinsUsed !== 1 ? 's' : ''} left today</p>
+                  <p className="text-xs text-white/45">{SPIN_CAP - spinsUsed} spin{SPIN_CAP - spinsUsed !== 1 ? 's' : ''} left today</p>
                 )}
                 {spinsUsed >= SPIN_CAP && (
-                  <p className="text-[10px] text-white/30">Daily limit reached · resets at midnight</p>
+                  <p className="text-xs text-white/50">Daily limit reached · resets at midnight</p>
                 )}
               </div>
 
@@ -881,7 +881,7 @@ export default function WheelRevealPage() {
           {/* Past challenges */}
           {mode === 'platform' && pastChallenges.length > 0 && (
             <div className="w-full max-w-sm mt-2">
-              <p className="text-[10px] text-white/25 uppercase tracking-widest font-semibold mb-3">
+              <p className="text-xs text-white/50 uppercase tracking-widest font-semibold mb-3">
                 Previous Challenges
               </p>
               <div className="space-y-1.5">
@@ -896,7 +896,7 @@ export default function WheelRevealPage() {
                       <p className="text-xs font-medium text-white/70 truncate">
                         {pc.prompt.split('\n').join(' ')}
                       </p>
-                      <p className="text-[9px] text-white/25 mt-0.5 uppercase tracking-wide">
+                      <p className="text-[11px] text-white/25 mt-0.5 uppercase tracking-wide">
                         {new Date(pc.spun_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                         {pc.competitions?.status === 'completed' ? ' · Complete' : ''}
                       </p>

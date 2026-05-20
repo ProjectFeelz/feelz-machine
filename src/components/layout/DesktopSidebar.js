@@ -34,9 +34,9 @@ function DesktopNotifButton() {
       onClick={() => navigate('/notifications')}
       aria-label="Notifications"
       className="w-full flex items-center justify-between px-3 py-2 rounded-xl hover:bg-white/[0.04] transition">
-      <span className="text-xs text-white/30 font-medium">Notifications</span>
+      <span className="text-xs text-white/55 font-medium">Notifications</span>
       <div className="relative">
-        <Bell className="w-4 h-4 text-white/30" />
+        <Bell className="w-4 h-4 text-white/55" />
         {unreadCount > 0 && (
           <span className="absolute -top-1.5 -right-1.5 w-3.5 h-3.5 rounded-full bg-red-500 flex items-center justify-center text-[8px] font-bold text-white">
             {unreadCount > 9 ? '9+' : unreadCount}
@@ -108,7 +108,7 @@ export default function DesktopSidebar() {
         <Logo />
         <div>
           <span className="text-sm font-bold text-white tracking-tight">Feelz Machine</span>
-          <p className="text-[10px] text-white/30">Music Platform</p>
+          <p className="text-xs text-white/55">Music Platform</p>
         </div>
       </div>
 
@@ -124,7 +124,7 @@ export default function DesktopSidebar() {
               key={path}
               onClick={() => handleNav(path)}
               className={`w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl transition-all text-left group ${
-                isActive ? 'text-white' : 'text-white/40 hover:text-white/80 hover:bg-white/[0.04]'
+                isActive ? 'text-white' : 'text-white/60 hover:text-white/80 hover:bg-white/[0.04]'
               }`}
               style={isActive ? { background: 'rgba(255,255,255,0.08)', backdropFilter: 'blur(8px)' } : {}}>
               <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 transition-all ${
@@ -157,11 +157,11 @@ export default function DesktopSidebar() {
               <a href={playStoreUrl} target="_blank" rel="noopener noreferrer"
                 className="w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl hover:bg-white/[0.04] transition text-left"
                 style={{ textDecoration: 'none' }}>
-                <div className="w-5 h-5 flex items-center justify-center text-white/40 flex-shrink-0">
+                <div className="w-5 h-5 flex items-center justify-center text-white/60 flex-shrink-0">
                   <PlayStoreIcon />
                 </div>
                 <div>
-                  <p className="text-[9px] text-white/20 leading-none">GET IT ON</p>
+                  <p className="text-[9px] text-white/45 leading-none">GET IT ON</p>
                   <p className="text-xs text-white/50 font-medium leading-tight">Google Play</p>
                 </div>
               </a>
@@ -170,11 +170,11 @@ export default function DesktopSidebar() {
               <a href={appStoreUrl} target="_blank" rel="noopener noreferrer"
                 className="w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl hover:bg-white/[0.04] transition text-left"
                 style={{ textDecoration: 'none' }}>
-                <div className="w-5 h-5 flex items-center justify-center text-white/40 flex-shrink-0">
+                <div className="w-5 h-5 flex items-center justify-center text-white/60 flex-shrink-0">
                   <AppStoreIcon />
                 </div>
                 <div>
-                  <p className="text-[9px] text-white/20 leading-none">DOWNLOAD ON THE</p>
+                  <p className="text-[9px] text-white/45 leading-none">DOWNLOAD ON THE</p>
                   <p className="text-xs text-white/50 font-medium leading-tight">App Store</p>
                 </div>
               </a>
@@ -187,8 +187,8 @@ export default function DesktopSidebar() {
           onClick={() => navigate('/about')}
           className="w-full flex items-center justify-between px-3 py-2 rounded-xl hover:bg-white/[0.04] transition"
           style={location.pathname === '/about' ? { background: 'rgba(255,255,255,0.06)' } : {}}>
-          <span className="text-xs text-white/30 font-medium">About</span>
-          <Info className="w-4 h-4 text-white/30" />
+          <span className="text-xs text-white/55 font-medium">About</span>
+          <Info className="w-4 h-4 text-white/55" />
         </button>
 
         {/* Artist card */}
@@ -209,7 +209,7 @@ export default function DesktopSidebar() {
               <p className="text-xs font-semibold text-white/70 group-hover:text-white truncate transition-colors">
                 {artist.artist_name}
               </p>
-              <p className="text-[10px] text-white/25">View profile →</p>
+              <p className="text-xs text-white/25">View profile →</p>
             </div>
           </button>
         )}
