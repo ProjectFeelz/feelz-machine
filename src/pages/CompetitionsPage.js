@@ -365,7 +365,7 @@ export default function CompetitionsPage() {
       .limit(50);
     if (!data) { setLbLoading(false); return; }
     // Fetch display names
-    const ids = data.map(r => r.user_id);
+    const ids = data.map(r => r.user_id).filter(Boolean);
     const profiles_res = ids.length > 0
       ? await supabase.from('artists').select('user_id, artist_name, cover_artwork_url, slug').in('user_id', ids)
       : { data: [] };
