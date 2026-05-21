@@ -107,6 +107,7 @@ export default function ArtistDashboard() {
   const [trackStreams, setTrackStreams]    = useState([]);
   const [trackLikes, setTrackLikes]       = useState([]);
   const [trackAnalyticsLoading, setTrackAnalyticsLoading] = useState(false);
+  const [demographics, setDemographics]   = useState({ devices: [], countries: [], completionRate: 0 });
   const [memos, setMemos] = useState([]);
 
   const fetchMemos = useCallback(async () => {
@@ -162,8 +163,17 @@ export default function ArtistDashboard() {
         .select('id, title, cover_artwork_url, stream_count, download_count')
         .eq('artist_id', artist.id)
         .order('stream_count', { ascending: false })
-        .limit(5);
-      setTopTracks(tracks || []);
+        .limit(20);
+
+      // Enrich with like counts
+      if (tracks?.length) {
+        const likeCounts = await Promise.all(tracks.map(t =>
+          supabase.from('track_likes').select('*', { count: 'exact', head: true }).eq('track_id', t.id)
+        ));
+        setTopTracks(tracks.map((t, i) => ({ ...t, like_count: likeCounts[i]?.count || 0 })));
+      } else {
+        setTopTracks([]);
+      }
     } catch (err) {
       console.error('Stats error:', err);
     }
@@ -235,6 +245,30 @@ export default function ArtistDashboard() {
       });
       setTrackStreams(Object.entries(streamMap).map(([date, streams]) => ({ date, streams })));
       setTrackLikes(Object.entries(likeMap).map(([date, likes]) => ({ date, likes })));
+
+      // Listener demographics
+      const { data: demoData } = await supabase
+        .from('streams').select('device_type, completed, duration_played')
+        .eq('track_id', trackId).gte('created_at', since).limit(1000);
+      if (demoData?.length) {
+        const dc = {};
+        let completed = 0;
+        (demoData || []).forEach(s => {
+          dc[s.device_type || 'unknown'] = (dc[s.device_type || 'unknown'] || 0) + 1;
+          if (s.completed) completed++;
+        });
+        const total = demoData.length;
+        setDemographics({
+          devices: Object.entries(dc).map(([name, count]) => ({
+            name: name.charAt(0).toUpperCase() + name.slice(1),
+            count, pct: Math.round((count / total) * 100),
+          })).sort((a, b) => b.count - a.count),
+          completionRate: total > 0 ? Math.round((completed / total) * 100) : 0,
+          totalStreams: total,
+        });
+      } else {
+        setDemographics({ devices: [], completionRate: 0, totalStreams: 0 });
+      }
     } catch {}
     setTrackAnalyticsLoading(false);
   };
@@ -425,6 +459,35 @@ export default function ArtistDashboard() {
                               </BarChart>
                             </ResponsiveContainer>
                           </div>
+                          {/* Listener demographics */}
+                          {demographics.devices.length > 0 && (
+                            <div className="grid grid-cols-2 gap-3">
+                              <div className="bg-white/[0.03] rounded-xl p-3 border border-white/[0.05]">
+                                <p className="text-[10px] text-white/30 uppercase tracking-wider mb-2">Devices</p>
+                                {demographics.devices.map(d => (
+                                  <div key={d.name} className="mb-1.5">
+                                    <div className="flex justify-between text-xs mb-0.5">
+                                      <span className="text-white/60">{d.name}</span>
+                                      <span className="text-white/40">{d.pct}%</span>
+                                    </div>
+                                    <div className="h-1.5 bg-white/[0.06] rounded-full overflow-hidden">
+                                      <div className="h-full rounded-full bg-purple-400"
+                                        style={{ width: `${d.pct}%` }} />
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                              <div className="bg-white/[0.03] rounded-xl p-3 border border-white/[0.05]">
+                                <p className="text-[10px] text-white/30 uppercase tracking-wider mb-2">Engagement</p>
+                                <div className="flex flex-col items-center justify-center h-full space-y-2 pt-2">
+                                  <div className="text-3xl font-black text-white">{demographics.completionRate}%</div>
+                                  <p className="text-[10px] text-white/30 text-center">completion rate</p>
+                                  <p className="text-[10px] text-white/20">{demographics.totalStreams} streams sampled</p>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
                           {/* CSV export for this track */}
                           <button onClick={async () => {
                             const { data } = await supabase.from('streams').select('created_at, duration_played, completed, device_type').eq('track_id', selectedTrack).order('created_at', { ascending: false }).limit(5000);
