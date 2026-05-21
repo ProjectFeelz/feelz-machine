@@ -1,150 +1,116 @@
 import React from 'react';
-import { Helmet } from 'react-helmet-async';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, Shield } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 
-const BASE_URL = 'https://www.feelzmachine.com';
+const COMPANY      = 'Feelz Machine';
+const CONTACT      = 'privacy@feelzmachine.com';
+const LAST_UPDATED = 'May 2026';
+
+function Section({ title, children }) {
+  return (
+    <section className="mb-8">
+      <h2 className="text-base font-bold text-white mb-3 pb-2 border-b border-white/[0.06]">{title}</h2>
+      <div className="space-y-3 text-sm text-white/55 leading-relaxed">{children}</div>
+    </section>
+  );
+}
 
 export default function PrivacyPolicy() {
   const navigate = useNavigate();
-
   return (
     <div className="min-h-screen bg-black text-white">
-      <Helmet>
-        <title>Privacy Policy · Feelz Machine</title>
-        <meta name="description" content="Feelz Machine privacy policy — how we collect, use and protect your personal information." />
-        <link rel="canonical" href={`${BASE_URL}/privacy-policy`} />
-        <meta property="og:title" content="Privacy Policy · Feelz Machine" />
-        <meta property="og:url" content={`${BASE_URL}/privacy-policy`} />
-      </Helmet>
-
-      <div className="max-w-3xl mx-auto px-6 py-10">
-        <button onClick={() => navigate(-1)}
-          className="flex items-center space-x-2 text-white/40 hover:text-white/70 mb-8 transition">
-          <ChevronLeft className="w-5 h-5" />
-          <span className="text-sm">Back</span>
+      <div className="sticky top-0 z-10 bg-black/95 backdrop-blur-xl border-b border-white/[0.05] px-4 py-4 flex items-center space-x-3">
+        <button onClick={() => navigate(-1)} className="p-1.5 hover:bg-white/[0.06] rounded-lg transition">
+          <ArrowLeft className="w-5 h-5 text-white/40" />
         </button>
+        <h1 className="text-base font-bold text-white">Privacy Policy</h1>
+      </div>
 
-        <div className="mb-10">
-          <div className="flex items-center space-x-3 mb-3">
-            <Shield className="w-6 h-6 text-white/40" />
-            <h1 className="text-2xl font-bold text-white">Privacy Policy</h1>
-          </div>
-          <p className="text-sm text-white/30">Last Updated: March 2026</p>
-        </div>
+      <div className="max-w-2xl mx-auto px-5 pt-8 pb-24">
+        <p className="text-xs text-white/30 mb-8">Last updated: {LAST_UPDATED}</p>
 
-        <div className="space-y-8 text-sm text-white/60 leading-relaxed">
+        <Section title="1. Who We Are">
+          <p>{COMPANY} is a music streaming and distribution platform. This Privacy Policy explains how we collect, use, and protect your personal data when you use our service at feelzmachine.com.</p>
+          <p>For privacy-related questions or requests, contact us at <strong className="text-white/70">{CONTACT}</strong>.</p>
+        </Section>
 
-          <section>
-            <h2 className="text-base font-semibold text-white mb-3">1. Who We Are</h2>
-            <p>Feelz Machine is an independent music streaming and artist distribution platform operated by Project Feelz ("we", "us", "our"). We are based online at <span className="text-white/80">feelzmachine.com</span>. This policy explains how we collect, use, and protect your personal information when you use our platform.</p>
-          </section>
+        <Section title="2. Data We Collect">
+          <p><strong className="text-white/70">Account data:</strong> When you sign up, we collect your email address and, if you sign in with Google, your Google profile name and profile image. We do not store your Google password.</p>
+          <p><strong className="text-white/70">Artist profile data:</strong> If you create an artist profile, we store your artist name, bio, profile image, cover art, social media links, and any other information you voluntarily add to your profile.</p>
+          <p><strong className="text-white/70">Uploaded content:</strong> We store all files you upload including audio tracks, album artwork, music videos (MP4), story media, and lyrics. This content is stored on Supabase cloud storage infrastructure.</p>
+          <p><strong className="text-white/70">Streaming & engagement data:</strong> When you or others stream your tracks, we record the stream event including: timestamp, device type (mobile or desktop), duration played, whether the track was completed, and the platform used. This data powers artist analytics and our recommendation algorithm.</p>
+          <p><strong className="text-white/70">Interaction data:</strong> Likes, follows, playlist additions, comments, story reactions, and collab requests are stored and linked to your account.</p>
+          <p><strong className="text-white/70">Payment data:</strong> Purchase transactions are processed through PayPal. We do not store your card numbers or full PayPal credentials. We store transaction IDs, amounts, and payout records for accounting and dispute resolution purposes.</p>
+          <p><strong className="text-white/70">Usage data:</strong> We collect standard web analytics including pages visited, session duration, and referring URLs to understand how the Platform is used and to improve it.</p>
+          <p><strong className="text-white/70">Device & technical data:</strong> Browser type, operating system, IP address, and device identifiers may be collected for security, fraud prevention, and analytics purposes.</p>
+          <p><strong className="text-white/70">Notifications:</strong> If you grant push notification permission, we store your push subscription token to deliver notifications about new music from artists you follow, platform updates, and engagement activity.</p>
+        </Section>
 
-          <section>
-            <h2 className="text-base font-semibold text-white mb-3">2. Information We Collect</h2>
-            <p className="mb-3">We collect the following types of information:</p>
-            <ul className="space-y-2 list-none">
-              <li className="pl-4 border-l border-white/10"><span className="text-white/80 font-medium">Account Information:</span> Your email address when you register directly, or your Google account name and email if you sign in via Google OAuth.</li>
-              <li className="pl-4 border-l border-white/10"><span className="text-white/80 font-medium">Artist Profile:</span> Artist name, bio, profile image, social media links, and other profile details you choose to provide.</li>
-              <li className="pl-4 border-l border-white/10"><span className="text-white/80 font-medium">Music Content:</span> Audio files, cover artwork, track metadata, album information, and lyrics you upload.</li>
-              <li className="pl-4 border-l border-white/10"><span className="text-white/80 font-medium">Payment Information:</span> PayPal email and merchant ID for processing purchases and payouts. We do not store credit card numbers or full payment details — these are handled entirely by PayPal.</li>
-              <li className="pl-4 border-l border-white/10"><span className="text-white/80 font-medium">Collaboration Data:</span> Collaborator credits, roles, and revenue split percentages you assign to other artists on your tracks and albums.</li>
-              <li className="pl-4 border-l border-white/10"><span className="text-white/80 font-medium">Usage Data:</span> Stream counts, download activity, follow relationships, search queries, and engagement with the platform.</li>
-              <li className="pl-4 border-l border-white/10"><span className="text-white/80 font-medium">Communications:</span> Posts, comments, and chat room messages you create on the platform.</li>
-              <li className="pl-4 border-l border-white/10"><span className="text-white/80 font-medium">Moderation Records:</span> If your account is flagged for suspected stream fraud or other policy violations, a record of that flag and any actions taken is retained for platform integrity purposes.</li>
-            </ul>
-          </section>
+        <Section title="3. How We Use Your Data">
+          <p><strong className="text-white/70">To operate the Platform:</strong> Providing you with access to your account, streaming music, processing purchases, and delivering core features.</p>
+          <p><strong className="text-white/70">Artist analytics:</strong> Providing artists with per-track stream counts, likes, completion rates, device breakdowns, and time-series data about their content's performance. This analytics data is visible only to the artist who owns the content and to platform administrators.</p>
+          <p><strong className="text-white/70">Recommendation algorithm:</strong> Stream counts, engagement scores, follows, and listening history are used to personalise the For You feed for each user. The algorithm surfaces music from artists you follow and discovers new artists based on your listening patterns.</p>
+          <p><strong className="text-white/70">Content discovery:</strong> Published tracks, albums, and artist profiles are indexed and made discoverable across the Platform including search, browse, and algorithmic feeds.</p>
+          <p><strong className="text-white/70">Notifications:</strong> If you opt in to push notifications, we send you alerts about new releases from artists you follow, competition results, and platform activity relevant to your account.</p>
+          <p><strong className="text-white/70">Security & fraud prevention:</strong> We analyse usage patterns to detect and prevent fake streams, bot activity, and account abuse.</p>
+          <p><strong className="text-white/70">Legal compliance:</strong> We may process your data to comply with applicable laws or to respond to lawful requests from authorities.</p>
+        </Section>
 
-          <section>
-            <h2 className="text-base font-semibold text-white mb-3">3. How We Use Your Information</h2>
-            <p className="mb-3">We use your information to:</p>
-            <ul className="space-y-1.5 list-disc list-inside text-white/50">
-              <li>Provide and operate the Feelz Machine platform</li>
-              <li>Process track and album purchases via PayPal</li>
-              <li>Disburse revenue splits to collaborators via PayPal</li>
-              <li>Send royalty payouts to artists via PayPal</li>
-              <li>Facilitate 1-on-1 support session bookings and payments</li>
-              <li>Deliver email notifications relevant to your account</li>
-              <li>Display your public artist profile and music to listeners</li>
-              <li>Generate analytics and engagement insights for your dashboard</li>
-              <li>Operate chat rooms and community features</li>
-              <li>Detect and prevent stream fraud and platform abuse</li>
-              <li>Improve and develop our platform features</li>
-              <li>Enforce our Terms of Service and community guidelines</li>
-            </ul>
-          </section>
+        <Section title="4. What Is Publicly Visible">
+          <p>Your artist profile — including your artist name, bio, profile image, published tracks, albums, playlists, collaboration credits, and follower count — is publicly visible to anyone who visits {COMPANY}.</p>
+          <p>Track comments you post are visible to all users on that track. Story content you upload is visible to your followers for 24 hours.</p>
+          <p>Your email address, payment details, private messages, moderation records, and analytics data are never made public.</p>
+          <p>Your listening history and personal playlist contents are private to you.</p>
+        </Section>
 
-          <section>
-            <h2 className="text-base font-semibold text-white mb-3">4. Data Sharing</h2>
-            <p className="mb-3">We do not sell your personal data. We share information only in the following circumstances:</p>
-            <ul className="space-y-2 list-none">
-              <li className="pl-4 border-l border-white/10"><span className="text-white/80 font-medium">Supabase:</span> Our database and storage provider. Your data is stored securely on Supabase infrastructure with row-level security enforced.</li>
-              <li className="pl-4 border-l border-white/10"><span className="text-white/80 font-medium">PayPal:</span> Payment processing for purchases, subscriptions, and artist payouts including collaboration revenue splits. Governed by PayPal's privacy policy.</li>
-              <li className="pl-4 border-l border-white/10"><span className="text-white/80 font-medium">Google:</span> If you sign in via Google OAuth, your authentication is handled by Google. We receive only your name and email address from Google. Governed by Google's privacy policy.</li>
-              <li className="pl-4 border-l border-white/10"><span className="text-white/80 font-medium">Resend:</span> Email delivery service used to send transactional and newsletter emails.</li>
-              <li className="pl-4 border-l border-white/10"><span className="text-white/80 font-medium">Collaborators:</span> When you add a collaborator to a track, their name, role, and split percentage are visible to other collaborators on that track.</li>
-              <li className="pl-4 border-l border-white/10"><span className="text-white/80 font-medium">Legal requirements:</span> We may disclose information if required by law or to protect the rights and safety of our users.</li>
-            </ul>
-          </section>
+        <Section title="5. Data Sharing">
+          <p>We do not sell your personal data to third parties.</p>
+          <p><strong className="text-white/70">Service providers:</strong> We share data with the following third-party services that power the Platform:</p>
+          <p>— <strong className="text-white/70">Supabase</strong> (database and file storage) — stores all platform data and uploaded files<br/>
+          — <strong className="text-white/70">Netlify</strong> (hosting and serverless functions) — hosts the Platform<br/>
+          — <strong className="text-white/70">PayPal</strong> (payments) — processes all purchase transactions<br/>
+          — <strong className="text-white/70">Resend</strong> (email) — sends transactional emails and newsletters<br/>
+          — <strong className="text-white/70">Anthropic Claude API</strong> (AI features) — used in certain platform features; no personal data is sent to this service beyond what is necessary for the specific feature</p>
+          <p><strong className="text-white/70">Legal requirements:</strong> We may disclose your data if required by law, court order, or to protect the rights and safety of our users or the public.</p>
+        </Section>
 
-          <section>
-            <h2 className="text-base font-semibold text-white mb-3">5. Public Information</h2>
-            <p>Your artist profile — including your artist name, bio, profile image, published tracks, albums, collaboration credits, and community posts — is publicly visible to anyone who visits Feelz Machine. Chat room messages are visible to other members of that room. Your email address, payment details, and moderation records are never made public.</p>
-          </section>
+        <Section title="6. Data Retention">
+          <p>We retain your account data and uploaded content for as long as your account is active. If you delete your account, we will delete your personal data and remove your public profile and content from active circulation within a reasonable period. Some residual data may remain in encrypted backups for up to 90 days.</p>
+          <p>Stream and analytics data may be retained in anonymised or aggregated form after account deletion for platform analytics purposes.</p>
+          <p>Transaction records are retained for 7 years for accounting and legal compliance purposes.</p>
+        </Section>
 
-          <section>
-            <h2 className="text-base font-semibold text-white mb-3">6. Data Retention</h2>
-            <p>We retain your data for as long as your account is active. If you request account deletion, we will remove your personal data within 30 days, except where we are required to retain it for legal, financial compliance, or fraud prevention purposes. Stream and purchase records may be retained in anonymised form for platform analytics.</p>
-          </section>
+        <Section title="7. Security">
+          <p>We implement industry-standard security measures including encrypted data transmission (HTTPS), database-level row security policies, and access controls. Sensitive operations are handled server-side through Netlify Functions rather than client-side code.</p>
+          <p>No system is completely secure. We cannot guarantee that your data will never be accessed without authorisation, and we encourage you to use a strong, unique password for your account.</p>
+        </Section>
 
-          <section>
-            <h2 className="text-base font-semibold text-white mb-3">7. Your Rights</h2>
-            <p className="mb-3">You have the right to:</p>
-            <ul className="space-y-1.5 list-disc list-inside text-white/50">
-              <li>Access the personal data we hold about you</li>
-              <li>Request correction of inaccurate data</li>
-              <li>Request deletion of your account and personal data</li>
-              <li>Opt out of non-essential communications</li>
-              <li>Request a copy of your data in a portable format</li>
-            </ul>
-            <p className="mt-3">To exercise any of these rights, contact us at <span className="text-white/80">legal@projectfeelz.com</span>.</p>
-          </section>
+        <Section title="8. Cookies & Local Storage">
+          <p>We use browser local storage to maintain your session, remember preferences (such as your last viewed tab or playback settings), and store your daily login streak. We do not use third-party advertising cookies.</p>
+          <p>If you use Google Sign-In, Google may set cookies in accordance with Google's own privacy policy.</p>
+        </Section>
 
-          <section>
-            <h2 className="text-base font-semibold text-white mb-3">8. Cookies and Tracking</h2>
-            <p>Feelz Machine uses authentication tokens stored in your browser to keep you logged in. If you sign in via Google, Google's OAuth flow may set its own cookies governed by Google's privacy policy. We do not use third-party advertising cookies or tracking pixels. Basic analytics may be collected to understand platform usage in aggregate.</p>
-          </section>
+        <Section title="9. Children's Privacy">
+          <p>The Platform is not directed at children under 13. We do not knowingly collect personal data from children under 13. If we become aware that a child under 13 has provided personal data, we will delete it promptly. If you believe we have data from a child under 13, contact us at {CONTACT}.</p>
+        </Section>
 
-          <section>
-            <h2 className="text-base font-semibold text-white mb-3">9. Security</h2>
-            <p>We implement industry-standard security measures including encrypted connections (HTTPS), row-level security on our database, secure token-based authentication, and leaked password protection on user accounts. No method of transmission over the internet is 100% secure, and we cannot guarantee absolute security.</p>
-          </section>
+        <Section title="10. Your Rights">
+          <p>Depending on your location, you may have the right to: access the personal data we hold about you; request correction of inaccurate data; request deletion of your data; object to or restrict certain processing; and receive your data in a portable format.</p>
+          <p>To exercise any of these rights, contact us at <strong className="text-white/70">{CONTACT}</strong>. We will respond within 30 days. We may need to verify your identity before processing your request.</p>
+          <p>You may delete your account and all associated data at any time from your profile settings.</p>
+        </Section>
 
-          <section>
-            <h2 className="text-base font-semibold text-white mb-3">10. Stream Fraud Detection</h2>
-            <p>The platform operates automated systems to detect artificial stream manipulation. These systems analyse streaming patterns and may flag accounts exhibiting unusual activity. Flagged data is retained for platform integrity purposes and reviewed by our moderation team. If you believe your account has been flagged in error, contact us at <span className="text-white/80">legal@projectfeelz.com</span>.</p>
-          </section>
+        <Section title="11. International Data Transfers">
+          <p>Your data may be processed in countries outside your own by our service providers (Supabase, Netlify, PayPal). These providers maintain appropriate safeguards for international data transfers. By using the Platform, you consent to these transfers.</p>
+        </Section>
 
-          <section>
-            <h2 className="text-base font-semibold text-white mb-3">11. Children's Privacy</h2>
-            <p>Feelz Machine is not directed at children under the age of 13. We do not knowingly collect personal information from children. If we become aware that a child has provided us with personal data, we will delete it promptly.</p>
-          </section>
+        <Section title="12. Changes to This Policy">
+          <p>We may update this Privacy Policy from time to time. When we make material changes, we will update the "Last updated" date at the top. Continued use of the Platform after changes are posted constitutes acceptance of the updated Policy.</p>
+        </Section>
 
-          <section>
-            <h2 className="text-base font-semibold text-white mb-3">12. Changes to This Policy</h2>
-            <p>We may update this Privacy Policy from time to time. We will notify you of significant changes by updating the date at the top of this page. Continued use of the platform after changes constitutes acceptance of the updated policy.</p>
-          </section>
-
-          <section>
-            <h2 className="text-base font-semibold text-white mb-3">13. Contact</h2>
-            <p>For privacy-related questions or requests, contact us at <span className="text-white/80">legal@projectfeelz.com</span> or visit <span className="text-white/80">projectfeelz.com</span>.</p>
-          </section>
-
-        </div>
-
-        <div className="mt-12 pt-8 border-t border-white/[0.06] text-center">
-          <p className="text-xs text-white/20">Feelz Machine · Project Feelz · feelzmachine.com</p>
-        </div>
+        <Section title="13. Contact">
+          <p>For privacy-related queries, data subject requests, or concerns about how we handle your data, contact us at <strong className="text-white/70">{CONTACT}</strong>.</p>
+        </Section>
       </div>
     </div>
   );

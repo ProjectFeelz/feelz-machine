@@ -1,192 +1,126 @@
-import React, { useState } from 'react';
-import { Helmet } from 'react-helmet-async';
+import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, ChevronDown, ChevronUp } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 
-const BASE_URL      = 'https://www.feelzmachine.com';
-const LAST_UPDATED  = 'March 2026';
-const PLATFORM_NAME = 'Feelz Machine';
-const COMPANY       = 'Project Feelz';
-const CONTACT_EMAIL = 'legal@projectfeelz.com';
+const COMPANY     = 'Feelz Machine';
+const CONTACT     = 'legal@feelzmachine.com';
+const LAST_UPDATED = 'May 2026';
 
 function Section({ title, children }) {
-  const [open, setOpen] = useState(true);
   return (
-    <div className="border border-white/[0.06] rounded-xl overflow-hidden mb-3">
-      <button
-        onClick={() => setOpen(p => !p)}
-        className="w-full flex items-center justify-between px-5 py-4 hover:bg-white/[0.02] transition text-left"
-      >
-        <h2 className="text-sm font-semibold text-white">{title}</h2>
-        {open
-          ? <ChevronUp className="w-4 h-4 text-white/30 flex-shrink-0" />
-          : <ChevronDown className="w-4 h-4 text-white/30 flex-shrink-0" />}
-      </button>
-      {open && (
-        <div className="px-5 pb-5 text-sm text-white/50 leading-relaxed space-y-3">
-          {children}
-        </div>
-      )}
-    </div>
+    <section className="mb-8">
+      <h2 className="text-base font-bold text-white mb-3 pb-2 border-b border-white/[0.06]">{title}</h2>
+      <div className="space-y-3 text-sm text-white/55 leading-relaxed">{children}</div>
+    </section>
   );
 }
 
 export default function TermsOfUse() {
   const navigate = useNavigate();
-
   return (
-    <div className="min-h-screen bg-black text-white pt-14 md:pt-0 pb-32">
-      <Helmet>
-        <title>Terms of Use · Feelz Machine</title>
-        <meta name="description" content="Feelz Machine terms of service — your rights and responsibilities as an artist or listener on the platform." />
-        <link rel="canonical" href={`${BASE_URL}/terms-of-use`} />
-        <meta property="og:title" content="Terms of Use · Feelz Machine" />
-        <meta property="og:url" content={`${BASE_URL}/terms-of-use`} />
-      </Helmet>
+    <div className="min-h-screen bg-black text-white">
+      <div className="sticky top-0 z-10 bg-black/95 backdrop-blur-xl border-b border-white/[0.05] px-4 py-4 flex items-center space-x-3">
+        <button onClick={() => navigate(-1)} className="p-1.5 hover:bg-white/[0.06] rounded-lg transition">
+          <ArrowLeft className="w-5 h-5 text-white/40" />
+        </button>
+        <h1 className="text-base font-bold text-white">Terms of Use</h1>
+      </div>
 
-      <div className="max-w-2xl mx-auto px-4">
+      <div className="max-w-2xl mx-auto px-5 pt-8 pb-24">
+        <p className="text-xs text-white/30 mb-8">Last updated: {LAST_UPDATED}</p>
 
-        {/* Header */}
-        <div className="flex items-center space-x-3 py-6 mb-2">
-          <button onClick={() => navigate(-1)} className="p-2 -ml-2 hover:bg-white/[0.05] rounded-lg transition">
-            <ArrowLeft className="w-5 h-5 text-white/40" />
-          </button>
-          <div>
-            <h1 className="text-xl font-bold text-white">Terms of Service &amp; Legal Policies</h1>
-            <p className="text-xs text-white/30 mt-0.5">Last updated: {LAST_UPDATED}</p>
-          </div>
-        </div>
-
-        {/* Intro */}
-        <div className="rounded-xl p-4 mb-6 border border-white/[0.05]" style={{ backgroundColor: 'rgba(255,255,255,0.02)' }}>
-          <p className="text-sm text-white/50 leading-relaxed">
-            By accessing or using {PLATFORM_NAME} ("the Platform") you agree to these Terms of Service. If you do not agree, do not use the Platform.
-            These terms govern all users including listeners, artists, and visitors.
-          </p>
-        </div>
-
-        <Section title="1. Platform Description">
-          <p>{PLATFORM_NAME} is an independent music hosting and distribution platform operated by {COMPANY}. We provide infrastructure that allows artists to upload, publish, and monetise their music, and allows listeners to stream and purchase music directly from those artists.</p>
-          <p>{COMPANY} acts solely as a <strong className="text-white/70">technology host and facilitator</strong>. We do not produce, commission, own, or claim any rights over any music, lyrics, artwork, or other creative content uploaded by artists.</p>
-          <p>The Platform includes the following features: music streaming, track and album uploads, artist profiles, community posts and feeds, live chat rooms, collaborative track credits, playlist management, download purchases, artist tier subscriptions, and administrative moderation tools.</p>
+        <Section title="1. About These Terms">
+          <p>These Terms of Use govern your access to and use of {COMPANY} ("we", "us", "our", "the Platform"), a music streaming and distribution platform. By creating an account or using the Platform in any way, you agree to these terms in full. If you do not agree, do not use the Platform.</p>
+          <p>We may update these Terms from time to time. Continued use of the Platform after changes are posted constitutes acceptance of the updated Terms.</p>
         </Section>
 
-        <Section title="2. User-Generated Content & DMCA Safe Harbour">
-          <p>All music, lyrics, artwork, samples, and other content on the Platform is uploaded exclusively by registered artists and users. {COMPANY} does not review, curate, or endorse any uploaded content prior to publication.</p>
-          <p><strong className="text-white/70">Cover Artwork Requirement:</strong> Artists are required to upload cover artwork before publishing any track. This requirement is enforced at the platform level to maintain content quality standards.</p>
-          <p><strong className="text-white/70">Copyright Responsibility:</strong> By uploading content to the Platform, each artist and user represents and warrants that they hold all necessary rights, licences, and permissions to upload, distribute, and monetise that content on the Platform. Artists are solely and exclusively responsible for ensuring that their uploads do not infringe any third-party intellectual property rights including copyrights, trademarks, performance rights, and synchronisation rights.</p>
-          <p><strong className="text-white/70">DMCA Safe Harbour:</strong> {PLATFORM_NAME} qualifies as a service provider under the Digital Millennium Copyright Act (DMCA), 17 U.S.C. § 512, and equivalent legislation in other jurisdictions including the EU Directive on Copyright in the Digital Single Market (Article 17 / formerly Article 13). We are not liable for infringing content uploaded by users where we:</p>
-          <ul className="list-disc pl-5 space-y-1">
-            <li>Did not have actual knowledge of the infringing material;</li>
-            <li>Upon obtaining such knowledge, acted expeditiously to remove or disable access to the material;</li>
-            <li>Do not receive a direct financial benefit attributable to the infringing activity where we have the right and ability to control it.</li>
-          </ul>
-          <p><strong className="text-white/70">Takedown Notice:</strong> If you believe content on the Platform infringes your copyright, please send a formal DMCA takedown notice to <span className="text-white/70">{CONTACT_EMAIL}</span> including: (a) identification of the copyrighted work; (b) identification of the allegedly infringing material and its location on the Platform; (c) your contact information; (d) a statement of good faith belief; (e) a statement of accuracy under penalty of perjury; and (f) your physical or electronic signature. We will respond expeditiously.</p>
-          <p><strong className="text-white/70">Indemnification:</strong> Each artist and user agrees to indemnify, defend, and hold harmless {COMPANY}, its officers, directors, employees, agents, and affiliates from and against any and all claims, liabilities, damages, losses, costs, and expenses (including reasonable legal fees) arising out of or related to: (i) content they upload or publish on the Platform; (ii) their violation of these Terms; or (iii) their infringement of any third-party rights including intellectual property rights.</p>
+        <Section title="2. Eligibility">
+          <p>You must be at least 13 years of age to use this Platform. By registering, you confirm that you meet this requirement. Users under 18 should review these Terms with a parent or guardian.</p>
+          <p>You may not use this Platform if you have previously been suspended or removed from it.</p>
         </Section>
 
-        <Section title="3. No Ownership Claim by the Platform">
-          <p>{COMPANY} claims <strong className="text-white/70">no ownership, authorship, or intellectual property rights</strong> over any music, artwork, lyrics, samples, or other creative works uploaded to the Platform. Artists retain full ownership of their content.</p>
-          <p>By uploading content, artists grant {COMPANY} a limited, non-exclusive, royalty-free licence solely to host, display, stream, and distribute the content to users of the Platform for the purpose of operating the service. This licence terminates when the content is removed from the Platform. {COMPANY} does not sub-licence, sell, or transfer ownership of any artist content to any third party.</p>
-          <p>{COMPANY} does not collect or retain any portion of royalties, streaming revenue, or download sales revenue generated through third-party rights organisations (PROs, CMOs) on behalf of artists. Any platform service fees charged are solely for hosting and technology services.</p>
+        <Section title="3. Your Account">
+          <p>You are responsible for maintaining the security of your account credentials and for all activity that occurs under your account. Notify us immediately at {CONTACT} if you suspect unauthorised access.</p>
+          <p>You agree to provide accurate information when registering and to keep it updated. Accounts using false information may be suspended.</p>
         </Section>
 
-        <Section title="4. Prohibited Content & Conduct">
-          <p>Users must not upload content or engage in conduct that:</p>
-          <ul className="list-disc pl-5 space-y-1">
-            <li>Infringes any copyright, trademark, or other intellectual property right;</li>
-            <li>Contains unlicensed samples or interpolations without appropriate clearance;</li>
-            <li>Promotes illegal activity, violence, or hatred;</li>
-            <li>Contains content involving minors in a sexual context;</li>
-            <li>Constitutes defamation, harassment, or invasion of privacy;</li>
-            <li>Involves spam, artificial stream manipulation, or platform abuse;</li>
-            <li>Attempts to circumvent platform security, access controls, or content restrictions;</li>
-            <li>Shares external links, files, or media in chat rooms;</li>
-            <li>Violates any applicable law or regulation.</li>
-          </ul>
-          <p>Violation of these prohibitions may result in immediate content removal, account suspension, and referral to relevant authorities where required by law.</p>
+        <Section title="4. Content You Upload — Artist Rights & Licence">
+          <p><strong className="text-white/70">You retain ownership</strong> of all music, videos, images, lyrics, artwork, and other content ("Your Content") that you upload to the Platform. We do not claim ownership of Your Content.</p>
+          <p><strong className="text-white/70">Licence to us:</strong> By uploading content, you grant {COMPANY} a worldwide, non-exclusive, royalty-free, sublicensable licence to host, store, reproduce, distribute, display, stream, and promote Your Content solely for the purpose of operating and improving the Platform. This includes displaying your content in our algorithmic For You discovery feed, search results, featured sections, and promotional materials about the Platform.</p>
+          <p><strong className="text-white/70">You warrant that:</strong> (a) you own or have all necessary rights, licences, and permissions for Your Content; (b) Your Content does not infringe any third party's intellectual property, privacy, or other rights; (c) any music videos, story videos, or audiovisual content you upload do not include samples, compositions, or recordings owned by third parties without the appropriate synchronisation and master licences.</p>
+          <p><strong className="text-white/70">Video uploads:</strong> When you upload a music video (MP4), you warrant that you hold the master recording rights and synchronisation rights for all audio and visual elements contained in the file, or have obtained all required licences from the rights holders.</p>
+          <p><strong className="text-white/70">For You Feed discovery:</strong> Published tracks and content are eligible for distribution to all users through our algorithmic recommendation system. By publishing content, you consent to this form of distribution within the Platform.</p>
+          <p><strong className="text-white/70">Removal:</strong> You may delete Your Content at any time from your dashboard. Upon deletion, we will remove it from active distribution, though residual copies in backups may persist for a limited period.</p>
         </Section>
 
-        <Section title="5. Streaming & Listening Limits">
-          <p>Free music designated by the artist as free-to-stream may be listened to an unlimited number of times by any user, for as long as the artist keeps it designated as free. Artists may change this designation at any time at their sole discretion.</p>
-          <p>Music designated by the artist as paid or download-only content may be previewed up to <strong className="text-white/70">5 times</strong> per track by a listener before a purchase prompt is displayed. To continue listening after 5 plays, the listener must purchase the track or album at the price set by the artist. This limit is enforced at the device level and is not a guarantee of complete copy protection.</p>
+        <Section title="5. Content You Upload — Prohibited Content">
+          <p>You may not upload content that: (a) infringes any third party's intellectual property rights; (b) contains illegal material, including child sexual abuse material; (c) promotes violence, hatred, or discrimination; (d) contains malware or harmful code; (e) violates any applicable law or regulation.</p>
+          <p>We reserve the right to remove any content that violates these Terms or our community standards without notice.</p>
         </Section>
 
-        <Section title="6. Payments, Splits & Refunds">
-          <p>All purchases on the Platform are processed via <strong className="text-white/70">PayPal</strong>. {COMPANY} does not store payment card details. All transactions are subject to PayPal's terms of service.</p>
-          <p><strong className="text-white/70">Revenue Splits:</strong> Where an artist has designated collaborators on a track or album with agreed split percentages, the Platform will process revenue splits automatically at the time of purchase via PayPal. Split payments are disbursed directly to each collaborator's designated PayPal account. {COMPANY} is not responsible for incorrect PayPal details provided by artists or collaborators, failed disbursements due to inactive PayPal accounts, or disputes between collaborating artists regarding agreed splits. Artists are responsible for ensuring their collaborators' payment details are correct before publishing paid content.</p>
-          <p><strong className="text-white/70">Refunds:</strong> All sales of digital downloads are <strong className="text-white/70">final and non-refundable</strong> once the download has been delivered, due to the nature of digital goods. Refund requests for failed or duplicate transactions should be directed to {CONTACT_EMAIL} within 7 days.</p>
-          <p><strong className="text-white/70">Artist Tier Subscriptions:</strong> Artist tiers (Pro, Premium) unlock additional platform features including collaboration tools, download sales, and lyrics publishing. Subscriptions are billed periodically or granted by admin. Cancellation takes effect at the end of the current billing period. Downgrading a tier does not affect existing published content but may restrict access to tier-gated features going forward.</p>
-          <p><strong className="text-white/70">1-on-1 Support Sessions:</strong> Artists may offer paid 1-on-1 support or consultation sessions booked through the Platform. These are transactions directly between the artist and listener. {COMPANY} facilitates the booking and payment only and bears no responsibility for the content or delivery of such sessions. Refunds for sessions are at the artist's discretion.</p>
+        <Section title="6. DMCA & Copyright Takedown">
+          <p>We respect intellectual property rights. If you believe content on the Platform infringes your copyright, please send a takedown notice to {CONTACT} including: (a) identification of the copyrighted work; (b) identification of the infringing material and its location on the Platform; (c) your contact information; (d) a statement that you have a good faith belief the use is not authorised; (e) a statement of accuracy under penalty of perjury; (f) your signature.</p>
+          <p>We will process valid notices promptly. Repeat infringers will have their accounts terminated.</p>
+          <p>If your content was removed in error, you may submit a counter-notice to {CONTACT}. We are not liable for content removed in good faith response to a takedown notice.</p>
         </Section>
 
-        <Section title="7. Collaborations & Credits">
-          <p>Artists may add collaborators to tracks and albums with defined roles and revenue split percentages. By accepting a collaboration request, a collaborator agrees to the stated role and split percentage and confirms they have contributed original work to the track.</p>
-          <p>Collaboration credits are displayed publicly on the Platform. Artists agree not to falsely attribute credits or manipulate split arrangements to misrepresent ownership or contributions. {COMPANY} may remove credits or suspend accounts where fraudulent collaboration arrangements are detected.</p>
-          <p>Each collaborator is solely responsible for declaring any income received through the Platform in accordance with the tax laws of their jurisdiction. {COMPANY} does not provide tax advice and is not liable for any tax obligations arising from payments received.</p>
+        <Section title="7. Streaming, Downloads & Purchases">
+          <p>Free-tier music may be streamed an unlimited number of times by any user, for as long as the artist keeps it designated as free.</p>
+          <p>Music designated as paid or download-only may be previewed up to <strong className="text-white/70">5 times</strong> per track before a purchase prompt appears. To continue listening after 5 plays, the listener must purchase the track or album at the price set by the artist.</p>
+          <p>All purchases are final. We do not offer refunds for digital content once it has been downloaded or streamed beyond the preview limit. Exceptions may be made at our discretion for technical failures.</p>
         </Section>
 
-        <Section title="8. Chat Rooms & Community">
-          <p>The Platform provides live chat rooms and community post feeds for artists and listeners to interact. By participating in these features, users agree to communicate respectfully and in compliance with these Terms.</p>
-          <p><strong className="text-white/70">Chat Room Rules:</strong> External links, file sharing, and image or video sharing are not permitted in chat rooms. Profanity filters and word moderation are applied automatically. Messages containing prohibited content will be blocked. Room hosts and platform administrators may remove messages and mute or remove members at their discretion.</p>
-          <p><strong className="text-white/70">Subscribers-Only Rooms:</strong> Some chat rooms may be restricted to followers of a particular artist. Access is contingent on maintaining a follow relationship with the artist at the time of joining.</p>
-          <p>{COMPANY} is not responsible for the content of user messages in chat rooms and community posts but reserves the right to moderate, remove, or restrict access to any content or user at any time.</p>
+        <Section title="8. Revenue, Splits & Payouts">
+          <p>Artists set their own prices for downloadable content. {COMPANY} processes payments via PayPal and retains a platform fee as disclosed at the time of transaction.</p>
+          <p><strong className="text-white/70">Revenue Splits:</strong> Where an artist designates collaborators with agreed split percentages, the Platform processes revenue splits automatically at the time of purchase. Split payments are disbursed directly to each collaborator's PayPal account. {COMPANY} is not responsible for incorrect PayPal details, failed disbursements due to inactive accounts, or disputes between collaborating artists regarding agreed splits.</p>
+          <p>Artists are responsible for their own tax obligations arising from income earned through the Platform.</p>
         </Section>
 
-        <Section title="9. Content Moderation & Account Suspension">
-          <p>{COMPANY} reserves the right to moderate all content on the Platform and to take the following actions at its sole discretion:</p>
-          <ul className="list-disc pl-5 space-y-1">
-            <li>Remove or unpublish any track, album, post, or comment;</li>
-            <li>Remove featured status from any content;</li>
-            <li>Suspend or permanently ban any artist or listener account;</li>
-            <li>Flag accounts for suspected fraudulent stream activity;</li>
-            <li>Refer content or conduct to relevant legal authorities.</li>
-          </ul>
-          <p><strong className="text-white/70">Stream Fraud:</strong> The Platform employs automated detection systems to identify artificial stream manipulation. Accounts detected engaging in stream fraud may be suspended without prior notice and any artificially inflated stream counts may be corrected or removed.</p>
-          <p>Suspended accounts may appeal by contacting {CONTACT_EMAIL}. {COMPANY} will review appeals in good faith but is not obligated to reinstate any suspended account.</p>
+        <Section title="9. Artist Tiers & Subscriptions">
+          <p>Artists may subscribe to Pro or Premium tiers which unlock additional Platform features. Tier features are as described in the Platform at the time of subscription. We reserve the right to modify tier features with reasonable notice.</p>
+          <p>Subscription fees are non-refundable except where required by applicable consumer protection law. You may cancel at any time; cancellation takes effect at the end of the current billing period.</p>
+          <p>Per-song analytics, detailed listener demographics, and advanced reporting are available to Pro and Premium subscribers only.</p>
         </Section>
 
-        <Section title="10. Platform Liability Limitations">
-          <p>To the maximum extent permitted by applicable law, {COMPANY} and its affiliates, officers, employees, and licensors shall not be liable for:</p>
-          <ul className="list-disc pl-5 space-y-1">
-            <li>Any indirect, incidental, special, consequential, or punitive damages;</li>
-            <li>Loss of profits, revenue, data, goodwill, or other intangible losses;</li>
-            <li>Damages arising from user-uploaded content including copyright infringement;</li>
-            <li>Failed, delayed, or incorrect revenue split disbursements due to incorrect payment details;</li>
-            <li>Disputes between collaborating artists over credits or revenue;</li>
-            <li>Content or conduct in chat rooms or community posts;</li>
-            <li>Interruption or cessation of the Platform;</li>
-            <li>Unauthorised access to or alteration of your data.</li>
-          </ul>
-          <p>{COMPANY}'s total aggregate liability to any user for any claims arising under these Terms shall not exceed the greater of (a) the amount paid by that user to {COMPANY} in the 12 months preceding the claim or (b) USD $100.</p>
+        <Section title="10. Collaborative Playlists">
+          <p>The Platform allows users to create collaborative playlists and add tracks to them. Adding a track to a playlist is an internal Platform feature and does not constitute redistribution, resale, or any transfer of rights in the underlying recording. Playlist functionality is governed by the same licence granted in Section 4.</p>
         </Section>
 
-        <Section title="11. Privacy & Data">
-          <p>We collect limited personal data necessary to operate the Platform including account registration data, usage analytics, stream history, download records, and payment transaction records (processed by PayPal — we do not receive full payment details). We do not sell user data to third parties.</p>
-          <p>For users in the European Economic Area, your data is processed on the basis of contract performance and legitimate interests. You have the right to access, correct, and delete your personal data. Contact {CONTACT_EMAIL} for data requests.</p>
-          <p>The Platform uses Google OAuth for authentication. By signing in with Google, you agree to Google's terms of service and privacy policy in addition to these Terms.</p>
+        <Section title="11. Stories & Short-Form Video">
+          <p>Artists may upload short-form video stories and tag music to play alongside them. By tagging a track to a story video, the artist represents that they hold both the master recording rights and the synchronisation rights for the combination of audio and visual content, or have obtained all required licences.</p>
+          <p>Stories expire after 24 hours. We are not responsible for any content in stories that violates third-party rights.</p>
         </Section>
 
-        <Section title="12. Governing Law & Disputes">
-          <p>These Terms are governed by and construed in accordance with the laws of the Republic of South Africa, without regard to conflict of law principles. Any disputes shall first be subject to good faith negotiation, and if unresolved, submitted to binding arbitration or the competent courts of South Africa.</p>
-          <p>If any provision of these Terms is found to be unenforceable, the remaining provisions shall continue in full force and effect.</p>
+        <Section title="12. User-Generated Content — Listeners">
+          <p>Listeners may post comments on tracks and interact with artists. Comments must not contain harassment, hate speech, spam, or illegal content. We may remove comments and suspend accounts that violate these standards.</p>
         </Section>
 
-        <Section title="13. Changes to These Terms">
-          <p>We reserve the right to update these Terms at any time. Changes will be posted on this page with an updated date. Continued use of the Platform after changes constitutes acceptance of the revised Terms.</p>
+        <Section title="13. Platform Analytics & Data">
+          <p>We collect streaming data, device information, and engagement metrics to provide artists with analytics about their content's performance. This data is used to operate the Platform, power the recommendation algorithm, and provide per-track analytics to artists. See our Privacy Policy for full details.</p>
         </Section>
 
-        {/* Footer */}
-        <div className="mt-8 py-6 border-t border-white/[0.06] text-center">
-          <p className="text-xs text-white/20">
-            Questions about these terms? Contact us at{' '}
-            <a href={`mailto:${CONTACT_EMAIL}`} className="text-white/40 hover:text-white/60 transition">
-              {CONTACT_EMAIL}
-            </a>
-          </p>
-          <p className="text-xs text-white/15 mt-2">© {new Date().getFullYear()} {COMPANY}. All rights reserved.</p>
-        </div>
+        <Section title="14. Prohibited Uses">
+          <p>You may not: (a) use bots, scripts, or automated tools to artificially inflate stream counts, follower counts, or engagement metrics; (b) attempt to gain unauthorised access to other accounts or Platform systems; (c) scrape or harvest Platform data without permission; (d) use the Platform to transmit spam; (e) attempt to reverse engineer the Platform.</p>
+          <p>We use automated and manual systems to detect fraud. Accounts found manipulating metrics will be suspended and may have earnings reversed.</p>
+        </Section>
 
+        <Section title="15. Termination">
+          <p>We may suspend or terminate your account at any time for breach of these Terms. You may delete your account at any time from your profile settings. Upon deletion, your public profile and content will be removed from active circulation.</p>
+        </Section>
+
+        <Section title="16. Disclaimers & Limitation of Liability">
+          <p>The Platform is provided "as is" without warranties of any kind, express or implied. We do not warrant that the Platform will be uninterrupted, error-free, or that content will be preserved indefinitely.</p>
+          <p>To the maximum extent permitted by applicable law, {COMPANY} shall not be liable for indirect, incidental, special, or consequential damages arising from your use of the Platform, including loss of revenue, data, or goodwill.</p>
+          <p>Our total liability to you for any claim shall not exceed the amount you paid to us in the 12 months preceding the claim.</p>
+        </Section>
+
+        <Section title="17. Governing Law">
+          <p>These Terms are governed by applicable law. Disputes will be resolved through good faith negotiation where possible. If you are a consumer, nothing in these Terms affects your statutory rights under applicable consumer protection legislation.</p>
+        </Section>
+
+        <Section title="18. Contact">
+          <p>For legal notices, copyright takedown requests, or questions about these Terms, contact us at <strong className="text-white/70">{CONTACT}</strong>.</p>
+        </Section>
       </div>
     </div>
   );
