@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
+import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { useAuth } from '../contexts/AuthContext';
 import {
   BarChart3, Download, Music, Loader,
@@ -200,6 +201,40 @@ export default function ArtistDashboard() {
     );
   }
 
+  const fetchTrackAnalytics = async (trackId, days) => {
+    if (!trackId) return;
+    setTrackAnalyticsLoading(true);
+    try {
+      const since = new Date(Date.now() - days * 86400000).toISOString();
+      const { data: streamData } = await supabase
+        .from('streams').select('created_at')
+        .eq('track_id', trackId).gte('created_at', since).order('created_at');
+      const { data: likeData } = await supabase
+        .from('track_likes').select('created_at')
+        .eq('track_id', trackId).gte('created_at', since).order('created_at');
+
+      // Build daily buckets
+      const streamMap = {}, likeMap = {};
+      for (let i = days - 1; i >= 0; i--) {
+        const d = new Date(Date.now() - i * 86400000);
+        const key = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        streamMap[key] = 0; likeMap[key] = 0;
+      }
+      (streamData || []).forEach(s => {
+        const key = new Date(s.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        if (streamMap[key] !== undefined) streamMap[key]++;
+      });
+      (likeData || []).forEach(l => {
+        const key = new Date(l.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        if (likeMap[key] !== undefined) likeMap[key]++;
+      });
+      setTrackStreams(Object.entries(streamMap).map(([date, streams]) => ({ date, streams })));
+      setTrackLikes(Object.entries(likeMap).map(([date, likes]) => ({ date, likes })));
+    } catch {}
+    setTrackAnalyticsLoading(false);
+  };
+
+
   const statCards = [
     { icon: Headphones, label: 'Total Streams', value: stats.streams,   color: 'text-purple-400' },
     { icon: Download,   label: 'Downloads',     value: stats.downloads, color: 'text-blue-400' },
@@ -317,31 +352,108 @@ export default function ArtistDashboard() {
                     </div>
                   </TierGate>
 
-                  <div className="bg-white/[0.03] rounded-xl p-5 border border-white/[0.06]">
-                    <div className="flex items-center space-x-2 mb-4">
-                      <TrendingUp className="w-5 h-5 text-white/40" />
-                      <h3 className="text-base font-semibold text-white">Top Tracks</h3>
+                  {/* Per-song analytics */}
+                  <div className="bg-white/[0.03] rounded-xl p-5 border border-white/[0.06] space-y-4">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <div className="flex items-center space-x-2">
+                        <TrendingUp className="w-5 h-5 text-white/40" />
+                        <h3 className="text-base font-semibold text-white">Track Analytics</h3>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        {/* Date range selector */}
+                        <div className="flex space-x-1 bg-white/[0.04] rounded-lg p-0.5">
+                          {[7, 14, 30].map(d => (
+                            <button key={d} onClick={() => setTrackRange(d)}
+                              className={`px-2.5 py-1 rounded text-xs font-medium transition ${trackRange === d ? 'bg-white text-black' : 'text-white/40 hover:text-white/70'}`}>
+                              {d}d
+                            </button>
+                          ))}
+                        </div>
+                        {/* Track selector */}
+                        <select
+                          value={selectedTrack || ''}
+                          onChange={e => setSelectedTrack(e.target.value || null)}
+                          className="bg-white/[0.06] text-white text-xs rounded-lg px-2.5 py-1.5 outline-none border border-white/[0.08] max-w-[160px] truncate">
+                          <option value="">Pick a track…</option>
+                          {topTracks.map(t => (
+                            <option key={t.id} value={t.id}>{t.title}</option>
+                          ))}
+                        </select>
+                      </div>
                     </div>
-                    <div className="space-y-2">
+
+                    {/* Charts */}
+                    {selectedTrack ? (
+                      trackAnalyticsLoading ? (
+                        <div className="flex justify-center py-8"><Loader className="w-5 h-5 animate-spin text-white/20" /></div>
+                      ) : (
+                        <div className="space-y-4">
+                          {/* Streams chart */}
+                          <div>
+                            <p className="text-xs text-white/40 mb-2 font-medium">Streams — {trackRange}d</p>
+                            <ResponsiveContainer width="100%" height={120}>
+                              <AreaChart data={trackStreams}>
+                                <defs>
+                                  <linearGradient id="sg" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="5%" stopColor="#a78bfa" stopOpacity={0.3} />
+                                    <stop offset="95%" stopColor="#a78bfa" stopOpacity={0} />
+                                  </linearGradient>
+                                </defs>
+                                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
+                                <XAxis dataKey="date" tick={{ fill: 'rgba(255,255,255,0.2)', fontSize: 9 }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
+                                <YAxis tick={{ fill: 'rgba(255,255,255,0.2)', fontSize: 9 }} axisLine={false} tickLine={false} width={24} />
+                                <Tooltip contentStyle={{ background: '#111', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, fontSize: 11 }} />
+                                <Area type="monotone" dataKey="streams" stroke="#a78bfa" strokeWidth={2} fill="url(#sg)" />
+                              </AreaChart>
+                            </ResponsiveContainer>
+                          </div>
+                          {/* Likes chart */}
+                          <div>
+                            <p className="text-xs text-white/40 mb-2 font-medium">Likes — {trackRange}d</p>
+                            <ResponsiveContainer width="100%" height={100}>
+                              <BarChart data={trackLikes}>
+                                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
+                                <XAxis dataKey="date" tick={{ fill: 'rgba(255,255,255,0.2)', fontSize: 9 }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
+                                <YAxis tick={{ fill: 'rgba(255,255,255,0.2)', fontSize: 9 }} axisLine={false} tickLine={false} width={24} />
+                                <Tooltip contentStyle={{ background: '#111', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, fontSize: 11 }} />
+                                <Bar dataKey="likes" fill="#f472b6" radius={[3,3,0,0]} />
+                              </BarChart>
+                            </ResponsiveContainer>
+                          </div>
+                          {/* CSV export for this track */}
+                          <button onClick={async () => {
+                            const { data } = await supabase.from('streams').select('created_at, duration_played, completed, device_type').eq('track_id', selectedTrack).order('created_at', { ascending: false }).limit(5000);
+                            if (!data) return;
+                            const csv = ['date,duration,completed,device', ...data.map(s => `${s.created_at},${s.duration_played},${s.completed},${s.device_type}`)].join('\n');
+                            const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+                            a.download = 'track-streams.csv'; a.click();
+                          }} className="flex items-center space-x-2 px-3 py-2 bg-white/[0.04] rounded-xl text-xs text-white/50 hover:bg-white/[0.08] transition border border-white/[0.06]">
+                            <TrendingUp className="w-3.5 h-3.5" /><span>Export streams CSV</span>
+                          </button>
+                        </div>
+                      )
+                    ) : (
+                      <p className="text-center text-white/20 text-sm py-4">Select a track to see detailed analytics</p>
+                    )}
+
+                    {/* Top tracks list */}
+                    <div className="border-t border-white/[0.04] pt-3 space-y-2">
+                      <p className="text-xs text-white/30 font-medium mb-2">All tracks</p>
                       {topTracks.map((track, i) => (
-                        <div key={track.id} className="flex items-center space-x-3 p-2 rounded-lg hover:bg-white/[0.03] transition">
-                          <span className="text-sm font-bold text-white/30 w-5 text-right">{i + 1}</span>
-                          {track.cover_artwork_url ? (
-                            <img src={track.cover_artwork_url} alt="" className="w-10 h-10 rounded-md object-cover" />
-                          ) : (
-                            <div className="w-10 h-10 rounded-md bg-white/[0.06] flex items-center justify-center">
-                              <Music className="w-4 h-4 text-white/20" />
-                            </div>
-                          )}
+                        <div key={track.id} onClick={() => setSelectedTrack(track.id)}
+                          className={`flex items-center space-x-3 p-2 rounded-lg cursor-pointer transition ${selectedTrack === track.id ? 'bg-white/[0.08] ring-1 ring-white/10' : 'hover:bg-white/[0.04]'}`}>
+                          <span className="text-xs font-bold text-white/30 w-5 text-right">{i + 1}</span>
+                          {track.cover_artwork_url
+                            ? <img src={track.cover_artwork_url} alt="" className="w-9 h-9 rounded-md object-cover" />
+                            : <div className="w-9 h-9 rounded-md bg-white/[0.06] flex items-center justify-center"><Music className="w-4 h-4 text-white/20" /></div>}
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-medium text-white truncate">{track.title}</p>
-                            <p className="text-xs text-white/30">{track.stream_count || 0} streams</p>
+                            <p className="text-xs text-white/30">{(track.stream_count || 0).toLocaleString()} streams · {(track.like_count || 0).toLocaleString()} likes</p>
                           </div>
+                          {selectedTrack === track.id && <div className="w-1.5 h-1.5 rounded-full bg-purple-400 flex-shrink-0" />}
                         </div>
                       ))}
-                      {topTracks.length === 0 && (
-                        <p className="text-center text-white/20 text-sm py-6">No tracks yet</p>
-                      )}
+                      {topTracks.length === 0 && <p className="text-center text-white/20 text-sm py-4">No tracks yet</p>}
                     </div>
                   </div>
                 </>

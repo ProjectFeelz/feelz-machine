@@ -1130,7 +1130,7 @@ export default function ArtistProfilePage() {
   const socialEntries  = Object.entries(socials).filter(([_, v]) => v);
   const headingFont    = theme?.heading_font || 'Inter';
   const bodyFont       = theme?.body_font || 'Inter';
-  const visibleTracks  = showAllTracks ? tracks : tracks.slice(0, 10);
+  const visibleTracks  = showAllTracks ? tracks.slice(0, 10) : tracks.slice(0, 5);
   const isProfileOwner = user && myArtist && myArtist.id === artist.id;
   const pageUrl        = `${BASE_URL}/artist/${slug}`;
   const ogImage        = artist.profile_image_url || `${BASE_URL}/og-default.png`;
@@ -1468,7 +1468,7 @@ export default function ArtistProfilePage() {
 
       {tracks.length > 0 && (
         <div className="px-6 mb-8">
-          <h2 className="text-lg font-bold mb-3" style={{ fontFamily: `"${headingFont}", sans-serif` }}>Popular</h2>
+          <h2 className="text-lg font-bold mb-3 text-white" style={{ fontFamily: `"${headingFont}", sans-serif`, opacity: 1 }}>Popular</h2>
           <div className="space-y-1">
             {visibleTracks.map((track, i) => {
               const isActive = currentTrack?.id === track.id;

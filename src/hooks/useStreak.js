@@ -44,6 +44,7 @@ export function useStreak(user) {
   const [discoveryStreak, setDiscoveryStreak] = useState(0);
   const [loading,         setLoading]         = useState(true);
   const discoveredTodayRef = useRef(false);
+  const incrementingRef     = useRef(false); // in-memory lock for double-invoke
 
   // One key per user per day — written BEFORE the DB update to prevent
   // a second concurrent call from slipping through while the first is awaiting.
@@ -110,8 +111,9 @@ export function useStreak(user) {
       }
 
       // ── New day: claim the session slot BEFORE the DB write ─────────────────
-      // This is the critical fix — any concurrent call arriving between here
-      // and the await below will see the key already set and bail out.
+      // incrementingRef is an in-memory lock to handle React StrictMode double-invoke
+      if (incrementingRef.current) { setLoading(false); return; }
+      incrementingRef.current = true;
       localStorage.setItem(sessionKey, today);
 
       const newStreak  = isYesterday(lastActive) ? (row.current_streak || 1) + 1 : 1;

@@ -146,7 +146,8 @@ export default function NotificationsPage() {
   // Notification types that are informational only — no useful tap destination
   const READ_ONLY_TYPES = new Set([
     'streak', 'top_supporter', 'weekly_report', 'monthly_wrapped',
-    'tip', 'engagement', 'payout_pending',
+    'tip', 'engagement', 'payout_pending', 'admin_message',
+    'bug_report', 'announcement',
   ]);
 
   const handleClick = (notif) => {
@@ -410,13 +411,13 @@ export default function NotificationsPage() {
                         )}
 
                         <div className="flex-1 min-w-0">
-                          <p className={`text-sm leading-relaxed ${!notif.read ? 'text-white' : 'text-white/50'}`}>
+                          <p className={`text-base leading-relaxed font-medium ${!notif.read ? 'text-white' : 'text-white/60'}`}>
                             {notif.title}
                           </p>
                           {notif.message && (
                             <>
                               <p
-                                className={`text-xs text-white/30 mt-0.5 ${expandedIds.includes(notif.id) ? '' : 'line-clamp-2'}`}
+                                className={`text-sm text-white/40 mt-0.5 ${expandedIds.includes(notif.id) ? '' : 'line-clamp-2'}`}
                               >{notif.message}</p>
                               {notif.message.length > 80 && (
                                 <button
@@ -479,10 +480,10 @@ export default function NotificationsPage() {
                           )}
 
                           <div className="flex items-center space-x-2 mt-1.5">
-                            <span className={`text-[10px] px-1.5 py-0.5 rounded ${config.bg} ${config.color}`}>
+                            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${config.bg} ${config.color}`}>
                               {config.label}
                             </span>
-                            <span className="text-[10px] text-white/20">{formatDate(notif.created_at)}</span>
+                            <span className="text-xs text-white/30">{formatDate(notif.created_at)}</span>
                           </div>
                         </div>
 

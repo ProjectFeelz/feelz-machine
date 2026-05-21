@@ -19,6 +19,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { usePlayer } from '../contexts/PlayerContext';
 import VinylRecord from '../components/VinylRecord';
 import { ArtistStoryView } from '../components/ArtistStories';
+import ShareCard from '../components/ShareCard';
 import {
   Heart, MessageCircle, ListMusic, UserCheck,
   Share2, Loader, X, Send, ChevronUp,
@@ -45,7 +46,12 @@ function CommentSheet({ track, user, onClose }) {
       .order('created_at', { ascending: false })
       .limit(50)
       .then(({ data }) => { setComments(data || []); setLoading(false); });
-    setTimeout(() => inputRef.current?.focus(), 300);
+    setTimeout(() => {
+      if (inputRef.current) {
+        inputRef.current.focus();
+        inputRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }, 300);
   }, [track.id]);
 
   const post = async () => {
@@ -62,11 +68,8 @@ function CommentSheet({ track, user, onClose }) {
   };
 
   return (
-    <div
-      className="absolute inset-x-0 bottom-0 z-50 rounded-t-3xl overflow-hidden flex flex-col"
-      style={{ background: 'rgba(10,10,10,0.97)', border: '1px solid rgba(255,255,255,0.08)', maxHeight: '70vh' }}
-      onClick={e => e.stopPropagation()}
-    >
+    <div className="flex flex-col w-full" style={{ maxHeight: '70vh' }}
+      onClick={e => e.stopPropagation()}>
       <div className="flex justify-between items-center px-5 py-4 flex-shrink-0 border-b border-white/[0.06]">
         <p className="text-sm font-bold text-white">Comments</p>
         <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-full bg-white/[0.06]">
@@ -101,6 +104,7 @@ function CommentSheet({ track, user, onClose }) {
         <input
           ref={inputRef} value={text} onChange={e => setText(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && post()}
+          onFocus={() => setTimeout(() => inputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 300)}
           placeholder="Add a comment…" maxLength={300}
           className="flex-1 bg-white/[0.06] rounded-xl px-3 py-2 text-sm text-white placeholder-white/25 outline-none border border-white/[0.06] focus:border-white/20"
         />
@@ -142,11 +146,8 @@ function PlaylistSheet({ track, user, onClose, navigate }) {
   };
 
   return (
-    <div
-      className="absolute inset-x-0 bottom-0 z-50 rounded-t-3xl overflow-hidden flex flex-col"
-      style={{ background: 'rgba(10,10,10,0.97)', border: '1px solid rgba(255,255,255,0.08)', maxHeight: '60vh' }}
-      onClick={e => e.stopPropagation()}
-    >
+    <div className="flex flex-col w-full" style={{ maxHeight: '60vh' }}
+      onClick={e => e.stopPropagation()}>
       <div className="flex justify-between items-center px-5 py-4 border-b border-white/[0.06] flex-shrink-0">
         <p className="text-sm font-bold text-white">Add to Playlist</p>
         <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-full bg-white/[0.06]">
@@ -214,7 +215,7 @@ function LyricsCaption({ lyrics, currentTime, isActive }) {
     const nextLine   = activeIdx >= 0 && activeIdx + 1 < lrcLines.length ? lrcLines[activeIdx + 1] : null;
     if (!activeLine?.text && !nextLine?.text) return null;
     return (
-      <div className="absolute bottom-44 left-4 right-20 z-20 pointer-events-none text-center">
+      <div className="absolute bottom-44 left-0 right-0 z-20 pointer-events-none text-center px-8">
         {activeLine?.text && (
           <p key={activeIdx} className="text-center text-white text-base font-bold leading-snug mb-1 drop-shadow-lg"
             style={{ textShadow: '0 2px 8px rgba(0,0,0,0.9), 0 0 20px rgba(0,0,0,0.7)', animation: 'lyricFade 0.3s ease' }}>
@@ -240,7 +241,7 @@ function LyricsCaption({ lyrics, currentTime, isActive }) {
   const line = lines[lineIdx];
   if (!line) return null;
   return (
-    <div className="absolute bottom-44 left-4 right-20 z-20 pointer-events-none text-center">
+    <div className="absolute bottom-44 left-0 right-0 z-20 pointer-events-none text-center px-8">
       <p key={lineIdx} className="text-center text-white text-base font-bold leading-snug drop-shadow-lg"
         style={{ textShadow: '0 2px 8px rgba(0,0,0,0.9), 0 0 20px rgba(0,0,0,0.7)', animation: 'lyricFade 0.3s ease' }}>
         {line}
@@ -323,10 +324,10 @@ function FloatingHearts({ trackId }) {
   if (!hearts.length && !bubbles.length) return null;
 
   return (
-    <div className="absolute inset-0 pointer-events-none z-25 overflow-hidden">
+    <div className="absolute inset-0 pointer-events-none z-40 overflow-hidden">
       {/* Floating hearts */}
       {hearts.map(h => (
-        <div key={h.id} className="absolute bottom-32"
+        <div key={h.id} className="absolute bottom-36"
           style={{
             left: `${h.x}%`,
             animation: `floatHeart 2.5s ease-out ${h.delay}ms forwards`,
@@ -338,7 +339,7 @@ function FloatingHearts({ trackId }) {
 
       {/* Listener bubble — bottom left, fades in and out */}
       {bubbles.map(b => (
-        <div key={b.id} className="absolute bottom-32 left-4 flex items-center space-x-2 rounded-full px-3 py-1.5"
+        <div key={b.id} className="absolute bottom-36 left-4 flex items-center space-x-2 rounded-full px-3 py-1.5"
           style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)', border: '1px solid rgba(255,255,255,0.12)', animation: 'bubblePop 3.5s ease forwards' }}>
           <div className="w-6 h-6 rounded-full overflow-hidden bg-white/10 flex-shrink-0">
             {b.avatar
@@ -428,7 +429,7 @@ function StoryFeedCard({ item, isActive, onOpen, navigate }) {
 }
 
 // ── Single card ───────────────────────────────────────────────────────────────
-function ForYouCard({ track, isActive, user, navigate }) {
+function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare }) {
   const { currentTrack, isPlaying, currentTime, setIsMinimized } = usePlayer();
   const { artist: myArtist } = useAuth();
   const isOwnTrack = myArtist?.id === track.artist_id;
@@ -468,7 +469,6 @@ function ForYouCard({ track, isActive, user, navigate }) {
   const [likeCount, setLikeCount]     = useState(0);
   const [following, setFollowing]     = useState(false);
   const [commentCount, setCommentCount] = useState(0);
-  const [sheet, setSheet]             = useState(null);
   const [muted, setMuted]             = useState(true);
 
   useEffect(() => {
@@ -517,9 +517,16 @@ function ForYouCard({ track, isActive, user, navigate }) {
   };
 
   const handleShare = () => {
-    const url = `${window.location.origin}/@${track.artist_slug}`;
-    if (navigator.share) navigator.share({ title: track.title, text: `${track.title} by ${track.artist_name}`, url });
-    else navigator.clipboard.writeText(url);
+    const url = `${window.location.origin}/artist/${track.artist_slug}`;
+    onShare({
+      artist: {
+        artist_name:       track.artist_name,
+        slug:              track.artist_slug,
+        profile_image_url: track.artist_image,
+      },
+      url,
+      track,
+    });
   };
 
   const goToArtist = () => {
@@ -528,7 +535,6 @@ function ForYouCard({ track, isActive, user, navigate }) {
   };
 
   const handleTap = () => {
-    if (sheet) { setSheet(null); return; }
     goToArtist();
   };
 
@@ -637,7 +643,7 @@ function ForYouCard({ track, isActive, user, navigate }) {
         </button>
 
         {/* Comment */}
-        <button onClick={() => setSheet(s => s === 'comments' ? null : 'comments')}
+        <button onClick={() => onOpenSheet({ type: 'comments', track })}
           className="flex flex-col items-center space-y-1">
           <div className="w-11 h-11 flex items-center justify-center">
             <MessageCircle className="w-7 h-7 text-white/90" strokeWidth={2} />
@@ -646,7 +652,7 @@ function ForYouCard({ track, isActive, user, navigate }) {
         </button>
 
         {/* Playlist */}
-        <button onClick={() => setSheet(s => s === 'playlist' ? null : 'playlist')}
+        <button onClick={() => onOpenSheet({ type: 'playlist', track })}
           className="flex flex-col items-center space-y-1">
           <div className="w-11 h-11 flex items-center justify-center">
             <ListMusic className="w-7 h-7 text-white/90" strokeWidth={2} />
@@ -700,13 +706,7 @@ function ForYouCard({ track, isActive, user, navigate }) {
         </div>
       )}
 
-      {/* Sheets */}
-      {sheet === 'comments' && (
-        <CommentSheet track={track} user={user} onClose={() => setSheet(null)} />
-      )}
-      {sheet === 'playlist' && (
-        <PlaylistSheet track={track} user={user} onClose={() => setSheet(null)} navigate={navigate} />
-      )}
+
 
       <style>{`
         @keyframes fadeOutHint {
@@ -735,12 +735,34 @@ export default function ForYouPage() {
   const navigate    = useNavigate();
   const { playTrack, setIsMinimized } = usePlayer();
 
+  // Keep screen awake while on the feed
+  React.useEffect(() => {
+    let wakeLock = null;
+    const acquire = async () => {
+      try {
+        if ('wakeLock' in navigator) {
+          wakeLock = await navigator.wakeLock.request('screen');
+        }
+      } catch {}
+    };
+    acquire();
+    // Re-acquire if page becomes visible again (e.g. user switches tabs)
+    const onVisible = () => { if (document.visibilityState === 'visible') acquire(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      wakeLock?.release().catch(() => {});
+    };
+  }, []);
+
 
   const [tracks, setTracks]           = useState([]);
   const [idx, setIdx]                 = useState(0);
   const [loading, setLoading]         = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [viewingStory, setViewingStory] = useState(null); // { artist, stories }
+  const [activeSheet, setActiveSheet]   = useState(null); // { type, track }
+  const [shareCard, setShareCard]         = useState(null);  // { artist, url }
 
   const touchStartY  = useRef(null);
   const touchStartX  = useRef(null);
@@ -1059,7 +1081,7 @@ export default function ForYouPage() {
                   navigate={navigate}
                 />
               ) : (
-                <ForYouCard track={tracks[i]} isActive={i === idx} user={user} navigate={navigate} />
+                <ForYouCard track={tracks[i]} isActive={i === idx} user={user} navigate={navigate} onOpenSheet={setActiveSheet} onShare={setShareCard} />
               )}
             </div>
           );
@@ -1072,7 +1094,7 @@ export default function ForYouPage() {
 
       {/* Sign-in nudge for unauthenticated users */}
       {!user && (
-        <div className="absolute bottom-20 inset-x-0 z-40 flex justify-center px-6 pointer-events-none">
+        <div className="absolute inset-0 z-40 flex items-center justify-center px-6 pointer-events-none">
           <div className="w-full max-w-sm rounded-2xl overflow-hidden pointer-events-auto"
             style={{ background: 'rgba(10,10,10,0.85)', backdropFilter: 'blur(20px)', border: '1px solid rgba(255,255,255,0.1)' }}>
             <div className="px-5 py-4 flex items-center space-x-4">
@@ -1094,6 +1116,46 @@ export default function ForYouPage() {
         <div className="absolute bottom-24 left-1/2 -translate-x-1/2 z-30">
           <Loader className="w-4 h-4 animate-spin text-white/30" />
         </div>
+      )}
+
+      {/* Comment sheet — fixed overlay, unaffected by keyboard */}
+      {activeSheet?.type === 'comments' && (
+        <div className="fixed inset-0 z-[800] flex items-end"
+          style={{ background: 'rgba(0,0,0,0.5)' }}
+          onClick={() => setActiveSheet(null)}>
+          <div className="w-full" onClick={e => e.stopPropagation()}
+            style={{ maxHeight: '70vh', display: 'flex', flexDirection: 'column',
+                     background: 'rgba(10,10,10,0.98)', borderTop: '1px solid rgba(255,255,255,0.08)',
+                     borderRadius: '24px 24px 0 0',
+                     paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
+            <CommentSheet track={activeSheet.track} user={user} onClose={() => setActiveSheet(null)} />
+          </div>
+        </div>
+      )}
+
+      {/* Playlist sheet — fixed overlay */}
+      {activeSheet?.type === 'playlist' && (
+        <div className="fixed inset-0 z-[800] flex items-end"
+          style={{ background: 'rgba(0,0,0,0.5)' }}
+          onClick={() => setActiveSheet(null)}>
+          <div className="w-full" onClick={e => e.stopPropagation()}
+            style={{ maxHeight: '60vh', display: 'flex', flexDirection: 'column',
+                     background: 'rgba(10,10,10,0.98)', borderTop: '1px solid rgba(255,255,255,0.08)',
+                     borderRadius: '24px 24px 0 0',
+                     paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
+            <PlaylistSheet track={activeSheet.track} user={user} onClose={() => setActiveSheet(null)} navigate={navigate} />
+          </div>
+        </div>
+      )}
+
+      {/* ShareCard overlay */}
+      {shareCard && (
+        <ShareCard
+          artist={shareCard.artist}
+          track={shareCard.track}
+          shareUrl={shareCard.url}
+          onClose={() => setShareCard(null)}
+        />
       )}
 
       {/* Full-screen story viewer — rendered at root level so fixed inset-0 takes full screen */}

@@ -111,7 +111,7 @@ export default function MerchConnectSheet({ artist, onClose, onConnected }) {
   };
 
   return (
-    <div className="fixed inset-0 z-[700] flex items-end justify-center bg-black/70 backdrop-blur-sm md:items-center"
+    <div className="fixed inset-0 z-[700] flex items-center justify-center bg-black/70 backdrop-blur-sm px-4"
       onClick={onClose}>
       <div className="w-full max-w-sm rounded-t-3xl md:rounded-3xl overflow-hidden"
         style={{ backgroundColor: '#0f0f0f', border: '1px solid rgba(255,255,255,0.08)', boxShadow: '0 -16px 48px rgba(0,0,0,0.6)' }}
