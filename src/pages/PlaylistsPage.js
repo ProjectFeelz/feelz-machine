@@ -175,15 +175,32 @@ export default function PlaylistsPage() {
       {/* Create form */}
       {creating && (
         <div className="space-y-2 mb-4 p-4 rounded-xl bg-white/[0.03] border border-white/[0.06]">
-          <input
-            type="text"
-            value={newName}
-            onChange={e => setNewName(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && createPlaylist()}
-            placeholder="Playlist name..."
-            autoFocus
-            className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none placeholder-white/20 focus:bg-white/[0.1] transition"
-          />
+          {/* Cover image picker */}
+          <div className="flex items-center space-x-3">
+            <button type="button" onClick={() => coverRef.current?.click()}
+              className="w-14 h-14 rounded-xl overflow-hidden bg-white/[0.06] border border-white/[0.08] flex items-center justify-center flex-shrink-0 hover:bg-white/[0.1] transition">
+              {coverPreview
+                ? <img src={coverPreview} alt="" className="w-full h-full object-cover" />
+                : <Music className="w-5 h-5 text-white/20" />}
+            </button>
+            <div className="flex-1">
+              <input
+                type="text"
+                value={newName}
+                onChange={e => setNewName(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && createPlaylist()}
+                placeholder="Playlist name..."
+                autoFocus
+                className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none placeholder-white/20 focus:bg-white/[0.1] transition"
+              />
+              <p className="text-[10px] text-white/20 mt-1">{coverPreview ? 'Tap image to change' : 'Tap square to add cover'}</p>
+            </div>
+          </div>
+          <input ref={coverRef} type="file" accept="image/*" className="hidden"
+            onChange={e => {
+              const f = e.target.files[0];
+              if (f) { setCoverFile(f); setCoverPreview(URL.createObjectURL(f)); }
+            }} />
           <label className="flex items-center space-x-2 cursor-pointer py-1">
             <div
               onClick={() => setNewShared(s => !s)}

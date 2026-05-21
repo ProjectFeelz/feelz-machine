@@ -201,6 +201,78 @@ function YoutubeField({ value, onChange }) {
   );
 }
 
+
+// ─── Stems / Beat Kits uploader ───────────────────────────────────────────────
+// Allows producers to attach downloadable stem packs or beat kits to a track.
+// Files are stored in feelz-samples/stems/ and linked via track metadata.
+// This is separate from the track audio file.
+
+function StemsUploader({ stems, setStems, uploadFile, showMessage }) {
+  const [uploading, setUploading] = React.useState(false);
+  const fileRef = React.useRef(null);
+
+  const ACCEPTED = '.zip,.rar,.wav,.mp3,.flac,.aiff,.stem.mp4';
+
+  const handleFiles = async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    for (const file of files) {
+      if (file.size > 500 * 1024 * 1024) {
+        showMessage('error', `${file.name} is over 500MB`);
+        continue;
+      }
+      setUploading(true);
+      try {
+        const url = await uploadFile(file, 'stems/');
+        setStems(prev => [...prev, { name: file.name, url, size: file.size }]);
+      } catch (err) {
+        showMessage('error', `Failed to upload ${file.name}: ${err.message}`);
+      }
+      setUploading(false);
+    }
+    e.target.value = '';
+  };
+
+  return (
+    <div>
+      <FieldLabel>
+        <span className="flex items-center space-x-1.5">
+          <Disc className="w-3 h-3 text-blue-400" />
+          <span>Stems / Beat Kit <span className="text-white/20">(optional — zip, wav, flac, aiff)</span></span>
+        </span>
+      </FieldLabel>
+
+      {stems.length > 0 && (
+        <div className="space-y-1.5 mb-2">
+          {stems.map((s, i) => (
+            <div key={i} className="flex items-center space-x-3 px-3 py-2 bg-white/[0.04] rounded-xl border border-white/[0.06]">
+              <Disc className="w-3.5 h-3.5 text-blue-400/60 flex-shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs text-white/70 truncate">{s.name}</p>
+                <p className="text-[10px] text-white/30">{(s.size / (1024 * 1024)).toFixed(1)}MB</p>
+              </div>
+              <button type="button" onClick={() => setStems(prev => prev.filter((_, idx) => idx !== i))}
+                className="text-white/20 hover:text-red-400/60 text-xs transition flex-shrink-0">Remove</button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <button type="button" onClick={() => !uploading && fileRef.current?.click()}
+        className="w-full flex items-center space-x-3 px-3 py-3 bg-white/[0.04] rounded-xl border border-dashed border-white/[0.08] hover:bg-white/[0.07] transition text-left">
+        {uploading
+          ? <Loader className="w-4 h-4 text-blue-400 animate-spin flex-shrink-0" />
+          : <Plus className="w-4 h-4 text-white/30 flex-shrink-0" />}
+        <div>
+          <p className="text-xs text-white/50">{uploading ? 'Uploading…' : 'Upload stems or beat kit'}</p>
+          <p className="text-[10px] text-white/20 mt-0.5">ZIP, WAV, FLAC, AIFF · Max 500MB · Listeners can download after purchase</p>
+        </div>
+      </button>
+      <input ref={fileRef} type="file" accept={ACCEPTED} multiple onChange={handleFiles} className="hidden" />
+    </div>
+  );
+}
+
 // ─── Versions editor ──────────────────────────────────────────────────────────
 
 function VersionsEditor({ versions, setVersions }) {
@@ -270,6 +342,7 @@ function AddTrackToAlbum({
     is_published: true,
   });
   const [versionFiles, setVersionFiles] = useState([]);
+  const [stemFiles, setStemFiles]       = useState([]);
   const [collaborators, setCollaborators] = useState([]);
   const [uploading, setUploading]       = useState(false);
   const [message, setMessage]           = useState({ type: '', text: '' });
@@ -331,6 +404,18 @@ function AddTrackToAlbum({
       }]).select();
       if (error) throw error;
       const trackId = data[0].id;
+
+      if (stemFiles.length > 0) {
+        showMessage('info', 'Saving stem files…');
+        const stemInserts = stemFiles.map(s => ({
+          track_id: trackId,
+          file_name: s.name,
+          file_url: s.url,
+          file_size: s.size,
+        }));
+        await supabase.from('track_stems').insert(stemInserts).catch(() => {});
+        setStemFiles([]);
+      }
 
       if (trackForm.has_versions && versionFiles.length > 0) {
         for (const ver of versionFiles) {
@@ -506,6 +591,13 @@ function AddTrackToAlbum({
         />
       </TierGate>
 
+      <StemsUploader
+        stems={stemFiles}
+        setStems={setStemFiles}
+        uploadFile={uploadFile}
+        showMessage={showMessage}
+      />
+
       <div className="flex flex-wrap gap-4">
         {[
           { key: 'is_published',    label: 'Published' },
@@ -622,6 +714,7 @@ export default function TrackUploadPanel() {
   const [release, setRelease]                   = useState(BLANK_RELEASE);
   const [trackForm, setTrackForm]               = useState(BLANK_TRACK);
   const [versionFiles, setVersionFiles]         = useState([]);
+  const [stemFiles, setStemFiles]               = useState([]);
   const [collaborators, setCollaborators]       = useState([]);
   const [albumCollaborators, setAlbumCollaborators] = useState([]);
   const [albumTrackQueue, setAlbumTrackQueue]   = useState([]);
