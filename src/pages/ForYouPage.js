@@ -41,11 +41,27 @@ function CommentSheet({ track, user, onClose }) {
   useEffect(() => {
     supabase
       .from('track_comments')
-      .select('id, content, created_at, user_id, user_profiles(name, avatar_url), artists(artist_name, profile_image_url)')
+      .select('id, content, created_at, user_id')
       .eq('track_id', track.id)
       .order('created_at', { ascending: false })
       .limit(50)
-      .then(({ data }) => { setComments(data || []); setLoading(false); });
+      .then(async ({ data: rawComments }) => {
+        if (!rawComments?.length) { setComments([]); setLoading(false); return; }
+        // Fetch profiles separately to avoid invalid join
+        const uids = [...new Set(rawComments.map(c => c.user_id).filter(Boolean))];
+        const [{ data: artists }, { data: profiles }] = await Promise.all([
+          supabase.from('artists').select('user_id, artist_name, profile_image_url').in('user_id', uids),
+          supabase.from('user_profiles').select('user_id, name, avatar_url').in('user_id', uids),
+        ]);
+        const artistMap = Object.fromEntries((artists || []).map(a => [a.user_id, a]));
+        const profileMap = Object.fromEntries((profiles || []).map(p => [p.user_id, p]));
+        setComments(rawComments.map(c => ({
+          ...c,
+          artists: artistMap[c.user_id] || null,
+          user_profiles: profileMap[c.user_id] || null,
+        })));
+        setLoading(false);
+      });
     setTimeout(() => {
       if (inputRef.current) {
         inputRef.current.focus();

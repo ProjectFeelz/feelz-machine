@@ -1,0 +1,21 @@
+User-agent: *
+Allow: /
+
+# Allow indexing of public pages
+Allow: /artist/
+Allow: /album/
+Allow: /browse
+Allow: /about
+Allow: /terms-of-use
+Allow: /privacy-policy
+
+# Disallow private/auth pages
+Disallow: /dashboard
+Disallow: /setup
+Disallow: /hub
+Disallow: /library
+Disallow: /profile
+Disallow: /admin
+Disallow: /competitions
+
+Sitemap: https://www.feelzmachine.com/sitemap.xml

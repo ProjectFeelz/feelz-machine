@@ -151,8 +151,8 @@ function YoutubeField({ value, onChange }) {
   };
 
   return (
-    <div className="space-y-3">
-      <div className="opacity-50">
+    <div>
+      <div style={{ display: "none" }}>
         <FieldLabel>
           <span className="flex items-center space-x-1.5">
             <Youtube className="w-3 h-3 text-red-400" />

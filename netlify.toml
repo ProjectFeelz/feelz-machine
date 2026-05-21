@@ -126,6 +126,18 @@
 # ── Redirects ─────────────────────────────────────────────────────────────────
 
 [[redirects]]
+  from = "/sitemap.xml"
+  to = "/.netlify/functions/sitemap"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/robots.txt"
+  to = "/robots.txt"
+  status = 200
+  force = true
+
+[[redirects]]
   from = "/.well-known/assetlinks.json"
   to = "/.well-known/assetlinks.json"
   status = 200
