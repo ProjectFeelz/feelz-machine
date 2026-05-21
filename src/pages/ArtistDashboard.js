@@ -101,7 +101,12 @@ export default function ArtistDashboard() {
     streams: 0, downloads: 0, followers: 0, tracks: 0, likes: 0,
   });
   const [topTracks, setTopTracks] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading]             = useState(false);
+  const [selectedTrack, setSelectedTrack] = useState(null);
+  const [trackRange, setTrackRange]       = useState(30);
+  const [trackStreams, setTrackStreams]    = useState([]);
+  const [trackLikes, setTrackLikes]       = useState([]);
+  const [trackAnalyticsLoading, setTrackAnalyticsLoading] = useState(false);
   const [memos, setMemos] = useState([]);
 
   const fetchMemos = useCallback(async () => {
