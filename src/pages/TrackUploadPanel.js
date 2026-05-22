@@ -284,28 +284,42 @@ function YoutubeField({ value, onChange }) {
 
 
 // ─── Beat Licence Selector ────────────────────────────────────────────────────
-function BeatLicenceSelector({ selectedId, price, allowedLicences, onSelectLicence, onPriceChange }) {
+// beatPrices: { free: '', basic: '29', premium: '59', ... }
+// beatEnabled: { free: true, basic: true, premium: false, ... }
+function BeatLicenceSelector({ beatEnabled, beatPrices, allowedLicences, onChange }) {
   const [expanded, setExpanded] = React.useState(null);
+
+  const toggle = (id) => {
+    if (!allowedLicences?.includes(id)) return;
+    onChange({ ...beatEnabled, [id]: !beatEnabled[id] }, beatPrices);
+  };
+
+  const setPrice = (id, val) => {
+    onChange(beatEnabled, { ...beatPrices, [id]: val });
+  };
+
   return (
     <div>
       <FieldLabel>
         <span className="flex items-center space-x-1.5">
           <Disc className="w-3 h-3 text-yellow-400" />
-          <span>Beat Licence <span className="text-white/20">(set your price per tier)</span></span>
+          <span>Beat Licences <span className="text-white/20">(enable tiers & set prices — buyers choose)</span></span>
         </span>
       </FieldLabel>
+      <p className="text-[10px] text-white/25 mb-2">Enable any combination. Buyers pick which licence to purchase.</p>
       <div className="space-y-2">
         {BEAT_LICENCES.map(lic => {
-          const isLocked = allowedLicences && !allowedLicences.includes(lic.id);
-          const isSelected = selectedId === lic.id;
-          const isFree = lic.id === 'free';
+          const isLocked   = allowedLicences && !allowedLicences.includes(lic.id);
+          const isEnabled  = !!beatEnabled[lic.id];
+          const isFree     = lic.id === 'free';
           return (
             <div key={lic.id}
-              className={`rounded-xl border transition overflow-hidden ${isLocked ? 'opacity-40 cursor-not-allowed' : ''} ${isSelected && !isLocked ? lic.border + ' ' + lic.bg : 'border-white/[0.06] bg-white/[0.02]'}`}>
+              className={`rounded-xl border transition overflow-hidden ${isLocked ? 'opacity-40 cursor-not-allowed' : ''} ${isEnabled && !isLocked ? lic.border + ' ' + lic.bg : 'border-white/[0.06] bg-white/[0.02]'}`}>
               <div className="flex items-center space-x-3 p-3 cursor-pointer"
-                onClick={() => !isLocked && onSelectLicence(lic.id)}>
-                <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition ${isSelected ? 'border-white' : 'border-white/20'}`}>
-                  {isSelected && <div className="w-2 h-2 rounded-full bg-white" />}
+                onClick={() => toggle(lic.id)}>
+                {/* Checkbox */}
+                <div className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 transition ${isEnabled && !isLocked ? 'border-white bg-white' : 'border-white/20'}`}>
+                  {isEnabled && !isLocked && <span className="text-black text-[10px] font-black">✓</span>}
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center space-x-2">
@@ -313,16 +327,18 @@ function BeatLicenceSelector({ selectedId, price, allowedLicences, onSelectLicen
                     <span className="text-sm font-semibold text-white">{lic.label}</span>
                   </div>
                 </div>
-                {!isFree && isSelected && (
+                {/* Price input — shown when enabled and not free */}
+                {isEnabled && !isLocked && !isFree && (
                   <div className="flex items-center space-x-1.5 flex-shrink-0" onClick={e => e.stopPropagation()}>
                     <span className="text-xs text-white/40">$</span>
-                    <input type="number" min="0" step="1" value={price}
-                      onChange={e => onPriceChange(e.target.value)}
+                    <input type="number" min="0" step="1"
+                      value={beatPrices[lic.id] || ''}
+                      onChange={e => setPrice(lic.id, e.target.value)}
                       className="w-20 px-2 py-1 bg-white/[0.08] rounded-lg text-white text-sm outline-none border border-white/[0.12] focus:border-white/30 text-right"
                       placeholder="0" />
                   </div>
                 )}
-                {isFree && <span className={`text-sm font-bold flex-shrink-0 ${lic.color}`}>Free</span>}
+                {isFree && isEnabled && <span className={`text-sm font-bold flex-shrink-0 ${lic.color}`}>Free</span>}
                 {isLocked
                   ? <span className="text-[10px] text-white/30 flex-shrink-0 ml-1">🔒 Pro+</span>
                   : <button type="button"
@@ -1088,8 +1104,8 @@ export default function TrackUploadPanel() {
   const [trackForm, setTrackForm]               = useState(BLANK_TRACK);
   const [versionFiles, setVersionFiles]         = useState([]);
   const [stemFiles, setStemFiles]               = useState([]);
-  const [beatLicence, setBeatLicence]           = useState('basic');
-  const [beatPrice, setBeatPrice]               = useState('');
+  const [beatEnabled, setBeatEnabled]           = useState({ free: true, basic: true }); // which tiers are on
+  const [beatPrices, setBeatPrices]             = useState({}); // { licenceId: price }
   const [collaborators, setCollaborators]       = useState([]);
   const [albumCollaborators, setAlbumCollaborators] = useState([]);
   const [albumTrackQueue, setAlbumTrackQueue]   = useState([]);
@@ -1855,19 +1871,20 @@ export default function TrackUploadPanel() {
                 <div className="space-y-4">
                   <BeatMetaFields trackForm={trackForm} setTrackForm={setTrackForm} />
                   <BeatLicenceSelector
-                    selectedId={beatLicence}
-                    price={beatPrice}
+                    beatEnabled={beatEnabled}
+                    beatPrices={beatPrices}
                     allowedLicences={beatLicences}
-                    onSelectLicence={id => {
-                      setBeatLicence(id);
-                      setTrackForm({ ...trackForm, beat_licence: id,
-                        is_downloadable: true,
-                        download_price: id === 'free' ? '0' : beatPrice,
+                    onChange={(enabled, prices) => {
+                      setBeatEnabled(enabled);
+                      setBeatPrices(prices);
+                      // Store as JSON in beat_licence field for DB
+                      const licenceData = JSON.stringify({ enabled, prices });
+                      setTrackForm({ ...trackForm, beat_licence: licenceData, is_downloadable: true,
+                        download_price: Math.min(...Object.entries(prices)
+                          .filter(([id]) => enabled[id] && id !== 'free')
+                          .map(([,p]) => parseFloat(p) || 0)
+                          .filter(p => p > 0), Infinity) || 0,
                       });
-                    }}
-                    onPriceChange={val => {
-                      setBeatPrice(val);
-                      setTrackForm({ ...trackForm, download_price: val });
                     }}
                   />
                   {canUploadStems ? (

@@ -27,7 +27,7 @@ export default function PlaylistsPage() {
   const fetchPlaylists = async () => {
     const [{ data: mine }, { data: collab }] = await Promise.all([
       supabase.from('playlists')
-        .select('id, name, cover_url, is_shared, is_public, user_id, created_at, playlist_tracks(count, tracks(cover_artwork_url))')
+        .select('id, name, cover_url, is_shared, is_public, user_id, created_at, playlist_tracks(id, position, tracks(cover_artwork_url))')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false }),
       supabase.from('playlist_collaborators')
@@ -112,9 +112,11 @@ export default function PlaylistsPage() {
       className="flex items-center space-x-3 p-3 rounded-xl hover:bg-white/[0.04] transition group cursor-pointer"
     >
       <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-purple-600/30 to-blue-600/20 flex items-center justify-center flex-shrink-0 relative overflow-hidden">
-        {(playlist.cover_url || playlist.playlist_tracks?.[0]?.tracks?.[0]?.cover_artwork_url)
-          ? <img src={playlist.cover_url || playlist.playlist_tracks?.[0]?.tracks?.[0]?.cover_artwork_url} alt="" className="w-full h-full object-cover" />
-          : <Music className="w-5 h-5 text-white/30" />}
+        {(() => {
+            const auto = playlist.playlist_tracks?.find(pt => pt.tracks?.cover_artwork_url)?.tracks?.cover_artwork_url;
+            const src  = playlist.cover_url || auto;
+            return src ? <img src={src} alt="" className="w-full h-full object-cover" /> : <Music className="w-5 h-5 text-white/30" />;
+          })()}
         {(playlist.is_shared || isCollab) && (
           <div className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-blue-500/80 flex items-center justify-center">
             <Users className="w-2.5 h-2.5 text-white" />
@@ -124,7 +126,7 @@ export default function PlaylistsPage() {
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium text-white truncate">{playlist.name}</p>
         <p className="text-xs text-white/30">
-          {playlist.playlist_tracks?.[0]?.count || 0} tracks
+          {playlist.playlist_tracks?.length || 0} tracks
           {isCollab ? ' · Collaborative' : playlist.is_shared ? ' · Shared' : playlist.is_public ? ' · Public' : ' · Private'}
         </p>
       </div>
