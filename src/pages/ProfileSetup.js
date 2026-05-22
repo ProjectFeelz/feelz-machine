@@ -18,7 +18,7 @@ const SLIDES = [
     accentColor: '#a855f7',
     glowColor: 'rgba(168,85,247,0.18)',
     title: "You just joined\nsomething real",
-    subtitle: "Feelz Machine is an independent music platform — built for artists and fans, not labels or algorithms. Here's how to get the most out of it.",
+    subtitle: "Feelz Machine is built for artists, beat makers and fans. No labels, no algorithms, no middlemen. Here's how to get the most out of it.",
     visual: 'welcome',
   },
   {
@@ -28,6 +28,15 @@ const SLIDES = [
     tag: 'Home · Browse',
     title: 'Discover music\nyou won\'t find\nanywhere else',
     subtitle: 'Browse trending tracks, new releases and featured artists. The more you listen and like, the smarter your feed gets. Every stream directly supports the artist.',
+    visual: 'discover',
+  },
+  {
+    id: 'beats',
+    accentColor: '#f59e0b',
+    glowColor: 'rgba(245,158,11,0.15)',
+    tag: 'For Beat Makers',
+    title: 'Upload beats,\nsell licences,\nreach artists',
+    subtitle: 'Beat makers get their own upload flow with BPM, key, scale and 5 licence tiers. Set your price, attach stems and get discovered.',
     visual: 'discover',
   },
   {
@@ -81,7 +90,7 @@ const SLIDES = [
     glowColor: 'rgba(168,85,247,0.18)',
     title: "Now go find\nyour next\nfavourite artist",
     subtitle: "Browse music, follow artists, vote in competitions and support the independents building something real.",
-    cta: 'Start Listening',
+    cta: "Let's go",
     visual: 'done',
   },
 ];
@@ -541,6 +550,7 @@ function AccountTypeScreen({ onListener, onArtist, initialScreen = 'type' }) {
   const { user, refreshProfile, loading: authLoading } = useAuth();
   const [artistName, setArtistName]   = useState('');
   const [showArtist, setShowArtist]   = useState(initialScreen === 'artist');
+  const [accountRole, setAccountRole] = useState('artist');
   const [saving, setSaving]           = useState(false);
   const [error, setError]             = useState('');
 
@@ -574,6 +584,7 @@ function AccountTypeScreen({ onListener, onArtist, initialScreen = 'type' }) {
         artist_name: artistName.trim(),
         slug:        slugify(artistName.trim()),
         tier:        'free',
+        role:        accountRole,
         created_at:  new Date().toISOString(),
         updated_at:  new Date().toISOString(),
       });
