@@ -6,8 +6,8 @@ import {
   Heart, Headphones, Home, Search, MessageCircle,
   LayoutDashboard, ChevronUp, Disc, Zap,
 } from 'lucide-react';
-import { supabase } from './supabaseClient';
-import { useAuth } from './contexts/AuthContext';
+import { supabase } from '../supabaseClient';
+import { useAuth } from '../contexts/AuthContext';
 
 // ── Tour version ──────────────────────────────────────────────────────────────
 // Bump TOUR_VERSION to force ALL existing users to see the updated tour.
