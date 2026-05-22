@@ -968,13 +968,6 @@ function AddTrackToAlbum({
         />
       </TierGate>
 
-      <StemsUploader
-        stems={stemFiles}
-        setStems={setStemFiles}
-        uploadFile={uploadFile}
-        showMessage={showMessage}
-      />
-
       <div className="flex flex-wrap gap-4">
         {[
           { key: 'is_published',    label: 'Published' },
@@ -1854,6 +1847,12 @@ export default function TrackUploadPanel() {
                       setBeatPrice(val);
                       setTrackForm({ ...trackForm, download_price: val });
                     }}
+                  />
+                  <StemsUploader
+                    stems={stemFiles}
+                    setStems={setStemFiles}
+                    uploadFile={uploadFile}
+                    showMessage={showMessage}
                   />
                 </div>
               ) : (
