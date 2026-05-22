@@ -1125,7 +1125,7 @@ export default function ForYouPage() {
                   navigate={navigate}
                 />
               ) : (
-                <ForYouCard track={filteredTracks[i]} isActive={i === idx} user={user} navigate={navigate} onOpenSheet={setActiveSheet} onShare={setShareCard} />
+                {filteredTracks[i] && <ForYouCard track={filteredTracks[i]} isActive={i === idx} user={user} navigate={navigate} onOpenSheet={setActiveSheet} onShare={setShareCard} />}
               )}
             </div>
           );
@@ -1144,7 +1144,7 @@ export default function ForYouPage() {
           { id: 'music',  label: 'Music' },
           { id: 'beats',  label: 'Beats' },
         ].map(f => (
-          <button key={f.id} onClick={() => setFeedFilter(f.id)}
+          <button key={f.id} onClick={() => { setFeedFilter(f.id); setIdx(0); }}
             className={`px-3 py-1 rounded-full text-xs font-bold transition ${
               feedFilter === f.id ? 'bg-white text-black' : 'text-white/50 hover:text-white/80'
             }`}>
