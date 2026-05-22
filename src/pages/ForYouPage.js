@@ -1137,7 +1137,7 @@ export default function ForYouPage() {
         style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,0.5), transparent)' }} />
 
       {/* Feed filter tabs */}
-      <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30 flex space-x-1 rounded-full p-0.5 md:left-[calc(50%+128px)]"
+      <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30 flex space-x-1 rounded-full p-0.5"
         style={{ background: 'rgba(255,255,255,0.08)', backdropFilter: 'blur(10px)' }}>
         {[
           { id: 'all',    label: 'All' },
