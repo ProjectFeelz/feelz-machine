@@ -734,7 +734,7 @@ function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare }) {
 
       {/* First card swipe hint */}
       {track._isFirst && (
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 pointer-events-none z-30"
+        <div className="absolute bottom-36 left-0 right-0 flex justify-center pointer-events-none z-30"
           style={{ animation: 'swipeHint 2.5s ease 2s forwards', opacity: 0 }}>
           <div className="flex flex-col items-center space-y-1 text-white/40">
             <ChevronUp className="w-6 h-6" />

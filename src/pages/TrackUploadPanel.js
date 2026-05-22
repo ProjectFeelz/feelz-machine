@@ -434,6 +434,218 @@ function StemsUploader({ stems, setStems, uploadFile, showMessage }) {
   );
 }
 
+
+// ─── LRC Lyrics Sync Editor ───────────────────────────────────────────────────
+// Two modes:
+//   "paste" — plain textarea, artist pastes raw lyrics
+//   "sync"  — plays the audio file, artist taps a button at the start of each
+//             line to stamp [mm:ss.xx] timestamps → outputs LRC format
+//
+// The result is saved to trackForm.lyrics as either plain text or LRC.
+
+function LyricsEditor({ lyrics, onChange, audioFile, audioUrl }) {
+  const [mode, setMode]           = React.useState('paste');
+  const [rawText, setRawText]     = React.useState(lyrics || '');
+  const [lines, setLines]         = React.useState([]);
+  const [stamped, setStamped]     = React.useState([]);
+  const [playing, setPlaying]     = React.useState(false);
+  const [currentTime, setCurrentTime] = React.useState(0);
+  const [ready, setReady]         = React.useState(false);
+  const audioRef                  = React.useRef(null);
+  const tapBtn                    = React.useRef(null);
+
+  // When switching to sync mode, parse rawText into lines
+  const enterSyncMode = () => {
+    const parsed = rawText.split('\n').map(l => l.trim()).filter(Boolean);
+    if (parsed.length === 0) return;
+    setLines(parsed);
+    setStamped(parsed.map(() => null)); // null = not yet stamped
+    setMode('sync');
+    setCurrentTime(0);
+    setPlaying(false);
+  };
+
+  const exitSyncMode = () => {
+    setMode('paste');
+    setPlaying(false);
+    if (audioRef.current) { audioRef.current.pause(); audioRef.current.currentTime = 0; }
+  };
+
+  // Build audio src from file or existing url
+  const audioSrc = React.useMemo(() => {
+    if (audioFile) return URL.createObjectURL(audioFile);
+    if (audioUrl) return audioUrl;
+    return null;
+  }, [audioFile, audioUrl]);
+
+  // Sync time display
+  React.useEffect(() => {
+    const el = audioRef.current;
+    if (!el) return;
+    const onTime = () => setCurrentTime(el.currentTime);
+    const onEnded = () => setPlaying(false);
+    el.addEventListener('timeupdate', onTime);
+    el.addEventListener('ended', onEnded);
+    return () => { el.removeEventListener('timeupdate', onTime); el.removeEventListener('ended', onEnded); };
+  }, [mode]);
+
+  const togglePlay = () => {
+    const el = audioRef.current;
+    if (!el) return;
+    if (playing) { el.pause(); setPlaying(false); }
+    else { el.play(); setPlaying(true); }
+  };
+
+  // Stamp current time for next unstamped line
+  const stampNext = () => {
+    const el = audioRef.current;
+    if (!el) return;
+    const t = el.currentTime;
+    setStamped(prev => {
+      const next = [...prev];
+      const idx = next.findIndex(s => s === null);
+      if (idx >= 0) next[idx] = t;
+      return next;
+    });
+    // Focus back on the tap button immediately
+    tapBtn.current?.focus();
+  };
+
+  // Keyboard shortcut: Space = stamp (when in sync mode)
+  React.useEffect(() => {
+    if (mode !== 'sync') return;
+    const onKey = (e) => {
+      if (e.code === 'Space' && e.target === tapBtn.current) {
+        e.preventDefault();
+        stampNext();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [mode, stamped]);
+
+  // Build LRC output and propagate to parent
+  React.useEffect(() => {
+    if (mode !== 'sync') return;
+    const allStamped = stamped.every(s => s !== null);
+    if (!allStamped) return;
+    const lrc = lines.map((line, i) => {
+      const t = stamped[i];
+      const mm = String(Math.floor(t / 60)).padStart(2, '0');
+      const ss = String((t % 60).toFixed(2)).padStart(5, '0');
+      return `[${mm}:${ss}]${line}`;
+    }).join('\n');
+    onChange(lrc);
+    setRawText(lrc);
+  }, [stamped, lines, mode]);
+
+  // Format seconds as mm:ss
+  const fmt = (t) => {
+    const mm = String(Math.floor(t / 60)).padStart(2, '0');
+    const ss = String(Math.floor(t % 60)).padStart(2, '0');
+    return `${mm}:${ss}`;
+  };
+
+  const nextUnstampedIdx = stamped.findIndex(s => s === null);
+  const allDone = stamped.length > 0 && stamped.every(s => s !== null);
+
+  // ── Paste mode ──────────────────────────────────────────────────────────────
+  if (mode === 'paste') {
+    return (
+      <div>
+        <div className="flex items-center justify-between mb-1.5">
+          <FieldLabel>Lyrics (optional)</FieldLabel>
+          {(audioFile || audioUrl) && rawText.trim() && (
+            <button type="button" onClick={enterSyncMode}
+              className="flex items-center space-x-1 text-[10px] text-purple-400 hover:text-purple-300 transition font-medium">
+              <Zap className="w-3 h-3" />
+              <span>Sync to audio →</span>
+            </button>
+          )}
+        </div>
+        <textarea rows={4} value={rawText}
+          onChange={e => { setRawText(e.target.value); onChange(e.target.value); }}
+          placeholder={"Paste lyrics here, one line per row…\n\nTip: Add audio file first, then tap 'Sync to audio' to time-stamp each line."}
+          className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none resize-none font-mono leading-relaxed" />
+        {rawText.includes('[0') && (
+          <p className="text-[10px] text-purple-400 mt-1 flex items-center space-x-1">
+            <Zap className="w-2.5 h-2.5" /><span>LRC timestamps detected — lyrics will sync to audio</span>
+          </p>
+        )}
+      </div>
+    );
+  }
+
+  // ── Sync mode ───────────────────────────────────────────────────────────────
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <FieldLabel>Lyrics Sync Editor</FieldLabel>
+        <button type="button" onClick={exitSyncMode}
+          className="text-[10px] text-white/30 hover:text-white/60 transition">← Back to edit</button>
+      </div>
+
+      {/* Instructions */}
+      <div className="p-3 rounded-xl bg-purple-500/10 border border-purple-500/20 text-xs text-purple-300 space-y-1">
+        <p className="font-semibold">How to sync:</p>
+        <p>1. Press Play, then tap <strong>Stamp line</strong> (or Space) at the exact moment each line starts.</p>
+        <p>2. Work through all {lines.length} lines. You can redo from the start if you make a mistake.</p>
+      </div>
+
+      {/* Audio player */}
+      {audioSrc && (
+        <audio ref={audioRef} src={audioSrc} onCanPlay={() => setReady(true)} preload="metadata" />
+      )}
+
+      <div className="flex items-center space-x-3">
+        <button type="button" onClick={togglePlay} disabled={!audioSrc}
+          className="flex items-center space-x-2 px-4 py-2 bg-white text-black rounded-xl text-sm font-bold disabled:opacity-40 transition hover:bg-white/90">
+          {playing ? <Loader className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+          <span>{playing ? 'Playing…' : 'Play'}</span>
+        </button>
+        <span className="text-sm font-mono text-white/50">{fmt(currentTime)}</span>
+        {playing && nextUnstampedIdx >= 0 && (
+          <button ref={tapBtn} type="button" onClick={stampNext}
+            className="flex-1 py-2.5 rounded-xl bg-purple-500 hover:bg-purple-400 active:scale-95 text-white text-sm font-bold transition focus:outline-none focus:ring-2 focus:ring-purple-400">
+            ⏱ Stamp line {nextUnstampedIdx + 1} / {lines.length}
+          </button>
+        )}
+        {allDone && (
+          <div className="flex-1 py-2.5 rounded-xl bg-green-500/20 border border-green-500/30 text-green-400 text-sm font-bold text-center">
+            ✓ All {lines.length} lines synced!
+          </div>
+        )}
+      </div>
+
+      {/* Redo button */}
+      {stamped.some(s => s !== null) && !allDone && (
+        <button type="button" onClick={() => { setStamped(lines.map(() => null)); setCurrentTime(0); if (audioRef.current) { audioRef.current.pause(); audioRef.current.currentTime = 0; } setPlaying(false); }}
+          className="text-[10px] text-white/20 hover:text-white/50 transition">
+          ↺ Start over
+        </button>
+      )}
+
+      {/* Lines list */}
+      <div className="space-y-1 max-h-48 overflow-y-auto rounded-xl bg-white/[0.03] p-3 border border-white/[0.06]">
+        {lines.map((line, i) => (
+          <div key={i} className={`flex items-center space-x-2 px-2 py-1 rounded-lg text-xs transition ${
+            i === nextUnstampedIdx ? 'bg-purple-500/20 text-white' :
+            stamped[i] !== null ? 'text-green-400/70' : 'text-white/25'
+          }`}>
+            <span className="font-mono w-12 flex-shrink-0 text-[10px]">
+              {stamped[i] !== null ? `[${String(Math.floor(stamped[i]/60)).padStart(2,'0')}:${String((stamped[i]%60).toFixed(2)).padStart(5,'0')}]` : '[ -- ]'}
+            </span>
+            <span className="truncate">{line}</span>
+            {i === nextUnstampedIdx && playing && (
+              <span className="ml-auto text-purple-400 animate-pulse flex-shrink-0">← next</span>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ─── Versions editor ──────────────────────────────────────────────────────────
 
 function VersionsEditor({ versions, setVersions }) {
@@ -712,13 +924,12 @@ function AddTrackToAlbum({
       </div>
 
       <TierGate feature="lyrics" inline>
-        <div>
-          <FieldLabel>Lyrics (optional)</FieldLabel>
-          <textarea rows={3} value={trackForm.lyrics}
-            onChange={(e) => setTrackForm({ ...trackForm, lyrics: e.target.value })}
-            placeholder="Paste lyrics here…"
-            className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none resize-none" />
-        </div>
+        <LyricsEditor
+          lyrics={trackForm.lyrics}
+          onChange={val => setTrackForm({ ...trackForm, lyrics: val })}
+          audioFile={trackForm.audio_file}
+          audioUrl={null}
+        />
       </TierGate>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -2249,10 +2460,12 @@ export default function TrackUploadPanel() {
                           </div>
 
                           <div>
-                            <FieldLabel>Lyrics</FieldLabel>
-                            <textarea rows={3} value={editForm.lyrics}
-                              onChange={(e) => setEditForm({ ...editForm, lyrics: e.target.value })}
-                              className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none resize-none" />
+                            <LyricsEditor
+                              lyrics={editForm.lyrics}
+                              onChange={val => setEditForm({ ...editForm, lyrics: val })}
+                              audioFile={editAudioFile}
+                              audioUrl={editForm.file_url || null}
+                            />
                           </div>
 
                           <TierGate feature="download_sales" inline>

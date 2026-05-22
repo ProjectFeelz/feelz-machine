@@ -626,7 +626,7 @@ export default function WheelRevealPage() {
   const size = typeof window !== 'undefined' ? Math.min(window.innerWidth - 48, 320) : 300;
 
   return (
-    <div className="min-h-screen bg-black text-white pb-32">
+    <div className="min-h-screen bg-black text-white pb-32 max-w-2xl mx-auto">
 
       {/* Header — sticky */}
       <div className="sticky top-0 z-30 bg-black/90 backdrop-blur-sm flex items-center justify-between px-4 pt-14 pb-4 md:pt-6 border-b border-white/[0.04]">

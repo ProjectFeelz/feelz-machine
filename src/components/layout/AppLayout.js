@@ -70,7 +70,7 @@ function getTitle(pathname) {
 // ── Splash screen ─────────────────────────────────────────────────────────────
 function SplashScreen() {
   return (
-    <div className="fixed inset-0 z-50 bg-black flex flex-col items-center justify-center">
+    <div className="fixed inset-0 z-[9999] bg-black flex flex-col items-center justify-center" style={{ left: 0, top: 0, right: 0, bottom: 0 }}>
       <div className="flex flex-col items-center space-y-4">
         <img src="/logo.png" alt="Feelz Machine" className="w-20 h-20 rounded-2xl shadow-2xl" />
         <div className="space-y-1 text-center">
