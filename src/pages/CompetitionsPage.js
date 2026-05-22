@@ -422,7 +422,7 @@ export default function CompetitionsPage() {
   const activeStandard = competitions.filter(c => !c.wheel_challenge && !c.paid_collab);
 
   return (
-    <div className="pb-32 pt-0 max-w-2xl mx-auto">
+    <div className="pb-32 pt-0">
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@700&display=swap');`}</style>
 
       {/* Sticky header with tabs */}
