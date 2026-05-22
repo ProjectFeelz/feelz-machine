@@ -458,7 +458,7 @@ export default function CompetitionsPage() {
             style={{ background: 'linear-gradient(145deg, rgba(139,92,246,0.1), rgba(120,75,160,0.06))', border: '1px solid rgba(139,92,246,0.2)' }}>
 
             {/* Header */}
-            <div className="px-5 pt-5 pb-3 flex items-center justify-between">
+            <div className="px-5 pt-5 pb-3 flex flex-col items-center text-center">
               <div>
                 <div className="flex items-center space-x-2 mb-0.5">
                   <p style={{ fontSize: 10, letterSpacing: 3, color: 'rgba(139,92,246,0.8)', textTransform: 'uppercase', fontWeight: 600 }}>
@@ -478,7 +478,7 @@ export default function CompetitionsPage() {
 
             {/* Challenge text — always at top */}
             {revealed && wheelChallenge && (
-              <div className="px-5 pb-3">
+              <div className="px-5 pb-3 text-center">
                 <p className="text-[10px] text-white/30 uppercase tracking-wider mb-1">This week's challenge</p>
                 <p className="text-base font-bold text-white leading-relaxed"
                   style={{ whiteSpace: 'pre-line' }}>
@@ -545,7 +545,7 @@ export default function CompetitionsPage() {
                     {/* Prize */}
                     <div className="flex items-center space-x-1.5 mb-4 justify-center sm:justify-start">
                       <Crown className="w-3.5 h-3.5 flex-shrink-0" style={{ color: '#a78bfa' }} />
-                      <p className="text-xs font-bold" style={{ color: '#a78bfa' }}>Win 3 months Pro or Premium</p>
+                      <p className="text-xs font-bold text-center" style={{ color: '#a78bfa' }}>Win 3 months Pro or Premium</p>
                     </div>
 
                     {wheelChallenge.competitions?.id && (
