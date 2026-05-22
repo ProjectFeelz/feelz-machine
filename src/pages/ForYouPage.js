@@ -768,7 +768,7 @@ function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare }) {
 
 // ── Main feed ─────────────────────────────────────────────────────────────────
 export default function ForYouPage() {
-  const { user }    = useAuth();
+  const { user, isBeatmaker } = useAuth();
   const navigate    = useNavigate();
   const { playTrack, setIsMinimized } = usePlayer();
 
@@ -796,7 +796,7 @@ export default function ForYouPage() {
 
 
   const [tracks, setTracks]           = useState([]);
-  const [feedFilter, setFeedFilter]   = useState('all');
+  const [feedFilter, setFeedFilter]   = useState(isBeatmaker ? 'beats' : 'all');
   const [idx, setIdx]                 = useState(0);
   const [loading, setLoading]         = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);

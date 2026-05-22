@@ -1055,7 +1055,7 @@ function AddTrackToAlbum({
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function TrackUploadPanel() {
-  const { artist, user, refreshProfile } = useAuth();
+  const { artist, user, refreshProfile, isBeatmaker } = useAuth();
   const { isPremium, canAddDownloadSale, downloadSalesRemaining, downloadSalesLimit } = useTier();
 
   useEffect(() => {
@@ -1081,7 +1081,7 @@ export default function TrackUploadPanel() {
   const [message, setMessage]                   = useState({ type: '', text: '' });
 
   // Upload state
-  const [release, setRelease]                   = useState(BLANK_RELEASE);
+  const [release, setRelease]                   = useState({ ...BLANK_RELEASE, release_type: isBeatmaker ? 'beat' : 'single' });
   const [trackForm, setTrackForm]               = useState(BLANK_TRACK);
   const [versionFiles, setVersionFiles]         = useState([]);
   const [stemFiles, setStemFiles]               = useState([]);
@@ -1545,6 +1545,14 @@ export default function TrackUploadPanel() {
       )}
       {converting && <ConversionBanner progress={convProgress} />}
       {convError   && <div className="p-3 rounded-lg text-sm bg-red-500/10 border border-red-500/20 text-red-400">{convError}</div>}
+
+      {/* Beatmaker context banner */}
+      {isBeatmaker && (
+        <div className="flex items-center space-x-2 px-3 py-2 rounded-xl bg-yellow-500/10 border border-yellow-500/20">
+          <span className="text-base">🎛️</span>
+          <p className="text-xs text-yellow-400 font-medium">Beat Maker mode — beat upload selected by default</p>
+        </div>
+      )}
 
       {/* Tab bar */}
       <div className="flex items-center space-x-2">

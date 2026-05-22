@@ -627,7 +627,7 @@ function AccountTypeScreen({ onListener, onArtist, initialScreen = 'type' }) {
                 </div>
               </button>
               <button
-                onClick={() => setShowArtist(true)}
+                onClick={() => { setAccountRole('artist'); setShowArtist(true); }}
                 className="w-full flex items-center space-x-4 p-4 rounded-2xl border border-purple-500/25 bg-gradient-to-br from-purple-500/10 to-transparent hover:border-purple-500/40 hover:from-purple-500/15 transition active:scale-[0.98] text-left group"
               >
                 <div className="w-11 h-11 rounded-2xl bg-purple-500/20 flex items-center justify-center flex-shrink-0 group-hover:bg-purple-500/25 transition">
@@ -638,6 +638,18 @@ function AccountTypeScreen({ onListener, onArtist, initialScreen = 'type' }) {
                   <p className="text-xs text-white/40 mt-0.5">Upload music and connect with fans</p>
                 </div>
               </button>
+              <button
+                onClick={() => { setAccountRole('beatmaker'); setShowArtist(true); }}
+                className="w-full flex items-center space-x-4 p-4 rounded-2xl border border-yellow-500/25 bg-gradient-to-br from-yellow-500/10 to-transparent hover:border-yellow-500/40 hover:from-yellow-500/15 transition active:scale-[0.98] text-left group"
+              >
+                <div className="w-11 h-11 rounded-2xl bg-yellow-500/20 flex items-center justify-center flex-shrink-0 group-hover:bg-yellow-500/25 transition">
+                  <span className="text-xl">🎛️</span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-white">I'm a beat maker</p>
+                  <p className="text-xs text-white/40 mt-0.5">Sell beats, upload stems and reach artists</p>
+                </div>
+              </button>
             </div>
             <p className="text-center text-[11px] text-white/20 mt-6">You can change this any time in your profile</p>
           </>
@@ -646,10 +658,14 @@ function AccountTypeScreen({ onListener, onArtist, initialScreen = 'type' }) {
             <div className="text-center mb-8">
               <button onClick={() => setShowArtist(false)} className="text-xs text-white/30 hover:text-white/50 mb-6 transition">← Back</button>
               <div className="w-16 h-16 rounded-3xl bg-purple-500/15 flex items-center justify-center mx-auto mb-5">
-                <span className="text-3xl">🎤</span>
+                <span className="text-3xl">{accountRole === 'beatmaker' ? '🎛️' : '🎤'}</span>
               </div>
-              <h1 className="text-2xl font-bold text-white mb-2">What's your artist name?</h1>
-              <p className="text-sm text-white/40">This is how fans will find you</p>
+              <h1 className="text-2xl font-bold text-white mb-2">
+                {accountRole === 'beatmaker' ? "What's your producer name?" : "What's your artist name?"}
+              </h1>
+              <p className="text-sm text-white/40">
+                {accountRole === 'beatmaker' ? 'This is how artists will find your beats' : 'This is how fans will find you'}
+              </p>
             </div>
             <div className="space-y-3">
               <input

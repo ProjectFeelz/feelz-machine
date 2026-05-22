@@ -1,33 +1,34 @@
 import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Home, Search, Library, LayoutDashboard, Trophy, Sparkles } from 'lucide-react';
+import { Home, Search, Library, LayoutDashboard, Trophy, Sparkles, Upload } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useHaptics } from '../../hooks/useHaptics';
-
-const navItems = [
-  { path: '/',             icon: Sparkles,        label: 'For You',     tourKey: 'nav-foryou' },
-  { path: '/browse',       icon: Search,          label: 'Browse',      tourKey: 'nav-browse' },
-  { path: '/competitions', icon: Trophy,          label: 'Win',         tourKey: 'nav-competitions' },
-  { path: '/library',      icon: Library,         label: 'Library',     tourKey: 'nav-library' },
-  { path: '/hub',          icon: LayoutDashboard, label: 'Hub',         tourKey: 'nav-hub' },
-];
 
 export default function MobileNav() {
   const navigate        = useNavigate();
   const location        = useLocation();
-  const { user }        = useAuth();
+  const { user, isBeatmaker, isArtist, isListener } = useAuth();
   const { tap }         = useHaptics();
 
   const handleNav = (path) => {
     tap();
-    if (path === '/library' && !user) {
-      navigate('/login');
-      return;
-    }
+    if (path === '/library' && !user) { navigate('/login'); return; }
     navigate(path);
   };
 
   if (location.pathname === '/login' || location.pathname === '/signup') return null;
+
+  // Build nav items based on role
+  const navItems = [
+    { path: '/',             icon: Sparkles,        label: 'For You',   tourKey: 'nav-foryou'   },
+    { path: '/browse',       icon: Search,          label: 'Browse',    tourKey: 'nav-browse'   },
+    { path: '/competitions', icon: Trophy,          label: 'Win',       tourKey: 'nav-competitions' },
+    { path: '/library',      icon: Library,         label: 'Library',   tourKey: 'nav-library'  },
+    // Hub — show for artists and beatmakers, not pure listeners
+    ...(isArtist || isBeatmaker
+      ? [{ path: '/hub', icon: LayoutDashboard, label: isBeatmaker ? 'Studio' : 'Hub', tourKey: 'nav-hub' }]
+      : []),
+  ];
 
   return (
     <nav
@@ -36,7 +37,7 @@ export default function MobileNav() {
     >
       <div className="flex items-center justify-around h-16 w-full mx-auto px-1">
         {navItems.map(({ path, icon: Icon, label, tourKey }) => {
-          const isActive  = location.pathname === path ||
+          const isActive = location.pathname === path ||
             (path !== '/' && location.pathname.startsWith(path)) ||
             (path === '/' && location.pathname === '/for-you');
           return (
@@ -51,7 +52,6 @@ export default function MobileNav() {
                   className={`w-5 h-5 transition-colors ${isActive ? 'text-white' : 'text-white/40'}`}
                   strokeWidth={isActive ? 2.2 : 1.5}
                 />
-
               </div>
               <span className={`text-[11px] mt-0.5 transition-colors ${isActive ? 'text-white font-semibold' : 'text-white/55'}`}>
                 {label}
@@ -59,7 +59,6 @@ export default function MobileNav() {
             </button>
           );
         })}
-
       </div>
     </nav>
   );

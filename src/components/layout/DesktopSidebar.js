@@ -6,15 +6,7 @@ import { Bell } from 'lucide-react';
 import useNotifications from '../../contexts/useNotifications';
 import { supabase } from '../../supabaseClient';
 
-const navItems = [
-  { path: '/',             icon: Sparkles,        label: 'For You' },
-  { path: '/home',         icon: Home,            label: 'Home' },
-  { path: '/browse',       icon: Search,          label: 'Browse' },
-  { path: '/competitions', icon: Trophy,          label: 'Competitions' },
-  { path: '/library',      icon: Library,         label: 'Library' },
-  { path: '/hub',          icon: LayoutDashboard, label: 'Hub' },
-  { path: '/profile',      icon: User,            label: 'Profile' },
-];
+// navItems built dynamically in component based on role
 
 function Logo() {
   return (
@@ -67,7 +59,20 @@ function AppStoreIcon() {
 export default function DesktopSidebar() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, artist } = useAuth();
+  const { user, artist, isBeatmaker, isArtist } = useAuth();
+
+  const navItems = [
+    { path: '/',             icon: Sparkles,        label: 'For You' },
+    { path: '/home',         icon: Home,            label: 'Home' },
+    { path: '/browse',       icon: Search,          label: 'Browse' },
+    { path: '/competitions', icon: Trophy,          label: 'Competitions' },
+    { path: '/library',      icon: Library,         label: 'Library' },
+    ...(isArtist || isBeatmaker
+      ? [{ path: '/hub', icon: LayoutDashboard, label: isBeatmaker ? 'Studio' : 'Hub' }]
+      : []),
+    { path: '/profile',      icon: User,            label: 'Profile' },
+  ];
+
   const [playStoreUrl, setPlayStoreUrl] = useState('');
   const [appStoreUrl, setAppStoreUrl] = useState('');
 

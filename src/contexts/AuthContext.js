@@ -248,6 +248,8 @@ export function AuthProvider({ children }) {
     isAdmin: viewAs ? viewAs === 'admin' : isAdmin,
     isArtist: viewAs ? (viewAs === 'artist' || viewAs === 'admin') : !!artist,
     isListener: viewAs ? viewAs === 'listener' : !!listener,
+    isBeatmaker: !viewAs && artist?.role === 'beatmaker',
+    userRole: artist?.role || (listener ? 'listener' : 'artist'),
     rawIsAdmin: isAdmin,
     rawIsArtist: !!artist,
     rawIsMaster: artist?.is_master || false,

@@ -91,7 +91,7 @@ function MemoTabPanel({ artist, memos, fetchMemos, deleteMemo }) {
 
 export default function ArtistDashboard() {
   const navigate = useNavigate();
-  const { artist, isMaster } = useAuth();
+  const { artist, isMaster, isBeatmaker } = useAuth();
 
   const [activeTab, setActiveTab] = useState(
     new URLSearchParams(window.location.search).get('tab') || 'analytics'
@@ -285,7 +285,7 @@ export default function ArtistDashboard() {
   const tabs = [
     { key: 'upload',     label: 'Upload',     icon: Upload },
     { key: 'collabs',    label: 'Collabs',    icon: Users, hasBadge: true },
-    { key: 'analytics',  label: 'Analytics',  icon: BarChart3 },
+    { key: 'analytics',  label: isBeatmaker ? 'Beat Analytics' : 'Analytics',  icon: BarChart3 },
     // Memos tab hidden from nav bar — accessible via Profile page Voice Memo button (?tab=memos)
   ];
 
