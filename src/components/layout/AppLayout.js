@@ -160,7 +160,7 @@ function MobileBellButton() {
 // ── Main layout ───────────────────────────────────────────────────────────────
 export default function AppLayout() {
   const { currentTrack }            = usePlayer();
-  const { user, hasProfile, loading, isArtist } = useAuth();
+  const { user, hasProfile, loading, isArtist, isBeatmaker } = useAuth();
   const navigate                    = useNavigate();
   const location                    = useLocation();
   const [splashDone, setSplashDone] = useState(false);
@@ -277,7 +277,7 @@ export default function AppLayout() {
         <MobileNav />
 
         {showTour && splashDone && !loading && hasProfile && (
-          <AppTour isArtist={isArtist} onDone={dismissTour} />
+          <AppTour isArtist={isArtist} isBeatmaker={isBeatmaker} onDone={dismissTour} />
         )}
         <InstallPrompt />
       </div>

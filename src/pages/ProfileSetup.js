@@ -591,7 +591,7 @@ function AccountTypeScreen({ onListener, onArtist, initialScreen = 'type' }) {
       if (insertErr) throw insertErr;
       await refreshProfile();
       // Mark tour as done so AppTour doesn't show after onboarding
-      localStorage.setItem('fm_tour_artist_done', '1');
+      localStorage.removeItem('fm_tour_done_v2'); // let new tour show after onboarding
       onArtist();
     } catch (err) {
       setError(err.message || 'Failed to create artist profile');
@@ -757,7 +757,7 @@ export default function ProfileSetup() {
 
   const handleTourDone = async () => {
     if (artist) {
-      localStorage.setItem('fm_tour_artist_done', '1');
+      localStorage.removeItem('fm_tour_done_v2'); // let new tour show after onboarding
       navigate('/');
     }
     else { await ensureListenerProfile(); setStage('follow'); }
@@ -767,7 +767,7 @@ export default function ProfileSetup() {
     await ensureListenerProfile();
     // Mark both tour keys as done so AppTour doesn't show after onboarding
     localStorage.setItem('fm_tour_listener_done', '1');
-    localStorage.setItem('fm_tour_artist_done', '1');
+    localStorage.removeItem('fm_tour_done_v2'); // let new tour show after onboarding
     navigate('/');
   };
 
