@@ -772,14 +772,7 @@ export default function ForYouPage() {
   const navigate    = useNavigate();
   const { playTrack, setIsMinimized } = usePlayer();
 
-  const [feedFilter, setFeedFilter]       = useState('all'); // all | music | beats
 
-  // Filtered tracks based on feedFilter
-  const filteredTracks = React.useMemo(() => {
-    if (feedFilter === 'music') return tracks.filter(t => !t.is_beat);
-    if (feedFilter === 'beats') return tracks.filter(t => t.is_beat);
-    return tracks;
-  }, [tracks, feedFilter]);
 
   // Keep screen awake while on the feed
   React.useEffect(() => {
@@ -803,12 +796,17 @@ export default function ForYouPage() {
 
 
   const [tracks, setTracks]           = useState([]);
+  const [feedFilter, setFeedFilter]   = useState('all');
   const [idx, setIdx]                 = useState(0);
   const [loading, setLoading]         = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [viewingStory, setViewingStory] = useState(null); // { artist, stories }
   const [activeSheet, setActiveSheet]   = useState(null); // { type, track }
   const [shareCard, setShareCard]         = useState(null);  // { artist, url }
+
+  const filteredTracks = feedFilter === 'music' ? tracks.filter(t => !t.is_beat)
+    : feedFilter === 'beats' ? tracks.filter(t => t.is_beat)
+    : tracks;
 
   const touchStartY  = useRef(null);
   const touchStartX  = useRef(null);
