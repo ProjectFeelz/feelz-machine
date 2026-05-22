@@ -374,6 +374,66 @@ function BeatMetaFields({ trackForm, setTrackForm }) {
   );
 }
 
+
+// ─── Stems / Beat Kits uploader ───────────────────────────────────────────────
+function StemsUploader({ stems, setStems, uploadFile, showMessage }) {
+  const [uploading, setUploading] = React.useState(false);
+  const fileRef = React.useRef(null);
+  const ACCEPTED = '.zip,.rar,.wav,.mp3,.flac,.aiff,.stem.mp4';
+
+  const handleFiles = async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    for (const file of files) {
+      if (file.size > 500 * 1024 * 1024) { showMessage('error', `${file.name} is over 500MB`); continue; }
+      setUploading(true);
+      try {
+        const url = await uploadFile(file, 'stems/');
+        setStems(prev => [...prev, { name: file.name, url, size: file.size }]);
+      } catch (err) { showMessage('error', `Failed to upload ${file.name}: ${err.message}`); }
+      setUploading(false);
+    }
+    e.target.value = '';
+  };
+
+  return (
+    <div>
+      <FieldLabel>
+        <span className="flex items-center space-x-1.5">
+          <Disc className="w-3 h-3 text-blue-400" />
+          <span>Stems / Beat Kit <span className="text-white/20">(optional — zip, wav, flac, aiff)</span></span>
+        </span>
+      </FieldLabel>
+      {stems.length > 0 && (
+        <div className="space-y-1.5 mb-2">
+          {stems.map((s, i) => (
+            <div key={i} className="flex items-center space-x-3 px-3 py-2 bg-white/[0.04] rounded-xl border border-white/[0.06]">
+              <Disc className="w-3.5 h-3.5 text-blue-400/60 flex-shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs text-white/70 truncate">{s.name}</p>
+                <p className="text-[10px] text-white/30">{(s.size / (1024 * 1024)).toFixed(1)}MB</p>
+              </div>
+              <button type="button" onClick={() => setStems(prev => prev.filter((_, idx) => idx !== i))}
+                className="text-white/20 hover:text-red-400/60 text-xs transition flex-shrink-0">Remove</button>
+            </div>
+          ))}
+        </div>
+      )}
+      <button type="button" onClick={() => !uploading && fileRef.current?.click()}
+        className="w-full flex items-center space-x-3 px-3 py-3 bg-white/[0.04] rounded-xl border border-dashed border-white/[0.08] hover:bg-white/[0.07] transition text-left">
+        {uploading
+          ? <Loader className="w-4 h-4 text-blue-400 animate-spin flex-shrink-0" />
+          : <Plus className="w-4 h-4 text-white/30 flex-shrink-0" />}
+        <div>
+          <p className="text-xs text-white/50">{uploading ? 'Uploading…' : 'Upload stems or beat kit'}</p>
+          <p className="text-[10px] text-white/20 mt-0.5">ZIP, WAV, FLAC, AIFF · Max 500MB · Listeners can download after purchase</p>
+        </div>
+      </button>
+      <input ref={fileRef} type="file" accept={ACCEPTED} multiple onChange={handleFiles} className="hidden" />
+    </div>
+  );
+}
+
 // ─── Versions editor ──────────────────────────────────────────────────────────
 
 function VersionsEditor({ versions, setVersions }) {
@@ -502,11 +562,11 @@ function AddTrackToAlbum({
         is_preorder:       trackForm.is_preorder || false,
         release_date:      trackForm.is_preorder && trackForm.release_date ? trackForm.release_date : null,
         youtube_url:       trackForm.youtube_url?.trim() || null,
-        is_beat:           isBeat || false,
-        bpm:               isBeat && trackForm.bpm ? parseInt(trackForm.bpm) : null,
-        beat_key:          isBeat ? (trackForm.beat_key || null) : null,
-        beat_scale:        isBeat ? (trackForm.beat_scale || null) : null,
-        beat_licence:      isBeat ? beatLicence : null,
+        is_beat:           false,
+        bpm:               null,
+        beat_key:          null,
+        beat_scale:        null,
+        beat_licence:      null,
       }]).select();
       if (error) throw error;
       const trackId = data[0].id;

@@ -606,7 +606,7 @@ function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare }) {
                   playerVars: {
                     controls: 0, modestbranding: 1, rel: 0,
                     showinfo: 0, iv_load_policy: 3, playsinline: 1,
-                    autoplay: 1, mute: muted ? 1 : 0,
+                    autoplay: 1, mute: 1,
                   },
                 },
               }}
