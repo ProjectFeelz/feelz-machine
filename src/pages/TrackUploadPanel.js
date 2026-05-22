@@ -926,14 +926,14 @@ function AddTrackToAlbum({
         )}
       </div>
 
-      {!isBeatmaker && <TierGate feature="lyrics" inline>
+      <TierGate feature="lyrics" inline>
         <LyricsEditor
           lyrics={trackForm.lyrics}
           onChange={val => setTrackForm({ ...trackForm, lyrics: val })}
           audioFile={trackForm.audio_file}
           audioUrl={null}
         />
-      </TierGate>}
+      </TierGate>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
