@@ -284,7 +284,7 @@ function YoutubeField({ value, onChange }) {
 
 
 // ─── Beat Licence Selector ────────────────────────────────────────────────────
-function BeatLicenceSelector({ selectedId, price, onSelectLicence, onPriceChange }) {
+function BeatLicenceSelector({ selectedId, price, allowedLicences, onSelectLicence, onPriceChange }) {
   const [expanded, setExpanded] = React.useState(null);
   return (
     <div>
@@ -296,13 +296,14 @@ function BeatLicenceSelector({ selectedId, price, onSelectLicence, onPriceChange
       </FieldLabel>
       <div className="space-y-2">
         {BEAT_LICENCES.map(lic => {
+          const isLocked = allowedLicences && !allowedLicences.includes(lic.id);
           const isSelected = selectedId === lic.id;
           const isFree = lic.id === 'free';
           return (
             <div key={lic.id}
-              className={`rounded-xl border transition overflow-hidden ${isSelected ? lic.border + ' ' + lic.bg : 'border-white/[0.06] bg-white/[0.02]'}`}>
+              className={`rounded-xl border transition overflow-hidden ${isLocked ? 'opacity-40 cursor-not-allowed' : ''} ${isSelected && !isLocked ? lic.border + ' ' + lic.bg : 'border-white/[0.06] bg-white/[0.02]'}`}>
               <div className="flex items-center space-x-3 p-3 cursor-pointer"
-                onClick={() => onSelectLicence(lic.id)}>
+                onClick={() => !isLocked && onSelectLicence(lic.id)}>
                 <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition ${isSelected ? 'border-white' : 'border-white/20'}`}>
                   {isSelected && <div className="w-2 h-2 rounded-full bg-white" />}
                 </div>
@@ -322,11 +323,13 @@ function BeatLicenceSelector({ selectedId, price, onSelectLicence, onPriceChange
                   </div>
                 )}
                 {isFree && <span className={`text-sm font-bold flex-shrink-0 ${lic.color}`}>Free</span>}
-                <button type="button"
-                  onClick={e => { e.stopPropagation(); setExpanded(expanded === lic.id ? null : lic.id); }}
-                  className="text-[10px] text-white/25 hover:text-white/50 transition flex-shrink-0 ml-1">
-                  {expanded === lic.id ? '▲' : '▼'}
-                </button>
+                {isLocked
+                  ? <span className="text-[10px] text-white/30 flex-shrink-0 ml-1">🔒 Pro+</span>
+                  : <button type="button"
+                      onClick={e => { e.stopPropagation(); setExpanded(expanded === lic.id ? null : lic.id); }}
+                      className="text-[10px] text-white/25 hover:text-white/50 transition flex-shrink-0 ml-1">
+                      {expanded === lic.id ? '▲' : '▼'}
+                    </button>}
               </div>
               {expanded === lic.id && (
                 <div className="px-3 pb-3 space-y-1 border-t border-white/[0.04] pt-2">
@@ -923,14 +926,14 @@ function AddTrackToAlbum({
         )}
       </div>
 
-      <TierGate feature="lyrics" inline>
+      {!isBeatmaker && <TierGate feature="lyrics" inline>
         <LyricsEditor
           lyrics={trackForm.lyrics}
           onChange={val => setTrackForm({ ...trackForm, lyrics: val })}
           audioFile={trackForm.audio_file}
           audioUrl={null}
         />
-      </TierGate>
+      </TierGate>}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
@@ -1056,7 +1059,7 @@ function AddTrackToAlbum({
 
 export default function TrackUploadPanel() {
   const { artist, user, refreshProfile, isBeatmaker } = useAuth();
-  const { isPremium, canAddDownloadSale, downloadSalesRemaining, downloadSalesLimit } = useTier();
+  const { isPremium, canAddDownloadSale, downloadSalesRemaining, downloadSalesLimit, beatLicences, maxBeats, canUploadStems, canUseBeatAnalytics, canUseExclusive } = useTier();
 
   useEffect(() => {
     if (user && !artist) {
@@ -1226,6 +1229,16 @@ export default function TrackUploadPanel() {
     if (!trackForm.audio_file) { showMessage('error', 'Audio file is required'); return; }
     if (!trackForm.title.trim()) { showMessage('error', 'Track title is required'); return; }
     if (!artist) { showMessage('error', 'No artist profile found'); return; }
+
+    // Beat upload limit check for free beatmakers
+    if (isBeat && isFinite(maxBeats)) {
+      const { count } = await supabase.from('tracks').select('*', { count: 'exact', head: true })
+        .eq('artist_id', artist.id).eq('is_beat', true);
+      if ((count || 0) >= maxBeats) {
+        showMessage('error', `Free beatmakers can upload up to ${maxBeats} beats. Upgrade to Pro for 20 beats or Premium for unlimited.`);
+        return;
+      }
+    }
 
     const normTitle = trackForm.title.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
     const { data: existingTitles } = await supabase
@@ -1586,9 +1599,9 @@ export default function TrackUploadPanel() {
 
           {/* Step 1: Release type */}
           <div className="bg-white/[0.03] rounded-xl p-5 border border-white/[0.06] space-y-3">
-            <h3 className="text-sm font-semibold text-white">What are you releasing?</h3>
+            <h3 className="text-sm font-semibold text-white">{isBeatmaker ? "Upload a beat" : "What are you releasing?"}</h3>
             <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
-              {['single', 'beat', 'ep', 'album', 'mixtape', 'live', 'compilation'].map(type => (
+              {(isBeatmaker ? ['beat'] : ['single', 'ep', 'album', 'mixtape', 'live', 'compilation']).map(type => (
                 <button key={type} type="button"
                   onClick={() => {
                     setRelease({ ...release, release_type: type });
@@ -1844,6 +1857,7 @@ export default function TrackUploadPanel() {
                   <BeatLicenceSelector
                     selectedId={beatLicence}
                     price={beatPrice}
+                    allowedLicences={beatLicences}
                     onSelectLicence={id => {
                       setBeatLicence(id);
                       setTrackForm({ ...trackForm, beat_licence: id,
@@ -1856,12 +1870,22 @@ export default function TrackUploadPanel() {
                       setTrackForm({ ...trackForm, download_price: val });
                     }}
                   />
-                  <StemsUploader
-                    stems={stemFiles}
-                    setStems={setStemFiles}
-                    uploadFile={uploadFile}
-                    showMessage={showMessage}
-                  />
+                  {canUploadStems ? (
+                    <StemsUploader
+                      stems={stemFiles}
+                      setStems={setStemFiles}
+                      uploadFile={uploadFile}
+                      showMessage={showMessage}
+                    />
+                  ) : (
+                    <div className="p-3 rounded-xl border border-white/[0.06] bg-white/[0.02] flex items-center space-x-3">
+                      <span className="text-xl">🔒</span>
+                      <div>
+                        <p className="text-xs font-semibold text-white/50">Stem uploads — Pro & Premium</p>
+                        <p className="text-[10px] text-white/25 mt-0.5">Upgrade to attach WAV stems to your beats</p>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ) : (
                 !isAlbumRelease && (

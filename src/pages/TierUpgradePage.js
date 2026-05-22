@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
+import { useTier } from '../contexts/useTier';
 import {
   ArrowLeft, Check, X, Crown, Zap, Star, Loader, Shield, AlertCircle, Globe
 } from 'lucide-react';
@@ -38,6 +39,63 @@ const CURRENCY_MAP = {
   US: { currency: 'USD', symbol: '$',   locale: 'en-US' },
 };
 const DEFAULT_CURRENCY = { currency: 'USD', symbol: '$', locale: 'en-US' };
+
+const BEATMAKER_TIER_FEATURES = {
+  free: {
+    name: 'Free',
+    icon: Star,
+    color: '#737373',
+    features: [
+      { text: 'Upload up to 3 beats', included: true },
+      { text: 'Basic producer profile', included: true },
+      { text: 'Free & Basic Lease licences only', included: true },
+      { text: 'Beat discovery in For You feed', included: true },
+      { text: 'Stem uploads', included: false },
+      { text: 'Beat analytics', included: false },
+      { text: 'Premium & Unlimited Lease', included: false },
+      { text: 'Exclusive Licence tier', included: false },
+      { text: 'Collaboration & splits', included: false },
+      { text: 'Custom theme & branding', included: false },
+    ],
+  },
+  pro: {
+    name: 'Pro',
+    icon: Zap,
+    color: '#8B5CF6',
+    popular: true,
+    features: [
+      { text: 'Upload up to 20 beats', included: true },
+      { text: 'Full producer profile', included: true },
+      { text: 'All licences except Exclusive', included: true },
+      { text: 'Stem uploads', included: true },
+      { text: 'Beat analytics dashboard', included: true },
+      { text: 'Per-beat streams, plays & licence views', included: true },
+      { text: 'Collaboration & revenue splits', included: true },
+      { text: 'Custom theme & branding', included: true },
+      { text: 'Competition entry', included: true },
+      { text: 'Exclusive Licence tier', included: false },
+      { text: 'Priority in beats feed', included: false },
+    ],
+  },
+  premium: {
+    name: 'Premium',
+    icon: Crown,
+    color: '#F59E0B',
+    features: [
+      { text: 'Unlimited beat uploads', included: true },
+      { text: 'Full producer profile', included: true },
+      { text: 'All 5 licence tiers including Exclusive', included: true },
+      { text: 'Stem uploads', included: true },
+      { text: 'Advanced beat analytics & CSV export', included: true },
+      { text: 'Collaboration & revenue splits', included: true },
+      { text: 'Custom theme & branding', included: true },
+      { text: 'Priority placement in beats feed', included: true },
+      { text: 'Featured beat placement', included: true },
+      { text: 'Competition entry', included: true },
+      { text: 'Merch store integration', included: true },
+    ],
+  },
+};
 
 const TIER_FEATURES = {
   free: {
@@ -179,7 +237,7 @@ function PriceDisplay({ tier, billingCycle, geoRate, geoInfo }) {
 
 export default function TierUpgradePage() {
   const navigate = useNavigate();
-  const { user, artist, refreshProfile } = useAuth();
+  const { user, artist, refreshProfile, isBeatmaker } = useAuth();
 
   const [currentTier, setCurrentTier]   = useState(null);
   const [activeSubId, setActiveSubId]   = useState(null);
@@ -429,7 +487,7 @@ export default function TierUpgradePage() {
 
       {/* Tier cards */}
       <div className="px-6 space-y-4">
-        {Object.entries(TIER_FEATURES).map(([slug, tier]) => {
+        {Object.entries(isBeatmaker ? BEATMAKER_TIER_FEATURES : TIER_FEATURES).map(([slug, tier]) => {
           const isCurrent = currentTier === slug;
           const isDowngrade = (currentTier === 'premium' && slug !== 'premium') ||
                               (currentTier === 'pro' && slug === 'free');

@@ -17,6 +17,12 @@ const TIER_ACCESS = {
     pre_order: false,
     custom_branding: false,
     advanced_analytics: false,
+    // Beatmaker limits
+    max_beats: 3,                        // Free: 3 beats total
+    beat_licences: ['free', 'basic'],    // Free: only Free and Basic Lease
+    stems_upload: false,                 // Free: no stem uploads
+    beat_analytics: false,               // Free: no beat analytics
+    exclusive_licence: false,            // Free: no Exclusive licence tier
   },
   pro: {
     max_singles: Infinity,
@@ -28,12 +34,18 @@ const TIER_ACCESS = {
     collaborations: true,
     priority_trending: false,
     download_sales: true,
-    download_sales_monthly_limit: 2,   // Pro: 2 paid download tracks per month
+    download_sales_monthly_limit: 2,
     pre_order: false,
     custom_branding: true,
     advanced_analytics: false,
     community_post: true,
     daily_thought: true,
+    // Beatmaker limits
+    max_beats: 20,                                              // Pro: 20 beats
+    beat_licences: ['free', 'basic', 'premium', 'unlimited'],  // Pro: all except Exclusive
+    stems_upload: true,
+    beat_analytics: true,
+    exclusive_licence: false,                                   // Pro: no Exclusive
   },
 
   premium: {
@@ -46,12 +58,18 @@ const TIER_ACCESS = {
     collaborations: true,
     priority_trending: true,
     download_sales: true,
-    download_sales_monthly_limit: Infinity, // Premium: unlimited
+    download_sales_monthly_limit: Infinity,
     pre_order: true,
     custom_branding: true,
     advanced_analytics: true,
     community_post: true,
     daily_thought: true,
+    // Beatmaker limits
+    max_beats: Infinity,                                                      // Premium: unlimited
+    beat_licences: ['free', 'basic', 'premium', 'unlimited', 'exclusive'],   // Premium: all tiers
+    stems_upload: true,
+    beat_analytics: true,
+    exclusive_licence: true,
   },
 };
 
@@ -70,6 +88,9 @@ const FEATURE_LABELS = {
   unlimited_uploads: { name: 'Unlimited Uploads', description: 'Upload unlimited tracks and albums', minTier: 'pro' },
   daily_thought: { name: 'Daily Thought', description: 'Post a daily message on your artist profile', minTier: 'pro' },
   pre_order: { name: 'Pre-order Releases', description: 'Let fans pre-save upcoming releases before they drop', minTier: 'premium' },
+  stems_upload: { name: 'Stem Uploads', description: 'Attach stems to your beats for buyers to download', minTier: 'pro' },
+  beat_analytics: { name: 'Beat Analytics', description: 'Per-beat plays, licence views and purchase tracking', minTier: 'pro' },
+  exclusive_licence: { name: 'Exclusive Licence', description: 'Offer full exclusive rights on your beats', minTier: 'premium' },
 }
 
 export function useTier() {
@@ -212,6 +233,11 @@ export function useTier() {
   const isPro = tierSlug === 'pro' || tierSlug === 'premium';
   const isPremium = tierSlug === 'premium';
   const isFree = tierSlug === 'free';
+  const beatLicences      = access.beat_licences || ['free', 'basic'];
+  const maxBeats          = access.max_beats ?? 3;
+  const canUploadStems    = access.stems_upload ?? false;
+  const canUseBeatAnalytics = access.beat_analytics ?? false;
+  const canUseExclusive   = access.exclusive_licence ?? false;
 
   const downloadSalesLimit = access.download_sales_monthly_limit ?? 0;
   const canAddDownloadSale = isPremium
