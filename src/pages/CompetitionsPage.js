@@ -520,7 +520,7 @@ export default function CompetitionsPage() {
                   <>
                     {/* Countdown */}
                     {wheelChallenge.competitions && (
-                      <div className="flex gap-3 mb-4 justify-center sm:justify-start">
+                      <div className="flex gap-3 mb-4 justify-center">
                         {wheelChallenge.competitions.entries_close_at && wheelChallenge.competitions.status === 'open' && (
                           <div className="text-center">
                             <div className="flex items-center space-x-1">
@@ -543,7 +543,7 @@ export default function CompetitionsPage() {
                     )}
 
                     {/* Prize */}
-                    <div className="flex items-center space-x-1.5 mb-4 justify-center sm:justify-start">
+                    <div className="flex items-center space-x-1.5 mb-4 justify-center">
                       <Crown className="w-3.5 h-3.5 flex-shrink-0" style={{ color: '#a78bfa' }} />
                       <p className="text-xs font-bold text-center" style={{ color: '#a78bfa' }}>Win 3 months Pro or Premium</p>
                     </div>
