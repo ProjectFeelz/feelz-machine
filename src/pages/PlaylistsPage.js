@@ -27,7 +27,7 @@ export default function PlaylistsPage() {
   const fetchPlaylists = async () => {
     const [{ data: mine }, { data: collab }] = await Promise.all([
       supabase.from('playlists')
-        .select('id, name, cover_url, is_shared, is_public, user_id, created_at, playlist_tracks(count)')
+        .select('id, name, cover_url, is_shared, is_public, user_id, created_at, playlist_tracks(count, tracks(cover_artwork_url))')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false }),
       supabase.from('playlist_collaborators')
@@ -112,8 +112,8 @@ export default function PlaylistsPage() {
       className="flex items-center space-x-3 p-3 rounded-xl hover:bg-white/[0.04] transition group cursor-pointer"
     >
       <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-purple-600/30 to-blue-600/20 flex items-center justify-center flex-shrink-0 relative overflow-hidden">
-        {playlist.cover_url
-          ? <img src={playlist.cover_url} alt="" className="w-full h-full object-cover" />
+        {(playlist.cover_url || playlist.playlist_tracks?.[0]?.tracks?.[0]?.cover_artwork_url)
+          ? <img src={playlist.cover_url || playlist.playlist_tracks?.[0]?.tracks?.[0]?.cover_artwork_url} alt="" className="w-full h-full object-cover" />
           : <Music className="w-5 h-5 text-white/30" />}
         {(playlist.is_shared || isCollab) && (
           <div className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-blue-500/80 flex items-center justify-center">

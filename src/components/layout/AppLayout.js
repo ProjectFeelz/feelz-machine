@@ -160,7 +160,7 @@ function MobileBellButton() {
 // ── Main layout ───────────────────────────────────────────────────────────────
 export default function AppLayout() {
   const { currentTrack }            = usePlayer();
-  const { user, hasProfile, loading, isArtist, isBeatmaker } = useAuth();
+  const { user, hasProfile, loading, isArtist, isBeatmaker, viewAs, setViewAs } = useAuth();
   const navigate                    = useNavigate();
   const location                    = useLocation();
   const [splashDone, setSplashDone] = useState(false);
@@ -247,6 +247,18 @@ export default function AppLayout() {
       <div className="min-h-screen bg-black text-white">
         {/* Offline detection — fixed banner, renders above everything */}
         <OfflineBanner />
+
+        {/* Listener mode banner */}
+        {viewAs === 'listener' && (
+          <div className="fixed top-0 inset-x-0 z-[200] flex items-center justify-between px-4 py-2"
+            style={{ background: 'rgba(139,92,246,0.95)', backdropFilter: 'blur(8px)' }}>
+            <p className="text-xs font-semibold text-white">🎧 Listening as fan</p>
+            <button onClick={() => setViewAs(null)}
+              className="text-xs font-bold text-white/80 hover:text-white transition px-2 py-1 rounded-lg bg-white/20">
+              Switch back
+            </button>
+          </div>
+        )}
 
         <DesktopSidebar />
         <MobileBellButton />
