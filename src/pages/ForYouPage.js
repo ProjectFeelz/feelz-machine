@@ -772,6 +772,8 @@ export default function ForYouPage() {
   const navigate    = useNavigate();
   const { playTrack, setIsMinimized } = usePlayer();
 
+  const [feedFilter, setFeedFilter]       = useState('all'); // all | music | beats
+
   // Filtered tracks based on feedFilter
   const filteredTracks = React.useMemo(() => {
     if (feedFilter === 'music') return tracks.filter(t => !t.is_beat);
@@ -806,7 +808,6 @@ export default function ForYouPage() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [viewingStory, setViewingStory] = useState(null); // { artist, stories }
   const [activeSheet, setActiveSheet]   = useState(null); // { type, track }
-  const [feedFilter, setFeedFilter]       = useState('all'); // all | music | beats
   const [shareCard, setShareCard]         = useState(null);  // { artist, url }
 
   const touchStartY  = useRef(null);
