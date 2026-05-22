@@ -1125,7 +1125,7 @@ export default function ForYouPage() {
                   navigate={navigate}
                 />
               ) : (
-                {filteredTracks[i] && <ForYouCard track={filteredTracks[i]} isActive={i === idx} user={user} navigate={navigate} onOpenSheet={setActiveSheet} onShare={setShareCard} />}
+                filteredTracks[i] ? <ForYouCard track={filteredTracks[i]} isActive={i === idx} user={user} navigate={navigate} onOpenSheet={setActiveSheet} onShare={setShareCard} /> : null
               )}
             </div>
           );
