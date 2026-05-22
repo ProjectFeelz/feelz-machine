@@ -477,7 +477,9 @@ function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare }) {
     };
     img.src = track.cover_artwork_url;
   }, [track.cover_artwork_url]);
-  const hasVideo  = !!track.youtube_url;
+  const hasVideo   = !!track.youtube_url;
+  const isYouTube  = hasVideo && (track.youtube_url.includes('youtube') || track.youtube_url.includes('youtu.be'));
+  const isUploadedVideo = hasVideo && track.youtube_url.includes('supabase');
   const isThisOne = currentTrack?.id === track.id;
   const playing   = isThisOne && isPlaying;
 
@@ -485,7 +487,6 @@ function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare }) {
   const [likeCount, setLikeCount]     = useState(0);
   const [following, setFollowing]     = useState(false);
   const [commentCount, setCommentCount] = useState(0);
-  const [muted, setMuted]             = useState(true);
 
   useEffect(() => {
     if (!track.id) return;
@@ -579,32 +580,40 @@ function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare }) {
       {/* YouTube video */}
       {hasVideo && isActive && (
         <div className="absolute inset-0 z-10">
-          <ReactPlayer
-            url={track.youtube_url}
-            playing={isActive}
-            muted={muted}
-            loop
-            playsinline
-            width="100%"
-            height="100%"
-            style={{ position: 'absolute', top: 0, left: 0 }}
-            config={{
-              youtube: {
-                playerVars: {
-                  controls: 0, modestbranding: 1, rel: 0,
-                  showinfo: 0, iv_load_policy: 3, playsinline: 1,
-                  autoplay: 1, mute: muted ? 1 : 0,
+          {isUploadedVideo ? (
+            /* Native video for Supabase-hosted MP4s */
+            <video
+              src={track.youtube_url}
+              autoPlay
+              loop
+              playsInline
+              muted
+              style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover' }}
+            />
+          ) : isYouTube ? (
+            /* ReactPlayer only for actual YouTube URLs */
+            <ReactPlayer
+              url={track.youtube_url}
+              playing={isActive}
+              muted
+              loop
+              playsinline
+              width="100%"
+              height="100%"
+              style={{ position: 'absolute', top: 0, left: 0 }}
+              config={{
+                youtube: {
+                  playerVars: {
+                    controls: 0, modestbranding: 1, rel: 0,
+                    showinfo: 0, iv_load_policy: 3, playsinline: 1,
+                    autoplay: 1, mute: muted ? 1 : 0,
+                  },
                 },
-              },
-            }}
-          />
+              }}
+            />
+          ) : null}
           <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/70 z-10 pointer-events-none" />
-          <button
-            onClick={e => { e.stopPropagation(); setMuted(m => !m); }}
-            className="absolute top-16 right-4 z-20 w-9 h-9 flex items-center justify-center rounded-full bg-black/50"
-          >
-            {muted ? <VolumeX className="w-4 h-4 text-white/70" /> : <Volume2 className="w-4 h-4 text-white/70" />}
-          </button>
+
         </div>
       )}
 
@@ -693,7 +702,19 @@ function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare }) {
         </button>
         <p className="text-lg font-black text-white leading-tight mb-2">{track.title}</p>
         <div className="flex items-center flex-wrap gap-1.5">
-          {track.genre && (
+          {track.is_beat && (
+            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full"
+              style={{ background: 'rgba(234,179,8,0.15)', color: '#facc15', border: '1px solid rgba(234,179,8,0.25)' }}>
+              BEAT{track.bpm ? ` · ${track.bpm} BPM` : ''}
+            </span>
+          )}
+          {track.beat_key && (
+            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full"
+              style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.4)' }}>
+              {track.beat_key} {track.beat_scale || ''}
+            </span>
+          )}
+          {track.genre && !track.is_beat && (
             <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full"
               style={{ background: 'rgba(167,139,250,0.2)', color: '#a78bfa', border: '1px solid rgba(167,139,250,0.3)' }}>
               {track.genre}
@@ -751,6 +772,13 @@ export default function ForYouPage() {
   const navigate    = useNavigate();
   const { playTrack, setIsMinimized } = usePlayer();
 
+  // Filtered tracks based on feedFilter
+  const filteredTracks = React.useMemo(() => {
+    if (feedFilter === 'music') return tracks.filter(t => !t.is_beat);
+    if (feedFilter === 'beats') return tracks.filter(t => t.is_beat);
+    return tracks;
+  }, [tracks, feedFilter]);
+
   // Keep screen awake while on the feed
   React.useEffect(() => {
     let wakeLock = null;
@@ -778,6 +806,7 @@ export default function ForYouPage() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [viewingStory, setViewingStory] = useState(null); // { artist, stories }
   const [activeSheet, setActiveSheet]   = useState(null); // { type, track }
+  const [feedFilter, setFeedFilter]       = useState('all'); // all | music | beats
   const [shareCard, setShareCard]         = useState(null);  // { artist, url }
 
   const touchStartY  = useRef(null);
@@ -930,7 +959,7 @@ export default function ForYouPage() {
   // Single source of truth for playback — fires when idx changes
   const lastPlayedIdx = React.useRef(-1);
   useEffect(() => {
-    if (!tracks.length) return;
+    if (!filteredTracks.length) return;
     const item = tracks[idx];
     if (!item || item._type === 'story') return; // skip story cards
     if (idx === lastPlayedIdx.current) return;   // already played this idx
@@ -1097,7 +1126,7 @@ export default function ForYouPage() {
                   navigate={navigate}
                 />
               ) : (
-                <ForYouCard track={tracks[i]} isActive={i === idx} user={user} navigate={navigate} onOpenSheet={setActiveSheet} onShare={setShareCard} />
+                <ForYouCard track={filteredTracks[i]} isActive={i === idx} user={user} navigate={navigate} onOpenSheet={setActiveSheet} onShare={setShareCard} />
               )}
             </div>
           );
@@ -1107,6 +1136,23 @@ export default function ForYouPage() {
       {/* Status bar gradient */}
       <div className="absolute top-0 inset-x-0 h-20 pointer-events-none z-30"
         style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,0.5), transparent)' }} />
+
+      {/* Feed filter tabs */}
+      <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30 flex space-x-1 rounded-full p-0.5 md:left-[calc(50%+128px)]"
+        style={{ background: 'rgba(255,255,255,0.08)', backdropFilter: 'blur(10px)' }}>
+        {[
+          { id: 'all',    label: 'All' },
+          { id: 'music',  label: 'Music' },
+          { id: 'beats',  label: 'Beats' },
+        ].map(f => (
+          <button key={f.id} onClick={() => setFeedFilter(f.id)}
+            className={`px-3 py-1 rounded-full text-xs font-bold transition ${
+              feedFilter === f.id ? 'bg-white text-black' : 'text-white/50 hover:text-white/80'
+            }`}>
+            {f.label}
+          </button>
+        ))}
+      </div>
 
       {/* Sign-in nudge for unauthenticated users */}
       {!user && (

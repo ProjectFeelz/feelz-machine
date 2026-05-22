@@ -647,7 +647,6 @@ export default function FullPlayer() {
   const [showQueue, setShowQueue]             = useState(false);
   const [showActionSheet, setShowActionSheet] = useState(false);
   const [displayMode, setDisplayMode]         = useState('artwork');
-  const [videoMuted, setVideoMuted]           = useState(true);
   const [lyrics, setLyrics]                   = useState(null);
   const [lyricsLoading, setLyricsLoading]     = useState(false);
 
@@ -716,7 +715,9 @@ export default function FullPlayer() {
   const y       = useMotionValue(window.innerHeight);
   const opacity = useTransform(y, [0, 300], [1, 0]);
 
-  const hasVideo   = !!currentTrack?.youtube_url;
+  const hasVideo        = !!currentTrack?.youtube_url;
+  const isYouTube       = hasVideo && (currentTrack.youtube_url.includes('youtube') || currentTrack.youtube_url.includes('youtu.be'));
+  const isUploadedVideo = hasVideo && currentTrack.youtube_url.includes('supabase');
   const hasLyrics  = !!lyrics;
 
   // Reset video mode if track has no video
@@ -911,25 +912,37 @@ export default function FullPlayer() {
                 {/* Video layer */}
                 {displayMode === 'video' && hasVideo && (
                   <div className="absolute inset-0">
-                    <ReactPlayer
-                      key={currentTrack.youtube_url}
-                      url={currentTrack.youtube_url}
-                      playing={isPlaying}
-                      muted={videoMuted}
-                      loop
-                      width="100%"
-                      height="100%"
-                      style={{ position: 'absolute', top: 0, left: 0 }}
-                      config={{
-                        youtube: {
-                          playerVars: {
-                            controls: 0, modestbranding: 1, rel: 0,
-                            showinfo: 0, iv_load_policy: 3, playsinline: 1,
-                            autoplay: 1, mute: 1,
+                    {isUploadedVideo ? (
+                      <video
+                        key={currentTrack.youtube_url}
+                        src={currentTrack.youtube_url}
+                        autoPlay={isPlaying}
+                        loop
+                        muted
+                        playsInline
+                        style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover' }}
+                      />
+                    ) : isYouTube ? (
+                      <ReactPlayer
+                        key={currentTrack.youtube_url}
+                        url={currentTrack.youtube_url}
+                        playing={isPlaying}
+                        muted
+                        loop
+                        width="100%"
+                        height="100%"
+                        style={{ position: 'absolute', top: 0, left: 0 }}
+                        config={{
+                          youtube: {
+                            playerVars: {
+                              controls: 0, modestbranding: 1, rel: 0,
+                              showinfo: 0, iv_load_policy: 3, playsinline: 1,
+                              autoplay: 1, mute: 1,
+                            },
                           },
-                        },
-                      }}
-                    />
+                        }}
+                      />
+                    ) : null}
                     <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/60" />
                   </div>
                 )}
@@ -1000,15 +1013,7 @@ export default function FullPlayer() {
                       </button>
                     );
                   })}
-                  {displayMode === 'video' && hasVideo && (
-                    <>
-                      <div className="w-px h-5 bg-white/10 mx-0.5" />
-                      <button onClick={() => { tap(); setVideoMuted(m => !m); }}
-                        className="px-3 py-2 text-white/40 hover:text-white/70 transition">
-                        {videoMuted ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
-                      </button>
-                    </>
-                  )}
+
                 </div>
               </div>
             )}

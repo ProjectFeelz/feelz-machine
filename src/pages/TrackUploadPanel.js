@@ -44,6 +44,99 @@ const VERSION_TYPES = [
 
 const ALBUM_TYPES = ['ep', 'album', 'mixtape', 'live', 'compilation'];
 
+const BEAT_KEYS = [
+  'C','C#/Db','D','D#/Eb','E','F','F#/Gb','G','G#/Ab','A','A#/Bb','B',
+];
+const BEAT_SCALES = ['Major','Minor','Harmonic Minor','Melodic Minor'];
+
+// Standard beat licences — beat makers only set the price, terms are fixed
+const BEAT_LICENCES = [
+  {
+    id: 'free',
+    label: 'Free Download',
+    badge: 'FREE',
+    color: 'text-green-400',
+    bg: 'bg-green-500/10',
+    border: 'border-green-500/20',
+    price: 0,
+    terms: [
+      'Non-commercial use only',
+      'Must credit producer in title (Prod. by [name])',
+      'No monetisation on streaming platforms',
+      'No broadcast or sync rights',
+      '1 free download per user',
+    ],
+  },
+  {
+    id: 'basic',
+    label: 'Basic Lease',
+    badge: 'LEASE',
+    color: 'text-blue-400',
+    bg: 'bg-blue-500/10',
+    border: 'border-blue-500/20',
+    terms: [
+      'MP3 file only',
+      'Up to 50,000 streams across all platforms',
+      'Up to 2,500 paid sales / downloads',
+      'Must credit producer (Prod. by [name])',
+      'Non-exclusive — beat may be sold to others',
+      'No broadcast or sync rights',
+      'Licence period: 2 years',
+    ],
+  },
+  {
+    id: 'premium',
+    label: 'Premium Lease',
+    badge: 'PREMIUM',
+    color: 'text-purple-400',
+    bg: 'bg-purple-500/10',
+    border: 'border-purple-500/20',
+    terms: [
+      'MP3 + WAV files',
+      'Unlimited streams',
+      'Up to 25,000 paid sales / downloads',
+      'Must credit producer (Prod. by [name])',
+      'Non-exclusive — beat may be sold to others',
+      'Radio & podcast broadcast rights included',
+      'No sync / TV / film rights',
+      'Licence period: 5 years',
+    ],
+  },
+  {
+    id: 'unlimited',
+    label: 'Unlimited Lease',
+    badge: 'UNLIMITED',
+    color: 'text-yellow-400',
+    bg: 'bg-yellow-500/10',
+    border: 'border-yellow-500/20',
+    terms: [
+      'MP3 + WAV + Stems (if provided)',
+      'Unlimited streams & sales',
+      'Must credit producer (Prod. by [name])',
+      'Non-exclusive — beat may be sold to others',
+      'Radio, podcast & sync rights included',
+      'Licence period: Lifetime',
+    ],
+  },
+  {
+    id: 'exclusive',
+    label: 'Exclusive Rights',
+    badge: 'EXCLUSIVE',
+    color: 'text-red-400',
+    bg: 'bg-red-500/10',
+    border: 'border-red-500/20',
+    terms: [
+      'MP3 + WAV + Stems (if provided)',
+      'Full ownership transfer of the recording',
+      'Unlimited streams, sales & distribution',
+      'Beat removed from sale after purchase',
+      'No producer credit required (negotiable)',
+      'All broadcast, sync & film rights included',
+      'Licence period: Lifetime / Perpetual',
+    ],
+  },
+];
+
 const BLANK_TRACK = {
   title: '', genre: '', mood: '', lyrics: '',
   is_explicit: false, is_downloadable: true, is_published: true,
@@ -52,6 +145,9 @@ const BLANK_TRACK = {
   is_preorder: false, release_date: null,
   track_number: '1', audio_file: null, cover_file: null, has_versions: false,
   youtube_url: '',
+  // Beat-specific fields
+  is_beat: false, bpm: '', beat_key: '', beat_scale: 'Minor',
+  beat_licence: 'basic',
 };
 
 const BLANK_RELEASE = {
@@ -138,7 +234,7 @@ function YoutubeField({ value, onChange }) {
     const file = e.target.files[0];
     if (!file) return;
     if (file.type !== 'video/mp4') { setUploadError('MP4 only. Convert your video first.'); return; }
-    if (file.size > 300 * 1024 * 1024) { setUploadError('Max 300MB'); return; }
+    if (file.size > 500 * 1024 * 1024) { setUploadError('Max 500MB'); return; }
     setUploading(true); setUploadError('');
     try {
       const path = Date.now() + '-' + Math.random().toString(36).slice(2) + '.mp4';
@@ -152,123 +248,128 @@ function YoutubeField({ value, onChange }) {
 
   return (
     <div>
-      <div style={{ display: "none" }}>
-        <FieldLabel>
-          <span className="flex items-center space-x-1.5">
-            <Youtube className="w-3 h-3 text-red-400" />
-            <span>YouTube Video URL <span className="text-white/20">(limited — some videos block embedding)</span></span>
-          </span>
-        </FieldLabel>
-        <FInput
-          type="url"
-          value={isUploaded ? '' : (value || '')}
-          onChange={e => onChange(e.target.value)}
-          placeholder="https://youtube.com/watch?v=..."
-        />
-      </div>
-      <div>
-        <FieldLabel>
-          <span className="flex items-center space-x-1.5">
-            <Upload className="w-3 h-3 text-purple-400" />
-            <span>Direct Video Upload <span className="text-white/20">(MP4 · recommended · plays in For You feed)</span></span>
-          </span>
-        </FieldLabel>
-        {isUploaded ? (
-          <div className="flex items-center space-x-3 p-3 bg-white/[0.04] rounded-xl border border-white/[0.08]">
-            <video src={value} className="w-16 h-10 object-cover rounded-lg bg-black" muted />
-            <div className="flex-1 min-w-0">
-              <p className="text-xs text-white/70">Video uploaded ✓</p>
-              <p className="text-[10px] text-white/30">Shows in For You feed</p>
-            </div>
-            <button type="button" onClick={() => onChange('')} className="text-white/30 hover:text-white/60 text-xs transition">Remove</button>
+      <FieldLabel>
+        <span className="flex items-center space-x-1.5">
+          <Upload className="w-3 h-3 text-purple-400" />
+          <span>Music Video <span className="text-white/20">(optional · MP4 · plays in For You feed)</span></span>
+        </span>
+      </FieldLabel>
+      {isUploaded ? (
+        <div className="flex items-center space-x-3 p-3 bg-white/[0.04] rounded-xl border border-white/[0.08]">
+          <video src={value} className="w-16 h-10 object-cover rounded-lg bg-black" muted />
+          <div className="flex-1 min-w-0">
+            <p className="text-xs text-white/70">Video uploaded ✓</p>
+            <p className="text-[10px] text-white/30">Shows in For You feed</p>
           </div>
-        ) : (
-          <button type="button" onClick={() => !uploading && fileRef.current?.click()}
-            className="w-full flex items-center space-x-3 px-3 py-3 bg-white/[0.04] rounded-xl border border-dashed border-white/[0.12] hover:bg-white/[0.07] transition text-left">
-            {uploading
-              ? <Loader className="w-4 h-4 text-purple-400 animate-spin flex-shrink-0" />
-              : <Upload className="w-4 h-4 text-white/30 flex-shrink-0" />}
-            <div>
-              <p className="text-xs text-white/50">{uploading ? 'Uploading…' : 'Upload music video'}</p>
-              <p className="text-[10px] text-white/20 mt-0.5">MP4 only · Max 300MB · Vertical recommended</p>
-            </div>
-          </button>
-        )}
-        <input ref={fileRef} type="file" accept="video/mp4" onChange={handleVideoFile} className="hidden" />
-        {uploadError && <p className="text-[10px] text-red-400 mt-1">{uploadError}</p>}
-      </div>
+          <button type="button" onClick={() => onChange('')} className="text-white/30 hover:text-white/60 text-xs transition">Remove</button>
+        </div>
+      ) : (
+        <button type="button" onClick={() => !uploading && fileRef.current?.click()}
+          className="w-full flex items-center space-x-3 px-3 py-3 bg-white/[0.04] rounded-xl border border-dashed border-white/[0.12] hover:bg-white/[0.07] transition text-left">
+          {uploading
+            ? <Loader className="w-4 h-4 text-purple-400 animate-spin flex-shrink-0" />
+            : <Upload className="w-4 h-4 text-white/30 flex-shrink-0" />}
+          <div>
+            <p className="text-xs text-white/50">{uploading ? 'Uploading…' : 'Upload music video'}</p>
+            <p className="text-[10px] text-white/20 mt-0.5">MP4 only · Max 500MB · Vertical recommended · Convert before uploading</p>
+          </div>
+        </button>
+      )}
+      <input ref={fileRef} type="file" accept="video/mp4" onChange={handleVideoFile} className="hidden" />
+      {uploadError && <p className="text-[10px] text-red-400 mt-1">{uploadError}</p>}
     </div>
   );
 }
 
 
-// ─── Stems / Beat Kits uploader ───────────────────────────────────────────────
-// Allows producers to attach downloadable stem packs or beat kits to a track.
-// Files are stored in feelz-samples/stems/ and linked via track metadata.
-// This is separate from the track audio file.
 
-function StemsUploader({ stems, setStems, uploadFile, showMessage }) {
-  const [uploading, setUploading] = React.useState(false);
-  const fileRef = React.useRef(null);
-
-  const ACCEPTED = '.zip,.rar,.wav,.mp3,.flac,.aiff,.stem.mp4';
-
-  const handleFiles = async (e) => {
-    const files = Array.from(e.target.files || []);
-    if (!files.length) return;
-    for (const file of files) {
-      if (file.size > 500 * 1024 * 1024) {
-        showMessage('error', `${file.name} is over 500MB`);
-        continue;
-      }
-      setUploading(true);
-      try {
-        const url = await uploadFile(file, 'stems/');
-        setStems(prev => [...prev, { name: file.name, url, size: file.size }]);
-      } catch (err) {
-        showMessage('error', `Failed to upload ${file.name}: ${err.message}`);
-      }
-      setUploading(false);
-    }
-    e.target.value = '';
-  };
-
+// ─── Beat Licence Selector ────────────────────────────────────────────────────
+function BeatLicenceSelector({ selectedId, price, onSelectLicence, onPriceChange }) {
+  const [expanded, setExpanded] = React.useState(null);
   return (
     <div>
       <FieldLabel>
         <span className="flex items-center space-x-1.5">
-          <Disc className="w-3 h-3 text-blue-400" />
-          <span>Stems / Beat Kit <span className="text-white/20">(optional — zip, wav, flac, aiff)</span></span>
+          <Disc className="w-3 h-3 text-yellow-400" />
+          <span>Beat Licence <span className="text-white/20">(set your price per tier)</span></span>
         </span>
       </FieldLabel>
-
-      {stems.length > 0 && (
-        <div className="space-y-1.5 mb-2">
-          {stems.map((s, i) => (
-            <div key={i} className="flex items-center space-x-3 px-3 py-2 bg-white/[0.04] rounded-xl border border-white/[0.06]">
-              <Disc className="w-3.5 h-3.5 text-blue-400/60 flex-shrink-0" />
-              <div className="flex-1 min-w-0">
-                <p className="text-xs text-white/70 truncate">{s.name}</p>
-                <p className="text-[10px] text-white/30">{(s.size / (1024 * 1024)).toFixed(1)}MB</p>
+      <div className="space-y-2">
+        {BEAT_LICENCES.map(lic => {
+          const isSelected = selectedId === lic.id;
+          const isFree = lic.id === 'free';
+          return (
+            <div key={lic.id}
+              className={`rounded-xl border transition overflow-hidden ${isSelected ? lic.border + ' ' + lic.bg : 'border-white/[0.06] bg-white/[0.02]'}`}>
+              <div className="flex items-center space-x-3 p-3 cursor-pointer"
+                onClick={() => onSelectLicence(lic.id)}>
+                <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition ${isSelected ? 'border-white' : 'border-white/20'}`}>
+                  {isSelected && <div className="w-2 h-2 rounded-full bg-white" />}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center space-x-2">
+                    <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${lic.bg} ${lic.color}`}>{lic.badge}</span>
+                    <span className="text-sm font-semibold text-white">{lic.label}</span>
+                  </div>
+                </div>
+                {!isFree && isSelected && (
+                  <div className="flex items-center space-x-1.5 flex-shrink-0" onClick={e => e.stopPropagation()}>
+                    <span className="text-xs text-white/40">$</span>
+                    <input type="number" min="0" step="1" value={price}
+                      onChange={e => onPriceChange(e.target.value)}
+                      className="w-20 px-2 py-1 bg-white/[0.08] rounded-lg text-white text-sm outline-none border border-white/[0.12] focus:border-white/30 text-right"
+                      placeholder="0" />
+                  </div>
+                )}
+                {isFree && <span className={`text-sm font-bold flex-shrink-0 ${lic.color}`}>Free</span>}
+                <button type="button"
+                  onClick={e => { e.stopPropagation(); setExpanded(expanded === lic.id ? null : lic.id); }}
+                  className="text-[10px] text-white/25 hover:text-white/50 transition flex-shrink-0 ml-1">
+                  {expanded === lic.id ? '▲' : '▼'}
+                </button>
               </div>
-              <button type="button" onClick={() => setStems(prev => prev.filter((_, idx) => idx !== i))}
-                className="text-white/20 hover:text-red-400/60 text-xs transition flex-shrink-0">Remove</button>
+              {expanded === lic.id && (
+                <div className="px-3 pb-3 space-y-1 border-t border-white/[0.04] pt-2">
+                  {lic.terms.map((t, i) => (
+                    <p key={i} className="text-[11px] text-white/40 flex items-start space-x-1.5">
+                      <span className={`${lic.color} mt-0.5 flex-shrink-0`}>·</span>
+                      <span>{t}</span>
+                    </p>
+                  ))}
+                </div>
+              )}
             </div>
-          ))}
-        </div>
-      )}
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
-      <button type="button" onClick={() => !uploading && fileRef.current?.click()}
-        className="w-full flex items-center space-x-3 px-3 py-3 bg-white/[0.04] rounded-xl border border-dashed border-white/[0.08] hover:bg-white/[0.07] transition text-left">
-        {uploading
-          ? <Loader className="w-4 h-4 text-blue-400 animate-spin flex-shrink-0" />
-          : <Plus className="w-4 h-4 text-white/30 flex-shrink-0" />}
-        <div>
-          <p className="text-xs text-white/50">{uploading ? 'Uploading…' : 'Upload stems or beat kit'}</p>
-          <p className="text-[10px] text-white/20 mt-0.5">ZIP, WAV, FLAC, AIFF · Max 500MB · Listeners can download after purchase</p>
-        </div>
-      </button>
-      <input ref={fileRef} type="file" accept={ACCEPTED} multiple onChange={handleFiles} className="hidden" />
+function BeatMetaFields({ trackForm, setTrackForm }) {
+  return (
+    <div className="grid grid-cols-3 gap-3">
+      <div>
+        <FieldLabel>BPM *</FieldLabel>
+        <FInput type="number" min="40" max="300" placeholder="e.g. 140"
+          value={trackForm.bpm || ''}
+          onChange={e => setTrackForm({ ...trackForm, bpm: e.target.value })} />
+      </div>
+      <div>
+        <FieldLabel>Key</FieldLabel>
+        <FSelect value={trackForm.beat_key || ''}
+          onChange={e => setTrackForm({ ...trackForm, beat_key: e.target.value })}>
+          <option value="">Key…</option>
+          {BEAT_KEYS.map(k => <option key={k} value={k}>{k}</option>)}
+        </FSelect>
+      </div>
+      <div>
+        <FieldLabel>Scale</FieldLabel>
+        <FSelect value={trackForm.beat_scale || 'Minor'}
+          onChange={e => setTrackForm({ ...trackForm, beat_scale: e.target.value })}>
+          {BEAT_SCALES.map(s => <option key={s} value={s}>{s}</option>)}
+        </FSelect>
+      </div>
     </div>
   );
 }
@@ -401,6 +502,11 @@ function AddTrackToAlbum({
         is_preorder:       trackForm.is_preorder || false,
         release_date:      trackForm.is_preorder && trackForm.release_date ? trackForm.release_date : null,
         youtube_url:       trackForm.youtube_url?.trim() || null,
+        is_beat:           isBeat || false,
+        bpm:               isBeat && trackForm.bpm ? parseInt(trackForm.bpm) : null,
+        beat_key:          isBeat ? (trackForm.beat_key || null) : null,
+        beat_scale:        isBeat ? (trackForm.beat_scale || null) : null,
+        beat_licence:      isBeat ? beatLicence : null,
       }]).select();
       if (error) throw error;
       const trackId = data[0].id;
@@ -715,6 +821,8 @@ export default function TrackUploadPanel() {
   const [trackForm, setTrackForm]               = useState(BLANK_TRACK);
   const [versionFiles, setVersionFiles]         = useState([]);
   const [stemFiles, setStemFiles]               = useState([]);
+  const [beatLicence, setBeatLicence]           = useState('basic');
+  const [beatPrice, setBeatPrice]               = useState('');
   const [collaborators, setCollaborators]       = useState([]);
   const [albumCollaborators, setAlbumCollaborators] = useState([]);
   const [albumTrackQueue, setAlbumTrackQueue]   = useState([]);
@@ -735,6 +843,7 @@ export default function TrackUploadPanel() {
   const [showAddTrackToAlbum, setShowAddTrackToAlbum] = useState(false);
 
   const isAlbumRelease = ALBUM_TYPES.includes(release.release_type);
+  const isBeat          = release.release_type === 'beat';
   const isWorking      = uploading || converting;
 
   useEffect(() => { if (artist) fetchAlbums(); }, [artist]);
@@ -1207,7 +1316,7 @@ export default function TrackUploadPanel() {
           <div className="bg-white/[0.03] rounded-xl p-5 border border-white/[0.06] space-y-3">
             <h3 className="text-sm font-semibold text-white">What are you releasing?</h3>
             <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
-              {['single', 'ep', 'album', 'mixtape', 'live', 'compilation'].map(type => (
+              {['single', 'beat', 'ep', 'album', 'mixtape', 'live', 'compilation'].map(type => (
                 <button key={type} type="button"
                   onClick={() => {
                     setRelease({ ...release, release_type: type });
@@ -1456,13 +1565,35 @@ export default function TrackUploadPanel() {
                 </div>
               </div>
 
-              {!isAlbumRelease && (
-                <TierGate feature="download_sales" inline>
-                  <YoutubeField
-                    value={trackForm.youtube_url}
-                    onChange={(val) => setTrackForm({ ...trackForm, youtube_url: val })}
+              {isBeat ? (
+                /* ── Beat-specific fields ── */
+                <div className="space-y-4">
+                  <BeatMetaFields trackForm={trackForm} setTrackForm={setTrackForm} />
+                  <BeatLicenceSelector
+                    selectedId={beatLicence}
+                    price={beatPrice}
+                    onSelectLicence={id => {
+                      setBeatLicence(id);
+                      setTrackForm({ ...trackForm, beat_licence: id,
+                        is_downloadable: true,
+                        download_price: id === 'free' ? '0' : beatPrice,
+                      });
+                    }}
+                    onPriceChange={val => {
+                      setBeatPrice(val);
+                      setTrackForm({ ...trackForm, download_price: val });
+                    }}
                   />
-                </TierGate>
+                </div>
+              ) : (
+                !isAlbumRelease && (
+                  <TierGate feature="download_sales" inline>
+                    <YoutubeField
+                      value={trackForm.youtube_url}
+                      onChange={(val) => setTrackForm({ ...trackForm, youtube_url: val })}
+                    />
+                  </TierGate>
+                )
               )}
 
               <div className="flex flex-wrap gap-4">
@@ -1536,7 +1667,8 @@ export default function TrackUploadPanel() {
                 <span>
                   {converting ? `Converting… ${convProgress}%`
                     : uploading ? 'Uploading…'
-                    : isAlbumRelease
+                    : isBeat ? 'Upload Beat'
+                      : isAlbumRelease
                       ? albumTrackQueue.length === 0
                         ? `Create ${release.release_type.toUpperCase()} & Add Track`
                         : 'Add Track'
