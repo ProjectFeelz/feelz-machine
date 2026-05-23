@@ -1068,6 +1068,7 @@ export default function ArtistProfilePage() {
   };
 
   const handlePlayTrack = (track) => {
+    window.__feelz_play_source = 'artist_profile';
     if (currentTrack?.id === track.id) { togglePlay(); return; }
     playTrack(
       { ...track, artist_name: artist.artist_name, artist_slug: artist.slug },

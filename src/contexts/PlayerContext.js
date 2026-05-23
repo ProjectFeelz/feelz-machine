@@ -12,7 +12,7 @@ function preloadCover(track) {
 
 const PlayerContext = createContext({});
 
-function PlayerProviderInner({ children, value, isPlaying, togglePlay, playNext, playPrev, currentTrack, seek, currentTime, duration }) {
+function PlayerProviderInner({ children, value, isPlaying, togglePlay, playNext, playPrev, currentTrack }) {
   useMediaSession({ currentTrack, isPlaying, togglePlay, playNext, playPrev, seek, currentTime, duration });
   return <PlayerContext.Provider value={value}>{children}</PlayerContext.Provider>;
 }
@@ -249,6 +249,7 @@ export function PlayerProvider({ children }) {
         completed: true,
         platform: 'web',
         device_type: /Mobi|Android/i.test(navigator.userAgent) ? 'mobile' : 'desktop',
+        source: window.__feelz_play_source || 'unknown',
       });
 
       // 3. Increment stream_count on the track (atomic — avoids race conditions)
@@ -460,9 +461,6 @@ export function PlayerProvider({ children }) {
       togglePlay={togglePlay}
       playNext={playNext}
       playPrev={playPrev}
-      seek={seek}
-      currentTime={currentTime}
-      duration={duration}
     >
       {children}
     </PlayerProviderInner>

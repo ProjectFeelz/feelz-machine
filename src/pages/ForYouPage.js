@@ -1060,6 +1060,7 @@ export default function ForYouPage() {
     if (idx === lastPlayedIdx.current) return;   // already played this idx
     lastPlayedIdx.current = idx;
     if (item.file_url && !item.youtube_url) {
+      window.__feelz_play_source = 'for_you';
       playTrack(item, filteredTracks.filter(t => t?.file_url && !t?.youtube_url), filteredTracks.filter(t => t?.file_url && !t?.youtube_url).findIndex(t => t.id === item.id));
       setIsMinimized(true); // keep player hidden while on feed
     }

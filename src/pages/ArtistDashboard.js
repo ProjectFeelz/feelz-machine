@@ -107,7 +107,7 @@ export default function ArtistDashboard() {
   const [trackStreams, setTrackStreams]    = useState([]);
   const [trackLikes, setTrackLikes]       = useState([]);
   const [trackAnalyticsLoading, setTrackAnalyticsLoading] = useState(false);
-  const [demographics, setDemographics]   = useState({ totalStreams: 0, uniqueListeners: 0, repeatRate: 0 });
+  const [demographics, setDemographics]   = useState({ totalStreams: 0, uniqueListeners: 0, repeatRate: 0, completionRate: 0, avgDuration: 0, devices: [], sources: [] });
   const [memos, setMemos] = useState([]);
 
   const fetchMemos = useCallback(async () => {
@@ -249,17 +249,27 @@ export default function ArtistDashboard() {
       setTrackStreams(Object.entries(streamMap).map(([date, streams]) => ({ date, streams })));
       setTrackLikes(Object.entries(likeMap).map(([date, likes]) => ({ date, likes })));
 
-      // Unique listeners vs repeat streams — only uses columns that exist
+      // Full analytics
       const { data: demoData } = await supabase
-        .from('streams').select('user_id')
+        .from('streams').select('user_id, device_type, completed, duration_played, source')
         .eq('track_id', trackId).gte('created_at', since).limit(5000);
       if (demoData?.length) {
         const total = demoData.length;
         const unique = new Set(demoData.map(s => s.user_id).filter(Boolean)).size;
         const repeatRate = total > 0 ? Math.round(((total - unique) / total) * 100) : 0;
-        setDemographics({ totalStreams: total, uniqueListeners: unique, repeatRate });
+        const completionRate = total > 0 ? Math.round((demoData.filter(s => s.completed).length / total) * 100) : 0;
+        const durations = demoData.map(s => s.duration_played || 0).filter(d => d > 0);
+        const avgDuration = durations.length > 0 ? Math.round(durations.reduce((a,b) => a+b,0) / durations.length) : 0;
+        const dc = {}, sc = {};
+        demoData.forEach(s => {
+          const d = s.device_type || 'unknown'; dc[d] = (dc[d]||0)+1;
+          const src = s.source || 'unknown'; sc[src] = (sc[src]||0)+1;
+        });
+        const devices = Object.entries(dc).map(([name,count]) => ({ name: name.charAt(0).toUpperCase()+name.slice(1), count, pct: Math.round((count/total)*100) })).sort((a,b)=>b.count-a.count);
+        const sources = Object.entries(sc).map(([name,count]) => ({ name: name.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase()), count, pct: Math.round((count/total)*100) })).sort((a,b)=>b.count-a.count);
+        setDemographics({ totalStreams: total, uniqueListeners: unique, repeatRate, completionRate, avgDuration, devices, sources });
       } else {
-        setDemographics({ totalStreams: 0, uniqueListeners: 0, repeatRate: 0 });
+        setDemographics({ totalStreams: 0, uniqueListeners: 0, repeatRate: 0, completionRate: 0, avgDuration: 0, devices: [], sources: [] });
       }
     } catch {}
     setTrackAnalyticsLoading(false);
@@ -444,21 +454,74 @@ export default function ArtistDashboard() {
                             </ResponsiveContainer>
                           </div>
 
-                          {/* Listener stats — only uses columns that actually exist in streams table */}
+                          {/* Rich listener analytics */}
                           {demographics.totalStreams > 0 && (
-                            <div className="grid grid-cols-3 gap-2">
-                              <div className="bg-white/[0.03] rounded-xl p-3 border border-white/[0.05] text-center">
-                                <p className="text-xl font-black text-white">{demographics.totalStreams}</p>
-                                <p className="text-[10px] text-white/30 mt-0.5">streams</p>
+                            <div className="space-y-3">
+                              {/* Top stats row */}
+                              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                                {[
+                                  { label: 'Streams', value: demographics.totalStreams, color: 'text-white' },
+                                  { label: 'Unique Listeners', value: demographics.uniqueListeners, color: 'text-purple-400' },
+                                  { label: 'Completion Rate', value: `${demographics.completionRate}%`, color: 'text-green-400' },
+                                  { label: 'Avg Listen', value: demographics.avgDuration > 0 ? `${Math.floor(demographics.avgDuration/60)}:${String(demographics.avgDuration%60).padStart(2,'0')}` : '—', color: 'text-blue-400' },
+                                ].map(s => (
+                                  <div key={s.label} className="bg-white/[0.03] rounded-xl p-3 border border-white/[0.05] text-center">
+                                    <p className={`text-lg font-black ${s.color}`}>{s.value}</p>
+                                    <p className="text-[10px] text-white/30 mt-0.5">{s.label}</p>
+                                  </div>
+                                ))}
                               </div>
-                              <div className="bg-white/[0.03] rounded-xl p-3 border border-white/[0.05] text-center">
-                                <p className="text-xl font-black text-purple-400">{demographics.uniqueListeners}</p>
-                                <p className="text-[10px] text-white/30 mt-0.5">unique listeners</p>
+
+                              {/* Repeat rate bar */}
+                              <div className="bg-white/[0.03] rounded-xl p-3 border border-white/[0.05]">
+                                <div className="flex justify-between text-xs mb-1.5">
+                                  <span className="text-white/40">Repeat listener rate</span>
+                                  <span className="text-pink-400 font-bold">{demographics.repeatRate}%</span>
+                                </div>
+                                <div className="h-1.5 bg-white/[0.06] rounded-full overflow-hidden">
+                                  <div className="h-full rounded-full bg-pink-400 transition-all" style={{ width: `${demographics.repeatRate}%` }} />
+                                </div>
                               </div>
-                              <div className="bg-white/[0.03] rounded-xl p-3 border border-white/[0.05] text-center">
-                                <p className="text-xl font-black text-pink-400">{demographics.repeatRate}%</p>
-                                <p className="text-[10px] text-white/30 mt-0.5">repeat rate</p>
-                              </div>
+
+                              {/* Device breakdown */}
+                              {demographics.devices?.length > 0 && (
+                                <div className="bg-white/[0.03] rounded-xl p-3 border border-white/[0.05]">
+                                  <p className="text-[10px] text-white/30 uppercase tracking-wider font-semibold mb-2">Devices</p>
+                                  <div className="space-y-2">
+                                    {demographics.devices.map(d => (
+                                      <div key={d.name}>
+                                        <div className="flex justify-between text-xs mb-1">
+                                          <span className="text-white/60">{d.name}</span>
+                                          <span className="text-white/40">{d.pct}%</span>
+                                        </div>
+                                        <div className="h-1.5 bg-white/[0.06] rounded-full overflow-hidden">
+                                          <div className="h-full rounded-full bg-purple-400" style={{ width: `${d.pct}%` }} />
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Source breakdown */}
+                              {demographics.sources?.length > 0 && (
+                                <div className="bg-white/[0.03] rounded-xl p-3 border border-white/[0.05]">
+                                  <p className="text-[10px] text-white/30 uppercase tracking-wider font-semibold mb-2">Where people find your music</p>
+                                  <div className="space-y-2">
+                                    {demographics.sources.map(s => (
+                                      <div key={s.name}>
+                                        <div className="flex justify-between text-xs mb-1">
+                                          <span className="text-white/60">{s.name}</span>
+                                          <span className="text-white/40">{s.pct}%</span>
+                                        </div>
+                                        <div className="h-1.5 bg-white/[0.06] rounded-full overflow-hidden">
+                                          <div className="h-full rounded-full bg-blue-400" style={{ width: `${s.pct}%` }} />
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           )}
 
