@@ -9,6 +9,17 @@ export default function MobileNav() {
   const location        = useLocation();
   const { user, isBeatmaker, isArtist, isListener } = useAuth();
   const { tap }         = useHaptics();
+  const [keyboardOpen, setKeyboardOpen] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!window.visualViewport) return;
+    const update = () => {
+      const shrunk = window.innerHeight - window.visualViewport.height > 100;
+      setKeyboardOpen(shrunk);
+    };
+    window.visualViewport.addEventListener('resize', update);
+    return () => window.visualViewport.removeEventListener('resize', update);
+  }, []);
 
   const handleNav = (path) => {
     tap();
@@ -17,6 +28,7 @@ export default function MobileNav() {
   };
 
   if (location.pathname === '/login' || location.pathname === '/signup') return null;
+  if (keyboardOpen) return null;
 
   // Build nav items based on role
   const navItems = [

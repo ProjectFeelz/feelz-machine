@@ -238,6 +238,7 @@ function PriceDisplay({ tier, billingCycle, geoRate, geoInfo }) {
 export default function TierUpgradePage() {
   const navigate = useNavigate();
   const { user, artist, refreshProfile, isBeatmaker } = useAuth();
+  const [viewRole, setViewRole] = React.useState(isBeatmaker ? 'beatmaker' : 'artist');
 
   const [currentTier, setCurrentTier]   = useState(null);
   const [activeSubId, setActiveSubId]   = useState(null);
@@ -487,7 +488,7 @@ export default function TierUpgradePage() {
 
       {/* Tier cards */}
       <div className="px-6 space-y-4">
-        {Object.entries(isBeatmaker ? BEATMAKER_TIER_FEATURES : TIER_FEATURES).map(([slug, tier]) => {
+        {Object.entries(viewRole === 'beatmaker' ? BEATMAKER_TIER_FEATURES : TIER_FEATURES).map(([slug, tier]) => {
           const isCurrent = currentTier === slug;
           const isDowngrade = (currentTier === 'premium' && slug !== 'premium') ||
                               (currentTier === 'pro' && slug === 'free');

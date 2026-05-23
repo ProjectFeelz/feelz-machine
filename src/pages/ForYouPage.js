@@ -31,7 +31,29 @@ const PRELOAD_AHEAD   = 2;
 const PAGE_SIZE       = 20;
 
 // ── Comment sheet ─────────────────────────────────────────────────────────────
+
+// ── Keyboard-aware bottom offset ─────────────────────────────────────────────
+// Works on both iOS (visual viewport) and Android (resize event)
+function useKeyboardOffset() {
+  const [offset, setOffset] = React.useState(0);
+  React.useEffect(() => {
+    if (!window.visualViewport) return;
+    const update = () => {
+      const keyboardHeight = window.innerHeight - window.visualViewport.height - window.visualViewport.offsetTop;
+      setOffset(Math.max(0, keyboardHeight));
+    };
+    window.visualViewport.addEventListener('resize', update);
+    window.visualViewport.addEventListener('scroll', update);
+    return () => {
+      window.visualViewport.removeEventListener('resize', update);
+      window.visualViewport.removeEventListener('scroll', update);
+    };
+  }, []);
+  return offset;
+}
+
 function CommentSheet({ track, user, onClose }) {
+  const keyboardOffset = useKeyboardOffset();
   const [comments, setComments] = useState([]);
   const [text, setText]         = useState('');
   const [posting, setPosting]   = useState(false);
@@ -84,7 +106,7 @@ function CommentSheet({ track, user, onClose }) {
   };
 
   return (
-    <div className="flex flex-col w-full" style={{ maxHeight: '70vh' }}
+    <div className="flex flex-col w-full" style={{ maxHeight: '70vh', position: 'relative' }}
       onClick={e => e.stopPropagation()}>
       <div className="flex justify-between items-center px-5 py-4 flex-shrink-0 border-b border-white/[0.06]">
         <p className="text-sm font-bold text-white">Comments</p>
@@ -114,8 +136,8 @@ function CommentSheet({ track, user, onClose }) {
         ))}
       </div>
       <div
-        className="flex items-center space-x-3 px-4 py-3 border-t border-white/[0.06] flex-shrink-0"
-        style={{ paddingBottom: 'max(12px, env(safe-area-inset-bottom))' }}
+        className="flex items-center space-x-3 px-4 py-3 border-t border-white/[0.06] flex-shrink-0 sticky bottom-0 bg-black"
+        style={{ paddingBottom: 'max(12px, env(safe-area-inset-bottom))'  }}
       >
         <input
           ref={inputRef} value={text} onChange={e => setText(e.target.value)}
@@ -445,7 +467,7 @@ function StoryFeedCard({ item, isActive, onOpen, navigate }) {
 }
 
 // ── Single card ───────────────────────────────────────────────────────────────
-function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare }) {
+function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare, onNext, queue, queueIndex }) {
   const { currentTrack, isPlaying, currentTime, setIsMinimized } = usePlayer();
   const { artist: myArtist } = useAuth();
   const isOwnTrack = myArtist?.id === track.artist_id;
@@ -585,9 +607,9 @@ function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare }) {
             <video
               src={track.youtube_url}
               autoPlay
-              loop
               playsInline
               muted
+              onEnded={isActive ? onNext : undefined}
               style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover' }}
             />
           ) : isYouTube ? (
@@ -596,8 +618,8 @@ function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare }) {
               url={track.youtube_url}
               playing={isActive}
               muted
-              loop
               playsinline
+              onEnded={isActive ? onNext : undefined}
               width="100%"
               height="100%"
               style={{ position: 'absolute', top: 0, left: 0 }}
@@ -795,14 +817,34 @@ export default function ForYouPage() {
   }, []);
 
 
-  const [tracks, setTracks]           = useState([]);
+  const [tracks, setTracks]           = useState(() => {
+    try {
+      const cached = sessionStorage.getItem('foryou_tracks');
+      return cached ? JSON.parse(cached) : [];
+    } catch { return []; }
+  });
   const [feedFilter, setFeedFilter]   = useState(isBeatmaker ? 'beats' : 'all');
-  const [idx, setIdx]                 = useState(0);
+  const [idx, setIdx]                 = useState(() => {
+    try { return parseInt(sessionStorage.getItem('foryou_idx') || '0', 10); } catch { return 0; }
+  });
   const [loading, setLoading]         = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [viewingStory, setViewingStory] = useState(null); // { artist, stories }
   const [activeSheet, setActiveSheet]   = useState(null); // { type, track }
   const [shareCard, setShareCard]         = useState(null);  // { artist, url }
+
+  // When PlayerContext advances to next track (track ended), sync idx
+  const { currentTrack } = usePlayer();
+  useEffect(() => {
+    if (!currentTrack || !filteredTracks.length) return;
+    const newIdx = filteredTracks.findIndex(t => t.id === currentTrack.id);
+    if (newIdx > -1 && newIdx !== idx) setIdx(newIdx);
+  }, [currentTrack?.id]); // eslint-disable-line
+
+  // Persist idx so returning to page resumes where you were
+  useEffect(() => {
+    try { sessionStorage.setItem('foryou_idx', String(idx)); } catch {}
+  }, [idx]);
 
   const filteredTracks = feedFilter === 'music' ? tracks.filter(t => !t.is_beat)
     : feedFilter === 'beats' ? tracks.filter(t => t.is_beat)
@@ -930,7 +972,12 @@ export default function ForYouPage() {
       }
 
       if (offset === 0 && fetched.length > 0) fetched[0]._isFirst = true;
-      setTracks(prev => offset === 0 ? fetched : [...prev, ...fetched]);
+      if (offset === 0) {
+        setTracks(fetched);
+        try { sessionStorage.setItem('foryou_tracks', JSON.stringify(fetched.slice(0, 20))); } catch {}
+      } else {
+        setTracks(prev => [...prev, ...fetched]);
+      }
     } catch (err) {
       console.error('ForYou load error:', err);
     }
@@ -964,7 +1011,7 @@ export default function ForYouPage() {
     if (idx === lastPlayedIdx.current) return;   // already played this idx
     lastPlayedIdx.current = idx;
     if (item.file_url && !item.youtube_url) {
-      playTrack(item, [item]);
+      playTrack(item, filteredTracks.filter(t => t?.file_url && !t?.youtube_url), filteredTracks.filter(t => t?.file_url && !t?.youtube_url).findIndex(t => t.id === item.id));
       setIsMinimized(true); // keep player hidden while on feed
     }
   }, [idx, tracks]); // eslint-disable-line
@@ -1137,7 +1184,7 @@ export default function ForYouPage() {
         style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,0.5), transparent)' }} />
 
       {/* Feed filter tabs */}
-      <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30 flex space-x-1 rounded-full p-0.5"
+      <div className="absolute top-16 left-1/2 -translate-x-1/2 z-30 flex space-x-1 rounded-full p-0.5"
         style={{ background: 'rgba(255,255,255,0.08)', backdropFilter: 'blur(10px)' }}>
         {[
           { id: 'all',    label: 'All' },
@@ -1181,14 +1228,13 @@ export default function ForYouPage() {
 
       {/* Comment sheet — fixed overlay, unaffected by keyboard */}
       {activeSheet?.type === 'comments' && (
-        <div className="fixed inset-0 z-[800] flex items-end"
-          style={{ background: 'rgba(0,0,0,0.5)' }}
+        <div key={activeSheet?.track?.id} className="fixed inset-x-0 z-[800] flex items-end"
+          style={{ background: 'rgba(0,0,0,0.5)', top: 0, bottom: 0 }}
           onClick={() => setActiveSheet(null)}>
           <div className="w-full" onClick={e => e.stopPropagation()}
             style={{ maxHeight: '70vh', display: 'flex', flexDirection: 'column',
                      background: 'rgba(10,10,10,0.98)', borderTop: '1px solid rgba(255,255,255,0.08)',
-                     borderRadius: '24px 24px 0 0',
-                     paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
+                     borderRadius: '24px 24px 0 0' }}>
             <CommentSheet track={activeSheet.track} user={user} onClose={() => setActiveSheet(null)} />
           </div>
         </div>
@@ -1230,4 +1276,3 @@ export default function ForYouPage() {
     </div>
   );
 }
-// updated

@@ -601,7 +601,7 @@ export default function ArtistProfilePage() {
       // Fetch artist's own playlists + collaborative playlists
       const [{ data: ownPlaylists }, { data: collabPlaylists }] = await Promise.all([
         supabase.from('playlists')
-          .select('id, name, cover_url, user_id, created_at, is_shared')
+          .select('id, name, cover_url, user_id, created_at, is_shared, playlist_tracks(id, position, tracks(cover_artwork_url))')
           .eq('user_id', artistData.user_id)
           .order('created_at', { ascending: false })
           .limit(10),
@@ -1881,12 +1881,15 @@ export default function ArtistProfilePage() {
               <div key={pl.id} className="flex-shrink-0 w-36 cursor-pointer group"
                 onClick={() => navigate(`/library/playlists/${pl.id}`)}>
                 <div className="aspect-square rounded-xl overflow-hidden mb-2" style={{ backgroundColor: `${textColor}08` }}>
-                  {pl.cover_url
-                    ? <img src={pl.cover_url} alt={pl.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
-                    : <div className="w-full h-full flex items-center justify-center" style={{ background: `linear-gradient(135deg, ${secondaryColor}40, ${accentColor}20)` }}>
-                        <Music className="w-8 h-8" style={{ color: `${textColor}20` }} />
-                      </div>
-                  }
+                  {(() => {
+                      const auto = pl.playlist_tracks?.find(pt => pt.tracks?.cover_artwork_url)?.tracks?.cover_artwork_url;
+                      const src = pl.cover_url || auto;
+                      return src
+                        ? <img src={src} alt={pl.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                        : <div className="w-full h-full flex items-center justify-center" style={{ background: `linear-gradient(135deg, ${secondaryColor}40, ${accentColor}20)` }}>
+                            <Music className="w-8 h-8" style={{ color: `${textColor}20` }} />
+                          </div>;
+                    })()}
                 </div>
                 <p className="text-sm font-medium truncate" style={{ color: textColor }}>{pl.name}</p>
                 <p className="text-xs truncate" style={{ color: `${textColor}50` }}>{pl.user_id !== artist?.user_id ? '👥 Collab' : 'Playlist'}</p>

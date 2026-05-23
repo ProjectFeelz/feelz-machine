@@ -87,6 +87,52 @@ const TIERS = [
   },
 ];
 
+const BEATMAKER_TIERS = [
+  {
+    key: 'free', name: 'Free', icon: Star, color: '#737373', price: null,
+    features: [
+      { text: 'Upload up to 3 beats',          included: true },
+      { text: 'Basic producer profile',         included: true },
+      { text: 'Free & Basic Lease licences',    included: true },
+      { text: 'Beat discovery in feed',         included: true },
+      { text: 'Stem uploads',                   included: false },
+      { text: 'Beat analytics',                 included: false },
+      { text: 'Premium & Unlimited Lease',      included: false },
+      { text: 'Exclusive licence tier',         included: false },
+      { text: 'Collaboration & splits',         included: false },
+    ],
+  },
+  {
+    key: 'pro', name: 'Pro', icon: Zap, color: '#8B5CF6', popular: true,
+    features: [
+      { text: 'Upload up to 20 beats',          included: true },
+      { text: 'Full producer profile',          included: true },
+      { text: 'All licences except Exclusive',  included: true },
+      { text: 'Stem uploads',                   included: true },
+      { text: 'Beat analytics dashboard',       included: true },
+      { text: 'Collaboration & revenue splits', included: true },
+      { text: 'Custom theme & branding',        included: true },
+      { text: 'Competition entry',              included: true },
+      { text: 'Exclusive licence tier',         included: false },
+      { text: 'Priority in beats feed',         included: false },
+    ],
+  },
+  {
+    key: 'premium', name: 'Premium', icon: Crown, color: '#F59E0B',
+    features: [
+      { text: 'Unlimited beat uploads',         included: true },
+      { text: 'All 5 licences incl. Exclusive', included: true },
+      { text: 'Stem uploads',                   included: true },
+      { text: 'Advanced analytics & CSV export',included: true },
+      { text: 'Collaboration & revenue splits', included: true },
+      { text: 'Priority placement in feed',     included: true },
+      { text: 'Featured beat placement',        included: true },
+      { text: 'Custom theme & branding',        included: true },
+      { text: 'Merch store integration',        included: true },
+    ],
+  },
+];
+
 function TierCard({ tier, symbol, rate, billingCycle = 'monthly' }) {
   const [expanded, setExpanded] = useState(false);
   const Icon = tier.icon;
@@ -161,7 +207,7 @@ function TierCard({ tier, symbol, rate, billingCycle = 'monthly' }) {
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function LoginPage() {
-  const { signInWithGoogle, signInWithEmail, signUpWithEmail, user } = useAuth();
+  const { signInWithGoogle, signInWithEmail, signUpWithEmail, signInWithMagicLink, user } = useAuth();
   const navigate      = useNavigate();
   const [searchParams] = useSearchParams();
 
@@ -169,17 +215,17 @@ export default function LoginPage() {
 
   const [authMode, setAuthMode]         = useState('signin'); // 'signin' | 'signup'
   const [email, setEmail]               = useState('');
-  const [password, setPassword]         = useState('');
-  const [showPassword, setShowPassword] = useState(false);
   const [ageConfirmed, setAgeConfirmed] = useState(false);
   const [error, setError]               = useState('');
   const [loading, setLoading]           = useState(false);
   const [success, setSuccess]           = useState('');
+  const [magicSent, setMagicSent]       = useState(false);
 
   // Currency detection
   const [symbol,       setSymbol]       = useState('$');
   const [rate,         setRate]         = useState(1);
   const [billingCycle, setBillingCycle] = useState('monthly');
+  const [pricingRole, setPricingRole]   = useState('artist'); // 'artist' | 'beatmaker'
 
   useEffect(() => {
     if (user) navigate(redirectTo || '/', { replace: true });
@@ -203,21 +249,14 @@ export default function LoginPage() {
     } catch (err) { setError(err.message); setLoading(false); }
   };
 
-  const handleEmail = async (e) => {
+  const handleMagicLink = async (e) => {
     e.preventDefault();
     if (!ageConfirmed) { setError('Please confirm you are 13 or older.'); return; }
-    if (!email.trim() || !password) { setError('Please enter your email and password.'); return; }
-    if (authMode === 'signup' && password.length < 6) { setError('Password must be at least 6 characters.'); return; }
+    if (!email.trim()) { setError('Please enter your email address.'); return; }
     setLoading(true); setError('');
     try {
-      if (authMode === 'signin') {
-        await signInWithEmail(email.trim(), password);
-      } else {
-        await signUpWithEmail(email.trim(), password);
-        setSuccess('Account created! Check your inbox for a confirmation email — if you don\'t see it, check your spam or junk folder.');
-        setAuthMode('signin');
-        setPassword('');
-      }
+      await signInWithMagicLink(email.trim());
+      setMagicSent(true);
     } catch (err) {
       setError(err.message?.replace('AuthApiError: ', '') || 'Something went wrong.');
     }
@@ -243,108 +282,119 @@ export default function LoginPage() {
         {/* ── Auth section ─────────────────────────────────────────────────── */}
         <div className="bg-white/[0.02] border border-white/[0.07] rounded-2xl p-5">
 
-          {/* Sign in / Sign up tabs */}
-          <div className="flex bg-white/[0.05] rounded-xl p-1 mb-5">
-            {['signin', 'signup'].map(mode => (
-              <button key={mode} onClick={() => { setAuthMode(mode); setError(''); setSuccess(''); }}
-                className={`flex-1 py-2 rounded-lg text-sm font-semibold transition ${
-                  authMode === mode ? 'bg-white text-black' : 'text-white/40 hover:text-white/60'
-                }`}>
-                {mode === 'signin' ? 'Sign In' : 'Create Account'}
-              </button>
-            ))}
-          </div>
-
           {error && (
             <div className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-xs">
               {error}
             </div>
           )}
-          {success && (
-            <div className="mb-4 p-3 rounded-lg bg-green-500/10 border border-green-500/20 text-green-400 text-xs">
-              {success}
-            </div>
-          )}
 
-          {/* Email/password form */}
-          <form onSubmit={handleEmail} className="space-y-3 mb-4">
-            <div className="relative">
-              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/25" />
-              <input
-                type="email" value={email} onChange={e => setEmail(e.target.value)}
-                placeholder="Email address" autoComplete="email"
-                className="w-full pl-10 pr-4 py-3 bg-white/[0.06] rounded-xl text-sm text-white placeholder-white/25 outline-none border border-white/[0.06] focus:border-white/20 transition"
-              />
-            </div>
-            <div className="relative">
-              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/25" />
-              <input
-                type={showPassword ? 'text' : 'password'} value={password}
-                onChange={e => setPassword(e.target.value)}
-                placeholder={authMode === 'signup' ? 'Create a password (min 6 chars)' : 'Password'}
-                autoComplete={authMode === 'signup' ? 'new-password' : 'current-password'}
-                className="w-full pl-10 pr-10 py-3 bg-white/[0.06] rounded-xl text-sm text-white placeholder-white/25 outline-none border border-white/[0.06] focus:border-white/20 transition"
-              />
-              <button type="button" onClick={() => setShowPassword(p => !p)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-white/25 hover:text-white/50 transition">
-                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              </button>
-            </div>
-
-            {/* Age confirmation */}
-            <label className="flex items-start space-x-2.5 cursor-pointer group">
-              <div className="relative flex-shrink-0 mt-0.5">
-                <input type="checkbox" checked={ageConfirmed}
-                  onChange={e => { setAgeConfirmed(e.target.checked); setError(''); }}
-                  className="sr-only" />
-                <div className={`w-4 h-4 rounded flex items-center justify-center border transition ${
-                  ageConfirmed ? 'bg-white border-white' : 'bg-transparent border-white/20 group-hover:border-white/40'
-                }`}>
-                  {ageConfirmed && (
-                    <svg className="w-2.5 h-2.5 text-black" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                    </svg>
-                  )}
-                </div>
+          {magicSent ? (
+            /* ── Magic link sent state ── */
+            <div className="text-center py-4 space-y-3">
+              <div className="w-16 h-16 rounded-full bg-purple-500/15 flex items-center justify-center mx-auto">
+                <Mail className="w-7 h-7 text-purple-400" />
               </div>
-              <span className="text-[11px] text-white/35 leading-relaxed group-hover:text-white/50 transition">
-                I confirm I am 13 years or older
-              </span>
-            </label>
+              <h3 className="text-base font-bold text-white">Check your email</h3>
+              <p className="text-sm text-white/50 leading-relaxed">
+                We sent a magic link to <span className="text-white/80 font-medium">{email}</span>.
+                Tap the link in the email to sign in — no password needed.
+              </p>
+              <p className="text-[11px] text-white/25">
+                Didn't get it? Check spam or{' '}
+                <button onClick={() => { setMagicSent(false); setError(''); }}
+                  className="text-purple-400 hover:text-purple-300 transition underline">
+                  try again
+                </button>
+              </p>
+            </div>
+          ) : (
+            <>
+              {/* Magic link form */}
+              <form onSubmit={handleMagicLink} className="space-y-3 mb-4">
+                <div>
+                  <p className="text-sm font-semibold text-white mb-1">Sign in or create account</p>
+                  <p className="text-xs text-white/35 mb-3">Enter your email — we'll send you a magic link. No password needed.</p>
+                </div>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/25" />
+                  <input
+                    type="email" value={email} onChange={e => setEmail(e.target.value)}
+                    placeholder="Email address" autoComplete="email"
+                    className="w-full pl-10 pr-4 py-3 bg-white/[0.06] rounded-xl text-sm text-white placeholder-white/25 outline-none border border-white/[0.06] focus:border-white/20 transition"
+                  />
+                </div>
 
-            <button type="submit" disabled={loading || !ageConfirmed}
-              className="w-full py-3 bg-white text-black rounded-xl text-sm font-bold disabled:opacity-40 transition active:scale-98 flex items-center justify-center space-x-2">
-              {loading ? <Loader className="w-4 h-4 animate-spin" /> : null}
-              <span>{authMode === 'signin' ? 'Sign In' : 'Create Account'}</span>
-            </button>
-          </form>
+                {/* Age confirmation */}
+                <label className="flex items-start space-x-2.5 cursor-pointer group">
+                  <div className="relative flex-shrink-0 mt-0.5">
+                    <input type="checkbox" checked={ageConfirmed}
+                      onChange={e => { setAgeConfirmed(e.target.checked); setError(''); }}
+                      className="sr-only" />
+                    <div className={`w-4 h-4 rounded flex items-center justify-center border transition ${
+                      ageConfirmed ? 'bg-white border-white' : 'bg-transparent border-white/20 group-hover:border-white/40'
+                    }`}>
+                      {ageConfirmed && (
+                        <svg className="w-2.5 h-2.5 text-black" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                        </svg>
+                      )}
+                    </div>
+                  </div>
+                  <span className="text-[11px] text-white/35 leading-relaxed group-hover:text-white/50 transition">
+                    I confirm I am 13 years or older
+                  </span>
+                </label>
 
-          {/* Divider */}
-          <div className="flex items-center space-x-3 mb-4">
-            <div className="flex-1 h-px bg-white/[0.07]" />
-            <span className="text-[11px] text-white/25">or</span>
-            <div className="flex-1 h-px bg-white/[0.07]" />
-          </div>
+                <button type="submit" disabled={loading || !ageConfirmed || !email.trim()}
+                  className="w-full py-3 bg-white text-black rounded-xl text-sm font-bold disabled:opacity-40 transition active:scale-98 flex items-center justify-center space-x-2">
+                  {loading ? <Loader className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
+                  <span>{loading ? 'Sending…' : 'Send Magic Link'}</span>
+                </button>
+              </form>
 
-          {/* Google */}
-          <button onClick={handleGoogle} disabled={loading || !ageConfirmed}
-            className="w-full py-3 bg-white/[0.05] border border-white/[0.08] text-white/70 rounded-xl text-sm font-semibold disabled:opacity-40 transition hover:bg-white/[0.08] active:scale-98 flex items-center justify-center space-x-3">
-            <svg className="w-4 h-4" viewBox="0 0 24 24">
-              <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-              <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-              <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
-              <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-            </svg>
-            <span>Continue with Google</span>
-          </button>
+              {/* Divider */}
+              <div className="flex items-center space-x-3 mb-4">
+                <div className="flex-1 h-px bg-white/[0.07]" />
+                <span className="text-[11px] text-white/25">or</span>
+                <div className="flex-1 h-px bg-white/[0.07]" />
+              </div>
+
+              {/* Google */}
+              <button onClick={handleGoogle} disabled={loading || !ageConfirmed}
+                className="w-full py-3 bg-white/[0.05] border border-white/[0.08] text-white/70 rounded-xl text-sm font-semibold disabled:opacity-40 transition hover:bg-white/[0.08] active:scale-98 flex items-center justify-center space-x-3">
+                <svg className="w-4 h-4" viewBox="0 0 24 24">
+                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                  <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+                </svg>
+                <span>Continue with Google</span>
+              </button>
+            </>
+          )}
         </div>
 
         {/* ── Pricing section ──────────────────────────────────────────────── */}
         <div className="mt-10">
-          <div className="flex items-center space-x-3 mb-6">
+          <div className="flex items-center space-x-3 mb-4">
             <div className="flex-1 h-px bg-white/[0.07]" />
-            <span className="text-xs text-white/25">Artist Plans</span>
+            <span className="text-xs text-white/25">Plans & Pricing</span>
             <div className="flex-1 h-px bg-white/[0.07]" />
+          </div>
+
+          {/* Role toggle */}
+          <div className="flex bg-white/[0.05] rounded-xl p-1 mb-4">
+            {[
+              { key: 'artist',    label: '🎤 Artist'    },
+              { key: 'beatmaker', label: '🎛️ Beat Maker' },
+            ].map(r => (
+              <button key={r.key} onClick={() => setPricingRole(r.key)}
+                className={`flex-1 py-2 rounded-lg text-xs font-semibold transition ${
+                  pricingRole === r.key ? 'bg-white text-black' : 'text-white/40 hover:text-white/60'
+                }`}>
+                {r.label}
+              </button>
+            ))}
           </div>
 
           {/* Billing toggle */}
@@ -366,12 +416,12 @@ export default function LoginPage() {
           </div>
 
           <div className="space-y-3">
-            {TIERS.map(tier => (
+            {(pricingRole === 'beatmaker' ? BEATMAKER_TIERS : TIERS).map(tier => (
               <TierCard key={tier.key} tier={tier} symbol={symbol} rate={rate} billingCycle={billingCycle} />
             ))}
           </div>
           <p className="text-center text-[11px] text-white/20 mt-4">
-            Listeners always sign up free · Artists choose their plan after joining
+            Listeners always sign up free · Choose your plan after joining
           </p>
         </div>
 

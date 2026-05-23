@@ -103,7 +103,7 @@ function PillSelect({ options, selected, onToggle, multi = false }) {
 export default function ProfilePage() {
   const nav = useNavigate();
   const {
-    user, profile, artist, isAdmin, isArtist, signOut, refreshProfile,
+    user, profile, artist, isAdmin, isArtist, isBeatmaker, signOut, refreshProfile,
     rawIsAdmin, rawIsArtist, rawIsMaster, viewAs, setViewAs, deleteAccount,
   } = useAuth();
   const { tierSlug } = useTier();
@@ -654,6 +654,51 @@ export default function ProfilePage() {
               </div>
               <div className="p-4 space-y-5">
 
+                {/* ── Creator Type — prominent at top ── */}
+                <div className="rounded-2xl border border-white/[0.08] overflow-hidden"
+                  style={{ background: 'rgba(255,255,255,0.03)' }}>
+                  <div className="px-4 py-3 border-b border-white/[0.05]">
+                    <p className="text-sm font-semibold text-white">I am a…</p>
+                    <p className="text-[10px] text-white/30 mt-0.5">Changes your nav, default feed and dashboard</p>
+                  </div>
+                  <div className="p-3 grid grid-cols-2 gap-2">
+                    {[
+                      { role: 'artist',    emoji: '🎤', label: 'Artist',    sub: 'Upload music & connect with fans' },
+                      { role: 'beatmaker', emoji: '🎛️', label: 'Beat Maker', sub: 'Sell beats, stems & licences' },
+                    ].map(({ role, emoji, label, sub }) => (
+                      <button key={role} type="button"
+                        onClick={async () => {
+                          await supabase.from('artists').update({ role }).eq('id', artist.id);
+                          await refreshProfile();
+                        }}
+                        className={`flex flex-col items-center py-3 px-2 rounded-xl text-center transition border ${
+                          (artist?.role || 'artist') === role
+                            ? 'bg-white text-black border-white'
+                            : 'bg-white/[0.04] text-white/50 border-white/[0.08] hover:bg-white/[0.08]'
+                        }`}>
+                        <div className="text-2xl mb-1">{emoji}</div>
+                        <p className="text-xs font-bold">{label}</p>
+                        <p className={`text-[10px] mt-0.5 ${(artist?.role || 'artist') === role ? 'text-black/50' : 'text-white/25'}`}>{sub}</p>
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Listen as Fan toggle */}
+                  <div className="px-4 pb-3 pt-1 border-t border-white/[0.05] flex items-center justify-between">
+                    <div>
+                      <p className="text-xs font-semibold text-white">Listen as Fan</p>
+                      <p className="text-[10px] text-white/30 mt-0.5">
+                        {viewAs === 'listener' ? 'Active — browsing as a listener' : 'Temporarily browse without creator tools'}
+                      </p>
+                    </div>
+                    <button type="button"
+                      onClick={() => setViewAs(viewAs === 'listener' ? null : 'listener')}
+                      className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ${viewAs === 'listener' ? 'bg-purple-500' : 'bg-white/10'}`}>
+                      <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform ${viewAs === 'listener' ? 'translate-x-7' : 'translate-x-1'}`} />
+                    </button>
+                  </div>
+                </div>
+
                 {/* Avatar */}
                 <div className="flex flex-col items-center space-y-3">
                   <div className="relative">
@@ -866,7 +911,8 @@ export default function ProfilePage() {
               { key: null,       label: 'Default'  },
               ...(rawIsAdmin  ? [{ key: 'admin',   label: 'Admin'   }] : []),
               ...(rawIsArtist ? [{ key: 'artist',  label: 'Artist'  }] : []),
-              { key: 'listener', label: 'Listener' },
+              { key: 'listener',  label: 'Listener'   },
+              { key: 'beatmaker', label: 'Beat Maker' },
             ].map(opt => (
               <button key={opt.key || 'default'} onClick={() => setViewAs(opt.key)}
                 className="px-3 py-1.5 rounded-lg text-xs font-medium transition"

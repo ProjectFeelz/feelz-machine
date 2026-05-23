@@ -127,6 +127,17 @@ export function AuthProvider({ children }) {
     if (error) throw error;
   };
 
+  const signInWithMagicLink = async (email) => {
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options: {
+        emailRedirectTo: `${window.location.origin}/setup`,
+        shouldCreateUser: true,
+      },
+    });
+    if (error) throw error;
+  };
+
   const signInWithEmail = async (email, password) => {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) throw error;
@@ -260,6 +271,7 @@ export function AuthProvider({ children }) {
     signInWithGoogle,
     signInWithEmail,
     signUpWithEmail,
+    signInWithMagicLink,
     signOut,
     refreshProfile,
     deleteAccount,
