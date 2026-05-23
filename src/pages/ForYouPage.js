@@ -855,16 +855,9 @@ export default function ForYouPage() {
   }, []);
 
 
-  const [tracks, setTracks]           = useState(() => {
-    try {
-      const cached = sessionStorage.getItem('foryou_tracks');
-      return cached ? JSON.parse(cached) : [];
-    } catch { return []; }
-  });
+  const [tracks, setTracks]           = useState([]);
   const [feedFilter, setFeedFilter]   = useState(isBeatmaker ? 'beats' : 'all');
-  const [idx, setIdx]                 = useState(() => {
-    try { return parseInt(sessionStorage.getItem('foryou_idx') || '0', 10); } catch { return 0; }
-  });
+  const [idx, setIdx]                 = useState(0);
   const [loading, setLoading]         = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [viewingStory, setViewingStory] = useState(null); // { artist, stories }
@@ -878,11 +871,6 @@ export default function ForYouPage() {
     const newIdx = filteredTracks.findIndex(t => t.id === currentTrack.id);
     if (newIdx > -1 && newIdx !== idx) setIdx(newIdx);
   }, [currentTrack?.id]); // eslint-disable-line
-
-  // Persist idx so returning to page resumes where you were
-  useEffect(() => {
-    try { sessionStorage.setItem('foryou_idx', String(idx)); } catch {}
-  }, [idx]);
 
   const filteredTracks = feedFilter === 'music' ? tracks.filter(t => !t.is_beat)
     : feedFilter === 'beats' ? tracks.filter(t => t.is_beat)
@@ -1010,12 +998,8 @@ export default function ForYouPage() {
       }
 
       if (offset === 0 && fetched.length > 0) fetched[0]._isFirst = true;
-      if (offset === 0) {
-        setTracks(fetched);
-        try { sessionStorage.setItem('foryou_tracks', JSON.stringify(fetched.slice(0, 20))); } catch {}
-      } else {
-        setTracks(prev => [...prev, ...fetched]);
-      }
+      if (offset === 0) setTracks(fetched);
+      else setTracks(prev => [...prev, ...fetched]);
     } catch (err) {
       console.error('ForYou load error:', err);
     }
@@ -1023,18 +1007,7 @@ export default function ForYouPage() {
     setLoadingMore(false);
   }, [user]);
 
-  useEffect(() => {
-    // If we already have cached tracks from sessionStorage, skip the initial fetch
-    // so navigating away and back doesn't reset the feed
-    try {
-      const cached = sessionStorage.getItem('foryou_tracks');
-      if (cached) {
-        const parsed = JSON.parse(cached);
-        if (parsed?.length > 0) return; // already restored from cache in useState init
-      }
-    } catch {}
-    loadTracks(0);
-  }, [loadTracks]);
+  useEffect(() => { loadTracks(0); }, [loadTracks]);
 
   useEffect(() => {
     if (idx >= tracks.length - 3 && !loadingMore && tracks.length > 0) loadTracks(tracks.length);
@@ -1283,7 +1256,7 @@ export default function ForYouPage() {
           onClick={() => setActiveSheet(null)}>
           <div className="w-full md:max-w-lg md:mb-6 md:rounded-2xl"
             onClick={e => e.stopPropagation()}
-            style={{ height: '70vh', display: 'flex', flexDirection: 'column',
+            style={{ maxHeight: 'calc(100vh - 80px)', height: '65vh', display: 'flex', flexDirection: 'column',
                      background: 'rgba(10,10,10,0.98)', borderTop: '1px solid rgba(255,255,255,0.08)',
                      borderRadius: '24px 24px 0 0' }}>
             <CommentSheet track={activeSheet.track} user={user} onClose={() => setActiveSheet(null)} />

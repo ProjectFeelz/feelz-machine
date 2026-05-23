@@ -54,13 +54,21 @@ export default function BeatDetailPage() {
     if (!slug) return;
     const load = async () => {
       setLoading(true);
-      const { data: t } = await supabase
+      let { data: t } = await supabase
         .from('tracks')
         .select('*, artists(id, artist_name, slug, profile_image_url, is_verified, total_streams, user_id)')
         .eq('slug', slug)
         .eq('is_beat', true)
-        .eq('is_published', true)
         .maybeSingle();
+      if (!t) {
+        const { data: t2 } = await supabase
+          .from('tracks')
+          .select('*, artists(id, artist_name, slug, profile_image_url, is_verified, total_streams, user_id)')
+          .eq('id', slug)
+          .eq('is_beat', true)
+          .maybeSingle();
+        t = t2;
+      }
 
       if (!t) { setLoading(false); return; }
       setTrack(t);

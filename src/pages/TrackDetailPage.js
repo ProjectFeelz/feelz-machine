@@ -49,12 +49,21 @@ export default function TrackDetailPage() {
     const load = async () => {
       setLoading(true);
       // Fetch by slug
-      const { data: t } = await supabase
+      // Try slug first, fall back to id
+      let { data: t } = await supabase
         .from('tracks')
         .select('*, artists(id, artist_name, slug, profile_image_url, is_verified, total_streams), albums(id, title, cover_artwork_url)')
         .eq('slug', slug)
-        .eq('is_published', true)
         .maybeSingle();
+      // If not found by slug, try by id (in case slug param is actually an id)
+      if (!t) {
+        const { data: t2 } = await supabase
+          .from('tracks')
+          .select('*, artists(id, artist_name, slug, profile_image_url, is_verified, total_streams), albums(id, title, cover_artwork_url)')
+          .eq('id', slug)
+          .maybeSingle();
+        t = t2;
+      }
 
       if (!t) { setLoading(false); return; }
       setTrack(t);
