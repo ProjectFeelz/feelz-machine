@@ -467,6 +467,22 @@ export default function TierUpgradePage() {
           )}
         </div>
 
+        {/* Role toggle — Artist / Beat Maker */}
+        <div className="flex items-center bg-white/[0.04] rounded-xl p-1 space-x-1 mb-3">
+          {[
+            { key: 'artist',    label: '🎤 Artist' },
+            { key: 'beatmaker', label: '🎛️ Beat Maker' },
+          ].map(r => (
+            <button key={r.key}
+              onClick={() => { setViewRole(r.key); setSelectedTier(null); }}
+              className={`flex-1 py-2 rounded-lg text-sm font-semibold transition ${
+                viewRole === r.key ? 'bg-white text-black' : 'text-white/40 hover:text-white/70'
+              }`}>
+              {r.label}
+            </button>
+          ))}
+        </div>
+
         {/* Billing cycle toggle */}
         <div className="flex items-center bg-white/[0.04] rounded-xl p-1 space-x-1">
           {['monthly', 'annual'].map(cycle => (

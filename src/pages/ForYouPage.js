@@ -910,7 +910,7 @@ export default function ForYouPage() {
       if (user) {
         const { data: recData } = await supabase
           .from('listener_recommendations')
-          .select('score, reason, tracks(id, title, genre, mood, cover_artwork_url, file_url, youtube_url, duration, lyrics, artist_id, artists(artist_name, slug, profile_image_url))')
+          .select('score, reason, tracks(id, title, slug, genre, mood, cover_artwork_url, file_url, youtube_url, duration, lyrics, artist_id, is_beat, stream_count, like_count, bpm, beat_key, beat_scale, download_price, engagement_score, artists(artist_name, slug, profile_image_url))')
           .eq('user_id', user.id)
           .order('score', { ascending: false })
           .range(offset, offset + PAGE_SIZE - 1);
@@ -933,15 +933,16 @@ export default function ForYouPage() {
         const existingIdsStr = existingIds.length > 0 ? `(${existingIds.join(',')})` : null;
 
         let recentQuery = supabase.from('tracks')
-          .select('id, title, genre, mood, cover_artwork_url, file_url, youtube_url, duration, lyrics, artist_id, artists(artist_name, slug, profile_image_url)')
+          .select('id, title, slug, genre, mood, cover_artwork_url, file_url, youtube_url, duration, lyrics, artist_id, is_beat, stream_count, like_count, bpm, beat_key, beat_scale, download_price, engagement_score, artists(artist_name, slug, profile_image_url)')
           .eq('is_published', true)
           .order('created_at', { ascending: false })
           .limit(halfPage);
         if (existingIdsStr) recentQuery = recentQuery.not('id', 'in', existingIdsStr);
 
         let topQuery = supabase.from('tracks')
-          .select('id, title, genre, mood, cover_artwork_url, file_url, youtube_url, duration, lyrics, artist_id, artists(artist_name, slug, profile_image_url)')
+          .select('id, title, slug, genre, mood, cover_artwork_url, file_url, youtube_url, duration, lyrics, artist_id, is_beat, stream_count, like_count, bpm, beat_key, beat_scale, download_price, engagement_score, artists(artist_name, slug, profile_image_url)')
           .eq('is_published', true)
+          .gt('engagement_score', 0)
           .order('engagement_score', { ascending: false })
           .limit(PAGE_SIZE - fetched.length);
 
