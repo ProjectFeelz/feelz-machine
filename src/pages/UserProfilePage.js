@@ -29,23 +29,16 @@ function FieldLabel({ children }) {
   );
 }
 
-// Multi-select pill grid
 function PillGrid({ options, selected = [], onToggle }) {
   return (
     <div className="flex flex-wrap gap-2">
       {options.map(opt => {
         const isSelected = selected.includes(opt);
         return (
-          <button
-            key={opt}
-            type="button"
-            onClick={() => onToggle(opt)}
+          <button key={opt} type="button" onClick={() => onToggle(opt)}
             className={`flex items-center space-x-1 px-3 py-1.5 rounded-full text-xs font-medium transition active:scale-95 ${
-              isSelected
-                ? 'bg-white text-black'
-                : 'bg-white/[0.06] text-white/50 hover:bg-white/[0.1] hover:text-white/70'
-            }`}
-          >
+              isSelected ? 'bg-white text-black' : 'bg-white/[0.06] text-white/50 hover:bg-white/[0.1] hover:text-white/70'
+            }`}>
             {isSelected && <Check className="w-3 h-3" strokeWidth={3} />}
             <span>{opt}</span>
           </button>
@@ -55,23 +48,16 @@ function PillGrid({ options, selected = [], onToggle }) {
   );
 }
 
-// Single-select pill grid (for mood)
 function SinglePillGrid({ options, selected, onToggle }) {
   return (
     <div className="flex flex-wrap gap-2">
       {options.map(opt => {
         const isSelected = selected === opt;
         return (
-          <button
-            key={opt}
-            type="button"
-            onClick={() => onToggle(opt)}
+          <button key={opt} type="button" onClick={() => onToggle(opt)}
             className={`flex items-center space-x-1 px-3 py-1.5 rounded-full text-xs font-medium transition active:scale-95 ${
-              isSelected
-                ? 'bg-white text-black'
-                : 'bg-white/[0.06] text-white/50 hover:bg-white/[0.1] hover:text-white/70'
-            }`}
-          >
+              isSelected ? 'bg-white text-black' : 'bg-white/[0.06] text-white/50 hover:bg-white/[0.1] hover:text-white/70'
+            }`}>
             {isSelected && <Check className="w-3 h-3" strokeWidth={3} />}
             <span>{opt}</span>
           </button>
@@ -88,7 +74,7 @@ export default function UserProfilePage() {
 
   const [displayName, setDisplayName]     = useState('');
   const [bio, setBio]                     = useState('');
-  const [genres, setGenres]               = useState([]); // multi-select array
+  const [genres, setGenres]               = useState([]);
   const [mood, setMood]                   = useState('');
   const [avatarUrl, setAvatarUrl]         = useState('');
   const [avatarFile, setAvatarFile]       = useState(null);
@@ -109,7 +95,6 @@ export default function UserProfilePage() {
       if (data) {
         setDisplayName(data.name || '');
         setBio(data.bio || '');
-        // Support both old single genre and new multi-genre
         const savedGenres = data.genre_preferences?.length
           ? data.genre_preferences
           : data.genre ? [data.genre] : [];
@@ -132,9 +117,7 @@ export default function UserProfilePage() {
   };
 
   const toggleGenre = (g) => {
-    setGenres(prev =>
-      prev.includes(g) ? prev.filter(x => x !== g) : [...prev, g]
-    );
+    setGenres(prev => prev.includes(g) ? prev.filter(x => x !== g) : [...prev, g]);
   };
 
   const handleSave = async () => {
@@ -145,27 +128,27 @@ export default function UserProfilePage() {
       let newAvatarUrl = avatarUrl;
       if (avatarFile) {
         const ext  = avatarFile.name.split('.').pop();
-        const path = `user-avatars/${user.id}.${ext}`;
+        const path = `user-avatars/${user.id}-${Date.now()}.${ext}`;
+        // Use artist-images bucket — open to all authenticated users
         const { error: uploadErr } = await supabase.storage
-          .from('feelz-samples')
+          .from('artist-images')
           .upload(path, avatarFile, { contentType: avatarFile.type, upsert: true });
         if (uploadErr) throw uploadErr;
-        const { data: urlData } = supabase.storage.from('feelz-samples').getPublicUrl(path);
+        const { data: urlData } = supabase.storage.from('artist-images').getPublicUrl(path);
         newAvatarUrl = urlData.publicUrl;
       }
 
-      // Always upsert — handles both new and existing profiles
       const { error: upsertErr } = await supabase
         .from('user_profiles')
         .upsert({
-          user_id:          user.id,
-          name:             displayName.trim() || user.email?.split('@')[0],
-          bio:              bio.trim() || null,
-          genre:            genres[0] || null,       // keep single genre for backwards compat
-          genre_preferences: genres,                 // new multi-genre array
-          mood:             mood || null,
-          avatar_url:       newAvatarUrl,
-          updated_at:       new Date().toISOString(),
+          user_id:           user.id,
+          name:              displayName.trim() || user.email?.split('@')[0],
+          bio:               bio.trim() || null,
+          genre:             genres[0] || null,
+          genre_preferences: genres,
+          mood:              mood || null,
+          avatar_url:        newAvatarUrl,
+          updated_at:        new Date().toISOString(),
         }, { onConflict: 'user_id' });
 
       if (upsertErr) throw upsertErr;
@@ -197,7 +180,6 @@ export default function UserProfilePage() {
     <div className="min-h-screen bg-black text-white">
       <div className="max-w-lg mx-auto px-4 py-6 pb-32">
 
-        {/* Header */}
         <div className="flex items-center space-x-3 mb-8">
           <button onClick={() => navigate(-1)}
             className="w-9 h-9 flex items-center justify-center rounded-full bg-white/[0.06] hover:bg-white/[0.1] transition">
@@ -233,8 +215,7 @@ export default function UserProfilePage() {
             {/* Display Name */}
             <div>
               <FieldLabel>Display Name</FieldLabel>
-              <input type="text" value={displayName}
-                onChange={e => setDisplayName(e.target.value)}
+              <input type="text" value={displayName} onChange={e => setDisplayName(e.target.value)}
                 placeholder="Your name" maxLength={50}
                 className="w-full px-4 py-3 bg-white/[0.06] rounded-xl text-white placeholder-white/20 outline-none focus:ring-1 focus:ring-white/20 transition text-sm" />
             </div>
@@ -249,38 +230,27 @@ export default function UserProfilePage() {
               <p className="text-right text-[10px] text-white/20 mt-1">{bio.length}/200</p>
             </div>
 
-            {/* Genre — multi select */}
+            {/* Genre */}
             <div>
               <FieldLabel>Favourite Genre{genres.length > 1 ? 's' : ''}</FieldLabel>
               <p className="text-xs text-white/25 mb-3">Select all that apply — used to personalise your recommendations</p>
-              <PillGrid
-                options={GENRES}
-                selected={genres}
-                onToggle={toggleGenre}
-              />
+              <PillGrid options={GENRES} selected={genres} onToggle={toggleGenre} />
               {genres.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => setGenres([])}
-                  className="mt-2 text-[10px] text-white/20 hover:text-white/40 transition"
-                >
+                <button type="button" onClick={() => setGenres([])}
+                  className="mt-2 text-[10px] text-white/20 hover:text-white/40 transition">
                   Clear all
                 </button>
               )}
             </div>
 
-            {/* Mood — single select */}
+            {/* Mood */}
             <div>
               <FieldLabel>Favourite Mood</FieldLabel>
               <p className="text-xs text-white/25 mb-3">Helps us find music that matches your vibe</p>
-              <SinglePillGrid
-                options={MOODS}
-                selected={mood}
-                onToggle={(m) => setMood(prev => prev === m ? '' : m)}
-              />
+              <SinglePillGrid options={MOODS} selected={mood} onToggle={(m) => setMood(prev => prev === m ? '' : m)} />
             </div>
 
-            {/* Email (read-only) */}
+            {/* Email */}
             <div>
               <FieldLabel>Email</FieldLabel>
               <div className="w-full px-4 py-3 bg-white/[0.03] rounded-xl text-white/30 text-sm border border-white/[0.04]">
@@ -288,14 +258,12 @@ export default function UserProfilePage() {
               </div>
             </div>
 
-            {/* Error */}
             {error && (
               <div className="px-4 py-3 bg-red-500/10 border border-red-500/20 rounded-xl">
                 <p className="text-red-400 text-sm">{error}</p>
               </div>
             )}
 
-            {/* Save */}
             <button onClick={handleSave} disabled={saving}
               className="w-full py-3.5 rounded-xl font-semibold text-sm transition disabled:opacity-50 flex items-center justify-center space-x-2"
               style={{ backgroundColor: saved ? '#16a34a' : '#fff', color: '#000' }}>

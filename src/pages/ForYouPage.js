@@ -61,6 +61,16 @@ function CommentSheet({ track, user, onClose }) {
   const inputRef                = useRef(null);
 
   useEffect(() => {
+    // Pre-fetch current user's profile for instant comment display
+    if (user?.id) {
+      Promise.all([
+        supabase.from('artists').select('user_id, artist_name, profile_image_url').eq('user_id', user.id).maybeSingle(),
+        supabase.from('user_profiles').select('user_id, name, avatar_url').eq('user_id', user.id).maybeSingle(),
+      ]).then(([{ data: a }, { data: p }]) => {
+        if (a) user.__artist = a;
+        if (p) user.__profile = p;
+      });
+    }
     supabase
       .from('track_comments')
       .select('id, content, created_at, user_id')
@@ -101,7 +111,13 @@ function CommentSheet({ track, user, onClose }) {
       .select('id, content, created_at, user_id')
       .single();
     if (data) {
-      setComments(prev => [data, ...prev]);
+      // Enrich with current user's profile so it displays immediately
+      const enriched = {
+        ...data,
+        artists: user?.__artist || null,
+        user_profiles: user?.__profile || null,
+      };
+      setComments(prev => [enriched, ...prev]);
       // Notify the track's artist (skip if commenting on own track)
       try {
         const { data: trackRow } = await supabase
@@ -153,11 +169,11 @@ function CommentSheet({ track, user, onClose }) {
             <div className="w-8 h-8 rounded-full bg-white/10 overflow-hidden flex-shrink-0 flex items-center justify-center">
               {(c.artists?.profile_image_url || c.user_profiles?.avatar_url)
                 ? <img src={c.artists?.profile_image_url || c.user_profiles?.avatar_url} alt="" className="w-full h-full object-cover" />
-                : <span className="text-xs text-white/30 font-bold">{(c.artists?.artist_name || c.user_profiles?.name || '?')[0]}</span>}
+                : <span className="text-xs text-white/30 font-bold">{(c.artists?.artist_name || c.user_profiles?.name || 'L')[0].toUpperCase()}</span>}
             </div>
             <div className="flex-1">
               <p className="text-[11px] font-semibold text-white/60 mb-0.5">
-                {c.artists?.artist_name || c.user_profiles?.name || 'Listener'}
+                {c.artists?.artist_name || c.user_profiles?.name || (c.user_id ? 'Listener' : 'Anonymous')}
               </p>
               <p className="text-sm text-white/90 leading-relaxed">{c.content}</p>
             </div>
