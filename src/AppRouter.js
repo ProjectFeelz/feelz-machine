@@ -39,6 +39,8 @@ import AdminBroadcast from './pages/AdminBroadcast';
 import RecentlyPlayedPage from './pages/RecentlyPlayedPage';
 import UserProfilePage from './pages/UserProfilePage';
 import AlbumDetailPage from './pages/AlbumDetailPage';
+import TrackDetailPage from './pages/TrackDetailPage';
+import BeatDetailPage from './pages/BeatDetailPage';
 import AdminUserBehaviorPage from './pages/AdminUserBehaviorPage';
 import { Helmet } from 'react-helmet-async';
 import TrackPage from './pages/TrackPage';
@@ -163,6 +165,8 @@ export default function AppRouter() {
                 <Route path="/hub" element={<HubPage />} />
                 <Route path="/about" element={<AboutPage />} />
                 <Route path="/album/:id" element={<AlbumDetailPage />} />
+                <Route path="/track/:slug" element={<TrackDetailPage />} />
+                <Route path="/beat/:slug" element={<BeatDetailPage />} />
                 <Route path="/artist/:slug" element={<ArtistProfilePage />} />
                 <Route path="/artist/:slug/merch" element={<MerchPage />} />
                 <Route path="/artist/:slug/merch/checkout" element={<MerchCheckoutPage />} />

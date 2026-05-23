@@ -3,17 +3,18 @@ import { supabase } from '../supabaseClient';
 import { useAuth } from './AuthContext';
 
 // Helper to create a notification from anywhere in the app
-export async function createNotification({ artistId, type, title, message, fromArtistId, trackId, collaborationId, metadata }) {
+export async function createNotification({ artistId, userId, type, title, message, fromArtistId, trackId, collaborationId, metadata }) {
   try {
     const { error } = await supabase.from('notifications').insert([{
-      artist_id: artistId,
+      artist_id:        artistId || null,
+      user_id:          userId || null,
       type,
       title,
-      message: message || null,
-      from_artist_id: fromArtistId || null,
-      track_id: trackId || null,
+      message:          message || null,
+      from_artist_id:   fromArtistId || null,
+      track_id:         trackId || null,
       collaboration_id: collaborationId || null,
-      metadata: metadata || {},
+      metadata:         metadata || {},
     }]);
     if (error) console.error('Create notification error:', error);
   } catch (err) {

@@ -100,14 +100,40 @@ function CommentSheet({ track, user, onClose }) {
       .insert({ track_id: track.id, user_id: user.id, content: text.trim() })
       .select('id, content, created_at, user_id')
       .single();
-    if (data) setComments(prev => [data, ...prev]);
+    if (data) {
+      setComments(prev => [data, ...prev]);
+      // Notify the track's artist (skip if commenting on own track)
+      try {
+        const { data: trackRow } = await supabase
+          .from('tracks').select('artist_id, title, artists(user_id)').eq('id', track.id).maybeSingle();
+        if (trackRow && trackRow.artists?.user_id !== user.id) {
+          const commenterName = (await supabase
+            .from('artists').select('artist_name').eq('user_id', user.id).maybeSingle()
+          ).data?.artist_name || 'Someone';
+          await supabase.from('notifications').insert({
+            user_id:        trackRow.artists.user_id,
+            artist_id:      trackRow.artist_id,
+            type:           'track_commented',
+            title:          `${commenterName} commented on "${trackRow.title}"`,
+            message:        text.trim().slice(0, 100),
+            track_id:       track.id,
+            from_artist_id: null,
+            metadata: {
+              track_id:     track.id,
+              track_title:  trackRow.title,
+              comment:      text.trim().slice(0, 100),
+              artist_slug:  null,
+            },
+          });
+        }
+      } catch {}
+    }
     setText('');
     setPosting(false);
   };
 
   return (
-    <div className="flex flex-col w-full" style={{ maxHeight: '70vh', position: 'relative' }}
-      onClick={e => e.stopPropagation()}>
+    <div className="flex flex-col w-full h-full" onClick={e => e.stopPropagation()}>
       <div className="flex justify-between items-center px-5 py-4 flex-shrink-0 border-b border-white/[0.06]">
         <p className="text-sm font-bold text-white">Comments</p>
         <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-full bg-white/[0.06]">
@@ -118,7 +144,10 @@ function CommentSheet({ track, user, onClose }) {
         {loading ? (
           <div className="flex justify-center py-8"><Loader className="w-5 h-5 animate-spin text-white/20" /></div>
         ) : comments.length === 0 ? (
-          <p className="text-center text-white/30 text-sm py-8">No comments yet. Be first.</p>
+          <div className="flex flex-col items-center py-8 space-y-2">
+            <p className="text-center text-white/30 text-sm">No comments yet — be first.</p>
+            <p className="text-[11px] text-white/15">Type below and tap send ↓</p>
+          </div>
         ) : comments.map(c => (
           <div key={c.id} className="flex items-start space-x-3">
             <div className="w-8 h-8 rounded-full bg-white/10 overflow-hidden flex-shrink-0 flex items-center justify-center">
@@ -253,7 +282,7 @@ function LyricsCaption({ lyrics, currentTime, isActive }) {
     const nextLine   = activeIdx >= 0 && activeIdx + 1 < lrcLines.length ? lrcLines[activeIdx + 1] : null;
     if (!activeLine?.text && !nextLine?.text) return null;
     return (
-      <div className="absolute bottom-44 left-0 right-0 z-20 pointer-events-none text-center px-8">
+      <div className="absolute bottom-64 left-0 right-0 z-20 pointer-events-none text-center px-8">
         {activeLine?.text && (
           <p key={activeIdx} className="text-center text-white text-base font-bold leading-snug mb-1 drop-shadow-lg"
             style={{ textShadow: '0 2px 8px rgba(0,0,0,0.9), 0 0 20px rgba(0,0,0,0.7)', animation: 'lyricFade 0.3s ease' }}>
@@ -279,7 +308,7 @@ function LyricsCaption({ lyrics, currentTime, isActive }) {
   const line = lines[lineIdx];
   if (!line) return null;
   return (
-    <div className="absolute bottom-44 left-0 right-0 z-20 pointer-events-none text-center px-8">
+    <div className="absolute bottom-64 left-0 right-0 z-20 pointer-events-none text-center px-8">
       <p key={lineIdx} className="text-center text-white text-base font-bold leading-snug drop-shadow-lg"
         style={{ textShadow: '0 2px 8px rgba(0,0,0,0.9), 0 0 20px rgba(0,0,0,0.7)', animation: 'lyricFade 0.3s ease' }}>
         {line}
@@ -714,6 +743,15 @@ function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare, onN
           </div>
           <span className="text-[11px] font-semibold text-white/80">Share</span>
         </button>
+
+        {/* Detail page */}
+        <button onClick={() => navigate(track.is_beat ? `/beat/${track.slug}` : `/track/${track.slug}`)}
+          className="flex flex-col items-center space-y-1">
+          <div className="w-11 h-11 flex items-center justify-center">
+            <Info className="w-6 h-6 text-white/90" strokeWidth={2} />
+          </div>
+          <span className="text-[11px] font-semibold text-white/80">{track.is_beat ? 'Buy' : 'Info'}</span>
+        </button>
       </div>
 
       {/* Bottom info */}
@@ -985,7 +1023,18 @@ export default function ForYouPage() {
     setLoadingMore(false);
   }, [user]);
 
-  useEffect(() => { loadTracks(0); }, [loadTracks]);
+  useEffect(() => {
+    // If we already have cached tracks from sessionStorage, skip the initial fetch
+    // so navigating away and back doesn't reset the feed
+    try {
+      const cached = sessionStorage.getItem('foryou_tracks');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed?.length > 0) return; // already restored from cache in useState init
+      }
+    } catch {}
+    loadTracks(0);
+  }, [loadTracks]);
 
   useEffect(() => {
     if (idx >= tracks.length - 3 && !loadingMore && tracks.length > 0) loadTracks(tracks.length);
@@ -1172,7 +1221,7 @@ export default function ForYouPage() {
                   navigate={navigate}
                 />
               ) : (
-                filteredTracks[i] ? <ForYouCard track={filteredTracks[i]} isActive={i === idx} user={user} navigate={navigate} onOpenSheet={setActiveSheet} onShare={setShareCard} /> : null
+                filteredTracks[i] ? <ForYouCard track={filteredTracks[i]} isActive={i === idx} user={user} navigate={navigate} onOpenSheet={setActiveSheet} onShare={setShareCard} onNext={() => setIdx(i + 1)} queue={filteredTracks} queueIndex={i} /> : null
               )}
             </div>
           );
@@ -1228,11 +1277,12 @@ export default function ForYouPage() {
 
       {/* Comment sheet — fixed overlay, unaffected by keyboard */}
       {activeSheet?.type === 'comments' && (
-        <div key={activeSheet?.track?.id} className="fixed inset-x-0 z-[800] flex items-end"
-          style={{ background: 'rgba(0,0,0,0.5)', top: 0, bottom: 0 }}
+        <div key={activeSheet?.track?.id} className="fixed inset-0 z-[800] flex items-end justify-center"
+          style={{ background: 'rgba(0,0,0,0.5)' }}
           onClick={() => setActiveSheet(null)}>
-          <div className="w-full" onClick={e => e.stopPropagation()}
-            style={{ maxHeight: '70vh', display: 'flex', flexDirection: 'column',
+          <div className="w-full md:max-w-lg md:mb-6 md:rounded-2xl"
+            onClick={e => e.stopPropagation()}
+            style={{ height: '70vh', display: 'flex', flexDirection: 'column',
                      background: 'rgba(10,10,10,0.98)', borderTop: '1px solid rgba(255,255,255,0.08)',
                      borderRadius: '24px 24px 0 0' }}>
             <CommentSheet track={activeSheet.track} user={user} onClose={() => setActiveSheet(null)} />

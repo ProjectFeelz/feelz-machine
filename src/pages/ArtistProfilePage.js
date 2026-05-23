@@ -1532,6 +1532,11 @@ export default function ArtistProfilePage() {
                       />
                     )}
                     {/* 3-dot menu — like and queue removed for cleaner mobile layout */}
+                    <button onClick={(e) => { e.stopPropagation(); navigate(track.is_beat ? `/beat/${track.slug}` : `/track/${track.slug}`); }}
+                      className="flex-shrink-0 p-1.5 rounded-lg transition-all active:scale-95"
+                      style={{ color: `${textColor}30` }} title={track.is_beat ? 'Buy Beat' : 'Track Info'}>
+                      <Info className="w-4 h-4" />
+                    </button>
                     <button onClick={(e) => { e.stopPropagation(); setActionSheetTrack(track); }}
                       className="flex-shrink-0 p-1.5 rounded-lg transition-all active:scale-95"
                       style={{ color: `${textColor}30` }} title="More">

@@ -107,7 +107,7 @@ export default function ArtistDashboard() {
   const [trackStreams, setTrackStreams]    = useState([]);
   const [trackLikes, setTrackLikes]       = useState([]);
   const [trackAnalyticsLoading, setTrackAnalyticsLoading] = useState(false);
-  const [demographics, setDemographics]   = useState({ devices: [], countries: [], completionRate: 0 });
+  const [demographics, setDemographics]   = useState({ totalStreams: 0, uniqueListeners: 0, repeatRate: 0 });
   const [memos, setMemos] = useState([]);
 
   const fetchMemos = useCallback(async () => {
@@ -165,7 +165,6 @@ export default function ArtistDashboard() {
         .order('stream_count', { ascending: false })
         .limit(20);
 
-      // Enrich with like counts
       if (tracks?.length) {
         const likeCounts = await Promise.all(tracks.map(t =>
           supabase.from('track_likes').select('*', { count: 'exact', head: true }).eq('track_id', t.id)
@@ -193,7 +192,6 @@ export default function ArtistDashboard() {
       .then(({ data }) => setWheelChallenge(data || null));
   }, [artist?.id]); // eslint-disable-line
 
-  // ── No artist guard ───────────────────────────────────────────────────────────
   if (!artist) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center px-6">
@@ -246,33 +244,26 @@ export default function ArtistDashboard() {
       setTrackStreams(Object.entries(streamMap).map(([date, streams]) => ({ date, streams })));
       setTrackLikes(Object.entries(likeMap).map(([date, likes]) => ({ date, likes })));
 
-      // Listener demographics
+      // Unique listeners vs repeat streams — only uses columns that exist
       const { data: demoData } = await supabase
-        .from('streams').select('device_type, completed, duration_played')
-        .eq('track_id', trackId).gte('created_at', since).limit(1000);
+        .from('streams').select('user_id')
+        .eq('track_id', trackId).gte('created_at', since).limit(5000);
       if (demoData?.length) {
-        const dc = {};
-        let completed = 0;
-        (demoData || []).forEach(s => {
-          dc[s.device_type || 'unknown'] = (dc[s.device_type || 'unknown'] || 0) + 1;
-          if (s.completed) completed++;
-        });
         const total = demoData.length;
-        setDemographics({
-          devices: Object.entries(dc).map(([name, count]) => ({
-            name: name.charAt(0).toUpperCase() + name.slice(1),
-            count, pct: Math.round((count / total) * 100),
-          })).sort((a, b) => b.count - a.count),
-          completionRate: total > 0 ? Math.round((completed / total) * 100) : 0,
-          totalStreams: total,
-        });
+        const unique = new Set(demoData.map(s => s.user_id).filter(Boolean)).size;
+        const repeatRate = total > 0 ? Math.round(((total - unique) / total) * 100) : 0;
+        setDemographics({ totalStreams: total, uniqueListeners: unique, repeatRate });
       } else {
-        setDemographics({ devices: [], completionRate: 0, totalStreams: 0 });
+        setDemographics({ totalStreams: 0, uniqueListeners: 0, repeatRate: 0 });
       }
     } catch {}
     setTrackAnalyticsLoading(false);
   };
 
+  // Fetch track analytics when selection or range changes
+  useEffect(() => {
+    if (selectedTrack) fetchTrackAnalytics(selectedTrack, trackRange);
+  }, [selectedTrack, trackRange]); // eslint-disable-line
 
   const statCards = [
     { icon: Headphones, label: 'Total Streams', value: stats.streams,   color: 'text-purple-400' },
@@ -286,7 +277,6 @@ export default function ArtistDashboard() {
     { key: 'upload',     label: 'Upload',     icon: Upload },
     { key: 'collabs',    label: 'Collabs',    icon: Users, hasBadge: true },
     { key: 'analytics',  label: isBeatmaker ? 'Beat Analytics' : 'Analytics',  icon: BarChart3 },
-    // Memos tab hidden from nav bar — accessible via Profile page Voice Memo button (?tab=memos)
   ];
 
   return (
@@ -314,7 +304,7 @@ export default function ArtistDashboard() {
 
         {/* ── Tab Bar ── */}
         <div className="flex space-x-1 bg-white/[0.03] rounded-lg p-1 mb-6">
-          {tabs.map(({ key, label, icon: Icon, hasBadge, hasDot }) => (
+          {tabs.map(({ key, label, icon: Icon, hasBadge }) => (
             <button
               key={key}
               onClick={() => setActiveTab(key)}
@@ -325,9 +315,6 @@ export default function ArtistDashboard() {
               <div className="relative">
                 <Icon className="w-4 h-4" />
                 {hasBadge && activeTab !== key && <CollabBadge />}
-                {hasDot && activeTab !== key && (
-                  <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-pink-500" />
-                )}
               </div>
               <span>{label}</span>
             </button>
@@ -354,11 +341,9 @@ export default function ArtistDashboard() {
           />
         )}
 
-
         {/* ── Analytics Tab ── */}
         {activeTab === 'analytics' && (
           <TierGate feature="analytics">
-            <style>{`.recharts-wrapper { overflow: visible !important; } .recharts-surface { overflow: visible !important; }`}</style>
             <div className="space-y-6">
               {loading ? (
                 <div className="flex justify-center py-16">
@@ -366,6 +351,7 @@ export default function ArtistDashboard() {
                 </div>
               ) : (
                 <>
+                  {/* Stat cards */}
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                     {statCards.map(({ icon: Icon, label, value, color }) => (
                       <div key={label} className="bg-white/[0.03] rounded-xl p-5 border border-white/[0.06]">
@@ -391,15 +377,14 @@ export default function ArtistDashboard() {
                     </div>
                   </TierGate>
 
-                  {/* Per-song analytics */}
-                  <div className="bg-white/[0.03] rounded-xl p-5 border border-white/[0.06] space-y-4">
+                  {/* Per-track analytics */}
+                  <div className="bg-white/[0.03] rounded-xl p-5 border border-white/[0.06] space-y-4 overflow-hidden">
                     <div className="flex items-center justify-between flex-wrap gap-2">
                       <div className="flex items-center space-x-2">
                         <TrendingUp className="w-5 h-5 text-white/40" />
                         <h3 className="text-base font-semibold text-white">Track Analytics</h3>
                       </div>
                       <div className="flex items-center space-x-2">
-                        {/* Date range selector */}
                         <div className="flex space-x-1 bg-white/[0.04] rounded-lg p-0.5">
                           {[7, 14, 30].map(d => (
                             <button key={d} onClick={() => setTrackRange(d)}
@@ -408,7 +393,6 @@ export default function ArtistDashboard() {
                             </button>
                           ))}
                         </div>
-                        {/* Track selector */}
                         <select
                           value={selectedTrack || ''}
                           onChange={e => setSelectedTrack(e.target.value || null)}
@@ -421,14 +405,13 @@ export default function ArtistDashboard() {
                       </div>
                     </div>
 
-                    {/* Charts */}
                     {selectedTrack ? (
                       trackAnalyticsLoading ? (
                         <div className="flex justify-center py-8"><Loader className="w-5 h-5 animate-spin text-white/20" /></div>
                       ) : (
                         <div className="space-y-4">
                           {/* Streams chart */}
-                          <div>
+                          <div className="overflow-hidden">
                             <p className="text-xs text-white/40 mb-2 font-medium">Streams — {trackRange}d</p>
                             <ResponsiveContainer width="100%" height={120}>
                               <AreaChart data={trackStreams}>
@@ -446,8 +429,9 @@ export default function ArtistDashboard() {
                               </AreaChart>
                             </ResponsiveContainer>
                           </div>
+
                           {/* Likes chart */}
-                          <div>
+                          <div className="overflow-hidden">
                             <p className="text-xs text-white/40 mb-2 font-medium">Likes — {trackRange}d</p>
                             <ResponsiveContainer width="100%" height={100}>
                               <BarChart data={trackLikes}>
@@ -459,40 +443,30 @@ export default function ArtistDashboard() {
                               </BarChart>
                             </ResponsiveContainer>
                           </div>
-                          {/* Listener demographics */}
-                          {demographics.devices.length > 0 && (
-                            <div className="grid grid-cols-2 gap-3">
-                              <div className="bg-white/[0.03] rounded-xl p-3 border border-white/[0.05]">
-                                <p className="text-[10px] text-white/30 uppercase tracking-wider mb-2">Devices</p>
-                                {demographics.devices.map(d => (
-                                  <div key={d.name} className="mb-1.5">
-                                    <div className="flex justify-between text-xs mb-0.5">
-                                      <span className="text-white/60">{d.name}</span>
-                                      <span className="text-white/40">{d.pct}%</span>
-                                    </div>
-                                    <div className="h-1.5 bg-white/[0.06] rounded-full overflow-hidden">
-                                      <div className="h-full rounded-full bg-purple-400"
-                                        style={{ width: `${d.pct}%` }} />
-                                    </div>
-                                  </div>
-                                ))}
+
+                          {/* Listener stats — only uses columns that actually exist in streams table */}
+                          {demographics.totalStreams > 0 && (
+                            <div className="grid grid-cols-3 gap-2">
+                              <div className="bg-white/[0.03] rounded-xl p-3 border border-white/[0.05] text-center">
+                                <p className="text-xl font-black text-white">{demographics.totalStreams}</p>
+                                <p className="text-[10px] text-white/30 mt-0.5">streams</p>
                               </div>
-                              <div className="bg-white/[0.03] rounded-xl p-3 border border-white/[0.05]">
-                                <p className="text-[10px] text-white/30 uppercase tracking-wider mb-2">Engagement</p>
-                                <div className="flex flex-col items-center justify-center h-full space-y-2 pt-2">
-                                  <div className="text-3xl font-black text-white">{demographics.completionRate}%</div>
-                                  <p className="text-[10px] text-white/30 text-center">completion rate</p>
-                                  <p className="text-[10px] text-white/20">{demographics.totalStreams} streams sampled</p>
-                                </div>
+                              <div className="bg-white/[0.03] rounded-xl p-3 border border-white/[0.05] text-center">
+                                <p className="text-xl font-black text-purple-400">{demographics.uniqueListeners}</p>
+                                <p className="text-[10px] text-white/30 mt-0.5">unique listeners</p>
+                              </div>
+                              <div className="bg-white/[0.03] rounded-xl p-3 border border-white/[0.05] text-center">
+                                <p className="text-xl font-black text-pink-400">{demographics.repeatRate}%</p>
+                                <p className="text-[10px] text-white/30 mt-0.5">repeat rate</p>
                               </div>
                             </div>
                           )}
 
-                          {/* CSV export for this track */}
+                          {/* CSV export */}
                           <button onClick={async () => {
-                            const { data } = await supabase.from('streams').select('created_at, duration_played, completed, device_type').eq('track_id', selectedTrack).order('created_at', { ascending: false }).limit(5000);
+                            const { data } = await supabase.from('streams').select('created_at, user_id').eq('track_id', selectedTrack).order('created_at', { ascending: false }).limit(5000);
                             if (!data) return;
-                            const csv = ['date,duration,completed,device', ...data.map(s => `${s.created_at},${s.duration_played},${s.completed},${s.device_type}`)].join('\n');
+                            const csv = ['date,user_id', ...data.map(s => `${s.created_at},${s.user_id || 'anon'}`)].join('\n');
                             const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
                             a.download = 'track-streams.csv'; a.click();
                           }} className="flex items-center space-x-2 px-3 py-2 bg-white/[0.04] rounded-xl text-xs text-white/50 hover:bg-white/[0.08] transition border border-white/[0.06]">
@@ -501,10 +475,10 @@ export default function ArtistDashboard() {
                         </div>
                       )
                     ) : (
-                      <p className="text-center text-white/20 text-sm py-4">Select a track to see detailed analytics</p>
+                      <p className="text-center text-white/20 text-sm py-4">Select a track above to see detailed analytics</p>
                     )}
 
-                    {/* Top tracks list */}
+                    {/* All tracks list */}
                     <div className="border-t border-white/[0.04] pt-3 space-y-2">
                       <p className="text-xs text-white/30 font-medium mb-2">All tracks</p>
                       {topTracks.map((track, i) => (

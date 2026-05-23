@@ -45,6 +45,9 @@ const TYPE_CONFIG = {
   payout_pending:   { icon: DollarSign,     color: 'text-green-400',  bg: 'bg-green-500/10',  label: 'Payout' },
   admin_message:    { icon: Megaphone,     color: 'text-yellow-400', bg: 'bg-yellow-500/10', label: 'Message from Admin' },
   bug_report:       { icon: MessageCircle, color: 'text-red-400',    bg: 'bg-red-500/10',    label: 'Bug Report' },
+  new_comment:      { icon: MessageCircle, color: 'text-purple-400', bg: 'bg-purple-500/10', label: 'Comment' },
+  artist_thought:   { icon: MessageCircle, color: 'text-pink-400',   bg: 'bg-pink-500/10',   label: 'Thought' },
+  wheel_challenge:  { icon: TrendingUp,    color: 'text-yellow-400', bg: 'bg-yellow-500/10', label: 'Challenge' },
 };
 
 const FILTERS = [
@@ -57,7 +60,7 @@ const FILTERS = [
 function filterMatch(type, filter) {
   if (filter === 'all') return true;
   if (filter === 'collabs') return type?.startsWith('collab_');
-  if (filter === 'social') return ['new_follower', 'track_liked', 'playlist_add', 'track_commented', 'new_post', 'new_stream', 'mention', 'engagement'].includes(type);
+  if (filter === 'social') return ['new_follower', 'track_liked', 'playlist_add', 'track_commented', 'new_comment', 'new_post', 'new_stream', 'mention', 'engagement', 'artist_thought'].includes(type);
   if (filter === 'milestones') return type?.startsWith('milestone_');
   return true;
 }
@@ -175,8 +178,17 @@ export default function NotificationsPage() {
       return;
     }
 
-    // New post / comment / mention — go to the post
-    if ((type === 'new_post' || type === 'mention' || type === 'track_commented') && meta.post_id) {
+    // Comments on tracks
+    if (type === 'track_commented' || type === 'new_comment') {
+      // Go to the track's artist page — no dedicated comment URL exists
+      if (meta.artist_slug) navigate(`/artist/${meta.artist_slug}`);
+      else if (artist) navigate('/dashboard?tab=analytics');
+      else navigate('/browse');
+      return;
+    }
+
+    // New post / mention — go to the post
+    if ((type === 'new_post' || type === 'mention') && meta.post_id) {
       navigate(`/feed?post=${meta.post_id}`);
       return;
     }
@@ -283,6 +295,19 @@ export default function NotificationsPage() {
       } else {
         navigate('/browse');
       }
+      return;
+    }
+
+    // Wheel challenge — go to the wheel page
+    if (type === 'wheel_challenge') {
+      navigate('/wheel');
+      return;
+    }
+
+    // Artist thought — go to their profile
+    if (type === 'artist_thought') {
+      if (meta.artist_slug) navigate(`/artist/${meta.artist_slug}`);
+      else navigate('/browse');
       return;
     }
 

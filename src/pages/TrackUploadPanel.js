@@ -832,23 +832,7 @@ function AddTrackToAlbum({
         await saveCollaborations(trackId, collaborators);
       }
 
-      if (trackForm.is_published) {
-        try {
-          const { data: { session: authSession } } = await supabase.auth.getSession();
-          fetch('/.netlify/functions/notify-new-track', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              track_id:    trackId,
-              track_title: trackForm.title,
-              artist_id:   artist.id,
-              artist_slug: artist.slug,
-              token:       authSession?.access_token,
-            }),
-          }).catch(() => {});
-        } catch {}
-      }
-
+      // No per-track notification for album tracks — album release sends its own
       showMessage('success', `"${trackForm.title}" added to album!`);
       onTrackAdded(data[0]);
 
@@ -1895,13 +1879,14 @@ export default function TrackUploadPanel() {
                       showMessage={showMessage}
                     />
                   ) : (
-                    <div className="p-3 rounded-xl border border-white/[0.06] bg-white/[0.02] flex items-center space-x-3">
+                    <button type="button" onClick={() => window.location.href = '/upgrade'}
+                      className="w-full p-3 rounded-xl border border-white/[0.06] bg-white/[0.02] flex items-center space-x-3 hover:bg-white/[0.04] hover:border-purple-500/20 transition text-left group">
                       <span className="text-xl">🔒</span>
-                      <div>
-                        <p className="text-xs font-semibold text-white/50">Stem uploads — Pro & Premium</p>
-                        <p className="text-[10px] text-white/25 mt-0.5">Upgrade to attach WAV stems to your beats</p>
+                      <div className="flex-1">
+                        <p className="text-xs font-semibold text-white/50 group-hover:text-white/70 transition">Stem uploads — Pro & Premium</p>
+                        <p className="text-[10px] text-white/25 mt-0.5 group-hover:text-purple-400/60 transition">Tap to upgrade →</p>
                       </div>
-                    </div>
+                    </button>
                   )}
                 </div>
               ) : (
