@@ -14,7 +14,7 @@ import {
   Globe, Music, Loader, Verified, Download,
   Heart, Check, MoreHorizontal, DollarSign, MessageCircle,
   ChevronDown, ChevronUp, Send, Trash2, Shuffle, Users, Plus, ShoppingBag,
-  Radio, X, Search
+  Radio, X, Search, Info
 } from 'lucide-react';
 import { ArtistProfileSkeleton } from '../components/SkeletonLoader';
 import ShareCard from '../components/ShareCard';

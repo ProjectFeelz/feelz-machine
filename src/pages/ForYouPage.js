@@ -23,7 +23,7 @@ import ShareCard from '../components/ShareCard';
 import {
   Heart, MessageCircle, ListMusic, UserCheck,
   Share2, Loader, X, Send, ChevronUp,
-  Sparkles, Volume2, VolumeX,
+  Sparkles, Volume2, VolumeX, Info,
 } from 'lucide-react';
 
 const SWIPE_THRESHOLD = 60;

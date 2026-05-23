@@ -184,6 +184,11 @@ export default function ArtistDashboard() {
     if (activeTab === 'memos' && artist) fetchMemos();
   }, [activeTab, artist, fetchStats, fetchMemos]);
 
+  // Fetch track analytics when selection or range changes
+  useEffect(() => {
+    if (selectedTrack) fetchTrackAnalytics(selectedTrack, trackRange);
+  }, [selectedTrack, trackRange]); // eslint-disable-line
+
   useEffect(() => {
     if (!artist) return;
     supabase.from('wheel_challenges')
@@ -259,11 +264,6 @@ export default function ArtistDashboard() {
     } catch {}
     setTrackAnalyticsLoading(false);
   };
-
-  // Fetch track analytics when selection or range changes
-  useEffect(() => {
-    if (selectedTrack) fetchTrackAnalytics(selectedTrack, trackRange);
-  }, [selectedTrack, trackRange]); // eslint-disable-line
 
   const statCards = [
     { icon: Headphones, label: 'Total Streams', value: stats.streams,   color: 'text-purple-400' },
