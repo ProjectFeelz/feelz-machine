@@ -1,5 +1,5 @@
 [build]
-  command = "sed -i \"s/feelz-v[0-9]*/feelz-$(date +%Y%m%d%H%M)/g\" public/service-worker.js && npm run build"
+  command = "sed -i \"s/feelz-v[0-9]*/feelz-$(date +%Y%m%d%H%M)/g\" public/service-worker.js && NODE_OPTIONS=--max-old-space-size=4096 npm run build"
   publish = "build"
 
 [build.environment]
