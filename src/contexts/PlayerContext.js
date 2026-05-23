@@ -12,7 +12,7 @@ function preloadCover(track) {
 
 const PlayerContext = createContext({});
 
-function PlayerProviderInner({ children, value, isPlaying, togglePlay, playNext, playPrev, currentTrack }) {
+function PlayerProviderInner({ children, value, isPlaying, togglePlay, playNext, playPrev, currentTrack, seek, currentTime, duration }) {
   useMediaSession({ currentTrack, isPlaying, togglePlay, playNext, playPrev, seek, currentTime, duration });
   return <PlayerContext.Provider value={value}>{children}</PlayerContext.Provider>;
 }
@@ -461,6 +461,9 @@ export function PlayerProvider({ children }) {
       togglePlay={togglePlay}
       playNext={playNext}
       playPrev={playPrev}
+      seek={seek}
+      currentTime={currentTime}
+      duration={duration}
     >
       {children}
     </PlayerProviderInner>
