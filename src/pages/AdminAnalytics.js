@@ -122,6 +122,9 @@ export default function AdminAnalytics() {
   const [topGenres, setTopGenres] = useState([]);
   const [retentionStats, setRetentionStats] = useState({});
   const [recentStreams, setRecentStreams] = useState([]);
+  const [sourceSplit, setSourceSplit]     = useState([]);
+  const [completionStats, setCompletionStats] = useState({});
+  const [beatStats, setBeatStats]         = useState({});
 
   const fetchAll = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true); else setLoading(true);
@@ -226,9 +229,37 @@ export default function AdminAnalytics() {
 
       // ── Device split ──────────────────────────────────────────────────────
       const { data: deviceRows } = await supabase
-        .from('streams').select('device_type').gte('created_at', cutoff);
+        .from('streams').select('device_type, source, completed, duration_played').gte('created_at', cutoff).limit(10000);
       const dc = { mobile: 0, desktop: 0, unknown: 0 };
-      (deviceRows || []).forEach(s => { dc[s.device_type || 'unknown']++; });
+      const sc = {}, completedCount = { yes: 0, no: 0 }, durAll = [];
+      (deviceRows || []).forEach(s => {
+        dc[s.device_type || 'unknown']++;
+        sc[s.source || 'unknown'] = (sc[s.source || 'unknown'] || 0) + 1;
+        if (s.completed) completedCount.yes++; else completedCount.no++;
+        if (s.duration_played > 0) durAll.push(s.duration_played);
+      });
+      const totalStreamsForPct = (deviceRows || []).length || 1;
+      setSourceSplit(Object.entries(sc).map(([name, count]) => ({
+        name: name.replace(/_/g,' ').replace(/\w/g, c => c.toUpperCase()),
+        value: count, pct: Math.round((count/totalStreamsForPct)*100),
+      })).sort((a,b) => b.value - a.value));
+      setCompletionStats({
+        rate: Math.round((completedCount.yes / totalStreamsForPct) * 100),
+        avgDuration: durAll.length ? Math.round(durAll.reduce((a,b)=>a+b,0)/durAll.length) : 0,
+        total: totalStreamsForPct,
+      });
+
+      // Beat stats
+      try {
+        const [{ count: beatCount }, { data: beatPurchases }] = await Promise.all([
+          supabase.from('tracks').select('*', { count: 'exact', head: true }).eq('is_beat', true).eq('is_published', true),
+          supabase.from('beat_purchases').select('amount_paid, licence_type, status').eq('status', 'completed').gte('created_at', cutoff),
+        ]);
+        const revenue = (beatPurchases || []).reduce((s, p) => s + (parseFloat(p.amount_paid) || 0), 0);
+        const licenceCounts = {};
+        (beatPurchases || []).forEach(p => { licenceCounts[p.licence_type] = (licenceCounts[p.licence_type] || 0) + 1; });
+        setBeatStats({ count: beatCount || 0, purchases: (beatPurchases || []).length, revenue: revenue.toFixed(2), licenceCounts });
+      } catch { setBeatStats({ count: 0, purchases: 0, revenue: '0.00', licenceCounts: {} }); }
       const total = dc.mobile + dc.desktop + dc.unknown;
       setDeviceSplit([
         { name: 'Mobile',  value: dc.mobile,  pct: pct(dc.mobile, total),  color: PURPLE },
@@ -384,11 +415,13 @@ export default function AdminAnalytics() {
       {/* Tabs */}
       <div className="flex space-x-1 px-4 py-3 overflow-x-auto scrollbar-hide border-b border-white/[0.04]">
         {[
-          { key: 'overview',  label: 'Overview'  },
-          { key: 'content',   label: 'Content'   },
-          { key: 'listeners', label: 'Listeners' },
-          { key: 'health',    label: 'Health'    },
-          { key: 'export',    label: 'Export'    },
+          { key: 'overview',   label: 'Overview'  },
+          { key: 'content',    label: 'Content'   },
+          { key: 'behaviour',  label: 'Behaviour' },
+          { key: 'beats',      label: 'Beats'     },
+          { key: 'listeners',  label: 'Listeners' },
+          { key: 'health',     label: 'Health'    },
+          { key: 'export',     label: 'Export'    },
         ].map(t => <TabButton key={t.key} active={tab === t.key} onClick={() => setTab(t.key)}>{t.label}</TabButton>)}
       </div>
 
@@ -510,6 +543,109 @@ export default function AdminAnalytics() {
                 </div>
               </div>
             </>
+          )}
+
+          {/* ── BEHAVIOUR ─────────────────────────────────────────────── */}
+          {tab === 'behaviour' && (
+            <div className="space-y-4">
+              {/* Completion funnel */}
+              <div className="rounded-2xl p-4 bg-white/[0.02] border border-white/[0.05]">
+                <SectionTitle icon={Activity} title="Stream Quality" color="text-green-400" />
+                <div className="grid grid-cols-3 gap-3 mb-4">
+                  <div className="text-center p-3 rounded-xl bg-white/[0.03] border border-white/[0.05]">
+                    <p className="text-2xl font-black text-green-400">{completionStats.rate || 0}%</p>
+                    <p className="text-[10px] text-white/30 mt-0.5">Completion rate</p>
+                  </div>
+                  <div className="text-center p-3 rounded-xl bg-white/[0.03] border border-white/[0.05]">
+                    <p className="text-2xl font-black text-blue-400">
+                      {completionStats.avgDuration > 0 ? `${Math.floor(completionStats.avgDuration/60)}:${String(completionStats.avgDuration%60).padStart(2,'0')}` : '—'}
+                    </p>
+                    <p className="text-[10px] text-white/30 mt-0.5">Avg listen time</p>
+                  </div>
+                  <div className="text-center p-3 rounded-xl bg-white/[0.03] border border-white/[0.05]">
+                    <p className="text-2xl font-black text-white">{fmt(completionStats.total || 0)}</p>
+                    <p className="text-[10px] text-white/30 mt-0.5">Streams sampled</p>
+                  </div>
+                </div>
+                <div>
+                  <div className="flex justify-between text-xs mb-1">
+                    <span className="text-white/40">Completed streams</span>
+                    <span className="text-green-400 font-bold">{completionStats.rate || 0}%</span>
+                  </div>
+                  <div className="h-2 bg-white/[0.06] rounded-full overflow-hidden">
+                    <div className="h-full rounded-full bg-green-400 transition-all" style={{ width: `${completionStats.rate || 0}%` }} />
+                  </div>
+                </div>
+              </div>
+
+              {/* Where streams come from */}
+              {sourceSplit.length > 0 && (
+                <div className="rounded-2xl p-4 bg-white/[0.02] border border-white/[0.05]">
+                  <SectionTitle icon={TrendingUp} title="Where Listeners Discover Music" color="text-cyan-400" />
+                  <div className="space-y-2">
+                    {sourceSplit.map(s => (
+                      <div key={s.name}>
+                        <div className="flex justify-between text-xs mb-1">
+                          <span className="text-white/60">{s.name}</span>
+                          <span className="text-white/40">{s.pct}% — {fmt(s.value)} streams</span>
+                        </div>
+                        <div className="h-1.5 bg-white/[0.06] rounded-full overflow-hidden">
+                          <div className="h-full rounded-full bg-cyan-400" style={{ width: `${s.pct}%` }} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Device breakdown */}
+              {deviceSplit.length > 0 && (
+                <div className="rounded-2xl p-4 bg-white/[0.02] border border-white/[0.05]">
+                  <SectionTitle icon={Activity} title="Device Split" color="text-purple-400" />
+                  <div className="space-y-2">
+                    {deviceSplit.map(d => (
+                      <div key={d.name}>
+                        <div className="flex justify-between text-xs mb-1">
+                          <span className="text-white/60">{d.name}</span>
+                          <span className="text-white/40">{d.pct || Math.round((d.value/(completionStats.total||1))*100)}%</span>
+                        </div>
+                        <div className="h-1.5 bg-white/[0.06] rounded-full overflow-hidden">
+                          <div className="h-full rounded-full bg-purple-400" style={{ width: `${d.pct || Math.round((d.value/(completionStats.total||1))*100)}%` }} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── BEATS ────────────────────────────────────────────────────── */}
+          {tab === 'beats' && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <KPI icon={Music}       label="Published Beats"  value={beatStats.count || 0}     color="bg-yellow-500/20" />
+                <KPI icon={TrendingUp}  label="Purchases"        value={beatStats.purchases || 0} color="bg-green-500/20"  sub={`$${beatStats.revenue || '0.00'} revenue`} />
+              </div>
+              {Object.keys(beatStats.licenceCounts || {}).length > 0 && (
+                <div className="rounded-2xl p-4 bg-white/[0.02] border border-white/[0.05]">
+                  <SectionTitle icon={TrendingUp} title="Licence Type Breakdown" color="text-yellow-400" />
+                  <div className="space-y-2">
+                    {Object.entries(beatStats.licenceCounts).sort((a,b) => b[1]-a[1]).map(([type, count]) => (
+                      <div key={type} className="flex items-center justify-between py-1.5 border-b border-white/[0.04] last:border-0">
+                        <span className="text-sm text-white/60 capitalize">{type} Lease</span>
+                        <span className="text-sm font-bold text-white">{count}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {(beatStats.purchases || 0) === 0 && (
+                <div className="text-center py-10 text-white/20">
+                  <p className="text-sm">No beat purchases yet in this period</p>
+                </div>
+              )}
+            </div>
           )}
 
           {/* ── LISTENERS ────────────────────────────────────────────────── */}

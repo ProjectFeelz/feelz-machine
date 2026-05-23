@@ -1469,14 +1469,14 @@ export default function ArtistProfilePage() {
 
       {tracks.length > 0 && (
         <div className="px-6 mb-8">
-          <h2 className="text-lg font-bold mb-3 text-white" style={{ fontFamily: `"${headingFont}", sans-serif`, opacity: 1 }}>Popular</h2>
+          <h2 className="text-lg font-bold mb-3 text-white" style={{ fontFamily: `"${headingFont}", sans-serif`, opacity: 1 }}>{isBeatmakerProfile ? "Beats" : "Popular"}</h2>
           <div className="space-y-1">
             {visibleTracks.map((track, i) => {
               const isActive = currentTrack?.id === track.id;
               const isTrackPlaying = isActive && isPlaying;
               return (
                 <React.Fragment key={track.id}>
-                  <div id={`track-${track.id}`} onClick={() => handlePlayTrack(track)}
+                  <div id={`track-${track.id}`} onClick={() => isBeatmakerProfile && track.is_beat ? navigate(`/beat/${track.slug}`) : handlePlayTrack(track)}
                     className="w-full flex items-center space-x-3 p-2.5 rounded-lg transition-all cursor-pointer"
                     style={{
                       backgroundColor: isActive ? `${secondaryColor}15` : highlightedTrackId === track.id ? `${secondaryColor}25` : 'transparent',
@@ -1520,7 +1520,15 @@ export default function ArtistProfilePage() {
                         {track.is_explicit && (
                           <span className="text-[9px] font-bold px-1 py-0.5 rounded" style={{ backgroundColor: `${textColor}15`, color: `${textColor}50` }}>E</span>
                         )}
-                        <span className="text-xs truncate" style={{ color: `${textColor}40` }}>{formatNumber(track.stream_count || 0)} plays</span>
+                        {isBeatmakerProfile && track.is_beat ? (
+                          <div className="flex items-center gap-1 flex-wrap mt-0.5">
+                            {track.bpm && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded" style={{ background: `${accentColor}20`, color: accentColor }}>{track.bpm} BPM</span>}
+                            {track.beat_key && <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/[0.06] text-white/40">{track.beat_key} {track.beat_scale || ''}</span>}
+                            {track.download_price > 0 && <span className="text-[10px] font-bold" style={{ color: accentColor }}>from ${track.download_price}</span>}
+                          </div>
+                        ) : (
+                          <span className="text-xs truncate" style={{ color: `${textColor}40` }}>{formatNumber(track.stream_count || 0)} plays</span>
+                        )}
                       </div>
                     </div>
                     {track.duration && <span className="text-xs flex-shrink-0" style={{ color: `${textColor}30` }}>{formatDuration(track.duration)}</span>}
@@ -1621,7 +1629,7 @@ export default function ArtistProfilePage() {
 
       {tracks.filter(t => !t.album_id).length > 0 && (
         <div className="mb-8">
-          <h2 className="text-lg font-bold px-6 mb-3" style={{ fontFamily: `"${headingFont}", sans-serif` }}>Singles</h2>
+          <h2 className="text-lg font-bold px-6 mb-3" style={{ fontFamily: `"${headingFont}", sans-serif` }}>{isBeatmakerProfile ? "Beat Catalogue" : "Singles"}</h2>
           <div className="flex space-x-3 overflow-x-auto px-6 scrollbar-hide">
             {tracks.filter(t => !t.album_id).map(track => (
               <div key={track.id} className="flex-shrink-0 w-36 cursor-pointer group" onClick={() => handlePlayTrack(track)}>
@@ -1906,7 +1914,7 @@ export default function ArtistProfilePage() {
       )}
 
       {/* Deep Cuts — least-played tracks, frames obscurity as a feature */}
-      {deepCuts.length > 1 && (
+      {deepCuts.length > 1 && !isBeatmakerProfile && (
         <div className="mb-8 py-5" style={{ background: `linear-gradient(135deg, ${accentColor}08 0%, transparent 100%)`, borderTop: `1px solid ${accentColor}12`, borderBottom: `1px solid ${accentColor}08` }}>
         <div className="px-6">
           <div className="flex items-center space-x-2 mb-3">

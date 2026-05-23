@@ -42,6 +42,11 @@ export default function BeatDetailPage() {
   const [commentText, setCommentText] = useState('');
   const [posting, setPosting]     = useState(false);
   const [selectedLicence, setSelectedLicence] = useState(null);
+  const [purchasing, setPurchasing]       = useState(false);
+  const [purchaseSuccess, setPurchaseSuccess] = useState(false);
+  const [purchaseError, setPurchaseError] = useState('');
+  const [paypalReady, setPaypalReady]     = useState(false);
+  const [alreadyPurchased, setAlreadyPurchased] = useState(false);
 
   const isCurrentTrack = currentTrack?.id === track?.id;
 
@@ -119,8 +124,25 @@ export default function BeatDetailPage() {
           const { data: fw } = await supabase.from('follows').select('id').eq('artist_id', t.artists.id).eq('follower_id', user.id).maybeSingle();
           setFollowing(!!fw);
         }
+        // Check if already purchased
+        const { data: existingPurchase } = await supabase
+          .from('beat_purchases').select('id, licence_type')
+          .eq('track_id', t.id).eq('buyer_user_id', user.id).eq('status', 'completed').maybeSingle();
+        if (existingPurchase) { setAlreadyPurchased(true); setSelectedLicence(existingPurchase.licence_type); }
       }
       setLoading(false);
+      // Load PayPal SDK
+      if (!window.paypal) {
+        const clientId = process.env.REACT_APP_PAYPAL_CLIENT_ID;
+        if (clientId) {
+          const script = document.createElement('script');
+          script.src = `https://www.paypal.com/sdk/js?client-id=${clientId}&currency=USD&intent=capture`;
+          script.onload = () => setPaypalReady(true);
+          document.head.appendChild(script);
+        }
+      } else {
+        setPaypalReady(true);
+      }
     };
     load();
   }, [slug, user?.id]);
@@ -155,8 +177,24 @@ export default function BeatDetailPage() {
 
   const handleShare = () => {
     const url = `${window.location.origin}/beat/${slug}`;
-    if (navigator.share) navigator.share({ title: track.title, url });
-    else navigator.clipboard.writeText(url);
+    const licenceInfo = licences.length > 0
+      ? `Licences from $${Math.min(...licences.filter(l=>l.price>0).map(l=>l.price), Infinity) || 0}`
+      : '';
+    const beatInfo = [
+      track.bpm ? `${track.bpm} BPM` : null,
+      track.beat_key ? `${track.beat_key} ${track.beat_scale||''}`.trim() : null,
+      track.genre || null,
+      licenceInfo || null,
+    ].filter(Boolean).join(' · ');
+    const text = `🎛️ ${track.title} by ${artist?.artist_name}${beatInfo ? `\n${beatInfo}` : ''}`;
+    if (navigator.share) {
+      navigator.share({ title: track.title, text, url });
+    } else {
+      navigator.clipboard.writeText(`${text}\n${url}`);
+      // Show brief toast — use existing purchaseError state repurposed
+      setPurchaseError('Link copied!');
+      setTimeout(() => setPurchaseError(''), 2000);
+    }
   };
 
   const postComment = async () => {
@@ -182,10 +220,78 @@ export default function BeatDetailPage() {
     setCommentText(''); setPosting(false);
   };
 
-  const handleBuy = (lic) => {
-    // TODO: wire to PayPal/payment flow
-    // For now navigate to artist page or show contact modal
-    if (artist?.slug) navigate(`/artist/${artist.slug}`);
+  const handleBuy = async (lic) => {
+    if (!user) { navigate('/login'); return; }
+    if (lic.price === 0) {
+      // Free licence — record and trigger download
+      await supabase.from('beat_purchases').insert({
+        track_id: track.id, buyer_user_id: user.id,
+        licence_type: lic.id, amount_paid: 0, status: 'completed',
+      });
+      setAlreadyPurchased(true); setPurchaseSuccess(true);
+      if (track.file_url) {
+        const a = document.createElement('a');
+        a.href = track.file_url; a.download = `${track.title}.mp3`; a.click();
+      }
+      return;
+    }
+    setPurchasing(true); setPurchaseError('');
+    // Render PayPal buttons into the container
+    if (!window.paypal) { setPurchaseError('PayPal not loaded. Please refresh.'); setPurchasing(false); return; }
+    const container = document.getElementById('beat-paypal-container');
+    if (!container) { setPurchasing(false); return; }
+    container.innerHTML = '';
+    window.paypal.Buttons({
+      style: { layout: 'vertical', color: 'gold', shape: 'rect', label: 'pay' },
+      createOrder: async () => {
+        try {
+          const res = await fetch('/.netlify/functions/paypal-order', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'create', trackId: track.id, amount: lic.price, trackTitle: `${track.title} — ${lic.label} Lease`, artistName: artist?.artist_name }),
+          });
+          const { orderId, error } = await res.json();
+          if (error || !orderId) throw new Error(error || 'Failed to create order');
+          return orderId;
+        } catch (err) { setPurchaseError(err.message); setPurchasing(false); throw err; }
+      },
+      onApprove: async (data) => {
+        try {
+          const res = await fetch('/.netlify/functions/paypal-order', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'capture', orderId: data.orderID }),
+          });
+          const captureData = await res.json();
+          if (!captureData.success) throw new Error('Payment capture failed');
+          // Record beat purchase
+          await supabase.from('beat_purchases').insert({
+            track_id: track.id, buyer_user_id: user.id,
+            licence_type: selectedLicence, amount_paid: lic.price,
+            paypal_order_id: data.orderID, paypal_capture_id: captureData.captureId,
+            status: 'completed',
+          });
+          // Notify producer
+          if (artist?.user_id) {
+            supabase.from('notifications').insert({
+              user_id: artist.user_id, artist_id: artist.id,
+              type: 'download', title: `Someone purchased "${track.title}"`,
+              message: `${lic.label} lease — $${lic.price}`,
+              track_id: track.id,
+              metadata: { track_id: track.id, track_title: track.title, licence: lic.id, amount: lic.price },
+            }).catch(() => {});
+          }
+          setAlreadyPurchased(true); setPurchaseSuccess(true); setPurchasing(false);
+          // Trigger download
+          if (track.file_url) {
+            setTimeout(() => {
+              const a = document.createElement('a');
+              a.href = track.file_url; a.download = `${track.title}.mp3`; a.click();
+            }, 800);
+          }
+        } catch (err) { setPurchaseError(err.message); setPurchasing(false); }
+      },
+      onError: () => { setPurchaseError('Payment failed. Please try again.'); setPurchasing(false); },
+      onCancel: () => setPurchasing(false),
+    }).render('#beat-paypal-container');
   };
 
   if (loading) return (
@@ -360,16 +466,38 @@ export default function BeatDetailPage() {
             {/* Buy CTA */}
             {selectedLic && (
               <div className="p-4 border-t border-white/[0.05]">
-                <button onClick={() => handleBuy(selectedLic)}
-                  className="w-full py-3.5 rounded-xl font-bold text-sm transition active:scale-[0.98] flex items-center justify-center space-x-2"
-                  style={{ background: selectedLic.price === 0 ? 'rgba(34,197,94,0.15)' : `${selectedLic.bg}`, border: `1px solid ${selectedLic.border}`, color: selectedLic.price === 0 ? '#22c55e' : selectedLic.color }}>
-                  {selectedLic.price === 0
-                    ? <><Download className="w-4 h-4" /><span>Download Free</span></>
-                    : <><ShoppingBag className="w-4 h-4" /><span>Buy {selectedLic.label} — ${selectedLic.price}</span></>}
-                </button>
-                <p className="text-[10px] text-white/20 text-center mt-2">
-                  Contact {artist?.artist_name} via their profile to purchase
-                </p>
+                {purchaseSuccess || alreadyPurchased ? (
+                  <div className="text-center py-2 space-y-1">
+                    <div className="w-10 h-10 rounded-full bg-green-500/20 flex items-center justify-center mx-auto mb-2">
+                      <Check className="w-5 h-5 text-green-400" />
+                    </div>
+                    <p className="text-sm font-bold text-green-400">{purchaseSuccess ? 'Purchase complete!' : 'Already purchased'}</p>
+                    <p className="text-[11px] text-white/30">{selectedLic.label} licence — download starting</p>
+                    {track.file_url && (
+                      <a href={track.file_url} download={`${track.title}.mp3`}
+                        className="text-xs text-purple-400 hover:text-purple-300 transition mt-1 inline-block">
+                        Download again →
+                      </a>
+                    )}
+                  </div>
+                ) : purchasing ? (
+                  <div>
+                    <div id="beat-paypal-container" className="min-h-[48px]" />
+                    {purchaseError && <p className="text-xs text-red-400 mt-2 text-center">{purchaseError}</p>}
+                  </div>
+                ) : (
+                  <>
+                    <button onClick={() => handleBuy(selectedLic)}
+                      className="w-full py-3.5 rounded-xl font-bold text-sm transition active:scale-[0.98] flex items-center justify-center space-x-2"
+                      style={{ background: selectedLic.price === 0 ? 'rgba(34,197,94,0.15)' : selectedLic.bg, border: `1px solid ${selectedLic.border}`, color: selectedLic.price === 0 ? '#22c55e' : selectedLic.color }}>
+                      {selectedLic.price === 0
+                        ? <><Download className="w-4 h-4" /><span>Download Free</span></>
+                        : <><ShoppingBag className="w-4 h-4" /><span>Buy {selectedLic.label} — ${selectedLic.price}</span></>}
+                    </button>
+                    {!user && <p className="text-[10px] text-white/20 text-center mt-2">Sign in to purchase</p>}
+                    {purchaseError && <p className="text-xs text-red-400 mt-2 text-center">{purchaseError}</p>}
+                  </>
+                )}
               </div>
             )}
           </div>
