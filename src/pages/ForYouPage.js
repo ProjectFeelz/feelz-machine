@@ -298,7 +298,7 @@ function LyricsCaption({ lyrics, currentTime, isActive }) {
     const nextLine   = activeIdx >= 0 && activeIdx + 1 < lrcLines.length ? lrcLines[activeIdx + 1] : null;
     if (!activeLine?.text && !nextLine?.text) return null;
     return (
-      <div className="absolute bottom-64 left-0 right-0 z-20 pointer-events-none text-center px-8">
+      <div className="absolute bottom-44 left-0 right-0 z-20 pointer-events-none text-center px-8">
         {activeLine?.text && (
           <p key={activeIdx} className="text-center text-white text-base font-bold leading-snug mb-1 drop-shadow-lg"
             style={{ textShadow: '0 2px 8px rgba(0,0,0,0.9), 0 0 20px rgba(0,0,0,0.7)', animation: 'lyricFade 0.3s ease' }}>
@@ -324,7 +324,7 @@ function LyricsCaption({ lyrics, currentTime, isActive }) {
   const line = lines[lineIdx];
   if (!line) return null;
   return (
-    <div className="absolute bottom-64 left-0 right-0 z-20 pointer-events-none text-center px-8">
+    <div className="absolute bottom-44 left-0 right-0 z-20 pointer-events-none text-center px-8">
       <p key={lineIdx} className="text-center text-white text-base font-bold leading-snug drop-shadow-lg"
         style={{ textShadow: '0 2px 8px rgba(0,0,0,0.9), 0 0 20px rgba(0,0,0,0.7)', animation: 'lyricFade 0.3s ease' }}>
         {line}
