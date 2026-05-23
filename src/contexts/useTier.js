@@ -116,7 +116,7 @@ export function useTier() {
       setLoading(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [artist?.id, isAdmin]);
+  }, [artist?.id, artist?.role, isAdmin]);
 
   // Re-check tier when user returns from Safari (iOS PayPal hop)
   useEffect(() => {
@@ -128,7 +128,7 @@ export function useTier() {
     };
     document.addEventListener('visibilitychange', handleVisibility);
     return () => document.removeEventListener('visibilitychange', handleVisibility);
-  }, [artist?.id, isAdmin]);
+  }, [artist?.id, artist?.role, isAdmin]);
 
   const fetchTier = async (artistId) => {
     if (!artistId) return;
