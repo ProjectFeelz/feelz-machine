@@ -1738,7 +1738,7 @@ export default function TrackUploadPanel() {
                     onChange={(e) => setTrackForm({ ...trackForm, title: e.target.value })}
                     onBlur={(e) => setTrackForm(prev => ({ ...prev, title: normaliseTitleCase(e.target.value) }))} />
                 </div>
-                {!isAlbumRelease && (
+                {!isAlbumRelease && !isBeat && (
                   <div>
                     <FieldLabel>Add to Existing Album (optional)</FieldLabel>
                     <FSelect value={trackForm.album_id || ''}
@@ -1900,6 +1900,7 @@ export default function TrackUploadPanel() {
                 )
               )}
 
+              {!isBeat && (
               <div className="flex flex-wrap gap-4">
                 {[
                   { key: 'is_published',    label: 'Published' },
@@ -1943,6 +1944,7 @@ export default function TrackUploadPanel() {
                   </label>
                 </TierGate>
               </div>
+              )}
 
               {trackForm.is_preorder && (
                 <div>
