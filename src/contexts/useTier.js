@@ -133,23 +133,33 @@ export function useTier() {
   const fetchTier = async (artistId) => {
     if (!artistId) return;
     try {
-      // Single query with join — avoids two-step race condition
-      const { data: sub } = await supabase
+      // Fetch active subscription then resolve tier slug separately
+      // (two FK constraints to platform_tiers prevent reliable PostgREST join)
+      const { data: subs } = await supabase
         .from('artist_tier_subscriptions')
-        .select('status, platform_tiers(id, slug, name, price_monthly, price_annual)')
+        .select('tier_id, status')
         .eq('artist_id', artistId)
         .eq('status', 'active')
         .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
+        .limit(1);
 
-      console.log('[useTier] fetchTier result:', JSON.stringify(sub));
-      if (sub?.platform_tiers?.slug) {
-        const slug = sub.platform_tiers.slug;
-        setTierSlug(['master','premium'].includes(slug) ? 'premium' : slug === 'pro' ? 'pro' : 'free');
-        setTierData(sub.platform_tiers);
-        setLoading(false);
-        return;
+      const sub = subs?.[0];
+      console.log('[useTier] active sub:', JSON.stringify(sub));
+
+      if (sub?.tier_id) {
+        const { data: tierRow } = await supabase
+          .from('platform_tiers')
+          .select('id, slug, name, price_monthly, price_annual')
+          .eq('id', sub.tier_id)
+          .single();
+        console.log('[useTier] tier row:', JSON.stringify(tierRow));
+        if (tierRow?.slug) {
+          const slug = tierRow.slug;
+          setTierSlug(['master','premium'].includes(slug) ? 'premium' : slug === 'pro' ? 'pro' : 'free');
+          setTierData(tierRow);
+          setLoading(false);
+          return;
+        }
       }
 
       // Fallback: check artists.tier column
