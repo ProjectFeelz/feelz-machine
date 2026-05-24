@@ -147,19 +147,33 @@ export function useTier() {
       console.log('[useTier] active sub:', JSON.stringify(sub));
 
       if (sub?.tier_id) {
-        const { data: tierRow } = await supabase
-          .from('platform_tiers')
-          .select('id, slug, name, price_monthly, price_annual')
-          .eq('id', sub.tier_id)
-          .single();
-        console.log('[useTier] tier row:', JSON.stringify(tierRow));
-        if (tierRow?.slug) {
-          const slug = tierRow.slug;
+        // Hardcoded tier_id → slug mapping to avoid platform_tiers RLS issues
+        const TIER_ID_MAP = {
+          '289f65ec-4b2f-4868-b71f-9f560d493225': 'free',
+          'a421dac1-f492-461c-88a5-f01b6942a042': 'pro',
+          'f0b8b8f5-bfc2-496e-9fb4-8904d9dc6fe4': 'premium',
+        };
+        const slug = TIER_ID_MAP[sub.tier_id];
+        console.log('[useTier] tier slug from map:', slug, 'for tier_id:', sub.tier_id);
+        if (slug) {
           setTierSlug(['master','premium'].includes(slug) ? 'premium' : slug === 'pro' ? 'pro' : 'free');
-          setTierData(tierRow);
           setLoading(false);
           return;
         }
+        // Fallback: try platform_tiers query
+        try {
+          const { data: tierRow } = await supabase
+            .from('platform_tiers')
+            .select('id, slug')
+            .eq('id', sub.tier_id)
+            .single();
+          console.log('[useTier] tier row:', JSON.stringify(tierRow));
+          if (tierRow?.slug) {
+            setTierSlug(['master','premium'].includes(tierRow.slug) ? 'premium' : tierRow.slug === 'pro' ? 'pro' : 'free');
+            setLoading(false);
+            return;
+          }
+        } catch {}
       }
 
       // Fallback: check artists.tier column
