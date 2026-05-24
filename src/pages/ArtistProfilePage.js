@@ -1235,6 +1235,12 @@ export default function ArtistProfilePage() {
               <Verified className="w-3 h-3" style={{ color: bgColor }} />
             </div>
           )}
+          {isBeatmakerProfile && (
+            <span className="text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full"
+              style={{ background: 'rgba(234,179,8,0.15)', color: '#facc15', border: '1px solid rgba(234,179,8,0.25)' }}>
+              Beat Maker
+            </span>
+          )}
         </div>
         <div className="flex items-center space-x-4 mb-4">
           <span className="text-sm" style={{ color: `${textColor}80` }}>{formatNumber(followerCount)} followers</span>

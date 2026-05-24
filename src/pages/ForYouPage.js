@@ -942,7 +942,7 @@ export default function ForYouPage() {
         let topQuery = supabase.from('tracks')
           .select('id, title, slug, genre, mood, cover_artwork_url, file_url, youtube_url, duration, lyrics, artist_id, is_beat, stream_count, like_count, bpm, beat_key, beat_scale, download_price, engagement_score, artists(artist_name, slug, profile_image_url)')
           .eq('is_published', true)
-          .gt('engagement_score', 0)
+          .or(`engagement_score.gt.0,created_at.gte.${new Date(Date.now()-14*86400000).toISOString()}`)
           .order('engagement_score', { ascending: false })
           .limit(PAGE_SIZE - fetched.length);
 

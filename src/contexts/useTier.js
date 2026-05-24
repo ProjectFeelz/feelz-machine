@@ -1,6 +1,13 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, createContext, useContext } from 'react';
 import { supabase } from '../supabaseClient';
 import { useAuth } from './AuthContext';
+
+const TierContext = createContext(null);
+
+export function TierProvider({ children }) {
+  const tier = useTierInternal();
+  return <TierContext.Provider value={tier}>{children}</TierContext.Provider>;
+}
 
 // Feature access map per tier
 const TIER_ACCESS = {
@@ -93,7 +100,7 @@ const FEATURE_LABELS = {
   exclusive_licence: { name: 'Exclusive Licence', description: 'Offer full exclusive rights on your beats', minTier: 'premium' },
 }
 
-export function useTier() {
+function useTierInternal() {
   const { artist, isAdmin } = useAuth();
   const [tierSlug, setTierSlug] = useState('free');
   const [tierData, setTierData] = useState(null);
@@ -296,6 +303,12 @@ export function useTier() {
     downloadSalesRemaining,
     canAddDownloadSale,
   };
+}
+
+export function useTier() {
+  const ctx = useContext(TierContext);
+  if (!ctx) throw new Error('useTier must be used within TierProvider');
+  return ctx;
 }
 
 export { TIER_ACCESS, FEATURE_LABELS };

@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation, useParams, useNavi
 import { HelmetProvider } from 'react-helmet-async';
 import { AuthProvider } from './contexts/AuthContext';
 import { PlayerProvider } from './contexts/PlayerContext';
+import { TierProvider } from './contexts/useTier';
 import { useSessionRefresh } from './useSessionRefresh';
 import { useActivityPing } from './useActivityPing';
 import AppLayout from './components/layout/AppLayout';
@@ -111,6 +112,7 @@ export default function AppRouter() {
         <SessionManager />
         <AuthProvider>
           <PlayerProvider>
+            <TierProvider>
             <Routes>
               {/* Legacy /player/* redirects */}
               <Route path="/player" element={<Navigate to="/" replace />} />
@@ -188,6 +190,7 @@ export default function AppRouter() {
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Route>
             </Routes>
+            </TierProvider>
           </PlayerProvider>
         </AuthProvider>
       </BrowserRouter>
