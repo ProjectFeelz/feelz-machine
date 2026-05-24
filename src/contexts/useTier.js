@@ -133,29 +133,26 @@ export function useTier() {
   const fetchTier = async (artistId) => {
     if (!artistId) return;
     try {
-      const { data: sub, error: subErr } = await supabase
+      // Single query with join — avoids two-step race condition
+      const { data: sub } = await supabase
         .from('artist_tier_subscriptions')
-        .select('tier_id, status')
+        .select('status, platform_tiers(id, slug, name, price_monthly, price_annual)')
         .eq('artist_id', artistId)
         .eq('status', 'active')
+        .order('created_at', { ascending: false })
+        .limit(1)
         .maybeSingle();
 
-      if (sub?.tier_id) {
-        // Step 2: get tier slug separately
-        const { data: tierRow } = await supabase
-          .from('platform_tiers')
-          .select('*')
-          .eq('id', sub.tier_id)
-          .maybeSingle();
-        if (tierRow) {
-          setTierSlug(['master','premium'].includes(tierRow.slug) ? 'premium' : tierRow.slug === 'pro' ? 'pro' : 'free');
-          setTierData(tierRow);
-          setLoading(false);
-          return;
-        }
+      console.log('[useTier] fetchTier result:', JSON.stringify(sub));
+      if (sub?.platform_tiers?.slug) {
+        const slug = sub.platform_tiers.slug;
+        setTierSlug(['master','premium'].includes(slug) ? 'premium' : slug === 'pro' ? 'pro' : 'free');
+        setTierData(sub.platform_tiers);
+        setLoading(false);
+        return;
       }
 
-      // Fallback: use artists.tier column directly
+      // Fallback: check artists.tier column
       const { data: artistRow } = await supabase
         .from('artists')
         .select('tier')
@@ -163,7 +160,8 @@ export function useTier() {
         .maybeSingle();
       const fallback = artistRow?.tier || 'free';
       setTierSlug(['master','premium'].includes(fallback) ? 'premium' : fallback === 'pro' ? 'pro' : 'free');
-    } catch {
+    } catch (err) {
+      console.error('fetchTier error:', err);
       const fallback = artist?.tier || 'free';
       setTierSlug(['master','premium'].includes(fallback) ? 'premium' : fallback === 'pro' ? 'pro' : 'free');
     }

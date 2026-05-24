@@ -872,7 +872,7 @@ export default function ForYouPage() {
 
 
   const [tracks, setTracks]           = useState([]);
-  const [feedFilter, setFeedFilter]   = useState(isBeatmaker ? 'beats' : 'all');
+  const [feedFilter, setFeedFilter]   = useState('all');
   const [idx, setIdx]                 = useState(0);
   const [loading, setLoading]         = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
