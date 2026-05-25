@@ -1045,16 +1045,17 @@ export default function ForYouPage() {
   const lastPlayedIdx = React.useRef(-1);
   useEffect(() => {
     if (!filteredTracks.length) return;
-    const item = tracks[idx];
+    const item = filteredTracks[idx];
     if (!item || item._type === 'story') return; // skip story cards
     if (idx === lastPlayedIdx.current) return;   // already played this idx
     lastPlayedIdx.current = idx;
     if (item.file_url && !item.youtube_url) {
       window.__feelz_play_source = 'for_you';
-      playTrack(item, filteredTracks.filter(t => t?.file_url && !t?.youtube_url), filteredTracks.filter(t => t?.file_url && !t?.youtube_url).findIndex(t => t.id === item.id));
+      const playableQueue = filteredTracks.filter(t => t?.file_url && !t?.youtube_url);
+      playTrack(item, playableQueue, playableQueue.findIndex(t => t.id === item.id));
       setIsMinimized(true); // keep player hidden while on feed
     }
-  }, [idx, tracks]); // eslint-disable-line
+  }, [idx, filteredTracks]); // eslint-disable-line
 
   const goTo = useCallback((newIdx) => {
     if (newIdx < 0 || newIdx >= tracks.length) return;
@@ -1231,7 +1232,7 @@ export default function ForYouPage() {
           { id: 'music',  label: 'Music' },
           { id: 'beats',  label: 'Beats' },
         ].map(f => (
-          <button key={f.id} onClick={() => { setFeedFilter(f.id); setIdx(0); }}
+          <button key={f.id} onClick={() => { setFeedFilter(f.id); setIdx(0); lastPlayedIdx.current = -1; }}
             className={`px-3 py-1 rounded-full text-xs font-bold transition ${
               feedFilter === f.id ? 'bg-white text-black' : 'text-white/50 hover:text-white/80'
             }`}>

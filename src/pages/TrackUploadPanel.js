@@ -288,7 +288,6 @@ function YoutubeField({ value, onChange }) {
 // beatEnabled: { free: true, basic: true, premium: false, ... }
 function BeatLicenceSelector({ beatEnabled, beatPrices, allowedLicences, onChange }) {
   const [expanded, setExpanded] = React.useState(null);
-  console.log('[BeatLicenceSelector] allowedLicences:', allowedLicences);
 
   const toggle = (id) => {
     if (!allowedLicences?.includes(id)) return;

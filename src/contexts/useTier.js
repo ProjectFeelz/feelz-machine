@@ -151,7 +151,6 @@ function useTierInternal() {
         .limit(1);
 
       const sub = subs?.[0];
-      console.log('[useTier] active sub:', JSON.stringify(sub));
 
       if (sub?.tier_id) {
         // Hardcoded tier_id → slug mapping to avoid platform_tiers RLS issues
@@ -161,7 +160,6 @@ function useTierInternal() {
           'f0b8b8f5-bfc2-496e-9fb4-8904d9dc6fe4': 'premium',
         };
         const slug = TIER_ID_MAP[sub.tier_id];
-        console.log('[useTier] tier slug from map:', slug, 'for tier_id:', sub.tier_id);
         if (slug) {
           setTierSlug(['master','premium'].includes(slug) ? 'premium' : slug === 'pro' ? 'pro' : 'free');
           setLoading(false);
@@ -174,7 +172,6 @@ function useTierInternal() {
             .select('id, slug')
             .eq('id', sub.tier_id)
             .single();
-          console.log('[useTier] tier row:', JSON.stringify(tierRow));
           if (tierRow?.slug) {
             setTierSlug(['master','premium'].includes(tierRow.slug) ? 'premium' : tierRow.slug === 'pro' ? 'pro' : 'free');
             setLoading(false);
@@ -316,7 +313,6 @@ export function useTier() {
   // If context not available, return safe free-tier defaults
   // This prevents crashes if something renders outside TierProvider
   if (!ctx) {
-    console.warn('[useTier] called outside TierProvider — returning free defaults');
     return {
       tierSlug: 'free', tierLevel: 1, tierLoading: false, isPro: false,
       isPremium: false, isFree: true, beatLicences: ['free','basic'],
