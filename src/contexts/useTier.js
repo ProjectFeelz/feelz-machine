@@ -302,6 +302,12 @@ function useTierInternal() {
     downloadSalesUsed: monthlyDownloadSalesCount,
     downloadSalesRemaining,
     canAddDownloadSale,
+    // Beat maker features
+    beatLicences,
+    maxBeats,
+    canUploadStems,
+    canUseBeatAnalytics,
+    canUseExclusive,
   };
 }
 
