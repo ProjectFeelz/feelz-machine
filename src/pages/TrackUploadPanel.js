@@ -793,11 +793,11 @@ function AddTrackToAlbum({
         is_preorder:       trackForm.is_preorder || false,
         release_date:      trackForm.is_preorder && trackForm.release_date ? trackForm.release_date : null,
         youtube_url:       trackForm.youtube_url?.trim() || null,
-        is_beat:           false,
-        bpm:               null,
-        beat_key:          null,
-        beat_scale:        null,
-        beat_licence:      null,
+        is_beat:           trackForm.is_beat || false,
+        bpm:               trackForm.bpm ? parseInt(trackForm.bpm) : null,
+        beat_key:          trackForm.beat_key || null,
+        beat_scale:        trackForm.beat_scale || null,
+        beat_licence:      trackForm.beat_licence ? JSON.stringify(trackForm.beat_licence) : null,
       }]).select();
       if (error) throw error;
       const trackId = data[0].id;
@@ -1319,6 +1319,11 @@ export default function TrackUploadPanel() {
         is_preorder:       trackForm.is_preorder || false,
         release_date:      trackForm.is_preorder && trackForm.release_date ? trackForm.release_date : null,
         youtube_url:       trackForm.youtube_url?.trim() || null,
+        is_beat:           trackForm.is_beat || false,
+        bpm:               trackForm.bpm ? parseInt(trackForm.bpm) : null,
+        beat_key:          trackForm.beat_key || null,
+        beat_scale:        trackForm.beat_scale || null,
+        beat_licence:      trackForm.beat_licence ? JSON.stringify(trackForm.beat_licence) : null,
       }]).select();
       if (error) throw error;
       const trackId = data[0].id;
