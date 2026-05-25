@@ -307,7 +307,21 @@ function useTierInternal() {
 
 export function useTier() {
   const ctx = useContext(TierContext);
-  if (!ctx) throw new Error('useTier must be used within TierProvider');
+  // If context not available, return safe free-tier defaults
+  // This prevents crashes if something renders outside TierProvider
+  if (!ctx) {
+    console.warn('[useTier] called outside TierProvider — returning free defaults');
+    return {
+      tierSlug: 'free', tierLevel: 1, tierLoading: false, isPro: false,
+      isPremium: false, isFree: true, beatLicences: ['free','basic'],
+      canUploadStems: false, canUseBeatAnalytics: false, canUseExclusive: false,
+      maxBeats: 3, canAddDownloadSale: false, downloadSalesRemaining: 0,
+      downloadSalesLimit: 0, downloadSalesUsed: 0, access: {},
+      hasFeature: () => false, canUpload: true, uploadsRemaining: 999,
+      getMinTier: () => 'free', getFeatureInfo: () => ({}),
+      refreshTier: () => {},
+    };
+  }
   return ctx;
 }
 
