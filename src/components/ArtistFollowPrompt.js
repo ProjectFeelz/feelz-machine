@@ -185,7 +185,8 @@ export default function ArtistFollowPrompt({ onDone }) {
       await supabase.from('follows').delete().eq('follower_id', user.id).eq('artist_id', artist.id);
       setFollowing(prev => { const n = { ...prev }; delete n[artist.id]; return n; });
     } else {
-      await supabase.from('follows').insert({ follower_id: user.id, artist_id: artist.id });
+      await supabase.from('follows')
+        .upsert({ follower_id: user.id, artist_id: artist.id }, { onConflict: 'follower_id,artist_id', ignoreDuplicates: true });
       success();
       setFollowing(prev => ({ ...prev, [artist.id]: true }));
     }

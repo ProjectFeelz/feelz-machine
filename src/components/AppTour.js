@@ -28,11 +28,14 @@ export function useTourState(isArtist, ready) {
     // Slow path: check Supabase in case they completed on another device
     const checkRemote = async () => {
       try {
-        const { data } = await supabase
+        const { data, error } = await supabase
           .from('user_profiles')
           .select('onboarding_done')
           .eq('user_id', user.id)
           .maybeSingle();
+
+        // 400 = column doesn't exist yet (migration pending) — show tour
+        if (error) { setShow(true); return; }
 
         if (data?.onboarding_done) {
           // Already done on another device — mirror to localStorage and stay hidden
@@ -58,13 +61,15 @@ export function useTourState(isArtist, ready) {
     localStorage.setItem(`feelz_tour_done_${user.id}`, '1');
 
     // 2. Persist to Supabase so other devices skip the tour
+    // Silently skips if onboarding_done column doesn't exist yet
     try {
-      await supabase
+      const { error } = await supabase
         .from('user_profiles')
         .upsert(
           { user_id: user.id, onboarding_done: true },
           { onConflict: 'user_id' }
         );
+      if (error) console.warn('Tour sync skipped (run schema migration):', error.message);
     } catch {
       // Non-fatal — localStorage is the fallback for this device
     }

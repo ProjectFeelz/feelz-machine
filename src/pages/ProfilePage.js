@@ -898,6 +898,7 @@ export default function ProfilePage() {
         {isArtist && <NavRow icon={Music} label="Artist Dashboard" iconColor="text-purple-400" onClick={() => nav('/dashboard')} />}
         {isAdmin  && <NavRow icon={Shield} label="Admin Panel" iconColor="text-yellow-400" onClick={() => nav('/admin')} border />}
         <NavRow icon={Trophy} label="Competitions" iconColor="text-yellow-400" onClick={() => nav('/competitions')} border />
+        <NavRow icon={Link} label="Affiliate Programme" iconColor="text-green-400" onClick={() => nav('/affiliates')} border badge="Earn" />
         <NavRow icon={Globe} label="Privacy Policy" onClick={() => nav('/privacy-policy')} border />
         <NavRow icon={Globe} label="Terms of Use"   onClick={() => nav('/terms-of-use')}   border />
       </div>
@@ -926,19 +927,6 @@ export default function ProfilePage() {
           {viewAs && <p className="text-[10px] text-yellow-400/50 mt-2">Viewing as {viewAs}</p>}
         </div>
       )}
-
-      {/* ── Affiliate Programme ── */}
-      <button onClick={() => nav('/affiliates')}
-        className="w-full flex items-center space-x-3 px-4 py-3.5 mb-3 rounded-2xl border border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.04] transition text-left">
-        <div className="w-9 h-9 rounded-xl bg-green-500/15 flex items-center justify-center flex-shrink-0">
-          <span className="text-base">🔗</span>
-        </div>
-        <div className="flex-1">
-          <p className="text-sm font-semibold text-white">Affiliate Programme</p>
-          <p className="text-xs text-white/30">Earn by sharing Feelz Machine</p>
-        </div>
-        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-green-500/15 text-green-400 border border-green-500/25">Earn</span>
-      </button>
 
       {/* ── Sign out ── */}
       <button onClick={handleSignOut}
@@ -992,14 +980,19 @@ export default function ProfilePage() {
   );
 }
 
-function NavRow({ icon: Icon, label, iconColor = 'text-white/30', onClick, border = false }) {
+function NavRow({ icon: Icon, label, iconColor = 'text-white/30', onClick, border = false, badge }) {
   return (
     <button onClick={onClick}
       className={`w-full flex items-center justify-between p-4 hover:bg-white/[0.03] transition ${border ? 'border-t border-white/[0.04]' : ''}`}>
       <div className="flex items-center space-x-3">
         <Icon className={`w-5 h-5 ${iconColor}`} /><span className="text-sm text-white">{label}</span>
       </div>
-      <ChevronRight className="w-4 h-4 text-white/15" />
+      <div className="flex items-center space-x-2">
+        {badge && (
+          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-green-500/15 text-green-400 border border-green-500/25">{badge}</span>
+        )}
+        <ChevronRight className="w-4 h-4 text-white/15" />
+      </div>
     </button>
   );
 }

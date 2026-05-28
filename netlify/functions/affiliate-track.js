@@ -77,14 +77,26 @@ exports.handler = async (event) => {
       currency:        'ZAR',
     });
 
-    await supabase.from('affiliates').update({
-      total_signups:    supabase.rpc('increment', { x: 1 }),
-      total_conversions: supabase.rpc('increment', { x: 1 }),
-      ...(creditsEarned > 0 ? {
-        credits_balance:  newBalance,
-        credits_lifetime: supabase.rpc('increment', { x: creditsEarned }),
-      } : {}),
-    }).eq('id', affiliate.id);
+    // Use RPC for atomic increments, fall back to read-modify-write if RPC missing
+    try {
+      await supabase.rpc('increment_affiliate_stats', {
+        p_affiliate_id: affiliate.id,
+        p_signups: 1,
+        p_conversions: 1,
+        p_credits: creditsEarned,
+      });
+    } catch {
+      // Fallback: manual increment
+      const updates = {
+        total_signups:    (affiliate.total_signups || 0) + 1,
+        total_conversions: (affiliate.total_conversions || 0) + 1,
+      };
+      if (creditsEarned > 0) {
+        updates.credits_balance  = newBalance;
+        updates.credits_lifetime = (affiliate.credits_lifetime || 0) + creditsEarned;
+      }
+      await supabase.from('affiliates').update(updates).eq('id', affiliate.id);
+    }
 
     if (creditsEarned > 0) {
       await supabase.from('credits_transactions').insert({
@@ -102,9 +114,55 @@ exports.handler = async (event) => {
 
   // ── CHECK ELIGIBILITY & CREATE AFFILIATE ───────────────────────────────────
   if (action === 'apply') {
-    // Check eligibility via DB function
-    const { data: eligible } = await supabase
-      .rpc('check_affiliate_eligibility', { p_user_id: userId });
+    if (!userId) return { statusCode: 400, body: JSON.stringify({ error: 'userId required' }) };
+
+    // Check if already an affiliate — return existing record immediately
+    const { data: existing } = await supabase
+      .from('affiliates').select('*').eq('user_id', userId).maybeSingle();
+    if (existing) {
+      return { statusCode: 200, body: JSON.stringify({ affiliate: existing }) };
+    }
+
+    // ── Inline eligibility check (no RPC dependency) ──────────────────────
+    const { data: artist } = await supabase
+      .from('artists')
+      .select('id, slug, role, created_at')
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    const isArtist = !!artist;
+    const accountAgeMs = Date.now() - new Date(artist?.created_at || Date.now()).getTime();
+    const accountAgeDays = accountAgeMs / 86400000;
+
+    let eligible = false;
+
+    if (isArtist) {
+      // Artist: account at least 30 days old + at least 1 published track
+      const { count: trackCount } = await supabase
+        .from('tracks')
+        .select('id', { count: 'exact', head: true })
+        .eq('artist_id', artist.id)
+        .eq('is_published', true);
+      eligible = accountAgeDays >= 30 && (trackCount || 0) >= 1;
+    } else {
+      // Listener: account at least 14 days old, 10+ follows, 20+ streams
+      const { data: profile } = await supabase
+        .from('auth.users')
+        .select('created_at')
+        .eq('id', userId)
+        .maybeSingle()
+        .catch(() => ({ data: null }));
+
+      const createdAt = profile?.created_at || new Date(Date.now() - 20 * 86400000).toISOString();
+      const listenerAge = (Date.now() - new Date(createdAt).getTime()) / 86400000;
+
+      const { count: followCount } = await supabase
+        .from('follows').select('id', { count: 'exact', head: true }).eq('follower_id', userId);
+      const { count: streamCount } = await supabase
+        .from('streams').select('id', { count: 'exact', head: true }).eq('user_id', userId);
+
+      eligible = listenerAge >= 14 && (followCount || 0) >= 10 && (streamCount || 0) >= 20;
+    }
 
     if (!eligible) {
       return {
@@ -113,32 +171,32 @@ exports.handler = async (event) => {
       };
     }
 
-    // Check if already an affiliate
-    const { data: existing } = await supabase
-      .from('affiliates').select('id, status').eq('user_id', userId).maybeSingle();
-    if (existing) {
-      return { statusCode: 200, body: JSON.stringify({ affiliate: existing }) };
-    }
-
-    // Get artist/user info for ref code
-    const { data: artist } = await supabase
-      .from('artists').select('slug, role').eq('user_id', userId).maybeSingle();
-
+    // ── Create affiliate record ──────────────────────────────────────────
     const refCode = artist?.slug
       ? `${artist.slug}-${Math.random().toString(36).slice(2, 6)}`
       : `fm-${Math.random().toString(36).slice(2, 8)}`;
 
-    const { data: affiliate } = await supabase.from('affiliates').insert({
-      user_id:   userId,
-      artist_id: artist?.id || null,
-      ref_code:  refCode,
-      role:      artist?.role || 'listener',
-      status:    'active',
-      is_eligible: true,
-      eligibility_met_at: new Date().toISOString(),
-    }).select('*').single();
+    const insertPayload = {
+      user_id:  userId,
+      ref_code: refCode,
+      role:     isArtist ? (artist.role || 'artist') : 'listener',
+      status:   'active',
+    };
+    // Only add artist_id if it exists (avoids FK error for listeners)
+    if (artist?.id) insertPayload.artist_id = artist.id;
 
-    return { statusCode: 200, body: JSON.stringify({ affiliate }) };
+    const { data: newAffiliate, error: insertErr } = await supabase
+      .from('affiliates')
+      .insert(insertPayload)
+      .select('*')
+      .single();
+
+    if (insertErr) {
+      console.error('Affiliate insert error:', insertErr);
+      return { statusCode: 500, body: JSON.stringify({ error: 'Failed to create affiliate record' }) };
+    }
+
+    return { statusCode: 200, body: JSON.stringify({ affiliate: newAffiliate }) };
   }
 
   return { statusCode: 400, body: JSON.stringify({ error: 'Invalid action' }) };
