@@ -25,6 +25,12 @@ const ADMIN_SECTIONS = [
     ],
   },
   {
+    heading: 'Affiliate Programme',
+    items: [
+      { label: 'Affiliates & Payouts', icon: Zap,      path: '/admin/affiliates',   color: 'bg-green-500/15 text-green-300',    desc: 'Manage affiliates, approve payouts, run campaigns' },
+    ],
+  },
+  {
     heading: 'Content & Community',
     items: [
       { label: 'Competitions',    icon: Trophy,         path: '/admin/competitions', color: 'bg-yellow-500/15 text-yellow-300',  desc: 'Create and manage competitions' },

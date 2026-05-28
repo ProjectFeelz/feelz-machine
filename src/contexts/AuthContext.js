@@ -65,6 +65,17 @@ export function AuthProvider({ children }) {
   const loadUser = async (sessionUser) => {
     if (!sessionUser) return;
     setUser(sessionUser);
+    // Check for affiliate ref in sessionStorage (set by landing page)
+    try {
+      const ref = sessionStorage.getItem('feelz_ref');
+      if (ref) {
+        fetch('/.netlify/functions/affiliate-track', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'convert', refCode: ref, userId: sessionUser.id }),
+        }).then(() => sessionStorage.removeItem('feelz_ref')).catch(() => {});
+      }
+    } catch {}
     try {
       await Promise.all([
         fetchProfile(sessionUser.id),

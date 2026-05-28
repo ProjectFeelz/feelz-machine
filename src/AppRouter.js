@@ -41,6 +41,8 @@ import RecentlyPlayedPage from './pages/RecentlyPlayedPage';
 import UserProfilePage from './pages/UserProfilePage';
 import AlbumDetailPage from './pages/AlbumDetailPage';
 import TrackDetailPage from './pages/TrackDetailPage';
+import AffiliatePage from './pages/AffiliatePage';
+import AdminAffiliates from './pages/AdminAffiliates';
 import BeatDetailPage from './pages/BeatDetailPage';
 import AdminUserBehaviorPage from './pages/AdminUserBehaviorPage';
 import { Helmet } from 'react-helmet-async';
@@ -104,15 +106,54 @@ function MerchConnectCallback() {
   return null;
 }
 
+// Captures ?ref= param from URL and logs affiliate click
+function AffiliateTracker() {
+  React.useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const ref = params.get('ref');
+    if (!ref) return;
+    // Store ref for conversion tracking on signup
+    try { sessionStorage.setItem('feelz_ref', ref); } catch {}
+    // Log click
+    fetch('/.netlify/functions/affiliate-track', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'click', refCode: ref, page: window.location.pathname }),
+    }).catch(() => {});
+  }, []);
+  return null;
+}
+
+
+// Redirects new users to /setup if they have no artist or listener profile
+function OnboardingGuard({ children }) {
+  const { user, artist, listener, loading } = useAuth();
+  const location = useLocation();
+  const skipPaths = ['/setup', '/login', '/about', '/terms-of-use', '/privacy-policy'];
+  
+  if (loading) return null;
+  if (!user) return children;
+  if (skipPaths.some(p => location.pathname.startsWith(p))) return children;
+  
+  // New user — has auth but no profile
+  if (user && !artist && !listener) {
+    return <Navigate to="/setup" replace />;
+  }
+  return children;
+}
+
+
 export default function AppRouter() {
   return (
     <HelmetProvider>
       <BrowserRouter>
         <ScrollToTop />
         <SessionManager />
+        <AffiliateTracker />
         <AuthProvider>
           <PlayerProvider>
             <TierProvider>
+            <OnboardingGuard>
             <Routes>
               {/* Legacy /player/* redirects */}
               <Route path="/player" element={<Navigate to="/" replace />} />
@@ -168,6 +209,8 @@ export default function AppRouter() {
                 <Route path="/about" element={<AboutPage />} />
                 <Route path="/album/:id" element={<AlbumDetailPage />} />
                 <Route path="/track/:slug" element={<TrackDetailPage />} />
+                <Route path="/affiliates" element={<AffiliatePage />} />
+                <Route path="/admin/affiliates" element={<AdminAffiliates />} />
                 <Route path="/beat/:slug" element={<BeatDetailPage />} />
                 <Route path="/artist/:slug" element={<ArtistProfilePage />} />
                 <Route path="/artist/:slug/merch" element={<MerchPage />} />
@@ -190,6 +233,7 @@ export default function AppRouter() {
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Route>
             </Routes>
+            </OnboardingGuard>
             </TierProvider>
           </PlayerProvider>
         </AuthProvider>

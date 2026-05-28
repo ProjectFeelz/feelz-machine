@@ -927,6 +927,19 @@ export default function ProfilePage() {
         </div>
       )}
 
+      {/* ── Affiliate Programme ── */}
+      <button onClick={() => navigate('/affiliates')}
+        className="w-full flex items-center space-x-3 px-4 py-3.5 mb-3 rounded-2xl border border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.04] transition text-left">
+        <div className="w-9 h-9 rounded-xl bg-green-500/15 flex items-center justify-center flex-shrink-0">
+          <span className="text-base">🔗</span>
+        </div>
+        <div className="flex-1">
+          <p className="text-sm font-semibold text-white">Affiliate Programme</p>
+          <p className="text-xs text-white/30">Earn by sharing Feelz Machine</p>
+        </div>
+        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-green-500/15 text-green-400 border border-green-500/25">Earn</span>
+      </button>
+
       {/* ── Sign out ── */}
       <button onClick={handleSignOut}
         className="w-full py-3 rounded-2xl font-medium text-sm flex items-center justify-center space-x-2

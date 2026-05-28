@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import { usePlayer } from '../contexts/PlayerContext';
+import ShareCard from '../components/ShareCard';
 import {
   ChevronLeft, Play, Pause, Heart, Share2, Download,
   Music, MessageCircle, Loader, ShoppingBag, Check,
@@ -47,6 +48,7 @@ export default function BeatDetailPage() {
   const [purchaseError, setPurchaseError] = useState('');
   const [paypalReady, setPaypalReady]     = useState(false);
   const [alreadyPurchased, setAlreadyPurchased] = useState(false);
+  const [shareCard, setShareCard]   = useState(null);
 
   const isCurrentTrack = currentTrack?.id === track?.id;
 
@@ -226,6 +228,36 @@ export default function BeatDetailPage() {
       }
     }
     setCommentText(''); setPosting(false);
+  };
+
+  const isZAR = navigator.language === 'af' || navigator.language?.startsWith('af') ||
+    Intl.DateTimeFormat().resolvedOptions().timeZone?.includes('Africa');
+
+  const handlePayFast = async (lic) => {
+    if (!user) { navigate('/login'); return; }
+    if (lic.price === 0) { handleBuy(lic); return; }
+    setPurchasing(true);
+    try {
+      const amountZAR = (lic.price * 18.5).toFixed(2); // USD to ZAR approx
+      const affiliateRef = sessionStorage.getItem('feelz_ref') || '';
+      const res = await fetch('/.netlify/functions/payfast-payment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'create',
+          amount: amountZAR,
+          itemName: `${track.title} — ${lic.label} Lease`,
+          buyerEmail: user.email,
+          trackId: track.id,
+          userId: user.id,
+          affiliateRef,
+          type: 'beat_purchase',
+        }),
+      });
+      const { redirectUrl, error } = await res.json();
+      if (error) { setPurchaseError(error); setPurchasing(false); return; }
+      window.location.href = redirectUrl;
+    } catch { setPurchaseError('PayFast unavailable. Try PayPal.'); setPurchasing(false); }
   };
 
   const handleBuy = async (lic) => {
@@ -495,13 +527,28 @@ export default function BeatDetailPage() {
                   </div>
                 ) : (
                   <>
-                    <button onClick={() => handleBuy(selectedLic)}
-                      className="w-full py-3.5 rounded-xl font-bold text-sm transition active:scale-[0.98] flex items-center justify-center space-x-2"
-                      style={{ background: selectedLic.price === 0 ? 'rgba(34,197,94,0.15)' : selectedLic.bg, border: `1px solid ${selectedLic.border}`, color: selectedLic.price === 0 ? '#22c55e' : selectedLic.color }}>
-                      {selectedLic.price === 0
-                        ? <><Download className="w-4 h-4" /><span>Download Free</span></>
-                        : <><ShoppingBag className="w-4 h-4" /><span>Buy {selectedLic.label} — ${selectedLic.price}</span></>}
-                    </button>
+                    {selectedLic.price === 0 ? (
+                      <button onClick={() => handleBuy(selectedLic)}
+                        className="w-full py-3.5 rounded-xl font-bold text-sm transition active:scale-[0.98] flex items-center justify-center space-x-2"
+                        style={{ background: 'rgba(34,197,94,0.15)', border: '1px solid rgba(34,197,94,0.3)', color: '#22c55e' }}>
+                        <Download className="w-4 h-4" /><span>Download Free</span>
+                      </button>
+                    ) : (
+                      <div className="space-y-2">
+                        <button onClick={() => handlePayFast(selectedLic)}
+                          className="w-full py-3.5 rounded-xl font-bold text-sm transition active:scale-[0.98] flex items-center justify-center space-x-2"
+                          style={{ background: 'rgba(0,143,85,0.15)', border: '1px solid rgba(0,143,85,0.3)', color: '#00a550' }}>
+                          <ShoppingBag className="w-4 h-4" />
+                          <span>🇿🇦 Pay with PayFast — R{(selectedLic.price * 18.5).toFixed(0)}</span>
+                        </button>
+                        <button onClick={() => handleBuy(selectedLic)}
+                          className="w-full py-3 rounded-xl font-semibold text-sm transition active:scale-[0.98] flex items-center justify-center space-x-2"
+                          style={{ background: selectedLic.bg, border: `1px solid ${selectedLic.border}`, color: selectedLic.color }}>
+                          <ShoppingBag className="w-4 h-4" />
+                          <span>🌍 Pay with PayPal — ${selectedLic.price}</span>
+                        </button>
+                      </div>
+                    )}
                     {!user && <p className="text-[10px] text-white/20 text-center mt-2">Sign in to purchase</p>}
                     {purchaseError && <p className="text-xs text-red-400 mt-2 text-center">{purchaseError}</p>}
                   </>
@@ -607,6 +654,14 @@ export default function BeatDetailPage() {
           </div>
         </div>
       </div>
+      {shareCard && (
+        <ShareCard
+          artist={shareCard.artist}
+          track={shareCard.track}
+          shareUrl={shareCard.url}
+          onClose={() => setShareCard(null)}
+        />
+      )}
     </div>
   );
 }
