@@ -1,7 +1,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Bell } from 'lucide-react';
-import useNotifications from '../../contexts/useNotifications';
+import useNotifications from '../contexts/useNotifications';
 
 export default function NotificationBell() {
   const navigate = useNavigate();
