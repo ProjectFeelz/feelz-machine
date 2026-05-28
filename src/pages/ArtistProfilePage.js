@@ -955,6 +955,8 @@ export default function ArtistProfilePage() {
   };
 
   const triggerDownload = async (track) => {
+    if (!track.is_downloadable) { alert('This track is not available for download.'); return; }
+    if (track.download_price > 0 && !purchasedTracks[track.id]) { alert('Purchase required to download.'); return; }
     setDownloading(track.id);
     try {
       try { await supabase.from('downloads').upsert({ user_id: user.id, track_id: track.id }, { onConflict: 'user_id,track_id', ignoreDuplicates: true }); } catch {}

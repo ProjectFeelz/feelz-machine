@@ -1,500 +1,243 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import {
-  X, ChevronRight, ChevronLeft, Check,
-  Music, Users, Radio, Upload, BarChart3, Bell,
-  Heart, Headphones, Home, Search, MessageCircle,
-  LayoutDashboard, ChevronUp, Disc, Zap,
-} from 'lucide-react';
-import { supabase } from '../supabaseClient';
-import { useAuth } from '../contexts/AuthContext';
+import React, { useEffect } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useParams, useNavigate } from 'react-router-dom';
+import { HelmetProvider } from 'react-helmet-async';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { PlayerProvider } from './contexts/PlayerContext';
+import { TierProvider } from './contexts/useTier';
+import { useSessionRefresh } from './useSessionRefresh';
+import { useActivityPing } from './useActivityPing';
+import AppLayout from './components/layout/AppLayout';
+import AboutPage from './pages/AboutPage';
+import HomePage from './pages/HomePage';
+import BrowsePage from './pages/BrowsePage';
+import LoginPage from './pages/LoginPage';
+import LibraryPage from './pages/LibraryPage';
+import LikedSongsPage from './pages/LikedSongsPage';
+import DownloadsPage from './pages/DownloadsPage';
+import FollowingPage from './pages/FollowingPage';
+import PlaylistsPage from './pages/PlaylistsPage';
+import PlaylistDetailPage from './pages/PlaylistDetailPage';
+import PlaylistJoinPage from './pages/PlaylistJoinPage';
+import ListeningSessionPage from './pages/ListeningSessionPage';
+import ProfilePage from './pages/ProfilePage';
+import FeedPage from './pages/FeedPage';
+import ArtistDashboard from './pages/ArtistDashboard';
+import ArtistProfilePage from './pages/ArtistProfilePage';
+import TierUpgradePage from './pages/TierUpgradePage';
+import ChatRoomsPage from './pages/ChatRoomsPage';
+import ChatRoomView from './pages/ChatRoomView';
+import PrivacyPolicy from './pages/PrivacyPolicy';
+import TermsOfUse from './pages/TermsOfUse';
+import NotificationsPage from './pages/NotificationsPage';
+import HubPage from './pages/HubPage';
+import ProfileSetup from './pages/ProfileSetup';
+import AdminDashboard from './pages/AdminDashboard';
+import AdminArtists from './pages/AdminArtists';
+import AdminAnalytics from './pages/AdminAnalytics';
+import AdminModeration from './pages/AdminModeration';
+import AdminBoost from './pages/AdminBoost';
+import AdminBroadcast from './pages/AdminBroadcast';
+import RecentlyPlayedPage from './pages/RecentlyPlayedPage';
+import UserProfilePage from './pages/UserProfilePage';
+import AlbumDetailPage from './pages/AlbumDetailPage';
+import TrackDetailPage from './pages/TrackDetailPage';
+import AffiliatePage from './pages/AffiliatePage';
+import AdminAffiliates from './pages/AdminAffiliates';
+import BeatDetailPage from './pages/BeatDetailPage';
+import AdminUserBehaviorPage from './pages/AdminUserBehaviorPage';
+import { Helmet } from 'react-helmet-async';
+import TrackPage from './pages/TrackPage';
+import CollabRadarPage from './pages/CollabRadarPage';
+import AdminDuplicates from './pages/AdminDuplicates';
+import CompetitionRoomPage from './pages/CompetitionRoomPage';
+import WheelRevealPage from './pages/WheelRevealPage';
+import ForYouPage from './pages/ForYouPage';
+import MerchPage from './pages/MerchPage';
+import MerchCheckoutPage from './pages/MerchCheckoutPage';
+import CompetitionsPage from './pages/CompetitionsPage';
+import AdminCompetitions from './pages/AdminCompetitions';
+import AdminEngagement from './pages/AdminEngagement';
 
-// ── Tour version ──────────────────────────────────────────────────────────────
-// Bump TOUR_VERSION to force ALL existing users to see the updated tour.
-// v2: added beats, beatmaker role, For You feed, updated nav.
-const TOUR_VERSION        = 'v2';
-const STORAGE_KEY_ARTIST  = `fm_tour_artist_done_${TOUR_VERSION}`;
-const STORAGE_KEY_LISTENER= `fm_tour_listener_done_${TOUR_VERSION}`;
-const STORAGE_KEY_BEAT    = `fm_tour_beatmaker_done_${TOUR_VERSION}`;
-const DB_META_KEY         = `tour_done_${TOUR_VERSION}`;
 
-// ── Tour step definitions ─────────────────────────────────────────────────────
-
-const LISTENER_TOUR = [
-  {
-    id: 'welcome',
-    title: 'Welcome to Feelz Machine 👋',
-    body: "You're now part of an independent music community built for artists, beat makers and fans. Here's a quick tour.",
-    icon: Headphones,
-    color: '#8B5CF6',
-    target: null,
-  },
-  {
-    id: 'foryou',
-    title: 'For You — Swipe to Discover',
-    body: 'Swipe up to discover music. The feed learns what you like. Filter between Music and Beats at the top of the screen.',
-    icon: ChevronUp,
-    color: '#06B6D4',
-    target: '[data-tour="nav-foryou"]',
-    arrow: 'down',
-    cardPosition: 'top',
-  },
-  {
-    id: 'browse',
-    title: 'Browse — Explore Everything',
-    body: 'Search tracks, artists and albums. Filter by genre, explore Trending, Featured and New Releases.',
-    icon: Search,
-    color: '#F59E0B',
-    target: '[data-tour="nav-browse"]',
-    arrow: 'down',
-    cardPosition: 'top',
-  },
-  {
-    id: 'library',
-    title: 'Library — Your Music Collection',
-    body: 'Liked tracks, playlists, downloads, recently played and the artists you follow. Everything you save lives here.',
-    icon: Heart,
-    color: '#EF4444',
-    target: '[data-tour="nav-library"]',
-    arrow: 'down',
-    cardPosition: 'top',
-  },
-  {
-    id: 'hub',
-    title: 'Hub — Your Control Centre',
-    body: 'Quick access to all features, your profile, notifications and settings. Start here whenever you need something.',
-    icon: LayoutDashboard,
-    color: '#8B5CF6',
-    target: '[data-tour="nav-hub"]',
-    arrow: 'down',
-    cardPosition: 'top',
-  },
-  {
-    id: 'support',
-    title: 'Support Artists Directly',
-    body: 'When you buy a download, 100% goes to the artist. No label cut, no platform fee. Just you and the music.',
-    icon: Music,
-    color: '#EC4899',
-    target: null,
-  },
-  {
-    id: 'done',
-    title: "You're all set 🎵",
-    body: 'Start browsing. The more you listen and like, the better your recommendations become. Enjoy the music.',
-    icon: Check,
-    color: '#10B981',
-    target: null,
-  },
-];
-
-const ARTIST_TOUR = [
-  {
-    id: 'welcome',
-    title: 'Welcome, Artist 🎤',
-    body: 'Feelz Machine is built for independent artists. Upload music, sell downloads, connect with fans and collaborate — no middleman.',
-    icon: Music,
-    color: '#8B5CF6',
-    target: null,
-  },
-  {
-    id: 'foryou',
-    title: 'For You — Your Music Gets Discovered',
-    body: 'Your published tracks appear in the For You feed. Listeners swipe through and discover you. Filter tabs let them choose Music or Beats.',
-    icon: ChevronUp,
-    color: '#06B6D4',
-    target: '[data-tour="nav-foryou"]',
-    arrow: 'down',
-    cardPosition: 'top',
-  },
-  {
-    id: 'hub',
-    title: 'Hub — Your Control Centre',
-    body: 'Everything starts here. Upload tracks, manage collaborations, view analytics, access community and settings.',
-    icon: LayoutDashboard,
-    color: '#F59E0B',
-    target: '[data-tour="nav-hub"]',
-    arrow: 'down',
-    cardPosition: 'top',
-  },
-  {
-    id: 'upload',
-    title: 'Upload Your Music',
-    body: 'Singles, EPs, Albums, Mixtapes — all supported. WAV files auto-convert to 320kbps MP3. Add lyrics with the sync editor to timestamp each line.',
-    icon: Upload,
-    color: '#10B981',
-    target: null,
-  },
-  {
-    id: 'community',
-    title: 'Community — Build Your Audience',
-    body: 'Post updates to your feed. Create subscriber-only chat rooms. Fans who spend $5+ on your music get exclusive access.',
-    icon: Users,
-    color: '#EC4899',
-    target: '[data-tour="nav-hub"]',
-    arrow: 'down',
-    cardPosition: 'top',
-  },
-  {
-    id: 'collabs',
-    title: 'Collab Radar',
-    body: 'Pro and Premium artists can use Collab Radar to find artists with matching genres and sound. Set your genre in Profile to activate it.',
-    icon: Radio,
-    color: '#8B5CF6',
-    target: null,
-  },
-  {
-    id: 'notifications',
-    title: 'Notifications',
-    body: "You'll be notified when fans follow you, like tracks, hit stream milestones, or send collab requests. Find Notifications inside Hub.",
-    icon: Bell,
-    color: '#06B6D4',
-    target: '[data-tour="nav-hub"]',
-    arrow: 'down',
-    cardPosition: 'top',
-  },
-  {
-    id: 'done',
-    title: 'Time to drop music 🔥',
-    body: 'Head to Hub and upload your first track. Your followers get notified instantly when you publish.',
-    icon: Check,
-    color: '#10B981',
-    target: null,
-  },
-];
-
-const BEATMAKER_TOUR = [
-  {
-    id: 'welcome',
-    title: 'Welcome, Producer 🎛️',
-    body: 'Feelz Machine has a dedicated beat maker flow. Upload beats, set licence prices, attach stems and get discovered by artists.',
-    icon: Disc,
-    color: '#F59E0B',
-    target: null,
-  },
-  {
-    id: 'foryou',
-    title: 'Beats Feed — Get Discovered',
-    body: 'Your beats appear in the For You feed with a yellow BEAT badge showing BPM and key. Listeners can filter to Beats only.',
-    icon: ChevronUp,
-    color: '#8B5CF6',
-    target: '[data-tour="nav-foryou"]',
-    arrow: 'down',
-    cardPosition: 'top',
-  },
-  {
-    id: 'studio',
-    title: 'Studio — Your Beat Hub',
-    body: 'Upload beats, view beat analytics, manage licence sales and track stem downloads. Everything in one place.',
-    icon: LayoutDashboard,
-    color: '#06B6D4',
-    target: '[data-tour="nav-hub"]',
-    arrow: 'down',
-    cardPosition: 'top',
-  },
-  {
-    id: 'upload',
-    title: 'Upload a Beat',
-    body: 'Select Beat from the release type. Fill in BPM, key and scale. Choose your licence tier — Free, Basic, Premium, Unlimited or Exclusive. Terms are pre-written, you just set the price.',
-    icon: Upload,
-    color: '#F59E0B',
-    target: null,
-  },
-  {
-    id: 'stems',
-    title: 'Attach Stems',
-    body: 'Upload ZIP or individual WAV/FLAC stems alongside your beat. Buyers on eligible licence tiers receive stems automatically.',
-    icon: Zap,
-    color: '#EC4899',
-    target: null,
-  },
-  {
-    id: 'analytics',
-    title: 'Beat Analytics',
-    body: 'Studio → Beat Analytics shows plays, licence views and purchases per beat. Pro and Premium unlock detailed graphs and CSV exports.',
-    icon: BarChart3,
-    color: '#10B981',
-    target: null,
-  },
-  {
-    id: 'done',
-    title: 'Time to upload your first beat 🔥',
-    body: 'Head to Studio → Upload. Select Beat, set your BPM and price, and get your sound in front of artists.',
-    icon: Check,
-    color: '#10B981',
-    target: null,
-  },
-];
-
-// ── useTourState ──────────────────────────────────────────────────────────────
-export function useTourState(isArtist, authReady = true) {
-  const { user, isBeatmaker } = useAuth();
-  const key = isBeatmaker ? STORAGE_KEY_BEAT
-    : isArtist ? STORAGE_KEY_ARTIST
-    : STORAGE_KEY_LISTENER;
-
-  const [show, setShow]       = useState(false);
-  const [checked, setChecked] = useState(false);
-
-  useEffect(() => {
-    if (!authReady || checked) return;
-    // Fast path — localStorage already set for this version
-    if (localStorage.getItem(key)) { setChecked(true); return; }
-
-    // Check DB for cross-device persistence
-    if (user?.id) {
-      supabase
-        .from('user_profiles')
-        .select('metadata')
-        .eq('user_id', user.id)
-        .maybeSingle()
-        .then(({ data }) => {
-          const meta = data?.metadata || {};
-          if (meta[DB_META_KEY]) {
-            localStorage.setItem(key, '1');
-            setChecked(true);
-          } else {
-            setShow(true);
-            setChecked(true);
-          }
-        })
-        .catch(() => { setShow(true); setChecked(true); });
-    } else {
-      setShow(true);
-      setChecked(true);
-    }
-  }, [key, authReady, user, checked]);
-
-  const dismiss = async () => {
-    setShow(false);
-    localStorage.setItem(key, '1');
-    if (user?.id) {
-      try {
-        const { data } = await supabase
-          .from('user_profiles').select('metadata').eq('user_id', user.id).maybeSingle();
-        const meta = { ...(data?.metadata || {}), [DB_META_KEY]: true };
-        await supabase.from('user_profiles').update({ metadata: meta }).eq('user_id', user.id);
-      } catch {}
-    }
-  };
-
-  const restart = () => {
-    localStorage.removeItem(key);
-    setShow(true);
-  };
-
-  return { show, dismiss, restart };
+// ── Session keepalive — refreshes token + listens for activity ───────────────
+function SessionManager() {
+  useSessionRefresh();
+  useActivityPing();
+  return null;
 }
 
-// ── Spotlight overlay ─────────────────────────────────────────────────────────
-function SpotlightOverlay({ targetSelector, onSkip }) {
-  const [rect, setRect] = useState(null);
-
-  useEffect(() => {
-    if (!targetSelector) { setRect(null); return; }
-    const el = document.querySelector(targetSelector);
-    if (!el) { setRect(null); return; }
-    const r = el.getBoundingClientRect();
-    setRect({ top: r.top, left: r.left, width: r.width, height: r.height });
-  }, [targetSelector]);
-
-  if (!rect) {
-    return (
-      <motion.div
-        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-        className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[290]"
-        onClick={onSkip}
-      />
-    );
-  }
-
-  const pad = 8;
-  return (
-    <svg className="fixed inset-0 z-[290] pointer-events-none"
-      style={{ width: '100vw', height: '100vh' }}>
-      <defs>
-        <mask id="spotlight-mask">
-          <rect width="100%" height="100%" fill="white" />
-          <rect x={rect.left - pad} y={rect.top - pad}
-            width={rect.width + pad * 2} height={rect.height + pad * 2}
-            rx="12" fill="black" />
-        </mask>
-      </defs>
-      <rect width="100%" height="100%" fill="rgba(0,0,0,0.82)"
-        mask="url(#spotlight-mask)"
-        style={{ pointerEvents: 'all', cursor: 'pointer' }}
-        onClick={onSkip} />
-      <rect x={rect.left - pad} y={rect.top - pad}
-        width={rect.width + pad * 2} height={rect.height + pad * 2}
-        rx="12" fill="none"
-        stroke="rgba(255,255,255,0.25)" strokeWidth="1.5" />
-    </svg>
-  );
+// ── Wrapper to set page title for standalone pages outside AppLayout ─────────
+function ScrollToTop() {
+  const { pathname } = useLocation();
+  useEffect(() => { window.scrollTo(0, 0); }, [pathname]);
+  return null;
 }
 
-// ── Arrow ─────────────────────────────────────────────────────────────────────
-function Arrow({ direction, color }) {
-  if (!direction) return null;
-  const arrows = { down: '↓', up: '↑', left: '←', right: '→' };
-  return (
-    <motion.div
-      animate={{ y: direction === 'down' ? [0, 6, 0] : direction === 'up' ? [0, -6, 0] : 0 }}
-      transition={{ repeat: Infinity, duration: 1.2, ease: 'easeInOut' }}
-      className="text-2xl font-bold text-center mb-1"
-      style={{ color }}>
-      {arrows[direction]}
-    </motion.div>
-  );
-}
-
-// ── Card positioning ──────────────────────────────────────────────────────────
-function getCardStyle(targetSelector, cardPosition) {
-  if (!targetSelector) return {};
-  const el = document.querySelector(targetSelector);
-  if (!el) return {};
-  const r = el.getBoundingClientRect();
-  const margin = 20;
-  if (cardPosition === 'top') {
-    return { position: 'fixed', bottom: window.innerHeight - r.top + margin,
-      left: '50%', transform: 'translateX(-50%)', width: 'min(90vw, 360px)' };
-  }
-  if (cardPosition === 'bottom') {
-    return { position: 'fixed', top: r.bottom + margin,
-      left: '50%', transform: 'translateX(-50%)', width: 'min(90vw, 360px)' };
-  }
-  return {};
-}
-
-// ── Main tour component ───────────────────────────────────────────────────────
-export default function AppTour({ isArtist, onDone }) {
-  const { isBeatmaker } = useAuth();
-  const steps   = isBeatmaker ? BEATMAKER_TOUR : isArtist ? ARTIST_TOUR : LISTENER_TOUR;
-  const [step, setStep]           = useState(0);
-  const [direction, setDirection] = useState(1);
-  const [cardStyle, setCardStyle] = useState({});
-  const current = steps[step];
-  const Icon    = current.icon;
-  const isLast  = step === steps.length - 1;
-
-  useEffect(() => {
-    if (current.target) {
-      const t = setTimeout(() => {
-        setCardStyle(getCardStyle(current.target, current.cardPosition));
-      }, 200);
-      return () => clearTimeout(t);
-    } else {
-      setCardStyle({});
-    }
-  }, [step, current.target, current.cardPosition]);
-
-  const goNext = () => { if (isLast) { onDone(); return; } setDirection(1); setStep(s => s + 1); };
-  const goPrev = () => { if (step === 0) return; setDirection(-1); setStep(s => s - 1); };
-
-  const variants = {
-    enter:  (d) => ({ x: d > 0 ? 30 : -30, opacity: 0 }),
-    center: { x: 0, opacity: 1 },
-    exit:   (d) => ({ x: d > 0 ? -30 : 30, opacity: 0 }),
-  };
-
-  const isMobile  = window.innerWidth < 768;
-  const hasTarget = !!current.target && isMobile;
-  const isCenter  = !hasTarget;
-
+function PageTitle({ title, children }) {
   return (
     <>
-      <SpotlightOverlay targetSelector={current.target} onSkip={onDone} />
-
-      <div
-        className={`z-[300] ${isCenter ? 'fixed inset-0 flex items-center justify-center px-6' : ''}`}
-        style={isCenter ? {} : { zIndex: 300, ...cardStyle }}>
-        <motion.div
-          key={step}
-          initial={{ scale: 0.95, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          exit={{ scale: 0.95, opacity: 0 }}
-          transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-          className="w-full rounded-3xl overflow-hidden"
-          style={{
-            maxWidth: isCenter ? 360 : undefined,
-            backgroundColor: '#0f0f0f',
-            border: '1px solid rgba(255,255,255,0.08)',
-            boxShadow: '0 32px 64px rgba(0,0,0,0.6)',
-          }}
-          onClick={e => e.stopPropagation()}>
-
-          {/* Skip */}
-          <div className="flex justify-end pt-4 pr-4">
-            <button onClick={onDone}
-              className="w-7 h-7 flex items-center justify-center rounded-full bg-white/[0.06] hover:bg-white/[0.12] transition">
-              <X className="w-3.5 h-3.5 text-white/40" />
-            </button>
-          </div>
-
-          {/* Content */}
-          <AnimatePresence custom={direction} mode="wait">
-            <motion.div
-              key={step}
-              custom={direction}
-              variants={variants}
-              initial="enter"
-              animate="center"
-              exit="exit"
-              transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-              className="px-6 pb-4 flex flex-col items-center text-center">
-
-              {current.arrow && <Arrow direction={current.arrow} color={current.color} />}
-
-              <div className="w-14 h-14 rounded-2xl flex items-center justify-center mb-4"
-                style={{ backgroundColor: `${current.color}20` }}>
-                <Icon className="w-7 h-7" style={{ color: current.color }} />
-              </div>
-
-              <p className="text-[10px] uppercase tracking-widest font-semibold mb-2"
-                style={{ color: current.color }}>
-                {step + 1} of {steps.length}
-              </p>
-
-              <h2 className="text-lg font-bold text-white mb-2 leading-tight">
-                {current.title}
-              </h2>
-
-              <p className="text-sm text-white/50 leading-relaxed">
-                {current.body}
-              </p>
-            </motion.div>
-          </AnimatePresence>
-
-          {/* Progress dots */}
-          <div className="flex items-center justify-center space-x-1.5 pb-3">
-            {steps.map((_, i) => (
-              <motion.div
-                key={i}
-                animate={{
-                  width: i === step ? 18 : 5,
-                  backgroundColor: i === step ? current.color : 'rgba(255,255,255,0.15)',
-                }}
-                transition={{ type: 'spring', damping: 20, stiffness: 300 }}
-                className="h-1.5 rounded-full cursor-pointer"
-                onClick={() => { setDirection(i > step ? 1 : -1); setStep(i); }}
-              />
-            ))}
-          </div>
-
-          {/* Nav buttons */}
-          <div className="flex items-center space-x-3 px-5 pb-6">
-            <button onClick={goPrev} disabled={step === 0}
-              className="w-10 h-10 flex items-center justify-center rounded-xl border border-white/[0.08] text-white/30 hover:text-white/60 hover:border-white/20 transition disabled:opacity-0">
-              <ChevronLeft className="w-4 h-4" />
-            </button>
-            <button onClick={goNext}
-              className="flex-1 h-10 rounded-xl font-semibold text-sm flex items-center justify-center space-x-2 transition active:scale-[0.98]"
-              style={{ backgroundColor: current.color }}>
-              {isLast
-                ? <><Check className="w-4 h-4 text-black" /><span className="text-black">Let's go</span></>
-                : <><span className="text-black">Next</span><ChevronRight className="w-4 h-4 text-black" /></>}
-            </button>
-          </div>
-        </motion.div>
-      </div>
+      <Helmet>
+        <title>{title} · Feelz Machine</title>
+      </Helmet>
+      {children}
     </>
+  );
+}
+
+// Handles /@slug short URLs → redirects to /artist/:slug
+function ArtistProfileRedirect() {
+  const { slug } = useParams();
+  return <Navigate to={`/artist/${slug}`} replace />;
+}
+
+// Handles Printful OAuth redirect — passes code back to artist profile
+function MerchConnectCallback() {
+  const navigate = useNavigate();
+  React.useEffect(() => {
+    const params  = new URLSearchParams(window.location.search);
+    const code    = params.get('code');
+    const state   = params.get('state'); // artist slug stored in state param
+    if (code && state) {
+      navigate(`/artist/${state}?printful_code=${code}`, { replace: true });
+    } else {
+      navigate('/', { replace: true });
+    }
+  }, []); // eslint-disable-line
+  return null;
+}
+
+// Captures ?ref= param from URL and logs affiliate click
+function AffiliateTracker() {
+  React.useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const ref = params.get('ref');
+    if (!ref) return;
+    // Store ref for conversion tracking on signup
+    try { sessionStorage.setItem('feelz_ref', ref); } catch {}
+    // Log click
+    fetch('/.netlify/functions/affiliate-track', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'click', refCode: ref, page: window.location.pathname }),
+    }).catch(() => {});
+  }, []);
+  return null;
+}
+
+
+// Redirects new users to /setup if they have no artist or listener profile
+function OnboardingGuard({ children }) {
+  const { user, artist, listener, loading } = useAuth();
+  const location = useLocation();
+  const skipPaths = ['/setup', '/login', '/about', '/terms-of-use', '/privacy-policy'];
+  
+  if (loading) return null;
+  if (!user) return children;
+  if (skipPaths.some(p => location.pathname.startsWith(p))) return children;
+  
+  // New user — has auth but no profile
+  if (user && !artist && !listener) {
+    return <Navigate to="/setup" replace />;
+  }
+  return children;
+}
+
+
+export default function AppRouter() {
+  return (
+    <HelmetProvider>
+      <BrowserRouter>
+        <ScrollToTop />
+        <SessionManager />
+        <AffiliateTracker />
+        <AuthProvider>
+          <PlayerProvider>
+            <TierProvider>
+            <OnboardingGuard>
+            <Routes>
+              {/* Legacy /player/* redirects */}
+              <Route path="/player" element={<Navigate to="/" replace />} />
+              <Route path="/player/*" element={<Navigate to="/" replace />} />
+
+              {/* Fix: /terms was broken — redirect to correct route */}
+              <Route path="/terms" element={<Navigate to="/terms-of-use" replace />} />
+
+              <Route path="/login" element={<LoginPage />} />
+              <Route path="/setup" element={<ProfileSetup />} />
+              <Route path="/dashboard" element={<ArtistDashboard />} />
+              <Route path="/upgrade" element={<TierUpgradePage />} />
+              <Route path="/chat/:roomId" element={<ChatRoomView />} />
+              <Route path="/competition/:competitionId" element={<CompetitionRoomPage />} />
+              <Route path="/session/:sessionId" element={<ListeningSessionPage />} />
+              <Route path="/@:slug" element={<ArtistProfileRedirect />} />
+              <Route path="/merch-connect-callback" element={<MerchConnectCallback />} />
+
+              {/* Legal pages — fixed titles */}
+              <Route path="/privacy-policy" element={
+                <PageTitle title="Privacy Policy">
+                  <PrivacyPolicy />
+                </PageTitle>
+              } />
+              <Route path="/terms-of-use" element={
+                <PageTitle title="Terms of Use">
+                  <TermsOfUse />
+                </PageTitle>
+              } />
+
+              <Route element={<AppLayout />}>
+                <Route path="/" element={<ForYouPage />} />
+                <Route path="/home" element={<HomePage />} />
+                <Route path="/for-you" element={<Navigate to="/" replace />} />
+                <Route path="/browse" element={<BrowsePage />} />
+                <Route path="/wheel" element={<WheelRevealPage />} />
+                <Route path="/competitions" element={<CompetitionsPage />} />
+                <Route path="/library" element={<LibraryPage />} />
+                <Route path="/library/likes" element={<LikedSongsPage />} />
+                <Route path="/library/downloads" element={<DownloadsPage />} />
+                <Route path="/library/recent" element={<RecentlyPlayedPage />} />
+                <Route path="/library/following" element={<FollowingPage />} />
+                <Route path="/library/playlists" element={<PlaylistsPage />} />
+                <Route path="/library/playlists/join/:token" element={<PlaylistJoinPage />} />
+                <Route path="/library/playlists/:id" element={<PlaylistDetailPage />} />
+                <Route path="/community" element={<ChatRoomsPage />} />
+                <Route path="/feed" element={<FeedPage />} />
+                <Route path="/chat" element={<Navigate to="/community" replace />} />
+                <Route path="/profile" element={<ProfilePage />} />
+                <Route path="/profile/edit" element={<UserProfilePage />} />
+                <Route path="/notifications" element={<NotificationsPage />} />
+                <Route path="/hub" element={<HubPage />} />
+                <Route path="/about" element={<AboutPage />} />
+                <Route path="/album/:id" element={<AlbumDetailPage />} />
+                <Route path="/track/:slug" element={<TrackDetailPage />} />
+                <Route path="/affiliates" element={<AffiliatePage />} />
+                <Route path="/admin/affiliates" element={<AdminAffiliates />} />
+                <Route path="/beat/:slug" element={<BeatDetailPage />} />
+                <Route path="/artist/:slug" element={<ArtistProfilePage />} />
+                <Route path="/artist/:slug/merch" element={<MerchPage />} />
+                <Route path="/artist/:slug/merch/checkout" element={<MerchCheckoutPage />} />
+                <Route path="/track/:slug" element={<TrackPage />} />
+                <Route path="/collab-radar" element={<CollabRadarPage />} />
+                <Route path="/admin" element={<AdminDashboard />} />
+                <Route path="/admin/artists" element={<AdminArtists />} />
+                <Route path="/admin/analytics" element={<AdminAnalytics />} />
+                <Route path="/admin/moderation" element={<AdminModeration />} />
+                <Route path="/admin/boost" element={<AdminBoost />} />
+                <Route path="/admin/broadcast" element={<AdminBroadcast />} />
+                <Route path="/admin/behavior" element={<AdminUserBehaviorPage />} />
+                <Route path="/admin/duplicates" element={<AdminDuplicates />} />
+                <Route path="/admin/competitions" element={<AdminCompetitions />} />
+                <Route path="/admin/engagement" element={<AdminEngagement />} />
+               
+
+                {/* Catch-all: unknown routes redirect home */}
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Route>
+            </Routes>
+            </OnboardingGuard>
+            </TierProvider>
+          </PlayerProvider>
+        </AuthProvider>
+      </BrowserRouter>
+    </HelmetProvider>
   );
 }

@@ -141,6 +141,18 @@ export default function TrackDetailPage() {
     }
   };
 
+  const handleDownload = () => {
+    if (!track?.file_url) return;
+    if (!track.is_downloadable) { alert('This track is not available for download.'); return; }
+    if (track.download_price > 0) { alert('This track requires purchase to download.'); return; }
+    const a = document.createElement('a');
+    a.href = track.file_url;
+    a.download = `${track.title} - ${artist?.artist_name || ''}.mp3`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
+
   const handleShare = () => {
     const url = `${window.location.origin}/track/${slug}`;
     setShareCard({
@@ -291,11 +303,11 @@ export default function TrackDetailPage() {
           </button>
 
           {/* Download */}
-          {track.is_downloadable && (track.download_price === 0 || !track.download_price) && (
-            <a href={track.file_url} download={`${track.title} - ${artist?.artist_name || ""}.mp3`} onClick={(e) => { e.preventDefault(); const a = document.createElement("a"); a.href = track.file_url; a.download = `${track.title} - ${artist?.artist_name || ""}.mp3`; document.body.appendChild(a); a.click(); document.body.removeChild(a); }}
+          {track.is_downloadable && !track.download_price && (
+            <button onClick={handleDownload}
               className="w-13 h-13 flex items-center justify-center rounded-2xl border border-white/[0.08] bg-white/[0.04] transition active:scale-95">
               <Download className="w-5 h-5 text-white/60" />
-            </a>
+            </button>
           )}
 
           {/* Share */}

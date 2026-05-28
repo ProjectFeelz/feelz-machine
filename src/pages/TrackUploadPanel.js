@@ -926,7 +926,7 @@ function AddTrackToAlbum({
         )}
       </div>
 
-      {!isBeat && (
+      {!trackForm.is_beat && (
         <TierGate feature="lyrics" inline>
           <LyricsEditor
             lyrics={trackForm.lyrics}

@@ -928,7 +928,7 @@ export default function ProfilePage() {
       )}
 
       {/* ── Affiliate Programme ── */}
-      <button onClick={() => navigate('/affiliates')}
+      <button onClick={() => nav('/affiliates')}
         className="w-full flex items-center space-x-3 px-4 py-3.5 mb-3 rounded-2xl border border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.04] transition text-left">
         <div className="w-9 h-9 rounded-xl bg-green-500/15 flex items-center justify-center flex-shrink-0">
           <span className="text-base">🔗</span>
