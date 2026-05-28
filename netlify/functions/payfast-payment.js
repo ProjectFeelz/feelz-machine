@@ -48,7 +48,27 @@ exports.handler = async (event) => {
       trackId, affiliateRef, type, userId,
     } = JSON.parse(event.body);
 
-    const amountZAR = parseFloat(amount).toFixed(2);
+    // ── Server-side price verification for track/beat purchases ──────────────
+    let amountZAR;
+    if (type === 'beat_purchase' && trackId) {
+      const { data: track, error: trackErr } = await supabase
+        .from('tracks')
+        .select('download_price')
+        .eq('id', trackId)
+        .maybeSingle();
+      if (trackErr || !track) {
+        return { statusCode: 404, body: JSON.stringify({ error: 'Track not found' }) };
+      }
+      if (!track.download_price || track.download_price <= 0) {
+        return { statusCode: 400, body: JSON.stringify({ error: 'Track is not available for purchase' }) };
+      }
+      // download_price is stored in USD; convert to ZAR using a fixed rate env var or fallback
+      const usdToZar = parseFloat(process.env.USD_TO_ZAR_RATE || '18.5');
+      amountZAR = (track.download_price * usdToZar).toFixed(2);
+    } else {
+      // Subscription or other type — amount comes from client but is validated by PayFast's own signature
+      amountZAR = parseFloat(amount).toFixed(2);
+    }
     const mPaymentId = `fm_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
     const data = {

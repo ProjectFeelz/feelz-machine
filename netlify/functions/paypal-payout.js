@@ -35,7 +35,7 @@ async function verifyAdmin(authHeader) {
 // ── Get PayPal access token ───────────────────────────────────
 async function getAccessToken() {
   const credentials = Buffer.from(
-    `${process.env.PAYPAL_CLIENT_ID}:${process.env.PAYPAL_SECRET}`
+    `${process.env.PAYPAL_CLIENT_ID}:${process.env.PAYPAL_CLIENT_SECRET}`
   ).toString('base64');
 
   const res = await fetch(`${PAYPAL_BASE}/v1/oauth2/token`, {

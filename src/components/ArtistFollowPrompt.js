@@ -53,11 +53,11 @@ export default function ArtistFollowPrompt({ onDone }) {
     setLoading(true);
     const { data: artistData } = await supabase
       .from('artists')
-      .select('id, artist_name, slug, profile_image_url, is_verified, follower_count, genre')
+      .select('id, artist_name, slug, profile_image_url, is_verified, follower_count, total_streams, genre')
       .not('profile_image_url', 'is', null)
       .neq('profile_image_url', '')
       .order('follower_count', { ascending: false })
-      .limit(60);
+      .limit(100);
 
     if (!artistData?.length) { setLoading(false); return; }
 
@@ -91,7 +91,7 @@ export default function ArtistFollowPrompt({ onDone }) {
     // If fewer than 6 matched artists, pad with popular ones to avoid an empty screen
     if (matched.length < 6) {
       const matchedIds = new Set(matched.map(a => a.id));
-      const padding    = allArtists.filter(a => !matchedIds.has(a.id)).slice(0, 12 - matched.length);
+      const padding    = allArtists.filter(a => !matchedIds.has(a.id)).slice(0, 20 - matched.length);
       setDisplayArtists([...matched, ...padding]);
     } else {
       setDisplayArtists(matched);
@@ -327,7 +327,7 @@ export default function ArtistFollowPrompt({ onDone }) {
               ))}
             </div>
           )}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-3 gap-2">
             {displayArtists.map((artist) => {
               const isFollowed       = !!following[artist.id];
               const isPreviewing     = previewingId === artist.id;
@@ -344,7 +344,7 @@ export default function ArtistFollowPrompt({ onDone }) {
                   }`}>
                   <div className="p-3">
                     {/* Avatar */}
-                    <div className="relative mb-2.5">
+                    <div className="relative mb-2">
                       <div
                         className="w-full aspect-square rounded-xl overflow-hidden bg-white/[0.06] cursor-pointer"
                         onClick={() => hasTrack && startPreview(artist)}
@@ -381,7 +381,7 @@ export default function ArtistFollowPrompt({ onDone }) {
                     </div>
 
                     {/* Info */}
-                    <div className="mb-2.5">
+                    <div className="mb-1.5">
                       <div className="flex items-center space-x-1">
                         <p className="text-sm font-semibold text-white truncate">{artist.artist_name}</p>
                         {artist.is_verified && (

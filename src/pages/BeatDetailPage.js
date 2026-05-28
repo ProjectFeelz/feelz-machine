@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import { usePlayer } from '../contexts/PlayerContext';
+import { downloadTrack } from '../utils/downloadTrack';
 import ShareCard from '../components/ShareCard';
 import {
   ChevronLeft, Play, Pause, Heart, Share2, Download,
@@ -295,16 +296,16 @@ export default function BeatDetailPage() {
   const handleBuy = async (lic) => {
     if (!user) { navigate('/login'); return; }
     if (lic.price === 0) {
-      // Free licence — record and trigger download
-      await supabase.from('beat_purchases').insert({
+      // Free licence — record purchase then use signed URL (not raw public file_url)
+      try { await supabase.from('beat_purchases').insert({
         track_id: track.id, buyer_user_id: user.id,
         licence_type: lic.id, amount_paid: 0, status: 'completed',
-      });
+      }); } catch {}
       setAlreadyPurchased(true); setPurchaseSuccess(true);
-      if (track.file_url) {
-        const a = document.createElement('a');
-        a.href = track.file_url; a.download = `${track.title}.mp3`; a.click();
-      }
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        await downloadTrack(track.id, track.title, session?.access_token);
+      } catch { /* iOS fallback: open file in browser */ if (track.file_url) window.open(track.file_url, '_blank'); }
       return;
     }
     setPurchasing(true); setPurchaseError('');
@@ -355,12 +356,12 @@ export default function BeatDetailPage() {
           }
           setAlreadyPurchased(true); setPurchaseSuccess(true); setPurchasing(false);
           // Trigger download
-          if (track.file_url) {
-            setTimeout(() => {
-              const a = document.createElement('a');
-              a.href = track.file_url; a.download = `${track.title}.mp3`; a.click();
-            }, 800);
-          }
+          setTimeout(async () => {
+            try {
+              const { data: { session } } = await supabase.auth.getSession();
+              await downloadTrack(track.id, track.title, session?.access_token);
+            } catch { if (track.file_url) window.open(track.file_url, '_blank'); }
+          }, 800);
         } catch (err) { setPurchaseError(err.message); setPurchasing(false); }
       },
       onError: () => { setPurchaseError('Payment failed. Please try again.'); setPurchasing(false); },

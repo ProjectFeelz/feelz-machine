@@ -133,21 +133,8 @@ export default function TrackActionSheet({ track, artist, onClose }) {
                     const captureData = await res.json();
                     if (!captureData.success) throw new Error('Payment capture failed');
 
-                    await supabase
-                        .from('downloads')
-                        .insert({ user_id: user.id, track_id: track.id, amount_paid: effectivePrice })
-                        .catch(() => {});
-
-                    await fetch('/.netlify/functions/process-split-payout', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json', 'x-internal-secret': process.env.REACT_APP_INTERNAL_FUNCTION_SECRET || '' },
-                        body: JSON.stringify({
-                            track_id: track.id,
-                            transaction_id: captureData.captureId,
-                            total_amount: effectivePrice,
-                            buyer_user_id: user.id,
-                        }),
-                    }).catch(() => {});
+                    try { await supabase.from('downloads').insert({ user_id: user.id, track_id: track.id, amount_paid: effectivePrice }); } catch {}
+                    // Split payout triggered server-side in paypal-order.js
 
                     setPurchaseSuccess(true);
                     setPurchasing(false);

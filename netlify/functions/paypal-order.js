@@ -1,16 +1,16 @@
 // netlify/functions/paypal-order.js
-// Creates and captures PayPal orders for track purchases
+// Creates and captures PayPal orders for track purchases.
+// Amount is ALWAYS read from the DB — never trusted from the client.
 
 const https = require('https');
+const { createClient } = require('@supabase/supabase-js');
 
 async function getPayPalAccessToken() {
   return new Promise((resolve, reject) => {
     const credentials = Buffer.from(
       `${process.env.PAYPAL_CLIENT_ID}:${process.env.PAYPAL_CLIENT_SECRET}`
     ).toString('base64');
-
     const payload = 'grant_type=client_credentials';
-
     const options = {
       hostname: 'api-m.paypal.com',
       path: '/v1/oauth2/token',
@@ -21,7 +21,6 @@ async function getPayPalAccessToken() {
         'Content-Length': Buffer.byteLength(payload),
       },
     };
-
     const req = https.request(options, (res) => {
       let data = '';
       res.on('data', (chunk) => { data += chunk; });
@@ -33,7 +32,6 @@ async function getPayPalAccessToken() {
         } catch (e) { reject(e); }
       });
     });
-
     req.on('error', reject);
     req.write(payload);
     req.end();
@@ -43,7 +41,6 @@ async function getPayPalAccessToken() {
 async function paypalRequest(method, path, body, accessToken) {
   return new Promise((resolve, reject) => {
     const payload = body ? JSON.stringify(body) : null;
-
     const options = {
       hostname: 'api-m.paypal.com',
       path,
@@ -54,7 +51,6 @@ async function paypalRequest(method, path, body, accessToken) {
         ...(payload ? { 'Content-Length': Buffer.byteLength(payload) } : {}),
       },
     };
-
     const req = https.request(options, (res) => {
       let data = '';
       res.on('data', (chunk) => { data += chunk; });
@@ -63,7 +59,6 @@ async function paypalRequest(method, path, body, accessToken) {
         catch (e) { resolve({ status: res.statusCode, body: data }); }
       });
     });
-
     req.on('error', reject);
     if (payload) req.write(payload);
     req.end();
@@ -82,7 +77,7 @@ exports.handler = async (event) => {
     return { statusCode: 400, body: 'Invalid JSON' };
   }
 
-  const { action, orderId, trackId, amount, trackTitle, artistName } = body;
+  const { action, orderId, trackId, artistName } = body;
 
   if (!action) {
     return { statusCode: 400, body: JSON.stringify({ error: 'action required: create or capture' }) };
@@ -93,16 +88,37 @@ exports.handler = async (event) => {
 
     // ========== CREATE ORDER ==========
     if (action === 'create') {
-      if (!amount || !trackTitle) {
-        return { statusCode: 400, body: JSON.stringify({ error: 'amount and trackTitle required' }) };
+      if (!trackId) {
+        return { statusCode: 400, body: JSON.stringify({ error: 'trackId required' }) };
       }
+
+      // ── Look up authoritative price and title from DB — never trust client ──
+      const adminClient = createClient(
+        process.env.SUPABASE_URL,
+        process.env.SUPABASE_SERVICE_ROLE_KEY
+      );
+      const { data: track, error: trackErr } = await adminClient
+        .from('tracks')
+        .select('id, title, download_price, is_downloadable')
+        .eq('id', trackId)
+        .maybeSingle();
+
+      if (trackErr || !track) {
+        return { statusCode: 404, body: JSON.stringify({ error: 'Track not found' }) };
+      }
+      if (!track.is_downloadable || !track.download_price || track.download_price <= 0) {
+        return { statusCode: 400, body: JSON.stringify({ error: 'This track is not available for paid download' }) };
+      }
+
+      const safeAmount = parseFloat(track.download_price).toFixed(2);
+      const trackTitle = track.title;
 
       const orderPayload = {
         intent: 'CAPTURE',
         purchase_units: [{
           amount: {
             currency_code: 'USD',
-            value: parseFloat(amount).toFixed(2),
+            value: safeAmount,
           },
           description: `${trackTitle} by ${artistName || 'Artist'} - Feelz Machine`,
           custom_id: trackId,
@@ -127,7 +143,7 @@ exports.handler = async (event) => {
 
       return {
         statusCode: 200,
-        body: JSON.stringify({ orderId: result.body.id }),
+        body: JSON.stringify({ orderId: result.body.id, amount: safeAmount }),
       };
     }
 
@@ -152,13 +168,38 @@ exports.handler = async (event) => {
       }
 
       const capture = result.body.purchase_units?.[0]?.payments?.captures?.[0];
+      const captureId = capture?.id;
+      const capturedAmount = parseFloat(capture?.amount?.value || 0);
+
+      // ── Trigger split payout server-side — secret never leaves the server ──
+      // Get trackId from custom_id stored on the order
+      const captureTrackId = result.body.purchase_units?.[0]?.custom_id;
+      if (captureTrackId && captureId && capturedAmount > 0) {
+        try {
+          const siteUrl = process.env.URL || 'https://www.feelzmachine.com';
+          fetch(`${siteUrl}/.netlify/functions/process-split-payout`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-internal-secret': process.env.INTERNAL_FUNCTION_SECRET || '',
+            },
+            body: JSON.stringify({
+              track_id:       captureTrackId,
+              transaction_id: captureId,
+              total_amount:   capturedAmount,
+            }),
+          }).catch(err => console.error('Split payout trigger failed:', err.message));
+        } catch (e) {
+          console.error('Split payout trigger error:', e.message);
+        }
+      }
 
       return {
         statusCode: 200,
         body: JSON.stringify({
           success: true,
           orderId: result.body.id,
-          captureId: capture?.id,
+          captureId: captureId,
           amount: capture?.amount?.value,
           status: capture?.status,
         }),

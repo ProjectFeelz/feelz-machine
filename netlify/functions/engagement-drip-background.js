@@ -570,7 +570,22 @@ async function processNewUsers(users, segmentKey, platform) {
 
 // ── Main handler ──────────────────────────────────────────────
 exports.handler = async (event) => {
-  const isManual = event.httpMethod === 'POST';
+  // Scheduled functions arrive via GET from Netlify internally.
+  // Manual triggers from admin panel or cron arrive via POST with the internal secret.
+  const isScheduled = event.httpMethod === 'GET';
+  const isManual    = event.httpMethod === 'POST';
+
+  if (!isScheduled && !isManual) {
+    return { statusCode: 405, body: 'Method Not Allowed' };
+  }
+
+  // Require secret on all POST calls (admin panel + cron)
+  if (isManual) {
+    const incomingSecret = event.headers['x-internal-secret'];
+    if (!incomingSecret || incomingSecret !== process.env.INTERNAL_FUNCTION_SECRET) {
+      return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized' }) };
+    }
+  }
 
   const { data: config } = await supabase
     .from('engagement_config').select('key, value').in('key', ['drip_enabled']);

@@ -9,8 +9,9 @@ import { ArrowRight, Check, Loader } from 'lucide-react';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // useTourState — called by AppLayout
-// Returns { show, dismiss } after auth loads
-// Persists completion in localStorage, keyed by user id
+// Returns { show, dismiss } after auth loads.
+// Persists completion to BOTH localStorage (instant) AND user_profiles in
+// Supabase (syncs across devices — phone done = PC skips tour too).
 // ─────────────────────────────────────────────────────────────────────────────
 export function useTourState(isArtist, ready) {
   const { user } = useAuth();
@@ -18,16 +19,55 @@ export function useTourState(isArtist, ready) {
 
   useEffect(() => {
     if (!ready || !user?.id) return;
-    const key = `feelz_tour_done_${user.id}`;
-    const done = localStorage.getItem(key);
-    if (!done) setShow(true);
+
+    const localKey = `feelz_tour_done_${user.id}`;
+
+    // Fast path: localStorage already set on this device
+    if (localStorage.getItem(localKey)) return;
+
+    // Slow path: check Supabase in case they completed on another device
+    const checkRemote = async () => {
+      try {
+        const { data } = await supabase
+          .from('user_profiles')
+          .select('onboarding_done')
+          .eq('user_id', user.id)
+          .maybeSingle();
+
+        if (data?.onboarding_done) {
+          // Already done on another device — mirror to localStorage and stay hidden
+          localStorage.setItem(localKey, '1');
+          return;
+        }
+        // Not done anywhere — show tour
+        setShow(true);
+      } catch {
+        // If DB check fails, fall back to showing tour (safe default)
+        setShow(true);
+      }
+    };
+
+    checkRemote();
   }, [ready, user?.id]);
 
-  const dismiss = useCallback(() => {
-    if (user?.id) {
-      localStorage.setItem(`feelz_tour_done_${user.id}`, '1');
-    }
+  const dismiss = useCallback(async () => {
     setShow(false);
+    if (!user?.id) return;
+
+    // 1. Instant local write so dismiss feels instant
+    localStorage.setItem(`feelz_tour_done_${user.id}`, '1');
+
+    // 2. Persist to Supabase so other devices skip the tour
+    try {
+      await supabase
+        .from('user_profiles')
+        .upsert(
+          { user_id: user.id, onboarding_done: true },
+          { onConflict: 'user_id' }
+        );
+    } catch {
+      // Non-fatal — localStorage is the fallback for this device
+    }
   }, [user?.id]);
 
   return { show, dismiss };
@@ -237,6 +277,23 @@ export default function AppTour({ isArtist, isBeatmaker, onDone }) {
   const [chosenRole, setRole] = useState(null);
   const { user, artist, listener } = useAuth();
   const navigate = useNavigate();
+
+  // Block ForYouPage's window wheel listener from firing while tour is open.
+  // ForYouPage attaches a non-passive 'wheel' listener to window — we capture
+  // it first and stop it reaching the feed underneath.
+  useEffect(() => {
+    const block = (e) => { e.stopPropagation(); };
+    window.addEventListener('wheel',      block, { capture: true, passive: false });
+    window.addEventListener('touchstart', block, { capture: true, passive: false });
+    window.addEventListener('touchmove',  block, { capture: true, passive: false });
+    window.addEventListener('touchend',   block, { capture: true, passive: false });
+    return () => {
+      window.removeEventListener('wheel',      block, { capture: true });
+      window.removeEventListener('touchstart', block, { capture: true });
+      window.removeEventListener('touchmove',  block, { capture: true });
+      window.removeEventListener('touchend',   block, { capture: true });
+    };
+  }, []);
 
   const displayName =
     artist?.artist_name ||

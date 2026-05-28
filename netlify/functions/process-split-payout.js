@@ -98,7 +98,14 @@ exports.handler = async (event) => {
     const collaborators = collabs || [];
 
     // 3. Calculate splits
-    // Total collaborator split %
+    // Guard: if collaborator percentages exceed 100, normalise proportionally
+    const rawCollabTotal = collaborators.reduce((sum, c) => sum + (c.split_percent || 0), 0);
+    if (rawCollabTotal > 100) {
+      console.warn(`Split overflow for track ${track_id}: ${rawCollabTotal}% — normalising`);
+      for (const c of collaborators) {
+        c.split_percent = parseFloat(((c.split_percent / rawCollabTotal) * 100).toFixed(4));
+      }
+    }
     const totalCollabPercent = collaborators.reduce((sum, c) => sum + (c.split_percent || 0), 0);
     // Owner gets the remainder
     const ownerPercent = Math.max(0, 100 - totalCollabPercent);
@@ -116,7 +123,8 @@ exports.handler = async (event) => {
       currency,
       split_percentage: ownerPercent,
       paypal_payout_id: null, // TODO: populate after real PayPal payout
-      status: 'pending',
+      // Solo tracks (no collabs) get status 'no_split_required' to distinguish from pending payouts
+      status: collaborators.length > 0 ? 'pending' : 'no_split_required',
     });
 
     // Collaborator payouts

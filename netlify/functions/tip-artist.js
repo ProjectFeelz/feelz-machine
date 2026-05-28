@@ -108,6 +108,50 @@ exports.handler = async (event) => {
       }).eq('id', activeGoal.id);
     }
 
+    // ── Forward tip to artist via PayPal Payouts ──────────────────────────────
+    // The order captured funds into the platform account; now send to the artist.
+    if (artist.paypal_email) {
+      try {
+        const batchId = `FEELZ_TIP_${order_id}`;
+        const payoutRes = await fetch(`https://${PAYPAL_BASE}/v1/payments/payouts`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${ppToken}`,
+            'Content-Type':  'application/json',
+          },
+          body: JSON.stringify({
+            sender_batch_header: {
+              sender_batch_id: batchId,
+              email_subject:   `You received a $${amountNum.toFixed(2)} tip on Feelz Machine 💸`,
+              email_message:   message?.trim() || 'Someone tipped you on Feelz Machine.',
+            },
+            items: [{
+              recipient_type: 'EMAIL',
+              amount:         { value: amountNum.toFixed(2), currency: 'USD' },
+              receiver:       artist.paypal_email,
+              note:           message?.trim() || `Tip on Feelz Machine`,
+              sender_item_id: batchId,
+            }],
+          }),
+        });
+        if (!payoutRes.ok) {
+          const errData = await payoutRes.json().catch(() => ({}));
+          console.error('Tip payout failed:', errData);
+          // Record failure so admin can follow up — but don't fail the user response
+          await supabase.from('tips').update({ payout_status: 'failed', payout_error: JSON.stringify(errData) })
+            .eq('paypal_order_id', order_id);
+        } else {
+          const payoutData = await payoutRes.json();
+          const batchPayout = payoutData.batch_header?.payout_batch_id || batchId;
+          await supabase.from('tips').update({ payout_status: 'processing', payout_batch_id: batchPayout })
+            .eq('paypal_order_id', order_id);
+        }
+      } catch (payoutErr) {
+        console.error('Tip payout exception:', payoutErr.message);
+        // Non-fatal — tip is recorded, admin can manually retry
+      }
+    }
+
     return { statusCode: 200, body: JSON.stringify({ success: true }) };
   }
 

@@ -759,10 +759,7 @@ export default function ArtistProfilePage() {
           const captureData = await res.json();
           if (!captureData.success) throw new Error('Payment capture failed');
           await supabase.from('downloads').insert({ user_id: user.id, track_id: purchaseTrack.id, amount_paid: getEffectivePrice(purchaseTrack) });
-          await fetch('/.netlify/functions/process-split-payout', {
-            method: 'POST', headers: { 'Content-Type': 'application/json', 'x-internal-secret': process.env.REACT_APP_INTERNAL_FUNCTION_SECRET || '' },
-            body: JSON.stringify({ track_id: purchaseTrack.id, transaction_id: captureData.captureId, total_amount: getEffectivePrice(purchaseTrack), buyer_user_id: user.id }),
-          });
+          // Split payout triggered server-side in paypal-order.js
           setPurchaseSuccess(true); setPurchasing(false);
           setTimeout(async () => { await triggerDownload(purchaseTrack); setPurchaseTrack(null); setPurchaseSuccess(false); }, 1500);
         } catch (err) { setPurchaseError(err.message); setPurchasing(false); }
@@ -936,7 +933,7 @@ export default function ArtistProfilePage() {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'x-internal-secret': process.env.REACT_APP_INTERNAL_FUNCTION_SECRET || '',
+            'x-internal-secret': '',  // send-push auth is user-token based
           },
           body: JSON.stringify({
             user_ids: followerIds,
@@ -1790,10 +1787,7 @@ export default function ArtistProfilePage() {
                             const captureData = await res.json();
                             if (!captureData.success) throw new Error('Payment capture failed');
                             try { await supabase.from('downloads').insert({ user_id: user.id, track_id: pwywTrack.id, amount_paid: amount }); } catch {}
-                            fetch('/.netlify/functions/process-split-payout', {
-                              method: 'POST', headers: { 'Content-Type': 'application/json', 'x-internal-secret': process.env.REACT_APP_INTERNAL_FUNCTION_SECRET || '' },
-                              body: JSON.stringify({ track_id: pwywTrack.id, transaction_id: captureData.captureId, total_amount: amount, buyer_user_id: user.id }),
-                            }).catch(() => {});
+                            // Split payout triggered server-side in paypal-order.js
                             setPwywPurchaseSuccess(true);
                             setTimeout(async () => {
                               await triggerDownload(pwywTrack);

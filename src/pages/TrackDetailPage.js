@@ -10,6 +10,7 @@ import {
   Clock, BarChart2, ShoppingBag
 } from 'lucide-react';
 import { useTier } from '../contexts/useTier';
+import PaidPlayGate from '../components/PaidPlayGate';
 
 function fmt(n) {
   if (!n) return '0';
@@ -39,6 +40,7 @@ export default function TrackDetailPage() {
   const [likeCount, setLikeCount] = useState(0);
   const [following, setFollowing] = useState(false);
   const [loading, setLoading]     = useState(true);
+  const [showBuyGate, setShowBuyGate] = useState(false);
   const [commenting, setCommenting] = useState(false);
   const [commentText, setCommentText] = useState('');
   const [posting, setPosting]     = useState(false);
@@ -382,13 +384,24 @@ export default function TrackDetailPage() {
                 <p className="text-sm font-bold text-white">Download</p>
                 <p className="text-xs text-white/30 mt-0.5">High quality audio file</p>
               </div>
-              <button className="flex items-center space-x-2 px-4 py-2 rounded-xl font-semibold text-sm transition active:scale-95"
+              <button
+                onClick={() => { if (!user) { navigate('/login'); return; } setShowBuyGate(true); }}
+                className="flex items-center space-x-2 px-4 py-2 rounded-xl font-semibold text-sm transition active:scale-95"
                 style={{ background: 'rgba(34,197,94,0.15)', border: '1px solid rgba(34,197,94,0.3)', color: '#22c55e' }}>
                 <Download className="w-4 h-4" />
                 <span>${track.download_price}</span>
               </button>
             </div>
           </div>
+        )}
+
+        {showBuyGate && track && (
+          <PaidPlayGate
+            track={track}
+            artist={artist}
+            onClose={() => setShowBuyGate(false)}
+            onPurchaseComplete={() => { setShowBuyGate(false); }}
+          />
         )}
 
         {/* ── Comments ── */}
