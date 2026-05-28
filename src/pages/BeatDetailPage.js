@@ -343,13 +343,15 @@ export default function BeatDetailPage() {
           });
           // Notify producer
           if (artist?.user_id) {
-            supabase.from('notifications').insert({
-              user_id: artist.user_id, artist_id: artist.id,
-              type: 'download', title: `Someone purchased "${track.title}"`,
-              message: `${lic.label} lease — $${lic.price}`,
-              track_id: track.id,
-              metadata: { track_id: track.id, track_title: track.title, licence: lic.id, amount: lic.price },
-            }).catch(() => {});
+            try {
+              await supabase.from('notifications').insert({
+                user_id: artist.user_id, artist_id: artist.id,
+                type: 'download', title: `Someone purchased "${track.title}"`,
+                message: `${lic.label} lease — $${lic.price}`,
+                track_id: track.id,
+                metadata: { track_id: track.id, track_title: track.title, licence: lic.id, amount: lic.price },
+              });
+            } catch {}
           }
           setAlreadyPurchased(true); setPurchaseSuccess(true); setPurchasing(false);
           // Trigger download

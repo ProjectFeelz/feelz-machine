@@ -253,9 +253,11 @@ export function ArtistStoryView({ stories, artist, initialIndex = 0, onClose }) 
     if (!user) return;
     try {
       await supabase.from('story_views').upsert({ story_id: storyId, user_id: user.id }, { onConflict: 'story_id,user_id', ignoreDuplicates: true });
-      await supabase.rpc('increment_story_views', { story_id_input: storyId }).catch(() => {
-        supabase.from('artist_stories').update({ view_count: (story.view_count || 0) + 1 }).eq('id', storyId).catch(() => {});
-      });
+      try {
+        await supabase.rpc('increment_story_views', { story_id_input: storyId });
+      } catch {
+        try { await supabase.from('artist_stories').update({ view_count: (story.view_count || 0) + 1 }).eq('id', storyId); } catch {}
+      }
     } catch {}
   }, [user, story?.view_count]);
 

@@ -99,8 +99,8 @@ export default function PaidPlayGate({ track, artist, onClose, onPurchaseComplet
           const captureData = await res.json();
           if (!captureData.success) throw new Error('Payment capture failed');
           if (user) {
-            await supabase.from('downloads').insert({ user_id: user.id, track_id: track.id, amount_paid: track.download_price }).catch(() => {});
-            await fetch('/.netlify/functions/process-split-payout', {
+            try { await supabase.from('downloads').insert({ user_id: user.id, track_id: track.id, amount_paid: track.download_price }); } catch {}
+            fetch('/.netlify/functions/process-split-payout', {
               method: 'POST', headers: { 'Content-Type': 'application/json', 'x-internal-secret': process.env.REACT_APP_INTERNAL_FUNCTION_SECRET || '' },
               body: JSON.stringify({
                 track_id: track.id,

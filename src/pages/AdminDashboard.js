@@ -133,7 +133,7 @@ export default function AdminDashboard() {
         user_id: artist.user_id,
         banned_until: '2999-12-31T23:59:59Z',
         reason: 'Banned by admin',
-      }, { onConflict: 'user_id' }).catch(() => {});
+      }, { onConflict: 'user_id' });
 
       // Also update auth.users directly via service role if available
       const { error: banErr } = await supabase.rpc('ban_user', {

@@ -188,10 +188,12 @@ function SubmitForReviewModal({ sessionId, user, onClose, onSubmitted }) {
 
       // Record the boost usage so they can't do it again this session
       if (isPriority) {
-        await supabase.from('session_priority_boosts').insert({
-          session_id: sessionId,
-          user_id:    user.id,
-        }).catch(() => {}); // ignore if already exists
+        try {
+          await supabase.from('session_priority_boosts').insert({
+            session_id: sessionId,
+            user_id:    user.id,
+          });
+        } catch {} // ignore if already exists
         setAlreadyBoosted(true);
       }
 

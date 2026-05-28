@@ -149,7 +149,7 @@ export function useStreak(user) {
             title:    msg.title,
             message:  msg.body,
             metadata: { streak_days: newStreak, milestone: true },
-          }).catch(() => {});
+          });
         }
       }
     } catch (err) {
@@ -206,7 +206,7 @@ export function useStreak(user) {
             title:    msg.title,
             message:  msg.body,
             metadata: { discovery_streak: newDiscovery, milestone: true },
-          }).catch(() => {});
+          });
         }
       }
     } catch (err) {

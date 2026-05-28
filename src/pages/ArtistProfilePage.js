@@ -1789,8 +1789,8 @@ export default function ArtistProfilePage() {
                             });
                             const captureData = await res.json();
                             if (!captureData.success) throw new Error('Payment capture failed');
-                            await supabase.from('downloads').insert({ user_id: user.id, track_id: pwywTrack.id, amount_paid: amount }).catch(() => {});
-                            await fetch('/.netlify/functions/process-split-payout', {
+                            try { await supabase.from('downloads').insert({ user_id: user.id, track_id: pwywTrack.id, amount_paid: amount }); } catch {}
+                            fetch('/.netlify/functions/process-split-payout', {
                               method: 'POST', headers: { 'Content-Type': 'application/json', 'x-internal-secret': process.env.REACT_APP_INTERNAL_FUNCTION_SECRET || '' },
                               body: JSON.stringify({ track_id: pwywTrack.id, transaction_id: captureData.captureId, total_amount: amount, buyer_user_id: user.id }),
                             }).catch(() => {});
@@ -1813,7 +1813,7 @@ export default function ArtistProfilePage() {
                   <button onClick={async () => {
                     const minPrice = parseFloat(pwywTrack.minimum_price) || 0;
                     if (minPrice > 0) { setPwywFanPriceError(`Minimum is $${minPrice.toFixed(2)}`); return; }
-                    await supabase.from('downloads').insert({ user_id: user.id, track_id: pwywTrack.id, amount_paid: 0 }).catch(() => {});
+                    try { await supabase.from('downloads').insert({ user_id: user.id, track_id: pwywTrack.id, amount_paid: 0 }); } catch {}
                     await triggerDownload(pwywTrack);
                     setPwywTrack(null);
                   }}

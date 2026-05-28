@@ -111,15 +111,17 @@ export default function ArtistFollowPrompt({ onDone }) {
     applyGenreFilter(selectedGenres);
     // Save genre preferences to user_profiles
     if (user?.id && selectedGenres.length > 0) {
-      await supabase.from('user_profiles').upsert(
-        {
-          user_id:           user.id,
-          genre_preferences: selectedGenres,
-          genre:             selectedGenres[0] || null,
-          updated_at:        new Date().toISOString(),
-        },
-        { onConflict: 'user_id' }
-      ).catch(() => {});
+      try {
+        await supabase.from('user_profiles').upsert(
+          {
+            user_id:           user.id,
+            genre_preferences: selectedGenres,
+            genre:             selectedGenres[0] || null,
+            updated_at:        new Date().toISOString(),
+          },
+          { onConflict: 'user_id' }
+        );
+      } catch {}
     }
     setStep(2);
   };

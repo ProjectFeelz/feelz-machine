@@ -149,9 +149,10 @@ export default function AlbumDetailPage() {
               body: JSON.stringify({ album_id: album.id, transaction_id: captureData.captureId, total_amount: purchaseTarget.price, buyer_user_id: user.id }),
             }).catch(() => {});
           } else {
-            await supabase.from('downloads')
-              .insert({ user_id: user.id, track_id: purchaseTarget.track.id, amount_paid: purchaseTarget.price })
-              .catch(() => {});
+            try {
+              await supabase.from('downloads')
+                .insert({ user_id: user.id, track_id: purchaseTarget.track.id, amount_paid: purchaseTarget.price });
+            } catch {}
             await fetch('/.netlify/functions/process-split-payout', {
               method: 'POST', headers: { 'Content-Type': 'application/json', 'x-internal-secret': process.env.REACT_APP_INTERNAL_FUNCTION_SECRET || '' },
               body: JSON.stringify({ track_id: purchaseTarget.track.id, transaction_id: captureData.captureId, total_amount: purchaseTarget.price, buyer_user_id: user.id }),

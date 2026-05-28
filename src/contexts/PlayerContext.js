@@ -296,7 +296,7 @@ export function PlayerProvider({ children }) {
               title:    msg.title,
               message:  msg.message,
               metadata: { artist_id: track.artist_id, artist_name: name, play_count: totalPlays, fan_milestone: true },
-            }).catch(() => {});
+            });
           }
         }
       } catch { /* fan milestone is non-critical, never let it break playback */ }

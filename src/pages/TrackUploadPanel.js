@@ -810,7 +810,7 @@ function AddTrackToAlbum({
           file_url: s.url,
           file_size: s.size,
         }));
-        await supabase.from('track_stems').insert(stemInserts).catch(() => {});
+        try { await supabase.from('track_stems').insert(stemInserts); } catch {}
         setStemFiles([]);
       }
 
