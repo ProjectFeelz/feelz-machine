@@ -49,27 +49,22 @@ exports.handler = async (event) => {
   const artistName = artist.artist_name;
 
   // 1. In-app notifications for all followers
-  // Dedup guard: skip if a new_track notification already exists for this track today
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  // Dedup by track_id — stronger than title which can be duplicated
-  const { data: existing } = await supabase
+  // Dedup guard: skip if ANY new_track notification exists for this track ever
+  // This prevents double-firing regardless of timing or race conditions
+  const { count: existingCount } = await supabase
     .from('notifications')
-    .select('user_id')
-    .eq('artist_id', artist_id)
+    .select('*', { count: 'exact', head: true })
     .eq('type', 'new_track')
-    .eq('track_id', track_id)
-    .gte('created_at', today.toISOString())
-    .limit(1);
+    .eq('track_id', track_id);
 
-  if (existing?.length) {
-    console.log(`Duplicate notify-new-track blocked for track: ${title}`);
+  if (existingCount > 0) {
+    console.log(`Duplicate notify-new-track blocked for track_id: ${track_id}`);
     return { statusCode: 200, body: JSON.stringify({ notified: 0, skipped: 'duplicate' }) };
   }
 
   const notifRows = followerIds.map(uid => ({
     user_id:        uid,
-    artist_id:      artist_id,
+    artist_id:      null,  // null so artist's own feed doesn't pull these in via artist_id filter
     type:           'new_track',
     title:          `${artistName} dropped a new track`,
     message:        title,

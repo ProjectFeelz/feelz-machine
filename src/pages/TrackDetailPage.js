@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import { usePlayer } from '../contexts/PlayerContext';
+import ShareCard from '../components/ShareCard';
 import {
   ChevronLeft, Play, Pause, Heart, Share2, Download,
   Music, Users, MessageCircle, Loader, ExternalLink,
@@ -41,6 +42,7 @@ export default function TrackDetailPage() {
   const [commenting, setCommenting] = useState(false);
   const [commentText, setCommentText] = useState('');
   const [posting, setPosting]     = useState(false);
+  const [shareCard, setShareCard]   = useState(null);
 
   const isCurrentTrack = currentTrack?.id === track?.id;
 
@@ -141,8 +143,11 @@ export default function TrackDetailPage() {
 
   const handleShare = () => {
     const url = `${window.location.origin}/track/${slug}`;
-    if (navigator.share) navigator.share({ title: track.title, url });
-    else navigator.clipboard.writeText(url);
+    setShareCard({
+      artist: { ...artist, artist_name: artist?.artist_name, slug: artist?.slug, profile_image_url: artist?.profile_image_url },
+      track,
+      url,
+    });
   };
 
   const postComment = async () => {
@@ -287,7 +292,7 @@ export default function TrackDetailPage() {
 
           {/* Download */}
           {track.is_downloadable && (track.download_price === 0 || !track.download_price) && (
-            <a href={track.file_url} download target="_blank" rel="noreferrer"
+            <a href={track.file_url} download={`${track.title} - ${artist?.artist_name || ""}.mp3`} onClick={(e) => { e.preventDefault(); const a = document.createElement("a"); a.href = track.file_url; a.download = `${track.title} - ${artist?.artist_name || ""}.mp3`; document.body.appendChild(a); a.click(); document.body.removeChild(a); }}
               className="w-13 h-13 flex items-center justify-center rounded-2xl border border-white/[0.08] bg-white/[0.04] transition active:scale-95">
               <Download className="w-5 h-5 text-white/60" />
             </a>
@@ -430,6 +435,14 @@ export default function TrackDetailPage() {
           </div>
         </div>
       </div>
+      {shareCard && (
+        <ShareCard
+          artist={shareCard.artist}
+          track={shareCard.track}
+          shareUrl={shareCard.url}
+          onClose={() => setShareCard(null)}
+        />
+      )}
     </div>
   );
 }

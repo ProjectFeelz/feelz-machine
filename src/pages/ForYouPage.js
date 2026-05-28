@@ -181,7 +181,7 @@ function CommentSheet({ track, user, onClose }) {
         ))}
       </div>
       <div
-        className="flex items-center space-x-3 px-4 py-3 border-t border-white/[0.06] flex-shrink-0 sticky bottom-0 bg-black"
+        className="flex items-center space-x-2 pl-4 pr-4 py-3 border-t border-white/[0.06] flex-shrink-0 sticky bottom-0 bg-black overflow-visible"
         style={{ paddingBottom: 'max(12px, env(safe-area-inset-bottom))'  }}
       >
         <input
@@ -189,7 +189,7 @@ function CommentSheet({ track, user, onClose }) {
           onKeyDown={e => e.key === 'Enter' && post()}
           onFocus={() => setTimeout(() => inputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 300)}
           placeholder="Add a comment…" maxLength={300}
-          className="flex-1 bg-white/[0.06] rounded-xl px-3 py-2 text-sm text-white placeholder-white/25 outline-none border border-white/[0.06] focus:border-white/20"
+          className="flex-1 min-w-0 bg-white/[0.06] rounded-xl px-3 py-2 text-sm text-white placeholder-white/25 outline-none border border-white/[0.06] focus:border-white/20"
         />
         <button
           onClick={post} disabled={!text.trim() || !user || posting}

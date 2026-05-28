@@ -926,14 +926,16 @@ function AddTrackToAlbum({
         )}
       </div>
 
-      <TierGate feature="lyrics" inline>
-        <LyricsEditor
-          lyrics={trackForm.lyrics}
-          onChange={val => setTrackForm({ ...trackForm, lyrics: val })}
-          audioFile={trackForm.audio_file}
-          audioUrl={null}
-        />
-      </TierGate>
+      {!isBeat && (
+        <TierGate feature="lyrics" inline>
+          <LyricsEditor
+            lyrics={trackForm.lyrics}
+            onChange={val => setTrackForm({ ...trackForm, lyrics: val })}
+            audioFile={trackForm.audio_file}
+            audioUrl={null}
+          />
+        </TierGate>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
@@ -1816,6 +1818,7 @@ export default function TrackUploadPanel() {
                 )}
               </div>
 
+              {!isBeat && (
               <TierGate feature="lyrics" inline>
                 <div>
                   <FieldLabel>Lyrics (optional)</FieldLabel>
@@ -1825,6 +1828,7 @@ export default function TrackUploadPanel() {
                     className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none resize-none" />
                 </div>
               </TierGate>
+              )}
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>

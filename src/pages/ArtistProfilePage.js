@@ -921,7 +921,7 @@ export default function ArtistProfilePage() {
         await supabase.from('notifications').insert(
           batch.map(uid => ({
             user_id:   uid,
-            artist_id: artist.id,
+            artist_id: null,  // null so artist doesn't see their own broadcast
             type:      'admin_message',
             title:     `Message from ${artist.artist_name}`,
             message:   dmMessage.trim(),
