@@ -52,6 +52,38 @@ export default function BeatDetailPage() {
 
   const isCurrentTrack = currentTrack?.id === track?.id;
 
+  // Detect PayFast return — check URL for payment ref
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const ref = params.get('ref');
+    if (ref && ref.startsWith('fm_')) {
+      // PayFast returned successfully — check if purchase was recorded
+      const checkPurchase = async () => {
+        if (!user?.id || !track?.id) return;
+        const { data } = await supabase
+          .from('beat_purchases').select('id, licence_type')
+          .eq('track_id', track.id).eq('buyer_user_id', user.id)
+          .eq('status', 'completed').maybeSingle();
+        if (data) {
+          setAlreadyPurchased(true);
+          setPurchaseSuccess(true);
+          // Trigger download
+          if (track.file_url) {
+            setTimeout(() => {
+              const a = document.createElement('a');
+              a.href = track.file_url;
+              a.download = `${track.title}.mp3`;
+              a.click();
+            }, 1000);
+          }
+          // Clean URL
+          window.history.replaceState({}, '', window.location.pathname);
+        }
+      };
+      checkPurchase();
+    }
+  }, [track?.id, user?.id]); // eslint-disable-line
+
   useEffect(() => {
     if (!slug) return;
     const load = async () => {

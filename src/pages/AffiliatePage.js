@@ -389,9 +389,31 @@ export default function AffiliatePage() {
                     <p className="text-base font-bold text-white">Credits Balance</p>
                     <p className="text-4xl font-black text-yellow-400">{affiliate.credits_balance || 0}</p>
                     <p className="text-xs text-white/30">Redeem for premium access, exclusive drops and more</p>
-                    <button className="w-full py-3 rounded-xl text-sm font-semibold bg-yellow-500/15 border border-yellow-500/25 text-yellow-400 transition">
-                      Redeem Credits — Coming Soon
-                    </button>
+                    <div className="space-y-2">
+                      <p className="text-xs text-white/30 font-semibold uppercase tracking-wider">Redeem For</p>
+                      {[
+                        { label: '1 Month Pro Free', cost: 500, icon: '⭐' },
+                        { label: 'Featured Artist Slot', cost: 1000, icon: '🔥' },
+                        { label: 'Priority Upload Badge', cost: 300, icon: '🏅' },
+                      ].map(r => (
+                        <div key={r.label} className="flex items-center justify-between p-3 rounded-xl bg-white/[0.03] border border-white/[0.05]">
+                          <div className="flex items-center space-x-2">
+                            <span>{r.icon}</span>
+                            <span className="text-sm text-white">{r.label}</span>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <span className="text-xs font-bold text-yellow-400">{r.cost} credits</span>
+                            <button
+                              disabled={affiliate.credits_balance < r.cost}
+                              className="px-3 py-1 rounded-lg text-xs font-bold transition disabled:opacity-30"
+                              style={{ background: affiliate.credits_balance >= r.cost ? 'rgba(234,179,8,0.2)' : 'rgba(255,255,255,0.04)', color: affiliate.credits_balance >= r.cost ? '#facc15' : 'rgba(255,255,255,0.2)', border: `1px solid ${affiliate.credits_balance >= r.cost ? 'rgba(234,179,8,0.3)' : 'rgba(255,255,255,0.06)'}` }}>
+                              Redeem
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                      <p className="text-[10px] text-white/20 text-center pt-1">Redemptions are reviewed and applied manually within 24h</p>
+                    </div>
                   </div>
                 ) : (
                   <>

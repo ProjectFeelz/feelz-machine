@@ -102,8 +102,6 @@ exports.handler = async (event) => {
 
   // ── CHECK ELIGIBILITY & CREATE AFFILIATE ───────────────────────────────────
   if (action === 'apply') {
-    const { data: { session } } = await supabase.auth.admin.getUserById(userId);
-
     // Check eligibility via DB function
     const { data: eligible } = await supabase
       .rpc('check_affiliate_eligibility', { p_user_id: userId });

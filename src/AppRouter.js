@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation, useParams, useNavigate } from 'react-router-dom';
 import { HelmetProvider } from 'react-helmet-async';
-import { AuthProvider } from './contexts/AuthContext';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { PlayerProvider } from './contexts/PlayerContext';
 import { TierProvider } from './contexts/useTier';
 import { useSessionRefresh } from './useSessionRefresh';
@@ -143,6 +143,39 @@ function OnboardingGuard({ children }) {
 }
 
 
+function PaymentSuccess() {
+  const navigate = useNavigate();
+  React.useEffect(() => {
+    // Redirect back after 3 seconds — BeatDetailPage handles the rest via URL param
+    const t = setTimeout(() => navigate(-1), 3000);
+    return () => clearTimeout(t);
+  }, [navigate]);
+  return (
+    <div className="min-h-screen bg-black flex flex-col items-center justify-center space-y-4 px-6 text-center">
+      <div className="w-16 h-16 rounded-full bg-green-500/20 flex items-center justify-center">
+        <span className="text-3xl">✓</span>
+      </div>
+      <h2 className="text-xl font-bold text-white">Payment Successful!</h2>
+      <p className="text-sm text-white/40">Your download will start shortly. Redirecting you back…</p>
+    </div>
+  );
+}
+
+function PaymentCancel() {
+  const navigate = useNavigate();
+  return (
+    <div className="min-h-screen bg-black flex flex-col items-center justify-center space-y-4 px-6 text-center">
+      <div className="w-16 h-16 rounded-full bg-red-500/20 flex items-center justify-center">
+        <span className="text-3xl">✕</span>
+      </div>
+      <h2 className="text-xl font-bold text-white">Payment Cancelled</h2>
+      <p className="text-sm text-white/40">No charge was made.</p>
+      <button onClick={() => navigate(-1)} className="px-6 py-2.5 bg-white text-black rounded-xl text-sm font-semibold">Go Back</button>
+    </div>
+  );
+}
+
+
 export default function AppRouter() {
   return (
     <HelmetProvider>
@@ -210,6 +243,8 @@ export default function AppRouter() {
                 <Route path="/album/:id" element={<AlbumDetailPage />} />
                 <Route path="/track/:slug" element={<TrackDetailPage />} />
                 <Route path="/affiliates" element={<AffiliatePage />} />
+                <Route path="/payment/success" element={<PaymentSuccess />} />
+                <Route path="/payment/cancel" element={<PaymentCancel />} />
                 <Route path="/admin/affiliates" element={<AdminAffiliates />} />
                 <Route path="/beat/:slug" element={<BeatDetailPage />} />
                 <Route path="/artist/:slug" element={<ArtistProfilePage />} />
