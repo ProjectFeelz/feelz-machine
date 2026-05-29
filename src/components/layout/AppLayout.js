@@ -7,6 +7,7 @@ import MiniPlayer from './MiniPlayer';
 import FullPlayer from './FullPlayer';
 import { usePlayer } from '../../contexts/PlayerContext';
 import { useAuth } from '../../contexts/AuthContext';
+import { ListenerThemeProvider } from '../../contexts/ListenerThemeContext';
 import { Bell, Flame, UserCircle, Compass } from 'lucide-react';
 import useNotifications from '../../contexts/useNotifications';
 import { OfflineBanner } from '../../hooks/useOffline';
@@ -70,6 +71,7 @@ function getTitle(pathname) {
 // ── Splash screen ─────────────────────────────────────────────────────────────
 function SplashScreen() {
   return (
+    <ListenerThemeProvider>
     <div className="fixed inset-0 z-[9999] bg-black flex flex-col items-center justify-center" style={{ left: 0, top: 0, right: 0, bottom: 0 }}>
       <div className="flex flex-col items-center space-y-4">
         <img src="/logo.png" alt="Feelz Machine" className="w-20 h-20 rounded-2xl shadow-2xl" />
@@ -294,5 +296,6 @@ export default function AppLayout() {
         <InstallPrompt />
       </div>
     </StreakContext.Provider>
+    </ListenerThemeProvider>
   );
 }

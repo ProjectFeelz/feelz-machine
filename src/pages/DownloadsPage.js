@@ -9,6 +9,8 @@ import { Download, Play, Pause, Music, ArrowLeft, Loader, Check } from 'lucide-r
 export default function DownloadsPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const navigate = useNavigate();
+  const [downloadError, setDownloadError] = useState('');
   const { playTrack, currentTrack, isPlaying, togglePlay } = usePlayer();
   const [downloads, setDownloads]     = useState([]);
   const [loading, setLoading]         = useState(true);
@@ -44,7 +46,13 @@ export default function DownloadsPage() {
       setJustDownloaded(track.id);
       setTimeout(() => setJustDownloaded(null), 2000);
     } catch (err) {
-      console.error('Download error:', err);
+      if (err.message === 'fan_pro_required') {
+        setDownloadError('Upgrade to Fan Pro to download tracks.');
+      } else if (err.message === 'monthly_quota_exceeded') {
+        setDownloadError('Monthly download quota reached. Resets on the 1st.');
+      } else {
+        console.error('Download error:', err);
+      }
     }
     setDownloading(null);
   };
@@ -61,6 +69,18 @@ export default function DownloadsPage() {
           <p className="text-xs text-white/30">{downloads.length} tracks</p>
         </div>
       </div>
+
+      {downloadError && (
+        <div className="mb-4 p-3 rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-between">
+          <p className="text-xs text-purple-300">{downloadError}</p>
+          <button
+            onClick={() => navigate('/listener/upgrade')}
+            className="text-[10px] font-bold text-purple-400 bg-purple-500/10 px-2 py-1 rounded-lg ml-3 flex-shrink-0 hover:bg-purple-500/20 transition"
+          >
+            Upgrade
+          </button>
+        </div>
+      )}
 
       {loading ? (
         <div className="flex justify-center py-20">

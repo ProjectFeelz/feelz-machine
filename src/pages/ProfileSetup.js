@@ -14,6 +14,8 @@ import PaymentSettings from '../components/PaymentSettings';
 import TierGate from '../components/TierGate';
 import { TierBadge } from '../components/TierGate';
 import { useTier } from '../contexts/useTier';
+import { useListenerTheme, LISTENER_THEME_PRESETS } from '../contexts/ListenerThemeContext';
+import { getListenerFeature } from '../contexts/useTier';
 import ProfileCompletionBanner from '../components/ProfileCompletionBanner';
 import { useStreakContext } from '../contexts/StreakContext';
 
@@ -131,7 +133,8 @@ export default function ProfilePage() {
     user, profile, artist, isAdmin, isArtist, isBeatmaker, signOut, refreshProfile,
     rawIsAdmin, rawIsArtist, rawIsMaster, viewAs, setViewAs, deleteAccount,
   } = useAuth();
-  const { tierSlug } = useTier();
+  const { tierSlug, listenerTierSlug } = useTier();
+  const listenerTheme = useListenerTheme();
   const { streak, longestStreak, discoveryStreak } = useStreakContext();
   const [streakRow, setStreakRow]       = useState(null);
   const [freezing, setFreezing]         = useState(false);
@@ -947,6 +950,64 @@ export default function ProfilePage() {
                 </p>
               )}
               {freezeMsg && <p className="text-xs text-center mt-2 text-blue-400/70">{freezeMsg}</p>}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Listener Pro section ── */}
+      {!isArtist && (
+        <div className="rounded-2xl border border-white/[0.06] overflow-hidden mb-4" style={{ background: 'rgba(255,255,255,0.02)' }}>
+          <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.05]">
+            <p className="text-sm font-semibold text-white">Fan Plan</p>
+            {listenerTierSlug === 'pro'
+              ? <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-500/15 text-purple-400 border border-purple-500/25">Pro Active</span>
+              : <button onClick={() => nav('/listener/upgrade')}
+                  className="text-xs font-semibold text-purple-400 bg-purple-500/10 px-3 py-1.5 rounded-lg hover:bg-purple-500/20 transition">
+                  Upgrade $2.99/mo
+                </button>}
+          </div>
+
+          {/* Theme picker — Pro only */}
+          {listenerTheme && (
+            <div className="p-4">
+              <p className="text-xs text-white/40 mb-3 font-semibold uppercase tracking-wider">App Theme</p>
+              {listenerTierSlug !== 'pro' ? (
+                <button onClick={() => nav('/listener/upgrade')}
+                  className="w-full flex items-center space-x-3 p-3 rounded-xl bg-purple-500/5 border border-purple-500/15 text-left hover:bg-purple-500/8 transition active:scale-[0.98]">
+                  <Palette className="w-4 h-4 text-purple-400 flex-shrink-0" />
+                  <div>
+                    <p className="text-sm text-white font-medium">Unlock App Themes</p>
+                    <p className="text-xs text-white/30 mt-0.5">10 colour schemes — upgrade to Fan Pro</p>
+                  </div>
+                </button>
+              ) : (
+                <div className="grid grid-cols-5 gap-2">
+                  {LISTENER_THEME_PRESETS.map(preset => (
+                    <button
+                      key={preset.slug}
+                      onClick={() => listenerTheme.setTheme(preset.slug)}
+                      className="relative flex flex-col items-center space-y-1.5 active:scale-95 transition"
+                      title={preset.name}
+                    >
+                      <div className="w-full aspect-square rounded-lg border-2 overflow-hidden transition-all"
+                        style={{
+                          backgroundColor: preset.bg,
+                          borderColor: listenerTheme.activeSlug === preset.slug ? preset.secondary : 'transparent',
+                        }}>
+                        <div className="w-full h-1/2" style={{ backgroundColor: preset.secondary + '60' }} />
+                        <div className="w-3/4 h-px mx-auto mt-0.5" style={{ backgroundColor: preset.accent + '80' }} />
+                      </div>
+                      <p className="text-[9px] text-white/40 truncate w-full text-center">{preset.name}</p>
+                      {listenerTheme.activeSlug === preset.slug && (
+                        <div className="absolute top-1 right-1 w-3 h-3 rounded-full bg-white flex items-center justify-center">
+                          <Check className="w-2 h-2 text-black" strokeWidth={3} />
+                        </div>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>

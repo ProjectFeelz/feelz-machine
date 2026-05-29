@@ -70,6 +70,60 @@ exports.handler = async (event) => {
 
   const trackIsFree = !track.download_price || track.download_price <= 0;
 
+  // ── Listener download quota check ───────────────────────────────────────────
+  // Free listeners cannot download. Pro listeners get 3 free downloads/month.
+  // Paid downloads (download_price > 0) bypass the quota — they already paid.
+  if (trackIsFree && track.is_downloadable) {
+    // Check if user is an artist (artists bypass listener quota)
+    const { data: artistCheck } = await adminClient
+      .from('artists').select('id').eq('user_id', user.id).maybeSingle();
+
+    if (!artistCheck) {
+      // This is a listener — check their tier
+      const { data: listenerSub } = await adminClient
+        .from('listener_tier_subscriptions')
+        .select('tier_id')
+        .eq('user_id', user.id)
+        .eq('status', 'active')
+        .maybeSingle();
+
+      const PRO_TIER_ID = 'a421dac1-f492-461c-88a5-f01b6942a042';
+      const isPro = listenerSub?.tier_id === PRO_TIER_ID;
+
+      if (!isPro) {
+        return {
+          statusCode: 403,
+          body: JSON.stringify({
+            error: 'fan_pro_required',
+            message: 'Upgrade to Fan Pro to download tracks',
+          }),
+        };
+      }
+
+      // Pro listener — check monthly quota (3/month)
+      const monthStart = new Date();
+      monthStart.setDate(1); monthStart.setHours(0, 0, 0, 0);
+      const { count: monthlyCount } = await adminClient
+        .from('downloads')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+        .eq('amount_paid', 0)
+        .gte('created_at', monthStart.toISOString());
+
+      if ((monthlyCount || 0) >= 3) {
+        return {
+          statusCode: 403,
+          body: JSON.stringify({
+            error: 'monthly_quota_exceeded',
+            message: 'You have used your 3 free downloads this month. They reset on the 1st.',
+            quota: 3,
+            used: monthlyCount,
+          }),
+        };
+      }
+    }
+  }
+
   if (trackIsFree) {
     await adminClient
       .from('downloads')

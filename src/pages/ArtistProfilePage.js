@@ -1134,6 +1134,7 @@ export default function ArtistProfilePage() {
   const isProfileOwner = user && myArtist && myArtist.id === artist.id;
   const isBeatmakerProfile = artist?.role === 'beatmaker';
   const pageUrl        = `${BASE_URL}/artist/${slug}`;
+  const shortUrl       = artist?.slug ? `${BASE_URL}/@${artist.slug}` : pageUrl;
   const ogImage        = artist.profile_image_url || `${BASE_URL}/og-default.png`;
   const pageTitle      = `${artist.artist_name} · Feelz Machine`;
   const pageDesc       = artist.bio
@@ -1313,6 +1314,36 @@ export default function ArtistProfilePage() {
             <TipButton artist={artist} />
           )}
         </div>
+
+        {/* Owner @link strip */}
+        {isProfileOwner && artist?.slug && (
+          <div className="flex items-center justify-center space-x-3 mb-4 px-4 py-2.5 rounded-2xl"
+            style={{ background: `${textColor}06`, border: `1px solid ${textColor}10` }}>
+            <span className="text-xs font-semibold" style={{ color: `${textColor}50` }}>
+              @{artist.slug}
+            </span>
+            <div className="flex items-center space-x-1">
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(`${BASE_URL}/@${artist.slug}`);
+                  setCopied(true); setTimeout(() => setCopied(false), 2000);
+                }}
+                className="text-[10px] font-semibold px-2.5 py-1 rounded-lg transition active:scale-95"
+                style={{ background: `${textColor}10`, color: `${textColor}50` }}>
+                {copied ? '✓ Copied' : 'Copy @link'}
+              </button>
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(pageUrl);
+                  setCopied(true); setTimeout(() => setCopied(false), 2000);
+                }}
+                className="text-[10px] font-semibold px-2.5 py-1 rounded-lg transition active:scale-95"
+                style={{ background: `${textColor}10`, color: `${textColor}50` }}>
+                Copy URL
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Tip Goal — full width below pills */}
         <TipGoal
@@ -1829,7 +1860,7 @@ export default function ArtistProfilePage() {
       {showShareCard && (
         <ShareCard
           artist={artist}
-          shareUrl={pageUrl}
+          shareUrl={shortUrl}
           onClose={() => setShowShareCard(false)}
         />
       )}

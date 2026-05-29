@@ -7,6 +7,7 @@ import {
   UserX, Crown, MoreVertical, Music, Mail, Calendar,
   Megaphone, BarChart3, AlertTriangle, Zap, Trophy,
   Brain, Copy, ChevronRight, Ban, Trash2, Check,
+  Headphones, DollarSign, TrendingUp, Radio, Heart, Star,
 } from 'lucide-react';
 
 const ADMIN_SECTIONS = [
@@ -58,6 +59,8 @@ export default function AdminDashboard() {
   const [selectedUser, setSelectedUser]   = useState(null);
   const [actionLoading, setActionLoading] = useState(false);
   const [banConfirm, setBanConfirm]       = useState(null); // artist to confirm ban+delete
+  const [platformStats, setPlatformStats] = useState({});
+  const [userTab, setUserTab]             = useState('artists'); // artists | users | listeners
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -73,6 +76,39 @@ export default function AdminDashboard() {
       const { data: profileData } = await supabase
         .from('user_profiles').select('*').order('created_at', { ascending: false });
       setUsers(profileData || []);
+
+      // ── Platform stats ─────────────────────────────────────────────────
+      const cutoff7d = new Date(Date.now() - 7 * 86400000).toISOString();
+      const [
+        { count: totalStreams7d },
+        { data: tipData },
+        { data: dlData },
+        { data: beatData },
+        { count: fanProCount },
+        { count: activeListeners7d },
+        { count: totalTracks },
+        { count: totalFollows },
+      ] = await Promise.all([
+        supabase.from('streams').select('*', { count: 'exact', head: true }).gte('created_at', cutoff7d),
+        supabase.from('tips').select('amount').gte('created_at', cutoff7d),
+        supabase.from('downloads').select('amount_paid').gt('amount_paid', 0).gte('created_at', cutoff7d),
+        supabase.from('beat_purchases').select('amount_paid').eq('status', 'completed').gte('created_at', cutoff7d),
+        supabase.from('listener_tier_subscriptions').select('*', { count: 'exact', head: true }).eq('status', 'active'),
+        supabase.from('listeners').select('*', { count: 'exact', head: true }).gte('last_seen_at', cutoff7d),
+        supabase.from('tracks').select('*', { count: 'exact', head: true }).eq('is_published', true),
+        supabase.from('follows').select('*', { count: 'exact', head: true }),
+      ]);
+      const tipsTotal  = (tipData  || []).reduce((s, t) => s + (t.amount      || 0), 0);
+      const dlTotal    = (dlData   || []).reduce((s, d) => s + (d.amount_paid || 0), 0);
+      const beatTotal  = (beatData || []).reduce((s, b) => s + (b.amount_paid || 0), 0);
+      setPlatformStats({
+        streams7d:      totalStreams7d  || 0,
+        revenue7d:      (tipsTotal + dlTotal + beatTotal).toFixed(2),
+        fanProSubs:     fanProCount     || 0,
+        activeListeners: activeListeners7d || 0,
+        publishedTracks: totalTracks    || 0,
+        totalFollows:    totalFollows   || 0,
+      });
     } catch (err) { console.error('Admin fetch error:', err); }
     setLoading(false);
   }, []);
@@ -173,10 +209,14 @@ export default function AdminDashboard() {
   );
 
   const stats = [
-    { label: 'Artists', value: artists.length,                           color: 'text-green-400' },
-    { label: 'Users',   value: users.length,                             color: 'text-blue-400'  },
-    { label: 'Admins',  value: artists.filter(a => a.isAdmin).length,    color: 'text-yellow-400'},
-    { label: 'Masters', value: artists.filter(a => a.is_master).length,  color: 'text-purple-400'},
+    { label: 'Artists',       value: artists.length,                          color: 'text-green-400',  icon: Users      },
+    { label: 'Users',         value: users.length,                            color: 'text-blue-400',   icon: Users      },
+    { label: 'Published',     value: platformStats.publishedTracks || 0,      color: 'text-purple-400', icon: Music      },
+    { label: 'Fan Pro',       value: platformStats.fanProSubs || 0,            color: 'text-yellow-400', icon: Star       },
+    { label: 'Streams (7d)',  value: platformStats.streams7d || 0,            color: 'text-cyan-400',   icon: Headphones },
+    { label: 'Active (7d)',   value: platformStats.activeListeners || 0,       color: 'text-pink-400',   icon: Radio      },
+    { label: 'Follows',       value: platformStats.totalFollows || 0,          color: 'text-indigo-400', icon: Heart      },
+    { label: 'Revenue (7d)',  value: `$${platformStats.revenue7d || '0.00'}`,  color: 'text-green-400',  icon: DollarSign },
   ];
 
   if (!isAdmin) return null;
@@ -217,14 +257,20 @@ export default function AdminDashboard() {
         <h1 className="text-xl font-bold text-white">Admin Panel</h1>
       </div>
 
-      {/* Stats strip */}
+      {/* Platform stats grid */}
       <div className="grid grid-cols-4 gap-2 mb-6">
-        {stats.map(s => (
-          <div key={s.label} className="bg-white/[0.03] rounded-xl p-3 border border-white/[0.06] text-center">
-            <p className={`text-lg font-bold ${s.color}`}>{s.value}</p>
-            <p className="text-[10px] text-white/30 mt-0.5">{s.label}</p>
-          </div>
-        ))}
+        {stats.map(s => {
+          const Icon = s.icon;
+          return (
+            <div key={s.label} className="bg-white/[0.03] rounded-xl p-3 border border-white/[0.06]">
+              <div className="flex items-center justify-between mb-1">
+                <Icon className={`w-3.5 h-3.5 ${s.color} opacity-60`} />
+              </div>
+              <p className={`text-base font-black ${s.color} leading-none`}>{typeof s.value === 'number' ? s.value.toLocaleString() : s.value}</p>
+              <p className="text-[9px] text-white/25 mt-1 leading-tight">{s.label}</p>
+            </div>
+          );
+        })}
       </div>
 
       {/* Grouped nav sections */}
@@ -261,19 +307,22 @@ export default function AdminDashboard() {
         </div>
 
         <div className="flex space-x-1 mb-3 bg-white/[0.03] rounded-lg p-1">
-          {['artists', 'users'].map(tab => (
-            <button key={tab} onClick={() => setActiveTab(tab)}
+          {[
+            { key: 'artists',   label: `Artists (${filteredArtists.length})` },
+            { key: 'users',     label: `Users (${filteredUsers.length})` },
+          ].map(tab => (
+            <button key={tab.key} onClick={() => setUserTab(tab.key)}
               className={`flex-1 py-2 text-xs font-semibold rounded-md transition ${
-                activeTab === tab ? 'bg-white text-black' : 'text-white/40 hover:text-white/60'
+                userTab === tab.key ? 'bg-white text-black' : 'text-white/40 hover:text-white/60'
               }`}>
-              {tab === 'artists' ? `Artists (${filteredArtists.length})` : `Users (${filteredUsers.length})`}
+              {tab.label}
             </button>
           ))}
         </div>
 
         {loading ? (
           <div className="flex justify-center py-12"><Loader className="w-5 h-5 animate-spin text-white/20" /></div>
-        ) : activeTab === 'artists' ? (
+        ) : userTab === 'artists' ? (
           <div className="space-y-2">
             {filteredArtists.length === 0 ? (
               <p className="text-center text-white/20 text-sm py-10">No artists found</p>

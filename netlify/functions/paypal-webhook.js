@@ -110,13 +110,20 @@ exports.handler = async (event) => {
   // ── Subscription cancelled by user from PayPal dashboard ─────────────────
   if (eventType === 'BILLING.SUBSCRIPTION.CANCELLED') {
     const subscriptionId = resource?.id;
+    // Try artist first, then listener
     await cancelArtistSubscription(subscriptionId, 'user_cancelled');
+    await supabase.from('listener_tier_subscriptions')
+      .update({ status: 'cancelled', cancelled_at: new Date().toISOString(), cancel_reason: 'user_cancelled' })
+      .eq('paypal_subscription_id', subscriptionId);
   }
 
   // ── Subscription suspended (payment failed repeatedly) ───────────────────
   if (eventType === 'BILLING.SUBSCRIPTION.SUSPENDED') {
     const subscriptionId = resource?.id;
     await cancelArtistSubscription(subscriptionId, 'payment_failed');
+    await supabase.from('listener_tier_subscriptions')
+      .update({ status: 'cancelled', cancelled_at: new Date().toISOString(), cancel_reason: 'payment_failed' })
+      .eq('paypal_subscription_id', subscriptionId);
   }
 
   // ── Subscription expired ──────────────────────────────────────────────────

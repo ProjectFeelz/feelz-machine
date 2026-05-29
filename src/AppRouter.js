@@ -31,6 +31,8 @@ import TermsOfUse from './pages/TermsOfUse';
 import NotificationsPage from './pages/NotificationsPage';
 import HubPage from './pages/HubPage';
 import ProfileSetup from './pages/ProfileSetup';
+import ListenerStatsPage from './pages/ListenerStatsPage';
+import ListenerUpgradePage from './pages/ListenerUpgradePage';
 import AdminDashboard from './pages/AdminDashboard';
 import AdminArtists from './pages/AdminArtists';
 import AdminAnalytics from './pages/AdminAnalytics';
@@ -229,6 +231,8 @@ export default function AppRouter() {
                 <Route path="/library/downloads" element={<DownloadsPage />} />
                 <Route path="/library/recent" element={<RecentlyPlayedPage />} />
                 <Route path="/library/following" element={<FollowingPage />} />
+                <Route path="/listener/stats"   element={<ListenerStatsPage />} />
+                <Route path="/listener/upgrade" element={<ListenerUpgradePage />} />
                 <Route path="/library/playlists" element={<PlaylistsPage />} />
                 <Route path="/library/playlists/join/:token" element={<PlaylistJoinPage />} />
                 <Route path="/library/playlists/:id" element={<PlaylistDetailPage />} />

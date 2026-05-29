@@ -80,6 +80,29 @@ const TIER_ACCESS = {
   },
 };
 
+// ── Listener tier feature map ─────────────────────────────────────────────────
+export const LISTENER_TIER_ACCESS = {
+  free: {
+    app_themes:             false,
+    deep_stats:             false,
+    fan_badge:              false,
+    free_downloads_monthly: 0,
+    early_access:           false,
+  },
+  pro: {
+    app_themes:             true,
+    deep_stats:             true,
+    fan_badge:              true,
+    free_downloads_monthly: 3,
+    early_access:           true,
+  },
+};
+
+export function getListenerFeature(tier, feature) {
+  const map = LISTENER_TIER_ACCESS[tier] || LISTENER_TIER_ACCESS.free;
+  return map[feature] ?? false;
+}
+
 // Human-readable feature names for upgrade prompts
 const FEATURE_LABELS = {
   lyrics: { name: 'Lyrics', description: 'Add lyrics to your tracks', minTier: 'pro' },
@@ -101,12 +124,13 @@ const FEATURE_LABELS = {
 }
 
 function useTierInternal() {
-  const { artist, isAdmin } = useAuth();
+  const { artist, user, isAdmin } = useAuth();
   const [tierSlug, setTierSlug] = useState('free');
   const [tierData, setTierData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [trackCount, setTrackCount] = useState(0);
   const [monthlyDownloadSalesCount, setMonthlyDownloadSalesCount] = useState(0);
+  const [listenerTierSlug, setListenerTierSlug] = useState('free');
 
   useEffect(() => {
     if (isAdmin) {
@@ -118,12 +142,39 @@ function useTierInternal() {
       fetchTier(artist.id);
       fetchTrackCount(artist.id);
       fetchMonthlyDownloadSalesCount(artist.id);
+    } else if (user?.id) {
+      fetchListenerTier(user.id);
     } else {
       setTierSlug('free');
+      setListenerTierSlug('free');
       setLoading(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [artist?.id, artist?.role, isAdmin]);
+  }, [artist?.id, artist?.role, user?.id, isAdmin]);
+
+  const fetchListenerTier = async (userId) => {
+    try {
+      const { data: sub } = await supabase
+        .from('listener_tier_subscriptions')
+        .select('tier_id, status')
+        .eq('user_id', userId)
+        .eq('status', 'active')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (sub?.tier_id) {
+        const TIER_ID_MAP = {
+          '289f65ec-4b2f-4868-b71f-9f560d493225': 'free',
+          'a421dac1-f492-461c-88a5-f01b6942a042': 'pro',
+          'f0b8b8f5-bfc2-496e-9fb4-8904d9dc6fe4': 'premium',
+        };
+        setListenerTierSlug(TIER_ID_MAP[sub.tier_id] || 'free');
+      } else {
+        setListenerTierSlug('free');
+      }
+    } catch { setListenerTierSlug('free'); }
+    setLoading(false);
+  };
 
   // Re-check tier when user returns from Safari (iOS PayPal hop)
   useEffect(() => {
@@ -275,6 +326,7 @@ function useTierInternal() {
 
   return {
     tierSlug,
+    listenerTierSlug,
     tierData,
     tierLevel,
     access,

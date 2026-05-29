@@ -125,6 +125,10 @@ export default function AdminAnalytics() {
   const [sourceSplit, setSourceSplit]     = useState([]);
   const [completionStats, setCompletionStats] = useState({});
   const [beatStats, setBeatStats]         = useState({});
+  const [revenueStats, setRevenueStats]   = useState({});
+  const [listenerTierSplit, setListenerTierSplit] = useState([]);
+  const [platformSignals, setPlatformSignals]     = useState([]);
+  const [trendingGenres, setTrendingGenres]       = useState([]);
 
   const fetchAll = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true); else setLoading(true);
@@ -343,6 +347,83 @@ export default function AdminAnalytics() {
         time: new Date(s.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       })));
 
+      // ── Revenue ────────────────────────────────────────────────────────────
+      try {
+        const [
+          { data: tipRevenue },
+          { data: dlRevenue },
+          { data: beatRevenue },
+          { count: artistProCount },
+          { count: artistPremCount },
+          { count: fanProCount },
+        ] = await Promise.all([
+          supabase.from('tips').select('amount').gte('created_at', cutoff),
+          supabase.from('downloads').select('amount_paid').gt('amount_paid', 0).gte('created_at', cutoff),
+          supabase.from('beat_purchases').select('amount_paid').eq('status', 'completed').gte('created_at', cutoff),
+          supabase.from('artist_tier_subscriptions').select('*', { count: 'exact', head: true }).eq('status', 'active')
+            .in('tier_id', ['a421dac1-f492-461c-88a5-f01b6942a042']), // pro
+          supabase.from('artist_tier_subscriptions').select('*', { count: 'exact', head: true }).eq('status', 'active')
+            .in('tier_id', ['f0b8b8f5-bfc2-496e-9fb4-8904d9dc6fe4']), // premium
+          supabase.from('listener_tier_subscriptions').select('*', { count: 'exact', head: true }).eq('status', 'active'),
+        ]);
+        const tipTotal  = (tipRevenue  || []).reduce((s, t) => s + (parseFloat(t.amount)      || 0), 0);
+        const dlTotal   = (dlRevenue   || []).reduce((s, d) => s + (parseFloat(d.amount_paid) || 0), 0);
+        const beatTotal = (beatRevenue || []).reduce((s, b) => s + (parseFloat(b.amount_paid) || 0), 0);
+        setRevenueStats({
+          tips:        tipTotal.toFixed(2),
+          downloads:   dlTotal.toFixed(2),
+          beats:       beatTotal.toFixed(2),
+          total:       (tipTotal + dlTotal + beatTotal).toFixed(2),
+          artistPro:   artistProCount  || 0,
+          artistPrem:  artistPremCount || 0,
+          fanPro:      fanProCount     || 0,
+        });
+
+        // ── Listener tier split ───────────────────────────────────────────
+        const { data: lTierRows } = await supabase
+          .from('listener_tier_subscriptions').select('tier_id').eq('status', 'active');
+        const PRO_ID = 'a421dac1-f492-461c-88a5-f01b6942a042';
+        const lProCount = (lTierRows || []).filter(r => r.tier_id === PRO_ID).length;
+        const lFreeCount = Math.max(0, (listenerCount || 0) - lProCount);
+        const lTotal = lFreeCount + lProCount || 1;
+        setListenerTierSplit([
+          { name: 'Fan Pro', value: lProCount,  pct: pct(lProCount,  lTotal), color: PURPLE },
+          { name: 'Free',    value: lFreeCount, pct: pct(lFreeCount, lTotal), color: '#4b5563' },
+        ]);
+      } catch (err) { console.warn('Revenue fetch error:', err); }
+
+      // ── Platform intelligence signals ──────────────────────────────────
+      try {
+        // Fastest-growing artists (most new followers in period)
+        const { data: newFollows } = await supabase
+          .from('follows').select('artist_id, artists(artist_name, slug)')
+          .gte('created_at', cutoff).limit(5000);
+        const followGrowth = {};
+        const artistNameMap = {};
+        (newFollows || []).forEach(f => {
+          if (!f.artist_id) return;
+          followGrowth[f.artist_id] = (followGrowth[f.artist_id] || 0) + 1;
+          if (f.artists) artistNameMap[f.artist_id] = f.artists;
+        });
+        const growingArtists = Object.entries(followGrowth)
+          .sort((a, b) => b[1] - a[1]).slice(0, 5)
+          .map(([id, count]) => ({ name: artistNameMap[id]?.artist_name || id, slug: artistNameMap[id]?.slug, newFollowers: count }));
+
+        // Trending genres by recent streams
+        const { data: recentGenreStreams } = await supabase
+          .from('streams').select('tracks(genre)').gte('created_at', cutoff).limit(5000);
+        const genreCounts = {};
+        (recentGenreStreams || []).forEach(s => {
+          const g = s.tracks?.genre;
+          if (g) genreCounts[g] = (genreCounts[g] || 0) + 1;
+        });
+        setTrendingGenres(Object.entries(genreCounts)
+          .sort((a, b) => b[1] - a[1]).slice(0, 8)
+          .map(([genre, streams]) => ({ genre, streams })));
+
+        setPlatformSignals(growingArtists);
+      } catch (err) { console.warn('Platform signals error:', err); }
+
     } catch (err) {
       console.error('Analytics error:', err);
     }
@@ -416,6 +497,7 @@ export default function AdminAnalytics() {
       <div className="flex space-x-1 px-4 py-3 overflow-x-auto scrollbar-hide border-b border-white/[0.04]">
         {[
           { key: 'overview',   label: 'Overview'  },
+          { key: 'revenue',    label: 'Revenue'   },
           { key: 'content',    label: 'Content'   },
           { key: 'behaviour',  label: 'Behaviour' },
           { key: 'beats',      label: 'Beats'     },
@@ -480,6 +562,105 @@ export default function AdminAnalytics() {
           )}
 
           {/* ── CONTENT ──────────────────────────────────────────────────── */}
+          {/* ── REVENUE ─────────────────────────────────────────────────── */}
+          {tab === 'revenue' && (
+            <>
+              {/* Total revenue KPIs */}
+              <div className="grid grid-cols-2 gap-2 mb-4">
+                <KPI icon={DollarSign}  label="Total Revenue"    value={`$${revenueStats.total || '0.00'}`}     color="bg-green-500/20"  sub={`Last ${range} days`} />
+                <KPI icon={Heart}       label="Tips"             value={`$${revenueStats.tips || '0.00'}`}      color="bg-pink-500/20"   />
+                <KPI icon={Download}    label="Download Sales"   value={`$${revenueStats.downloads || '0.00'}`} color="bg-blue-500/20"   />
+                <KPI icon={Music}       label="Beat Sales"       value={`$${revenueStats.beats || '0.00'}`}     color="bg-yellow-500/20" />
+              </div>
+
+              {/* Subscription breakdown */}
+              <div className="rounded-2xl p-4 bg-white/[0.02] border border-white/[0.05] mb-4">
+                <SectionTitle icon={Crown} title="Active Subscriptions" color="text-yellow-400" />
+                <div className="grid grid-cols-3 gap-3 mt-3">
+                  {[
+                    { label: 'Artist Pro',     value: revenueStats.artistPro  || 0, color: 'text-purple-400', est: ((revenueStats.artistPro || 0) * 4.99).toFixed(0) },
+                    { label: 'Artist Premium', value: revenueStats.artistPrem || 0, color: 'text-yellow-400', est: ((revenueStats.artistPrem || 0) * 9.99).toFixed(0) },
+                    { label: 'Fan Pro',        value: revenueStats.fanPro     || 0, color: 'text-cyan-400',   est: ((revenueStats.fanPro || 0) * 2.99).toFixed(0) },
+                  ].map(s => (
+                    <div key={s.label} className="bg-white/[0.03] rounded-xl p-3 border border-white/[0.05] text-center">
+                      <p className={`text-xl font-black ${s.color}`}>{s.value}</p>
+                      <p className="text-[10px] text-white/30 mt-0.5">{s.label}</p>
+                      <p className="text-[10px] text-green-400/60 mt-0.5">~${s.est}/mo</p>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-[10px] text-white/20 mt-3 text-center">
+                  Estimated MRR: ~${((revenueStats.artistPro || 0) * 4.99 + (revenueStats.artistPrem || 0) * 9.99 + (revenueStats.fanPro || 0) * 2.99).toFixed(2)}/mo
+                </p>
+              </div>
+
+              {/* Listener tier split */}
+              <div className="rounded-2xl p-4 bg-white/[0.02] border border-white/[0.05] mb-4">
+                <SectionTitle icon={Users} title="Listener Tier Split" color="text-cyan-400" />
+                <div className="flex items-center space-x-6 mt-2">
+                  <ResponsiveContainer width={120} height={120}>
+                    <PieChart>
+                      <Pie data={listenerTierSplit} cx="50%" cy="50%" innerRadius={32} outerRadius={55} dataKey="value" paddingAngle={3}>
+                        {listenerTierSplit.map((d, i) => <Cell key={i} fill={d.color} />)}
+                      </Pie>
+                    </PieChart>
+                  </ResponsiveContainer>
+                  <div className="space-y-2 flex-1">
+                    {listenerTierSplit.map((d, i) => (
+                      <div key={i} className="flex items-center space-x-2">
+                        <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: d.color }} />
+                        <span className="text-xs text-white/60 flex-1">{d.name}</span>
+                        <span className="text-xs font-bold text-white">{d.pct}</span>
+                        <span className="text-[10px] text-white/30">({fmt(d.value)})</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Platform intelligence — fastest growing artists */}
+              {platformSignals.length > 0 && (
+                <div className="rounded-2xl p-4 bg-white/[0.02] border border-white/[0.05] mb-4">
+                  <SectionTitle icon={TrendingUp} title={`Fastest Growing Artists (${range}d)`} color="text-green-400" />
+                  <div className="space-y-2 mt-2">
+                    {platformSignals.map((a, i) => (
+                      <div key={i} className="flex items-center space-x-3 py-1.5">
+                        <span className="text-xs font-bold text-white/20 w-4">{i + 1}</span>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm text-white font-medium truncate">{a.name}</p>
+                        </div>
+                        <span className="text-xs font-bold text-green-400">+{a.newFollowers} followers</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Trending genres */}
+              {trendingGenres.length > 0 && (
+                <div className="rounded-2xl p-4 bg-white/[0.02] border border-white/[0.05]">
+                  <SectionTitle icon={Music} title={`Trending Genres (${range}d)`} color="text-purple-400" />
+                  <div className="space-y-2 mt-2">
+                    {trendingGenres.map((g, i) => {
+                      const max = trendingGenres[0]?.streams || 1;
+                      return (
+                        <div key={g.genre}>
+                          <div className="flex justify-between text-xs mb-1">
+                            <span className="text-white/60">{g.genre}</span>
+                            <span className="text-white/30">{fmt(g.streams)} streams</span>
+                          </div>
+                          <div className="h-1.5 bg-white/[0.05] rounded-full overflow-hidden">
+                            <div className="h-full rounded-full" style={{ width: `${Math.round((g.streams/max)*100)}%`, background: PURPLE }} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+
           {tab === 'content' && (
             <>
               {/* Top Tracks */}
@@ -683,6 +864,32 @@ export default function AdminAnalytics() {
                   </div>
                 </div>
               </div>
+
+              {/* Listener tier split */}
+              {listenerTierSplit.length > 0 && (
+                <div className="rounded-2xl p-4 bg-white/[0.02] border border-white/[0.05] mb-4">
+                  <SectionTitle icon={Crown} title="Listener Tier (Fan Pro)" color="text-cyan-400" />
+                  <div className="flex items-center space-x-6">
+                    <ResponsiveContainer width={120} height={120}>
+                      <PieChart>
+                        <Pie data={listenerTierSplit} cx="50%" cy="50%" innerRadius={32} outerRadius={55} dataKey="value" paddingAngle={3}>
+                          {listenerTierSplit.map((d, i) => <Cell key={i} fill={d.color} />)}
+                        </Pie>
+                      </PieChart>
+                    </ResponsiveContainer>
+                    <div className="space-y-2 flex-1">
+                      {listenerTierSplit.map((d, i) => (
+                        <div key={i} className="flex items-center space-x-2">
+                          <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: d.color }} />
+                          <span className="text-xs text-white/60 flex-1">{d.name}</span>
+                          <span className="text-xs font-bold text-white">{d.pct}</span>
+                          <span className="text-[10px] text-white/30">({fmt(d.value)})</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Tier split */}
               <div className="rounded-2xl p-4 bg-white/[0.02] border border-white/[0.05] mb-4">
