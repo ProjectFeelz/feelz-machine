@@ -131,11 +131,11 @@ function AffiliateTracker() {
 function OnboardingGuard({ children }) {
   const { user, artist, listener, loading } = useAuth();
   const location = useLocation();
-  const skipPaths = ['/setup', '/login', '/about', '/terms-of-use', '/privacy-policy', '/artist/', '/@'];
+  const skipPaths = ['/setup', '/login', '/about', '/terms-of-use', '/privacy-policy'];
   
-  if (skipPaths.some(p => location.pathname.startsWith(p))) return children;
-  if (loading) return children;  // keep routes mounted during auth load
+  if (loading) return null;
   if (!user) return children;
+  if (skipPaths.some(p => location.pathname.startsWith(p))) return children;
   
   // New user — has auth but no profile
   if (user && !artist && !listener) {

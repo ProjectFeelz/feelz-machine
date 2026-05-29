@@ -409,6 +409,8 @@ export default function ProfilePage() {
   return (
     <div className="pb-8 px-4 md:px-0">
       <Helmet>
+        <link rel="icon" href="/favicon.ico" />
+        <link rel="apple-touch-icon" href="/logo192.png" />
         <title>Profile · Feelz Machine</title>
         <meta name="description" content="Manage your Feelz Machine artist profile, theme, social links and payments." />
         <link rel="canonical" href="https://www.feelzmachine.com/profile" />

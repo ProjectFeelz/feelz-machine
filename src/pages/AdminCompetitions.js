@@ -4,7 +4,7 @@ import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import {
   Trophy, Plus, Loader, Crown, ChevronRight, Clock, Check,
-  AlertCircle, Upload, DollarSign, Users, X, Edit2, Zap, Play, ArrowLeft, Music,
+  AlertCircle, Upload, DollarSign, Users, X, Edit2, Zap, Play, ArrowLeft, Music, RefreshCw,
 } from 'lucide-react';
 
 const STATUS_OPTIONS = ['upcoming', 'open', 'voting', 'closed', 'completed'];
@@ -399,6 +399,7 @@ export default function AdminCompetitions() {
   const [loading, setLoading]           = useState(true);
   const [showCreate, setShowCreate]     = useState(false);
   const [editingId, setEditingId]       = useState(null);
+  const [spinning, setSpinning]         = useState(false);
   const [saving, setSaving]             = useState(false);
   const [toast, setToast]               = useState('');
   const [payoutComp, setPayoutComp]     = useState(null);
@@ -477,6 +478,59 @@ export default function AdminCompetitions() {
     showToast(`Status → ${status}`);
   };
 
+  const handleNewWeek = async () => {
+    if (!window.confirm('Start a new week? This will close the current wheel competition and create a fresh one.')) return;
+    setSpinning(true);
+    try {
+      const current = competitions.find(comp => comp.wheel_challenge && comp.status === 'open');
+      if (current) {
+        await supabase.from('competitions')
+          .update({ status: 'completed', updated_at: new Date().toISOString() })
+          .eq('id', current.id);
+      }
+      await supabase.from('wheel_challenges').update({ is_current: false }).eq('is_current', true);
+
+      const now          = new Date();
+      const entriesClose = new Date(now.getTime() + 7 * 86400000);
+      const votingClose  = new Date(now.getTime() + 9 * 86400000);
+      const weekNum      = competitions.filter(comp => comp.wheel_challenge).length + 1;
+
+      const { data: newComp, error: compErr } = await supabase
+        .from('competitions')
+        .insert({
+          title:              `Collab Roulette — Week ${weekNum}`,
+          description:        'First official Feelz Machine wheel challenge',
+          prize_description:  'Win 3 months Pro or Premium',
+          status:             'open',
+          wheel_challenge:    true,
+          entries_open_at:    now.toISOString(),
+          entries_close_at:   entriesClose.toISOString(),
+          voting_open_at:     entriesClose.toISOString(),
+          voting_close_at:    votingClose.toISOString(),
+          max_votes_per_user: 2,
+        })
+        .select('id')
+        .single();
+
+      if (compErr) throw compErr;
+
+      // Create a placeholder wheel challenge — artist will see it spin on the wheel page
+      await supabase.from('wheel_challenges').insert({
+        competition_id: newComp.id,
+        prompt:         'New week — challenge prompt coming soon',
+        mode:           'Beats',
+        is_current:     true,
+        spun_at:        now.toISOString(),
+      });
+
+      showToast('✓ New week started');
+      load();
+    } catch (err) {
+      showToast('Error: ' + err.message);
+    }
+    setSpinning(false);
+  };
+
   if (!isAdmin) return null;
 
   return (
@@ -495,6 +549,16 @@ export default function AdminCompetitions() {
           <div className="flex items-center space-x-2">
             <Trophy className="w-5 h-5 text-yellow-400" />
             <h1 className="text-base font-bold text-white">Competitions</h1>
+          </div>
+          <button
+            onClick={handleNewWeek}
+            disabled={spinning}
+            className="flex items-center space-x-1.5 px-3 py-2 rounded-xl bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 text-xs font-semibold hover:bg-cyan-500/15 transition disabled:opacity-40"
+          >
+            {spinning ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+            <span>New Week</span>
+          </button>
+          <div className="flex items-center space-x-2">
           </div>
         </div>
         {!showCreate && (

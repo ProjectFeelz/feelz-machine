@@ -216,6 +216,8 @@ export default function TrackPage() {
     <div className="min-h-screen bg-black text-white pb-32">
 
       <Helmet>
+        <link rel="icon" href="/favicon.ico" />
+        <link rel="apple-touch-icon" href="/logo192.png" />
         <title>{pageTitle}</title>
         <meta name="description" content={pageDesc} />
         <link rel="canonical" href={pageUrl} />

@@ -333,6 +333,8 @@ export default function AlbumDetailPage() {
 
       {/* ── Dynamic head tags ── */}
       <Helmet>
+        <link rel="icon" href="/favicon.ico" />
+        <link rel="apple-touch-icon" href="/logo192.png" />
         <title>{pageTitle}</title>
         <meta name="description" content={pageDesc} />
         <link rel="canonical" href={pageUrl} />

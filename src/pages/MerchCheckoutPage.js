@@ -93,7 +93,7 @@ export default function MerchCheckoutPage() {
 
   if (success) return (
     <div className="min-h-screen bg-black flex flex-col items-center justify-center px-6 text-center">
-      <Helmet><title>Order Placed · Feelz Machine</title></Helmet>
+      <Helmet><title>Order Placed · Feelz Machine</title><link rel="icon" href="/favicon.ico" /><link rel="apple-touch-icon" href="/logo192.png" /></Helmet>
       <div className="w-16 h-16 rounded-full bg-green-500/15 flex items-center justify-center mb-4">
         <Check className="w-8 h-8 text-green-400" />
       </div>
@@ -109,7 +109,7 @@ export default function MerchCheckoutPage() {
 
   return (
     <div className="min-h-screen bg-black text-white pb-32">
-      <Helmet><title>Checkout · Feelz Machine</title></Helmet>
+      <Helmet><title>Checkout · Feelz Machine</title><link rel="icon" href="/favicon.ico" /><link rel="apple-touch-icon" href="/logo192.png" /></Helmet>
 
       {/* Header */}
       <div className="sticky top-0 z-20 bg-black/95 backdrop-blur-xl border-b border-white/[0.06] px-4 pt-14 pb-3 md:pt-4 flex items-center space-x-3">

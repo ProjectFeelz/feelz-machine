@@ -289,7 +289,7 @@ export default function CollabRadarPage() {
 
   return (
     <div className="min-h-screen pb-32">
-      <Helmet><title>Collab Radar · Feelz Machine</title></Helmet>
+      <Helmet><title>Collab Radar · Feelz Machine</title><link rel="icon" href="/favicon.ico" /><link rel="apple-touch-icon" href="/logo192.png" /></Helmet>
 
       <div className="px-6 pt-12 md:pt-6 pb-6">
         <div className="flex items-center space-x-3 mb-1">

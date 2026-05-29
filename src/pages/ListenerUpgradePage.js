@@ -168,7 +168,7 @@ export default function ListenerUpgradePage() {
 
   return (
     <div className="pb-32 px-4 max-w-lg mx-auto">
-      <Helmet><title>Fan Pro · Feelz Machine</title></Helmet>
+      <Helmet><title>Fan Pro · Feelz Machine</title><link rel="icon" href="/favicon.ico" /><link rel="apple-touch-icon" href="/logo192.png" /></Helmet>
 
       <div className="flex items-center space-x-3 mb-6 sticky top-0 z-20 bg-black/95 backdrop-blur-xl pt-14 md:pt-4 pb-3 -mx-4 px-4 border-b border-white/[0.04]">
         <button onClick={() => navigate(-1)} className="w-9 h-9 flex items-center justify-center rounded-full bg-white/[0.06] hover:bg-white/[0.1] transition">

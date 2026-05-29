@@ -1015,7 +1015,7 @@ export default function ForYouPage() {
       onTouchEnd={onTouchEnd}
       style={{ touchAction: 'none' }}
     >
-      <Helmet><title>For You · Feelz Machine</title></Helmet>
+      <Helmet><title>For You · Feelz Machine</title><link rel="icon" href="/favicon.ico" /><link rel="apple-touch-icon" href="/logo192.png" /></Helmet>
 
       {/* Card stack */}
       <div

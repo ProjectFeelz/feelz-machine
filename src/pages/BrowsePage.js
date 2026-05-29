@@ -266,6 +266,8 @@ export default function BrowsePage() {
   return (
     <div className="min-h-screen pb-32">
       <Helmet>
+        <link rel="icon" href="/favicon.ico" />
+        <link rel="apple-touch-icon" href="/logo192.png" />
         <title>Browse · Feelz Machine</title>
         <meta name="description" content="Browse trending tracks, new releases, artists and albums on Feelz Machine." />
         <link rel="canonical" href="https://www.feelzmachine.com/browse" />

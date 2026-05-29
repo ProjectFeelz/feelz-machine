@@ -102,6 +102,8 @@ export default function LibraryPage() {
   return (
     <div className="pb-4 px-4 md:px-0 max-w-2xl mx-auto">
       <Helmet>
+        <link rel="icon" href="/favicon.ico" />
+        <link rel="apple-touch-icon" href="/logo192.png" />
         <title>Library · Feelz Machine</title>
         <meta name="description" content="Your music library — liked songs, downloads, playlists and artists you follow." />
         <link rel="canonical" href="https://www.feelzmachine.com/library" />

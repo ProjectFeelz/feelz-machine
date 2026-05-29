@@ -136,6 +136,8 @@ export default function HubPage() {
   return (
     <div className="pb-32 px-4 md:px-0">
       <Helmet>
+        <link rel="icon" href="/favicon.ico" />
+        <link rel="apple-touch-icon" href="/logo192.png" />
         <title>Hub · Feelz Machine</title>
         <meta name="description" content="Your Feelz Machine control center — access your dashboard, library, community and settings." />
         <link rel="canonical" href="https://www.feelzmachine.com/hub" />

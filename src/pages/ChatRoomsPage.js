@@ -341,6 +341,8 @@ export default function ChatRoomsPage() {
   return (
     <div className="pb-4 px-6 md:px-0">
       <Helmet>
+        <link rel="icon" href="/favicon.ico" />
+        <link rel="apple-touch-icon" href="/logo192.png" />
         <title>Chat Rooms · Feelz Machine</title>
         <meta name="description" content="Join artist chat rooms and connect with the Feelz Machine community." />
         <link rel="canonical" href="https://www.feelzmachine.com/chat" />

@@ -35,8 +35,8 @@ async function generateSingleMessage(prompt) {
     },
     body: JSON.stringify({
       model: 'claude-sonnet-4-6',
-      max_tokens: 200,
-      system: `You are the voice of Feelz Machine, an independent music platform. Write like a friend texting someone about music they actually care about. Casual, warm, direct. No em-dashes, no corporate language, no exclamation marks on every line. Just real talk. Write ONE in-app notification. Return ONLY valid JSON: {"title":"...","body":"..."}. Title max 60 chars. Body max 120 chars.`,
+      max_tokens: 120,
+      system: `Feelz Machine voice. Friend texting about music — casual, warm, real. No em-dashes, no hype. Return ONLY JSON: {"title":"...","body":"..."}. Title ≤60 chars, body ≤120 chars.`,
       messages: [{ role: 'user', content: prompt }],
     }),
   });
@@ -68,8 +68,8 @@ async function generateSegmentMessages(ctx) {
     },
     body: JSON.stringify({
       model: 'claude-sonnet-4-6',
-      max_tokens: 500,
-      system: `You are the voice of Feelz Machine. Write like a real person texting about music. Casual and warm, no em-dashes, no hype-speak, no corporate tone. Return ONLY a JSON array of 3 variants: [{"title":"...","body":"..."},...]`,
+      max_tokens: 280,
+      system: `Feelz Machine voice. Casual, warm, real. No em-dashes. Return ONLY JSON array of 3 variants: [{"title":"...","body":"..."},...]`,
       messages: [{ role: 'user', content: `Segment: ${ctx.segment}\nDescription: ${ctx.description}\nPlatform: ${ctx.platformContext}\nTone: ${ctx.tone}` }],
     }),
   });
@@ -137,7 +137,7 @@ async function getPlatformContext() {
     competitionSummary,
     totalArtists: totalArtists || 0,
     newTracksThisWeek: newThisWeek || 0,
-    recentDrops: (recentTracks || []).map(t => `"${t.title}" by ${t.artists?.artist_name}`).join(', '),
+    recentDrops: (recentTracks || []).slice(0, 3).map(t => `"${t.title}" by ${t.artists?.artist_name}`).join(', '),
     trendingTrack,
   };
 }
@@ -313,19 +313,22 @@ function buildListenerPrompt(segment, ctx, platform) {
   const dormantNote = segment === 'dormant_listener'
     ? "They drifted. No guilt — just something that'll make them want to open the app." : '';
 
-  return `Write ONE personalised in-app notification for a ${segment.replace(/_/g, ' ')}.
+  const parts = [
+    name,
+    `LISTENING: ${historyNote}`,
+    streakNote && `STREAK: ${streakNote}${discoveryNote ? ' ' + discoveryNote : ''}`,
+    engagementNote && `ENGAGEMENT: ${engagementNote}`,
+    followNote,
+    unheardNote,
+    competitionNote,
+    dormantNote,
+    platform.recentDrops && `Fresh drops: ${platform.recentDrops}.`,
+  ].filter(Boolean);
 
-${name}
-LISTENING: ${historyNote}
-STREAK: ${streakNote || 'No notable streak.'} ${discoveryNote}
-ENGAGEMENT: ${engagementNote || 'Passive listener so far.'}
-FOLLOWING: ${followNote}
-${unheardNote}
-${competitionNote}
-${dormantNote}
-PLATFORM: ${platform.recentDrops ? `Fresh drops — ${platform.recentDrops}.` : ''} ${platform.newTracksThisWeek} new tracks this week.
-
-Use their name if you have it. Reference their actual genre/artists/mood. Be specific, not generic.`;
+  return `Write ONE personalised notification for a ${segment.replace(/_/g, ' ')}.
+${parts.join('
+')}
+Be specific, not generic. JSON only.`;
 }
 
 // ── Build artist prompt ───────────────────────────────────────
@@ -366,20 +369,22 @@ function buildArtistPrompt(segment, artist, ctx, platform) {
   const dormantNote = segment === 'dormant_artist'
     ? "Been quiet. Re-engagement only — make them feel the platform missed them, not guilty." : '';
 
-  return `Write ONE in-app notification for ${artist.artist_name || 'an artist'} (${segment.replace(/_/g, ' ')}).
+  const artistParts = [
+    `Artist: ${artist.artist_name || 'Unknown'} (${segment.replace(/_/g, ' ')})`,
+    sizeNote,
+    weekNote,
+    latestNote,
+    activityNote !== 'quiet lately' && `Activity: ${activityNote}`,
+    artist.genre && `Genre: ${artist.genre}`,
+    competitionNote,
+    dormantNote,
+    tierNote,
+  ].filter(Boolean);
 
-THEIR STATS: ${sizeNote}
-THIS WEEK: ${weekNote}
-LATEST TRACK: ${latestNote}
-ACTIVITY: ${activityNote}
-LIVE SESSIONS: ${sessionNote}
-GENRE: ${artist.genre || 'not set'}
-${tierNote}
-${competitionNote}
-${dormantNote}
-PLATFORM: ${platform.totalArtists} artists total. ${platform.newTracksThisWeek} new tracks this week.${platform.trendingTrack ? ` Trending: "${platform.trendingTrack}".` : ''}
-
-Use their artist name. Be specific to their situation. Peer energy, not corporate.`;
+  return `Write ONE notification.
+${artistParts.join('
+')}
+Peer energy, specific, not corporate. JSON only.`;
 }
 
 // ── Weekly cap helper ─────────────────────────────────────────

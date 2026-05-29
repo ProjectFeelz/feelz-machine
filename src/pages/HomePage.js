@@ -599,6 +599,8 @@ export default function HomePage() {
   return (
     <div className="pb-4 scroll-page" {...pullProps}>
       <Helmet>
+        <link rel="icon" href="/favicon.ico" />
+        <link rel="apple-touch-icon" href="/logo192.png" />
         <title>Home · Feelz Machine</title>
         <meta name="description" content="Discover independent music, trending tracks and artists on Feelz Machine." />
         <link rel="canonical" href="https://www.feelzmachine.com/" />

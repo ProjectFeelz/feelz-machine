@@ -96,6 +96,8 @@ export default function MerchPage() {
   return (
     <div className="min-h-screen bg-black text-white pb-32">
       <Helmet>
+        <link rel="icon" href="/favicon.ico" />
+        <link rel="apple-touch-icon" href="/logo192.png" />
         <title>{artist?.artist_name} Merch · Feelz Machine</title>
         <meta property="og:url" content={`${BASE_URL}/artist/${slug}/merch`} />
       </Helmet>

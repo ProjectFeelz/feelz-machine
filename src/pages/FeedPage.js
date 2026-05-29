@@ -121,6 +121,8 @@ export default function FeedPage() {
   return (
     <div className="pb-4 px-6 md:px-0" {...pullProps}>
       <Helmet>
+        <link rel="icon" href="/favicon.ico" />
+        <link rel="apple-touch-icon" href="/logo192.png" />
         <title>Community · Feelz Machine</title>
         <meta name="description" content="See the latest posts, updates and music from independent artists on Feelz Machine." />
         <link rel="canonical" href="https://www.feelzmachine.com/community" />

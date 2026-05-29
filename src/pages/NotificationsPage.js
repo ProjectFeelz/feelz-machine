@@ -448,6 +448,8 @@ export default function NotificationsPage() {
   return (
     <div className="max-w-2xl mx-auto px-4 pb-32">
       <Helmet>
+        <link rel="icon" href="/favicon.ico" />
+        <link rel="apple-touch-icon" href="/logo192.png" />
         <title>Notifications · Feelz Machine</title>
         <meta name="description" content="Your Feelz Machine notifications — followers, collabs, likes and milestones." />
         <link rel="canonical" href="https://www.feelzmachine.com/notifications" />
