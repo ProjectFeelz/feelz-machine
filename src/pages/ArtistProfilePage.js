@@ -1151,6 +1151,8 @@ export default function ArtistProfilePage() {
       {/* ── Dynamic head tags ── */}
       <Helmet>
         <title>{pageTitle}</title>
+        <link rel="icon" href="/favicon.ico" />
+        <link rel="apple-touch-icon" href="/logo192.png" />
         <meta name="description" content={pageDesc} />
         <link rel="canonical" href={pageUrl} />
         <meta property="og:title" content={pageTitle} />
