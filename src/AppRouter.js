@@ -133,9 +133,9 @@ function OnboardingGuard({ children }) {
   const location = useLocation();
   const skipPaths = ['/setup', '/login', '/about', '/terms-of-use', '/privacy-policy', '/artist/', '/@'];
   
-  if (loading) return null;
-  if (!user) return children;
   if (skipPaths.some(p => location.pathname.startsWith(p))) return children;
+  if (loading) return children;  // keep routes mounted during auth load
+  if (!user) return children;
   
   // New user — has auth but no profile
   if (user && !artist && !listener) {
