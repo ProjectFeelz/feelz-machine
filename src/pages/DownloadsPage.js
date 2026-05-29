@@ -9,7 +9,6 @@ import { Download, Play, Pause, Music, ArrowLeft, Loader, Check } from 'lucide-r
 export default function DownloadsPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const navigate = useNavigate();
   const [downloadError, setDownloadError] = useState('');
   const { playTrack, currentTrack, isPlaying, togglePlay } = usePlayer();
   const [downloads, setDownloads]     = useState([]);
