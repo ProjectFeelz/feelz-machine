@@ -819,12 +819,18 @@ export default function CompetitionRoomPage() {
                   <p className="text-[10px] text-green-400/60">"{myEntry.title}" — awaiting judging</p>
                 </div>
               </div>
-            ) : (
+            ) : isOpen ? (
               <button onClick={() => setShowSubmit(true)}
                 className="w-full py-3.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-sm flex items-center justify-center space-x-2 transition active:scale-[0.98]">
                 <Upload className="w-4 h-4" />
                 <span>Submit Your Entry</span>
               </button>
+            ) : (
+              <div className="w-full py-3.5 rounded-xl bg-white/[0.04] border border-white/[0.06] text-center">
+                <p className="text-sm text-white/30 font-medium">
+                  {isVoting ? '🗳️ Entries closed — voting is open' : '🔒 Entries are closed'}
+                </p>
+              </div>
             )}
           </div>
         )}
