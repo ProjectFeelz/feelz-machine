@@ -579,8 +579,12 @@ export default function ArtistProfilePage() {
     setLoading(true);
     try {
       const { data: artistData, error } = await supabase
-        .from('artists').select('*').eq('slug', slug).single();
-      if (error || !artistData) { setLoading(false); return; }
+        .from('artists').select('*').eq('slug', slug).maybeSingle();
+      if (error || !artistData) {
+        setLoading(false);
+        navigate('/browse', { replace: true });
+        return;
+      }
       setArtist(artistData);
       setFollowerCount(artistData.follower_count || 0);
       const { data: themeData } = await supabase
@@ -1296,12 +1300,14 @@ export default function ArtistProfilePage() {
               </button>
             </>
           )}
-          <button onClick={handleShare}
-            className="flex items-center space-x-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all active:scale-95"
-            style={{ backgroundColor: `${textColor}10`, color: `${textColor}70`, border: `1px solid ${textColor}20` }}>
-            <Share2 className="w-3.5 h-3.5" />
-            <span>Share</span>
-          </button>
+          {!isProfileOwner && (
+            <button onClick={handleShare}
+              className="flex items-center space-x-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all active:scale-95"
+              style={{ backgroundColor: `${textColor}10`, color: `${textColor}70`, border: `1px solid ${textColor}20` }}>
+              <Share2 className="w-3.5 h-3.5" />
+              <span>Share</span>
+            </button>
+          )}
           {artist.merch_enabled && (
             <button onClick={() => navigate(`/artist/${slug}/merch`)}
               className="flex items-center space-x-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all active:scale-95"
