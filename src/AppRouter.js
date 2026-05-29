@@ -131,7 +131,7 @@ function AffiliateTracker() {
 function OnboardingGuard({ children }) {
   const { user, artist, listener, loading } = useAuth();
   const location = useLocation();
-  const skipPaths = ['/setup', '/login', '/about', '/terms-of-use', '/privacy-policy'];
+  const skipPaths = ['/setup', '/login', '/about', '/terms-of-use', '/privacy-policy', '/artist/', '/@'];
   
   if (loading) return null;
   if (!user) return children;
