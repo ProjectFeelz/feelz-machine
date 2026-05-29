@@ -210,6 +210,53 @@ exports.handler = async (event) => {
       return { statusCode: 200, headers: cors, body: JSON.stringify({ ok: true, order: confirmed.result }) };
     }
 
+    // ── Shipping rates ────────────────────────────────────────────────────────
+    if (action === 'get_shipping_rates') {
+      const { shipping_address, items } = body;
+      const { data: artist } = await supabase
+        .from('artists').select('printful_access_token, merch_enabled').eq('id', artist_id).maybeSingle();
+      if (!artist?.merch_enabled || !artist.printful_access_token) {
+        return { statusCode: 403, headers: cors, body: JSON.stringify({ error: 'Merch not available' }) };
+      }
+
+      const payload = {
+        recipient: shipping_address,
+        items: items.map(i => ({ sync_variant_id: i.variant_id, quantity: i.quantity })),
+        currency: 'USD',
+        locale: 'en_US',
+      };
+
+      const data = await printfulFetch('/shipping/rates', artist.printful_access_token, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+
+      return { statusCode: 200, headers: cors, body: JSON.stringify({ ok: true, rates: data.result || [] }) };
+    }
+
+    // ── Get order history by email ──────────────────────────────────────────
+    if (action === 'get_orders') {
+      const userId = await verifyUser(authHeader);
+      const { data: artist } = await supabase
+        .from('artists').select('printful_access_token, merch_enabled').eq('id', artist_id).maybeSingle();
+      if (!artist?.merch_enabled || !artist.printful_access_token) {
+        return { statusCode: 403, headers: cors, body: JSON.stringify({ error: 'Merch not available' }) };
+      }
+
+      // Get user's email
+      const { data: authUser } = await supabase.auth.admin.getUserById(userId);
+      const email = authUser?.user?.email;
+      if (!email) return { statusCode: 200, headers: cors, body: JSON.stringify({ ok: true, orders: [] }) };
+
+      const data = await printfulFetch('/orders?limit=20', artist.printful_access_token);
+      // Filter orders by recipient email
+      const orders = (data.result || []).filter(o =>
+        o.recipient?.email?.toLowerCase() === email.toLowerCase()
+      );
+
+      return { statusCode: 200, headers: cors, body: JSON.stringify({ ok: true, orders }) };
+    }
+
     // ── Disconnect ────────────────────────────────────────────────────────────
     if (action === 'disconnect') {
       const userId = await verifyUser(authHeader);
