@@ -188,6 +188,13 @@ export default function AppRouter() {
         <AuthProvider>
           <PlayerProvider>
             <TierProvider>
+            <Routes>
+              {/* Public routes — no auth required */}
+              <Route path="/@:slug" element={<ArtistProfileRedirect />} />
+              <Route path="/artist/:slug" element={<ArtistProfilePage />} />
+              <Route path="/artist/:slug/merch" element={<MerchPage />} />
+              <Route path="/artist/:slug/merch/checkout" element={<MerchCheckoutPage />} />
+            </Routes>
             <OnboardingGuard>
             <Routes>
               {/* Legacy /player/* redirects */}
@@ -204,7 +211,6 @@ export default function AppRouter() {
               <Route path="/chat/:roomId" element={<ChatRoomView />} />
               <Route path="/competition/:competitionId" element={<CompetitionRoomPage />} />
               <Route path="/session/:sessionId" element={<ListeningSessionPage />} />
-              <Route path="/@:slug" element={<ArtistProfileRedirect />} />
               <Route path="/merch-connect-callback" element={<MerchConnectCallback />} />
 
               {/* Legal pages — fixed titles */}
@@ -251,9 +257,7 @@ export default function AppRouter() {
                 <Route path="/payment/cancel" element={<PaymentCancel />} />
                 <Route path="/admin/affiliates" element={<AdminAffiliates />} />
                 <Route path="/beat/:slug" element={<BeatDetailPage />} />
-                <Route path="/artist/:slug" element={<ArtistProfilePage />} />
-                <Route path="/artist/:slug/merch" element={<MerchPage />} />
-                <Route path="/artist/:slug/merch/checkout" element={<MerchCheckoutPage />} />
+
                 <Route path="/track/:slug" element={<TrackPage />} />
                 <Route path="/collab-radar" element={<CollabRadarPage />} />
                 <Route path="/admin" element={<AdminDashboard />} />
