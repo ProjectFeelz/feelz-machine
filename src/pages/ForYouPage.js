@@ -1127,7 +1127,7 @@ export default function ForYouPage() {
             style={{ maxHeight: 'calc(100vh - 80px)', height: '65vh', display: 'flex', flexDirection: 'column',
                      background: 'rgba(10,10,10,0.98)', borderTop: '1px solid rgba(255,255,255,0.08)',
                      borderRadius: '24px 24px 0 0' }}>
-            <CommentSheet track={activeSheet.track} user={user} onClose={() => setActiveSheet(null)} />
+            <TrackCommentSheet track={activeSheet.track} user={user} onClose={() => setActiveSheet(null)} />
           </div>
         </div>
       )}
