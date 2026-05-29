@@ -6,7 +6,7 @@ import {
   BarChart3, ChevronLeft, Loader, Music, Users, Mic2,
   TrendingUp, Heart, Download, Headphones, FileDown,
   Smartphone, Monitor, Zap, Crown, Star, Activity,
-  Radio, Globe, RefreshCw, Eye, Flame,
+  Radio, Globe, RefreshCw, Eye, Flame, DollarSign,
 } from 'lucide-react';
 import {
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
