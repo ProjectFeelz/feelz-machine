@@ -130,11 +130,8 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
   const subtitle   = track?.artist_name || (artist ? 'Listen on Feelz Machine' : '');
   const artworkUrl = track?.cover_artwork_url || artist?.profile_image_url || null;
   const audioUrl   = track?.file_url || null;
-  // Prefer showing the @handle form if the URL is a /@slug URL
   const displayUrl = shareUrl
-    ? shareUrl.includes('/@')
-      ? '@' + shareUrl.split('/@')[1]                                  // → @stevecsa
-      : shareUrl.replace('https://www.', '').replace('https://', '')   // → feelzmachine.com/artist/...
+    ? shareUrl.replace('https://www.', '').replace('https://', '')
     : 'feelzmachine.com';
 
   // ── Image card ───────────────────────────────────────────────────────────────
@@ -873,7 +870,7 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
                 className="w-full flex items-center justify-center space-x-2 py-3 rounded-2xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.06] transition text-sm font-semibold text-white/60">
                 {copied
                   ? <><Check className="w-4 h-4 text-green-400" /><span className="text-green-400">Link copied!</span></>
-                  : <><Link className="w-4 h-4" /><span className="truncate max-w-[200px]">{displayUrl}</span></>}
+                  : <><Link className="w-4 h-4" /><span>Copy link</span></>}
               </button>
               <p className="text-[10px] text-white/20 text-center leading-relaxed">
                 For Instagram Stories: save the card, open Instagram, then paste the link in your story.
