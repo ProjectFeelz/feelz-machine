@@ -131,7 +131,7 @@ function AffiliateTracker() {
 function OnboardingGuard({ children }) {
   const { user, artist, listener, loading } = useAuth();
   const location = useLocation();
-  const skipPaths = ['/setup', '/login', '/about', '/terms-of-use', '/privacy-policy'];
+  const skipPaths = ['/setup', '/login', '/about', '/terms-of-use', '/privacy-policy', '/artist/', '/@'];
   
   if (loading) return null;
   if (!user) return children;
@@ -190,6 +190,12 @@ export default function AppRouter() {
             <TierProvider>
             <OnboardingGuard>
             <Routes>
+              {/* Public routes — accessible without auth or profile */}
+              <Route path="/@:slug" element={<ArtistProfileRedirect />} />
+              <Route path="/artist/:slug" element={<ArtistProfilePage />} />
+              <Route path="/artist/:slug/merch" element={<MerchPage />} />
+              <Route path="/artist/:slug/merch/checkout" element={<MerchCheckoutPage />} />
+
               {/* Legacy /player/* redirects */}
               <Route path="/player" element={<Navigate to="/" replace />} />
               <Route path="/player/*" element={<Navigate to="/" replace />} />
@@ -204,7 +210,6 @@ export default function AppRouter() {
               <Route path="/chat/:roomId" element={<ChatRoomView />} />
               <Route path="/competition/:competitionId" element={<CompetitionRoomPage />} />
               <Route path="/session/:sessionId" element={<ListeningSessionPage />} />
-              <Route path="/@:slug" element={<ArtistProfileRedirect />} />
               <Route path="/merch-connect-callback" element={<MerchConnectCallback />} />
 
               {/* Legal pages — fixed titles */}
@@ -251,9 +256,7 @@ export default function AppRouter() {
                 <Route path="/payment/cancel" element={<PaymentCancel />} />
                 <Route path="/admin/affiliates" element={<AdminAffiliates />} />
                 <Route path="/beat/:slug" element={<BeatDetailPage />} />
-                <Route path="/artist/:slug" element={<ArtistProfilePage />} />
-                <Route path="/artist/:slug/merch" element={<MerchPage />} />
-                <Route path="/artist/:slug/merch/checkout" element={<MerchCheckoutPage />} />
+
                 <Route path="/track/:slug" element={<TrackPage />} />
                 <Route path="/collab-radar" element={<CollabRadarPage />} />
                 <Route path="/admin" element={<AdminDashboard />} />
