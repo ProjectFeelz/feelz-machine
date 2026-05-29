@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
+import { usePlayer } from '../contexts/PlayerContext';
 import { useHaptics } from '../hooks/useHaptics';
 import { Check, Loader, Music, Play, Square, ChevronRight } from 'lucide-react';
 
@@ -42,6 +43,8 @@ export default function ArtistFollowPrompt({ onDone }) {
   const [loading, setLoading]               = useState(false);
   const [following, setFollowing]           = useState({});
   const [followingReq, setFollowingReq]     = useState({});
+  const { isPlaying, togglePlay }           = usePlayer();
+  const wasPlayingRef                       = useRef(false);
   const [previewingId, setPreviewingId]     = useState(null);
   const [previewLoading, setPreviewLoading] = useState(null);
 
@@ -140,6 +143,11 @@ export default function ArtistFollowPrompt({ onDone }) {
       audioRef.current.pause();
       audioRef.current.src = '';
       audioRef.current = null;
+      // Resume global player if we paused it for the preview
+      if (wasPlayingRef.current) {
+        wasPlayingRef.current = false;
+        togglePlay(); // resume
+      }
     }
     clearTimeout(timerRef.current);
     setPreviewingId(null);
@@ -151,6 +159,9 @@ export default function ArtistFollowPrompt({ onDone }) {
     if (!artist.topTrack?.file_url) return;
     if (previewingId === artist.id) { stopPreview(); return; }
     stopPreview();
+    // Pause the global player before starting preview, remember its state
+    if (isPlaying) { wasPlayingRef.current = true; togglePlay(); }
+    else { wasPlayingRef.current = false; }
     setPreviewLoading(artist.id);
     try {
       const audio      = new Audio();

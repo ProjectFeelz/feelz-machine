@@ -1,11 +1,12 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { useAuth } from '../contexts/AuthContext';
 import {
-  BarChart3, Download, Music, Loader,
-  Upload, ChevronLeft, Headphones, Heart, TrendingUp, Users, Trophy, Zap
+  BarChart3, Download, Music, Loader, DollarSign,
+  Upload, ChevronLeft, ChevronRight, Headphones, Heart, TrendingUp,
+  Users, Trophy, Zap, MessageCircle, ArrowUp, ArrowDown, Minus
 } from 'lucide-react';
 import TrackUploadPanel from './TrackUploadPanel';
 import CollabRequests, { CollabBadge } from '../components/CollabRequests';
@@ -89,6 +90,274 @@ function MemoTabPanel({ artist, memos, fetchMemos, deleteMemo }) {
   );
 }
 
+
+
+// ─── ExportButton ─────────────────────────────────────────────────────────────
+function ExportButton({ artist, trackId, exportType, days = 30, label, small = false }) {
+  const [state, setState] = React.useState('idle'); // idle | loading | done | error
+  const [info,  setInfo]  = React.useState(null);   // { count, truncated, total }
+
+  const run = async (e) => {
+    e.stopPropagation();
+    if (state === 'loading') return;
+    setState('loading'); setInfo(null);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch('/.netlify/functions/export-streams', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          artist_id:   artist.id,
+          user_id:     session?.user?.id,
+          track_id:    trackId || undefined,
+          days,
+          export_type: exportType,
+        }),
+      });
+      const data = await res.json();
+      if (data.error) { setState('error'); return; }
+      if (!data.csv || data.count === 0) { setState('done'); setInfo({ count: 0 }); return; }
+
+      const blob = new Blob([data.csv], { type: 'text/csv' });
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.href     = url;
+      a.download = data.filename || `${exportType}_export.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setState('done');
+      setInfo({ count: data.count, truncated: data.truncated, total: data.total });
+    } catch (err) {
+      console.error('Export error:', err);
+      setState('error');
+    }
+    setTimeout(() => setState('idle'), 3000);
+  };
+
+  const pad = small ? 'px-3 py-1.5' : 'px-4 py-2.5';
+  const txt = small ? 'text-xs' : 'text-sm';
+
+  return (
+    <div className="flex flex-col items-end space-y-1">
+      <button
+        onClick={run}
+        disabled={state === 'loading'}
+        className={`flex items-center space-x-2 ${pad} bg-white/[0.04] rounded-xl ${txt} text-white/60 hover:bg-white/[0.08] transition border border-white/[0.06] disabled:opacity-40 active:scale-95`}
+      >
+        <Download className="w-3.5 h-3.5" />
+        <span>
+          {state === 'loading' ? 'Exporting…'
+            : state === 'error' ? 'Error — retry'
+            : state === 'done' && info?.count === 0 ? 'No data'
+            : label}
+        </span>
+      </button>
+      {info?.count > 0 && (
+        <p className="text-[10px] text-white/25">
+          {info.count.toLocaleString()} rows{info.total ? ` · $${info.total}` : ''}{info.truncated ? ' (truncated at 10k)' : ''}
+        </p>
+      )}
+    </div>
+  );
+}
+
+// ─── GrowthSnapshot ───────────────────────────────────────────────────────────
+function GrowthSnapshot({ artist }) {
+  const [data, setData] = React.useState(null);
+
+  React.useEffect(() => {
+    if (!artist?.id) return;
+    const load = async () => {
+      const now     = new Date();
+      const week1from = new Date(now - 7  * 86400000).toISOString();
+      const week2from = new Date(now - 14 * 86400000).toISOString();
+
+      const { data: tracks } = await supabase.from('tracks').select('id').eq('artist_id', artist.id);
+      const ids = (tracks || []).map(t => t.id);
+      if (!ids.length) return;
+
+      const [
+        { count: streamsThis },
+        { count: streamsLast },
+        { count: followsThis },
+        { count: followsLast },
+        { count: likesThis },
+        { count: likesLast },
+      ] = await Promise.all([
+        supabase.from('streams').select('*',{count:'exact',head:true}).in('track_id',ids).gte('created_at',week1from),
+        supabase.from('streams').select('*',{count:'exact',head:true}).in('track_id',ids).gte('created_at',week2from).lt('created_at',week1from),
+        supabase.from('follows').select('*',{count:'exact',head:true}).eq('artist_id',artist.id).gte('created_at',week1from),
+        supabase.from('follows').select('*',{count:'exact',head:true}).eq('artist_id',artist.id).gte('created_at',week2from).lt('created_at',week1from),
+        supabase.from('track_likes').select('*',{count:'exact',head:true}).in('track_id',ids).gte('created_at',week1from),
+        supabase.from('track_likes').select('*',{count:'exact',head:true}).in('track_id',ids).gte('created_at',week2from).lt('created_at',week1from),
+      ]);
+
+      setData({
+        streams: { this: streamsThis||0, last: streamsLast||0 },
+        follows: { this: followsThis||0, last: followsLast||0 },
+        likes:   { this: likesThis||0,   last: likesLast||0   },
+      });
+    };
+    load();
+  }, [artist?.id]);
+
+  if (!data) return null;
+
+  const Metric = ({ label, curr, prev }) => {
+    const diff = curr - prev;
+    const pct  = prev > 0 ? Math.round((diff / prev) * 100) : (curr > 0 ? 100 : 0);
+    const up   = diff > 0;
+    const flat = diff === 0;
+    return (
+      <div className="flex-1 text-center">
+        <p className="text-lg font-black text-white">{curr.toLocaleString()}</p>
+        <p className="text-[10px] text-white/30 mb-1">{label}</p>
+        <div className={`inline-flex items-center space-x-0.5 text-[10px] font-semibold rounded-full px-1.5 py-0.5 ${
+          flat ? 'text-white/25 bg-white/[0.04]'
+               : up ? 'text-green-400 bg-green-500/10'
+                    : 'text-red-400 bg-red-500/10'
+        }`}>
+          {flat ? <Minus className="w-2.5 h-2.5" /> : up ? <ArrowUp className="w-2.5 h-2.5" /> : <ArrowDown className="w-2.5 h-2.5" />}
+          <span>{flat ? '—' : `${Math.abs(pct)}%`}</span>
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="bg-white/[0.02] rounded-xl p-4 border border-white/[0.05]">
+      <p className="text-[10px] uppercase tracking-wider text-white/20 font-semibold mb-3">This week vs last week</p>
+      <div className="flex divide-x divide-white/[0.04]">
+        <Metric label="Streams"   curr={data.streams.this} prev={data.streams.last} />
+        <Metric label="New Fans"  curr={data.follows.this} prev={data.follows.last} />
+        <Metric label="Likes"     curr={data.likes.this}   prev={data.likes.last}   />
+      </div>
+    </div>
+  );
+}
+
+// ─── Earnings Section ─────────────────────────────────────────────────────────
+function EarningsSection({ artist, sectionRef, downloadsRef, highlight }) {
+  const [tips,      setTips]      = React.useState([]);
+  const [downloads, setDownloads] = React.useState([]);
+  const [loading,   setLoading]   = React.useState(true);
+
+  React.useEffect(() => {
+    if (!artist?.id) return;
+    const load = async () => {
+      const [{ data: tipsData }, { data: dlData }] = await Promise.all([
+        supabase.from('tips')
+          .select('id, amount, currency, message, created_at, from_user_id')
+          .eq('artist_id', artist.id)
+          .order('created_at', { ascending: false })
+          .limit(5),
+        supabase.from('downloads')
+          .select('id, amount_paid, created_at, track_id, tracks(title)')
+          .eq('tracks.artist_id', artist.id)
+          .gt('amount_paid', 0)
+          .order('created_at', { ascending: false })
+          .limit(5),
+      ]);
+      setTips(tipsData || []);
+      setDownloads(dlData || []);
+      setLoading(false);
+    };
+    load();
+  }, [artist?.id]);
+
+  const tipTotal     = tips.reduce((s, t) => s + (t.amount || 0), 0);
+  const downloadTotal = downloads.reduce((s, d) => s + (d.amount_paid || 0), 0);
+
+  return (
+    <div
+      ref={sectionRef}
+      className={`bg-white/[0.03] rounded-xl p-5 border space-y-4 ${
+        highlight === 'earnings' || highlight === 'tips' || highlight === 'download'
+          ? 'border-green-500/40 ring-1 ring-green-500/20'
+          : 'border-white/[0.06]'
+      }`}
+    >
+      <div className="flex items-center justify-between mb-1">
+        <div className="flex items-center space-x-2">
+          <DollarSign className="w-5 h-5 text-green-400/70" />
+          <h3 className="text-base font-semibold text-white">Earnings</h3>
+        </div>
+        <ExportButton artist={artist} exportType="earnings" days={30} label="Export" small />
+      </div>
+
+      {loading ? (
+        <div className="flex justify-center py-6"><Loader className="w-4 h-4 animate-spin text-white/20" /></div>
+      ) : (
+        <>
+          {/* Totals row */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="bg-white/[0.03] rounded-xl p-3.5 border border-white/[0.05] text-center">
+              <p className="text-xl font-black text-green-400">${tipTotal.toFixed(2)}</p>
+              <p className="text-[11px] text-white/30 mt-0.5">Tips received</p>
+            </div>
+            <div
+              ref={downloadsRef}
+              className={`bg-white/[0.03] rounded-xl p-3.5 border text-center ${
+                highlight === 'downloads' || highlight === 'download'
+                  ? 'border-blue-500/40 ring-1 ring-blue-500/20'
+                  : 'border-white/[0.05]'
+              }`}
+            >
+              <p className="text-xl font-black text-blue-400">${downloadTotal.toFixed(2)}</p>
+              <p className="text-[11px] text-white/30 mt-0.5">Paid downloads</p>
+            </div>
+          </div>
+
+          {/* Recent tips */}
+          {tips.length > 0 && (
+            <div>
+              <p className="text-[10px] uppercase tracking-wider text-white/20 font-semibold mb-2">Recent Tips</p>
+              <div className="space-y-2">
+                {tips.map(tip => (
+                  <div key={tip.id} className="flex items-center justify-between py-2 border-b border-white/[0.04] last:border-0">
+                    <div className="flex-1 min-w-0">
+                      {tip.message
+                        ? <p className="text-sm text-white/70 truncate">"{tip.message}"</p>
+                        : <p className="text-sm text-white/30 italic">No message</p>}
+                      <p className="text-[11px] text-white/25 mt-0.5">
+                        {new Date(tip.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                      </p>
+                    </div>
+                    <span className="text-sm font-bold text-green-400 ml-3 flex-shrink-0">
+                      +${Number(tip.amount).toFixed(2)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Recent paid downloads */}
+          {downloads.length > 0 && (
+            <div>
+              <p className="text-[10px] uppercase tracking-wider text-white/20 font-semibold mb-2">Recent Paid Downloads</p>
+              <div className="space-y-2">
+                {downloads.map(dl => (
+                  <div key={dl.id} className="flex items-center justify-between py-2 border-b border-white/[0.04] last:border-0">
+                    <p className="text-sm text-white/60 truncate flex-1">{dl.tracks?.title || 'Track'}</p>
+                    <span className="text-sm font-bold text-blue-400 ml-3 flex-shrink-0">
+                      +${Number(dl.amount_paid).toFixed(2)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {tips.length === 0 && downloads.length === 0 && (
+            <p className="text-center text-white/20 text-sm py-4">No earnings yet — share your music to start earning</p>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 export default function ArtistDashboard() {
   const navigate = useNavigate();
   const { artist, isMaster, isBeatmaker } = useAuth();
@@ -96,9 +365,34 @@ export default function ArtistDashboard() {
   const [activeTab, setActiveTab] = useState(
     new URLSearchParams(window.location.search).get('tab') || 'analytics'
   );
+  const [highlightSection, setHighlightSection] = useState(
+    new URLSearchParams(window.location.search).get('section') || null
+  );
+
+  // Section refs for deep-link scroll targeting
+  const sectionRefs = {
+    stats:     useRef(null),
+    downloads: useRef(null),
+    followers: useRef(null),
+    tracks:    useRef(null),
+    earnings:  useRef(null),
+  };
+
+  // Scroll to and highlight section when arriving from a notification
+  useEffect(() => {
+    if (!highlightSection || activeTab !== 'analytics') return;
+    const ref = sectionRefs[highlightSection];
+    if (!ref?.current) return;
+    const timer = setTimeout(() => {
+      ref.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 300); // wait for tab render
+    const clearTimer = setTimeout(() => setHighlightSection(null), 3000); // stop highlight after 3s
+    return () => { clearTimeout(timer); clearTimeout(clearTimer); };
+  }, [highlightSection, activeTab]); // eslint-disable-line
   const [wheelChallenge, setWheelChallenge] = useState(null);
   const [stats, setStats] = useState({
     streams: 0, downloads: 0, followers: 0, tracks: 0, likes: 0,
+    comments: 0, presaves: 0, collabs: 0, beatSales: 0, totalTipsUSD: 0, posts: 0,
   });
   const [topTracks, setTopTracks] = useState([]);
   const [loading, setLoading]             = useState(false);
@@ -143,19 +437,41 @@ export default function ArtistDashboard() {
         dlCount     = (streamData || []).reduce((s, t) => s + (t.download_count || 0), 0);
       }
 
-      const { count: followCount } = await supabase
-        .from('follows').select('*', { count: 'exact', head: true }).eq('artist_id', artist.id);
+      // Run all counts in parallel for speed
+      const [
+        { count: followCount },
+        { count: likeCount },
+        { count: commentCount },
+        { count: presaveCount },
+        { count: collabCount },
+        { count: beatPurchaseCount },
+        { data: tipData },
+        { data: postData },
+      ] = await Promise.all([
+        supabase.from('follows').select('*', { count: 'exact', head: true }).eq('artist_id', artist.id),
+        trackIds.length ? supabase.from('track_likes').select('*', { count: 'exact', head: true }).in('track_id', trackIds) : Promise.resolve({ count: 0 }),
+        trackIds.length ? supabase.from('track_comments').select('*', { count: 'exact', head: true }).in('track_id', trackIds) : Promise.resolve({ count: 0 }),
+        trackIds.length ? supabase.from('track_presaves').select('*', { count: 'exact', head: true }).in('track_id', trackIds) : Promise.resolve({ count: 0 }),
+        supabase.from('collaborations').select('*', { count: 'exact', head: true }).eq('artist_id', artist.id).eq('status', 'accepted'),
+        trackIds.length ? supabase.from('beat_purchases').select('*', { count: 'exact', head: true }).in('track_id', trackIds).eq('status', 'completed') : Promise.resolve({ count: 0 }),
+        supabase.from('tips').select('amount').eq('artist_id', artist.id),
+        supabase.from('artist_posts').select('id', { count: 'exact', head: true }).eq('artist_id', artist.id),
+      ]);
 
-      let likeCount = 0;
-      if (trackIds.length > 0) {
-        const { count: lc } = await supabase
-          .from('track_likes').select('*', { count: 'exact', head: true }).in('track_id', trackIds);
-        likeCount = lc || 0;
-      }
+      const totalTips = (tipData || []).reduce((s, t) => s + (t.amount || 0), 0);
 
       setStats({
-        streams: streamCount, downloads: dlCount,
-        followers: followCount || 0, tracks: trackIds.length, likes: likeCount,
+        streams:      streamCount,
+        downloads:    dlCount,
+        followers:    followCount  || 0,
+        tracks:       trackIds.length,
+        likes:        likeCount    || 0,
+        comments:     commentCount || 0,
+        presaves:     presaveCount || 0,
+        collabs:      collabCount  || 0,
+        beatSales:    beatPurchaseCount || 0,
+        totalTipsUSD: totalTips,
+        posts:        postData     || 0,
       });
 
       const { data: tracks } = await supabase
@@ -276,11 +592,16 @@ export default function ArtistDashboard() {
   };
 
   const statCards = [
-    { icon: Headphones, label: 'Total Streams', value: stats.streams,   color: 'text-purple-400' },
-    { icon: Download,   label: 'Downloads',     value: stats.downloads, color: 'text-blue-400' },
-    { icon: Users,      label: 'Followers',     value: stats.followers, color: 'text-pink-400' },
-    { icon: Music,      label: 'Tracks',        value: stats.tracks,    color: 'text-green-400' },
-    { icon: Heart,      label: 'Likes',         value: stats.likes,     color: 'text-red-400' },
+    { icon: Headphones,   label: 'Total Streams',  value: stats.streams,    color: 'text-purple-400',  section: 'streams'   },
+    { icon: Users,        label: 'Followers',      value: stats.followers,  color: 'text-pink-400',    section: 'followers' },
+    { icon: Heart,        label: 'Likes',          value: stats.likes,      color: 'text-red-400',     section: null        },
+    { icon: Download,     label: 'Downloads',      value: stats.downloads,  color: 'text-blue-400',    section: 'downloads' },
+    { icon: MessageCircle,label: 'Comments',       value: stats.comments,   color: 'text-indigo-400',  section: null        },
+    { icon: Music,        label: 'Tracks',         value: stats.tracks,     color: 'text-green-400',   section: 'tracks'    },
+    { icon: Zap,          label: 'Presaves',       value: stats.presaves,   color: 'text-yellow-400',  section: null        },
+    { icon: Users,        label: 'Collabs',        value: stats.collabs,    color: 'text-cyan-400',    section: 'collabs'   },
+    ...(isBeatmaker ? [{ icon: DollarSign, label: 'Beat Sales', value: stats.beatSales, color: 'text-green-400', section: 'earnings' }] : []),
+    { icon: DollarSign,   label: 'Tips Received',  value: `$${(stats.totalTipsUSD||0).toFixed(2)}`, color: 'text-green-400', isText: true, section: 'earnings' },
   ];
 
   const tabs = [
@@ -362,33 +683,60 @@ export default function ArtistDashboard() {
               ) : (
                 <>
                   {/* Stat cards */}
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                    {statCards.map(({ icon: Icon, label, value, color }) => (
-                      <div key={label} className="bg-white/[0.03] rounded-xl p-5 border border-white/[0.06]">
-                        <div className="flex items-center justify-between mb-3">
-                          <Icon className={`w-6 h-6 ${color}`} />
-                          <span className="text-3xl font-bold text-white">{value.toLocaleString()}</span>
+                  <div
+                    ref={sectionRefs.stats}
+                    className={`grid grid-cols-2 sm:grid-cols-3 gap-3 ${highlightSection === 'stats' ? 'transition-all duration-700 rounded-xl ring-2 ring-purple-500/40 ring-offset-2 ring-offset-black' : ''}`}
+                  >
+                    {statCards.map(({ icon: Icon, label, value, color, section, isText }) => (
+                      <div
+                        key={label}
+                        onClick={() => section && setHighlightSection(section)}
+                        className={`bg-white/[0.03] rounded-xl p-4 border border-white/[0.06] ${section ? 'cursor-pointer hover:bg-white/[0.05] hover:border-white/[0.1] transition-all active:scale-[0.98]' : ''}`}
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <Icon className={`w-5 h-5 ${color}`} />
+                          {section && <ChevronRight className="w-3.5 h-3.5 text-white/15" />}
                         </div>
-                        <p className="text-sm text-white/40">{label}</p>
+                        <p className="text-2xl font-black text-white leading-none mb-1">
+                          {isText ? value : (typeof value === 'number' ? value.toLocaleString() : value)}
+                        </p>
+                        <p className="text-xs text-white/35">{label}</p>
                       </div>
                     ))}
                   </div>
 
+                  {/* Growth snapshot — streams this week vs last week */}
+                  <GrowthSnapshot artist={artist} />
+
                   {/* Contact Export — Premium only */}
                   <TierGate feature="advanced_analytics" inline>
-                    <div className="bg-white/[0.03] rounded-xl p-4 border border-white/[0.06]">
+                    <div
+                      ref={sectionRefs.followers}
+                      className={`bg-white/[0.03] rounded-xl p-4 border ${
+                        highlightSection === 'followers'
+                          ? 'border-purple-500/40 ring-1 ring-purple-500/20'
+                          : 'border-white/[0.06]'
+                      }`}
+                    >
                       <div className="flex items-center justify-between">
                         <div>
                           <p className="text-sm font-semibold text-white">Follower Contacts</p>
-                          <p className="text-xs text-white/30 mt-0.5">Export your followers' names and emails</p>
+                          <p className="text-xs text-white/30 mt-0.5">Name, email, follow date, genre, stream count of your music</p>
                         </div>
-                        <ContactExportButton artist={artist} />
+                        <ExportButton artist={artist} exportType="followers" label="Export CSV" />
                       </div>
                     </div>
                   </TierGate>
 
                   {/* Per-track analytics */}
-                  <div className="bg-white/[0.03] rounded-xl p-5 border border-white/[0.06] space-y-4 overflow-hidden">
+                  <div
+                    ref={sectionRefs.tracks}
+                    className={`bg-white/[0.03] rounded-xl p-5 border space-y-4 overflow-hidden ${
+                      highlightSection === 'tracks' || highlightSection === 'streams'
+                        ? 'border-purple-500/40 ring-1 ring-purple-500/20'
+                        : 'border-white/[0.06]'
+                    }`}
+                  >
                     <div className="flex items-center justify-between flex-wrap gap-2">
                       <div className="flex items-center space-x-2">
                         <TrendingUp className="w-5 h-5 text-white/40" />
@@ -525,16 +873,14 @@ export default function ArtistDashboard() {
                             </div>
                           )}
 
-                          {/* CSV export */}
-                          <button onClick={async () => {
-                            const { data } = await supabase.from('streams').select('created_at, user_id').eq('track_id', selectedTrack).order('created_at', { ascending: false }).limit(5000);
-                            if (!data) return;
-                            const csv = ['date,user_id', ...data.map(s => `${s.created_at},${s.user_id || 'anon'}`)].join('\n');
-                            const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
-                            a.download = 'track-streams.csv'; a.click();
-                          }} className="flex items-center space-x-2 px-3 py-2 bg-white/[0.04] rounded-xl text-xs text-white/50 hover:bg-white/[0.08] transition border border-white/[0.06]">
-                            <TrendingUp className="w-3.5 h-3.5" /><span>Export streams CSV</span>
-                          </button>
+                          {/* Export buttons */}
+                          <ExportButton
+                            artist={artist}
+                            trackId={selectedTrack}
+                            exportType="streams"
+                            days={trackRange}
+                            label="Export streams CSV"
+                          />
                         </div>
                       )
                     ) : (
@@ -561,6 +907,14 @@ export default function ArtistDashboard() {
                       {topTracks.length === 0 && <p className="text-center text-white/20 text-sm py-4">No tracks yet</p>}
                     </div>
                   </div>
+                  {/* ── Earnings ── */}
+                  <EarningsSection
+                    artist={artist}
+                    sectionRef={sectionRefs.earnings}
+                    downloadsRef={sectionRefs.downloads}
+                    highlight={highlightSection}
+                  />
+
                 </>
               )}
             </div>

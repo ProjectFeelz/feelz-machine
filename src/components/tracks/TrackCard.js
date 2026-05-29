@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Play, Pause, Heart, ListMusic, Share2, Download, Check, Loader, X } from 'lucide-react';
+import { Play, Pause, Heart, ListMusic, Share2, Download, Check, Loader, X, MessageCircle } from 'lucide-react';
 import { usePlayer } from '../../contexts/PlayerContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../supabaseClient';
 import { useNavigate } from 'react-router-dom';
 import TrackActionSheet from '../TrackActionSheet';
+import TrackCommentSheet from '../TrackCommentSheet';
 import { useHaptics } from '../../hooks/useHaptics';
 
 const SWIPE_THRESHOLD = 60; // px to reveal actions
@@ -19,8 +20,10 @@ export default function TrackCard({ track, trackList = [], showArtwork = true, i
   const isCurrentTrack     = currentTrack?.id === track.id;
   const isCurrentAndPlaying = isCurrentTrack && isPlaying;
 
-  const [liked, setLiked]               = useState(false);
-  const [showActionSheet, setShowActionSheet] = useState(false);
+  const [liked,            setLiked]           = useState(false);
+  const [showActionSheet,  setShowActionSheet] = useState(false);
+  const [showComments,     setShowComments]    = useState(false);
+  const [commentCount,     setCommentCount]    = useState(track.comment_count || null);
 
   // Swipe state
   const [swipeX, setSwipeX]       = useState(0);
@@ -32,11 +35,21 @@ export default function TrackCard({ track, trackList = [], showArtwork = true, i
   const rowRef      = useRef(null);
 
   useEffect(() => {
-    if (!user || !track.id) return;
-    supabase.from('track_likes').select('id')
-      .eq('track_id', track.id).eq('user_id', user.id)
-      .maybeSingle().then(({ data }) => setLiked(!!data));
-  }, [track.id, user?.id]);
+    if (!track.id) return;
+    // Fetch like status
+    if (user) {
+      supabase.from('track_likes').select('id')
+        .eq('track_id', track.id).eq('user_id', user.id)
+        .maybeSingle().then(({ data }) => setLiked(!!data));
+    }
+    // Fetch comment count — lazy, non-blocking
+    if (commentCount === null) {
+      supabase.from('track_comments')
+        .select('*', { count: 'exact', head: true })
+        .eq('track_id', track.id)
+        .then(({ count }) => setCommentCount(count || 0));
+    }
+  }, [track.id, user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Close swipe when tapping elsewhere
   useEffect(() => {
@@ -238,9 +251,24 @@ export default function TrackCard({ track, trackList = [], showArtwork = true, i
           </p>
         </div>
 
-        {/* Duration + more button */}
-        <div className="flex items-center space-x-1 flex-shrink-0">
+        {/* Duration + comment + more */}
+        <div className="flex items-center space-x-0.5 flex-shrink-0">
           <span className="text-xs text-white/30 tabular-nums mr-1">{formatDuration(track.duration)}</span>
+          {/* Comment button with count */}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              if (!user) { navigate('/login'); return; }
+              tap();
+              setShowComments(true);
+            }}
+            className="flex items-center space-x-1 px-2 h-9 rounded-full hover:bg-white/10 transition active:scale-90"
+          >
+            <MessageCircle className="w-4 h-4 text-white/30" />
+            {commentCount > 0 && (
+              <span className="text-[10px] text-white/25 tabular-nums">{commentCount}</span>
+            )}
+          </button>
           <button
             onClick={(e) => { e.stopPropagation(); handleMore(e); }}
             className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-white/10 transition active:scale-90">
@@ -249,13 +277,49 @@ export default function TrackCard({ track, trackList = [], showArtwork = true, i
         </div>
       </div>
 
-      {/* Bottom sheet action sheet */}
+      {/* Action sheet */}
       {showActionSheet && (
         <TrackActionSheet
           track={track}
           artist={{ artist_name: track.artist_name, slug: track.artist_slug }}
           onClose={() => setShowActionSheet(false)}
         />
+      )}
+
+      {/* Comment sheet */}
+      {showComments && (
+        <div
+          className="fixed inset-0 z-[800] flex items-end justify-center"
+          style={{ background: 'rgba(0,0,0,0.5)' }}
+          onClick={() => setShowComments(false)}
+        >
+          <div
+            className="w-full md:max-w-lg md:mb-6 md:rounded-2xl"
+            style={{
+              maxHeight: 'calc(100vh - 80px)',
+              height: '65vh',
+              display: 'flex',
+              flexDirection: 'column',
+              background: 'rgba(10,10,10,0.98)',
+              borderTop: '1px solid rgba(255,255,255,0.08)',
+              borderRadius: '24px 24px 0 0',
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            <TrackCommentSheet
+              track={track}
+              user={user}
+              onClose={() => {
+                setShowComments(false);
+                // Refresh count after commenting
+                supabase.from('track_comments')
+                  .select('*', { count: 'exact', head: true })
+                  .eq('track_id', track.id)
+                  .then(({ count }) => setCommentCount(count || 0));
+              }}
+            />
+          </div>
+        </div>
       )}
     </div>
   );

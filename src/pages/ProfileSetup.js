@@ -51,6 +51,31 @@ const MOODS = [
 ];
 
 const PROFILE_IMAGE_BUCKET = 'artist-images';
+
+// ── Slug generation ───────────────────────────────────────────────────────────
+function generateSlug(name) {
+  return name
+    .toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')  // strip accents
+    .replace(/[^a-z0-9\s-]/g, '')                       // strip special chars
+    .trim()
+    .replace(/\s+/g, '-')                               // spaces → hyphens
+    .replace(/-+/g, '-')                                // collapse multiple hyphens
+    .slice(0, 50);                                      // max length
+}
+
+async function getUniqueSlug(base, currentArtistId) {
+  // Try the base slug first
+  const { count } = await supabase
+    .from('artists')
+    .select('*', { count: 'exact', head: true })
+    .eq('slug', base)
+    .neq('id', currentArtistId);
+  if (!count) return base;
+  // Collision — append a short random suffix
+  const suffix = Math.random().toString(36).slice(2, 6);
+  return `${base}-${suffix}`;
+}
 const MAX_DAILY_THOUGHTS   = 3;
 const THOUGHT_TTL_MS       = 24 * 60 * 60 * 1000;
 const BIO_MAX              = 300;
@@ -310,6 +335,7 @@ export default function ProfilePage() {
     try {
       const sl = {};
       SOCIALS.forEach(p => { if (form[p.key]?.trim()) sl[p.key] = form[p.key].trim(); });
+
       const updateData = {
         artist_name:  form.artist_name,
         bio:          form.bio,
@@ -319,6 +345,14 @@ export default function ProfilePage() {
         paypal_email: form.paypal_email?.trim() || null,
         updated_at:   new Date().toISOString(),
       };
+
+      // Generate slug if not set, or if artist_name changed
+      const nameChanged = form.artist_name?.trim() !== artist.artist_name?.trim();
+      if (!artist.slug || nameChanged) {
+        const base = generateSlug(form.artist_name?.trim() || '');
+        if (base) updateData.slug = await getUniqueSlug(base, artist.id);
+      }
+
       if (profileImgFile) updateData.profile_image_url = await uploadFile(profileImgFile, 'profile-images/');
       const { error } = await supabase.from('artists').update(updateData).eq('id', artist.id);
       if (error) throw error;
@@ -344,8 +378,9 @@ export default function ProfilePage() {
         newAvatarUrl = urlData.publicUrl;
       }
       // Update artist profile
+      const newName = editDisplayName.trim() || artist?.artist_name;
       const artistUpdate = {
-        artist_name: editDisplayName.trim() || artist?.artist_name,
+        artist_name: newName,
         bio:         editBio.trim() || null,
         genre:       editGenres[0] || null,
         mood:        editMood || null,
@@ -358,6 +393,13 @@ export default function ProfilePage() {
       const sl = {};
       SOCIALS.forEach(p => { if (form[p.key]?.trim()) sl[p.key] = form[p.key].trim(); });
       artistUpdate.social_links = sl;
+
+      // Generate slug if not set or name changed
+      const editNameChanged = newName !== artist?.artist_name;
+      if (!artist?.slug || editNameChanged) {
+        const base = generateSlug(newName || '');
+        if (base) artistUpdate.slug = await getUniqueSlug(base, artist.id);
+      }
 
       await supabase.from('artists').update(artistUpdate).eq('id', artist.id);
       // Also upsert user_profiles for listener side
@@ -499,14 +541,31 @@ export default function ProfilePage() {
             )}
           </div>
 
-          {isArtist && artist?.slug && (
-            <div className="flex items-center justify-between mt-4 pt-3 border-t border-white/[0.05]">
-              <button onClick={() => nav(`/artist/${artist.slug}`)}
-                className="flex items-center space-x-1.5 text-xs text-white/30 hover:text-white/50 transition">
-                <ExternalLink className="w-3 h-3" /><span>/artist/{artist.slug}</span>
-              </button>
-              <button onClick={() => navigator.clipboard.writeText(`${window.location.origin}/artist/${artist.slug}`)}
-                className="text-xs text-white/20 hover:text-white/40 transition">Copy link</button>
+          {isArtist && (
+            <div className="mt-4 pt-3 border-t border-white/[0.05]">
+              {artist?.slug ? (
+                <div className="flex items-center justify-between">
+                  <button onClick={() => nav(`/artist/${artist.slug}`)}
+                    className="flex items-center space-x-1.5 text-xs text-white/30 hover:text-white/50 transition">
+                    <ExternalLink className="w-3 h-3" />
+                    <span>@{artist.slug}</span>
+                  </button>
+                  <div className="flex items-center space-x-2">
+                    <button onClick={() => navigator.clipboard.writeText(`${window.location.origin}/@${artist.slug}`)}
+                      className="text-[10px] text-white/20 hover:text-white/40 transition px-2 py-1 rounded-lg hover:bg-white/[0.04]">
+                      Copy @link
+                    </button>
+                    <button onClick={() => navigator.clipboard.writeText(`${window.location.origin}/artist/${artist.slug}`)}
+                      className="text-[10px] text-white/20 hover:text-white/40 transition px-2 py-1 rounded-lg hover:bg-white/[0.04]">
+                      Copy URL
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-[11px] text-white/20 italic">
+                  Save your profile to generate your @username link
+                </p>
+              )}
             </div>
           )}
 
