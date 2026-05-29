@@ -1529,6 +1529,28 @@ export default function TrackUploadPanel() {
     } catch (err) { showMessage('error', 'Failed: ' + err.message); }
   };
 
+  const deleteAlbum = async (album) => {
+    const trackCount = albumTracks.length && editingAlbumId === album.id
+      ? albumTracks.length
+      : null;
+    const warning = trackCount
+      ? `Delete "${album.title}" and its ${trackCount} track${trackCount !== 1 ? 's' : ''}? This cannot be undone.`
+      : `Delete "${album.title}"? Any tracks in this album will also be deleted. This cannot be undone.`;
+    if (!window.confirm(warning)) return;
+    try {
+      // Delete all tracks in the album first
+      await supabase.from('tracks').delete().eq('album_id', album.id);
+      // Then delete the album itself
+      const { error } = await supabase.from('albums').delete().eq('id', album.id);
+      if (error) throw error;
+      showMessage('success', `"${album.title}" deleted`);
+      setEditingAlbumId(null);
+      setAlbumTracks([]);
+      fetchAlbums();
+      fetchTracks(); // refresh track list too since we deleted its tracks
+    } catch (err) { showMessage('error', 'Delete failed: ' + err.message); }
+  };
+
   // Helper: reload tracks for an open album
   const reloadAlbumTracks = async (albumId) => {
     setAlbumTracksLoading(true);
@@ -2048,23 +2070,32 @@ export default function TrackUploadPanel() {
                           {album.price > 0 && <span className="text-[10px] px-1.5 py-0.5 bg-white/[0.06] text-white/30 rounded">${album.price}</span>}
                         </div>
                       </div>
-                      <button type="button" onClick={async () => {
-                        setEditingAlbumId(album.id);
-                        setShowAddTrackToAlbum(false);
-                        setEditAlbumCoverFile(null);
-                        setEditAlbumForm({
-                          title: album.title, description: album.description || '',
-                          release_type: album.release_type || 'album',
-                          release_date: album.release_date || '', price: album.price || 0,
-                          is_published: album.is_published ?? true,
-                          cover_artwork_url: album.cover_artwork_url || '',
-                        });
-                        setEditingId(null);
-                        await reloadAlbumTracks(album.id);
-                      }}
-                        className="p-2 bg-white/[0.04] rounded-lg hover:bg-white/[0.08] transition">
-                        <Edit className="w-4 h-4 text-white/40" />
-                      </button>
+                      <div className="flex items-center space-x-1">
+                        <button type="button" onClick={async () => {
+                          setEditingAlbumId(album.id);
+                          setShowAddTrackToAlbum(false);
+                          setEditAlbumCoverFile(null);
+                          setEditAlbumForm({
+                            title: album.title, description: album.description || '',
+                            release_type: album.release_type || 'album',
+                            release_date: album.release_date || '', price: album.price || 0,
+                            is_published: album.is_published ?? true,
+                            cover_artwork_url: album.cover_artwork_url || '',
+                          });
+                          setEditingId(null);
+                          await reloadAlbumTracks(album.id);
+                        }}
+                          className="p-2 bg-white/[0.04] rounded-lg hover:bg-white/[0.08] transition"
+                          title="Edit album">
+                          <Edit className="w-4 h-4 text-white/40" />
+                        </button>
+                        <button type="button"
+                          onClick={() => deleteAlbum(album)}
+                          className="p-2 bg-red-500/[0.06] rounded-lg hover:bg-red-500/[0.14] transition"
+                          title="Delete album">
+                          <Trash2 className="w-4 h-4 text-red-400/60 hover:text-red-400" />
+                        </button>
+                      </div>
                     </div>
                   ) : (
                     <div className="p-4 space-y-4">
