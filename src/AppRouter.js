@@ -191,12 +191,8 @@ export default function AppRouter() {
             <TierProvider>
             <OnboardingGuard>
             <Routes>
-              {/* Public routes — accessible without auth or profile */}
+              {/* Public redirect — no layout needed, just redirects to /artist/:slug */}
               <Route path="/@:slug" element={<ArtistProfileRedirect />} />
-              <Route path="/artist/:slug" element={<ArtistProfilePage />} />
-              <Route path="/artist/:slug/merch" element={<MerchPage />} />
-              <Route path="/artist/:slug/merch/checkout" element={<MerchCheckoutPage />} />
-              <Route path="/artist/:slug/merch/orders" element={<MerchOrdersPage />} />
 
               {/* Legacy /player/* redirects */}
               <Route path="/player" element={<Navigate to="/" replace />} />
@@ -258,6 +254,10 @@ export default function AppRouter() {
                 <Route path="/payment/cancel" element={<PaymentCancel />} />
                 <Route path="/admin/affiliates" element={<AdminAffiliates />} />
                 <Route path="/beat/:slug" element={<BeatDetailPage />} />
+                <Route path="/artist/:slug" element={<ArtistProfilePage />} />
+                <Route path="/artist/:slug/merch" element={<MerchPage />} />
+                <Route path="/artist/:slug/merch/checkout" element={<MerchCheckoutPage />} />
+                <Route path="/artist/:slug/merch/orders" element={<MerchOrdersPage />} />
 
                 <Route path="/track/:slug" element={<TrackPage />} />
                 <Route path="/collab-radar" element={<CollabRadarPage />} />

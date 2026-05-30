@@ -70,11 +70,11 @@ export default function BeatDetailPage() {
           setPurchaseSuccess(true);
           // Trigger download
           if (track.file_url) {
-            setTimeout(() => {
-              const a = document.createElement('a');
-              a.href = track.file_url;
-              a.download = `${track.title}.mp3`;
-              a.click();
+            setTimeout(async () => {
+              try {
+                const { data: { session } } = await supabase.auth.getSession();
+                await downloadTrack(track.id, track.title, session?.access_token);
+              } catch { window.open(track.file_url, '_blank'); }
             }, 1000);
           }
           // Clean URL

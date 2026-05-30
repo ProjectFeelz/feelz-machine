@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
+import { downloadTrack } from '../utils/downloadTrack';
 import { useAuth } from '../contexts/AuthContext';
 import { usePlayer } from '../contexts/PlayerContext';
 import ShareCard from '../components/ShareCard';
@@ -143,16 +144,16 @@ export default function TrackDetailPage() {
     }
   };
 
-  const handleDownload = () => {
+  const handleDownload = async () => {
     if (!track?.file_url) return;
     if (!track.is_downloadable) { alert('This track is not available for download.'); return; }
     if (track.download_price > 0) { alert('This track requires purchase to download.'); return; }
-    const a = document.createElement('a');
-    a.href = track.file_url;
-    a.download = `${track.title} - ${artist?.artist_name || ''}.mp3`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      await downloadTrack(track.id, track.title, session?.access_token);
+    } catch (err) {
+      if (track.file_url) window.open(track.file_url, '_blank');
+    }
   };
 
   const handleShare = () => {
