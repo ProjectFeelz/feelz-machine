@@ -44,6 +44,7 @@ export default function TrackDetailPage() {
   const [loading, setLoading]     = useState(true);
   const [showBuyGate, setShowBuyGate] = useState(false);
   const [showComments, setShowComments] = useState(false);
+  const [downloading, setDownloading]   = useState(false);
   const [shareCard, setShareCard]   = useState(null);
 
   const isCurrentTrack = currentTrack?.id === track?.id;
@@ -126,15 +127,17 @@ export default function TrackDetailPage() {
   };
 
   const handleDownload = async () => {
-    if (!track?.file_url) return;
-    if (!track.is_downloadable) { alert('This track is not available for download.'); return; }
-    if (track.download_price > 0) { alert('This track requires purchase to download.'); return; }
+    if (!user) { navigate('/login'); return; }
+    if (!track.is_downloadable) return;
+    if (track.download_price > 0) { alert('Purchase required to download.'); return; }
+    if (downloading) return;
+    setDownloading(true);
     try {
+      try { await supabase.from('downloads').upsert({ user_id: user.id, track_id: track.id }, { onConflict: 'user_id,track_id', ignoreDuplicates: true }); } catch {}
       const { data: { session } } = await supabase.auth.getSession();
       await downloadTrack(track.id, track.title, session?.access_token);
-    } catch {
-      if (track.file_url) window.open(track.file_url, '_blank');
-    }
+    } catch (err) { console.error('Download error:', err); }
+    setDownloading(false);
   };
 
   const handleShare = () => {
@@ -249,9 +252,11 @@ export default function TrackDetailPage() {
             <Heart className="w-5 h-5" fill={liked ? '#ef4444' : 'none'} color={liked ? '#ef4444' : 'rgba(255,255,255,0.6)'} strokeWidth={liked ? 0 : 2} />
           </button>
           {track.is_downloadable && !track.download_price && (
-            <button onClick={handleDownload}
-              className="w-13 h-13 flex items-center justify-center rounded-2xl border border-white/[0.08] bg-white/[0.04] transition active:scale-95">
-              <Download className="w-5 h-5 text-white/60" />
+            <button onClick={handleDownload} disabled={downloading}
+              className="w-13 h-13 flex items-center justify-center rounded-2xl border border-white/[0.08] bg-white/[0.04] transition active:scale-95 disabled:opacity-50">
+              {downloading
+                ? <Loader className="w-5 h-5 text-white/40 animate-spin" />
+                : <Download className="w-5 h-5 text-white/60" />}
             </button>
           )}
           <button onClick={() => setShowComments(true)}

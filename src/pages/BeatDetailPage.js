@@ -50,6 +50,7 @@ export default function BeatDetailPage() {
   const [paypalReady, setPaypalReady]     = useState(false);
   const [alreadyPurchased, setAlreadyPurchased] = useState(false);
   const [shareCard, setShareCard]   = useState(null);
+  const [downloading, setDownloading] = useState(false);
 
   const isCurrentTrack = currentTrack?.id === track?.id;
 
@@ -70,12 +71,7 @@ export default function BeatDetailPage() {
           setPurchaseSuccess(true);
           // Trigger download
           if (track.file_url) {
-            setTimeout(async () => {
-              try {
-                const { data: { session } } = await supabase.auth.getSession();
-                await downloadTrack(track.id, track.title, session?.access_token);
-              } catch { window.open(track.file_url, '_blank'); }
-            }, 1000);
+            setTimeout(() => triggerDownload(), 1000);
           }
           // Clean URL
           window.history.replaceState({}, '', window.location.pathname);
@@ -181,6 +177,17 @@ export default function BeatDetailPage() {
     load();
   }, [slug, user?.id]);
 
+  const triggerDownload = async () => {
+    if (downloading) return;
+    setDownloading(true);
+    try {
+      try { await supabase.from('downloads').upsert({ user_id: user.id, track_id: track.id }, { onConflict: 'user_id,track_id', ignoreDuplicates: true }); } catch {}
+      const { data: { session } } = await supabase.auth.getSession();
+      await downloadTrack(track.id, track.title, session?.access_token);
+    } catch (err) { console.error('Download error:', err); }
+    setDownloading(false);
+  };
+
   const handlePlay = () => {
     if (!track?.file_url) return;
     if (isCurrentTrack) { togglePlay(); return; }
@@ -272,10 +279,7 @@ export default function BeatDetailPage() {
         licence_type: lic.id, amount_paid: 0, status: 'completed',
       }); } catch {}
       setAlreadyPurchased(true); setPurchaseSuccess(true);
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        await downloadTrack(track.id, track.title, session?.access_token);
-      } catch { /* iOS fallback: open file in browser */ if (track.file_url) window.open(track.file_url, '_blank'); }
+      triggerDownload();
       return;
     }
     setPurchasing(true); setPurchaseError('');
@@ -326,12 +330,7 @@ export default function BeatDetailPage() {
           }
           setAlreadyPurchased(true); setPurchaseSuccess(true); setPurchasing(false);
           // Trigger download
-          setTimeout(async () => {
-            try {
-              const { data: { session } } = await supabase.auth.getSession();
-              await downloadTrack(track.id, track.title, session?.access_token);
-            } catch { if (track.file_url) window.open(track.file_url, '_blank'); }
-          }, 800);
+          setTimeout(() => triggerDownload(), 800);
         } catch (err) { setPurchaseError(err.message); setPurchasing(false); }
       },
       onError: () => { setPurchaseError('Payment failed. Please try again.'); setPurchasing(false); },
@@ -518,12 +517,10 @@ export default function BeatDetailPage() {
                     </div>
                     <p className="text-sm font-bold text-green-400">{purchaseSuccess ? 'Purchase complete!' : 'Already purchased'}</p>
                     <p className="text-[11px] text-white/30">{selectedLic.label} licence — download starting</p>
-                    {track.file_url && (
-                      <a href={track.file_url} download={`${track.title}.mp3`}
-                        className="text-xs text-purple-400 hover:text-purple-300 transition mt-1 inline-block">
-                        Download again →
-                      </a>
-                    )}
+                    <button onClick={triggerDownload} disabled={downloading}
+                        className="text-xs text-purple-400 hover:text-purple-300 transition mt-1 disabled:opacity-40">
+                        {downloading ? 'Downloading…' : 'Download again →'}
+                      </button>
                   </div>
                 ) : purchasing ? (
                   <div>

@@ -36,7 +36,7 @@ export default function AffiliatePage() {
   const [copied, setCopied]           = useState(false);
   const [activeTab, setActiveTab]     = useState('overview');
   const [payoutAmount, setPayoutAmount] = useState('');
-  const [payoutMethod, setPayoutMethod] = useState('payfast');
+  const [payoutMethod, setPayoutMethod] = useState('paypal');
   const [requestingPayout, setRequestingPayout] = useState(false);
   const [eligibilityInfo, setEligibilityInfo] = useState(null);
 
@@ -436,17 +436,9 @@ export default function AffiliatePage() {
                           placeholder={`Amount (min R200, max R${affiliate.pending_zar.toFixed(2)})`}
                           max={affiliate.pending_zar}
                           className="w-full px-3 py-2.5 bg-white/[0.06] rounded-xl text-sm text-white placeholder-white/20 outline-none border border-white/[0.08] focus:border-white/20" />
-                        <div className="flex space-x-2">
-                          {['payfast', 'paypal'].map(m => (
-                            <button key={m} onClick={() => setPayoutMethod(m)}
-                              className={`flex-1 py-2 rounded-xl text-xs font-bold transition border ${
-                                payoutMethod === m
-                                  ? 'bg-white text-black border-white'
-                                  : 'border-white/[0.08] text-white/40 hover:text-white/60'
-                              }`}>
-                              {m === 'payfast' ? '🇿🇦 PayFast' : '🌍 PayPal'}
-                            </button>
-                          ))}
+                        <div className="flex items-center space-x-2 px-3 py-2 bg-white/[0.04] rounded-xl border border-white/[0.06]">
+                          <span className="text-xs text-white/40">Payout via</span>
+                          <span className="text-xs font-bold text-white">🌍 PayPal</span>
                         </div>
                         <button onClick={handlePayoutRequest} disabled={requestingPayout || !payoutAmount}
                           className="w-full py-3 rounded-xl text-sm font-bold transition active:scale-[0.98] disabled:opacity-40"
