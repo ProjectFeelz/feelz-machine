@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { usePlayer } from '../contexts/PlayerContext';
 import { downloadTrack } from '../utils/downloadTrack';
 import ShareCard from '../components/ShareCard';
+import TrackCommentSheet from '../components/TrackCommentSheet';
 import {
   ChevronLeft, Play, Pause, Heart, Share2, Download,
   Music, MessageCircle, Loader, ShoppingBag, Check,
@@ -36,13 +37,12 @@ export default function BeatDetailPage() {
   const [artist, setArtist]       = useState(null);
   const [licences, setLicences]   = useState([]);
   const [stems, setStems]         = useState([]);
-  const [comments, setComments]   = useState([]);
+  const [commentCount, setCommentCount] = useState(0);
   const [liked, setLiked]         = useState(false);
   const [likeCount, setLikeCount] = useState(0);
   const [following, setFollowing] = useState(false);
   const [loading, setLoading]     = useState(true);
-  const [commentText, setCommentText] = useState('');
-  const [posting, setPosting]     = useState(false);
+  const [showComments, setShowComments] = useState(false);
   const [selectedLicence, setSelectedLicence] = useState(null);
   const [purchasing, setPurchasing]       = useState(false);
   const [purchaseSuccess, setPurchaseSuccess] = useState(false);
@@ -145,20 +145,11 @@ export default function BeatDetailPage() {
       const { data: stemData } = await supabase.from('track_stems').select('*').eq('track_id', t.id);
       setStems(stemData || []);
 
-      // Comments
-      const { data: rawComments } = await supabase
-        .from('track_comments').select('id, content, created_at, user_id')
-        .eq('track_id', t.id).order('created_at', { ascending: false }).limit(30);
-      if (rawComments?.length) {
-        const uids = [...new Set(rawComments.map(c => c.user_id).filter(Boolean))];
-        const [{ data: artists }, { data: profiles }] = await Promise.all([
-          supabase.from('artists').select('user_id, artist_name, profile_image_url').in('user_id', uids),
-          supabase.from('user_profiles').select('user_id, name, avatar_url').in('user_id', uids),
-        ]);
-        const aMap = Object.fromEntries((artists || []).map(a => [a.user_id, a]));
-        const pMap = Object.fromEntries((profiles || []).map(p => [p.user_id, p]));
-        setComments(rawComments.map(c => ({ ...c, artist: aMap[c.user_id], profile: pMap[c.user_id] })));
-      }
+      // Comment count
+      const { count: cCount } = await supabase
+        .from('track_comments').select('*', { count: 'exact', head: true })
+        .eq('track_id', t.id);
+      setCommentCount(cCount || 0);
 
       if (user) {
         const { data: lk } = await supabase.from('track_likes').select('id').eq('track_id', t.id).eq('user_id', user.id).maybeSingle();
@@ -240,28 +231,7 @@ export default function BeatDetailPage() {
     }
   };
 
-  const postComment = async () => {
-    if (!commentText.trim() || !user || posting) return;
-    setPosting(true);
-    const { data } = await supabase.from('track_comments')
-      .insert({ track_id: track.id, user_id: user.id, content: commentText.trim() })
-      .select('id, content, created_at, user_id').single();
-    if (data) {
-      const name = myArtist?.artist_name || 'Listener';
-      setComments(prev => [{ ...data, artist: myArtist, profile: { name } }, ...prev]);
-      if (artist && artist.user_id !== user.id) {
-        supabase.from('notifications').insert({
-          user_id: artist.user_id, artist_id: artist.id,
-          type: 'track_commented',
-          title: `${name} commented on "${track.title}"`,
-          message: commentText.trim().slice(0, 100),
-          track_id: track.id,
-          metadata: { track_id: track.id, track_title: track.title },
-        }).catch(() => {});
-      }
-    }
-    setCommentText(''); setPosting(false);
-  };
+
 
   const isZAR = navigator.language === 'af' || navigator.language?.startsWith('af') ||
     Intl.DateTimeFormat().resolvedOptions().timeZone?.includes('Africa');
@@ -641,54 +611,42 @@ export default function BeatDetailPage() {
           )}
         </div>
 
-        {/* ── Comments ── */}
-        <div className="rounded-2xl border border-white/[0.06] overflow-hidden"
+        {/* ── Comments button ── */}
+        <button
+          onClick={() => setShowComments(true)}
+          className="w-full flex items-center justify-between rounded-2xl border border-white/[0.06] p-4 transition hover:bg-white/[0.03] active:scale-[0.98]"
           style={{ background: 'rgba(255,255,255,0.02)' }}>
-          <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.05]">
-            <p className="text-sm font-semibold text-white flex items-center space-x-2">
-              <MessageCircle className="w-4 h-4 text-white/40" />
-              <span>Comments</span>
-            </p>
-            <span className="text-xs text-white/30">{comments.length}</span>
+          <div className="flex items-center space-x-2">
+            <MessageCircle className="w-4 h-4 text-white/40" />
+            <span className="text-sm font-semibold text-white">Comments</span>
           </div>
-          {user && (
-            <div className="px-4 py-3 border-b border-white/[0.05] flex items-center space-x-3">
-              <div className="w-8 h-8 rounded-full bg-white/10 overflow-hidden flex-shrink-0 flex items-center justify-center">
-                {myArtist?.profile_image_url
-                  ? <img src={myArtist.profile_image_url} alt="" className="w-full h-full object-cover" />
-                  : <span className="text-xs font-bold text-white/40">{myArtist?.artist_name?.[0] || user.email?.[0]?.toUpperCase()}</span>}
-              </div>
-              <input value={commentText} onChange={e => setCommentText(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && postComment()}
-                placeholder="Add a comment…" maxLength={300}
-                className="flex-1 bg-white/[0.06] rounded-xl px-3 py-2 text-sm text-white placeholder-white/25 outline-none border border-white/[0.06] focus:border-white/20 transition" />
-              <button onClick={postComment} disabled={!commentText.trim() || posting}
-                className="w-8 h-8 flex items-center justify-center rounded-xl transition disabled:opacity-30"
-                style={{ background: 'rgba(234,179,8,0.15)', border: '1px solid rgba(234,179,8,0.3)' }}>
-                {posting ? <Loader className="w-3.5 h-3.5 animate-spin text-yellow-400" />
-                  : <svg className="w-3.5 h-3.5 text-yellow-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>}
-              </button>
-            </div>
-          )}
-          <div className="divide-y divide-white/[0.04] max-h-72 overflow-y-auto">
-            {comments.length === 0
-              ? <p className="text-center text-white/20 text-sm py-6">No comments yet</p>
-              : comments.map(c => (
-                <div key={c.id} className="flex items-start space-x-3 px-4 py-3">
-                  <div className="w-8 h-8 rounded-full bg-white/10 overflow-hidden flex-shrink-0 flex items-center justify-center">
-                    {(c.artist?.profile_image_url || c.profile?.avatar_url)
-                      ? <img src={c.artist?.profile_image_url || c.profile?.avatar_url} alt="" className="w-full h-full object-cover" />
-                      : <span className="text-xs font-bold text-white/30">{(c.artist?.artist_name || c.profile?.name || '?')[0]}</span>}
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-[11px] font-semibold text-white/50 mb-0.5">{c.artist?.artist_name || c.profile?.name || 'Listener'}</p>
-                    <p className="text-sm text-white/80">{c.content}</p>
-                  </div>
-                </div>
-              ))}
+          <span className="text-xs text-white/30">{commentCount}</span>
+        </button>
+      </div>
+      {/* ── TrackCommentSheet overlay ── */}
+      {showComments && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm"
+          onClick={() => setShowComments(false)}>
+          <div className="w-full md:max-w-lg md:mb-6 md:rounded-2xl"
+            onClick={e => e.stopPropagation()}
+            style={{
+              maxHeight: 'calc(100vh - 80px)',
+              height: '70vh',
+              display: 'flex',
+              flexDirection: 'column',
+              background: 'rgba(10,10,10,0.98)',
+              borderTop: '1px solid rgba(255,255,255,0.08)',
+              borderRadius: '24px 24px 0 0',
+            }}>
+            <TrackCommentSheet
+              track={{ ...track, artist_name: artist?.artist_name }}
+              user={user}
+              onClose={() => setShowComments(false)}
+            />
           </div>
         </div>
-      </div>
+      )}
+
       {shareCard && (
         <ShareCard
           artist={shareCard.artist}
