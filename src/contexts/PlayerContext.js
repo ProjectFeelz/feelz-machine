@@ -276,15 +276,22 @@ export function PlayerProvider({ children }) {
         const notifArtwork = fullTrack?.cover_artwork_url
           || fullTrack?.albums?.cover_artwork_url;
 
-        // Dedup: skip if we already sent a stream notification for this track in the last 60s
-        // This prevents multi-notification bursts when someone replays immediately
-        const dedupCutoff = new Date(Date.now() - 60000).toISOString();
+        // Dedup window:
+        // - Album tracks: 30 min per album — "New stream on Weekend" fires once
+        //   even if someone listens to all 10 tracks in a session
+        // - Standalone tracks: 60s per track — prevents replay bursts
+        const dedupMs     = isAlbumTrack ? 30 * 60 * 1000 : 60 * 1000;
+        const dedupCutoff = new Date(Date.now() - dedupMs).toISOString();
+        const dedupFilter = isAlbumTrack
+          ? { album_id: fullTrack.album_id }
+          : { track_id: trackId };
+
         const { count: recentCount } = await supabase
           .from('notifications')
           .select('*', { count: 'exact', head: true })
           .eq('type', 'new_stream')
           .eq('artist_id', track.artist_id)
-          .contains('metadata', { track_id: trackId })
+          .contains('metadata', dedupFilter)
           .gte('created_at', dedupCutoff);
 
         if (!recentCount) {
