@@ -258,7 +258,54 @@ export function PlayerProvider({ children }) {
       // 4. Increment artist total_streams
       await supabase.rpc('increment_artist_streams', { artist_id: track.artist_id });
 
-      // 5. Stream milestone notifications for the artist are handled by DB trigger.
+      // 5. Notify artist of new stream (rich notification with track info)
+      // DB trigger was dropped — we create it here so we control the metadata
+      try {
+        const { data: fullTrack } = await supabase
+          .from('tracks')
+          .select('title, cover_artwork_url, file_url, album_id, albums(title, cover_artwork_url)')
+          .eq('id', trackId)
+          .maybeSingle();
+
+        // Group album tracks — only notify once per album session
+        // Use track's album_id to determine title/artwork to show
+        const isAlbumTrack = !!fullTrack?.album_id;
+        const notifTitle   = isAlbumTrack
+          ? `New stream on ${fullTrack.albums?.title || fullTrack.title}`
+          : `New stream on ${fullTrack?.title}`;
+        const notifArtwork = fullTrack?.cover_artwork_url
+          || fullTrack?.albums?.cover_artwork_url;
+
+        // Dedup: skip if we already sent a stream notification for this track in the last 60s
+        // This prevents multi-notification bursts when someone replays immediately
+        const dedupCutoff = new Date(Date.now() - 60000).toISOString();
+        const { count: recentCount } = await supabase
+          .from('notifications')
+          .select('*', { count: 'exact', head: true })
+          .eq('type', 'new_stream')
+          .eq('artist_id', track.artist_id)
+          .contains('metadata', { track_id: trackId })
+          .gte('created_at', dedupCutoff);
+
+        if (!recentCount) {
+          await supabase.from('notifications').insert({
+            user_id:   art.user_id,
+            artist_id: track.artist_id,
+            type:      'new_stream',
+            title:     notifTitle,
+            message:   'Someone streamed your track',
+            metadata: {
+              track_id:      trackId,
+              track_title:   fullTrack?.title,
+              track_artwork: notifArtwork,
+              file_url:      fullTrack?.file_url,
+              artist_id:     track.artist_id,
+              album_id:      fullTrack?.album_id || null,
+              album_title:   fullTrack?.albums?.title || null,
+            },
+          });
+        }
+      } catch { /* non-critical — never break playback */ }
 
       // 5b. Fan milestone — celebrate the LISTENER's loyalty to this artist.
       //     "You've played [Artist] 100 times" — fires at 10, 50, 100, 250, 500, 1000.
