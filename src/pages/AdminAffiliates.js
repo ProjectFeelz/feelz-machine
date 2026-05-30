@@ -100,7 +100,15 @@ export default function AdminAffiliates() {
   if (loading) return <div className="flex justify-center py-16"><Loader className="w-5 h-5 animate-spin text-white/30" /></div>;
 
   return (
-    <div className="space-y-4">
+    <div className="pb-32 px-4 max-w-2xl mx-auto">
+      {/* Header */}
+      <div className="sticky top-0 z-20 bg-black/95 backdrop-blur-xl pt-14 md:pt-4 pb-3 -mx-4 px-4 border-b border-white/[0.04] mb-5 flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-bold text-white">Affiliates</h1>
+          <p className="text-xs text-white/30 mt-0.5">Manage your affiliate programme</p>
+        </div>
+      </div>
+      <div className="space-y-4">
       {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
         {[
@@ -250,6 +258,7 @@ export default function AdminAffiliates() {
           ))}
         </div>
       )}
+    </div>
     </div>
   );
 }

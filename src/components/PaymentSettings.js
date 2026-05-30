@@ -13,7 +13,7 @@ export default function PaymentSettings() {
   const [profile, setProfile] = useState(null);
   const [paypalEmail, setPaypalEmail] = useState('');
   const [paypalMerchantId, setPaypalMerchantId] = useState('');
-  const [payoutThreshold, setPayoutThreshold] = useState(10);
+  const [payoutThreshold,  setPayoutThreshold]  = useState(10);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState('');
   const [hasProfile, setHasProfile] = useState(false);
@@ -92,7 +92,7 @@ export default function PaymentSettings() {
     try {
       const payload = {
         artist_id: artist.id,
-        paypal_email: paypalEmail.trim(),
+        paypal_email:   paypalEmail.trim(),
         paypal_merchant_id: paypalMerchantId.trim() || null,
         payout_threshold: payoutThreshold,
         updated_at: new Date().toISOString(),
@@ -202,7 +202,7 @@ export default function PaymentSettings() {
         </div>
 
         <div>
-          <label className="block text-xs text-white/40 mb-1">PayPal Merchant ID (optional)</label>
+          <label className="block text-xs text-white/40 mb-1 mt-3">PayPal Merchant ID (optional)</label>
           <input
             type="text"
             value={paypalMerchantId}

@@ -21,10 +21,10 @@ export async function downloadTrack(trackId, title, authToken) {
 
   if (response.status === 403) {
     const err = await response.json().catch(() => ({}));
-    if (err.error === 'not_released_yet')      throw new Error('not_released_yet');
+    if (err.error === 'not_released_yet')        throw new Error('not_released_yet');
     if (err.error === 'artists_cannot_download') throw new Error('artists_cannot_download');
-    if (err.error === 'fan_pro_required')       throw new Error('fan_pro_required');
-    if (err.error === 'monthly_quota_exceeded') throw new Error('monthly_quota_exceeded');
+    if (err.error === 'fan_pro_required')        throw new Error('fan_pro_required');
+    if (err.error === 'monthly_quota_exceeded')  throw new Error('monthly_quota_exceeded');
     throw new Error('purchase_required');
   }
 
@@ -35,25 +35,41 @@ export async function downloadTrack(trackId, title, authToken) {
 
   const { signedUrl } = await response.json();
 
-  // Step 2: fetch the file as a blob from the signed URL.
-  // This bypasses the cross-origin a.download restriction on desktop browsers.
-  try {
-    const fileResponse = await fetch(signedUrl);
-    if (!fileResponse.ok) throw new Error('File fetch failed');
-    const blob = await fileResponse.blob();
-    const ext = 'mp3';
-    const blobUrl = URL.createObjectURL(blob);
+  // Step 2: download the file.
+  // iOS Safari can't blob-fetch cross-origin audio — use direct link with download attr.
+  // The signed URL already has Content-Disposition: attachment set by Supabase.
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+
+  if (isIOS) {
+    // On iOS, create a temporary link pointing at the signed URL.
+    // Supabase's ?download= param sets the filename via Content-Disposition.
     const a = document.createElement('a');
-    a.href = blobUrl;
-    a.download = cleanName + '.' + ext;
+    a.href = signedUrl;
+    a.download = cleanName + '.mp3';
     a.style.display = 'none';
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+    return;
+  }
+
+  // Desktop + Android: use arrayBuffer → Blob so a.download is always
+  // respected and the filename is never pulled from the storage URL string.
+  try {
+    const fileResponse = await fetch(signedUrl);
+    if (!fileResponse.ok) throw new Error('File fetch failed');
+    const blob = new Blob([await fileResponse.arrayBuffer()], { type: 'audio/mpeg' });
+    const blobUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = blobUrl;
+    a.download = cleanName + '.mp3';
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 30000);
   } catch {
-    // Fallback for iOS Safari — open signed URL directly.
-    // User taps Share > Save to Files.
+    // Last resort fallback
     window.open(signedUrl, '_blank');
   }
 }

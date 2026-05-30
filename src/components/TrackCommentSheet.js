@@ -8,16 +8,13 @@ import { supabase } from '../supabaseClient';
 
 const REACTIONS = ['🔥','❤️','😤','🎯','💯','🙌'];
 
-// Snap the sheet above the iOS soft keyboard using visualViewport
-function useKeyboardSnap(sheetRef) {
+function useKeyboardOffset() {
+  const [offset, setOffset] = useState(0);
   useEffect(() => {
     if (!window.visualViewport) return;
     const update = () => {
-      if (!sheetRef.current) return;
-      const offset = window.innerHeight - window.visualViewport.height;
-      sheetRef.current.style.transform = offset > 50
-        ? `translateY(-${offset}px)`
-        : 'translateY(0)';
+      const keyboardHeight = window.innerHeight - window.visualViewport.height - window.visualViewport.offsetTop;
+      setOffset(Math.max(0, keyboardHeight));
     };
     window.visualViewport.addEventListener('resize', update);
     window.visualViewport.addEventListener('scroll', update);
@@ -25,7 +22,8 @@ function useKeyboardSnap(sheetRef) {
       window.visualViewport.removeEventListener('resize', update);
       window.visualViewport.removeEventListener('scroll', update);
     };
-  }, [sheetRef]);
+  }, []);
+  return offset;
 }
 
 // ── Reaction bar ──────────────────────────────────────────────────────────────
@@ -157,7 +155,7 @@ function ReplyInput({ commentId, trackId, user, parentAuthor, onReplied }) {
 
 // ── Main component ────────────────────────────────────────────────────────────
 export default function TrackCommentSheet({ track, user, onClose }) {
-  const sheetRef  = useRef(null);
+  const keyboardOffset = useKeyboardOffset();
   const inputRef  = useRef(null);
   const [comments,  setComments]  = useState([]);
   const [text,      setText]      = useState('');
@@ -165,7 +163,7 @@ export default function TrackCommentSheet({ track, user, onClose }) {
   const [loading,   setLoading]   = useState(true);
   const [replyingTo, setReplyingTo] = useState(null); // { id, authorName }
 
-  useKeyboardSnap(sheetRef);
+
 
   const load = useCallback(async () => {
     const { data: raw } = await supabase
@@ -328,10 +326,9 @@ export default function TrackCommentSheet({ track, user, onClose }) {
 
   return (
     <div
-      ref={sheetRef}
       className="flex flex-col w-full h-full"
       onClick={e => e.stopPropagation()}
-      style={{ transition: 'transform 0.15s ease-out' }}
+      style={{ paddingBottom: keyboardOffset ? `${keyboardOffset}px` : undefined }}
     >
       {/* Header */}
       <div className="flex justify-between items-center px-5 py-4 flex-shrink-0 border-b border-white/[0.06]">
