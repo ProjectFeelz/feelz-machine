@@ -630,7 +630,9 @@ export default function ListeningSessionPage() {
   const [showQueue, setShowQueue]     = useState(false);
   const [youtubeInput, setYoutubeInput] = useState('');
   const [listenerCount, setListenerCount] = useState(0);
-  const [audioLocked, setAudioLocked] = useState(false);
+  const [audioLocked, setAudioLocked]     = useState(false);
+  const [listeners, setListeners]         = useState([]); // who's watching
+  const [showListeners, setShowListeners] = useState(false);
 
   const audioRef      = useRef(new Audio());
   const sessionSubRef = useRef(null);
@@ -664,11 +666,26 @@ export default function ListeningSessionPage() {
     });
     channel
       .on('presence', { event: 'sync' }, () => {
-        setListenerCount(Object.keys(channel.presenceState()).length);
+        const state = channel.presenceState();
+        const all = Object.values(state).flat();
+        setListenerCount(all.length);
+        setListeners(all);
       })
       .subscribe(async (status) => {
         if (status === 'SUBSCRIBED') {
-          await channel.track({ user_id: user?.id, joined_at: new Date().toISOString() });
+          // Track with display info for the who's watching panel
+          const { data: myProfile } = await supabase
+            .from('artists').select('artist_name, profile_image_url, slug').eq('user_id', user?.id || '').maybeSingle();
+          const { data: myListener } = !myProfile
+            ? await supabase.from('listeners').select('display_name').eq('user_id', user?.id || '').maybeSingle()
+            : { data: null };
+          await channel.track({
+            user_id:  user?.id || 'anon',
+            name:     myProfile?.artist_name || myListener?.display_name || 'Listener',
+            avatar:   myProfile?.profile_image_url || null,
+            slug:     myProfile?.slug || null,
+            joined_at: new Date().toISOString(),
+          });
         }
       });
 
@@ -691,6 +708,18 @@ export default function ListeningSessionPage() {
         }
       })
       .subscribe();
+
+    // Periodic re-sync every 10s for listeners — prevents gradual drift
+    if (!artist) {
+      syncTimerRef.current = setInterval(async () => {
+        const { data: latest } = await supabase
+          .from('listening_sessions')
+          .select('is_playing, playback_pos, started_at, current_track_id, mode')
+          .eq('id', sessionId)
+          .maybeSingle();
+        if (latest?.mode === 'audio') syncAudio(latest);
+      }, 10000);
+    }
 
     // Realtime reactions — shared broadcast channel everyone subscribes to
     const reactionSub = supabase.channel(`session-reactions-${sessionId}`)
@@ -836,13 +865,21 @@ export default function ListeningSessionPage() {
       audio.src = track.file_url;
     }
 
-    // Compute expected playback position accounting for network latency
+    // Compute expected playback position with sub-second precision
+    // Use server started_at + client elapsed to account for network latency
     const elapsed = s.is_playing
       ? (Date.now() - new Date(s.started_at).getTime()) / 1000
       : 0;
     const expectedPos = parseFloat(s.playback_pos || 0) + elapsed;
     const drift = Math.abs(audio.currentTime - expectedPos);
-    if (drift > 2) audio.currentTime = Math.max(0, expectedPos);
+    // Snap if drift > 0.5s (tight), nudge if drift > 0.1s (smooth)
+    if (drift > 0.5) {
+      audio.currentTime = Math.max(0, expectedPos);
+    } else if (drift > 0.1) {
+      // Gentle nudge — speed up/slow down by 2% to close the gap
+      audio.playbackRate = drift > 0 ? 1.02 : 0.98;
+      setTimeout(() => { if (audio) audio.playbackRate = 1.0; }, 2000);
+    }
 
     if (s.is_playing && audio.paused)  audio.play().catch(() => { setAudioLocked(true); });
     if (!s.is_playing && !audio.paused) audio.pause();
@@ -976,16 +1013,44 @@ export default function ListeningSessionPage() {
         </button>
         <div className="text-center">
           <div className="flex items-center space-x-1.5 justify-center">
-            <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-            <span className="text-xs font-semibold text-white">LIVE</span>
+            {session.status === 'scheduled' ? (
+              <><div className="w-2 h-2 rounded-full bg-yellow-500" />
+              <span className="text-xs font-semibold text-yellow-400">SCHEDULED</span></>
+            ) : (
+              <><div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+              <span className="text-xs font-semibold text-white">LIVE</span></>
+            )}
           </div>
           <p className="text-xs text-white/40 truncate max-w-[180px]">{session.title}</p>
         </div>
-        <div className="flex items-center space-x-1 text-white/40">
+        <button
+          onClick={() => setShowListeners(v => !v)}
+          className="flex items-center space-x-1 text-white/40 hover:text-white/60 transition px-2 py-1 rounded-lg hover:bg-white/[0.06]">
           <Users className="w-3.5 h-3.5" />
-          <span className="text-xs">{listenerCount}</span>
-        </div>
+          <span className="text-xs font-medium">{listenerCount}</span>
+        </button>
       </div>
+
+      {/* Who's watching panel */}
+      {showListeners && listeners.length > 0 && (
+        <div className="flex-shrink-0 px-4 py-3 border-b border-white/[0.05] bg-white/[0.02]">
+          <p className="text-[10px] text-white/30 uppercase tracking-wider font-semibold mb-2">Watching now</p>
+          <div className="flex items-center space-x-2 overflow-x-auto pb-1">
+            {listeners.map((l, i) => (
+              <div key={l.user_id || i} className="flex flex-col items-center space-y-1 flex-shrink-0">
+                <div className="w-8 h-8 rounded-full bg-white/[0.08] overflow-hidden border border-white/[0.1]">
+                  {l.avatar
+                    ? <img src={l.avatar} alt="" className="w-full h-full object-cover" />
+                    : <div className="w-full h-full flex items-center justify-center text-[10px] font-bold text-white/40">
+                        {(l.name || '?')[0].toUpperCase()}
+                      </div>}
+                </div>
+                <p className="text-[9px] text-white/30 truncate max-w-[48px]">{l.name || 'Guest'}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Main content area */}
       <div className="flex-1 flex flex-col overflow-hidden">
@@ -1073,6 +1138,20 @@ export default function ListeningSessionPage() {
               >
                 <Youtube className="w-3.5 h-3.5" /><span>YouTube Live</span>
               </button>
+              <button onClick={async () => {
+                  // Export chat as JSON for replay/archive
+                  const blob = new Blob([JSON.stringify(messages, null, 2)], { type: 'application/json' });
+                  const url  = URL.createObjectURL(blob);
+                  const a    = document.createElement('a');
+                  a.href = url;
+                  a.download = `session-chat-${sessionId.slice(0,8)}.json`;
+                  a.click();
+                  URL.revokeObjectURL(url);
+                }}
+                className="flex items-center space-x-1 px-3 py-1.5 rounded-lg text-xs text-white/40 bg-white/[0.04] hover:bg-white/[0.08] transition"
+                title="Export chat log">
+                <Send className="w-3.5 h-3.5 rotate-45" /><span>Save chat</span>
+              </button>
               <button onClick={endSession} className="ml-auto flex items-center space-x-1 px-3 py-1.5 rounded-lg text-xs text-red-400 bg-red-500/10 hover:bg-red-500/20 transition">
                 <X className="w-3.5 h-3.5" /><span>End</span>
               </button>
@@ -1138,9 +1217,21 @@ export default function ListeningSessionPage() {
                         <p className="text-xs text-white truncate flex-1">{q.tracks?.title}</p>
                         {q.track_id === session.current_track_id
                           ? <span className="text-[10px] text-green-400">playing</span>
-                          : <button onClick={() => removeFromQueue(q)} className="w-6 h-6 flex items-center justify-center rounded hover:bg-red-500/20 transition flex-shrink-0">
-                              <Trash2 className="w-3 h-3 text-red-400/50 hover:text-red-400" />
-                            </button>
+                          : <div className="flex items-center space-x-1 flex-shrink-0">
+                              {i > 0 && q.track_id !== session.current_track_id && (
+                                <button onClick={async () => {
+                                  // Swap positions with item above
+                                  const updated = [...queue];
+                                  [updated[i-1], updated[i]] = [updated[i], updated[i-1]];
+                                  setQueue(updated);
+                                  await supabase.from('listening_session_queue').update({ position: i-1 }).eq('id', q.id);
+                                  await supabase.from('listening_session_queue').update({ position: i }).eq('id', updated[i].id);
+                                }} className="w-5 h-5 flex items-center justify-center rounded text-white/20 hover:text-white/60 hover:bg-white/[0.08] transition text-xs">↑</button>
+                              )}
+                              <button onClick={() => removeFromQueue(q)} className="w-6 h-6 flex items-center justify-center rounded hover:bg-red-500/20 transition">
+                                <Trash2 className="w-3 h-3 text-red-400/50 hover:text-red-400" />
+                              </button>
+                            </div>
                         }
                       </div>
                     ))}
