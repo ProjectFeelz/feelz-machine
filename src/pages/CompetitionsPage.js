@@ -81,32 +81,161 @@ function pickChallenge(mode) {
   return { ...base, modifier: base.modifier + extra };
 }
 
+// ── localStorage keys ────────────────────────────────────────────────────────
+const LS_CHALLENGE = 'fm_spin_challenge';  // { result, mode, spunAt }
+const LS_SPINS     = 'fm_spin_daily';      // { count, date }
+
+function todayStr() {
+  return new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+}
+
+function loadStoredChallenge() {
+  try {
+    const raw = localStorage.getItem(LS_CHALLENGE);
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+}
+
+function loadDailySpins() {
+  try {
+    const raw = localStorage.getItem(LS_SPINS);
+    if (!raw) return 0;
+    const { count, date } = JSON.parse(raw);
+    return date === todayStr() ? (count || 0) : 0; // reset if new day
+  } catch { return 0; }
+}
+
+function saveDailySpins(count) {
+  localStorage.setItem(LS_SPINS, JSON.stringify({ count, date: todayStr() }));
+}
+
+function saveChallenge(result, mode) {
+  localStorage.setItem(LS_CHALLENGE, JSON.stringify({
+    result, mode, spunAt: new Date().toISOString(),
+  }));
+}
+
+function clearChallenge() {
+  localStorage.removeItem(LS_CHALLENGE);
+}
+
 function SpinForYourselfTab() {
-  const [mode, setMode]           = React.useState('singer');
-  const [result, setResult]       = React.useState(null);
-  const [spinning, setSpinning]   = React.useState(false);
-  const [spins, setSpins]         = React.useState(0);
-  const navigate                  = useNavigate();
+  const { user } = useAuth();
+  const navigate = useNavigate();
+
+  // Hydrate from localStorage on mount
+  const [mode, setMode]         = React.useState(() => loadStoredChallenge()?.mode || 'singer');
+  const [result, setResult]     = React.useState(() => loadStoredChallenge()?.result || null);
+  const [spins, setSpins]       = React.useState(() => loadDailySpins());
+  const [spinning, setSpinning] = React.useState(false);
+  const [claiming, setClaiming] = React.useState(false);
+  const [claimed, setClaimed]   = React.useState(false);
+  const [xpError, setXpError]   = React.useState('');
+
+  // Check if user already claimed this challenge
+  React.useEffect(() => {
+    if (!user || !result) return;
+    supabase.from('challenge_xp')
+      .select('id')
+      .eq('user_id', user.id)
+      .eq('challenge_id', result.id)
+      .maybeSingle()
+      .then(({ data }) => { if (data) setClaimed(true); });
+  }, [user, result?.id]); // eslint-disable-line
 
   const spin = () => {
     if (spinning || spins >= SPIN_CAP) return;
     setSpinning(true);
     setResult(null);
+    setClaimed(false);
+    setXpError('');
     setTimeout(() => {
-      setResult(pickChallenge(mode));
-      setSpins(s => s + 1);
+      const r = pickChallenge(mode);
+      setResult(r);
+      const newCount = spins + 1;
+      setSpins(newCount);
+      saveDailySpins(newCount);
+      saveChallenge(r, mode);
       setSpinning(false);
     }, 800);
   };
 
+  const handleModeChange = (key) => {
+    setMode(key);
+    // Only clear result if there isn't a saved challenge already in play
+    const stored = loadStoredChallenge();
+    if (!stored || stored.mode !== key) {
+      setResult(null);
+      clearChallenge();
+      setClaimed(false);
+      setXpError('');
+    }
+  };
+
+  const claimXP = async () => {
+    if (!user) { navigate('/login'); return; }
+    if (!result || claimed || claiming) return;
+    setClaiming(true);
+    setXpError('');
+    try {
+      // Check for existing entry
+      const { data: existing } = await supabase
+        .from('challenge_xp')
+        .select('id, total_xp')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (existing) {
+        await supabase.from('challenge_xp').update({
+          total_xp:      existing.total_xp + result.points,
+          last_challenge: result.prompt,
+          updated_at:    new Date().toISOString(),
+        }).eq('id', existing.id);
+      } else {
+        const { data: artist } = await supabase
+          .from('artists').select('id').eq('user_id', user.id).maybeSingle();
+        await supabase.from('challenge_xp').insert({
+          user_id:        user.id,
+          artist_id:      artist?.id || null,
+          total_xp:       result.points,
+          last_challenge: result.prompt,
+          challenge_id:   result.id,
+        });
+      }
+      setClaimed(true);
+      clearChallenge(); // clear persisted challenge after claim
+      // Notify
+      await supabase.from('notifications').insert({
+        user_id: user.id,
+        type:    'challenge_xp',
+        title:   `+${result.points} XP earned!`,
+        message: `${result.tier} challenge complete — ${result.prompt.slice(0, 60)}…`,
+        metadata: { points: result.points, tier: result.tier, challenge_id: result.id },
+      }).catch(() => {});
+    } catch (err) {
+      setXpError('Could not save XP — try again');
+    }
+    setClaiming(false);
+  };
+
+  const dismissChallenge = () => {
+    clearChallenge();
+    setResult(null);
+    setClaimed(false);
+    setXpError('');
+  };
+
   const tc = result ? (TIER_STYLES[result.tier] || TIER_STYLES.Common) : null;
+  const spunDate = loadStoredChallenge()?.spunAt
+    ? new Date(loadStoredChallenge().spunAt).toLocaleDateString('en-ZA', { day:'numeric', month:'short' })
+    : null;
 
   return (
     <div className="px-4 pb-6">
       {/* Mode toggle */}
       <div className="flex space-x-2 mb-5">
         {[{key:'singer',label:'🎤 Vocalist'},{key:'beatmaker',label:'🎛️ Producer'}].map(({key,label}) => (
-          <button key={key} onClick={() => { setMode(key); setResult(null); }}
+          <button key={key} onClick={() => handleModeChange(key)}
             className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition ${
               mode === key ? 'bg-white text-black' : 'bg-white/[0.04] text-white/40 border border-white/[0.08]'
             }`}>
@@ -115,23 +244,52 @@ function SpinForYourselfTab() {
         ))}
       </div>
 
-      {/* Result card */}
+      {/* Active challenge card */}
       {result && tc && (
         <div className="rounded-2xl p-4 mb-5" style={{ background: tc.bg, border: `1px solid ${tc.border}`, animation: 'fadeUp 0.4s ease' }}>
           <div className="flex items-center justify-between mb-2">
-            <span className="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full" style={{ color: tc.color, background: tc.bg, border: `1px solid ${tc.border}` }}>{result.tier}</span>
-            <span className="text-[11px] font-bold" style={{ color: tc.color }}>+{result.points} XP</span>
+            <div className="flex items-center space-x-2">
+              <span className="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full" style={{ color: tc.color, background: 'rgba(0,0,0,0.2)', border: `1px solid ${tc.border}` }}>
+                {result.tier}
+              </span>
+              {spunDate && (
+                <span className="text-[10px] text-white/25">Spun {spunDate}</span>
+              )}
+            </div>
+            <div className="flex items-center space-x-2">
+              <span className="text-[11px] font-bold" style={{ color: tc.color }}>+{result.points} XP</span>
+              <button onClick={dismissChallenge} title="Dismiss challenge"
+                className="text-white/20 hover:text-white/40 transition text-xs px-1">✕</button>
+            </div>
           </div>
           <p className="text-base font-bold text-white leading-relaxed mb-3">{result.prompt}</p>
           <div className="rounded-xl px-3 py-2 mb-4" style={{ background: 'rgba(0,0,0,0.2)', border: `1px solid ${tc.border}` }}>
             <p className="text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: tc.color }}>Modifier</p>
             <p className="text-xs text-white/70">{result.modifier}</p>
           </div>
-          <button onClick={() => navigate('/dashboard?tab=upload')}
-            className="w-full py-2.5 rounded-xl text-xs font-bold text-white transition"
-            style={{ background: tc.color }}>
-            Upload Track to Claim XP
-          </button>
+          {claimed ? (
+            <div className="w-full py-2.5 rounded-xl text-xs font-bold text-center"
+              style={{ background: 'rgba(52,211,153,0.15)', border: '1px solid rgba(52,211,153,0.3)', color: '#34d399' }}>
+              ✓ XP Claimed! +{result.points} added to your score
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <button onClick={() => navigate('/dashboard?tab=upload')}
+                className="w-full py-2.5 rounded-xl text-xs font-bold text-white transition active:scale-[0.98]"
+                style={{ background: tc.color }}>
+                Upload Track
+              </button>
+              <button onClick={claimXP} disabled={claiming}
+                className="w-full py-2 rounded-xl text-xs font-semibold transition active:scale-[0.98] disabled:opacity-40"
+                style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.5)' }}>
+                {claiming ? 'Saving XP…' : 'Already uploaded? Claim XP here'}
+              </button>
+              {xpError && <p className="text-[10px] text-red-400/70 text-center">{xpError}</p>}
+            </div>
+          )}
+          <p className="text-[10px] text-white/15 text-center mt-3">
+            This challenge is saved — come back anytime to complete it.
+          </p>
         </div>
       )}
 
@@ -139,8 +297,8 @@ function SpinForYourselfTab() {
       <button onClick={spin} disabled={spinning || spins >= SPIN_CAP}
         className="w-full py-4 rounded-2xl text-sm font-bold transition active:scale-[0.98] disabled:opacity-40 flex items-center justify-center space-x-2"
         style={{ background: spinning ? 'rgba(139,92,246,0.1)' : 'linear-gradient(135deg,rgba(139,92,246,0.3),rgba(120,75,160,0.2))', border: '1px solid rgba(139,92,246,0.4)', color: '#a78bfa' }}>
-        <span style={{ fontSize: 20 }}>{spinning ? '⏳' : '🎲'}</span>
-        <span>{spinning ? 'Spinning...' : spins >= SPIN_CAP ? 'Come back tomorrow' : result ? 'Spin Again' : '🎡 Spin the Wheel'}</span>
+        <span style={{ fontSize: 20 }}>{spinning ? '⏳' : '🎡'}</span>
+        <span>{spinning ? 'Spinning...' : spins >= SPIN_CAP ? 'Come back tomorrow' : result ? 'Spin for a new challenge' : '🎡 Spin the Wheel'}</span>
       </button>
       {spins > 0 && spins < SPIN_CAP && (
         <p className="text-xs text-white/25 text-center mt-2">{SPIN_CAP - spins} spin{SPIN_CAP - spins !== 1 ? 's' : ''} left today</p>
@@ -148,7 +306,11 @@ function SpinForYourselfTab() {
       {spins >= SPIN_CAP && (
         <p className="text-xs text-white/25 text-center mt-2">Daily limit reached · resets at midnight</p>
       )}
-      <p className="text-[10px] text-white/15 text-center mt-3">Personal spins are for fun — upload a track to earn XP</p>
+      {!result && (
+        <p className="text-[10px] text-white/15 text-center mt-3">
+          Your challenge saves automatically — complete it anytime.
+        </p>
+      )}
     </div>
   );
 }
