@@ -231,85 +231,150 @@ function SpinForYourselfTab() {
     : null;
 
   return (
-    <div className="px-4 pb-6">
-      {/* Mode toggle */}
-      <div className="flex space-x-2 mb-5">
-        {[{key:'singer',label:'🎤 Vocalist'},{key:'beatmaker',label:'🎛️ Producer'}].map(({key,label}) => (
-          <button key={key} onClick={() => handleModeChange(key)}
-            className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition ${
-              mode === key ? 'bg-white text-black' : 'bg-white/[0.04] text-white/40 border border-white/[0.08]'
-            }`}>
-            {label}
-          </button>
-        ))}
+    <div className="pb-8">
+
+      {/* ── Mode selector ── */}
+      <div className="px-4 mb-6">
+        <div className="flex p-1 rounded-2xl gap-1" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+          {[{key:'singer',label:'🎤 Vocalist'},{key:'beatmaker',label:'🎛️ Producer'}].map(({key,label}) => (
+            <button key={key} onClick={() => handleModeChange(key)}
+              className="flex-1 py-2.5 rounded-xl text-sm font-semibold transition"
+              style={mode === key
+                ? { background: 'white', color: '#000' }
+                : { color: 'rgba(255,255,255,0.3)' }}>
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
 
-      {/* Active challenge card */}
-      {result && tc && (
-        <div className="rounded-2xl p-4 mb-5" style={{ background: tc.bg, border: `1px solid ${tc.border}`, animation: 'fadeUp 0.4s ease' }}>
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center space-x-2">
-              <span className="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full" style={{ color: tc.color, background: 'rgba(0,0,0,0.2)', border: `1px solid ${tc.border}` }}>
-                {result.tier}
-              </span>
-              {spunDate && (
-                <span className="text-[10px] text-white/25">Spun {spunDate}</span>
-              )}
+      {/* ── Active challenge card ── */}
+      {result && tc ? (
+        <div className="mx-4 mb-5 rounded-3xl overflow-hidden" style={{ background: 'rgba(255,255,255,0.02)', border: `1px solid ${tc.border}` }}>
+          {/* Coloured top bar */}
+          <div style={{ height: 3, background: `linear-gradient(90deg, ${tc.color}, transparent)` }} />
+
+          <div className="p-5">
+            {/* Header row */}
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-black uppercase tracking-widest px-2.5 py-1 rounded-full"
+                  style={{ background: tc.bg, color: tc.color, border: `1px solid ${tc.border}` }}>
+                  {result.tier}
+                </span>
+                {spunDate && (
+                  <span className="text-[10px] text-white/20">spun {spunDate}</span>
+                )}
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="text-sm font-black" style={{ color: tc.color }}>+{result.points} XP</span>
+                <button onClick={dismissChallenge}
+                  className="w-6 h-6 flex items-center justify-center rounded-full text-white/20 hover:text-white/50 hover:bg-white/[0.06] transition text-xs">
+                  ✕
+                </button>
+              </div>
             </div>
-            <div className="flex items-center space-x-2">
-              <span className="text-[11px] font-bold" style={{ color: tc.color }}>+{result.points} XP</span>
-              <button onClick={dismissChallenge} title="Dismiss challenge"
-                className="text-white/20 hover:text-white/40 transition text-xs px-1">✕</button>
+
+            {/* Prompt */}
+            <p className="text-lg font-bold text-white leading-snug mb-4" style={{ letterSpacing: '-0.01em' }}>
+              {result.prompt}
+            </p>
+
+            {/* Modifier */}
+            <div className="rounded-2xl p-3.5 mb-5" style={{ background: 'rgba(0,0,0,0.25)', border: `1px solid ${tc.border}` }}>
+              <p className="text-[9px] font-black uppercase tracking-widest mb-1.5" style={{ color: tc.color }}>Modifier</p>
+              <p className="text-xs text-white/60 leading-relaxed">{result.modifier}</p>
             </div>
+
+            {/* Actions */}
+            {claimed ? (
+              <div className="flex items-center justify-center gap-2 py-3.5 rounded-2xl text-sm font-bold"
+                style={{ background: 'rgba(52,211,153,0.1)', border: '1px solid rgba(52,211,153,0.25)', color: '#34d399' }}>
+                <span>✓</span>
+                <span>+{result.points} XP claimed</span>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <button onClick={() => navigate('/dashboard?tab=upload')}
+                  className="w-full py-3.5 rounded-2xl text-sm font-bold text-white transition active:scale-[0.98]"
+                  style={{ background: `linear-gradient(135deg, ${tc.color}, ${tc.border.replace('0.25', '1').replace('0.35','1')})` }}>
+                  Upload Track to Claim XP
+                </button>
+                <button onClick={claimXP} disabled={claiming}
+                  className="w-full py-2.5 rounded-2xl text-xs font-semibold transition active:scale-[0.98] disabled:opacity-40"
+                  style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.4)' }}>
+                  {claiming ? 'Saving…' : 'Already uploaded? Tap to claim XP'}
+                </button>
+                {xpError && <p className="text-[10px] text-red-400/60 text-center">{xpError}</p>}
+              </div>
+            )}
+
+            <p className="text-[10px] text-white/15 text-center mt-3">
+              Saved to this device — complete it anytime, no time limit.
+            </p>
           </div>
-          <p className="text-base font-bold text-white leading-relaxed mb-3">{result.prompt}</p>
-          <div className="rounded-xl px-3 py-2 mb-4" style={{ background: 'rgba(0,0,0,0.2)', border: `1px solid ${tc.border}` }}>
-            <p className="text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: tc.color }}>Modifier</p>
-            <p className="text-xs text-white/70">{result.modifier}</p>
-          </div>
-          {claimed ? (
-            <div className="w-full py-2.5 rounded-xl text-xs font-bold text-center"
-              style={{ background: 'rgba(52,211,153,0.15)', border: '1px solid rgba(52,211,153,0.3)', color: '#34d399' }}>
-              ✓ XP Claimed! +{result.points} added to your score
-            </div>
-          ) : (
-            <div className="space-y-2">
-              <button onClick={() => navigate('/dashboard?tab=upload')}
-                className="w-full py-2.5 rounded-xl text-xs font-bold text-white transition active:scale-[0.98]"
-                style={{ background: tc.color }}>
-                Upload Track
-              </button>
-              <button onClick={claimXP} disabled={claiming}
-                className="w-full py-2 rounded-xl text-xs font-semibold transition active:scale-[0.98] disabled:opacity-40"
-                style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.5)' }}>
-                {claiming ? 'Saving XP…' : 'Already uploaded? Claim XP here'}
-              </button>
-              {xpError && <p className="text-[10px] text-red-400/70 text-center">{xpError}</p>}
-            </div>
-          )}
-          <p className="text-[10px] text-white/15 text-center mt-3">
-            This challenge is saved — come back anytime to complete it.
-          </p>
         </div>
+      ) : (
+        /* ── Empty state — no active challenge ── */
+        !spinning && (
+          <div className="mx-4 mb-5 rounded-3xl p-8 text-center" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)' }}>
+            <div className="text-4xl mb-3">🎡</div>
+            <p className="text-sm font-semibold text-white mb-1">No active challenge</p>
+            <p className="text-xs text-white/30 leading-relaxed max-w-xs mx-auto">
+              Spin to get a random creative prompt. It'll stay here until you complete it.
+            </p>
+          </div>
+        )
       )}
 
-      {/* Spin button */}
-      <button onClick={spin} disabled={spinning || spins >= SPIN_CAP}
-        className="w-full py-4 rounded-2xl text-sm font-bold transition active:scale-[0.98] disabled:opacity-40 flex items-center justify-center space-x-2"
-        style={{ background: spinning ? 'rgba(139,92,246,0.1)' : 'linear-gradient(135deg,rgba(139,92,246,0.3),rgba(120,75,160,0.2))', border: '1px solid rgba(139,92,246,0.4)', color: '#a78bfa' }}>
-        <span style={{ fontSize: 20 }}>{spinning ? '⏳' : '🎡'}</span>
-        <span>{spinning ? 'Spinning...' : spins >= SPIN_CAP ? 'Come back tomorrow' : result ? 'Spin for a new challenge' : '🎡 Spin the Wheel'}</span>
-      </button>
-      {spins > 0 && spins < SPIN_CAP && (
-        <p className="text-xs text-white/25 text-center mt-2">{SPIN_CAP - spins} spin{SPIN_CAP - spins !== 1 ? 's' : ''} left today</p>
-      )}
-      {spins >= SPIN_CAP && (
-        <p className="text-xs text-white/25 text-center mt-2">Daily limit reached · resets at midnight</p>
-      )}
+      {/* ── Spin button ── */}
+      <div className="px-4">
+        <button onClick={spin} disabled={spinning || spins >= SPIN_CAP}
+          className="w-full py-4 rounded-2xl text-sm font-bold transition active:scale-[0.98] disabled:opacity-40 flex items-center justify-center gap-2.5"
+          style={{
+            background: spinning
+              ? 'rgba(139,92,246,0.08)'
+              : spins >= SPIN_CAP
+              ? 'rgba(255,255,255,0.03)'
+              : 'linear-gradient(135deg,rgba(167,139,250,0.25),rgba(124,58,237,0.15))',
+            border: `1px solid ${spins >= SPIN_CAP ? 'rgba(255,255,255,0.06)' : 'rgba(167,139,250,0.35)'}`,
+            color: spins >= SPIN_CAP ? 'rgba(255,255,255,0.25)' : '#a78bfa',
+          }}>
+          <span style={{ fontSize: 18 }}>{spinning ? '⏳' : '🎡'}</span>
+          <span>
+            {spinning ? 'Spinning…'
+              : spins >= SPIN_CAP ? 'Come back tomorrow'
+              : result ? 'Spin for a new challenge'
+              : 'Spin the Wheel'}
+          </span>
+        </button>
+
+        {/* Spin counter */}
+        {spins > 0 && (
+          <div className="flex items-center justify-center gap-1.5 mt-3">
+            {Array.from({ length: SPIN_CAP }).map((_, i) => (
+              <div key={i} className="w-1.5 h-1.5 rounded-full transition-all"
+                style={{ background: i < spins ? '#a78bfa' : 'rgba(255,255,255,0.1)' }} />
+            ))}
+            <span className="text-[10px] text-white/20 ml-1">
+              {spins >= SPIN_CAP ? 'resets midnight' : `${SPIN_CAP - spins} left today`}
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* ── Tier legend ── */}
       {!result && (
-        <p className="text-[10px] text-white/15 text-center mt-3">
-          Your challenge saves automatically — complete it anytime.
-        </p>
+        <div className="mx-4 mt-6 grid grid-cols-4 gap-2">
+          {Object.entries(TIER_STYLES).map(([tier, s]) => (
+            <div key={tier} className="rounded-xl p-2.5 text-center" style={{ background: s.bg, border: `1px solid ${s.border}` }}>
+              <p className="text-[10px] font-black uppercase tracking-wider" style={{ color: s.color }}>{tier}</p>
+              <p className="text-[9px] text-white/30 mt-0.5">
+                {tier === 'Common' ? '100 XP' : tier === 'Rare' ? '250 XP' : tier === 'Epic' ? '500 XP' : '1000 XP'}
+              </p>
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );
