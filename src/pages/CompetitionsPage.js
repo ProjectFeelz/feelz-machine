@@ -140,7 +140,7 @@ function SpinForYourselfTab() {
         className="w-full py-4 rounded-2xl text-sm font-bold transition active:scale-[0.98] disabled:opacity-40 flex items-center justify-center space-x-2"
         style={{ background: spinning ? 'rgba(139,92,246,0.1)' : 'linear-gradient(135deg,rgba(139,92,246,0.3),rgba(120,75,160,0.2))', border: '1px solid rgba(139,92,246,0.4)', color: '#a78bfa' }}>
         <span style={{ fontSize: 20 }}>{spinning ? '⏳' : '🎲'}</span>
-        <span>{spinning ? 'Spinning...' : spins >= SPIN_CAP ? 'Come back tomorrow' : result ? 'Spin Again' : 'Spin the Wheel'}</span>
+        <span>{spinning ? 'Spinning...' : spins >= SPIN_CAP ? 'Come back tomorrow' : result ? 'Spin Again' : '🎡 Spin the Wheel'}</span>
       </button>
       {spins > 0 && spins < SPIN_CAP && (
         <p className="text-xs text-white/25 text-center mt-2">{SPIN_CAP - spins} spin{SPIN_CAP - spins !== 1 ? 's' : ''} left today</p>
@@ -251,11 +251,12 @@ function timeLeft(date) {
 function HowItWorksSummary() {
   const [open, setOpen] = useState(false);
   const steps = [
-    { icon: '🎲', title: 'Wheel spins every Sunday 9am', body: 'A random challenge is picked — alternating between vocalist and producer prompts. Announced to the whole platform.' },
-    { icon: '🎵', title: 'Artists make something new', body: 'You have one week to create an original track inspired by the prompt. New recordings only — no existing uploads.' },
-    { icon: '🗳️', title: 'Fans vote Sunday 5pm–11:59pm', body: 'Entries are anonymous. Each listener gets 2 votes. Most votes wins. No gaming it — just the music.' },
+    { icon: '📋', title: 'Check what's open', body: 'The admin posts competitions with a brief, prize, and deadline. Check the competitions tab to see what's live and when entries close.' },
+    { icon: '🎵', title: 'Create and submit', body: 'Make something original inspired by the brief. Upload your track and submit your entry before the deadline — new recordings only.' },
+    { icon: '🗳️', title: 'Community votes', body: 'Entries are anonymous. Each listener gets 2 votes. Most votes wins. No gaming it — just the music.' },
     { icon: '🏆', title: 'Winner gets rewarded', body: 'Free tier → 3 months Pro. Pro → 3 months Premium. Premium → 7-day featured placement. Plus Verified badge for all winners.' },
-    { icon: '💰', title: 'Paid Collaborations', body: 'Monthly — the platform drops stems and commissions a missing piece from the community. Winner gets $50 USD automatically via PayPal.' },
+    { icon: '💰', title: 'Paid Collaborations', body: 'The platform drops stems and commissions a missing piece from the community. Winner gets $50 USD automatically via PayPal.' },
+    { icon: '🎡', title: 'Challenge Wheel', body: 'Head to the Spin tab for personal creative challenges anytime — no competition required. Great for content, great for breaking blocks.' },
   ];
 
   return (
@@ -422,7 +423,7 @@ export default function CompetitionsPage() {
         <div className="flex space-x-1 p-1 rounded-xl bg-white/[0.03] border border-white/[0.06]">
         {[
           { key: 'competitions', label: 'Competitions', emoji: '🏆' },
-          { key: 'spin',         label: 'Spin',         emoji: '🎲' },
+          { key: 'spin',         label: 'Spin',         emoji: '🎡' },
           { key: 'leaderboard',  label: 'Leaderboard',  emoji: '⚡' },
         ].map(({ key, label, emoji }) => (
           <button key={key} onClick={() => setActiveTab(key)}
