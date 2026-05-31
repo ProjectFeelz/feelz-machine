@@ -270,7 +270,7 @@ async function getArtistContext(artistId) {
 }
 
 // ── Build listener prompt ─────────────────────────────────────
-function buildListenerPrompt(segment, ctx, platform) {
+function buildListenerPrompt(segment, ctx, platform, learnBlock) {
   const name = ctx.displayName ? `Their name is ${ctx.displayName}.` : '';
 
   const streakNote = ctx.currentStreak >= 7
@@ -325,14 +325,30 @@ function buildListenerPrompt(segment, ctx, platform) {
     platform.recentDrops && `Fresh drops: ${platform.recentDrops}.`,
   ].filter(Boolean);
 
-  return `Write ONE personalised notification for a ${segment.replace(/_/g, ' ')}.
-${parts.join('
-')}
-Be specific, not generic. JSON only.`;
+  // Add behaviour signals
+  const habitNotes = [];
+  if (ctx.behaviorTags?.includes('night_owl'))        habitNotes.push('Listens late at night.');
+  if (ctx.behaviorTags?.includes('morning_commuter')) habitNotes.push('Streams in the morning.');
+  if (ctx.behaviorTags?.includes('weekend_binger'))   habitNotes.push('Weekend binge listener.');
+  if (ctx.behaviorTags?.includes('deep_listener'))    habitNotes.push('Finishes almost every track.');
+  if (ctx.behaviorTags?.includes('skip_heavy'))       habitNotes.push('Heavy skipper — needs a specific hook.');
+  if (ctx.behaviorTags?.includes('genre_loyal') && ctx.topGenre) habitNotes.push(`Loyal to ${ctx.topGenre}.`);
+  if (ctx.behaviorTags?.includes('collector'))        habitNotes.push('Downloads tracks — real supporter.');
+  if (ctx.behaviorTags?.includes('competition_fan'))  habitNotes.push('Engages with competition entries.');
+  if (ctx.behaviorTags?.includes('surging'))          habitNotes.push('Listening surging this week.');
+  if (ctx.behaviorTags?.includes('cooling'))          habitNotes.push('Listening drifting off this week.');
+  if (ctx.behaviorTags?.includes('churning'))         habitNotes.push('Gone quiet 2+ weeks — needs specific pull, not generic nudge.');
+  if (ctx.behaviorSummary) parts.unshift(`BEHAVIOUR: ${ctx.behaviorSummary}`);
+  if (habitNotes.length)   parts.push(`LISTENER SIGNALS: ${habitNotes.join(' ')}`);
+  if (learnBlock)          parts.push(learnBlock);
+
+  return `Write ONE personalised in-app notification for this listener (${segment.replace(/_/g, ' ')}).
+${parts.join('\n')}
+Use the specific behaviour signals — be real not generic. JSON only: {"title":"...","body":"..."}. Title ≤55 chars, body ≤110 chars.\`;
 }
 
 // ── Build artist prompt ───────────────────────────────────────
-function buildArtistPrompt(segment, artist, ctx, platform) {
+function buildArtistPrompt(segment, artist, ctx, platform, learnBlock) {
   const competitionNote = platform.hasActiveCompetition
     ? `Active competition(s): ${platform.competitionSummary}. Nudge toward entering if relevant.`
     : '';
@@ -381,10 +397,21 @@ function buildArtistPrompt(segment, artist, ctx, platform) {
     tierNote,
   ].filter(Boolean);
 
-  return `Write ONE notification.
-${artistParts.join('
-')}
-Peer energy, specific, not corporate. JSON only.`;
+  const aHabits = [];
+  if (ctx.behaviorTags?.includes('going_viral'))         aHabits.push('Track is blowing up — lean into momentum.');
+  if (ctx.behaviorTags?.includes('momentum'))            aHabits.push('Just dropped, gaining streams — encourage continuation.');
+  if (ctx.behaviorTags?.includes('stalled'))             aHabits.push('Growth stalled — honest but actionable nudge.');
+  if (ctx.behaviorTags?.includes('dormant'))             aHabits.push('Long upload gap — re-engage, no guilt.');
+  if (ctx.behaviorTags?.includes('live_performer'))      aHabits.push('Goes live — reference that energy.');
+  if (ctx.behaviorTags?.includes('competition_entrant')) aHabits.push('Enters competitions — use if one is active.');
+  if (ctx.behaviorTags?.includes('growing'))             aHabits.push(`Gained ${ctx.newFollowersWeek} followers this week.`);
+  if (ctx.behaviorSummary)    artistParts.push(`BEHAVIOUR: ${ctx.behaviorSummary}`);
+  if (aHabits.length > 0)     artistParts.push(`ARTIST SIGNALS: ${aHabits.join(' ')}`);
+  if (learnBlock)             artistParts.push(learnBlock);
+
+  return `Write ONE in-app notification for this artist (${segment.replace(/_/g, ' ')}).
+${artistParts.join('\n')}
+Peer energy, specific, not corporate. JSON only: {"title":"...","body":"..."}. Title ≤55 chars, body ≤110 chars.\`;
 }
 
 // ── Weekly cap helper ─────────────────────────────────────────
@@ -398,6 +425,54 @@ async function getWeeklyMessageCounts(userIds) {
   const counts = {};
   (data || []).forEach(r => { counts[r.user_id] = (counts[r.user_id] || 0) + 1; });
   return counts;
+}
+
+// ── Fetch learning context for a user's tag combo ────────────────────────────
+async function getLearningContext(segment, tags) {
+  if (!tags || tags.length === 0) return null;
+  const combo = [...tags].sort().join('+');
+  const { data } = await supabase
+    .from('engagement_learning')
+    .select('conversion_rate, recent_conversion_rate, best_signals, worst_signals, avg_session_quality, total_sends')
+    .eq('segment', segment)
+    .eq('tag_combo', combo)
+    .maybeSingle();
+  return data || null;
+}
+
+// ── Build learning block for Claude prompt ────────────────────────────────────
+function buildLearningBlock(learning) {
+  if (!learning || learning.total_sends < 5) return null; // not enough data yet
+
+  const parts = [];
+
+  // Use recent rate if we have it, fall back to all-time
+  const rate = learning.recent_conversion_rate > 0
+    ? learning.recent_conversion_rate
+    : learning.conversion_rate;
+  const rateStr = `${Math.round(rate * 100)}%`;
+  const qualityStr = learning.avg_session_quality >= 2.5
+    ? 'deep listening sessions'
+    : learning.avg_session_quality >= 1
+    ? 'light engagement'
+    : 'mostly bounces';
+
+  parts.push(`WHAT HAS WORKED FOR THIS USER TYPE (${learning.total_sends} sends, ${rateStr} conversion → ${qualityStr}):`);
+
+  if (learning.best_signals?.length > 0) {
+    parts.push(`Signals that drove real sessions: ${learning.best_signals.join(', ')}.`);
+  }
+  if (learning.worst_signals?.length > 0) {
+    parts.push(`Signals that flopped (avoid): ${learning.worst_signals.join(', ')}.`);
+  }
+
+  if (rate < 0.1) {
+    parts.push('Low conversion overall — try a completely different angle, not more of the same.');
+  } else if (rate > 0.35) {
+    parts.push('This approach converts well — stay in this lane.');
+  }
+
+  return parts.join(' ');
 }
 
 // ── Segment users ─────────────────────────────────────────────
@@ -443,12 +518,18 @@ const PARALLEL_BATCH = 5;
 async function processOneUser(user, segmentKey, platform, isArtist) {
   try {
     let prompt;
+    let ctx;
     if (isArtist) {
-      const ctx = await getArtistContext(user.id);
-      prompt = buildArtistPrompt(segmentKey, user, ctx, platform);
+      ctx    = await getArtistContext(user.id);
+      // Fetch learning for this artist's behaviour profile
+      const learning = await getLearningContext(segmentKey, ctx.behaviorTags);
+      const learnBlock = buildLearningBlock(learning);
+      prompt = buildArtistPrompt(segmentKey, user, ctx, platform, learnBlock);
     } else {
-      const ctx = await getListenerContext(user.user_id);
-      prompt = buildListenerPrompt(segmentKey, ctx, platform);
+      ctx    = await getListenerContext(user.user_id);
+      const learning = await getLearningContext(segmentKey, ctx.behaviorTags);
+      const learnBlock = buildLearningBlock(learning);
+      prompt = buildListenerPrompt(segmentKey, ctx, platform, learnBlock);
     }
 
     const msg = await generateSingleMessage(prompt);
@@ -458,6 +539,12 @@ async function processOneUser(user, segmentKey, platform, isArtist) {
     }
 
     const siteUrl = process.env.URL || 'https://www.feelzmachine.com';
+    // Extract which signals were actually used in the prompt
+    const signalsUsed = [
+      ...(ctx.behaviorTags || []),
+      ctx.sessionType ? `session:${ctx.sessionType}` : null,
+    ].filter(Boolean);
+
     const [notifResult, msgResult] = await Promise.all([
       supabase.from('notifications').insert({
         user_id:   user.user_id,
@@ -465,7 +552,7 @@ async function processOneUser(user, segmentKey, platform, isArtist) {
         type:      'engagement',
         title:     msg.title,
         message:   msg.body,
-        metadata:  { segment: segmentKey, message_type: `drip_${segmentKey}`, ai_generated: true, personalised: true },
+        metadata:  { segment: segmentKey, message_type: `drip_${segmentKey}`, ai_generated: true, personalised: true, signals_used: signalsUsed },
       }),
       supabase.from('engagement_messages').insert({
         user_id:      user.user_id,
@@ -474,6 +561,7 @@ async function processOneUser(user, segmentKey, platform, isArtist) {
         message_type: `drip_${segmentKey}`,
         title:        msg.title,
         body:         msg.body,
+        signals_used: signalsUsed,
       }),
     ]);
 
@@ -602,6 +690,8 @@ exports.handler = async (event) => {
   console.log(`Engagement drip v2 — ${new Date().toISOString()} — ${isManual ? 'manual' : 'scheduled'}`);
 
   try {
+    console.log('Computing behaviour profiles…');
+    try { await computeAllProfiles(); } catch (e) { console.warn('Profile compute (non-fatal):', e.message); }
     const [platform, segments] = await Promise.all([getPlatformContext(), segmentUsers()]);
 
     console.log('Competitions:', platform.competitionSummary || 'none active');

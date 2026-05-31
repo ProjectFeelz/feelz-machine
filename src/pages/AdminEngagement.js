@@ -195,7 +195,9 @@ export default function AdminEngagement() {
     setTriggering(true);
     setTriggerResult(null);
     try {
-      const res = await fetch('/.netlify/functions/engagement-drip-background', {
+      // Call the cron wrapper (regular function, not background) —
+      // background functions return 503 when called directly from the browser
+      const res = await fetch('/.netlify/functions/engagement-drip-cron', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
       });

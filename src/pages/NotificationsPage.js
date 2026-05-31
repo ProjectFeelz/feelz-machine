@@ -63,11 +63,14 @@ const FILTERS = [
 function filterMatch(type, filter) {
   if (filter === 'all')        return true;
   if (filter === 'collabs')    return type?.startsWith('collab_');
-  if (filter === 'social')     return ['new_follower','track_liked','playlist_add','track_commented','new_comment','new_post','new_stream','mention','engagement','artist_thought'].includes(type);
+  if (filter === 'social')     return ['new_follower','track_liked','playlist_add','track_commented','new_comment','new_post','new_stream','mention','artist_thought'].includes(type);
   if (filter === 'milestones') return type?.startsWith('milestone_') || ['top_supporter','streak','first_listener','competition_winner','weekly_report','monthly_wrapped'].includes(type);
   if (filter === 'money')      return ['tip','download','payout_pending','beat_purchase'].includes(type);
   return true;
 }
+
+// Types to completely hide from the list (not useful to users)
+const HIDDEN_TYPES = new Set(['engagement', 'wheel_challenge', 'admin_message', 'bug_report']);
 
 function formatDate(date) {
   const d = new Date(date);
@@ -325,7 +328,7 @@ export default function NotificationsPage() {
     fetchAll(next);
   };
 
-  const filtered = allNotifs.filter(n => filterMatch(n.type, filter));
+  const filtered = allNotifs.filter(n => filterMatch(n.type, filter) && !HIDDEN_TYPES.has(n.type));
 
   // Group by date
   const grouped = {};
@@ -530,13 +533,18 @@ export default function NotificationsPage() {
                   const meta   = notif.metadata || {};
                   const isRead = notif.read;
                   const isReplyOpen   = replyingTo === notif.id;
-                  const isExpandable  = notif.message?.length > 80;
+                  const isExpandable  = (notif.message?.length > 80) && !['announcement','engagement','weekly_report','admin_message'].includes(notif.type);
                   const isExpanded    = expandedIds.includes(notif.id);
-                  const hasTrackPill  = !!meta.track_title;
+                  const hasTrackPill  = !!meta.track_title && !!meta.track_id;
+                  // Orphaned stream notification — has no track data
+                  const isOrphanStream = notif.type === 'new_stream' && !meta.track_title;
                   const isCollabReq   = notif.type === 'collab_request';
                   const isNewFollower = notif.type === 'new_follower';
                   const isComment     = notif.type === 'track_commented' || notif.type === 'new_comment';
                   const canReply      = isComment && (meta.post_id || meta.track_id);
+
+                  // Skip orphaned stream notifications (no track data - old DB trigger leftovers)
+                  if (isOrphanStream) return null;
 
                   // Monthly wrapped gets its own card
                   if (notif.type === 'monthly_wrapped') {

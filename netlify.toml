@@ -71,6 +71,14 @@
   schedule = "0 8 * * 1,4"
 
 [[scheduled_functions]]
+  name = "compute-behavior-profiles"
+  schedule = "0 3 * * *"
+
+[[scheduled_functions]]
+  name = "score-engagement-outcomes"
+  schedule = "30 3 * * *"
+
+[[scheduled_functions]]
   name = "monthly-wrapped"
   schedule = "0 9 1 * *"
 

@@ -51,34 +51,59 @@ export default function ArtistFollowPrompt({ onDone }) {
   const audioRef = useRef(null);
   const timerRef = useRef(null);
 
-  // Load ALL artists once (with their top track) — we filter client-side by genre
+  // Load artists who have published music — randomised each time so suggestions feel fresh
   const loadArtists = useCallback(async () => {
     setLoading(true);
-    const { data: artistData } = await supabase
-      .from('artists')
-      .select('id, artist_name, slug, profile_image_url, is_verified, follower_count, total_streams, genre')
-      .not('profile_image_url', 'is', null)
-      .neq('profile_image_url', '')
-      .order('follower_count', { ascending: false })
-      .limit(100);
 
-    if (!artistData?.length) { setLoading(false); return; }
+    // Fetch artists who have at least one published track
+    // Join via tracks table — only artists with music appear
+    const { data: trackData } = await supabase
+      .from('tracks')
+      .select('artist_id, title, file_url, cover_artwork_url, stream_count, artists(id, artist_name, slug, profile_image_url, is_verified, follower_count, total_streams, genre)')
+      .eq('is_published', true)
+      .not('file_url', 'is', null)
+      .neq('file_url', '')
+      .order('stream_count', { ascending: false })
+      .limit(400); // fetch wide pool then deduplicate
 
-    const withTracks = await Promise.all(
-      (artistData || []).map(async (a) => {
-        const { data: tracks } = await supabase
-          .from('tracks')
-          .select('id, title, file_url, cover_artwork_url')
-          .eq('artist_id', a.id)
-          .eq('is_published', true)
-          .order('stream_count', { ascending: false })
-          .limit(1);
-        return { ...a, topTrack: tracks?.[0] || null };
-      })
-    );
+    if (!trackData?.length) { setLoading(false); return; }
 
-    const enriched = withTracks.filter(a => a.id !== user?.id);
-    setAllArtists(enriched);
+    // Deduplicate — keep the most-streamed track per artist
+    const seen    = new Set();
+    const artists = [];
+    for (const row of (trackData || [])) {
+      const a = row.artists;
+      if (!a || seen.has(a.id) || a.id === user?.id) continue;
+      if (!a.profile_image_url) continue; // still require a profile image
+      seen.add(a.id);
+      artists.push({
+        ...a,
+        topTrack: {
+          id:                row.artist_id, // use track artist_id as proxy
+          title:             row.title,
+          file_url:          row.file_url,
+          cover_artwork_url: row.cover_artwork_url,
+        },
+      });
+    }
+
+    // Fisher-Yates shuffle — different order every onboarding
+    for (let i = artists.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [artists[i], artists[j]] = [artists[j], artists[i]];
+    }
+
+    // Pin platform owner to first only if their genre will match the user's selection.
+    // If no genres selected yet (or owner genre won't match), they appear naturally in shuffle.
+    const PLATFORM_OWNER_SLUG = 'stevecsa';
+    const ownerIdx = artists.findIndex(a => a.slug === PLATFORM_OWNER_SLUG);
+    if (ownerIdx > 0) {
+      // Move to front — applyGenreFilter will demote them to padding if genre doesn't match
+      const [owner] = artists.splice(ownerIdx, 1);
+      artists.unshift(owner);
+    }
+
+    setAllArtists(artists);
     setLoading(false);
   }, [user?.id]);
 
