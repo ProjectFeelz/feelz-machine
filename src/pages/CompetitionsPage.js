@@ -251,7 +251,7 @@ function timeLeft(date) {
 function HowItWorksSummary() {
   const [open, setOpen] = useState(false);
   const steps = [
-    { icon: '📋', title: 'Check what's open', body: 'The admin posts competitions with a brief, prize, and deadline. Check the competitions tab to see what's live and when entries close.' },
+    { icon: '📋', title: "Check what's open", body: "The admin posts competitions with a brief, prize, and deadline. Check the competitions tab to see what's live and when entries close." },
     { icon: '🎵', title: 'Create and submit', body: 'Make something original inspired by the brief. Upload your track and submit your entry before the deadline — new recordings only.' },
     { icon: '🗳️', title: 'Community votes', body: 'Entries are anonymous. Each listener gets 2 votes. Most votes wins. No gaming it — just the music.' },
     { icon: '🏆', title: 'Winner gets rewarded', body: 'Free tier → 3 months Pro. Pro → 3 months Premium. Premium → 7-day featured placement. Plus Verified badge for all winners.' },
