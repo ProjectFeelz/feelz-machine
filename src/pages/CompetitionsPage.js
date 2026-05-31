@@ -310,14 +310,7 @@ export default function CompetitionsPage() {
     setLoading(true);
     try {
       // Current wheel challenge
-      const { data: wc } = await supabase
-        .from('wheel_challenges')
-        .select('*, competitions(id, status, entries_close_at, voting_close_at, max_votes_per_user)')
-        .eq('is_current', true)
-        .maybeSingle();
-      setWheelChallenge(wc || null);
-
-      // All active competitions
+            // All active competitions
       const { data: comps } = await supabase
         .from('competitions')
         .select('id, title, status, brief, prize_description, cash_prize_amount, entries_close_at, voting_close_at, wheel_challenge, paid_collab, stem_pack_url')
@@ -417,7 +410,7 @@ export default function CompetitionsPage() {
   const size = typeof window !== 'undefined' ? Math.min(window.innerWidth - 80, 260) : 240;
 
   const activePaidCollabs = competitions.filter(c => c.paid_collab);
-  const activeStandard = competitions.filter(c => !c.wheel_challenge && !c.paid_collab);
+  const activeStandard = competitions.filter(c => !c.paid_collab); // show all including wheel challenges
 
   return (
     <div className="pb-32 pt-0">
