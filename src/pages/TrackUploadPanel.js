@@ -569,26 +569,67 @@ function LyricsEditor({ lyrics, onChange, audioFile, audioUrl }) {
   const allDone = stamped.length > 0 && stamped.every(s => s !== null);
 
   // ── Paste mode ──────────────────────────────────────────────────────────────
+  // Handle .lrc file import
+  const handleLrcImport = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const text = ev.target.result;
+      setRawText(text);
+      onChange(text);
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
+
   if (mode === 'paste') {
     return (
       <div>
+        {/* LRC Studio banner */}
+        <div className="flex items-center justify-between mb-2 p-2.5 rounded-xl"
+          style={{ background: 'rgba(167,139,250,0.06)', border: '1px solid rgba(167,139,250,0.15)' }}>
+          <div className="flex items-center space-x-2 min-w-0">
+            <Zap className="w-3.5 h-3.5 text-purple-400 flex-shrink-0" />
+            <div className="min-w-0">
+              <p className="text-[11px] font-semibold text-white leading-tight">Create synced lyrics in 5 min</p>
+              <p className="text-[10px] text-white/35 leading-tight">AI transcribes your track, you tap to sync</p>
+            </div>
+          </div>
+          <div className="flex items-center space-x-1.5 flex-shrink-0 ml-2">
+            <a href="https://lyrics.feelzmachine.com" target="_blank" rel="noopener"
+              className="text-[10px] font-bold px-2.5 py-1.5 rounded-lg transition"
+              style={{ background: 'rgba(167,139,250,0.2)', color: '#c4b5fd', border: '1px solid rgba(167,139,250,0.3)' }}>
+              Open Studio ↗
+            </a>
+          </div>
+        </div>
+
         <div className="flex items-center justify-between mb-1.5">
           <FieldLabel>Lyrics (optional)</FieldLabel>
-          {(audioFile || audioUrl) && rawText.trim() && (
-            <button type="button" onClick={enterSyncMode}
-              className="flex items-center space-x-1 text-[10px] text-purple-400 hover:text-purple-300 transition font-medium">
-              <Zap className="w-3 h-3" />
-              <span>Sync to audio →</span>
-            </button>
-          )}
+          <div className="flex items-center space-x-2">
+            {/* .lrc file import */}
+            <label className="flex items-center space-x-1 text-[10px] text-white/40 hover:text-purple-400 transition font-medium cursor-pointer">
+              <input type="file" accept=".lrc,.txt" onChange={handleLrcImport} className="hidden" />
+              <Upload className="w-3 h-3" />
+              <span>Import .lrc</span>
+            </label>
+            {(audioFile || audioUrl) && rawText.trim() && (
+              <button type="button" onClick={enterSyncMode}
+                className="flex items-center space-x-1 text-[10px] text-purple-400 hover:text-purple-300 transition font-medium">
+                <Zap className="w-3 h-3" />
+                <span>Sync to audio →</span>
+              </button>
+            )}
+          </div>
         </div>
         <textarea rows={4} value={rawText}
           onChange={e => { setRawText(e.target.value); onChange(e.target.value); }}
-          placeholder={"Paste lyrics here, one line per row…\n\nTip: Add audio file first, then tap 'Sync to audio' to time-stamp each line."}
+          placeholder={"Paste lyrics here, one line per row…\n\nOr use LRC Studio above to AI-transcribe and sync your track, then import the .lrc file."}
           className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none resize-none font-mono leading-relaxed" />
         {rawText.includes('[0') && (
           <p className="text-[10px] text-purple-400 mt-1 flex items-center space-x-1">
-            <Zap className="w-2.5 h-2.5" /><span>LRC timestamps detected — lyrics will sync to audio</span>
+            <Zap className="w-2.5 h-2.5" /><span>LRC timestamps detected — lyrics will sync to audio on every platform</span>
           </p>
         )}
       </div>
