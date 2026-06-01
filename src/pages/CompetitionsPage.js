@@ -280,10 +280,10 @@ function SpinForYourselfTab() {
               {result.prompt}
             </p>
 
-            {/* Modifier */}
-            <div className="rounded-2xl p-3.5 mb-5" style={{ background: 'rgba(0,0,0,0.25)', border: `1px solid ${tc.border}` }}>
-              <p className="text-[9px] font-black uppercase tracking-widest mb-1.5" style={{ color: tc.color }}>Modifier</p>
-              <p className="text-xs text-white/60 leading-relaxed">{result.modifier}</p>
+            {/* Twist */}
+            <div className="rounded-2xl p-3.5 mb-5" style={{ background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.05)' }}>
+              <p className="text-[9px] font-semibold uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.25)' }}>twist</p>
+              <p className="text-xs text-white/50 leading-relaxed">{result.modifier}</p>
             </div>
 
             {/* Actions */}
