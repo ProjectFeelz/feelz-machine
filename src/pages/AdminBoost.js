@@ -102,7 +102,7 @@ function StreamBoostRow({ track, onBoost, isBoosting }) {
   );
 }
 
-export default function AdminBoost() {
+export default function AdminBoost({ embedded = false }) {
   const navigate = useNavigate();
   const { isAdmin, loading: authLoading } = useAuth();
 
@@ -308,7 +308,7 @@ export default function AdminBoost() {
   if (!isAdmin) return null;
 
   return (
-    <div className="pt-14 md:pt-0 pb-32 px-4 max-w-3xl mx-auto">
+    <div className="pt-4 pb-32 px-4">
       <Toast message={toast.message} type={toast.type} />
 
       {/* Header */}

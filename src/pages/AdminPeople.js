@@ -290,10 +290,24 @@ function BugReportsTab() {
 
   const fetchReports = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase.from('bug_reports')
-      .select('*, artists(artist_name, profile_image_url, slug)')
+    const { data: reports } = await supabase.from('bug_reports')
+      .select('*')
       .order('created_at', { ascending: false });
-    setReports(data || []);
+
+    // Enrich with artist data — join via user_id since bug_reports has no artist FK
+    const userIds = [...new Set((reports || []).map(r => r.user_id).filter(Boolean))];
+    let artistMap = {};
+    if (userIds.length > 0) {
+      const { data: artists } = await supabase.from('artists')
+        .select('user_id, artist_name, profile_image_url, slug')
+        .in('user_id', userIds);
+      (artists || []).forEach(a => { artistMap[a.user_id] = a; });
+    }
+
+    setReports((reports || []).map(r => ({
+      ...r,
+      artists: artistMap[r.user_id] || null,
+    })));
     setLoading(false);
   }, []);
 

@@ -391,7 +391,7 @@ function PayoutModal({ competition, onClose }) {
 }
 
 // ── Main Admin Competitions Page ──────────────────────────────
-export default function AdminCompetitions() {
+export default function AdminCompetitions({ embedded = false }) {
   const navigate  = useNavigate();
   const { isAdmin } = useAuth();
 
@@ -534,13 +534,14 @@ export default function AdminCompetitions() {
   if (!isAdmin) return null;
 
   return (
-    <div className="min-h-screen pb-24">
+    <div className={embedded ? "pb-8" : "min-h-screen pb-24"}>
       {toast && (
         <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 rounded-xl bg-white/10 backdrop-blur-md border border-white/10 text-sm text-white font-medium shadow-lg">
           {toast}
         </div>
       )}
 
+      {!embedded && (
       <div className="flex items-center justify-between px-5 pt-14 md:pt-4 pb-4 sticky top-0 z-20 bg-black/90 backdrop-blur-sm border-b border-white/[0.04]">
         <div className="flex items-center space-x-3">
           <button onClick={() => navigate(-1)} className="w-8 h-8 flex items-center justify-center rounded-full bg-white/[0.06]">
@@ -570,6 +571,7 @@ export default function AdminCompetitions() {
         )}
       </div>
 
+      )}
       <div className="px-5 pt-5 space-y-5">
         {/* Create form */}
         {showCreate && (

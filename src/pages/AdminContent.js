@@ -26,6 +26,12 @@ export default function AdminContent() {
   const navigate = useNavigate();
   const { isAdmin } = useAuth();
   const [tab, setTab] = useState('boost');
+  const [mounted, setMounted] = useState({ boost: true });
+
+  const switchTab = (t) => {
+    setTab(t);
+    setMounted(prev => ({ ...prev, [t]: true }));
+  };
 
   useEffect(() => { if (!isAdmin) navigate('/hub'); }, [isAdmin, navigate]);
   if (!isAdmin) return null;
@@ -41,15 +47,15 @@ export default function AdminContent() {
           <h1 className="text-base font-bold text-white">Content</h1>
         </div>
         <div className="flex space-x-1 p-1 bg-white/[0.03] rounded-xl border border-white/[0.06]">
-          <Tab active={tab === 'boost'}        onClick={() => setTab('boost')}>Boost</Tab>
-          <Tab active={tab === 'competitions'} onClick={() => setTab('competitions')}>Competitions</Tab>
-          <Tab active={tab === 'moderation'}   onClick={() => setTab('moderation')}>Moderation</Tab>
+          <Tab active={tab === 'boost'}        onClick={() => switchTab('boost')}>Boost</Tab>
+          <Tab active={tab === 'competitions'} onClick={() => switchTab('competitions')}>Competitions</Tab>
+          <Tab active={tab === 'moderation'}   onClick={() => switchTab('moderation')}>Moderation</Tab>
         </div>
       </div>
 
-      <div className={tab === 'boost'        ? '' : 'hidden'}><AdminBoost        embedded /></div>
-      <div className={tab === 'competitions' ? '' : 'hidden'}><AdminCompetitions embedded /></div>
-      <div className={tab === 'moderation'   ? '' : 'hidden'}><AdminModeration   embedded /></div>
+      <div className={tab === 'boost'        ? '' : 'hidden'}>{mounted.boost        && <AdminBoost        embedded />}</div>
+      <div className={tab === 'competitions' ? '' : 'hidden'}>{mounted.competitions && <AdminCompetitions embedded />}</div>
+      <div className={tab === 'moderation'   ? '' : 'hidden'}>{mounted.moderation   && <AdminModeration   embedded />}</div>
     </div>
   );
 }

@@ -26,6 +26,12 @@ export default function AdminIntelligence() {
   const navigate = useNavigate();
   const { isAdmin } = useAuth();
   const [tab, setTab] = useState('analytics');
+  const [mounted, setMounted] = useState({ analytics: true });
+
+  const switchTab = (t) => {
+    setTab(t);
+    setMounted(prev => ({ ...prev, [t]: true }));
+  };
 
   useEffect(() => { if (!isAdmin) navigate('/hub'); }, [isAdmin, navigate]);
   if (!isAdmin) return null;
@@ -41,15 +47,15 @@ export default function AdminIntelligence() {
           <h1 className="text-base font-bold text-white">Intelligence</h1>
         </div>
         <div className="flex space-x-1 p-1 bg-white/[0.03] rounded-xl border border-white/[0.06] overflow-x-auto">
-          <Tab active={tab === 'analytics'} onClick={() => setTab('analytics')}>Platform Stats</Tab>
-          <Tab active={tab === 'behavior'}  onClick={() => setTab('behavior')}>User Behavior</Tab>
-          <Tab active={tab === 'drip'}      onClick={() => setTab('drip')}>AI Drip</Tab>
+          <Tab active={tab === 'analytics'} onClick={() => switchTab('analytics')}>Platform Stats</Tab>
+          <Tab active={tab === 'behavior'}  onClick={() => switchTab('behavior')}>User Behavior</Tab>
+          <Tab active={tab === 'drip'}      onClick={() => switchTab('drip')}>AI Drip</Tab>
         </div>
       </div>
 
-      <div className={tab === 'analytics' ? '' : 'hidden'}><AdminAnalytics        embedded /></div>
-      <div className={tab === 'behavior'  ? '' : 'hidden'}><AdminUserBehaviorPage embedded /></div>
-      <div className={tab === 'drip'      ? '' : 'hidden'}><AdminEngagement       embedded /></div>
+      <div className={tab === 'analytics' ? '' : 'hidden'}>{mounted.analytics && <AdminAnalytics        embedded />}</div>
+      <div className={tab === 'behavior'  ? '' : 'hidden'}>{mounted.behavior  && <AdminUserBehaviorPage embedded />}</div>
+      <div className={tab === 'drip'      ? '' : 'hidden'}>{mounted.drip      && <AdminEngagement       embedded />}</div>
     </div>
   );
 }

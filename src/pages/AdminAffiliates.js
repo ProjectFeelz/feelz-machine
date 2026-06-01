@@ -5,7 +5,7 @@ import {
   Loader, Zap, Clock, BarChart2, Gift, AlertCircle
 } from 'lucide-react';
 
-export default function AdminAffiliates() {
+export default function AdminAffiliates({ embedded = false }) {
   const [affiliates, setAffiliates]   = useState([]);
   const [campaigns, setCampaigns]     = useState([]);
   const [payouts, setPayouts]         = useState([]);
@@ -100,7 +100,7 @@ export default function AdminAffiliates() {
   if (loading) return <div className="flex justify-center py-16"><Loader className="w-5 h-5 animate-spin text-white/30" /></div>;
 
   return (
-    <div className="pb-32 px-4 max-w-2xl mx-auto">
+    <div className="pb-32 px-4">
       {/* Header */}
       <div className="sticky top-0 z-20 bg-black/95 backdrop-blur-xl pt-14 md:pt-4 pb-3 -mx-4 px-4 border-b border-white/[0.04] mb-5 flex items-center justify-between">
         <div>

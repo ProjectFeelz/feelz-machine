@@ -61,7 +61,7 @@ function SegmentRow({ segmentKey, count, recentSent, lastMessage }) {
   );
 }
 
-export default function AdminEngagement() {
+export default function AdminEngagement({ embedded = false }) {
   const navigate = useNavigate();
   const { isAdmin } = useAuth();
 
@@ -171,7 +171,7 @@ export default function AdminEngagement() {
   }, []);
 
   useEffect(() => {
-    if (!isAdmin) { navigate('/hub'); return; }
+    if (!isAdmin && !embedded) { navigate('/hub'); return; }
     load();
   }, [isAdmin]);
 
@@ -272,13 +272,14 @@ export default function AdminEngagement() {
   const isEnabled = config.drip_enabled === 'true';
 
   return (
-    <div className="min-h-screen pb-24">
+    <div className={embedded ? "pb-8" : "min-h-screen pb-24"}>
       {toast && (
         <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 rounded-xl bg-white/10 backdrop-blur-md border border-white/10 text-sm text-white font-medium shadow-lg">
           {toast}
         </div>
       )}
 
+      {!embedded && (
       {/* Header */}
       <div className="sticky top-0 z-20 bg-black/90 backdrop-blur-sm px-5 pt-14 md:pt-4 pb-4 border-b border-white/[0.04]">
         <div className="flex items-center justify-between">
@@ -308,6 +309,7 @@ export default function AdminEngagement() {
         </div>
       </div>
 
+      )}
       <div className="px-5 pt-5 space-y-5">
         {/* How it works banner */}
         <div className="rounded-xl bg-purple-500/10 border border-purple-500/20 p-4">

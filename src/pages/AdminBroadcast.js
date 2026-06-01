@@ -36,7 +36,7 @@ function SettingRow({ label, description, icon: Icon, iconColor, children }) {
     );
 }
 
-export default function AdminBroadcast() {
+export default function AdminBroadcast({ embedded = false }) {
     const navigate = useNavigate();
     const { isAdmin, loading: authLoading } = useAuth();
     const apkFileRef = useRef(null);
@@ -80,7 +80,7 @@ export default function AdminBroadcast() {
     const [dmError, setDmError]         = useState('');
 
     useEffect(() => {
-        if (!authLoading && !isAdmin) { navigate('/hub'); return; }
+        if (!authLoading && !isAdmin && !embedded) { navigate('/hub'); return; }
         loadSettings();
         countRecipients();
     }, [isAdmin]);
@@ -267,7 +267,7 @@ export default function AdminBroadcast() {
     };
 
     return (
-        <div className="pt-10 md:pt-0 pb-8 px-5 max-w-2xl mx-auto">
+        <div className="pt-4 pb-8 px-4">
             <div className="flex items-center space-x-3 mb-8">
                 <button onClick={() => navigate('/hub')}
                     className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/[0.06] transition">

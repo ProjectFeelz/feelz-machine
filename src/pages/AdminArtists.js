@@ -124,7 +124,7 @@ export default function AdminArtists() {
   if (!isAdmin) return null;
 
   return (
-    <div className="pt-14 md:pt-0 pb-32 px-4 max-w-3xl mx-auto">
+    <div className="pt-4 pb-32 px-4">
       {/* Toast */}
       {toast && (
         <div className={`fixed top-6 left-1/2 -translate-x-1/2 z-50 flex items-center space-x-2 px-4 py-3 rounded-xl shadow-2xl text-sm font-medium transition-all ${
@@ -248,5 +248,3 @@ export default function AdminArtists() {
     </div>
   );
 }
-
-

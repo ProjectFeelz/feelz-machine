@@ -20,7 +20,7 @@ function formatDate(d) {
   return new Date(d).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
-export default function AdminUserBehaviorPage() {
+export default function AdminUserBehaviorPage({ embedded = false }) {
   const navigate = useNavigate();
   const { user, isAdmin } = useAuth();
 
@@ -40,7 +40,7 @@ export default function AdminUserBehaviorPage() {
   const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
-    if (!isAdmin) { navigate('/hub'); return; }
+    if (!isAdmin && !embedded) { navigate('/hub'); return; }
     fetchArtists();
   }, [isAdmin]);
 
@@ -177,7 +177,7 @@ export default function AdminUserBehaviorPage() {
   };
 
   return (
-    <div className="pt-12 md:pt-0 pb-32 px-4 md:px-6">
+    <div className="pt-4 pb-32 px-4">
       {/* Header */}
       <div className="flex items-center space-x-3 mb-6">
         <button onClick={() => navigate('/hub')} className="w-9 h-9 flex items-center justify-center rounded-full bg-white/[0.06]">

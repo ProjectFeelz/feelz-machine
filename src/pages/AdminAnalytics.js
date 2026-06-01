@@ -102,7 +102,7 @@ const CustomTooltip = ({ active, payload, label }) => {
 };
 
 // ── Main component ────────────────────────────────────────────────────────────
-export default function AdminAnalytics() {
+export default function AdminAnalytics({ embedded = false }) {
   const navigate = useNavigate();
   const { isAdmin } = useAuth();
   const [loading, setLoading] = useState(true);
@@ -466,7 +466,7 @@ export default function AdminAnalytics() {
   if (!isAdmin) return null;
 
   return (
-    <div className="pt-14 md:pt-0 pb-32 min-h-screen bg-black text-white">
+    <div className="pt-0 pb-32 px-4">
       {/* Header */}
       <div className="sticky top-0 md:top-0 z-20 bg-black/95 backdrop-blur-xl border-b border-white/[0.05] px-4 py-3 flex items-center justify-between">
         <div className="flex items-center space-x-3">

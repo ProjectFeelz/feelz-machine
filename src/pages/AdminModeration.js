@@ -25,7 +25,7 @@ const FLAG_TYPE_LABELS = {
   suspicious_activity: 'Suspicious Activity',
 };
 
-export default function AdminModeration() {
+export default function AdminModeration({ embedded = false }) {
   const navigate = useNavigate();
   const { isAdmin } = useAuth();
 
@@ -116,7 +116,7 @@ export default function AdminModeration() {
   }, [flagFilter]);
 
   useEffect(() => {
-    if (!isAdmin) { navigate('/hub'); return; }
+    if (!isAdmin && !embedded) { navigate('/hub'); return; }
     fetchTracks();
     fetchArtists();
   }, [isAdmin, navigate, fetchTracks, fetchArtists]);
@@ -223,7 +223,7 @@ export default function AdminModeration() {
   if (!isAdmin) return null;
 
   return (
-    <div className="pt-14 pb-32 px-4 max-w-3xl mx-auto">
+    <div className="pt-4 pb-32 px-4">
 
       {/* Header */}
       <div className="flex items-center space-x-3 mb-6">
