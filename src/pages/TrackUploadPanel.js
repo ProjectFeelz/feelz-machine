@@ -1233,7 +1233,7 @@ export default function TrackUploadPanel() {
           toArtistId: collab.artist_id,
           trackTitle: trackForm.title || 'a track',
           trackId,
-        }).catch(() => {});
+        });
       } catch {}
     }
   };
@@ -1273,7 +1273,7 @@ export default function TrackUploadPanel() {
             toArtistId: collab.artist_id,
             trackTitle: release.album_title || 'an album',
             trackId: null,
-          }).catch(() => {});
+          });
         } catch {}
       }
     }
@@ -1417,7 +1417,7 @@ export default function TrackUploadPanel() {
               artist_slug: artist.slug,
               token:       authSession?.access_token,
             }),
-          }).catch(() => {});
+          });
         } catch {}
       }
 
@@ -1512,13 +1512,13 @@ export default function TrackUploadPanel() {
               collaboration_id: cd.id, from_artist_id: artist.id,
               to_artist_id: collab.artist_id, track_id: id,
               message: collab.message || null, status: 'pending',
-            }).catch(() => {});
+            });
             await notifyCollabRequest({
               fromArtist: artist,
               toArtistId: collab.artist_id,
               trackTitle: editForm.title || 'a track',
               trackId: id,
-            }).catch(() => {});
+            });
           }
         }
       }
@@ -1553,7 +1553,7 @@ export default function TrackUploadPanel() {
               artist_slug: artist.slug,
               token:       authSession?.access_token,
             }),
-          }).catch(() => {});
+          });
         } catch {}
       }
       showMessage('success', 'Track updated!');
