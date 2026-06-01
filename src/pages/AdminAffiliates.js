@@ -29,7 +29,7 @@ export default function AdminAffiliates({ embedded = false }) {
         { data: pays },
         { data: convStats },
       ] = await Promise.all([
-        supabase.from('affiliates').select('*, artists(artist_name)').order('total_earned_zar', { ascending: false }).limit(100),
+        supabase.from('affiliates').select('*, artists(artist_name), listeners(display_name)').order('total_earned_zar', { ascending: false }).limit(100),
         supabase.from('affiliate_campaigns').select('*, artists(artist_name)').order('created_at', { ascending: false }),
         supabase.from('affiliate_payouts').select('*, affiliates(user_id, artists(artist_name))').eq('status', 'requested').order('requested_at'),
         supabase.from('affiliate_conversions').select('status, commission_zar, credits_earned, type'),
@@ -145,7 +145,7 @@ export default function AdminAffiliates({ embedded = false }) {
           {affiliates.map(a => (
             <div key={a.id} className="flex items-center space-x-3 p-3 rounded-xl bg-white/[0.03] border border-white/[0.05]">
               <div className="flex-1 min-w-0">
-                <p className="text-sm text-white truncate">{a.artists?.artist_name || 'Listener'}</p>
+                <p className="text-sm text-white truncate">{a.artists?.artist_name || a.listeners?.display_name || 'User'}</p>
                 <p className="text-[10px] text-white/30">{a.ref_code} · {a.role} · {a.total_conversions} conversions</p>
               </div>
               <div className="text-right flex-shrink-0">
