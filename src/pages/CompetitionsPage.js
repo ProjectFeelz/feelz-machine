@@ -365,7 +365,7 @@ function SpinForYourselfTab() {
 
       {/* ── Tier legend ── */}
       {!result && (
-        <div className="mx-4 mt-6 grid grid-cols-4 gap-2">
+        <div className="mx-4 mt-6 mb-8 grid grid-cols-4 gap-2">
           {Object.entries(TIER_STYLES).map(([tier, s]) => (
             <div key={tier} className="rounded-xl p-2.5 text-center" style={{ background: s.bg, border: `1px solid ${s.border}` }}>
               <p className="text-[10px] font-black uppercase tracking-wider" style={{ color: s.color }}>{tier}</p>
