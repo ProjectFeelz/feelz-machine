@@ -243,7 +243,7 @@ export default function AdminDashboard() {
       {/* Header */}
       <div className="flex items-center space-x-3 mb-6 pt-2">
         <Shield className="w-5 h-5 text-yellow-400/70" />
-        <h1 className="text-xl font-bold text-white">Admin Panel</h1>
+        <h1 className="text-base font-bold text-white">Admin Panel</h1>
       </div>
 
       {/* Platform stats grid */}
@@ -255,8 +255,8 @@ export default function AdminDashboard() {
               <div className="flex items-center justify-between mb-1">
                 <Icon className={`w-3.5 h-3.5 ${s.color} opacity-60`} />
               </div>
-              <p className={`text-base font-black ${s.color} leading-none`}>{typeof s.value === 'number' ? s.value.toLocaleString() : s.value}</p>
-              <p className="text-[9px] text-white/25 mt-1 leading-tight">{s.label}</p>
+              <p className={`text-xl font-black ${s.color} leading-none`}>{typeof s.value === 'number' ? s.value.toLocaleString() : s.value}</p>
+              <p className="text-[10px] text-white/25 mt-1 leading-tight">{s.label}</p>
             </div>
           );
         })}
