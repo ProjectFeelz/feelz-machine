@@ -280,7 +280,6 @@ export default function AdminEngagement({ embedded = false }) {
       )}
 
       {!embedded && (
-      {/* Header */}
       <div className="sticky top-0 z-20 bg-black/90 backdrop-blur-sm px-5 pt-14 md:pt-4 pb-4 border-b border-white/[0.04]">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
