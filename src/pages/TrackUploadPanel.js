@@ -10,6 +10,7 @@ import TierGate from '../components/TierGate';
 import { useTier } from '../contexts/useTier';
 import { useAudioConverter } from '../hooks/useAudioConverter';
 import UploadHelpPanel from '../components/UploadHelpPanel';
+import { notifyCollabRequest } from '../components/notificationTriggers';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -1226,6 +1227,13 @@ export default function TrackUploadPanel() {
           to_artist_id: collab.artist_id, track_id: trackId,
           message: collab.message || null, status: 'pending',
         }]);
+        // Notify the invited artist
+        await notifyCollabRequest({
+          fromArtist: artist,
+          toArtistId: collab.artist_id,
+          trackTitle: trackForm.title || 'a track',
+          trackId,
+        }).catch(() => {});
       } catch {}
     }
   };
@@ -1259,6 +1267,13 @@ export default function TrackUploadPanel() {
             collaboration_id: cd.id, from_artist_id: artist.id,
             to_artist_id: collab.artist_id, message: collab.message || null, status: 'pending',
           }]);
+          // Notify the invited artist
+          await notifyCollabRequest({
+            fromArtist: artist,
+            toArtistId: collab.artist_id,
+            trackTitle: release.album_title || 'an album',
+            trackId: null,
+          }).catch(() => {});
         } catch {}
       }
     }
@@ -1488,10 +1503,23 @@ export default function TrackUploadPanel() {
       if (editCollaborators.length > 0) {
         await supabase.from('collaborations').delete().eq('track_id', id);
         for (const collab of editCollaborators) {
-          await supabase.from('collaborations').insert({
+          const { data: cd } = await supabase.from('collaborations').insert({
             track_id: id, artist_id: collab.artist_id, role: collab.role,
             split_percent: collab.split_percent, status: 'pending', invited_by: artist.id,
-          });
+          }).select().single();
+          if (cd) {
+            await supabase.from('collab_requests').insert({
+              collaboration_id: cd.id, from_artist_id: artist.id,
+              to_artist_id: collab.artist_id, track_id: id,
+              message: collab.message || null, status: 'pending',
+            }).catch(() => {});
+            await notifyCollabRequest({
+              fromArtist: artist,
+              toArtistId: collab.artist_id,
+              trackTitle: editForm.title || 'a track',
+              trackId: id,
+            }).catch(() => {});
+          }
         }
       }
       const { error } = await supabase.from('tracks').update({
