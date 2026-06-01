@@ -45,6 +45,10 @@ import AlbumDetailPage from './pages/AlbumDetailPage';
 import TrackDetailPage from './pages/TrackDetailPage';
 import AffiliatePage from './pages/AffiliatePage';
 import AdminAffiliates from './pages/AdminAffiliates';
+import AdminPeople       from './pages/AdminPeople';
+import AdminIntelligence from './pages/AdminIntelligence';
+import AdminContent      from './pages/AdminContent';
+import AdminGrowth       from './pages/AdminGrowth';
 import BeatDetailPage from './pages/BeatDetailPage';
 import AdminUserBehaviorPage from './pages/AdminUserBehaviorPage';
 import { Helmet } from 'react-helmet-async';
@@ -252,7 +256,11 @@ export default function AppRouter() {
                 <Route path="/affiliates" element={<AffiliatePage />} />
                 <Route path="/payment/success" element={<PaymentSuccess />} />
                 <Route path="/payment/cancel" element={<PaymentCancel />} />
-                <Route path="/admin/affiliates" element={<AdminAffiliates />} />
+                <Route path="/admin/affiliates"   element={<AdminAffiliates />} />
+                <Route path="/admin/people"       element={<AdminPeople />} />
+                <Route path="/admin/intelligence" element={<AdminIntelligence />} />
+                <Route path="/admin/content"      element={<AdminContent />} />
+                <Route path="/admin/growth"       element={<AdminGrowth />} />
                 <Route path="/beat/:slug" element={<BeatDetailPage />} />
                 <Route path="/artist/:slug" element={<ArtistProfilePage />} />
                 <Route path="/artist/:slug/merch" element={<MerchPage />} />

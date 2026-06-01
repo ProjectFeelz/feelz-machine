@@ -6,44 +6,33 @@ import {
   Shield, Users, Search, Loader, UserCheck,
   UserX, Crown, MoreVertical, Music, Mail, Calendar,
   Megaphone, BarChart3, AlertTriangle, Zap, Trophy,
-  Brain, Copy, ChevronRight, Ban, Trash2, Check,
+  Brain, Copy, ChevronRight, Ban, Trash2, Check, Layers,
   Headphones, DollarSign, TrendingUp, Radio, Heart, Star,
 } from 'lucide-react';
 
 const ADMIN_SECTIONS = [
-  {
-    heading: 'Communications',
+    {
+    heading: 'Intelligence',
     items: [
-      { label: 'Broadcast',        icon: Megaphone,     path: '/admin/broadcast',    color: 'bg-purple-500/15 text-purple-300',  desc: 'Send messages to all users' },
-      { label: 'Engagement Drip',  icon: Brain,         path: '/admin/engagement',   color: 'bg-violet-500/15 text-violet-300',  desc: 'AI messaging · segment stats' },
+      { label: 'Intelligence',  icon: Brain,         path: '/admin/intelligence', color: 'bg-purple-500/15 text-purple-300', desc: 'Platform stats · user behaviour · AI drip' },
     ],
   },
   {
-    heading: 'Analytics',
+    heading: 'Growth',
     items: [
-      { label: 'Platform Analytics', icon: BarChart3,   path: '/admin/analytics',    color: 'bg-blue-500/15 text-blue-300',      desc: 'Streams, signups, engagement' },
-      { label: 'User Behavior',      icon: BarChart3,   path: '/admin/behavior',     color: 'bg-cyan-500/15 text-cyan-300',      desc: 'Activity, downloads, exports' },
+      { label: 'Growth',        icon: TrendingUp,    path: '/admin/growth',       color: 'bg-green-500/15 text-green-300',  desc: 'Broadcasts · affiliates · payouts' },
     ],
   },
   {
-    heading: 'Affiliate Programme',
+    heading: 'Content',
     items: [
-      { label: 'Affiliates & Payouts', icon: Zap,      path: '/admin/affiliates',   color: 'bg-green-500/15 text-green-300',    desc: 'Manage affiliates, approve payouts, run campaigns' },
+      { label: 'Content',       icon: Layers,        path: '/admin/content',      color: 'bg-amber-500/15 text-amber-300',  desc: 'Boost · competitions · moderation' },
     ],
   },
   {
-    heading: 'Content & Community',
+    heading: 'People',
     items: [
-      { label: 'Competitions',    icon: Trophy,         path: '/admin/competitions', color: 'bg-yellow-500/15 text-yellow-300',  desc: 'Create and manage competitions' },
-      { label: 'Boost Manager',   icon: Zap,            path: '/admin/boost',        color: 'bg-amber-500/15 text-amber-300',    desc: 'Feature and boost content' },
-      { label: 'Moderation',      icon: AlertTriangle,  path: '/admin/moderation',   color: 'bg-red-500/15 text-red-300',        desc: 'Flagged tracks and reports' },
-    ],
-  },
-  {
-    heading: 'Users & Artists',
-    items: [
-      { label: 'All Artists',       icon: Music,  path: '/admin/artists',    color: 'bg-green-500/15 text-green-300',    desc: 'Browse and manage artist profiles' },
-      { label: 'Duplicate Artists', icon: Copy,   path: '/admin/duplicates', color: 'bg-rose-500/15 text-rose-300',      desc: 'Find and remove duplicates' },
+      { label: 'People',        icon: Users,         path: '/admin/people',       color: 'bg-blue-500/15 text-blue-300',    desc: 'Artists · duplicates · bug reports' },
     ],
   },
 ];
