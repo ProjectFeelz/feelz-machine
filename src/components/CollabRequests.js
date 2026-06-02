@@ -65,19 +65,39 @@ export default function CollabRequests() {
     setResponding(request.id);
     try {
       const newStatus = action === 'accept' ? 'accepted' : 'declined';
-      const collabUpdate = { status: newStatus };
-      if (action === 'accept') collabUpdate.accepted_at = new Date().toISOString();
 
-      await supabase.from('collaborations').update(collabUpdate).eq('id', request.collaboration_id);
-      await supabase.from('collab_requests').update({ status: newStatus, responded_at: new Date().toISOString() }).eq('id', request.id);
+      // Update collab_requests first — Sani always has permission as to_artist_id
+      const { error: reqErr } = await supabase
+        .from('collab_requests')
+        .update({ status: newStatus, responded_at: new Date().toISOString() })
+        .eq('id', request.id);
+      if (reqErr) throw new Error('Request update failed: ' + reqErr.message);
 
-      if (action === 'accept') {
-        await notifyCollabAccepted({ fromArtist: artist, toArtistId: request.from_artist_id, trackTitle: request.track?.title, trackId: request.track_id });
-      } else {
-        await notifyCollabDeclined({ fromArtist: artist, toArtistId: request.from_artist_id, trackTitle: request.track?.title, trackId: request.track_id });
+      // Update collaborations if collaboration_id exists
+      if (request.collaboration_id) {
+        const collabUpdate = { status: newStatus };
+        if (action === 'accept') collabUpdate.accepted_at = new Date().toISOString();
+        const { error: collabErr } = await supabase
+          .from('collaborations')
+          .update(collabUpdate)
+          .eq('id', request.collaboration_id);
+        if (collabErr) console.warn('Collab update error (non-fatal):', collabErr.message);
       }
+
+      // Notify — non-fatal
+      try {
+        if (action === 'accept') {
+          await notifyCollabAccepted({ fromArtist: artist, toArtistId: request.from_artist_id, trackTitle: request.track?.title, trackId: request.track_id });
+        } else {
+          await notifyCollabDeclined({ fromArtist: artist, toArtistId: request.from_artist_id, trackTitle: request.track?.title, trackId: request.track_id });
+        }
+      } catch (notifyErr) { console.warn('Notify error (non-fatal):', notifyErr.message); }
+
       fetchRequests();
-    } catch (err) { console.error('Respond error:', err); }
+    } catch (err) {
+      console.error('Respond error:', err);
+      alert('Could not respond: ' + err.message);
+    }
     setResponding(null);
   };
 
