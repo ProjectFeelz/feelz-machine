@@ -158,11 +158,25 @@ function CollabActions({ notif, onActioned }) {
   const meta = notif.metadata || {};
 
   const act = async (action) => {
-    if (!meta.collab_request_id && !meta.request_id) return;
     setLoading(action);
     try {
-      const reqId = meta.collab_request_id || meta.request_id;
-      if (!reqId) { console.warn('No request_id in notification metadata'); return; }
+      let reqId = meta.collab_request_id || meta.request_id || null;
+
+      // Fallback: find the request by artist IDs if no request_id in metadata
+      if (!reqId && meta.from_artist_id && artist?.id) {
+        const { data: found } = await supabase
+          .from('collab_requests')
+          .select('id')
+          .eq('from_artist_id', meta.from_artist_id)
+          .eq('to_artist_id', artist.id)
+          .eq('status', 'pending')
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        reqId = found?.id || null;
+      }
+
+      if (!reqId) { console.warn('No request_id found'); setLoading(null); return; }
       const newStatus = action === 'accept' ? 'accepted' : 'declined';
       const { data: reqData } = await supabase
         .from('collab_requests')

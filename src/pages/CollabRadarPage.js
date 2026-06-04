@@ -93,7 +93,7 @@ function SendRequestModal({ target, onClose, onSent, myArtistId }) {
         title:          'New Collab Request',
         message:        `${pitch.trim().slice(0, 80)}${pitch.length > 80 ? '…' : ''}`,
         from_artist_id: myArtistId,
-        metadata:       { request_id: req.id, collab_type: collabType },
+        metadata:       { request_id: req.id, collab_type: collabType, from_artist_id: myArtistId },
       });
       success();
       onSent();
