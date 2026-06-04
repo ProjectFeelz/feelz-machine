@@ -29,21 +29,27 @@ export default function AdminAffiliates({ embedded = false }) {
         { data: pays },
         { data: convStats },
       ] = await Promise.all([
-        supabase.from('affiliates').select('*, artists(artist_name), listeners(display_name)').order('total_earned_zar', { ascending: false }).limit(100),
-        supabase.from('affiliate_campaigns').select('*, artists(artist_name)').order('created_at', { ascending: false }),
-        supabase.from('affiliate_payouts').select('*, affiliates(user_id, artists(artist_name))').eq('status', 'requested').order('requested_at'),
+        supabase.from('affiliates').select('*').order('total_earned_zar', { ascending: false }).limit(100),
+        supabase.from('affiliate_campaigns').select('*').order('created_at', { ascending: false }),
+        supabase.from('affiliate_payouts').select('*').eq('status', 'requested').order('requested_at'),
         supabase.from('affiliate_conversions').select('status, commission_zar, credits_earned, type'),
       ]);
 
-      setAffiliates(affs || []);
+      // Enrich affiliates with display names
+      const enrichedAffs = await Promise.all((affs || []).map(async (aff) => {
+        const { data: art } = await supabase.from('artists').select('artist_name').eq('user_id', aff.user_id).maybeSingle();
+        const { data: lst } = await supabase.from('listeners').select('display_name').eq('user_id', aff.user_id).maybeSingle();
+        return { ...aff, display_name: art?.artist_name || lst?.display_name || aff.user_id?.slice(0,8) };
+      }));
+      setAffiliates(enrichedAffs);
       setCampaigns(camps || []);
       setPayouts(pays || []);
 
       const convs = convStats || [];
       setStats({
-        totalAffiliates:   (affs || []).length,
-        activeAffiliates:  (affs || []).filter(a => a.status === 'active').length,
-        totalEarned:       (affs || []).reduce((s, a) => s + (a.total_earned_zar || 0), 0),
+        totalAffiliates:   enrichedAffs.length,
+        activeAffiliates:  enrichedAffs.filter(a => a.status === 'active').length,
+        totalEarned:       enrichedAffs.reduce((s, a) => s + (a.total_earned_zar || 0), 0),
         pendingPayouts:    (pays || []).reduce((s, p) => s + (p.amount_zar || 0), 0),
         totalConversions:  convs.length,
         totalCommission:   convs.reduce((s, c) => s + (c.commission_zar || 0), 0),
