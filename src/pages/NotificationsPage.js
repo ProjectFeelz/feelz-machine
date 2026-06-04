@@ -206,10 +206,11 @@ function CollabActions({ notif, onActioned }) {
           metadata:  { from_artist_id: artist.id, from_artist_slug: artist.slug, track_title: meta.track_title },
         });
       }
+      console.log('[CollabActions] setting done:', action);
       setDone(action);
       onActioned?.();
     } catch (err) {
-      console.warn('Collab action failed:', err);
+      console.error('[CollabActions] CATCH:', err);
     }
     setLoading(null);
   };
