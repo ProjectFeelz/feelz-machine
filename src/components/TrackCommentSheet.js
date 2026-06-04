@@ -143,12 +143,14 @@ export default function TrackCommentSheet({ track, user, onClose, routePrefix = 
 
     if (!raw?.length) { setComments([]); setLoading(false); return; }
 
-    const uids = [...new Set(raw.map(c => c.user_id).filter(Boolean))];
-    const [{ data: artists }, { data: profiles }, { data: listenerProfiles }] = await Promise.all([
-      supabase.from('artists').select('user_id, artist_name, profile_image_url').in('user_id', uids),
-      supabase.from('user_profiles').select('user_id, name, avatar_url').in('user_id', uids),
-      supabase.from('listeners').select('user_id, display_name, avatar_url').in('user_id', uids),
-    ]);
+    const uids = [...new Set(raw.map(c => c.user_id).filter(id => id && id !== 'null'))];
+    const [{ data: artists }, { data: profiles }, { data: listenerProfiles }] = uids.length > 0
+      ? await Promise.all([
+          supabase.from('artists').select('user_id, artist_name, profile_image_url').in('user_id', uids),
+          supabase.from('user_profiles').select('user_id, name, avatar_url').in('user_id', uids),
+          supabase.from('listeners').select('user_id, display_name, avatar_url').in('user_id', uids),
+        ])
+      : [{ data: [] }, { data: [] }, { data: [] }];
     const artistMap   = Object.fromEntries((artists         || []).map(a => [a.user_id, a]));
     const profileMap  = Object.fromEntries((profiles        || []).map(p => [p.user_id, p]));
     const listenerMap = Object.fromEntries((listenerProfiles|| []).map(l => [l.user_id, l]));

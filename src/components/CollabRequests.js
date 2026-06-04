@@ -67,11 +67,12 @@ export default function CollabRequests() {
     try {
       const newStatus = action === 'accept' ? 'accepted' : 'declined';
 
-      // Update collab_requests first — Sani always has permission as to_artist_id
+      // Update collab_requests first
       const { error: reqErr } = await supabase
         .from('collab_requests')
         .update({ status: newStatus, responded_at: new Date().toISOString() })
-        .eq('id', request.id);
+        .eq('id', request.id)
+        .eq('to_artist_id', artist.id);
       if (reqErr) throw new Error('Request update failed: ' + reqErr.message);
 
       // Update collaborations if collaboration_id exists
