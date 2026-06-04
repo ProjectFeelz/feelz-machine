@@ -175,7 +175,7 @@ function RoleStep({ onContinue }) {
             user.user_metadata?.full_name ||
             user.user_metadata?.name ||
             user.email?.split('@')[0] ||
-            'Listener';
+            null;
           await supabase.from('listeners').upsert(
             { user_id: user.id, display_name: displayName, updated_at: new Date().toISOString() },
             { onConflict: 'user_id' }

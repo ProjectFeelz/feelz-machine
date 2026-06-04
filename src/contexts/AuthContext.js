@@ -45,12 +45,32 @@ export function AuthProvider({ children }) {
   };
 
   const fetchListener = async (userId) => {
-    const { data } = await supabase
+    const { data: existing } = await supabase
       .from('listeners')
       .select('*')
       .eq('user_id', userId)
       .maybeSingle();
-    if (data) setListener(data);
+    if (existing) {
+      setListener(existing);
+      return;
+    }
+    // No row yet — create one on first login so drip + last_seen_at work from day 1
+    try {
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      const displayName =
+        authUser?.user_metadata?.full_name ||
+        authUser?.user_metadata?.name ||
+        authUser?.email?.split('@')[0] ||
+        null;
+      const { data: created } = await supabase
+        .from('listeners')
+        .upsert({ user_id: userId, display_name: displayName, updated_at: new Date().toISOString() }, { onConflict: 'user_id' })
+        .select()
+        .maybeSingle();
+      if (created) setListener(created);
+    } catch (err) {
+      console.warn('Listener row creation failed (non-fatal):', err.message);
+    }
   };
 
   const checkAdmin = async (userId) => {

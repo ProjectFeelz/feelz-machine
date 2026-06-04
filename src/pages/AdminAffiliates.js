@@ -29,27 +29,21 @@ export default function AdminAffiliates({ embedded = false }) {
         { data: pays },
         { data: convStats },
       ] = await Promise.all([
-        supabase.from('affiliates').select('*').order('total_earned_zar', { ascending: false }).limit(100),
-        supabase.from('affiliate_campaigns').select('*').order('created_at', { ascending: false }),
-        supabase.from('affiliate_payouts').select('*').eq('status', 'requested').order('requested_at'),
+        supabase.from('affiliates').select('*, artists(artist_name), listeners(display_name)').order('total_earned_zar', { ascending: false }).limit(100),
+        supabase.from('affiliate_campaigns').select('*, artists(artist_name)').order('created_at', { ascending: false }),
+        supabase.from('affiliate_payouts').select('*, affiliates(user_id, artists(artist_name))').eq('status', 'requested').order('requested_at'),
         supabase.from('affiliate_conversions').select('status, commission_zar, credits_earned, type'),
       ]);
 
-      // Enrich affiliates with display names
-      const enrichedAffs = await Promise.all((affs || []).map(async (aff) => {
-        const { data: art } = await supabase.from('artists').select('artist_name').eq('user_id', aff.user_id).maybeSingle();
-        const { data: lst } = await supabase.from('listeners').select('display_name').eq('user_id', aff.user_id).maybeSingle();
-        return { ...aff, display_name: art?.artist_name || lst?.display_name || aff.user_id?.slice(0,8) };
-      }));
-      setAffiliates(enrichedAffs);
+      setAffiliates(affs || []);
       setCampaigns(camps || []);
       setPayouts(pays || []);
 
       const convs = convStats || [];
       setStats({
-        totalAffiliates:   enrichedAffs.length,
-        activeAffiliates:  enrichedAffs.filter(a => a.status === 'active').length,
-        totalEarned:       enrichedAffs.reduce((s, a) => s + (a.total_earned_zar || 0), 0),
+        totalAffiliates:   (affs || []).length,
+        activeAffiliates:  (affs || []).filter(a => a.status === 'active').length,
+        totalEarned:       (affs || []).reduce((s, a) => s + (a.total_earned_zar || 0), 0),
         pendingPayouts:    (pays || []).reduce((s, p) => s + (p.amount_zar || 0), 0),
         totalConversions:  convs.length,
         totalCommission:   convs.reduce((s, c) => s + (c.commission_zar || 0), 0),
@@ -106,9 +100,9 @@ export default function AdminAffiliates({ embedded = false }) {
   if (loading) return <div className="flex justify-center py-16"><Loader className="w-5 h-5 animate-spin text-white/30" /></div>;
 
   return (
-    <div className="pb-32 px-4">
+    <div className="pt-4 pb-32 px-4">
       {/* Header */}
-      <div className="sticky top-0 z-20 bg-black/95 backdrop-blur-xl pt-14 md:pt-4 pb-3 -mx-4 px-4 border-b border-white/[0.04] mb-5 flex items-center justify-between">
+      <div className="sticky top-0 z-10 bg-black/95 backdrop-blur-xl pt-4 pb-3 -mx-4 px-4 border-b border-white/[0.04] mb-5 flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold text-white">Affiliates</h1>
           <p className="text-xs text-white/30 mt-0.5">Manage your affiliate programme</p>

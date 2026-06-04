@@ -863,7 +863,7 @@ export default function CompetitionsPage() {
         <div className="py-4">
           <div className="px-4 mb-5">
             <h2 className="text-lg font-bold text-white mb-1">Challenge Wheel</h2>
-            <p className="text-sm text-white/40">Spin for a random creative prompt — for fun, for videos, for when you need a spark. No competition required.</p>
+            <p className="text-sm text-white/40">Spin for a random creative prompt. For fun, for videos, for when you need a spark. No competition required.</p>
           </div>
           <div className="px-4">
             <SpinForYourselfTab />

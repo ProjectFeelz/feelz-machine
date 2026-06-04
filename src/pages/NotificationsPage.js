@@ -490,8 +490,12 @@ export default function NotificationsPage() {
     if (type === 'tip')                                  { navigate('/dashboard?tab=analytics&section=earnings'); return; }
     if (type === 'payout_pending')                       { navigate('/dashboard?tab=analytics&section=earnings'); return; }
     if (type === 'announcement' || type === 'admin_message') {
-      if (meta.action_url) { window.open(meta.action_url, '_blank'); return; }
-      if (meta.cta_url) { window.open(meta.cta_url, '_blank'); return; }
+      const url = meta.action_url || meta.cta_url || meta.link_url || null;
+      if (url) {
+        if (url.startsWith('http')) window.open(url, '_blank');
+        else navigate(url);
+        return;
+      }
       return;
     }
     if (type === 'first_listener') {
@@ -630,7 +634,7 @@ export default function NotificationsPage() {
                   const isExpandable  = (notif.message?.length > 80);
                   const isExpanded    = expandedIds.includes(notif.id);
                   const hasTrackPill  = !!meta.track_title && !!meta.track_id;
-                  const hasActionUrl  = !!meta.action_url || !!meta.cta_url || !!meta.url;
+                  const hasActionUrl  = !!meta.action_url || !!meta.cta_url || !!meta.url || !!meta.link_url;
                   // Orphaned stream notification — has no track data
                   const isOrphanStream = notif.type === 'new_stream' && !meta.track_title;
                   const isCollabReq   = notif.type === 'collab_request';
@@ -638,8 +642,8 @@ export default function NotificationsPage() {
                   const isNewFollower = notif.type === 'new_follower';
                   const isComment     = notif.type === 'track_commented' || notif.type === 'new_comment';
                   const canReply      = isComment && (meta.post_id || meta.track_id);
-                  const actionUrl     = meta.action_url || meta.cta_url || meta.url || null;
-                  const actionLabel   = meta.cta_label || meta.action_label || (meta.feature_education ? 'Open Feature' : 'Learn more');
+                  const actionUrl     = meta.action_url || meta.cta_url || meta.url || meta.link_url || null;
+                  const actionLabel   = meta.cta_label || meta.action_label || meta.link_label || (meta.feature_education ? 'Open Feature' : 'Learn more');
 
                   // Skip orphaned stream notifications (no track data - old DB trigger leftovers)
                   if (isOrphanStream) return null;
