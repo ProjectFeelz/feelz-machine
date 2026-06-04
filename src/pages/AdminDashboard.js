@@ -75,7 +75,6 @@ export default function AdminDashboard() {
         { data: beatData },
         { count: fanProCount },
         { count: activeListeners7d },
-        { count: totalListeners },
         { count: totalTracks },
         { count: totalFollows },
       ] = await Promise.all([
@@ -85,14 +84,15 @@ export default function AdminDashboard() {
         supabase.from('beat_purchases').select('amount_paid').eq('status', 'completed').gte('created_at', cutoff7d),
         supabase.from('listener_tier_subscriptions').select('*', { count: 'exact', head: true }).eq('status', 'active'),
         supabase.from('listeners').select('*', { count: 'exact', head: true }).gte('last_seen_at', cutoff7d),
-        supabase.from('listeners').select('*', { count: 'exact', head: true }),
         supabase.from('tracks').select('*', { count: 'exact', head: true }).eq('is_published', true),
         supabase.from('follows').select('*', { count: 'exact', head: true }),
       ]);
+      // Fetch total listener count separately to avoid RLS interference in Promise.all
+      const { data: listenerRows } = await supabase.from('listeners').select('id');
+      const totalListeners = (listenerRows || []).length;
       const tipsTotal  = (tipData  || []).reduce((s, t) => s + (t.amount      || 0), 0);
       const dlTotal    = (dlData   || []).reduce((s, d) => s + (d.amount_paid || 0), 0);
       const beatTotal  = (beatData || []).reduce((s, b) => s + (b.amount_paid || 0), 0);
-      console.log('DEBUG counts:', { totalListeners, totalStreams7d, totalTracks, activeListeners7d });
       setPlatformStats({
         streams7d:      totalStreams7d  || 0,
         revenue7d:      (tipsTotal + dlTotal + beatTotal).toFixed(2),
