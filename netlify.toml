@@ -193,6 +193,16 @@
   status = 200
 
 [[redirects]]
+  from = "/privacy"
+  to = "/privacy-policy"
+  status = 301
+
+[[redirects]]
+  from = "/terms"
+  to = "/terms-of-use"
+  status = 301
+
+[[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200

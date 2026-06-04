@@ -60,15 +60,33 @@ async function verifyPayPalSignature(headers, rawBody) {
 // Downgrade artist tier subscription to cancelled/inactive
 async function cancelArtistSubscription(subscriptionId, reason) {
   if (!subscriptionId) return;
-  const { error } = await supabase
+  const { data: sub } = await supabase
     .from('artist_tier_subscriptions')
     .update({
-      status:     'cancelled',
+      status:       'cancelled',
       cancelled_at: new Date().toISOString(),
       cancel_reason: reason || 'paypal_webhook',
     })
-    .eq('paypal_subscription_id', subscriptionId);
-  if (error) console.error('Cancel subscription error:', error);
+    .eq('paypal_subscription_id', subscriptionId)
+    .select('artist_id, artists(user_id, tier)')
+    .maybeSingle();
+
+  // Notify the artist their subscription ended
+  if (sub?.artist_id) {
+    const reasonMsg = reason === 'user_cancelled'
+      ? 'You cancelled your subscription. You have been moved to the Free plan.'
+      : reason === 'payment_failed'
+      ? 'Your subscription payment failed. You have been moved to the Free plan.'
+      : 'Your subscription has ended. You have been moved to the Free plan.';
+    await supabase.from('notifications').insert({
+      artist_id: sub.artist_id,
+      user_id:   sub.artists?.user_id || null,
+      type:      'tier_granted',
+      title:     'Subscription ended',
+      message:   reasonMsg,
+      metadata:  { tier: 'free', reason },
+    }).catch(() => {});
+  }
 }
 
 // Reactivate or confirm a subscription

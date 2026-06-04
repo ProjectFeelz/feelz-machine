@@ -238,14 +238,15 @@ function GrowthSnapshot({ artist }) {
 
 // ─── Earnings Section ─────────────────────────────────────────────────────────
 function EarningsSection({ artist, sectionRef, downloadsRef, highlight }) {
-  const [tips,      setTips]      = React.useState([]);
-  const [downloads, setDownloads] = React.useState([]);
-  const [loading,   setLoading]   = React.useState(true);
+  const [tips,          setTips]          = React.useState([]);
+  const [downloads,     setDownloads]     = React.useState([]);
+  const [failedPayouts, setFailedPayouts] = React.useState([]);
+  const [loading,       setLoading]       = React.useState(true);
 
   React.useEffect(() => {
     if (!artist?.id) return;
     const load = async () => {
-      const [{ data: tipsData }, { data: dlData }] = await Promise.all([
+      const [{ data: tipsData }, { data: dlData }, { data: failedPayouts }] = await Promise.all([
         supabase.from('tips')
           .select('id, amount, currency, message, created_at, from_user_id')
           .eq('artist_id', artist.id)
@@ -257,9 +258,16 @@ function EarningsSection({ artist, sectionRef, downloadsRef, highlight }) {
           .gt('amount_paid', 0)
           .order('created_at', { ascending: false })
           .limit(5),
+        supabase.from('payouts')
+          .select('id, amount, currency, status, notes, created_at, tracks(title)')
+          .eq('artist_id', artist.id)
+          .in('status', ['payout_failed', 'no_paypal_email'])
+          .order('created_at', { ascending: false })
+          .limit(5),
       ]);
       setTips(tipsData || []);
       setDownloads(dlData || []);
+      setFailedPayouts(failedPayouts || []);
       setLoading(false);
     };
     load();
@@ -349,7 +357,34 @@ function EarningsSection({ artist, sectionRef, downloadsRef, highlight }) {
             </div>
           )}
 
-          {tips.length === 0 && downloads.length === 0 && (
+          {/* Failed payouts warning */}
+          {failedPayouts.length > 0 && (
+            <div className="rounded-xl border border-red-500/30 bg-red-500/[0.06] p-4">
+              <p className="text-[10px] uppercase tracking-wider text-red-400/60 font-semibold mb-2">Action required</p>
+              <div className="space-y-2">
+                {failedPayouts.map(p => (
+                  <div key={p.id} className="flex items-start justify-between">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-red-300 font-semibold">
+                        {p.status === 'no_paypal_email' ? 'Missing PayPal email' : 'Payout failed'}
+                      </p>
+                      <p className="text-[11px] text-white/30 mt-0.5">
+                        {p.tracks?.title || 'Track sale'} · {new Date(p.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                      </p>
+                      {p.status === 'no_paypal_email' && (
+                        <p className="text-[11px] text-red-300/60 mt-1">Add your PayPal email in Profile → Edit to receive this payout</p>
+                      )}
+                    </div>
+                    <span className="text-sm font-bold text-red-400 ml-3 flex-shrink-0">
+                      ${Number(p.amount).toFixed(2)} {p.currency}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {tips.length === 0 && downloads.length === 0 && failedPayouts.length === 0 && (
             <p className="text-center text-white/20 text-sm py-4">No earnings yet — share your music to start earning</p>
           )}
         </>
