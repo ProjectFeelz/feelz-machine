@@ -92,6 +92,7 @@ export default function AdminDashboard() {
       const tipsTotal  = (tipData  || []).reduce((s, t) => s + (t.amount      || 0), 0);
       const dlTotal    = (dlData   || []).reduce((s, d) => s + (d.amount_paid || 0), 0);
       const beatTotal  = (beatData || []).reduce((s, b) => s + (b.amount_paid || 0), 0);
+      console.log('DEBUG counts:', { totalListeners, totalStreams7d, totalTracks, activeListeners7d });
       setPlatformStats({
         streams7d:      totalStreams7d  || 0,
         revenue7d:      (tipsTotal + dlTotal + beatTotal).toFixed(2),
