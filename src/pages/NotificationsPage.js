@@ -162,7 +162,6 @@ function CollabActions({ notif, onActioned }) {
     setLoading(action);
     try {
       let reqId = meta.collab_request_id || meta.request_id || null;
-      console.log('[CollabActions] reqId from meta:', reqId);
 
       // Fallback: find the request by artist IDs if no request_id in metadata
       if (!reqId && meta.from_artist_id && artist?.id) {
@@ -186,7 +185,6 @@ function CollabActions({ notif, onActioned }) {
         .eq('id', reqId)
         .select('collaboration_id')
         .maybeSingle();
-      console.log('[CollabActions] update result:', { reqData, updateErr });
       // Also update the collaborations table
       if (reqData?.collaboration_id) {
         await supabase.from('collaborations')
@@ -206,11 +204,9 @@ function CollabActions({ notif, onActioned }) {
           metadata:  { from_artist_id: artist.id, from_artist_slug: artist.slug, track_title: meta.track_title },
         });
       }
-      console.log('[CollabActions] setting done:', action);
       setDone(action);
-      onActioned?.();
+      setTimeout(() => onActioned?.(), 1200);
     } catch (err) {
-      console.error('[CollabActions] CATCH:', err);
     }
     setLoading(null);
   };
