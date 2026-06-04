@@ -10,6 +10,7 @@ import {
   CheckCheck, Trash2, Music, Download, Megaphone,
   Radio, FileText, Play, DollarSign, Send, ChevronDown,
   Star, Zap, Award, Gift
+  ExternalLink,
 } from 'lucide-react';
 import useNotifications from '../contexts/useNotifications';
 import WrappedCard from '../components/WrappedCard';
@@ -70,7 +71,7 @@ function filterMatch(type, filter) {
 }
 
 // Types to completely hide from the list (not useful to users)
-const HIDDEN_TYPES = new Set(['engagement', 'wheel_challenge', 'admin_message', 'bug_report']);
+const HIDDEN_TYPES = new Set(['wheel_challenge', 'bug_report']);
 
 function formatDate(date) {
   const d = new Date(date);
@@ -161,10 +162,20 @@ function CollabActions({ notif, onActioned }) {
     setLoading(action);
     try {
       const reqId = meta.collab_request_id || meta.request_id;
-      await supabase
+      if (!reqId) { console.warn('No request_id in notification metadata'); return; }
+      const newStatus = action === 'accept' ? 'accepted' : 'declined';
+      const { data: reqData } = await supabase
         .from('collab_requests')
-        .update({ status: action === 'accept' ? 'accepted' : 'rejected' })
-        .eq('id', reqId);
+        .update({ status: newStatus, responded_at: new Date().toISOString() })
+        .eq('id', reqId)
+        .select('collaboration_id')
+        .single();
+      // Also update the collaborations table
+      if (reqData?.collaboration_id) {
+        await supabase.from('collaborations')
+          .update({ status: newStatus, ...(action === 'accept' ? { accepted_at: new Date().toISOString() } : {}) })
+          .eq('id', reqData.collaboration_id);
+      }
 
       // Notify the requester
       if (artist && meta.from_artist_id) {
@@ -322,6 +333,23 @@ export default function NotificationsPage() {
 
   useEffect(() => { setPage(0); fetchAll(0); }, [fetchAll, unreadCount]);
 
+  // Realtime: re-fetch when notifications are inserted OR updated (digest updates)
+  useEffect(() => {
+    if (!user) return;
+    const channel = supabase
+      .channel('notifications-page')
+      .on('postgres_changes', {
+        event: '*', // INSERT and UPDATE
+        schema: 'public',
+        table: 'notifications',
+        filter: artist ? `artist_id=eq.${artist.id}` : `user_id=eq.${user.id}`,
+      }, () => {
+        fetchAll(0); // refresh the list
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [user, artist, fetchAll]);
+
   const loadMore = () => {
     const next = page + 1;
     setPage(next);
@@ -348,7 +376,7 @@ export default function NotificationsPage() {
   const INLINE_ACTION_TYPES = new Set(['collab_request', 'new_follower']);
   const READ_ONLY_TYPES = new Set([
     'streak','top_supporter','weekly_report','monthly_wrapped',
-    'payout_pending','admin_message','bug_report','announcement',
+    'bug_report',
   ]);
 
   const handleClick = (notif) => {
@@ -360,9 +388,10 @@ export default function NotificationsPage() {
     const meta = notif.metadata || {};
 
     if (type === 'session_live') {
-      if (meta.session_id) navigate(`/session/${meta.session_id}`);
-      else if (meta.artist_slug) navigate(`/artist/${meta.artist_slug}`);
-      else navigate('/browse');
+      if (meta.url) { navigate(meta.url); return; }
+      if (meta.session_id) { navigate(`/session/${meta.session_id}`); return; }
+      if (meta.artist_slug) { navigate(`/artist/${meta.artist_slug}`); return; }
+      navigate('/browse');
       return;
     }
 
@@ -379,8 +408,10 @@ export default function NotificationsPage() {
 
     if (type === 'track_commented' || type === 'new_comment') {
       if (meta.post_id) { navigate(`/feed?post=${meta.post_id}`); return; }
+      if (meta.track_slug) { navigate(`/${meta.track_route_prefix || 'track'}/${meta.track_slug}?comments=1`); return; }
+      if (meta.track_id) { navigate(`/track/${meta.track_id}?comments=1`); return; }
       if (meta.artist_slug) { navigate(`/artist/${meta.artist_slug}`); return; }
-      if (artist) navigate('/dashboard?tab=analytics');
+      navigate('/hub');
       return;
     }
 
@@ -392,16 +423,19 @@ export default function NotificationsPage() {
     if (type === 'track_liked') {
       if (meta.track_id && meta.track_title) {
         playTrack({ id: meta.track_id, title: meta.track_title, file_url: meta.file_url || null, cover_artwork_url: meta.track_artwork || null, artist_name: meta.artist_name || '', artist_slug: meta.artist_slug || '' }, []);
+        if (meta.track_slug) navigate(`/track/${meta.track_slug}`);
         return;
       }
-      if (meta.artist_slug) navigate('/artist/' + meta.artist_slug);
-      else if (artist) navigate('/dashboard?tab=analytics&section=stats');
+      if (meta.track_id) { navigate(`/track/${meta.track_id}`); return; }
+      if (meta.artist_slug) { navigate('/artist/' + meta.artist_slug); return; }
+      navigate('/hub');
       return;
     }
 
     if (type === 'new_follower') {
-      if (meta.from_artist_slug) navigate('/artist/' + meta.from_artist_slug);
-      else navigate('/community');
+      if (meta.from_artist_slug) { navigate('/artist/' + meta.from_artist_slug); return; }
+      if (notif.from_artist?.slug) { navigate('/artist/' + notif.from_artist.slug); return; }
+      navigate('/community');
       return;
     }
 
@@ -417,8 +451,19 @@ export default function NotificationsPage() {
 
     if (type === 'tier_granted')                         { navigate('/profile'); return; }
     if (type === 'weekly_report')                         { navigate('/dashboard?tab=analytics&section=stats'); return; }
-    if (type === 'download')                             { navigate(artist ? '/dashboard?tab=analytics&section=downloads' : '/library/downloads'); return; }
+    if (type === 'download') {
+      if (meta.track_slug) { navigate(`/track/${meta.track_slug}`); return; }
+      if (meta.track_id) { navigate(`/track/${meta.track_id}`); return; }
+      navigate(artist ? '/dashboard?tab=analytics&section=downloads' : '/library/downloads');
+      return;
+    }
     if (type === 'tip')                                  { navigate('/dashboard?tab=analytics&section=earnings'); return; }
+    if (type === 'payout_pending')                       { navigate('/dashboard?tab=analytics&section=earnings'); return; }
+    if (type === 'announcement' || type === 'admin_message') {
+      if (meta.action_url) { window.open(meta.action_url, '_blank'); return; }
+      if (meta.cta_url) { window.open(meta.cta_url, '_blank'); return; }
+      return;
+    }
     if (type === 'first_listener')                       { navigate(artist ? '/dashboard?tab=analytics&section=tracks' : (meta.artist_slug ? `/artist/${meta.artist_slug}` : '/browse')); return; }
     if (type?.startsWith('collab_'))                     { navigate(artist ? '/dashboard?tab=collabs' : '/community'); return; }
     if (type?.startsWith('milestone_'))                  { navigate(artist ? '/dashboard?tab=analytics&section=stats' : '/browse'); return; }
@@ -426,7 +471,11 @@ export default function NotificationsPage() {
       navigate(meta.competition_id ? `/competition/${meta.competition_id}` : '/browse');
       return;
     }
-    if (type === 'engagement') { navigate(artist ? '/dashboard' : '/browse'); return; }
+    if (type === 'engagement') {
+      if (meta.url) { navigate(meta.url); return; }
+      navigate(artist ? '/hub' : '/browse');
+      return;
+    }
     if (type === 'top_supporter')                        { navigate(artist ? '/dashboard?tab=analytics&section=followers' : '/browse'); return; }
     if (type === 'wheel_challenge') { navigate('/wheel'); return; }
     if (type === 'artist_thought') { navigate(meta.artist_slug ? `/artist/${meta.artist_slug}` : '/browse'); return; }
@@ -533,15 +582,19 @@ export default function NotificationsPage() {
                   const meta   = notif.metadata || {};
                   const isRead = notif.read;
                   const isReplyOpen   = replyingTo === notif.id;
-                  const isExpandable  = (notif.message?.length > 80) && !['announcement','engagement','weekly_report','admin_message'].includes(notif.type);
+                  const isExpandable  = (notif.message?.length > 80);
                   const isExpanded    = expandedIds.includes(notif.id);
                   const hasTrackPill  = !!meta.track_title && !!meta.track_id;
+                  const hasActionUrl  = !!meta.action_url || !!meta.cta_url || !!meta.url;
                   // Orphaned stream notification — has no track data
                   const isOrphanStream = notif.type === 'new_stream' && !meta.track_title;
                   const isCollabReq   = notif.type === 'collab_request';
+                  const isEngagement  = notif.type === 'engagement' || notif.type === 'announcement' || notif.type === 'admin_message';
                   const isNewFollower = notif.type === 'new_follower';
                   const isComment     = notif.type === 'track_commented' || notif.type === 'new_comment';
                   const canReply      = isComment && (meta.post_id || meta.track_id);
+                  const actionUrl     = meta.action_url || meta.cta_url || meta.url || null;
+                  const actionLabel   = meta.cta_label || meta.action_label || (meta.feature_education ? 'Open Feature' : 'Learn more');
 
                   // Skip orphaned stream notifications (no track data - old DB trigger leftovers)
                   if (isOrphanStream) return null;
@@ -660,6 +713,19 @@ export default function NotificationsPage() {
                         {/* Collab accept/decline */}
                         {isCollabReq && (
                           <CollabActions notif={notif} onActioned={() => fetchAll(0)} />
+                        )}
+                        {actionUrl && !isCollabReq && (
+                          <button
+                            onClick={e => {
+                              e.stopPropagation();
+                              if (actionUrl.startsWith('http')) window.open(actionUrl, '_blank');
+                              else navigate(actionUrl);
+                            }}
+                            className="mt-2 flex items-center space-x-1 text-xs font-semibold px-3 py-1.5 rounded-lg transition"
+                            style={{ background: 'rgba(167,139,250,0.12)', border: '1px solid rgba(167,139,250,0.2)', color: '#c4b5fd' }}
+                          >
+                            <span>{actionLabel}</span>
+                          </button>
                         )}
 
                         {/* Quick reply for comments */}

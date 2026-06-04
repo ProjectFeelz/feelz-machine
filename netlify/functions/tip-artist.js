@@ -84,12 +84,26 @@ exports.handler = async (event) => {
       from_user_id: user.id, artist_id, amount: amountNum,
       currency: 'USD', paypal_order_id: order_id, message: message?.trim() || null,
     });
-    // Notify artist
+    // Notify artist — fetch sender name
+    const { data: senderArtist } = await supabase
+      .from('artists').select('id, artist_name, profile_image_url').eq('user_id', user.id).maybeSingle();
+    const senderName = senderArtist?.artist_name || 'A fan';
+    const { data: artistUser } = await supabase
+      .from('artists').select('user_id').eq('id', artist_id).maybeSingle();
     await supabase.from('notifications').insert({
-      artist_id, type: 'tip',
-      title: `Someone sent you a $${amountNum.toFixed(2)} tip! 💸`,
-      message: message?.trim() || 'No message',
-      metadata: { amount: amountNum, from_user_id: user.id },
+      artist_id,
+      user_id: artistUser?.user_id || null,
+      type: 'tip',
+      title: `${senderName} sent you a $${amountNum.toFixed(2)} tip 💸`,
+      message: message?.trim() || '',
+      from_artist_id: senderArtist?.id || null,
+      metadata: {
+        amount: amountNum,
+        from_user_id: user.id,
+        from_artist_name: senderName,
+        from_artist_image: senderArtist?.profile_image_url || null,
+        message: message?.trim() || null,
+      },
     });
 
     // Increment active tip goal if one exists

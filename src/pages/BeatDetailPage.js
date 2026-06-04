@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import { usePlayer } from '../contexts/PlayerContext';
@@ -43,6 +43,10 @@ export default function BeatDetailPage() {
   const [following, setFollowing] = useState(false);
   const [loading, setLoading]     = useState(true);
   const [showComments, setShowComments] = useState(false);
+  const [searchParams] = useSearchParams();
+  useEffect(() => {
+    if (searchParams.get('comments') === '1') setShowComments(true);
+  }, [searchParams]);
   const [selectedLicence, setSelectedLicence] = useState(null);
   const [purchasing, setPurchasing]       = useState(false);
   const [purchaseSuccess, setPurchaseSuccess] = useState(false);
@@ -54,32 +58,7 @@ export default function BeatDetailPage() {
 
   const isCurrentTrack = currentTrack?.id === track?.id;
 
-  // Detect PayFast return — check URL for payment ref
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const ref = params.get('ref');
-    if (ref && ref.startsWith('fm_')) {
-      // PayFast returned successfully — check if purchase was recorded
-      const checkPurchase = async () => {
-        if (!user?.id || !track?.id) return;
-        const { data } = await supabase
-          .from('beat_purchases').select('id, licence_type')
-          .eq('track_id', track.id).eq('buyer_user_id', user.id)
-          .eq('status', 'completed').maybeSingle();
-        if (data) {
-          setAlreadyPurchased(true);
-          setPurchaseSuccess(true);
-          // Trigger download
-          if (track.file_url) {
-            setTimeout(() => triggerDownload(), 1000);
-          }
-          // Clean URL
-          window.history.replaceState({}, '', window.location.pathname);
-        }
-      };
-      checkPurchase();
-    }
-  }, [track?.id, user?.id]); // eslint-disable-line
+
 
   useEffect(() => {
     if (!slug) return;
@@ -240,35 +219,7 @@ export default function BeatDetailPage() {
 
 
 
-  const isZAR = navigator.language === 'af' || navigator.language?.startsWith('af') ||
-    Intl.DateTimeFormat().resolvedOptions().timeZone?.includes('Africa');
 
-  const handlePayFast = async (lic) => {
-    if (!user) { navigate('/login'); return; }
-    if (lic.price === 0) { handleBuy(lic); return; }
-    setPurchasing(true);
-    try {
-      const amountZAR = (lic.price * 18.5).toFixed(2); // USD to ZAR approx
-      const affiliateRef = sessionStorage.getItem('feelz_ref') || '';
-      const res = await fetch('/.netlify/functions/payfast-payment', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'create',
-          amount: amountZAR,
-          itemName: `${track.title} — ${lic.label} Lease`,
-          buyerEmail: user.email,
-          trackId: track.id,
-          userId: user.id,
-          affiliateRef,
-          type: 'beat_purchase',
-        }),
-      });
-      const { redirectUrl, error } = await res.json();
-      if (error) { setPurchaseError(error); setPurchasing(false); return; }
-      window.location.href = redirectUrl;
-    } catch { setPurchaseError('PayFast unavailable. Try PayPal.'); setPurchasing(false); }
-  };
 
   const handleBuy = async (lic) => {
     if (!user) { navigate('/login'); return; }
@@ -536,20 +487,12 @@ export default function BeatDetailPage() {
                         <Download className="w-4 h-4" /><span>Download Free</span>
                       </button>
                     ) : (
-                      <div className="space-y-2">
-                        <button onClick={() => handlePayFast(selectedLic)}
+                      <button onClick={() => handleBuy(selectedLic)}
                           className="w-full py-3.5 rounded-xl font-bold text-sm transition active:scale-[0.98] flex items-center justify-center space-x-2"
-                          style={{ background: 'rgba(0,143,85,0.15)', border: '1px solid rgba(0,143,85,0.3)', color: '#00a550' }}>
-                          <ShoppingBag className="w-4 h-4" />
-                          <span>🇿🇦 Pay with PayFast — R{(selectedLic.price * 18.5).toFixed(0)}</span>
-                        </button>
-                        <button onClick={() => handleBuy(selectedLic)}
-                          className="w-full py-3 rounded-xl font-semibold text-sm transition active:scale-[0.98] flex items-center justify-center space-x-2"
                           style={{ background: selectedLic.bg, border: `1px solid ${selectedLic.border}`, color: selectedLic.color }}>
                           <ShoppingBag className="w-4 h-4" />
-                          <span>🌍 Pay with PayPal — ${selectedLic.price}</span>
+                          <span>Buy — ${selectedLic.price}</span>
                         </button>
-                      </div>
                     )}
                     {!user && <p className="text-[10px] text-white/20 text-center mt-2">Sign in to purchase</p>}
                     {purchaseError && <p className="text-xs text-red-400 mt-2 text-center">{purchaseError}</p>}
@@ -637,6 +580,7 @@ export default function BeatDetailPage() {
             }}>
             <TrackCommentSheet
               track={{ ...track, artist_name: artist?.artist_name }}
+              routePrefix="beat"
               user={user}
               onClose={() => setShowComments(false)}
             />

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import { downloadTrack } from '../utils/downloadTrack';
 import { useAuth } from '../contexts/AuthContext';
@@ -44,6 +45,10 @@ export default function TrackDetailPage() {
   const [loading, setLoading]     = useState(true);
   const [showBuyGate, setShowBuyGate] = useState(false);
   const [showComments, setShowComments] = useState(false);
+  const [searchParams] = useSearchParams();
+  useEffect(() => {
+    if (searchParams.get('comments') === '1') setShowComments(true);
+  }, [searchParams]);
   const [downloading, setDownloading]   = useState(false);
   const [shareCard, setShareCard]   = useState(null);
 

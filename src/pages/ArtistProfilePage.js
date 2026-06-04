@@ -789,15 +789,19 @@ export default function ArtistProfilePage() {
         await supabase.from('artist_alerts').upsert({ artist_id: artist.id, user_id: user.id }, { onConflict: 'user_id,artist_id' });
         setIsFollowing(true);
         setFollowerCount(prev => prev + 1);
-        const { data: myProfile } = await supabase.from('artists').select('id, artist_name').eq('user_id', user.id).maybeSingle();
+        const { data: myProfile } = await supabase.from('artists').select('id, artist_name, profile_image_url, slug').eq('user_id', user.id).maybeSingle();
         await supabase.from('notifications').insert({
           user_id: artist.user_id,
           artist_id: artist.id,
           type: 'new_follower',
           title: `${myProfile?.artist_name || 'Someone'} followed you`,
-          message: `${myProfile?.artist_name || 'Someone'} started following you`,
+          message: '',
           from_artist_id: myProfile?.id || null,
-          metadata: {},
+          metadata: {
+            from_artist_name:  myProfile?.artist_name || null,
+            from_artist_image: myProfile?.profile_image_url || null,
+            from_artist_slug:  myProfile?.slug || null,
+          },
         }).catch(() => {});
       }
     } catch (err) { console.error('Follow error:', err); }
@@ -961,17 +965,25 @@ export default function ArtistProfilePage() {
     setDownloading(track.id);
     try {
       try { await supabase.from('downloads').upsert({ user_id: user.id, track_id: track.id }, { onConflict: 'user_id,track_id', ignoreDuplicates: true }); } catch {}
-      const { data: myProfile } = await supabase.from('artists').select('id, artist_name').eq('user_id', user.id).maybeSingle();
+      const { data: myProfile } = await supabase.from('artists').select('id, artist_name, profile_image_url, slug').eq('user_id', user.id).maybeSingle();
       try {
         await supabase.from('notifications').insert({
           user_id: artist.user_id,
           artist_id: artist.id,
           type: 'download',
           title: `${myProfile?.artist_name || 'Someone'} downloaded ${track.title}`,
-          message: `${myProfile?.artist_name || 'Someone'} downloaded your track ${track.title}`,
+          message: '',
           track_id: track.id,
           from_artist_id: myProfile?.id || null,
-          metadata: { download: true, purchase_price: track.download_price || 0 },
+          metadata: {
+            download: true,
+            purchase_price:    track.download_price || 0,
+            track_id:          track.id,
+            track_title:       track.title,
+            track_slug:        track.slug || null,
+            from_artist_name:  myProfile?.artist_name || null,
+            from_artist_image: myProfile?.profile_image_url || null,
+          },
         });
       } catch {}
       const { data: { session } } = await supabase.auth.getSession();
@@ -1015,16 +1027,23 @@ export default function ArtistProfilePage() {
       await supabase.from('track_likes').delete().eq('track_id', track.id).eq('user_id', user.id);
     } else {
       await supabase.from('track_likes').insert({ track_id: track.id, user_id: user.id });
-      const { data: myProfile } = await supabase.from('artists').select('id, artist_name').eq('user_id', user.id).maybeSingle();
+      const { data: myProfile } = await supabase.from('artists').select('id, artist_name, profile_image_url, slug').eq('user_id', user.id).maybeSingle();
       await supabase.from('notifications').insert({
         user_id: artist.user_id,
         artist_id: artist.id,
         type: 'track_liked',
         title: `${myProfile?.artist_name || 'Someone'} liked ${track.title}`,
-        message: `${myProfile?.artist_name || 'Someone'} liked your track ${track.title}`,
+        message: '',
         track_id: track.id,
         from_artist_id: myProfile?.id || null,
-        metadata: {},
+        metadata: {
+          track_id:          track.id,
+          track_title:       track.title,
+          track_slug:        track.slug || null,
+          from_artist_name:  myProfile?.artist_name || null,
+          from_artist_image: myProfile?.profile_image_url || null,
+          from_artist_slug:  myProfile?.slug || null,
+        },
       }).catch(() => {});
     }
   };
@@ -1056,10 +1075,18 @@ export default function ArtistProfilePage() {
           artist_id: trackData.artist_id,
           type: 'playlist_add',
           title: `${myName} added ${trackData.title} to ${plData?.name || 'a playlist'}`,
-          message: `${myName} added your track ${trackData.title} to ${plData?.name || 'a playlist'}`,
+          message: '',
           track_id: trackId,
           from_artist_id: artist?.id,
-          metadata: { playlist_add: true, playlist_id: playlistId },
+          metadata: {
+            playlist_add:      true,
+            playlist_id:       playlistId,
+            track_id:          trackId,
+            track_title:       trackData.title,
+            from_artist_name:  myName,
+            from_artist_image: artist?.profile_image_url || null,
+            from_artist_slug:  artist?.slug || null,
+          },
         }).catch(() => {});
       }
     }

@@ -276,39 +276,81 @@ export function PlayerProvider({ children }) {
         const notifArtwork = fullTrack?.cover_artwork_url
           || fullTrack?.albums?.cover_artwork_url;
 
-        // Dedup window:
-        // - Album tracks: 30 min per album — "New stream on Weekend" fires once
-        //   even if someone listens to all 10 tracks in a session
-        // - Standalone tracks: 60s per track — prevents replay bursts
-        const dedupMs     = isAlbumTrack ? 30 * 60 * 1000 : 60 * 1000;
-        const dedupCutoff = new Date(Date.now() - dedupMs).toISOString();
-        const dedupFilter = isAlbumTrack
-          ? { album_id: fullTrack.album_id }
-          : { track_id: trackId };
+        // Daily digest: one stream summary per artist per day
+        // Count today's streams for this artist and upsert a single notification
+        const todayStart = new Date();
+        todayStart.setHours(0, 0, 0, 0);
+        const todayStartISO = todayStart.toISOString();
 
-        const { count: recentCount } = await supabase
-          .from('notifications')
+        // Count today's total streams for this artist
+        const { count: todayStreams } = await supabase
+          .from('streams')
           .select('*', { count: 'exact', head: true })
+          .eq('artist_id', track.artist_id)
+          .gte('created_at', todayStartISO);
+
+        // Find today's top track by stream count
+        const { data: topTrackData } = await supabase
+          .from('streams')
+          .select('track_id, tracks(title, cover_artwork_url, file_url)')
+          .eq('artist_id', track.artist_id)
+          .gte('created_at', todayStartISO);
+
+        // Count per track
+        const trackCounts = {};
+        (topTrackData || []).forEach(s => {
+          trackCounts[s.track_id] = (trackCounts[s.track_id] || 0) + 1;
+        });
+        const topTrackId = Object.entries(trackCounts).sort((a,b) => b[1]-a[1])[0]?.[0];
+        const topTrack   = topTrackData?.find(s => s.track_id === topTrackId)?.tracks;
+
+        const streamCount = todayStreams || 1;
+        const topTitle    = topTrack?.title || fullTrack?.title;
+        const digestTitle = streamCount === 1
+          ? `First stream today on ${topTitle}`
+          : `${streamCount} stream${streamCount > 1 ? 's' : ''} today — ${topTitle} leading`;
+
+        // Check if we already have a today digest for this artist
+        const { data: existingDigest } = await supabase
+          .from('notifications')
+          .select('id')
           .eq('type', 'new_stream')
           .eq('artist_id', track.artist_id)
-          .contains('metadata', dedupFilter)
-          .gte('created_at', dedupCutoff);
+          .gte('created_at', todayStartISO)
+          .limit(1)
+          .maybeSingle();
 
-        if (!recentCount) {
+        if (existingDigest) {
+          // Update the existing digest with fresh count and top track
+          await supabase.from('notifications').update({
+            title:   digestTitle,
+            message: `${streamCount} stream${streamCount !== 1 ? 's' : ''} across your catalogue today`,
+            metadata: {
+              track_id:      topTrackId || trackId,
+              track_title:   topTitle,
+              track_artwork: topTrack?.cover_artwork_url || notifArtwork,
+              file_url:      topTrack?.file_url || fullTrack?.file_url,
+              artist_id:     track.artist_id,
+              stream_count:  streamCount,
+              is_digest:     true,
+            },
+          }).eq('id', existingDigest.id);
+        } else {
+          // Insert first digest of the day
           await supabase.from('notifications').insert({
             user_id:   art.user_id,
             artist_id: track.artist_id,
             type:      'new_stream',
-            title:     notifTitle,
-            message:   'Someone streamed your track',
+            title:     digestTitle,
+            message:   `${streamCount} stream${streamCount !== 1 ? 's' : ''} across your catalogue today`,
             metadata: {
-              track_id:      trackId,
-              track_title:   fullTrack?.title,
-              track_artwork: notifArtwork,
-              file_url:      fullTrack?.file_url,
+              track_id:      topTrackId || trackId,
+              track_title:   topTitle,
+              track_artwork: topTrack?.cover_artwork_url || notifArtwork,
+              file_url:      topTrack?.file_url || fullTrack?.file_url,
               artist_id:     track.artist_id,
-              album_id:      fullTrack?.album_id || null,
-              album_title:   fullTrack?.albums?.title || null,
+              stream_count:  streamCount,
+              is_digest:     true,
             },
           });
         }

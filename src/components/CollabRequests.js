@@ -9,6 +9,7 @@ import {
 const ROLE_LABELS = {
   featured: 'Featured Artist', producer: 'Producer', songwriter: 'Songwriter',
   vocalist: 'Vocalist', remix: 'Remix', engineer: 'Engineer',
+  beatmaker: 'Beatmaker', co_producer: 'Co-Producer', composer: 'Composer',
 };
 
 const STATUS_PILL = {

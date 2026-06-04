@@ -1222,17 +1222,18 @@ export default function TrackUploadPanel() {
           split_percent: collab.split_percent, status: 'pending', invited_by: artist.id,
         }]).select().single();
         if (error) continue;
-        await supabase.from('collab_requests').insert([{
+        const { data: cr } = await supabase.from('collab_requests').insert([{
           collaboration_id: cd.id, from_artist_id: artist.id,
           to_artist_id: collab.artist_id, track_id: trackId,
           message: collab.message || null, status: 'pending',
-        }]);
+        }]).select('id').single();
         // Notify the invited artist
         await notifyCollabRequest({
           fromArtist: artist,
           toArtistId: collab.artist_id,
           trackTitle: trackForm.title || 'a track',
           trackId,
+          requestId: cr?.id,
         });
       } catch {}
     }

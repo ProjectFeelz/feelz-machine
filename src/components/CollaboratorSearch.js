@@ -7,6 +7,7 @@ const ROLES = [
   { value: 'performing_artist', label: 'Performing Artist' },
   { value: 'producer', label: 'Producer' },
   { value: 'co_producer', label: 'Co-Producer' },
+  { value: 'beatmaker', label: 'Beatmaker' },
   { value: 'songwriter', label: 'Songwriter' },
   { value: 'lyricist', label: 'Lyricist' },
   { value: 'vocalist', label: 'Vocalist' },

@@ -7,7 +7,7 @@ import { createNotification, checkStreamMilestone } from '../contexts/useNotific
 /**
  * Call when someone sends a collab request (in TrackUploadPanel saveCollaborations)
  */
-export async function notifyCollabRequest({ fromArtist, toArtistId, trackTitle, trackId }) {
+export async function notifyCollabRequest({ fromArtist, toArtistId, trackTitle, trackId, requestId }) {
   await createNotification({
     artistId: toArtistId,
     type: 'collab_request',
@@ -15,6 +15,11 @@ export async function notifyCollabRequest({ fromArtist, toArtistId, trackTitle, 
     message: `Invited you to collaborate on "${trackTitle}"`,
     fromArtistId: fromArtist.id,
     trackId,
+    metadata: {
+      request_id: requestId || null,
+      track_title: trackTitle,
+      from_artist_id: fromArtist.id,
+    },
   });
 }
 

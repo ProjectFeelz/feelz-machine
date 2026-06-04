@@ -149,15 +149,47 @@ exports.handler = async (event) => {
           .eq('id', trackId).maybeSingle();
 
         if (track?.artists?.user_id) {
+          // Fetch buyer name
+          const { data: buyerArtist } = userId
+            ? await supabase.from('artists').select('id, artist_name, profile_image_url').eq('user_id', userId).maybeSingle()
+            : { data: null };
+          const buyerName = buyerArtist?.artist_name || 'Someone';
           await supabase.from('notifications').insert({
-            user_id:   track.artists.user_id,
-            artist_id: track.artist_id,
-            type:      'download',
-            title:     `Someone purchased "${track.title}"`,
-            message:   `R${amountZAR.toFixed(2)} via PayFast`,
-            track_id:  trackId,
-            metadata:  { amount: amountZAR, currency: 'ZAR', payment_ref: pf_payment_id },
+            user_id:        track.artists.user_id,
+            artist_id:      track.artist_id,
+            type:           'download',
+            title:          `${buyerName} purchased "${track.title}"`,
+            message:        `R${amountZAR.toFixed(2)} via PayFast`,
+            track_id:       trackId,
+            from_artist_id: buyerArtist?.id || null,
+            metadata: {
+              amount: amountZAR, currency: 'ZAR', payment_ref: pf_payment_id,
+              from_artist_name: buyerName,
+              from_artist_image: buyerArtist?.profile_image_url || null,
+              track_id: trackId, track_title: track.title,
+            },
           });
+        }
+
+        // Trigger split payout for collaborators (beatmaker splits)
+        try {
+          const siteUrl = process.env.URL || 'https://www.feelzmachine.com';
+          fetch(`${siteUrl}/.netlify/functions/process-split-payout`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-internal-secret': process.env.INTERNAL_FUNCTION_SECRET || '',
+            },
+            body: JSON.stringify({
+              track_id:       trackId,
+              transaction_id: pf_payment_id,
+              total_amount:   creatorAmountZAR,
+              currency:       'ZAR',
+              buyer_user_id:  userId || null,
+            }),
+          }).catch(err => console.warn('Split payout trigger failed (non-fatal):', err.message));
+        } catch (splitErr) {
+          console.warn('Split payout trigger error (non-fatal):', splitErr.message);
         }
       }
 

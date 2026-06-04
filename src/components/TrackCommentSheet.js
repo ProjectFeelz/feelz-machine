@@ -104,7 +104,7 @@ function ReactionBar({ commentId, userId }) {
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
-export default function TrackCommentSheet({ track, user, onClose }) {
+export default function TrackCommentSheet({ track, user, onClose, routePrefix = 'track' }) {
   const keyboardOffset = useKeyboardOffset();
   const [comments,   setComments]   = useState([]);
   const [text,       setText]       = useState('');
@@ -144,17 +144,19 @@ export default function TrackCommentSheet({ track, user, onClose }) {
     if (!raw?.length) { setComments([]); setLoading(false); return; }
 
     const uids = [...new Set(raw.map(c => c.user_id).filter(Boolean))];
-    const [{ data: artists }, { data: profiles }] = await Promise.all([
+    const [{ data: artists }, { data: profiles }, { data: listenerProfiles }] = await Promise.all([
       supabase.from('artists').select('user_id, artist_name, profile_image_url').in('user_id', uids),
       supabase.from('user_profiles').select('user_id, name, avatar_url').in('user_id', uids),
+      supabase.from('listeners').select('user_id, display_name, avatar_url').in('user_id', uids),
     ]);
-    const artistMap  = Object.fromEntries((artists  || []).map(a => [a.user_id, a]));
-    const profileMap = Object.fromEntries((profiles || []).map(p => [p.user_id, p]));
+    const artistMap   = Object.fromEntries((artists         || []).map(a => [a.user_id, a]));
+    const profileMap  = Object.fromEntries((profiles        || []).map(p => [p.user_id, p]));
+    const listenerMap = Object.fromEntries((listenerProfiles|| []).map(l => [l.user_id, l]));
 
     setComments(raw.map(c => ({
       ...c,
-      artists:       artistMap[c.user_id]  || null,
-      user_profiles: profileMap[c.user_id] || null,
+      artists:       artistMap[c.user_id]   || null,
+      user_profiles: profileMap[c.user_id]  || listenerMap[c.user_id] || null,
     })));
     setLoading(false);
   }, [track.id]);
@@ -182,18 +184,29 @@ export default function TrackCommentSheet({ track, user, onClose }) {
       setComments(prev => [enriched, ...prev]);
       // Notify track artist
       try {
-        const { data: trackRow } = await supabase
-          .from('tracks').select('artist_id, title, artists(user_id)').eq('id', track.id).maybeSingle();
+        const [{ data: trackRow }, { data: commenterArtist }] = await Promise.all([
+          supabase.from('tracks').select('artist_id, title, slug, artists(user_id)').eq('id', track.id).maybeSingle(),
+          supabase.from('artists').select('id, artist_name, profile_image_url').eq('user_id', user.id).maybeSingle(),
+        ]);
         if (trackRow?.artists?.user_id && trackRow.artists.user_id !== user.id) {
-          const name = user.__artist?.artist_name || user.__profile?.name || 'Someone';
+          const name = commenterArtist?.artist_name || 'Someone';
           await supabase.from('notifications').insert({
-            user_id:   trackRow.artists.user_id,
-            artist_id: trackRow.artist_id,
-            type:      'track_commented',
-            title:     `${name} commented on "${trackRow.title}"`,
-            message:   text.trim().slice(0, 100),
-            track_id:  track.id,
-            metadata:  { track_id: track.id, track_title: trackRow.title, comment: text.trim().slice(0, 100) },
+            user_id:        trackRow.artists.user_id,
+            artist_id:      trackRow.artist_id,
+            type:           'track_commented',
+            title:          `${name} commented on "${trackRow.title}"`,
+            message:        text.trim().slice(0, 100),
+            track_id:       track.id,
+            from_artist_id: commenterArtist?.id || null,
+            metadata: {
+              track_id:           track.id,
+              track_slug:         trackRow.slug || track.slug || null,
+              track_route_prefix: routePrefix,
+              track_title:        trackRow.title,
+              comment:            text.trim().slice(0, 100),
+              from_artist_name:   name,
+              from_artist_image:  commenterArtist?.profile_image_url || null,
+            },
           });
         }
       } catch {}
@@ -212,7 +225,7 @@ export default function TrackCommentSheet({ track, user, onClose }) {
   });
 
   const renderComment = (c, isReply = false) => {
-    const name   = c.artists?.artist_name || c.user_profiles?.name || 'Listener';
+    const name   = c.artists?.artist_name || c.user_profiles?.name || c.user_profiles?.display_name || 'Listener';
     const avatar = c.artists?.profile_image_url || c.user_profiles?.avatar_url;
     const isOwn  = c.user_id === user?.id;
     return (

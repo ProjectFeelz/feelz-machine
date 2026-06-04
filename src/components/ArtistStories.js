@@ -17,7 +17,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useHaptics } from '../hooks/useHaptics';
 import {
   X, Plus, Upload, Loader, Play, Pause, Music, Image, Video,
-  Eye, Clock, Download,
+  Eye, Clock, Download, Heart,
 } from 'lucide-react';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -238,14 +238,57 @@ function StoryBubble({ artist, stories, viewed, onClick }) {
 export function ArtistStoryView({ stories, artist, initialIndex = 0, onClose }) {
   const { user } = useAuth();
   const { tap }  = useHaptics();
-  const [idx, setIdx]             = useState(initialIndex);
-  const [playing, setPlaying]     = useState(false);
-  const [progress, setProgress]   = useState(0);
-  const taggedAudioRef            = useRef(null);
-  const audioRef                  = useRef(null);
-  const videoRef                  = useRef(null);
-  const progressRef               = useRef(null);
-  const DURATION_IMAGE_MS         = 5000;
+  const navigate = useNavigate();
+  const [idx, setIdx]               = useState(initialIndex);
+  const [playing, setPlaying]       = useState(false);
+  const [progress, setProgress]     = useState(0);
+  const [likedIds, setLikedIds]     = useState(new Set());
+  const [likeCounts, setLikeCounts] = useState({});
+  const taggedAudioRef              = useRef(null);
+  const audioRef                    = useRef(null);
+  const videoRef                    = useRef(null);
+  const progressRef                 = useRef(null);
+  const DURATION_IMAGE_MS           = 5000;
+
+  // Load liked state
+  useEffect(() => {
+    if (!user) return;
+    const ids = stories.map(s => s.id);
+    supabase.from('story_likes').select('story_id').eq('user_id', user.id).in('story_id', ids)
+      .then(({ data }) => setLikedIds(new Set((data || []).map(l => l.story_id))));
+    const counts = {};
+    stories.forEach(s => { counts[s.id] = s.like_count || 0; });
+    setLikeCounts(counts);
+  }, [stories, user]);
+
+  const handleLike = async (e) => {
+    e.stopPropagation();
+    if (!user || !story) return;
+    const storyId = story.id;
+    const isLiked = likedIds.has(storyId);
+    setLikedIds(prev => { const n = new Set(prev); isLiked ? n.delete(storyId) : n.add(storyId); return n; });
+    setLikeCounts(prev => ({ ...prev, [storyId]: Math.max(0, (prev[storyId] || 0) + (isLiked ? -1 : 1)) }));
+    if (isLiked) {
+      await supabase.from('story_likes').delete().eq('story_id', storyId).eq('user_id', user.id);
+    } else {
+      await supabase.from('story_likes').insert({ story_id: storyId, user_id: user.id });
+      if (artist?.id) {
+        supabase.from('artists').select('id, artist_name, profile_image_url, user_id').eq('user_id', user.id).maybeSingle()
+          .then(({ data: liker }) => {
+            if (liker && artist.user_id && artist.user_id !== user.id) {
+              supabase.from('notifications').insert({
+                user_id: artist.user_id, artist_id: artist.id,
+                type: 'track_liked',
+                title: `${liker.artist_name || 'Someone'} liked your story`,
+                message: story.caption || '',
+                from_artist_id: liker.id || null,
+                metadata: { story_id: storyId, from_artist_name: liker.artist_name, from_artist_image: liker.profile_image_url },
+              }).catch(() => {});
+            }
+          });
+      }
+    }
+  };
 
   const story = stories[idx];
 
@@ -373,23 +416,48 @@ export function ArtistStoryView({ stories, artist, initialIndex = 0, onClose }) 
         <button className="absolute right-0 top-0 bottom-0 w-1/3" onClick={goNext} />
       </div>
 
-      {/* Tagged track pill */}
-      {story.tracks && (
-        <div className="absolute bottom-20 left-4 right-4 z-20">
-          <div className="inline-flex items-center space-x-2 px-3 py-1.5 rounded-full"
-            style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)', border: '1px solid rgba(255,255,255,0.15)' }}>
-            <span className="text-sm">🎵</span>
+      {/* Bottom bar — track pill + like */}
+      <div className="absolute bottom-4 left-4 right-4 z-20 flex items-end justify-between">
+        {story.tracks ? (
+          <button
+            onClick={(e) => { e.stopPropagation(); onClose(); navigate(`/track/${story.tracks.slug || story.tracks.id}`); }}
+            className="inline-flex items-center space-x-2 px-3 py-2 rounded-full active:scale-95 transition"
+            style={{ background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(12px)', border: '1px solid rgba(255,255,255,0.2)', maxWidth: 'calc(100% - 64px)' }}>
+            {story.tracks.cover_artwork_url
+              ? <img src={story.tracks.cover_artwork_url} alt="" className="w-6 h-6 rounded object-cover flex-shrink-0" />
+              : <span className="text-sm flex-shrink-0">🎵</span>}
             <div className="flex flex-col min-w-0">
-              <p className="text-[11px] font-bold text-white truncate max-w-[160px]">{story.tracks.title}</p>
-              <p className="text-[9px] text-white/40 uppercase tracking-wider">Tagged track</p>
+              <p className="text-[11px] font-bold text-white truncate">{story.tracks.title}</p>
+              <p className="text-[9px] text-purple-300/80 uppercase tracking-wider">Listen now →</p>
             </div>
+          </button>
+        ) : (
+          <button
+            onClick={(e) => { e.stopPropagation(); onClose(); navigate(`/artist/${artist.slug}`); }}
+            className="inline-flex items-center space-x-2 px-3 py-2 rounded-full active:scale-95 transition"
+            style={{ background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(12px)', border: '1px solid rgba(255,255,255,0.15)' }}>
+            <p className="text-[11px] font-semibold text-white/70">{artist.artist_name}</p>
+            <p className="text-[9px] text-purple-300/60">View profile →</p>
+          </button>
+        )}
+
+        <button onClick={handleLike} className="flex flex-col items-center space-y-0.5 active:scale-90 transition ml-3 flex-shrink-0">
+          <div className="w-11 h-11 rounded-full flex items-center justify-center"
+            style={{ background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.15)' }}>
+            <Heart className="w-5 h-5 transition-all"
+              style={likedIds.has(story.id)
+                ? { fill: '#f43f5e', color: '#f43f5e' }
+                : { color: 'rgba(255,255,255,0.7)' }} />
           </div>
-        </div>
-      )}
+          {(likeCounts[story.id] || 0) > 0 && (
+            <span className="text-[10px] font-semibold text-white/50">{likeCounts[story.id]}</span>
+          )}
+        </button>
+      </div>
 
       {/* Caption */}
       {story.caption && (
-        <div className="px-5 py-4 flex-shrink-0">
+        <div className="px-5 pt-2 pb-20 flex-shrink-0">
           <p className="text-sm text-white/80 leading-relaxed text-center">{story.caption}</p>
         </div>
       )}
@@ -413,7 +481,7 @@ export function StoriesRail({ userId }) {
         // Get all active (non-expired) stories
         const { data: stories } = await supabase
           .from('artist_stories')
-          .select('*, tracks:tagged_track_id(id, title, file_url, cover_artwork_url), artists(id, artist_name, slug, profile_image_url)')
+          .select('*, tracks:tagged_track_id(id, title, slug, file_url, cover_artwork_url), artists(id, artist_name, slug, profile_image_url, user_id)')
           .gt('expires_at', new Date().toISOString())
           .order('created_at', { ascending: false })
           .limit(100);
