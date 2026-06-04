@@ -7,7 +7,7 @@ import {
   UserX, Crown, MoreVertical, Music, Mail, Calendar,
   Megaphone, BarChart3, AlertTriangle, Zap, Trophy,
   Brain, Copy, ChevronRight, Ban, Trash2, Check, Layers,
-  Headphones, DollarSign, TrendingUp, Radio, Heart, Star,
+  Headphones, DollarSign, TrendingUp, Radio, Heart, Star, Download,
 } from 'lucide-react';
 
 const ADMIN_SECTIONS = [
@@ -50,6 +50,7 @@ export default function AdminDashboard() {
   const [banConfirm, setBanConfirm]       = useState(null); // artist to confirm ban+delete
   const [platformStats, setPlatformStats] = useState({});
   const [userTab, setUserTab]             = useState('artists'); // artists | users | listeners
+  const [exporting, setExporting]         = useState(false);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -90,6 +91,8 @@ export default function AdminDashboard() {
       // Fetch total listener count separately to avoid RLS interference in Promise.all
       const { data: listenerRows } = await supabase.from('listeners').select('id');
       const totalListeners = (listenerRows || []).length;
+      const { data: beatmakerRows } = await supabase.from('artists').select('id').eq('role', 'beatmaker');
+      const totalBeatmakers = (beatmakerRows || []).length;
       const tipsTotal  = (tipData  || []).reduce((s, t) => s + (t.amount      || 0), 0);
       const dlTotal    = (dlData   || []).reduce((s, d) => s + (d.amount_paid || 0), 0);
       const beatTotal  = (beatData || []).reduce((s, b) => s + (b.amount_paid || 0), 0);
@@ -101,6 +104,7 @@ export default function AdminDashboard() {
         publishedTracks: totalTracks    || 0,
         totalFollows:    totalFollows   || 0,
         totalListeners:  totalListeners || 0,
+        totalBeatmakers: totalBeatmakers || 0,
       });
     } catch (err) { console.error('Admin fetch error:', err); }
     setLoading(false);
@@ -203,7 +207,8 @@ export default function AdminDashboard() {
 
   const stats = [
     { label: 'Artists',       value: artists.length,                          color: 'text-green-400',  icon: Users      },
-    { label: 'Listeners',     value: platformStats.totalListeners || 0,            color: 'text-blue-400', icon: Users },
+    { label: 'Listeners',     value: platformStats.totalListeners || 0,            color: 'text-blue-400',   icon: Users      },
+    { label: 'Beatmakers',    value: platformStats.totalBeatmakers || 0,           color: 'text-orange-400', icon: Music      },
     { label: 'Published',     value: platformStats.publishedTracks || 0,      color: 'text-purple-400', icon: Music      },
     { label: 'Fan Pro',       value: platformStats.fanProSubs || 0,            color: 'text-yellow-400', icon: Star       },
     { label: 'Streams (7d)',  value: platformStats.streams7d || 0,            color: 'text-cyan-400',   icon: Headphones },
@@ -211,6 +216,61 @@ export default function AdminDashboard() {
     { label: 'Follows',       value: platformStats.totalFollows || 0,          color: 'text-indigo-400', icon: Heart      },
     { label: 'Revenue (7d)',  value: `$${platformStats.revenue7d || '0.00'}`,  color: 'text-green-400',  icon: DollarSign },
   ];
+
+  const handleExportPlatform = async () => {
+    setExporting(true);
+    try {
+      const now = new Date().toISOString().split('T')[0];
+      const [
+        { data: artistData },
+        { data: listenerData },
+        { data: streamData },
+        { data: trackData },
+        { data: tipData },
+        { data: followData },
+      ] = await Promise.all([
+        supabase.from('artists').select('id, artist_name, email, tier, role, follower_count, total_streams, created_at, last_seen_at').order('created_at', { ascending: false }),
+        supabase.from('listeners').select('id, user_id, display_name, tier, created_at, last_seen_at').order('created_at', { ascending: false }),
+        supabase.from('streams').select('id, track_id, user_id, created_at, duration_played, completed, device_type, platform').order('created_at', { ascending: false }).limit(10000),
+        supabase.from('tracks').select('id, title, artist_id, stream_count, download_count, download_price, is_published, created_at').order('created_at', { ascending: false }),
+        supabase.from('tips').select('id, artist_id, from_user_id, amount, currency, created_at').order('created_at', { ascending: false }),
+        supabase.from('follows').select('artist_id, follower_id, created_at').order('created_at', { ascending: false }).limit(5000),
+      ]);
+
+      const sheets = {
+        artists: { headers: ['id','artist_name','email','tier','role','follower_count','total_streams','created_at','last_seen_at'], rows: artistData || [] },
+        listeners: { headers: ['id','user_id','display_name','tier','created_at','last_seen_at'], rows: listenerData || [] },
+        tracks: { headers: ['id','title','artist_id','stream_count','download_count','download_price','is_published','created_at'], rows: trackData || [] },
+        streams: { headers: ['id','track_id','user_id','created_at','duration_played','completed','device_type','platform'], rows: streamData || [] },
+        tips: { headers: ['id','artist_id','from_user_id','amount','currency','created_at'], rows: tipData || [] },
+        follows: { headers: ['artist_id','follower_id','created_at'], rows: followData || [] },
+      };
+
+      const escape = v => {
+        if (v === null || v === undefined) return '';
+        const s = String(v);
+        return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s;
+      };
+
+      for (const [name, { headers, rows }] of Object.entries(sheets)) {
+        const csv = [headers.join(','), ...rows.map(r => headers.map(h => escape(r[h])).join(','))].join('\n');
+        const blob = new Blob([csv], { type: 'text/csv' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `feelzmachine_${name}_${now}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        await new Promise(r => setTimeout(r, 200)); // slight delay between files
+      }
+    } catch (err) {
+      console.error('Export error:', err);
+      alert('Export failed: ' + err.message);
+    }
+    setExporting(false);
+  };
 
   if (!isAdmin) return null;
 
@@ -245,9 +305,19 @@ export default function AdminDashboard() {
       )}
 
       {/* Header */}
-      <div className="flex items-center space-x-3 mb-6 pt-2">
-        <Shield className="w-5 h-5 text-yellow-400/70" />
-        <h1 className="text-base font-bold text-white">Admin Panel</h1>
+      <div className="flex items-center justify-between mb-6 pt-2">
+        <div className="flex items-center space-x-3">
+          <Shield className="w-5 h-5 text-yellow-400/70" />
+          <h1 className="text-base font-bold text-white">Admin Panel</h1>
+        </div>
+        <button
+          onClick={handleExportPlatform}
+          disabled={exporting}
+          className="flex items-center space-x-1.5 px-3 py-2 rounded-xl bg-white/[0.05] border border-white/[0.08] text-xs font-semibold text-white/60 hover:text-white hover:bg-white/[0.08] transition disabled:opacity-40"
+        >
+          {exporting ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+          <span>{exporting ? 'Exporting…' : 'Export CSV'}</span>
+        </button>
       </div>
 
       {/* Platform stats grid */}
