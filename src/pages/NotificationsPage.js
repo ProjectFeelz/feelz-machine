@@ -180,12 +180,13 @@ function CollabActions({ notif, onActioned }) {
 
       if (!reqId) { console.warn('No request_id found'); setLoading(null); return; }
       const newStatus = action === 'accept' ? 'accepted' : 'declined';
-      const { data: reqData } = await supabase
+      const { data: reqData, error: updateErr } = await supabase
         .from('collab_requests')
         .update({ status: newStatus, responded_at: new Date().toISOString() })
         .eq('id', reqId)
         .select('collaboration_id')
-        .single();
+        .maybeSingle();
+      console.log('[CollabActions] update result:', { reqData, updateErr });
       // Also update the collaborations table
       if (reqData?.collaboration_id) {
         await supabase.from('collaborations')
