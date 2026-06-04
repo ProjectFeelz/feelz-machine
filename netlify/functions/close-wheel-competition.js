@@ -217,7 +217,7 @@ exports.handler = async () => {
 
     // 6. Notify all users of the result
     const { data: allUsers } = await supabase
-      .from('user_profiles')
+      .from('listeners')
       .select('user_id')
       .limit(5000);
 

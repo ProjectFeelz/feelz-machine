@@ -154,6 +154,18 @@ function SubmitEntryModal({ competition, artistId, onClose, onSubmitted }) {
     setUploading(true);
     setError('');
     try {
+      // Gap 4: prevent duplicate entries
+      const { data: existing } = await supabase
+        .from('competition_entries')
+        .select('id')
+        .eq('competition_id', competition.id)
+        .eq('artist_id', artistId)
+        .maybeSingle();
+      if (existing) {
+        setError('You have already submitted an entry for this competition');
+        setUploading(false);
+        return;
+      }
       // Upload audio to Supabase Storage (public bucket — URLs never expire)
       const ext = audioFile.name.split('.').pop();
       const path = `${artistId}/${competition.id}_${Date.now()}.${ext}`;
@@ -173,7 +185,7 @@ function SubmitEntryModal({ competition, artistId, onClose, onSubmitted }) {
         audio_url: urlData.publicUrl,
         title: title.trim(),
         note: note.trim() || null,
-        is_visible: false,
+        is_visible: true,
         is_winner: false,
       });
       if (insertErr) throw insertErr;

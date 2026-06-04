@@ -38,6 +38,7 @@ const TYPE_CONFIG = {
   new_track:          { icon: Music,         color: 'text-purple-400', bg: 'bg-purple-500/10',  label: 'New Track' },
   playlist_add:       { icon: Music,         color: 'text-blue-400',   bg: 'bg-blue-500/10',    label: 'Playlist Add' },
   competition_winner: { icon: Award,         color: 'text-yellow-400', bg: 'bg-yellow-500/10',  label: 'Winner!' },
+  wheel_winner:       { icon: Award,         color: 'text-yellow-400', bg: 'bg-yellow-500/10',  label: 'Roulette Winner' },
   engagement:         { icon: Zap,           color: 'text-purple-400', bg: 'bg-purple-500/10',  label: 'For You' },
   monthly_wrapped:    { icon: Gift,          color: 'text-pink-400',   bg: 'bg-pink-500/10',    label: 'Monthly Wrapped' },
   top_supporter:      { icon: Heart,         color: 'text-orange-400', bg: 'bg-orange-500/10',  label: 'Top Supporter' },
@@ -65,7 +66,7 @@ function filterMatch(type, filter) {
   if (filter === 'all')        return true;
   if (filter === 'collabs')    return type?.startsWith('collab_');
   if (filter === 'social')     return ['new_follower','track_liked','playlist_add','track_commented','new_comment','new_post','new_stream','mention','artist_thought'].includes(type);
-  if (filter === 'milestones') return type?.startsWith('milestone_') || ['top_supporter','streak','first_listener','competition_winner','weekly_report','monthly_wrapped'].includes(type);
+  if (filter === 'milestones') return type?.startsWith('milestone_') || ['top_supporter','streak','first_listener','competition_winner','wheel_winner','weekly_report','monthly_wrapped'].includes(type);
   if (filter === 'money')      return ['tip','download','payout_pending','beat_purchase'].includes(type);
   return true;
 }
@@ -511,7 +512,7 @@ export default function NotificationsPage() {
       return;
     }
     if (type?.startsWith('milestone_'))                  { navigate(artist ? '/dashboard?tab=analytics&section=stats' : '/browse'); return; }
-    if (type === 'competition_winner' || type === 'competition_result') {
+    if (type === 'competition_winner' || type === 'competition_result' || type === 'wheel_winner') {
       if (meta.competition_id) { navigate(`/competition/${meta.competition_id}`); return; }
       navigate('/competitions');
       return;

@@ -178,15 +178,20 @@ function SpinForYourselfTab() {
     setClaiming(true);
     setXpError('');
     try {
-      // Verify the user has actually submitted a competition entry
-      const { data: entry } = await supabase
-        .from('competition_entries')
-        .select('id')
-        .eq('user_id', user.id)
-        .limit(1)
+      // Verify the user has actually submitted an entry to an active competition
+      // Get current wheel challenge competition_id if available
+      const { data: currentChallenge } = await supabase
+        .from('wheel_challenges')
+        .select('competition_id')
+        .eq('is_current', true)
         .maybeSingle();
+      const query = supabase.from('competition_entries').select('id').eq('user_id', user.id);
+      if (currentChallenge?.competition_id) {
+        query.eq('competition_id', currentChallenge.competition_id);
+      }
+      const { data: entry } = await query.limit(1).maybeSingle();
       if (!entry) {
-        setXpError('Upload your track first before claiming XP');
+        setXpError('Upload your track to this competition first before claiming XP');
         setClaiming(false);
         return;
       }
