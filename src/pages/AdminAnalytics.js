@@ -153,7 +153,7 @@ export default function AdminAnalytics({ embedded = false }) {
         { count: activeListeners },
       ] = await Promise.all([
         supabase.from('artists').select('*', { count: 'exact', head: true }),
-        supabase.from('user_profiles').select('*', { count: 'exact', head: true }),
+        supabase.from('listeners').select('*', { count: 'exact', head: true }),
         supabase.from('tracks').select('*', { count: 'exact', head: true }),
         supabase.from('tracks').select('*', { count: 'exact', head: true }).eq('is_published', true),
         supabase.from('follows').select('*', { count: 'exact', head: true }),
@@ -175,12 +175,12 @@ export default function AdminAnalytics({ embedded = false }) {
 
       const streamDelta = prevStreamCount > 0
         ? Math.round(((streamCount - prevStreamCount) / prevStreamCount) * 100) : null;
-      const artistDelta = prevNewArtists > 0
+      const artistDelta = (prevNewArtists > 0 && newArtists > 0)
         ? Math.round(((newArtists - prevNewArtists) / prevNewArtists) * 100) : null;
 
       setKpis({
         artists: artistCount || 0,
-        listeners: Math.max(0, (listenerCount || 0) - (artistCount || 0)),
+        listeners: listenerCount || 0,
         tracks: trackCount || 0,
         published: publishedCount || 0,
         follows: followCount || 0,
