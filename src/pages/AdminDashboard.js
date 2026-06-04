@@ -75,6 +75,7 @@ export default function AdminDashboard() {
         { data: beatData },
         { count: fanProCount },
         { count: activeListeners7d },
+        { count: totalListeners },
         { count: totalTracks },
         { count: totalFollows },
       ] = await Promise.all([
@@ -84,6 +85,7 @@ export default function AdminDashboard() {
         supabase.from('beat_purchases').select('amount_paid').eq('status', 'completed').gte('created_at', cutoff7d),
         supabase.from('listener_tier_subscriptions').select('*', { count: 'exact', head: true }).eq('status', 'active'),
         supabase.from('listeners').select('*', { count: 'exact', head: true }).gte('last_seen_at', cutoff7d),
+        supabase.from('listeners').select('*', { count: 'exact', head: true }),
         supabase.from('tracks').select('*', { count: 'exact', head: true }).eq('is_published', true),
         supabase.from('follows').select('*', { count: 'exact', head: true }),
       ]);
@@ -97,6 +99,7 @@ export default function AdminDashboard() {
         activeListeners: activeListeners7d || 0,
         publishedTracks: totalTracks    || 0,
         totalFollows:    totalFollows   || 0,
+        totalListeners:  totalListeners || 0,
       });
     } catch (err) { console.error('Admin fetch error:', err); }
     setLoading(false);
@@ -199,7 +202,7 @@ export default function AdminDashboard() {
 
   const stats = [
     { label: 'Artists',       value: artists.length,                          color: 'text-green-400',  icon: Users      },
-    { label: 'Users',         value: users.length,                            color: 'text-blue-400',   icon: Users      },
+    { label: 'Listeners',     value: platformStats.totalListeners || users.length, color: 'text-blue-400', icon: Users },
     { label: 'Published',     value: platformStats.publishedTracks || 0,      color: 'text-purple-400', icon: Music      },
     { label: 'Fan Pro',       value: platformStats.fanProSubs || 0,            color: 'text-yellow-400', icon: Star       },
     { label: 'Streams (7d)',  value: platformStats.streams7d || 0,            color: 'text-cyan-400',   icon: Headphones },
