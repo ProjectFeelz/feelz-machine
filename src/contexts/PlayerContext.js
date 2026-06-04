@@ -258,6 +258,43 @@ export function PlayerProvider({ children }) {
       // 4. Increment artist total_streams
       await supabase.rpc('increment_artist_streams', { artist_id: track.artist_id });
 
+      // 4b. first_listener — fire once when stream_count goes from 0 to 1
+      // track.stream_count is the BEFORE value (fetched before insert)
+      if (track.stream_count === 0) {
+        try {
+          const { data: fullFirst } = await supabase
+            .from('tracks')
+            .select('title, slug, cover_artwork_url, file_url')
+            .eq('id', trackId)
+            .maybeSingle();
+          // Fetch the listener's display name
+          const { data: listenerArtist } = await supabase
+            .from('artists')
+            .select('id, artist_name, profile_image_url, slug')
+            .eq('user_id', userId)
+            .maybeSingle();
+          const listenerName = listenerArtist?.artist_name || 'Someone';
+          await supabase.from('notifications').insert({
+            user_id:        art.user_id,
+            artist_id:      track.artist_id,
+            type:           'first_listener',
+            title:          `🎯 First ever stream on ${fullFirst?.title || track.title}`,
+            message:        `${listenerName} was your very first listener.`,
+            from_artist_id: listenerArtist?.id || null,
+            metadata: {
+              track_id:          trackId,
+              track_title:       fullFirst?.title || track.title,
+              track_slug:        fullFirst?.slug || null,
+              track_artwork:     fullFirst?.cover_artwork_url || null,
+              file_url:          fullFirst?.file_url || null,
+              from_artist_name:  listenerName,
+              from_artist_image: listenerArtist?.profile_image_url || null,
+              from_artist_slug:  listenerArtist?.slug || null,
+            },
+          });
+        } catch { /* non-critical */ }
+      }
+
       // 5. Notify artist of new stream (rich notification with track info)
       // DB trigger was dropped — we create it here so we control the metadata
       try {
@@ -292,7 +329,7 @@ export function PlayerProvider({ children }) {
         // Find today's top track by stream count
         const { data: topTrackData } = await supabase
           .from('streams')
-          .select('track_id, tracks(title, cover_artwork_url, file_url)')
+          .select('track_id, tracks(title, slug, cover_artwork_url, file_url)')
           .eq('artist_id', track.artist_id)
           .gte('created_at', todayStartISO);
 
@@ -327,6 +364,7 @@ export function PlayerProvider({ children }) {
             message: `${streamCount} stream${streamCount !== 1 ? 's' : ''} across your catalogue today`,
             metadata: {
               track_id:      topTrackId || trackId,
+              track_slug:    topTrack?.slug || fullTrack?.slug || null,
               track_title:   topTitle,
               track_artwork: topTrack?.cover_artwork_url || notifArtwork,
               file_url:      topTrack?.file_url || fullTrack?.file_url,
@@ -345,6 +383,7 @@ export function PlayerProvider({ children }) {
             message:   `${streamCount} stream${streamCount !== 1 ? 's' : ''} across your catalogue today`,
             metadata: {
               track_id:      topTrackId || trackId,
+              track_slug:    topTrack?.slug || fullTrack?.slug || null,
               track_title:   topTitle,
               track_artwork: topTrack?.cover_artwork_url || notifArtwork,
               file_url:      topTrack?.file_url || fullTrack?.file_url,
