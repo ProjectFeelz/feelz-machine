@@ -205,8 +205,13 @@ function CollabActions({ notif, onActioned }) {
         });
       }
       setDone(action);
+      // Update the notification type so it no longer shows action buttons after refetch
+      await supabase.from('notifications')
+        .update({ type: action === 'accept' ? 'collab_accepted' : 'collab_declined', read: true })
+        .eq('id', notif.id);
       setTimeout(() => onActioned?.(), 1200);
     } catch (err) {
+      console.warn('Collab action failed:', err);
     }
     setLoading(null);
   };
