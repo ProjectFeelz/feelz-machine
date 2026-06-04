@@ -202,7 +202,7 @@ export default function AdminDashboard() {
 
   const stats = [
     { label: 'Artists',       value: artists.length,                          color: 'text-green-400',  icon: Users      },
-    { label: 'Listeners',     value: platformStats.totalListeners || users.length, color: 'text-blue-400', icon: Users },
+    { label: 'Listeners',     value: platformStats.totalListeners || 0,            color: 'text-blue-400', icon: Users },
     { label: 'Published',     value: platformStats.publishedTracks || 0,      color: 'text-purple-400', icon: Music      },
     { label: 'Fan Pro',       value: platformStats.fanProSubs || 0,            color: 'text-yellow-400', icon: Star       },
     { label: 'Streams (7d)',  value: platformStats.streams7d || 0,            color: 'text-cyan-400',   icon: Headphones },
