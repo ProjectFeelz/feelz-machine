@@ -7,41 +7,50 @@
     <meta name="theme-color" content="#000000" />
 
     <!-- Primary SEO -->
-    <title>Feelz Machine — Independent Music Streaming & Discovery</title>
-    <meta name="description" content="Discover and stream independent music from artists worldwide. Follow your favourite artists, like tracks, build playlists, and support musicians directly. Afrobeats, Hip Hop, Amapiano, R&B and more." />
-    <meta name="keywords" content="independent music, music streaming, afrobeats, amapiano, hip hop, R&B, independent artists, music discovery, stream music, support artists" />
-    <meta name="robots" content="index, follow" />
+    <title>Feelz Machine — Stream &amp; Support Independent Music</title>
+    <meta name="description" content="Feelz Machine is where independent artists share music directly with fans. Stream Afrobeats, Amapiano, Hip Hop and R&B. Follow artists, buy downloads, send tips. No middlemen." />
+    <meta name="keywords" content="independent music streaming, afrobeats, amapiano, hip hop, R&B, south african music, stream independent artists, support musicians, music discovery, feelz machine" />
+    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
     <link rel="canonical" href="https://www.feelzmachine.com" />
+    <meta name="author" content="Feelz Machine" />
+    <meta name="application-name" content="Feelz Machine" />
+    <meta name="generator" content="Feelz Machine PWA" />
 
-    <!-- Open Graph (Facebook, WhatsApp, LinkedIn) -->
+    <!-- Open Graph -->
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://www.feelzmachine.com" />
-    <meta property="og:title" content="Feelz Machine — Independent Music Streaming & Discovery" />
-    <meta property="og:description" content="Stream and discover independent music. Support artists directly. No middlemen." />
+    <meta property="og:title" content="Feelz Machine — Stream &amp; Support Independent Music" />
+    <meta property="og:description" content="Independent artists. Direct to fans. Stream, support and discover music from Afrobeats to Hip Hop — no middlemen." />
     <meta property="og:image" content="https://www.feelzmachine.com/og-image.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Feelz Machine — Independent Music Streaming" />
     <meta property="og:site_name" content="Feelz Machine" />
+    <meta property="og:locale" content="en_ZA" />
 
     <!-- Twitter Card -->
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:site" content="@feelzmachine" />
-    <meta name="twitter:title" content="Feelz Machine — Independent Music Streaming" />
-    <meta name="twitter:description" content="Stream and discover independent music. Support artists directly." />
+    <meta name="twitter:creator" content="@feelzmachine" />
+    <meta name="twitter:title" content="Feelz Machine — Stream &amp; Support Independent Music" />
+    <meta name="twitter:description" content="Independent artists. Direct to fans. No middlemen." />
     <meta name="twitter:image" content="https://www.feelzmachine.com/og-image.png" />
+    <meta name="twitter:image:alt" content="Feelz Machine — Independent Music Streaming" />
 
     <!-- PWA -->
     <link rel="apple-touch-icon" href="%PUBLIC_URL%/logo192.png" />
     <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
 
-    <!-- Structured Data — Music Streaming Service -->
+    <!-- Structured Data — Website with search -->
     <script type="application/ld+json">
     {
       "@context": "https://schema.org",
       "@type": "WebSite",
       "name": "Feelz Machine",
+      "alternateName": "Feelz Machine Music",
       "url": "https://www.feelzmachine.com",
-      "description": "Independent music streaming and discovery platform. Stream music from independent artists worldwide.",
+      "description": "Independent music streaming and discovery platform. Stream Afrobeats, Amapiano, Hip Hop and R&B directly from artists worldwide.",
+      "inLanguage": "en-ZA",
       "potentialAction": {
         "@type": "SearchAction",
         "target": {
@@ -53,7 +62,7 @@
     }
     </script>
 
-    <!-- Structured Data — Music App -->
+    <!-- Structured Data — Music Streaming App -->
     <script type="application/ld+json">
     {
       "@context": "https://schema.org",
@@ -61,13 +70,37 @@
       "name": "Feelz Machine",
       "operatingSystem": "Android, iOS, Web",
       "applicationCategory": "MusicApplication",
+      "applicationSubCategory": "Music Streaming",
       "offers": {
-        "@type": "Offer",
-        "price": "0",
-        "priceCurrency": "USD"
+        "@type": "AggregateOffer",
+        "lowPrice": "0",
+        "highPrice": "9.99",
+        "priceCurrency": "USD",
+        "offerCount": "3"
       },
-      "description": "Discover and stream independent music. Follow artists, build playlists, and support musicians directly.",
-      "url": "https://www.feelzmachine.com"
+      "description": "Stream and support independent music. Follow artists, buy downloads, send tips. No middlemen.",
+      "url": "https://www.feelzmachine.com",
+      "screenshot": "https://www.feelzmachine.com/screenshots/screen-home.png",
+      "featureList": "Music streaming, Artist profiles, Collaborations, Competitions, Live sessions, Playlists"
+    }
+    </script>
+
+    <!-- Structured Data — Organisation -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "Organization",
+      "name": "Feelz Machine",
+      "url": "https://www.feelzmachine.com",
+      "logo": "https://www.feelzmachine.com/icon-512.png",
+      "sameAs": [
+        "https://twitter.com/feelzmachine"
+      ],
+      "contactPoint": {
+        "@type": "ContactPoint",
+        "email": "legal@projectfeelz.com",
+        "contactType": "customer support"
+      }
     }
     </script>
   </head>

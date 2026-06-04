@@ -158,7 +158,6 @@ function CollabActions({ notif, onActioned }) {
   const meta = notif.metadata || {};
 
   const act = async (action) => {
-    console.log('[CollabActions] act called', { action, artist: artist?.id, meta });
     setLoading(action);
     try {
       let reqId = meta.collab_request_id || meta.request_id || null;
