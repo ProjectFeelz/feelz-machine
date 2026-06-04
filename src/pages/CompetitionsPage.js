@@ -378,10 +378,10 @@ function SpinForYourselfTab() {
 
       {/* ── Tier legend ── */}
       {!result && (
-        <div className="mx-4 mt-6 mb-8 grid grid-cols-4 gap-2">
+        <div className="mx-4 mt-6 mb-8 grid grid-cols-4 gap-1.5">
           {Object.entries(TIER_STYLES).map(([tier, s]) => (
-            <div key={tier} className="rounded-xl p-2.5 text-center" style={{ background: s.bg, border: `1px solid ${s.border}` }}>
-              <p className="text-[10px] font-black uppercase tracking-wider" style={{ color: s.color }}>{tier}</p>
+            <div key={tier} className="rounded-xl py-2 px-1 text-center" style={{ background: s.bg, border: `1px solid ${s.border}` }}>
+              <p className="text-[9px] font-black uppercase tracking-tight leading-tight" style={{ color: s.color }}>{tier}</p>
               <p className="text-[9px] text-white/30 mt-0.5">
                 {tier === 'Common' ? '100 XP' : tier === 'Rare' ? '250 XP' : tier === 'Epic' ? '500 XP' : '1000 XP'}
               </p>
