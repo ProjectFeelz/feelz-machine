@@ -51,7 +51,8 @@ export function useStreak(user) {
   const sessionKey = `streak_written_${user?.id}`;
 
   const checkAndUpdateStreak = useCallback(async () => {
-    if (!user?.id) { setLoading(false); return; }
+    // Don't run until we have a real user ID (UUID format)
+    if (!user?.id || !/^[0-9a-f-]{36}$/i.test(user.id)) { setLoading(false); return; }
 
     try {
       const now   = new Date();

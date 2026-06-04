@@ -135,7 +135,7 @@ function ThoughtBlock({ thought, isOwner, secondaryColor, textColor, bgColor, us
       .from('thought_comments').select('id, thought_id, user_id, content, created_at')
       .eq('thought_id', thought.id).order('created_at', { ascending: true }).limit(50);
     if (error || !data || data.length === 0) { setComments([]); return; }
-    const userIds = [...new Set(data.map(c => c.user_id))];
+    const userIds = [...new Set(data.map(c => c.user_id))].filter(Boolean);
     const { data: artistsData } = await supabase
       .from('artists').select('user_id, artist_name, slug, profile_image_url, is_verified')
       .in('user_id', userIds);

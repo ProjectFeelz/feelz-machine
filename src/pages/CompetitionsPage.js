@@ -178,6 +178,19 @@ function SpinForYourselfTab() {
     setClaiming(true);
     setXpError('');
     try {
+      // Verify the user has actually submitted a competition entry
+      const { data: entry } = await supabase
+        .from('competition_entries')
+        .select('id')
+        .eq('user_id', user.id)
+        .limit(1)
+        .maybeSingle();
+      if (!entry) {
+        setXpError('Upload your track first before claiming XP');
+        setClaiming(false);
+        return;
+      }
+
       // Check for existing entry
       const { data: existing } = await supabase
         .from('challenge_xp')
@@ -586,11 +599,15 @@ export default function CompetitionsPage() {
     if (!data) { setLbLoading(false); return; }
     // Fetch display names
     const ids = data.map(r => r.user_id).filter(Boolean);
-    const profiles_res = ids.length > 0
-      ? await supabase.from('artists').select('user_id, artist_name, cover_artwork_url, slug').in('user_id', ids)
-      : { data: [] };
-    const { data: profiles } = profiles_res;
-    const profileMap = Object.fromEntries((profiles || []).map(p => [p.user_id, p]));
+    const [artistRes, listenerRes] = ids.length > 0
+      ? await Promise.all([
+          supabase.from('artists').select('user_id, artist_name, profile_image_url, slug').in('user_id', ids),
+          supabase.from('listeners').select('user_id, display_name, avatar_url').in('user_id', ids),
+        ])
+      : [{ data: [] }, { data: [] }];
+    const profileMap = {};
+    (listenerRes.data || []).forEach(l => { profileMap[l.user_id] = { artist_name: l.display_name || 'Listener', profile_image_url: l.avatar_url || null }; });
+    (artistRes.data  || []).forEach(a => { profileMap[a.user_id] = a; }); // artists override listeners
     setLeaderboard(data.map((r, i) => ({ ...r, rank: i + 1, artist: profileMap[r.user_id] || null })));
     setLbLoading(false);
   }, []);
@@ -810,9 +827,11 @@ export default function CompetitionsPage() {
                        : <span className="text-xs text-white/30 font-bold">#{i + 1}</span>}
                     </div>
                     {/* Avatar */}
-                    {entry.artist?.cover_artwork_url
-                      ? <img src={entry.artist.cover_artwork_url} alt="" className="w-9 h-9 rounded-xl object-cover flex-shrink-0" />
-                      : <div className="w-9 h-9 rounded-xl bg-white/[0.06] flex-shrink-0" />
+                    {entry.artist?.profile_image_url
+                      ? <img src={entry.artist.profile_image_url} alt="" className="w-9 h-9 rounded-full object-cover flex-shrink-0" />
+                      : <div className="w-9 h-9 rounded-full bg-white/[0.08] flex items-center justify-center flex-shrink-0">
+                          <span className="text-xs font-bold text-white/30">{(entry.artist?.artist_name || '?')[0]}</span>
+                        </div>
                     }
                     {/* Name + rank */}
                     <div className="flex-1 min-w-0">
