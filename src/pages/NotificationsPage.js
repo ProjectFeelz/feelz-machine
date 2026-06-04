@@ -9,7 +9,7 @@ import {
   UserPlus, Check, X, ChevronLeft, Loader,
   CheckCheck, Trash2, Music, Download, Megaphone,
   Radio, FileText, Play, DollarSign, Send, ChevronDown,
-  Star, Zap, Award, Gift
+  Star, Zap, Award, Gift,
   ExternalLink,
 } from 'lucide-react';
 import useNotifications from '../contexts/useNotifications';
