@@ -153,8 +153,15 @@ function OnboardingGuard({ children }) {
 function PaymentSuccess() {
   const navigate = useNavigate();
   React.useEffect(() => {
-    // Redirect back after 3 seconds — BeatDetailPage handles the rest via URL param
-    const t = setTimeout(() => navigate(-1), 3000);
+    // Navigate back to the beat page with payfast_success param so it auto-downloads
+    const t = setTimeout(() => {
+      // Try to go back; if no history, go to hub
+      if (window.history.length > 1) {
+        navigate(-1);
+      } else {
+        navigate('/hub');
+      }
+    }, 2000);
     return () => clearTimeout(t);
   }, [navigate]);
   return (

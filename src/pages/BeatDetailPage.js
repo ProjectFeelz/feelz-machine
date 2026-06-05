@@ -137,7 +137,14 @@ export default function BeatDetailPage() {
         const { data: existingPurchase } = await supabase
           .from('beat_purchases').select('id, licence_type')
           .eq('track_id', t.id).eq('buyer_user_id', user.id).eq('status', 'completed').maybeSingle();
-        if (existingPurchase) { setAlreadyPurchased(true); setSelectedLicence(existingPurchase.licence_type); }
+        if (existingPurchase) {
+          setAlreadyPurchased(true);
+          setSelectedLicence(existingPurchase.licence_type);
+          // Auto-trigger download if returning from PayFast payment
+          if (searchParams.get('payfast_success') === '1') {
+            setTimeout(() => triggerDownload(), 1200);
+          }
+        }
       }
       setLoading(false);
       // Load PayPal SDK
@@ -160,7 +167,7 @@ export default function BeatDetailPage() {
     if (downloading) return;
     setDownloading(true);
     try {
-      try { await supabase.from('downloads').upsert({ user_id: user.id, track_id: track.id }, { onConflict: 'user_id,track_id', ignoreDuplicates: true }); } catch {}
+      // Server handles downloads row insertion — no client-side duplicate write
       const { data: { session } } = await supabase.auth.getSession();
       await downloadTrack(track.id, track.title, session?.access_token);
     } catch (err) { console.error('Download error:', err); }

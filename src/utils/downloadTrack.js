@@ -41,11 +41,13 @@ export async function downloadTrack(trackId, title, authToken) {
   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
 
   if (isIOS) {
-    // On iOS, create a temporary link pointing at the signed URL.
-    // Supabase's ?download= param sets the filename via Content-Disposition.
+    // iOS Safari cannot save blobs — open in new tab, user taps Share > Save to Files
+    // Show a brief toast if possible
+    if (window.showToast) window.showToast('Tap Share → Save to Files to save your download');
     const a = document.createElement('a');
-    a.href = signedUrl;
-    a.download = cleanName + '.mp3';
+    a.href = signedUrl + '&download=' + encodeURIComponent(cleanName + '.mp3');
+    a.target = '_blank';
+    a.rel = 'noopener';
     a.style.display = 'none';
     document.body.appendChild(a);
     a.click();

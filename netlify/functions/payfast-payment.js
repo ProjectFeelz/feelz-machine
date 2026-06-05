@@ -53,7 +53,7 @@ exports.handler = async (event) => {
     if (type === 'beat_purchase' && trackId) {
       const { data: track, error: trackErr } = await supabase
         .from('tracks')
-        .select('download_price')
+        .select('download_price, slug')
         .eq('id', trackId)
         .maybeSingle();
       if (trackErr || !track) {
@@ -74,7 +74,7 @@ exports.handler = async (event) => {
     const data = {
       merchant_id:    PAYFAST_MERCHANT_ID,
       merchant_key:   PAYFAST_MERCHANT_KEY,
-      return_url:     `${BASE_URL}/payment/success?ref=${mPaymentId}`,
+      return_url:     `${BASE_URL}/beat/${track?.slug || trackId}?payfast_success=1`,
       cancel_url:     `${BASE_URL}/payment/cancel`,
       notify_url:     `${BASE_URL}/.netlify/functions/payfast-payment`,
       name_first:     buyerFirstName || 'Listener',

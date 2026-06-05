@@ -87,7 +87,10 @@ exports.handler = async (event) => {
         .eq('status', 'active')
         .maybeSingle();
 
-      const PRO_TIER_ID = 'a421dac1-f492-461c-88a5-f01b6942a042';
+      // Fix 5: Look up Pro tier by slug instead of hardcoded UUID
+      const { data: proTier } = await adminClient
+        .from('platform_tiers').select('id').eq('slug', 'fan_pro').maybeSingle();
+      const PRO_TIER_ID = proTier?.id || 'a421dac1-f492-461c-88a5-f01b6942a042';
       const isPro = listenerSub?.tier_id === PRO_TIER_ID;
 
       if (!isPro) {
@@ -125,13 +128,39 @@ exports.handler = async (event) => {
   }
 
   if (trackIsFree) {
-    await adminClient
+    const { data: existingDl } = await adminClient
       .from('downloads')
-      .upsert(
-        { user_id: user.id, track_id: trackId, amount_paid: 0 },
-        { onConflict: 'user_id,track_id', ignoreDuplicates: true }
-      );
+      .select('id')
+      .eq('user_id', user.id)
+      .eq('track_id', trackId)
+      .maybeSingle();
+    if (!existingDl) {
+      await adminClient.from('downloads').insert({ user_id: user.id, track_id: trackId, amount_paid: 0 });
+      // Increment download_count on track
+      await adminClient.rpc('increment_download_count', { track_id: trackId }).catch(() => {
+        // Fallback: direct update if RPC doesn't exist
+        adminClient.from('tracks').select('download_count').eq('id', trackId).maybeSingle()
+          .then(({ data }) => {
+            adminClient.from('tracks').update({ download_count: (data?.download_count || 0) + 1 }).eq('id', trackId);
+          });
+      });
+    }
   } else {
+    // Fix 4: Server-side PWYW minimum check
+    if (track.download_price > 0) {
+      const { data: purchase, error: purchaseError } = await adminClient
+        .from('downloads')
+        .select('id, amount_paid')
+        .eq('user_id', user.id)
+        .eq('track_id', trackId)
+        .maybeSingle();
+      if (purchaseError || !purchase) {
+        return { statusCode: 403, body: JSON.stringify({ error: 'Purchase required' }) };
+      }
+      if (purchase.amount_paid < track.download_price) {
+        return { statusCode: 403, body: JSON.stringify({ error: 'Insufficient payment', minimum: track.download_price }) };
+      }
+    }
     const { data: purchase, error: purchaseError } = await adminClient
       .from('downloads')
       .select('id')
@@ -147,6 +176,13 @@ exports.handler = async (event) => {
     if (!purchase) {
       return { statusCode: 403, body: JSON.stringify({ error: 'Purchase required' }) };
     }
+    // Increment download_count for paid track
+    await adminClient.rpc('increment_download_count', { track_id: trackId }).catch(() => {
+      adminClient.from('tracks').select('download_count').eq('id', trackId).maybeSingle()
+        .then(({ data }) => {
+          adminClient.from('tracks').update({ download_count: (data?.download_count || 0) + 1 }).eq('id', trackId);
+        });
+    });
   }
 
   const storagePathMatch = track.file_url.match(/\/object\/public\/feelz-samples\/(.+)/);
@@ -161,7 +197,7 @@ exports.handler = async (event) => {
   const { data: signedData, error: signedError } = await adminClient
     .storage
     .from('feelz-samples')
-    .createSignedUrl(storagePath, 60, {
+    .createSignedUrl(storagePath, 300, {
       download: safeTitle + '.mp3',
     });
 
