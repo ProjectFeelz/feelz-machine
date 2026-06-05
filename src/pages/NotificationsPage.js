@@ -38,7 +38,6 @@ const TYPE_CONFIG = {
   new_track:          { icon: Music,         color: 'text-purple-400', bg: 'bg-purple-500/10',  label: 'New Track' },
   playlist_add:       { icon: Music,         color: 'text-blue-400',   bg: 'bg-blue-500/10',    label: 'Playlist Add' },
   competition_winner: { icon: Award,         color: 'text-yellow-400', bg: 'bg-yellow-500/10',  label: 'Winner!' },
-  wheel_winner:       { icon: Award,         color: 'text-yellow-400', bg: 'bg-yellow-500/10',  label: 'Roulette Winner' },
   engagement:         { icon: Zap,           color: 'text-purple-400', bg: 'bg-purple-500/10',  label: 'For You' },
   monthly_wrapped:    { icon: Gift,          color: 'text-pink-400',   bg: 'bg-pink-500/10',    label: 'Monthly Wrapped' },
   top_supporter:      { icon: Heart,         color: 'text-orange-400', bg: 'bg-orange-500/10',  label: 'Top Supporter' },
@@ -66,7 +65,7 @@ function filterMatch(type, filter) {
   if (filter === 'all')        return true;
   if (filter === 'collabs')    return type?.startsWith('collab_');
   if (filter === 'social')     return ['new_follower','track_liked','playlist_add','track_commented','new_comment','new_post','new_stream','mention','artist_thought'].includes(type);
-  if (filter === 'milestones') return type?.startsWith('milestone_') || ['top_supporter','streak','first_listener','competition_winner','wheel_winner','weekly_report','monthly_wrapped'].includes(type);
+  if (filter === 'milestones') return type?.startsWith('milestone_') || ['top_supporter','streak','first_listener','competition_winner','weekly_report','monthly_wrapped'].includes(type);
   if (filter === 'money')      return ['tip','download','payout_pending','beat_purchase'].includes(type);
   return true;
 }
@@ -179,17 +178,35 @@ function CollabActions({ notif, onActioned }) {
 
       if (!reqId) { console.warn('No request_id found'); setLoading(null); return; }
       const newStatus = action === 'accept' ? 'accepted' : 'declined';
-      const { data: reqData, error: updateErr } = await supabase
+      const { data: reqData } = await supabase
         .from('collab_requests')
         .update({ status: newStatus, responded_at: new Date().toISOString() })
         .eq('id', reqId)
-        .select('collaboration_id')
+        .select('collaboration_id, track_id, from_artist_id, to_artist_id')
         .maybeSingle();
-      // Also update the collaborations table
+
       if (reqData?.collaboration_id) {
+        // Update existing collaborations row
         await supabase.from('collaborations')
           .update({ status: newStatus, ...(action === 'accept' ? { accepted_at: new Date().toISOString() } : {}) })
           .eq('id', reqData.collaboration_id);
+      } else if (action === 'accept' && reqData?.track_id && reqData?.from_artist_id) {
+        // CollabRadar request — no collaborations row exists yet, create one
+        const { data: newCollab } = await supabase.from('collaborations').insert({
+          track_id:      reqData.track_id,
+          artist_id:     reqData.from_artist_id,
+          role:          meta.collab_type || 'featured',
+          split_percent: 0,
+          status:        'accepted',
+          accepted_at:   new Date().toISOString(),
+          invited_by:    reqData.to_artist_id,
+        }).select('id').maybeSingle();
+        // Link it back to the request
+        if (newCollab?.id) {
+          await supabase.from('collab_requests')
+            .update({ collaboration_id: newCollab.id })
+            .eq('id', reqId);
+        }
       }
 
       // Notify the requester
@@ -491,12 +508,8 @@ export default function NotificationsPage() {
     if (type === 'tip')                                  { navigate('/dashboard?tab=analytics&section=earnings'); return; }
     if (type === 'payout_pending')                       { navigate('/dashboard?tab=analytics&section=earnings'); return; }
     if (type === 'announcement' || type === 'admin_message') {
-      const url = meta.action_url || meta.cta_url || meta.link_url || null;
-      if (url) {
-        if (url.startsWith('http')) window.open(url, '_blank');
-        else navigate(url);
-        return;
-      }
+      if (meta.action_url) { window.open(meta.action_url, '_blank'); return; }
+      if (meta.cta_url) { window.open(meta.cta_url, '_blank'); return; }
       return;
     }
     if (type === 'first_listener') {
@@ -512,7 +525,7 @@ export default function NotificationsPage() {
       return;
     }
     if (type?.startsWith('milestone_'))                  { navigate(artist ? '/dashboard?tab=analytics&section=stats' : '/browse'); return; }
-    if (type === 'competition_winner' || type === 'competition_result' || type === 'wheel_winner') {
+    if (type === 'competition_winner' || type === 'competition_result') {
       if (meta.competition_id) { navigate(`/competition/${meta.competition_id}`); return; }
       navigate('/competitions');
       return;
@@ -635,7 +648,7 @@ export default function NotificationsPage() {
                   const isExpandable  = (notif.message?.length > 80);
                   const isExpanded    = expandedIds.includes(notif.id);
                   const hasTrackPill  = !!meta.track_title && !!meta.track_id;
-                  const hasActionUrl  = !!meta.action_url || !!meta.cta_url || !!meta.url || !!meta.link_url;
+                  const hasActionUrl  = !!meta.action_url || !!meta.cta_url || !!meta.url;
                   // Orphaned stream notification — has no track data
                   const isOrphanStream = notif.type === 'new_stream' && !meta.track_title;
                   const isCollabReq   = notif.type === 'collab_request';
@@ -643,8 +656,8 @@ export default function NotificationsPage() {
                   const isNewFollower = notif.type === 'new_follower';
                   const isComment     = notif.type === 'track_commented' || notif.type === 'new_comment';
                   const canReply      = isComment && (meta.post_id || meta.track_id);
-                  const actionUrl     = meta.action_url || meta.cta_url || meta.url || meta.link_url || null;
-                  const actionLabel   = meta.cta_label || meta.action_label || meta.link_label || (meta.feature_education ? 'Open Feature' : 'Learn more');
+                  const actionUrl     = meta.action_url || meta.cta_url || meta.url || null;
+                  const actionLabel   = meta.cta_label || meta.action_label || (meta.feature_education ? 'Open Feature' : 'Learn more');
 
                   // Skip orphaned stream notifications (no track data - old DB trigger leftovers)
                   if (isOrphanStream) return null;
