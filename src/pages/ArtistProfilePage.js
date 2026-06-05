@@ -136,6 +136,7 @@ function ThoughtBlock({ thought, isOwner, secondaryColor, textColor, bgColor, us
       .eq('thought_id', thought.id).order('created_at', { ascending: true }).limit(50);
     if (error || !data || data.length === 0) { setComments([]); return; }
     const userIds = [...new Set(data.map(c => c.user_id))].filter(Boolean);
+    if (!userIds.length) { setComments(data.map(c => ({ ...c, commenter: null }))); return; }
     const { data: artistsData } = await supabase
       .from('artists').select('user_id, artist_name, slug, profile_image_url, is_verified')
       .in('user_id', userIds);
@@ -626,19 +627,29 @@ export default function ArtistProfilePage() {
         .from('albums').select('*').eq('artist_id', artistData.id).eq('is_published', true)
         .order('release_date', { ascending: false });
       setAlbums(albumData || []);
-      // Fetch both directions: collabs where this artist IS the collaborator
-      // AND collabs on tracks owned by this artist (other artists credited on their tracks)
-      const [{ data: asCollaborator }, { data: onOwnTracks }] = await Promise.all([
-        supabase.from('collaborations')
+      // Fetch both directions:
+      // 1. Collabs where this artist IS the collaborator on someone else's track
+      // 2. Collabs on tracks owned by this artist (beatmakers/featured artists credited)
+      const { data: asCollaborator } = await supabase
+        .from('collaborations')
+        .select('*, tracks(id, title, cover_artwork_url, file_url, duration, stream_count, artist_id, is_downloadable, download_price)')
+        .eq('artist_id', artistData.id).eq('status', 'accepted');
+
+      // Get track IDs owned by this artist
+      const ownTrackIds = (trackData || []).map(t => t.id).filter(Boolean);
+      let onOwnTracks = [];
+      if (ownTrackIds.length > 0) {
+        const { data: ownTrackCollabs } = await supabase
+          .from('collaborations')
           .select('*, tracks(id, title, cover_artwork_url, file_url, duration, stream_count, artist_id, is_downloadable, download_price)')
-          .eq('artist_id', artistData.id).eq('status', 'accepted'),
-        supabase.from('collaborations')
-          .select('*, tracks!inner(id, title, cover_artwork_url, file_url, duration, stream_count, artist_id, is_downloadable, download_price)')
-          .eq('tracks.artist_id', artistData.id).eq('status', 'accepted')
-          .neq('artist_id', artistData.id), // exclude self
-      ]);
+          .in('track_id', ownTrackIds)
+          .eq('status', 'accepted')
+          .neq('artist_id', artistData.id);
+        onOwnTracks = ownTrackCollabs || [];
+      }
+
       // Merge and deduplicate by id
-      const allCollabs = [...(asCollaborator || []), ...(onOwnTracks || [])];
+      const allCollabs = [...(asCollaborator || []), ...onOwnTracks];
       const seenCollabs = new Set();
       const uniqueCollabs = allCollabs.filter(col => {
         if (seenCollabs.has(col.id)) return false;

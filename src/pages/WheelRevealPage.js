@@ -566,6 +566,7 @@ export default function WheelRevealPage() {
 
   // Auto-spin to current week's prompt on load
   useEffect(() => {
+    if (!user) { navigate('/login'); return; }
     if (!challenge || spinning || revealed || mode !== 'platform') return;
     const idx = ALL_PROMPTS.findIndex(p => p === challenge.prompt);
     if (idx >= 0) {
@@ -608,6 +609,7 @@ export default function WheelRevealPage() {
   };
 
   const spinPersonal = () => {
+    if (!user) { navigate('/login'); return; }
     if (spinning) return;
     if (spinsUsed >= SPIN_CAP) return;
     const challengeMode = personalMode === 'beatmaker' ? 'beatmaker' : 'singer';
