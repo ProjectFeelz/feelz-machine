@@ -626,11 +626,26 @@ export default function ArtistProfilePage() {
         .from('albums').select('*').eq('artist_id', artistData.id).eq('is_published', true)
         .order('release_date', { ascending: false });
       setAlbums(albumData || []);
-      const { data: collabData } = await supabase
-        .from('collaborations')
-        .select('*, tracks(id, title, cover_artwork_url, file_url, duration, stream_count, artist_id, is_downloadable, download_price)')
-        .eq('artist_id', artistData.id).eq('status', 'accepted');
-      setCollabs(collabData || []);
+      // Fetch both directions: collabs where this artist IS the collaborator
+      // AND collabs on tracks owned by this artist (other artists credited on their tracks)
+      const [{ data: asCollaborator }, { data: onOwnTracks }] = await Promise.all([
+        supabase.from('collaborations')
+          .select('*, tracks(id, title, cover_artwork_url, file_url, duration, stream_count, artist_id, is_downloadable, download_price)')
+          .eq('artist_id', artistData.id).eq('status', 'accepted'),
+        supabase.from('collaborations')
+          .select('*, tracks!inner(id, title, cover_artwork_url, file_url, duration, stream_count, artist_id, is_downloadable, download_price)')
+          .eq('tracks.artist_id', artistData.id).eq('status', 'accepted')
+          .neq('artist_id', artistData.id), // exclude self
+      ]);
+      // Merge and deduplicate by id
+      const allCollabs = [...(asCollaborator || []), ...(onOwnTracks || [])];
+      const seen = new Set();
+      const uniqueCollabs = allCollabs.filter(col => {
+        if (seen.has(col.id)) return false;
+        seen.add(col.id);
+        return true;
+      });
+      setCollabs(uniqueCollabs);
       const cutoff = new Date(Date.now() - THOUGHT_TTL_MS).toISOString();
       const { data: thoughtsData } = await supabase
         .from('artist_thoughts').select('id, content, created_at')

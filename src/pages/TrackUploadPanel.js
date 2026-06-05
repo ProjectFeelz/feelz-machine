@@ -792,6 +792,7 @@ function AddTrackToAlbum({
     e.preventDefault();
     if (!trackForm.audio_file) { showMessage('error', 'Audio file is required'); return; }
     if (!trackForm.title.trim()) { showMessage('error', 'Track title is required'); return; }
+    if (!trackForm.cover_file) { showMessage('error', 'Cover artwork is required'); return; }
 
     // Duplicate title check within this album
     const normTitle = trackForm.title.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -1287,6 +1288,7 @@ export default function TrackUploadPanel() {
     e.preventDefault();
     if (!trackForm.audio_file) { showMessage('error', 'Audio file is required'); return; }
     if (!trackForm.title.trim()) { showMessage('error', 'Track title is required'); return; }
+    if (!isAlbumRelease && !trackForm.cover_file) { showMessage('error', 'Cover artwork is required'); return; }
     if (!artist) { showMessage('error', 'No artist profile found'); return; }
 
     // Beat upload limit check for free beatmakers
