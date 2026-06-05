@@ -639,10 +639,10 @@ export default function ArtistProfilePage() {
       ]);
       // Merge and deduplicate by id
       const allCollabs = [...(asCollaborator || []), ...(onOwnTracks || [])];
-      const seen = new Set();
+      const seenCollabs = new Set();
       const uniqueCollabs = allCollabs.filter(col => {
-        if (seen.has(col.id)) return false;
-        seen.add(col.id);
+        if (seenCollabs.has(col.id)) return false;
+        seenCollabs.add(col.id);
         return true;
       });
       setCollabs(uniqueCollabs);
