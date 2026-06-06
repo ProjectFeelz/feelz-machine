@@ -450,7 +450,7 @@ export default function ArtistProfilePage() {
         .map(([uid, count]) => ({ user_id: uid, count }));
 
       // Enrich with profile data
-      const uids = top5.map(t => t.user_id).filter(Boolean);
+      const uids = top5.map(t => t.user_id).filter(id => id && id !== 'null');
       if (!uids.length) return;
       const [{ data: artistProfiles }, { data: listenerProfiles }] = await Promise.all([
         supabase.from('artists').select('user_id, artist_name, profile_image_url, slug').in('user_id', uids),
