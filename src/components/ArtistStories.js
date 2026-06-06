@@ -77,7 +77,7 @@ export function StoryUpload({ artistId, onUploaded }) {
       reader.readAsDataURL(videoFile);
     });
 
-    const res = await fetch('/.netlify/functions/convert-to-mp4', {
+    const res = await fetch('/.netlify/functions/convert-to-mp4-background', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ video: base64, mimeType: videoFile.type }),

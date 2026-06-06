@@ -526,67 +526,39 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
       if (sourceNode) try { sourceNode.stop(); } catch {}
       if (audioCtx)   try { audioCtx.close();  } catch {}
 
-      // Convert WebM → MP4 using ffmpeg.wasm v0.11 via CDN script tag
+      // Skip ffmpeg.wasm — requires SharedArrayBuffer which needs COOP/COEP headers
+      // that Netlify doesn't send. Go straight to server-side conversion.
       try {
-        await loadFFmpegScript();
-        const { createFFmpeg, fetchFile } = window.FFmpeg;
-        const ffmpeg = createFFmpeg({
-          corePath: 'https://unpkg.com/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js',
-          log: false,
-          mainName: 'main',
+        const base64 = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload  = () => resolve(reader.result.split(',')[1]);
+          reader.onerror = reject;
+          reader.readAsDataURL(webmBlob);
         });
-        await ffmpeg.load();
 
-        ffmpeg.FS('writeFile', 'input.webm', await fetchFile(webmBlob));
+        // convert-to-mp4-background is the actual function name
+        const res = await fetch('/.netlify/functions/convert-to-mp4-background', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ video: base64, mimeType }),
+        });
 
-        await ffmpeg.run(
-          '-i', 'input.webm',
-          '-c:v', 'libx264',
-          '-preset', 'ultrafast',
-          '-crf', '23',
-          '-c:a', 'aac',
-          '-b:a', '128k',
-          '-movflags', '+faststart',
-          '-pix_fmt', 'yuv420p',
-          'output.mp4'
-        );
-
-        const mp4Data = ffmpeg.FS('readFile', 'output.mp4');
-        const mp4Blob = new window.Blob([mp4Data.buffer], { type: 'video/mp4' });
-        mp4Blob._ext  = 'mp4';
-        setVideoBlob(mp4Blob);
-        setVideoFormat('MP4');
-        try { ffmpeg.FS('unlink', 'input.webm'); } catch {}
-        try { ffmpeg.FS('unlink', 'output.mp4'); } catch {}
-      } catch (err) {
-        console.error('FFmpeg.wasm failed, trying server conversion:', err.message);
-        // Fall back to server-side conversion via convert-to-mp4 Netlify function
-        try {
-          const base64 = await new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload  = () => resolve(reader.result.split(',')[1]);
-            reader.onerror = reject;
-            reader.readAsDataURL(webmBlob);
-          });
-          const res = await fetch('/.netlify/functions/convert-to-mp4', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ video: base64, mimeType: mimeType }),
-          });
-          if (!res.ok) throw new Error(`Server conversion failed: ${res.status}`);
+        if (res.ok) {
           const { mp4 } = await res.json();
           const bytes   = Uint8Array.from(atob(mp4), c => c.charCodeAt(0));
           const mp4Blob = new window.Blob([bytes], { type: 'video/mp4' });
           mp4Blob._ext  = 'mp4';
           setVideoBlob(mp4Blob);
           setVideoFormat('MP4');
-        } catch (serverErr) {
-          console.error('Server conversion also failed:', serverErr.message);
-          // Last resort — save WebM, at least the user gets something
-          webmBlob._ext = 'webm';
-          setVideoBlob(webmBlob);
-          setVideoFormat('WEBM');
+        } else {
+          throw new Error(`Server returned ${res.status}`);
         }
+      } catch (err) {
+        console.error('MP4 conversion failed:', err.message);
+        // Fallback — WebM works on Android Chrome and can still be shared/downloaded
+        webmBlob._ext = 'webm';
+        setVideoBlob(webmBlob);
+        setVideoFormat('WEBM');
       }
 
       setConverting(false);

@@ -13,11 +13,19 @@
  */
 
 const ffmpeg      = require('fluent-ffmpeg');
-const ffmpegPath  = require('ffmpeg-static');
 const fs          = require('fs');
 const os          = require('os');
 const path        = require('path');
 
+// ffmpeg-static bundles the ffmpeg binary — resolve the actual path
+let ffmpegPath;
+try {
+  ffmpegPath = require('ffmpeg-static');
+  // On some environments it returns a path object, ensure string
+  if (typeof ffmpegPath !== 'string') ffmpegPath = ffmpegPath.path || String(ffmpegPath);
+} catch {
+  ffmpegPath = '/usr/bin/ffmpeg'; // fallback for environments where it's installed
+}
 ffmpeg.setFfmpegPath(ffmpegPath);
 
 exports.handler = async (event) => {

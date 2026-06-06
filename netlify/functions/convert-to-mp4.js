@@ -1,8 +1,8 @@
 /**
- * netlify/functions/convert-to-mp4.js
+ * netlify/functions/convert-to-mp4-background.js
  *
  * Receives a WebM video as base64, converts it to H.264/AAC MP4 using FFmpeg,
- * returns the MP4 as base64. Regular function — synchronous request/response.
+ * returns the MP4 as base64. Background function — 15 min timeout.
  *
  * POST body: { video: "<base64 webm>", mimeType: "video/webm" }
  * Response:  { mp4: "<base64 mp4>" }
@@ -13,11 +13,19 @@
  */
 
 const ffmpeg      = require('fluent-ffmpeg');
-const ffmpegPath  = require('ffmpeg-static');
 const fs          = require('fs');
 const os          = require('os');
 const path        = require('path');
 
+// ffmpeg-static bundles the ffmpeg binary — resolve the actual path
+let ffmpegPath;
+try {
+  ffmpegPath = require('ffmpeg-static');
+  // On some environments it returns a path object, ensure string
+  if (typeof ffmpegPath !== 'string') ffmpegPath = ffmpegPath.path || String(ffmpegPath);
+} catch {
+  ffmpegPath = '/usr/bin/ffmpeg'; // fallback for environments where it's installed
+}
 ffmpeg.setFfmpegPath(ffmpegPath);
 
 exports.handler = async (event) => {

@@ -1,5 +1,5 @@
 /**
- * netlify/functions/engagement-drip.js  (v2 — individual-level AI)
+ * netlify/functions/engagement-drip.js  (v2  -  individual-level AI)
  *
  * Scheduled: Monday and Thursday at 10:00 AM UTC
  * Can be manually triggered via POST.
@@ -7,7 +7,7 @@
  * v2 changes from v1:
  * - Per-user Claude calls for active/dormant listeners (uses their real play history)
  * - Competition context shifts message tone when a competition is live
- * - Streak awareness — messages reference or encourage streak behaviour
+ * - Streak awareness  -  messages reference or encourage streak behaviour
  * - Artist engagement includes their collab activity and recent upload stats
  * - Segment-level Claude call kept for new users (no history yet)
  * - Weekly cap (2/week) still enforced
@@ -36,7 +36,7 @@ async function generateSingleMessage(prompt) {
     body: JSON.stringify({
       model: 'claude-sonnet-4-6',
       max_tokens: 120,
-      system: `Feelz Machine voice. Friend texting about music — casual, warm, real. No em-dashes, no hype. Return ONLY JSON: {"title":"...","body":"..."}. Title ≤60 chars, body ≤120 chars.`,
+      system: `Feelz Machine voice. Friend texting about music  -  casual, warm, real. No em-dashes, no hype. Return ONLY JSON: {"title":"...","body":"..."}. Title <=60 chars, body <=120 chars.`,
       messages: [{ role: 'user', content: prompt }],
     }),
   });
@@ -274,11 +274,11 @@ function buildListenerPrompt(segment, ctx, platform, learnBlock) {
   const name = ctx.displayName ? `Their name is ${ctx.displayName}.` : '';
 
   const streakNote = ctx.currentStreak >= 7
-    ? `${ctx.currentStreak}-day streak — that's serious dedication, reference it.`
+    ? `${ctx.currentStreak}-day streak  -  that's serious dedication, reference it.`
     : ctx.currentStreak >= 3
-    ? `${ctx.currentStreak}-day streak going — acknowledge it warmly.`
+    ? `${ctx.currentStreak}-day streak going  -  acknowledge it warmly.`
     : ctx.currentStreak === 0
-    ? 'No active streak — soft nudge to start one.'
+    ? 'No active streak  -  soft nudge to start one.'
     : '';
 
   const discoveryNote = ctx.discoveryStreak >= 3
@@ -286,7 +286,7 @@ function buildListenerPrompt(segment, ctx, platform, learnBlock) {
 
   const engagementNote = [
     ctx.likeCount    > 0 && `${ctx.likeCount} liked tracks`,
-    ctx.downloadCount > 0 && `${ctx.downloadCount} downloads — they actually support artists`,
+    ctx.downloadCount > 0 && `${ctx.downloadCount} downloads  -  they actually support artists`,
   ].filter(Boolean).join(', ');
 
   const historyNote = ctx.streamsLastMonth > 0
@@ -296,11 +296,11 @@ function buildListenerPrompt(segment, ctx, platform, learnBlock) {
         ctx.topMood       && `Mood they gravitate to: ${ctx.topMood}.`,
         ctx.recentArtists && `Artists they've played: ${ctx.recentArtists}.`,
       ].filter(Boolean).join(' ')
-    : 'No recent streams — gone quiet.';
+    : 'No recent streams  -  gone quiet.';
 
   const followNote = ctx.followCount > 0
     ? `Follows ${ctx.followCount} artists${ctx.followedArtists ? ` including ${ctx.followedArtists}` : ''}.`
-    : 'Not following any artists yet — could nudge them to discover someone.';
+    : 'Not following any artists yet  -  could nudge them to discover someone.';
 
   const unheardNote = ctx.unheardRecentDrops
     ? `Recent drops they haven't heard yet: ${ctx.unheardRecentDrops}. Reference if relevant.`
@@ -311,7 +311,7 @@ function buildListenerPrompt(segment, ctx, platform, learnBlock) {
     : '';
 
   const dormantNote = segment === 'dormant_listener'
-    ? "They drifted. No guilt — just something that'll make them want to open the app." : '';
+    ? "They drifted. No guilt  -  just something that'll make them want to open the app." : '';
 
   const parts = [
     name,
@@ -331,20 +331,20 @@ function buildListenerPrompt(segment, ctx, platform, learnBlock) {
   if (ctx.behaviorTags?.includes('morning_commuter')) habitNotes.push('Streams in the morning.');
   if (ctx.behaviorTags?.includes('weekend_binger'))   habitNotes.push('Weekend binge listener.');
   if (ctx.behaviorTags?.includes('deep_listener'))    habitNotes.push('Finishes almost every track.');
-  if (ctx.behaviorTags?.includes('skip_heavy'))       habitNotes.push('Heavy skipper — needs a specific hook.');
+  if (ctx.behaviorTags?.includes('skip_heavy'))       habitNotes.push('Heavy skipper  -  needs a specific hook.');
   if (ctx.behaviorTags?.includes('genre_loyal') && ctx.topGenre) habitNotes.push(`Loyal to ${ctx.topGenre}.`);
-  if (ctx.behaviorTags?.includes('collector'))        habitNotes.push('Downloads tracks — real supporter.');
+  if (ctx.behaviorTags?.includes('collector'))        habitNotes.push('Downloads tracks  -  real supporter.');
   if (ctx.behaviorTags?.includes('competition_fan'))  habitNotes.push('Engages with competition entries.');
   if (ctx.behaviorTags?.includes('surging'))          habitNotes.push('Listening surging this week.');
   if (ctx.behaviorTags?.includes('cooling'))          habitNotes.push('Listening drifting off this week.');
-  if (ctx.behaviorTags?.includes('churning'))         habitNotes.push('Gone quiet 2+ weeks — needs specific pull, not generic nudge.');
+  if (ctx.behaviorTags?.includes('churning'))         habitNotes.push('Gone quiet 2+ weeks  -  needs specific pull, not generic nudge.');
   if (ctx.behaviorSummary) parts.unshift(`BEHAVIOUR: ${ctx.behaviorSummary}`);
   if (habitNotes.length)   parts.push(`LISTENER SIGNALS: ${habitNotes.join(' ')}`);
   if (learnBlock)          parts.push(learnBlock);
 
   return `Write ONE personalised in-app notification for this listener (${segment.replace(/_/g, ' ')}).
 ${parts.join('\n')}
-Use the specific behaviour signals — be real not generic. JSON only: {"title":"...","body":"..."}. Title ≤55 chars, body ≤110 chars.\`;
+Use the specific behaviour signals  -  be real not generic. JSON only: {"title":"...","body":"..."}. Title <=55 chars, body <=110 chars.`;
 }
 
 // ── Build artist prompt ───────────────────────────────────────
@@ -358,7 +358,7 @@ function buildArtistPrompt(segment, artist, ctx, platform, learnBlock) {
     : 'Just starting out.';
 
   const weekNote = ctx.streamsThisWeek > 0
-    ? `${ctx.streamsThisWeek} streams this week — people are listening right now.`
+    ? `${ctx.streamsThisWeek} streams this week  -  people are listening right now.`
     : 'No streams this week yet.';
 
   const latestNote = ctx.latestTrackTitle
@@ -375,15 +375,15 @@ function buildArtistPrompt(segment, artist, ctx, platform, learnBlock) {
 
   const sessionNote = ctx.daysSinceLastSession !== null
     ? ctx.daysSinceLastSession <= 7
-      ? 'Went live recently — momentum is there.'
+      ? 'Went live recently  -  momentum is there.'
       : `Last live session was ${ctx.daysSinceLastSession} days ago.`
-    : 'Never gone live — could be a nudge.';
+    : 'Never gone live  -  could be a nudge.';
 
   const tierNote = ctx.tier === 'free'
-    ? "On free plan — could mention Pro/Premium features if relevant, but don't be pushy." : '';
+    ? "On free plan  -  could mention Pro/Premium features if relevant, but don't be pushy." : '';
 
   const dormantNote = segment === 'dormant_artist'
-    ? "Been quiet. Re-engagement only — make them feel the platform missed them, not guilty." : '';
+    ? "Been quiet. Re-engagement only  -  make them feel the platform missed them, not guilty." : '';
 
   const artistParts = [
     `Artist: ${artist.artist_name || 'Unknown'} (${segment.replace(/_/g, ' ')})`,
@@ -398,12 +398,12 @@ function buildArtistPrompt(segment, artist, ctx, platform, learnBlock) {
   ].filter(Boolean);
 
   const aHabits = [];
-  if (ctx.behaviorTags?.includes('going_viral'))         aHabits.push('Track is blowing up — lean into momentum.');
-  if (ctx.behaviorTags?.includes('momentum'))            aHabits.push('Just dropped, gaining streams — encourage continuation.');
-  if (ctx.behaviorTags?.includes('stalled'))             aHabits.push('Growth stalled — honest but actionable nudge.');
-  if (ctx.behaviorTags?.includes('dormant'))             aHabits.push('Long upload gap — re-engage, no guilt.');
-  if (ctx.behaviorTags?.includes('live_performer'))      aHabits.push('Goes live — reference that energy.');
-  if (ctx.behaviorTags?.includes('competition_entrant')) aHabits.push('Enters competitions — use if one is active.');
+  if (ctx.behaviorTags?.includes('going_viral'))         aHabits.push('Track is blowing up  -  lean into momentum.');
+  if (ctx.behaviorTags?.includes('momentum'))            aHabits.push('Just dropped, gaining streams  -  encourage continuation.');
+  if (ctx.behaviorTags?.includes('stalled'))             aHabits.push('Growth stalled  -  honest but actionable nudge.');
+  if (ctx.behaviorTags?.includes('dormant'))             aHabits.push('Long upload gap  -  re-engage, no guilt.');
+  if (ctx.behaviorTags?.includes('live_performer'))      aHabits.push('Goes live  -  reference that energy.');
+  if (ctx.behaviorTags?.includes('competition_entrant')) aHabits.push('Enters competitions  -  use if one is active.');
   if (ctx.behaviorTags?.includes('growing'))             aHabits.push(`Gained ${ctx.newFollowersWeek} followers this week.`);
   if (ctx.behaviorSummary)    artistParts.push(`BEHAVIOUR: ${ctx.behaviorSummary}`);
   if (aHabits.length > 0)     artistParts.push(`ARTIST SIGNALS: ${aHabits.join(' ')}`);
@@ -411,7 +411,7 @@ function buildArtistPrompt(segment, artist, ctx, platform, learnBlock) {
 
   return `Write ONE in-app notification for this artist (${segment.replace(/_/g, ' ')}).
 ${artistParts.join('\n')}
-Peer energy, specific, not corporate. JSON only: {"title":"...","body":"..."}. Title ≤55 chars, body ≤110 chars.\`;
+Peer energy, specific, not corporate. JSON only: {"title":"...","body":"..."}. Title <=55 chars, body <=110 chars.`;
 }
 
 // ── Weekly cap helper ─────────────────────────────────────────
@@ -467,9 +467,9 @@ function buildLearningBlock(learning) {
   }
 
   if (rate < 0.1) {
-    parts.push('Low conversion overall — try a completely different angle, not more of the same.');
+    parts.push('Low conversion overall  -  try a completely different angle, not more of the same.');
   } else if (rate > 0.35) {
-    parts.push('This approach converts well — stay in this lane.');
+    parts.push('This approach converts well  -  stay in this lane.');
   }
 
   return parts.join(' ');
@@ -568,7 +568,7 @@ async function processOneUser(user, segmentKey, platform, isArtist) {
     if (notifResult.error) console.error(`Notification insert failed for ${user.user_id}:`, JSON.stringify(notifResult.error));
     if (msgResult.error)   console.error(`EngagementMessage insert failed for ${user.user_id}:`, JSON.stringify(msgResult.error));
 
-    // Web push — fire and forget
+    // Web push  -  fire and forget
     fetch(`${siteUrl}/.netlify/functions/send-push`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-internal-secret': process.env.INTERNAL_FUNCTION_SECRET },
@@ -687,7 +687,7 @@ exports.handler = async (event) => {
     return { statusCode: 200, body: JSON.stringify({ skipped: true, reason: 'disabled' }) };
   }
 
-  console.log(`Engagement drip v2 — ${new Date().toISOString()} — ${isManual ? 'manual' : 'scheduled'}`);
+  console.log(`Engagement drip v2  -  ${new Date().toISOString()}  -  ${isManual ? 'manual' : 'scheduled'}`);
 
   try {
     console.log('Computing behaviour profiles…');
@@ -700,14 +700,14 @@ exports.handler = async (event) => {
     const results = {};
     let totalSent = 0;
 
-    // New users — segment-level (one Claude call per segment)
+    // New users  -  segment-level (one Claude call per segment)
     for (const key of ['new_artist', 'new_listener']) {
       const sent = await processNewUsers(segments[key], key, platform);
       results[key] = { users: segments[key].length, sent };
       totalSent += sent;
     }
 
-    // Active & dormant — individual-level (personalised Claude call per user)
+    // Active & dormant  -  individual-level (personalised Claude call per user)
     for (const [key, isArtist] of [
       ['active_artist', true], ['dormant_artist', true],
       ['active_listener', false], ['dormant_listener', false],
@@ -717,7 +717,7 @@ exports.handler = async (event) => {
       totalSent += sent;
     }
 
-    console.log(`Drip v2 complete — ${totalSent} sent`);
+    console.log(`Drip v2 complete  -  ${totalSent} sent`);
     return { statusCode: 200, body: JSON.stringify({ success: true, totalSent, segments: results, runAt: new Date().toISOString() }) };
 
   } catch (err) {

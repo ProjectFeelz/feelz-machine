@@ -241,12 +241,13 @@ exports.handler = async (event) => {
       else console.error('Notif batch error:', JSON.stringify(error));
     }
     for (let i = 0; i < msgBatch.length; i += 100) {
-      await supabase.from('engagement_messages').insert(msgBatch.slice(i, i + 100)).catch(() => {});
+      try { await supabase.from('engagement_messages').insert(msgBatch.slice(i, i + 100)); } catch {}
     }
 
     // Push notifications
     const pushUserIds = notifBatch.map(n => n.user_id).slice(0, 2000);
     if (pushUserIds.length) {
+      try {
       await fetch(`${siteUrl}/.netlify/functions/send-push`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-internal-secret': process.env.INTERNAL_FUNCTION_SECRET || '' },
@@ -257,7 +258,8 @@ exports.handler = async (event) => {
           url:      '/',
           tag:      `edu-tip-${new Date().toISOString().slice(0, 10)}`,
         }),
-      }).catch(() => {});
+      });
+      } catch {}
     }
 
     console.log(`[feature-education-drip] Sent ${totalSent} tips`);

@@ -33,7 +33,7 @@ exports.handler = async (event) => {
 
   const { data: track, error: trackError } = await adminClient
     .from('tracks')
-    .select('file_url, title, is_preorder, release_date, download_price, artist_id')
+    .select('file_url, title, is_preorder, release_date, download_price, artist_id, album_id')
     .eq('id', trackId)
     .maybeSingle();
 
@@ -49,7 +49,7 @@ exports.handler = async (event) => {
       .eq('id', track.artist_id)
       .maybeSingle();
     if (trackArtist?.user_id === user.id) {
-      return { statusCode: 403, body: JSON.stringify({ error: 'Artists cannot download their own tracks' }) };
+      return { statusCode: 403, body: JSON.stringify({ error: 'artists_cannot_download' }) };
     }
   }
 
@@ -68,7 +68,20 @@ exports.handler = async (event) => {
     }
   }
 
-  const trackIsFree = !track.download_price || track.download_price <= 0;
+  // If track has no individual price but belongs to a paid album,
+  // per-track price = album.price / number of tracks in album
+  let effectivePrice = track.download_price || 0;
+  if (effectivePrice <= 0 && track.album_id) {
+    const [{ data: album }, { count: albumTrackCount }] = await Promise.all([
+      adminClient.from('albums').select('price').eq('id', track.album_id).maybeSingle(),
+      adminClient.from('tracks').select('*', { count: 'exact', head: true }).eq('album_id', track.album_id).eq('is_published', true),
+    ]);
+    if (album?.price > 0 && albumTrackCount > 0) {
+      effectivePrice = parseFloat((album.price / albumTrackCount).toFixed(2));
+    }
+  }
+
+  const trackIsFree = effectivePrice <= 0;
 
   // ── Listener download quota check ───────────────────────────────────────────
   // Free listeners cannot download. Pro listeners get 3 free downloads/month.
@@ -87,7 +100,7 @@ exports.handler = async (event) => {
         .eq('status', 'active')
         .maybeSingle();
 
-      // Fix 5: Look up Pro tier by slug instead of hardcoded UUID
+      // Look up Pro tier by slug instead of hardcoded UUID
       const { data: proTier } = await adminClient
         .from('platform_tiers').select('id').eq('slug', 'fan_pro').maybeSingle();
       const PRO_TIER_ID = proTier?.id || 'a421dac1-f492-461c-88a5-f01b6942a042';
@@ -137,17 +150,16 @@ exports.handler = async (event) => {
     if (!existingDl) {
       await adminClient.from('downloads').insert({ user_id: user.id, track_id: trackId, amount_paid: 0 });
       // Increment download_count on track
-      await adminClient.rpc('increment_download_count', { track_id: trackId }).catch(() => {
-        // Fallback: direct update if RPC doesn't exist
-        adminClient.from('tracks').select('download_count').eq('id', trackId).maybeSingle()
-          .then(({ data }) => {
-            adminClient.from('tracks').update({ download_count: (data?.download_count || 0) + 1 }).eq('id', trackId);
-          });
-      });
+      try {
+        await adminClient.rpc('increment_download_count', { track_id: trackId });
+      } catch {
+        const { data } = await adminClient.from('tracks').select('download_count').eq('id', trackId).maybeSingle();
+        await adminClient.from('tracks').update({ download_count: (data?.download_count || 0) + 1 }).eq('id', trackId);
+      }
     }
   } else {
-    // Fix 4: Server-side PWYW minimum check
-    if (track.download_price > 0) {
+    // Server-side PWYW minimum check
+    if (effectivePrice > 0) {
       const { data: purchase, error: purchaseError } = await adminClient
         .from('downloads')
         .select('id, amount_paid')
@@ -157,10 +169,11 @@ exports.handler = async (event) => {
       if (purchaseError || !purchase) {
         return { statusCode: 403, body: JSON.stringify({ error: 'Purchase required' }) };
       }
-      if (purchase.amount_paid < track.download_price) {
-        return { statusCode: 403, body: JSON.stringify({ error: 'Insufficient payment', minimum: track.download_price }) };
+      if (purchase.amount_paid < effectivePrice) {
+        return { statusCode: 403, body: JSON.stringify({ error: 'Insufficient payment', minimum: effectivePrice }) };
       }
     }
+
     const { data: purchase, error: purchaseError } = await adminClient
       .from('downloads')
       .select('id')
@@ -177,12 +190,12 @@ exports.handler = async (event) => {
       return { statusCode: 403, body: JSON.stringify({ error: 'Purchase required' }) };
     }
     // Increment download_count for paid track
-    await adminClient.rpc('increment_download_count', { track_id: trackId }).catch(() => {
-      adminClient.from('tracks').select('download_count').eq('id', trackId).maybeSingle()
-        .then(({ data }) => {
-          adminClient.from('tracks').update({ download_count: (data?.download_count || 0) + 1 }).eq('id', trackId);
-        });
-    });
+    try {
+      await adminClient.rpc('increment_download_count', { track_id: trackId });
+    } catch {
+      const { data } = await adminClient.from('tracks').select('download_count').eq('id', trackId).maybeSingle();
+      await adminClient.from('tracks').update({ download_count: (data?.download_count || 0) + 1 }).eq('id', trackId);
+    }
   }
 
   const storagePathMatch = track.file_url.match(/\/object\/public\/feelz-samples\/(.+)/);
@@ -191,7 +204,6 @@ exports.handler = async (event) => {
   }
 
   const storagePath = storagePathMatch[1];
-
   const safeTitle = (track.title || 'track').replace(/[^a-z0-9\s-]/gi, '').trim() || 'track';
 
   const { data: signedData, error: signedError } = await adminClient
