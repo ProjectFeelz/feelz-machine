@@ -551,7 +551,7 @@ function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare, onN
       {isActive && isThisOne && <FloatingHearts trackId={track.id} />}
 
       {/* Right action bar */}
-      <div className="absolute right-3 bottom-32 z-20 flex flex-col items-center space-y-5"
+      <div className="absolute right-3 bottom-0 pb-36 z-20 flex flex-col items-center space-y-4"
         onClick={e => e.stopPropagation()}>
 
         {/* Artist avatar */}
