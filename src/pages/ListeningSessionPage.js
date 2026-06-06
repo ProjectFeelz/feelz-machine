@@ -962,21 +962,45 @@ export default function ListeningSessionPage() {
   };
 
   // ── Chat ────────────────────────────────────────────────────────────────────
-  const sendMessage = async (e) => {
+  const [tipChatAmount, setTipChatAmount] = useState('');
+  const [showTipChat,   setShowTipChat]   = useState(false);
+
+  const sendMessage = async (e, isTip = false, tipAmt = null) => {
     e?.preventDefault();
-    if (!chatInput.trim() || !user || sending) return;
+    if (!isTip && !chatInput.trim()) return;
+    if (!user || sending) return;
     setSending(true);
     const { data: profile } = await supabase.from('artists').select('artist_name, profile_image_url').eq('user_id', user.id).maybeSingle();
     const { data: listener } = !profile ? await supabase.from('listeners').select('display_name').eq('user_id', user.id).maybeSingle() : { data: null };
     await supabase.from('session_messages').insert({
       session_id: sessionId,
-      user_id: user.id,
-      content: chatInput.trim(),
-      name: profile?.artist_name || listener?.display_name || 'Listener',
-      avatar: profile?.profile_image_url || null,
+      user_id:    user.id,
+      content:    chatInput.trim(),
+      name:       profile?.artist_name || listener?.display_name || 'Listener',
+      avatar:     profile?.profile_image_url || null,
+      is_tip:     isTip,
+      tip_amount: tipAmt,
     });
     setChatInput('');
+    setShowTipChat(false);
+    setTipChatAmount('');
     setSending(false);
+  };
+
+  // Called after PayPal tip completes — inject a tip message into chat
+  const onTipSent = async (amount) => {
+    const { data: profile } = await supabase.from('artists').select('artist_name, profile_image_url').eq('user_id', user.id).maybeSingle();
+    const { data: listener } = !profile ? await supabase.from('listeners').select('display_name').eq('user_id', user.id).maybeSingle() : { data: null };
+    await supabase.from('session_messages').insert({
+      session_id: sessionId,
+      user_id:    user.id,
+      content:    chatInput.trim() || '',
+      name:       profile?.artist_name || listener?.display_name || 'Listener',
+      avatar:     profile?.profile_image_url || null,
+      is_tip:     true,
+      tip_amount: parseFloat(amount) || 0,
+    });
+    setChatInput('');
   };
 
   const sendReaction = (emoji) => {
@@ -1261,7 +1285,14 @@ export default function ListeningSessionPage() {
         {/* Chat */}
         <div className="flex-1 overflow-y-auto min-h-0">
           <div className="py-2">
-            {messages.map((msg, i) => <ChatMessage key={msg.id || i} msg={msg} />)}
+            {/* Tip messages pinned at top — last 3 */}
+            {messages.filter(m => m.is_tip).slice(-3).map((msg, i) => (
+              <ChatMessage key={(msg.id || i) + '-tip'} msg={msg} />
+            ))}
+            {/* Regular messages */}
+            {messages.filter(m => !m.is_tip).map((msg, i) => (
+              <ChatMessage key={msg.id || i} msg={msg} />
+            ))}
             <div ref={chatEndRef} />
           </div>
         </div>
@@ -1291,23 +1322,57 @@ export default function ListeningSessionPage() {
               </button>
             ))}
             {!isHost && session?.artists?.paypal_email && (
-              <TipButton artist={session.artists} />
+              <TipButton artist={session.artists} onTipSent={onTipSent} />
             )}
           </div>
           {user && (
-            <form onSubmit={sendMessage} className="flex space-x-2">
-              <input
-                value={chatInput}
-                onChange={e => setChatInput(e.target.value)}
-                placeholder="Say something..."
-                maxLength={200}
-                className="flex-1 px-3 py-2.5 bg-white/[0.06] border border-white/[0.08] rounded-xl text-sm text-white placeholder-white/25 focus:outline-none focus:border-white/20"
-              />
-              <button type="submit" disabled={!chatInput.trim() || sending}
-                className="w-10 h-10 rounded-xl bg-white/[0.08] flex items-center justify-center disabled:opacity-30 hover:bg-white/[0.12] transition flex-shrink-0">
-                <Send className="w-4 h-4 text-white" />
-              </button>
-            </form>
+            <div className="space-y-2">
+              {/* Tip with message panel */}
+              {showTipChat && (
+                <div className="rounded-xl border border-yellow-500/30 bg-yellow-500/[0.06] p-3 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <p className="text-[11px] font-bold text-yellow-400">💛 Send a tip with a message</p>
+                    <button onClick={() => setShowTipChat(false)} className="text-white/30 hover:text-white/60 text-xs">✕</button>
+                  </div>
+                  <div className="flex space-x-2">
+                    {['1','2','5','10'].map(amt => (
+                      <button key={amt} onClick={() => setTipChatAmount(amt)}
+                        className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition ${tipChatAmount === amt ? 'bg-yellow-500 text-black' : 'bg-white/[0.06] text-white/50 hover:bg-white/[0.1]'}`}>
+                        ${amt}
+                      </button>
+                    ))}
+                  </div>
+                  <input
+                    value={chatInput}
+                    onChange={e => setChatInput(e.target.value)}
+                    placeholder="Add a message (optional)..."
+                    maxLength={100}
+                    className="w-full px-3 py-2 bg-white/[0.06] border border-yellow-500/20 rounded-xl text-sm text-white placeholder-white/25 focus:outline-none focus:border-yellow-500/40"
+                  />
+                  <p className="text-[10px] text-white/30">Tip is sent via PayPal. Message appears in chat immediately.</p>
+                </div>
+              )}
+              <form onSubmit={sendMessage} className="flex space-x-2">
+                {!isHost && session?.artists?.paypal_email && (
+                  <button type="button" onClick={() => setShowTipChat(p => !p)}
+                    className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 transition ${showTipChat ? 'bg-yellow-500/30 text-yellow-400' : 'bg-white/[0.06] text-white/40 hover:bg-white/[0.1]'}`}
+                    title="Send tip with message">
+                    <span className="text-base">💛</span>
+                  </button>
+                )}
+                <input
+                  value={chatInput}
+                  onChange={e => setChatInput(e.target.value)}
+                  placeholder={showTipChat ? "Add a message to your tip..." : "Say something..."}
+                  maxLength={200}
+                  className="flex-1 px-3 py-2.5 bg-white/[0.06] border border-white/[0.08] rounded-xl text-sm text-white placeholder-white/25 focus:outline-none focus:border-white/20"
+                />
+                <button type="submit" disabled={(!chatInput.trim() && !showTipChat) || sending}
+                  className="w-10 h-10 rounded-xl bg-white/[0.08] flex items-center justify-center disabled:opacity-30 hover:bg-white/[0.12] transition flex-shrink-0">
+                  <Send className="w-4 h-4 text-white" />
+                </button>
+              </form>
+            </div>
           )}
         </div>
       </div>

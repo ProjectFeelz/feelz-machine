@@ -5,7 +5,7 @@ import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import { usePlayer } from '../contexts/PlayerContext';
 import {
-  Bell, Users, Heart, MessageCircle, TrendingUp,
+  Bell, Users, Heart, MessageCircle, TrendingUp, Settings,
   UserPlus, Check, X, ChevronLeft, Loader,
   CheckCheck, Trash2, Music, Download, Megaphone,
   Radio, FileText, Play, DollarSign, Send, ChevronDown,
@@ -51,6 +51,7 @@ const TYPE_CONFIG = {
   bug_report:         { icon: MessageCircle, color: 'text-red-400',    bg: 'bg-red-500/10',     label: 'Bug Report' },
   artist_thought:     { icon: MessageCircle, color: 'text-pink-400',   bg: 'bg-pink-500/10',    label: 'Thought' },
   wheel_challenge:    { icon: TrendingUp,    color: 'text-yellow-400', bg: 'bg-yellow-500/10',  label: 'Challenge' },
+  wheel_winner:       { icon: Award,         color: 'text-yellow-400', bg: 'bg-yellow-500/10',  label: 'Roulette Winner' },
 };
 
 const FILTERS = [
@@ -64,8 +65,8 @@ const FILTERS = [
 function filterMatch(type, filter) {
   if (filter === 'all')        return true;
   if (filter === 'collabs')    return type?.startsWith('collab_');
-  if (filter === 'social')     return ['new_follower','track_liked','playlist_add','track_commented','new_comment','new_post','new_stream','mention','artist_thought'].includes(type);
-  if (filter === 'milestones') return type?.startsWith('milestone_') || ['top_supporter','streak','first_listener','competition_winner','weekly_report','monthly_wrapped'].includes(type);
+  if (filter === 'social')     return ['new_follower','track_liked','playlist_add','track_commented','new_comment','new_post','new_stream','mention','artist_thought','top_supporter','first_listener','session_live'].includes(type);
+  if (filter === 'milestones') return type?.startsWith('milestone_') || ['top_supporter','streak','first_listener','competition_winner','wheel_winner','weekly_report','monthly_wrapped'].includes(type);
   if (filter === 'money')      return ['tip','download','payout_pending','beat_purchase'].includes(type);
   return true;
 }
@@ -178,35 +179,17 @@ function CollabActions({ notif, onActioned }) {
 
       if (!reqId) { console.warn('No request_id found'); setLoading(null); return; }
       const newStatus = action === 'accept' ? 'accepted' : 'declined';
-      const { data: reqData } = await supabase
+      const { data: reqData, error: updateErr } = await supabase
         .from('collab_requests')
         .update({ status: newStatus, responded_at: new Date().toISOString() })
         .eq('id', reqId)
-        .select('collaboration_id, track_id, from_artist_id, to_artist_id')
+        .select('collaboration_id')
         .maybeSingle();
-
+      // Also update the collaborations table
       if (reqData?.collaboration_id) {
-        // Update existing collaborations row
         await supabase.from('collaborations')
           .update({ status: newStatus, ...(action === 'accept' ? { accepted_at: new Date().toISOString() } : {}) })
           .eq('id', reqData.collaboration_id);
-      } else if (action === 'accept' && reqData?.track_id && reqData?.from_artist_id) {
-        // CollabRadar request — no collaborations row exists yet, create one
-        const { data: newCollab } = await supabase.from('collaborations').insert({
-          track_id:      reqData.track_id,
-          artist_id:     reqData.from_artist_id,
-          role:          meta.collab_type || 'featured',
-          split_percent: 0,
-          status:        'accepted',
-          accepted_at:   new Date().toISOString(),
-          invited_by:    reqData.to_artist_id,
-        }).select('id').maybeSingle();
-        // Link it back to the request
-        if (newCollab?.id) {
-          await supabase.from('collab_requests')
-            .update({ collaboration_id: newCollab.id })
-            .eq('id', reqId);
-        }
       }
 
       // Notify the requester
@@ -324,12 +307,38 @@ export default function NotificationsPage() {
   const { unreadCount, markAsRead, markAllRead, clearAll } = useNotifications();
   const [filter,      setFilter]      = useState('all');
   const [expandedIds, setExpandedIds] = useState([]);
-  const [replyingTo,  setReplyingTo]  = useState(null);   // notif.id with open reply box
+  const [replyingTo,  setReplyingTo]  = useState(null);
   const [allNotifs,   setAllNotifs]   = useState([]);
   const [pageLoading, setPageLoading] = useState(true);
   const [page,        setPage]        = useState(0);
   const [hasMore,     setHasMore]     = useState(false);
+  const [showPrefs,   setShowPrefs]   = useState(false);
+  const [snoozedUntil,setSnoozedUntil]= useState(() => {
+    try { const v = localStorage.getItem('notif_snoozed'); return v ? parseInt(v) : null; } catch { return null; }
+  });
+  const [prefs, setPrefs] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('notif_prefs') || '{}'); } catch { return {}; }
+  });
   const PAGE_SIZE = 30;
+
+  const isSnoozeActive = snoozedUntil && Date.now() < snoozedUntil;
+
+  const savePref = (key, val) => {
+    const next = { ...prefs, [key]: val };
+    setPrefs(next);
+    localStorage.setItem('notif_prefs', JSON.stringify(next));
+  };
+
+  const handleSnooze = (hours) => {
+    const until = Date.now() + hours * 3600000;
+    setSnoozedUntil(until);
+    localStorage.setItem('notif_snoozed', String(until));
+  };
+
+  const clearSnooze = () => {
+    setSnoozedUntil(null);
+    localStorage.removeItem('notif_snoozed');
+  };
 
   const toggleExpand = (id) => setExpandedIds(prev =>
     prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
@@ -392,21 +401,94 @@ export default function NotificationsPage() {
     fetchAll(next);
   };
 
-  const filtered = allNotifs.filter(n => filterMatch(n.type, filter) && !HIDDEN_TYPES.has(n.type));
+  // Apply snooze and prefs filter
+  const PREF_TYPE_MAP = {
+    likes:    ['track_liked'],
+    streams:  ['new_stream','first_listener'],
+    follows:  ['new_follower'],
+    comments: ['track_commented','new_comment'],
+    collabs:  ['collab_request','collab_accepted','collab_declined'],
+    money:    ['tip','download','payout_pending'],
+    milestones: ['milestone_100','milestone_500','milestone_1k','milestone_10k','streak','top_supporter'],
+  };
 
-  // Group by date
-  const grouped = {};
-  filtered.forEach(n => {
-    const d = new Date(n.created_at);
-    const today = new Date();
-    const yesterday = new Date(today); yesterday.setDate(yesterday.getDate() - 1);
-    let key;
-    if (d.toDateString() === today.toDateString()) key = 'Today';
-    else if (d.toDateString() === yesterday.toDateString()) key = 'Yesterday';
-    else key = d.toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
-    if (!grouped[key]) grouped[key] = [];
-    grouped[key].push(n);
+  const filtered = allNotifs.filter(n => {
+    if (!filterMatch(n.type, filter)) return false;
+    if (HIDDEN_TYPES.has(n.type)) return false;
+    // Check user prefs — if a category is turned off, hide it
+    for (const [key, types] of Object.entries(PREF_TYPE_MAP)) {
+      if (prefs[key] === false && types.includes(n.type)) return false;
+    }
+    return true;
   });
+
+  // ── Priority inbox: money + collabs always float to top ───────────────────
+  const PRIORITY_TYPES = new Set(['tip','download','payout_pending','collab_request','collab_accepted']);
+  const priority = filtered.filter(n => PRIORITY_TYPES.has(n.type) && !n.read);
+  const unread   = filtered.filter(n => !n.read && !PRIORITY_TYPES.has(n.type));
+  const read     = filtered.filter(n => n.read);
+
+  // ── Action grouping: collapse same-type same-track notifications ──────────
+  // e.g. 5 track_liked on same track → one card "X and 4 others liked Weekend"
+  const GROUP_TYPES = new Set(['track_liked','new_follower','track_commented']);
+  const groupNotifs = (list) => {
+    const buckets = {};
+    const result  = [];
+    list.forEach(n => {
+      if (!GROUP_TYPES.has(n.type)) { result.push(n); return; }
+      const key = `${n.type}::${n.track_id || 'notrack'}`;
+      if (!buckets[key]) {
+        buckets[key] = { ...n, _group: [n], _groupKey: key };
+        result.push(buckets[key]);
+      } else {
+        buckets[key]._group.push(n);
+        // Update title to reflect count
+        const g = buckets[key]._group;
+        const first = g[0].metadata?.from_artist_name || 'Someone';
+        const extra = g.length - 1;
+        const track = g[0].metadata?.track_title || g[0].message;
+        if (n.type === 'track_liked') {
+          buckets[key].title = extra > 0
+            ? `${first} and ${extra} other${extra > 1 ? 's' : ''} liked ${track || 'your track'}`
+            : `${first} liked ${track || 'your track'}`;
+        } else if (n.type === 'new_follower') {
+          buckets[key].title = extra > 0
+            ? `${first} and ${extra} other${extra > 1 ? 's' : ''} followed you`
+            : `${first} followed you`;
+        } else if (n.type === 'track_commented') {
+          buckets[key].title = extra > 0
+            ? `${first} and ${extra} other${extra > 1 ? 's' : ''} commented on ${track || 'your track'}`
+            : `${first} commented on ${track || 'your track'}`;
+        }
+        // Update avatar to show count badge
+        buckets[key]._groupCount = g.length;
+      }
+    });
+    return result;
+  };
+
+  // ── Build final grouped sections ──────────────────────────────────────────
+  const buildDateGroups = (list) => {
+    const groups = {};
+    groupNotifs(list).forEach(n => {
+      const d = new Date(n.created_at);
+      const today = new Date();
+      const yesterday = new Date(today); yesterday.setDate(yesterday.getDate() - 1);
+      let key;
+      if (d.toDateString() === today.toDateString()) key = 'Today';
+      else if (d.toDateString() === yesterday.toDateString()) key = 'Yesterday';
+      else key = d.toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(n);
+    });
+    return groups;
+  };
+
+  const grouped = {
+    ...(priority.length  ? { '⚡ Priority': groupNotifs(priority) }  : {}),
+    ...(isSnoozeActive   ? {} : buildDateGroups(unread)),
+    ...(read.length      ? { 'Earlier': groupNotifs(read) }           : {}),
+  };
 
   // Types that have inline actions (don't navigate on tap)
   const INLINE_ACTION_TYPES = new Set(['collab_request']);
@@ -416,7 +498,7 @@ export default function NotificationsPage() {
   ]);
 
   const handleClick = (notif) => {
-    if (!notif.read) markAsRead(notif.id);
+    markAsRead(notif.id); // always mark read on tap, even if already read
     if (INLINE_ACTION_TYPES.has(notif.type)) return;
     if (READ_ONLY_TYPES.has(notif.type)) return;
 
@@ -508,8 +590,12 @@ export default function NotificationsPage() {
     if (type === 'tip')                                  { navigate('/dashboard?tab=analytics&section=earnings'); return; }
     if (type === 'payout_pending')                       { navigate('/dashboard?tab=analytics&section=earnings'); return; }
     if (type === 'announcement' || type === 'admin_message') {
-      if (meta.action_url) { window.open(meta.action_url, '_blank'); return; }
-      if (meta.cta_url) { window.open(meta.cta_url, '_blank'); return; }
+      const url = meta.action_url || meta.cta_url || meta.link_url || null;
+      if (url) {
+        if (url.startsWith('http')) window.open(url, '_blank');
+        else navigate(url);
+        return;
+      }
       return;
     }
     if (type === 'first_listener') {
@@ -541,6 +627,11 @@ export default function NotificationsPage() {
       return;
     }
     if (type === 'wheel_challenge') { navigate('/wheel'); return; }
+    if (type === 'wheel_winner') {
+      if (meta.competition_id) { navigate(`/competition/${meta.competition_id}`); return; }
+      navigate('/competitions');
+      return;
+    }
     if (type === 'artist_thought') { navigate(meta.artist_slug ? `/artist/${meta.artist_slug}` : '/browse'); return; }
   };
 
@@ -584,6 +675,19 @@ export default function NotificationsPage() {
         </div>
         {/* Header actions */}
         <div className="flex items-center space-x-1">
+          {isSnoozeActive && (
+            <button onClick={clearSnooze}
+              className="flex items-center space-x-1 px-2.5 py-1.5 rounded-xl bg-amber-500/15 border border-amber-500/25 text-amber-400 text-[11px] font-semibold transition"
+              title="Snoozed — tap to wake">
+              <span>😴</span>
+              <span>Snoozed</span>
+            </button>
+          )}
+          <button onClick={() => setShowPrefs(p => !p)}
+            className="p-2 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] transition"
+            title="Notification preferences">
+            <Settings className="w-4 h-4 text-white/40" />
+          </button>
           {unreadCount > 0 && (
             <button onClick={markAllRead}
               className="p-2 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] transition"
@@ -618,6 +722,69 @@ export default function NotificationsPage() {
         ))}
       </div>
 
+      {/* Preferences panel */}
+      {showPrefs && (
+        <div className="mb-4 rounded-xl bg-white/[0.03] border border-white/[0.06] overflow-hidden">
+          <div className="px-4 py-3 border-b border-white/[0.04]">
+            <p className="text-xs font-bold text-white/60 uppercase tracking-wider">Notification preferences</p>
+          </div>
+          {[
+            { key: 'likes',      label: 'Track likes',      emoji: '❤️' },
+            { key: 'follows',    label: 'New followers',    emoji: '👤' },
+            { key: 'comments',   label: 'Comments',         emoji: '💬' },
+            { key: 'streams',    label: 'Streams',          emoji: '🎧' },
+            { key: 'collabs',    label: 'Collabs',          emoji: '🤝' },
+            { key: 'money',      label: 'Money',            emoji: '💰' },
+            { key: 'milestones', label: 'Milestones',       emoji: '🏆' },
+          ].map(({ key, label, emoji }) => (
+            <div key={key} className="flex items-center justify-between px-4 py-2.5 border-b border-white/[0.03] last:border-0">
+              <div className="flex items-center space-x-2">
+                <span className="text-base">{emoji}</span>
+                <span className="text-sm text-white/70">{label}</span>
+              </div>
+              <button
+                onClick={() => savePref(key, prefs[key] === false ? true : false)}
+                className={`w-10 h-5.5 rounded-full transition-all relative ${prefs[key] === false ? 'bg-white/[0.08]' : 'bg-purple-500'}`}
+                style={{ height: 22, width: 40 }}
+              >
+                <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${prefs[key] === false ? 'left-0.5' : 'left-5'}`} />
+              </button>
+            </div>
+          ))}
+          {/* Snooze options */}
+          <div className="px-4 py-3 border-t border-white/[0.06]">
+            <p className="text-[11px] text-white/30 font-semibold uppercase tracking-wider mb-2">Snooze notifications</p>
+            <div className="flex space-x-2">
+              {[1, 4, 8, 24].map(h => (
+                <button key={h} onClick={() => { handleSnooze(h); setShowPrefs(false); }}
+                  className="flex-1 py-1.5 rounded-lg bg-white/[0.05] border border-white/[0.08] text-xs text-white/50 hover:text-white/70 transition">
+                  {h}h
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Snooze active banner */}
+      {isSnoozeActive && (
+        <div className="mb-4 flex items-center justify-between px-4 py-3 rounded-xl bg-amber-500/10 border border-amber-500/20">
+          <div className="flex items-center space-x-2">
+            <span className="text-lg">😴</span>
+            <div>
+              <p className="text-sm font-semibold text-amber-300">Notifications snoozed</p>
+              <p className="text-[11px] text-amber-400/60">
+                Until {new Date(snoozedUntil).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+              </p>
+            </div>
+          </div>
+          <button onClick={clearSnooze}
+            className="text-xs text-amber-400 font-semibold hover:text-amber-300 transition">
+            Wake up
+          </button>
+        </div>
+      )}
+
       {/* Content */}
       {pageLoading ? (
         <div className="flex justify-center py-16">
@@ -637,10 +804,23 @@ export default function NotificationsPage() {
         <div className="space-y-6">
           {Object.entries(grouped).map(([date, notifs]) => (
             <div key={date}>
-              <p className="text-[10px] uppercase tracking-wider text-white/20 font-semibold mb-2 px-1">{date}</p>
+              {date === '⚡ Priority' ? (
+                <div className="flex items-center space-x-2 mb-2 px-1">
+                  <span className="text-sm">⚡</span>
+                  <p className="text-[10px] uppercase tracking-wider text-amber-400/70 font-black">Priority</p>
+                </div>
+              ) : date === 'Earlier' ? (
+                <div className="flex items-center space-x-3 mb-3">
+                  <div className="h-px flex-1 bg-white/[0.06]" />
+                  <p className="text-[10px] uppercase tracking-wider text-white/20 font-semibold">Read</p>
+                  <div className="h-px flex-1 bg-white/[0.06]" />
+                </div>
+              ) : (
+                <p className="text-[10px] uppercase tracking-wider text-white/20 font-semibold mb-2 px-1">{date}</p>
+              )}
               <div className="space-y-1">
                 {notifs.map((notif) => {
-                  const config = TYPE_CONFIG[notif.type] || TYPE_CONFIG.new_stream;
+                  const config = TYPE_CONFIG[notif.type] || { icon: Bell, color: 'text-white/40', bg: 'bg-white/[0.06]', label: notif.type?.replace(/_/g, ' ') || 'Notification' };
                   const Icon   = config.icon;
                   const meta   = notif.metadata || {};
                   const isRead = notif.read;
@@ -648,7 +828,7 @@ export default function NotificationsPage() {
                   const isExpandable  = (notif.message?.length > 80);
                   const isExpanded    = expandedIds.includes(notif.id);
                   const hasTrackPill  = !!meta.track_title && !!meta.track_id;
-                  const hasActionUrl  = !!meta.action_url || !!meta.cta_url || !!meta.url;
+                  const hasActionUrl  = !!meta.action_url || !!meta.cta_url || !!meta.url || !!meta.link_url;
                   // Orphaned stream notification — has no track data
                   const isOrphanStream = notif.type === 'new_stream' && !meta.track_title;
                   const isCollabReq   = notif.type === 'collab_request';
@@ -656,8 +836,8 @@ export default function NotificationsPage() {
                   const isNewFollower = notif.type === 'new_follower';
                   const isComment     = notif.type === 'track_commented' || notif.type === 'new_comment';
                   const canReply      = isComment && (meta.post_id || meta.track_id);
-                  const actionUrl     = meta.action_url || meta.cta_url || meta.url || null;
-                  const actionLabel   = meta.cta_label || meta.action_label || (meta.feature_education ? 'Open Feature' : 'Learn more');
+                  const actionUrl     = meta.action_url || meta.cta_url || meta.url || meta.link_url || null;
+                  const actionLabel   = meta.cta_label || meta.action_label || meta.link_label || (meta.feature_education ? 'Open Feature' : 'Learn more');
 
                   // Skip orphaned stream notifications (no track data - old DB trigger leftovers)
                   if (isOrphanStream) return null;
@@ -665,7 +845,7 @@ export default function NotificationsPage() {
                   // Monthly wrapped gets its own card
                   if (notif.type === 'monthly_wrapped') {
                     return (
-                      <div key={notif.id} onClick={() => { if (!notif.read) markAsRead(notif.id); }}>
+                      <div key={notif.id} onClick={() => markAsRead(notif.id)}>
                         <WrappedCard notification={notif} compact />
                       </div>
                     );
@@ -681,7 +861,7 @@ export default function NotificationsPage() {
                           : 'hover:bg-white/[0.02]'
                       }`}
                     >
-                      {/* Avatar / Icon */}
+                      {/* Avatar / Icon — with group count badge */}
                       {meta.from_artist_image ? (
                         <div className="relative flex-shrink-0">
                           <img src={meta.from_artist_image} alt=""
@@ -689,10 +869,20 @@ export default function NotificationsPage() {
                           <div className={`absolute -bottom-0.5 -right-0.5 w-5 h-5 rounded-full ${config.bg} flex items-center justify-center border-2 border-black`}>
                             <Icon className={`w-2.5 h-2.5 ${config.color}`} />
                           </div>
+                          {notif._groupCount > 1 && (
+                            <div className="absolute -top-1 -right-1 min-w-[18px] h-[18px] rounded-full bg-purple-500 text-white text-[9px] font-black flex items-center justify-center px-1 border-2 border-black">
+                              {notif._groupCount}
+                            </div>
+                          )}
                         </div>
                       ) : (
-                        <div className={`w-11 h-11 rounded-full ${config.bg} flex items-center justify-center flex-shrink-0`}>
+                        <div className={`w-11 h-11 rounded-full ${config.bg} flex items-center justify-center flex-shrink-0 relative`}>
                           <Icon className={`w-5 h-5 ${config.color}`} />
+                          {notif._groupCount > 1 && (
+                            <div className="absolute -top-1 -right-1 min-w-[18px] h-[18px] rounded-full bg-purple-500 text-white text-[9px] font-black flex items-center justify-center px-1 border-2 border-black">
+                              {notif._groupCount}
+                            </div>
+                          )}
                         </div>
                       )}
 
@@ -768,9 +958,17 @@ export default function NotificationsPage() {
                           </div>
                         )}
 
-                        {/* Follow back button */}
+                        {/* Follow back button + rich preview */}
                         {isNewFollower && meta.from_artist_id && (
                           <FollowBackButton artistId={meta.from_artist_id} />
+                        )}
+                        {isNewFollower && meta.from_artist_slug && (
+                          <button
+                            onClick={e => { e.stopPropagation(); navigate(`/artist/${meta.from_artist_slug}`); }}
+                            className="mt-2 text-[11px] text-purple-400/70 hover:text-purple-400 transition flex items-center space-x-1"
+                          >
+                            <span>View profile →</span>
+                          </button>
                         )}
 
                         {/* Collab accept/decline */}

@@ -23,13 +23,18 @@ exports.handler = async (event) => {
 
   const { track_id, track_title, artist_id, artist_slug, token } = body;
   if (!track_id || !artist_id || !token) return { statusCode: 400, body: 'Missing fields' };
+  // Validate track_id is a real UUID not 'undefined' string
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (!UUID_RE.test(track_id) || !UUID_RE.test(artist_id)) {
+    return { statusCode: 400, body: 'Invalid track_id or artist_id' };
+  }
 
   // Verify the caller is the artist
   const { data: { user }, error: authErr } = await supabase.auth.getUser(token);
   if (authErr || !user) return { statusCode: 401, body: 'Unauthorized' };
 
   const { data: artist } = await supabase
-    .from('artists').select('id, artist_name, slug')
+    .from('artists').select('id, artist_name, slug, profile_image_url')
     .eq('id', artist_id).eq('user_id', user.id).maybeSingle();
   if (!artist) return { statusCode: 403, body: 'Forbidden' };
 
@@ -75,8 +80,9 @@ exports.handler = async (event) => {
       track_title:   title,
       track_artwork: trackData?.cover_artwork_url || null,
       file_url:      trackData?.file_url || null,
-      artist_name:   artistName,
-      artist_slug:   slug,
+      artist_name:        artistName,
+      artist_slug:        slug,
+      from_artist_image:  artist.profile_image_url || null,
     },
   }));
 

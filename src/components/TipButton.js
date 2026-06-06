@@ -11,7 +11,7 @@ import { Heart, Loader, X, DollarSign } from 'lucide-react';
 
 const PRESET_AMOUNTS = [2, 5, 10, 20];
 
-export default function TipButton({ artist }) {
+export default function TipButton({ artist, onTipSent }) {
   const { user } = useAuth();
   const [open, setOpen]         = useState(false);
   const [amount, setAmount]     = useState('');
@@ -72,7 +72,11 @@ export default function TipButton({ artist }) {
               body: JSON.stringify({ action: 'capture', order_id: data.order_id, artist_id: artist.id, amount: amountNum, message, token }),
             });
             const capData = await capRes.json();
-            if (capData.success) { setStep('success'); }
+            if (capData.success) {
+              setStep('success');
+              // Fire callback so live sessions can inject tip into chat
+              if (onTipSent) onTipSent(amountNum);
+            }
             else { setError('Payment failed. Please try again.'); setStep('error'); }
           },
           onError: () => { setError('Payment cancelled or failed.'); setStep('error'); },

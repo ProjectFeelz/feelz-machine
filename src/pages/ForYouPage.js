@@ -24,7 +24,7 @@ import ShareCard from '../components/ShareCard';
 import {
   Heart, MessageCircle, ListMusic, UserCheck,
   Share2, Loader, X, Send, ChevronUp,
-  Sparkles, Volume2, VolumeX, Info,
+  Sparkles, Volume2, VolumeX, Info, EyeOff,
 } from 'lucide-react';
 
 const SWIPE_THRESHOLD = 60;
@@ -618,6 +618,30 @@ function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare, onN
           </div>
           <span className="text-[11px] font-semibold text-white/80">{track.is_beat ? 'Buy' : 'Info'}</span>
         </button>
+
+        {/* Not interested */}
+        {user && !isOwnTrack && (
+          <button
+            onClick={e => {
+              e.stopPropagation();
+              supabase.from('listener_feedback').upsert({
+                user_id:    user.id,
+                track_id:   track.id,
+                artist_id:  track.artist_id,
+                signal:     'not_interested',
+                listen_pct: 0,
+                updated_at: new Date().toISOString(),
+              }, { onConflict: 'user_id,track_id' }).catch(() => {});
+              onNext();
+            }}
+            className="flex flex-col items-center space-y-1 opacity-40 hover:opacity-80 transition active:scale-90"
+          >
+            <div className="w-11 h-11 flex items-center justify-center">
+              <EyeOff className="w-6 h-6 text-white/90" strokeWidth={2} />
+            </div>
+            <span className="text-[11px] font-semibold text-white/80">Hide</span>
+          </button>
+        )}
       </div>
 
       {/* Bottom info */}
@@ -766,12 +790,20 @@ export default function ForYouPage() {
           .range(offset, offset + PAGE_SIZE - 1);
 
         if (recData?.length > 0) {
+          const REASON_LABELS = {
+            from_following: 'Following', genre_match: 'Your genre',
+            mood_match: 'Your mood', new_release: 'New release',
+            hidden_gem: 'Hidden gem', trending: 'Trending',
+            top_artist: 'Your fave', feat_following: 'Features who you follow',
+            recommended: 'For you',
+          };
           fetched = recData.filter(r => r.tracks).map(r => ({
             ...r.tracks,
             artist_name:  r.tracks.artists?.artist_name || 'Unknown',
             artist_slug:  r.tracks.artists?.slug || null,
             artist_image: r.tracks.artists?.profile_image_url || null,
-            reason: r.reason,
+            reason:       r.reason,
+            reason_label: REASON_LABELS[r.reason] || 'For you',
           }));
         }
       }
@@ -789,11 +821,12 @@ export default function ForYouPage() {
           .limit(halfPage);
         if (existingIdsStr) recentQuery = recentQuery.not('id', 'in', existingIdsStr);
 
+        // Fallback: mix engagement + recency so new users get a meaningful feed
+        // Sort by stream_count as proxy when engagement_score is null
         let topQuery = supabase.from('tracks')
           .select('id, title, slug, genre, mood, cover_artwork_url, file_url, youtube_url, duration, lyrics, artist_id, is_beat, stream_count, like_count, bpm, beat_key, beat_scale, download_price, engagement_score, artists(artist_name, slug, profile_image_url)')
           .eq('is_published', true)
-          .or(`engagement_score.gt.0,created_at.gte.${new Date(Date.now()-14*86400000).toISOString()}`)
-          .order('engagement_score', { ascending: false })
+          .order('stream_count', { ascending: false })
           .limit(PAGE_SIZE - fetched.length);
 
         const [{ data: recentTracks }, { data: topTracks }] = await Promise.all([recentQuery, topQuery]);
@@ -907,11 +940,43 @@ export default function ForYouPage() {
     }
   }, [idx, filteredTracks]); // eslint-disable-line
 
+  const trackStartTime = React.useRef(null);
+
   const goTo = useCallback((newIdx) => {
     if (newIdx < 0 || newIdx >= tracks.length) return;
+    // Capture listen depth for the track being left
+    const currentItem = filteredTracks[idx];
+    if (currentItem && user && trackStartTime.current) {
+      const elapsed = (Date.now() - trackStartTime.current) / 1000;
+      const duration = currentItem.duration || 180;
+      const pct = Math.min(100, Math.round((elapsed / duration) * 100));
+      // Log as implicit signal: < 10% = skip, > 70% = deep listen
+      if (pct < 10 && elapsed < 15) {
+        // Quick skip — negative signal, record in listener_feedback
+        supabase.from('listener_feedback').upsert({
+          user_id:    user.id,
+          track_id:   currentItem.id,
+          artist_id:  currentItem.artist_id,
+          signal:     'skip',
+          listen_pct: pct,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'user_id,track_id' }).catch(() => {});
+      } else if (pct >= 70) {
+        // Deep listen — positive signal
+        supabase.from('listener_feedback').upsert({
+          user_id:    user.id,
+          track_id:   currentItem.id,
+          artist_id:  currentItem.artist_id,
+          signal:     'deep_listen',
+          listen_pct: pct,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'user_id,track_id' }).catch(() => {});
+      }
+    }
+    trackStartTime.current = Date.now();
     setIdx(newIdx);
     setDragOffset(0);
-  }, [tracks.length]);
+  }, [tracks.length, filteredTracks, idx, user]);
 
   const onTouchStart = useCallback((e) => {
     touchStartY.current = e.touches[0].clientY;

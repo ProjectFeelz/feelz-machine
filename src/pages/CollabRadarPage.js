@@ -19,24 +19,87 @@ const COLLAB_TYPES = [
   { key: 'other',    label: 'Other',      icon: MoreHorizontal, desc: 'Something else' },
 ];
 
+// Genre compatibility: some genres naturally cross-pollinate
+const GENRE_AFFINITY = {
+  'Afrobeats':  ['Afropop','Afro House','Amapiano','R&B','Hip Hop'],
+  'Afropop':    ['Afrobeats','Afro House','R&B'],
+  'Afro House': ['Afrobeats','House','Amapiano','Electronic'],
+  'Amapiano':   ['Afro House','Afrobeats','House'],
+  'Hip Hop':    ['R&B','Trap','Afrobeats','Spoken Word'],
+  'R&B':        ['Soul','Hip Hop','Afrobeats','Neo Soul'],
+  'Soul':       ['R&B','Neo Soul','Gospel'],
+  'Neo Soul':   ['Soul','R&B','Jazz'],
+  'Jazz':       ['Neo Soul','Soul','Blues'],
+  'House':      ['Afro House','Electronic','Amapiano','Tech House'],
+  'Electronic': ['House','Afro House','Synthwave','Future Bass'],
+  'Trap':       ['Hip Hop','Drill','R&B'],
+  'Drill':      ['Trap','Hip Hop'],
+  'Gospel':     ['Soul','R&B','Choir'],
+  'Pop':        ['R&B','Dance','Electronic'],
+  'Reggae':     ['Dancehall','Afrobeats'],
+  'Dancehall':  ['Reggae','Afrobeats'],
+  'Gqom':       ['Amapiano','Afro House'],
+};
+
+// Role complementarity — beatmaker + vocalist = high compatibility
+const ROLE_PAIRS = {
+  beatmaker:   ['artist','vocalist'],
+  artist:      ['beatmaker','engineer','songwriter'],
+  vocalist:    ['beatmaker','producer'],
+  songwriter:  ['artist','vocalist','producer'],
+  engineer:    ['artist','beatmaker'],
+};
+
 function scoreMatch(me, them) {
-  const myGenres   = me.genre   ? [me.genre]   : [];
-  const myMoods    = me.mood    ? [me.mood]     : [];
-  const themGenres = them.genre ? [them.genre]  : [];
-  const themMoods  = them.mood  ? [them.mood]   : [];
-  const sharedGenres = myGenres.filter(g => themGenres.includes(g));
-  const sharedMoods  = myMoods.filter(m => themMoods.includes(m));
-  const shared       = [...new Set([...sharedGenres, ...sharedMoods])];
-  const genreScore    = sharedGenres.length * 25;
-  const moodScore     = sharedMoods.length  * 15;
-  const tierBonus     = them.tier === 'premium' ? 5 : them.tier === 'pro' ? 3 : 0;
-  const followerBonus = Math.min(Math.log10((them.follower_count || 1) + 1) * 3, 10);
-  // Give a base score so artists without genre overlap still appear;
-  // pure zero scores only happen when both sides have no genre/mood at all.
-  const base  = (myGenres.length === 0 || themGenres.length === 0) ? 10 : 0;
-  const raw   = base + genreScore + moodScore + tierBonus + followerBonus;
-  const score = Math.min(Math.round(raw), 99);
-  return { score, shared };
+  const myGenre   = me.genre   || null;
+  const theirGenre = them.genre || null;
+  const myMood    = me.mood    || null;
+  const theirMood  = them.mood  || null;
+  const myRole    = me.role    || 'artist';
+  const theirRole  = them.role  || 'artist';
+
+  const shared = [];
+  let score = 0;
+
+  // ── GENRE MATCH ───────────────────────────────────────────────────────────
+  if (myGenre && theirGenre) {
+    if (myGenre === theirGenre) {
+      score += 40; shared.push(myGenre); // exact match
+    } else {
+      // Affinity match (cross-genre compatibility)
+      const compatible = GENRE_AFFINITY[myGenre] || [];
+      if (compatible.includes(theirGenre)) {
+        score += 25; shared.push(`${myGenre} × ${theirGenre}`);
+      }
+    }
+  } else {
+    score += 8; // one side has no genre — give base score
+  }
+
+  // ── MOOD MATCH ────────────────────────────────────────────────────────────
+  if (myMood && theirMood) {
+    if (myMood === theirMood) { score += 20; shared.push(myMood); }
+    else if (['Energetic','Hype'].includes(myMood) && ['Energetic','Hype'].includes(theirMood)) score += 10;
+    else if (['Chill','Melancholic','Soulful'].includes(myMood) && ['Chill','Melancholic','Soulful'].includes(theirMood)) score += 10;
+  }
+
+  // ── ROLE COMPLEMENTARITY ──────────────────────────────────────────────────
+  const compatRoles = ROLE_PAIRS[myRole] || [];
+  if (compatRoles.includes(theirRole)) {
+    score += 20; // producer + vocalist, beatmaker + artist etc
+    if (!shared.includes(theirRole)) shared.push(theirRole);
+  } else if (myRole !== theirRole) {
+    score += 5; // different roles, not specifically complementary
+  }
+
+  // ── TIER + SOCIAL PROOF ───────────────────────────────────────────────────
+  const tierBonus = them.tier === 'premium' ? 8 : them.tier === 'pro' ? 4 : 0;
+  const followerBonus = Math.min(Math.log10((them.follower_count || 1) + 1) * 4, 12);
+  score += tierBonus + followerBonus;
+
+  // Cap at 99
+  const final = Math.min(Math.round(score), 99);
+  return { score: final, shared };
 }
 
 function MatchBadge({ score }) {
@@ -244,17 +307,17 @@ export default function CollabRadarPage() {
       // (handles the case where profile was just saved and context may lag)
       const { data: freshArtist } = await supabase
         .from('artists')
-        .select('id, genre, mood, tier')
+        .select('id, genre, mood, tier, role')
         .eq('id', artist.id)
         .single();
       const me = freshArtist || artist;
 
       const { data: artistList } = await supabase
         .from('artists')
-        .select('id, artist_name, slug, profile_image_url, is_verified, genre, mood, tier, follower_count')
+        .select('id, artist_name, slug, profile_image_url, is_verified, genre, mood, tier, follower_count, role')
         .neq('id', artist.id)
         .not('artist_name', 'is', null)
-        .limit(100);
+        .limit(200);
       const { data: sent } = await supabase
         .from('collab_requests').select('to_artist_id').eq('from_artist_id', artist.id);
       const alreadySent = new Set((sent || []).map(r => r.to_artist_id));

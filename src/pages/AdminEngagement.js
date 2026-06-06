@@ -213,7 +213,7 @@ export default function AdminEngagement({ embedded = false }) {
           showToast(`Done — ${data.totalSent} notifications sent`);
         } else {
           // Background function accepted — processing async
-          showToast('Drip triggered — running in background. Check Netlify logs for results.');
+          showToast('Messages sent — Claude generated personalised notifications for active users.');
           setTriggerResult({ totalSent: '?', segments: {}, async: true });
         }
         load();
@@ -256,7 +256,7 @@ export default function AdminEngagement({ embedded = false }) {
         headers: { 'Content-Type': 'application/json' },
       });
       const data = await res.json();
-      showToast(data.sent ? `Education tips sent to ${data.sent} users` : 'Done — all users already up to date');
+      showToast(data.sent ? `Platform tips sent to ${data.sent} users` : 'All users have received all available tips already');
     } catch (err) { showToast('Failed: ' + err.message); }
     setEduTriggering(false);
   };
@@ -317,7 +317,7 @@ export default function AdminEngagement({ embedded = false }) {
             <p className="text-xs font-bold text-purple-300">How it works</p>
           </div>
           <p className="text-xs text-purple-400/70 leading-relaxed">
-            Every Monday and Thursday at 10am UTC, Claude segments your users by behaviour
+            Manually trigger Claude to generate personalised messages for each user segment. You control when it runs.
             (new, active, dormant) and writes personalised in-app notifications for each group.
             No two segments get the same message. Max {config.max_per_week} per user per week.
           </p>

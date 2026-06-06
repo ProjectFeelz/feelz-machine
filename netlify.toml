@@ -68,7 +68,11 @@
 
 [[scheduled_functions]]
   name = "engagement-drip-cron"
-  schedule = "0 8 * * 1,4"
+  # schedule = "0 8 * * 1,4"  # disabled — AI drip not working as intended
+
+[[scheduled_functions]]
+  name = "update-engagement-scores"
+  schedule = "0 2 * * *"
 
 [[scheduled_functions]]
   name = "compute-behavior-profiles"
@@ -120,7 +124,7 @@
 
 [[scheduled_functions]]
   name = "compute-recommendations"
-  schedule = "0 3 * * *"
+  schedule = "30 3,15 * * *"
 
 [[scheduled_functions]]
   name = "platform-daily-story"
@@ -128,7 +132,7 @@
 
 [[scheduled_functions]]
   name = "feature-education-drip"
-  schedule = "0 10 * * 3"
+  # schedule = "0 10 * * 3"  # disabled — platform tips not landing
 
 
 # ── Redirects ─────────────────────────────────────────────────────────────────

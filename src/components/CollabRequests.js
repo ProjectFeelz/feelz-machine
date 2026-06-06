@@ -84,23 +84,10 @@ export default function CollabRequests() {
           .update(collabUpdate)
           .eq('id', request.collaboration_id);
         if (collabErr) console.warn('Collab update error (non-fatal):', collabErr.message);
-      } else if (action === 'accept' && request.track_id && request.from_artist_id) {
-        // CollabRadar request — no collaborations row exists, create one
-        const { data: newCollab } = await supabase.from('collaborations').insert({
-          track_id:      request.track_id,
-          artist_id:     request.from_artist_id,
-          role:          request.role || 'featured',
-          split_percent: 0,
-          status:        'accepted',
-          accepted_at:   new Date().toISOString(),
-          invited_by:    artist.id,
-        }).select('id').maybeSingle();
-        if (newCollab?.id) {
-          await supabase.from('collab_requests')
-            .update({ collaboration_id: newCollab.id })
-            .eq('id', request.id);
-        }
       }
+      // Note: CollabRadar requests have no track_id — we don't create a collaborations
+      // row here. The accepted status on collab_requests is sufficient. When an actual
+      // track upload happens later, the split can be set up at that point.
 
       // Notify — non-fatal
       try {
