@@ -631,7 +631,7 @@ function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare, onN
                 signal:     'not_interested',
                 listen_pct: 0,
                 updated_at: new Date().toISOString(),
-              }, { onConflict: 'user_id,track_id' }).catch(() => {});
+              }, { onConflict: 'user_id,track_id' });
               onNext();
             }}
             className="flex flex-col items-center space-y-1 opacity-40 hover:opacity-80 transition active:scale-90"
@@ -960,7 +960,7 @@ export default function ForYouPage() {
           signal:     'skip',
           listen_pct: pct,
           updated_at: new Date().toISOString(),
-        }, { onConflict: 'user_id,track_id' }).catch(() => {});
+        }, { onConflict: 'user_id,track_id' });
       } else if (pct >= 70) {
         // Deep listen — positive signal
         supabase.from('listener_feedback').upsert({
@@ -970,7 +970,7 @@ export default function ForYouPage() {
           signal:     'deep_listen',
           listen_pct: pct,
           updated_at: new Date().toISOString(),
-        }, { onConflict: 'user_id,track_id' }).catch(() => {});
+        }, { onConflict: 'user_id,track_id' });
       }
     }
     trackStartTime.current = Date.now();
