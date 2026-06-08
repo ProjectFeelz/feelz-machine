@@ -90,16 +90,11 @@ export default function MerchConnectSheet({ artist, onClose, onConnected }) {
   };
 
   return (
-    <div className="fixed inset-0 z-[700] flex items-end md:items-center justify-center bg-black/70 backdrop-blur-sm px-4"
+    <div className="fixed inset-0 z-[700] flex items-center justify-center bg-black/70 backdrop-blur-sm px-4 py-6"
       onClick={onClose}>
-      <div className="w-full max-w-sm rounded-t-3xl md:rounded-3xl overflow-hidden"
+      <div className="w-full max-w-sm rounded-3xl overflow-hidden flex flex-col" style={{ maxHeight: "calc(100vh - 48px)" }}
         style={{ backgroundColor: '#0f0f0f', border: '1px solid rgba(255,255,255,0.08)', boxShadow: '0 -16px 48px rgba(0,0,0,0.6)' }}
         onClick={e => e.stopPropagation()}>
-
-        {/* Handle */}
-        <div className="flex justify-center pt-3 pb-1 md:hidden">
-          <div className="w-8 h-1 rounded-full bg-white/20" />
-        </div>
 
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.06]">
@@ -113,7 +108,7 @@ export default function MerchConnectSheet({ artist, onClose, onConnected }) {
           </button>
         </div>
 
-        <div className="p-5 space-y-4">
+        <div className="p-5 space-y-4 overflow-y-auto flex-1">
 
           {/* Intro / connect */}
           {step === 'intro' && (

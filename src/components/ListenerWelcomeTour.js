@@ -424,7 +424,7 @@ export default function ListenerWelcomeTour({ displayName, onDone }) {
     : slide.title;
 
   return (
-    <div className="fixed inset-0 z-[500] flex flex-col bg-black overflow-hidden">
+    <div className="fixed inset-0 z-[500] flex flex-col bg-black overflow-y-auto">
       {/* Ambient glow */}
       <div
         className="absolute inset-0 pointer-events-none transition-all duration-700"
