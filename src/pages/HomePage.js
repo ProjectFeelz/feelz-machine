@@ -4,7 +4,7 @@ import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import { useStreakContext } from '../contexts/StreakContext';
 import { usePlayer } from '../contexts/PlayerContext';
-import { Flame, Play, Pause, Music, Verified, MoreHorizontal, Disc, Sparkles, Users, Trophy, Compass, Headphones, Radio, Zap } from 'lucide-react';
+import { Flame, Play, Pause, Music, Verified, MoreHorizontal, Disc, Sparkles, Users, Trophy, Compass, Headphones, Radio, Zap, ListMusic } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import TrackActionSheet from '../components/TrackActionSheet';
 import { usePullToRefresh } from '../hooks/usePullToRefresh';

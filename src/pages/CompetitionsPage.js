@@ -530,7 +530,7 @@ function HowItWorksSummary() {
 
 export default function CompetitionsPage() {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, artist } = useAuth();
   const { playTrack, currentTrack, isPlaying, togglePlay } = usePlayer();
 
   const [activeTab, setActiveTab]           = useState('competitions');
