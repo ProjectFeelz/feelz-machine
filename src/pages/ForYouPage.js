@@ -270,9 +270,9 @@ function FloatingHearts({ trackId }) {
         }
 
         if (name) {
-          const bubble = { id: Date.now(), name, avatar };
+          const bubble = { id: Date.now(), name, avatar, x: 5 + Math.random() * 45 };
           setBubbles(prev => [...prev, bubble]);
-          setTimeout(() => setBubbles(prev => prev.filter(b => b.id !== bubble.id)), 3500);
+          setTimeout(() => setBubbles(prev => prev.filter(b => b.id !== bubble.id)), 3200);
         }
       } catch {}
     };
@@ -298,17 +298,27 @@ function FloatingHearts({ trackId }) {
         </div>
       ))}
 
-      {/* Listener bubble — bottom left, fades in and out */}
+      {/* Listener name pills — float upward alongside hearts */}
       {bubbles.map(b => (
-        <div key={b.id} className="absolute bottom-36 left-4 flex items-center space-x-2 rounded-full px-3 py-1.5"
-          style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)', border: '1px solid rgba(255,255,255,0.12)', animation: 'bubblePop 3.5s ease forwards' }}>
-          <div className="w-6 h-6 rounded-full overflow-hidden bg-white/10 flex-shrink-0">
+        <div key={b.id}
+          className="absolute flex items-center space-x-1.5 rounded-full px-2.5 py-1.5"
+          style={{
+            bottom: '144px',
+            left: `${b.x || 8}%`,
+            maxWidth: '60%',
+            background: 'rgba(0,0,0,0.65)',
+            backdropFilter: 'blur(10px)',
+            border: '1px solid rgba(255,255,255,0.14)',
+            animation: 'bubbleFloat 3.2s ease forwards',
+            zIndex: 41,
+          }}>
+          <div className="w-5 h-5 rounded-full overflow-hidden bg-white/10 flex-shrink-0">
             {b.avatar
               ? <img src={b.avatar} alt="" className="w-full h-full object-cover" />
-              : <div className="w-full h-full flex items-center justify-center text-[10px] font-bold text-white/50">{b.name[0]}</div>}
+              : <div className="w-full h-full flex items-center justify-center text-[9px] font-bold text-white/50">{b.name[0]}</div>}
           </div>
-          <span className="text-[11px] font-semibold text-white/90 max-w-[120px] truncate">{b.name} liked this</span>
-          <span>❤️</span>
+          <span className="text-[11px] font-semibold text-white/90 truncate">{b.name}</span>
+          <span style={{ fontSize: 13 }}>❤️</span>
         </div>
       ))}
 
@@ -318,11 +328,11 @@ function FloatingHearts({ trackId }) {
           50%  { transform: translateY(-120px) scale(1.1) rotate(10deg); opacity: 0.9; }
           100% { transform: translateY(-240px) scale(0.7) rotate(-5deg); opacity: 0; }
         }
-        @keyframes bubblePop {
-          0%   { opacity: 0; transform: translateY(10px) scale(0.8); }
-          15%  { opacity: 1; transform: translateY(0) scale(1); }
-          70%  { opacity: 1; }
-          100% { opacity: 0; transform: translateY(-8px); }
+        @keyframes bubbleFloat {
+          0%   { opacity: 0; transform: translateY(12px) scale(0.85); }
+          12%  { opacity: 1; transform: translateY(0) scale(1); }
+          60%  { opacity: 1; transform: translateY(-60px); }
+          100% { opacity: 0; transform: translateY(-130px) scale(0.9); }
         }
       `}</style>
     </div>
@@ -679,33 +689,33 @@ function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare, onN
             <span className="text-[11px] font-semibold text-white/80">Hide</span>
           </button>
 
-          {/* Undo hide toast */}
-          {justHid && (
-            <div
-              className="absolute bottom-28 left-1/2 -translate-x-1/2 flex items-center space-x-3 px-4 py-2.5 rounded-2xl z-50 pointer-events-auto"
-              style={{ background: 'rgba(20,20,30,0.95)', border: '1px solid rgba(255,255,255,0.12)', boxShadow: '0 4px 24px rgba(0,0,0,0.5)', whiteSpace: 'nowrap' }}
-              onClick={e => e.stopPropagation()}
-            >
-              <span className="text-xs text-white/60">Hidden</span>
-              <button
-                onClick={e => {
-                  e.stopPropagation();
-                  clearTimeout(window.__feelz_hide_timer);
-                  // Remove the feedback signal
-                  supabase.from('listener_feedback')
-                    .delete()
-                    .eq('user_id', user.id)
-                    .eq('track_id', justHid.id);
-                  setJustHid(null);
-                }}
-                className="text-xs font-bold px-2.5 py-1 rounded-xl transition active:scale-95"
-                style={{ background: 'rgba(139,92,246,0.25)', color: '#a78bfa', border: '1px solid rgba(139,92,246,0.4)' }}
-              >
-                Undo
-              </button>
-            </div>
-          )}
           </>
+        )}
+
+        {/* Undo hide toast — positioned on card root so it's not clipped by action bar */}
+        {justHid && (
+          <div
+            className="absolute bottom-28 left-4 right-4 flex items-center justify-between px-4 py-2.5 rounded-2xl z-50 pointer-events-auto"
+            style={{ background: 'rgba(20,20,30,0.95)', border: '1px solid rgba(255,255,255,0.12)', boxShadow: '0 4px 24px rgba(0,0,0,0.5)' }}
+            onClick={e => e.stopPropagation()}
+          >
+            <span className="text-xs text-white/60">Song hidden</span>
+            <button
+              onClick={e => {
+                e.stopPropagation();
+                clearTimeout(window.__feelz_hide_timer);
+                supabase.from('listener_feedback')
+                  .delete()
+                  .eq('user_id', user.id)
+                  .eq('track_id', justHid.id);
+                setJustHid(null);
+              }}
+              className="text-xs font-bold px-3 py-1.5 rounded-xl transition active:scale-95"
+              style={{ background: 'rgba(139,92,246,0.25)', color: '#a78bfa', border: '1px solid rgba(139,92,246,0.4)' }}
+            >
+              Undo
+            </button>
+          </div>
         )}
       </div>
 
@@ -847,12 +857,26 @@ export default function ForYouPage() {
       let fetched = [];
 
       if (user) {
-        const { data: recData } = await supabase
+        // Fetch hidden track IDs so we can exclude them
+        const { data: hiddenData } = await supabase
+          .from('listener_feedback')
+          .select('track_id')
+          .eq('user_id', user.id)
+          .eq('signal', 'not_interested');
+        const hiddenIds = (hiddenData || []).map(h => h.track_id).filter(Boolean);
+
+        let recQuery = supabase
           .from('listener_recommendations')
           .select('score, reason, tracks(id, title, slug, genre, mood, cover_artwork_url, file_url, youtube_url, duration, lyrics, artist_id, is_beat, stream_count, like_count, bpm, beat_key, beat_scale, download_price, engagement_score, artists(artist_name, slug, profile_image_url))')
           .eq('user_id', user.id)
           .order('score', { ascending: false })
           .range(offset, offset + PAGE_SIZE - 1);
+
+        if (hiddenIds.length > 0) {
+          recQuery = recQuery.not('track_id', 'in', `(${hiddenIds.join(',')})`);
+        }
+
+        const { data: recData } = await recQuery;
 
         if (recData?.length > 0) {
           const REASON_LABELS = {
@@ -875,9 +899,11 @@ export default function ForYouPage() {
 
       if (fetched.length < PAGE_SIZE) {
         const existingIds = fetched.map(t => t.id);
+        // Combine with hidden IDs so fallback query also excludes them
+        const allExcludeIds = [...new Set([...existingIds, ...(typeof hiddenIds !== 'undefined' ? hiddenIds : [])])];
         // Mix: half by engagement, half by recency so new releases get exposure
         const halfPage = Math.ceil((PAGE_SIZE - fetched.length) / 2);
-        const existingIdsStr = existingIds.length > 0 ? `(${existingIds.join(',')})` : null;
+        const existingIdsStr = allExcludeIds.length > 0 ? `(${allExcludeIds.join(',')})` : null;
 
         let recentQuery = supabase.from('tracks')
           .select('id, title, slug, genre, mood, cover_artwork_url, file_url, youtube_url, duration, lyrics, artist_id, is_beat, stream_count, like_count, bpm, beat_key, beat_scale, download_price, engagement_score, artists(artist_name, slug, profile_image_url)')
