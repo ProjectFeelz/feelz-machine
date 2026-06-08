@@ -187,7 +187,7 @@ function LyricsCaption({ lyrics, currentTime, isActive }) {
 // ── Floating hearts + listener bubbles ───────────────────────────────────────
 const HEART_COLORS = ['#ef4444','#f472b6','#fb923c','#a78bfa','#f43f5e'];
 
-function FloatingHearts({ trackId }) {
+function FloatingHearts({ trackId, isActive }) {
   const [hearts, setHearts]   = React.useState([]);
   const [bubbles, setBubbles] = React.useState([]);
   const likersRef  = React.useRef([]); // cached liker profiles [{ name, avatar }]
@@ -196,7 +196,7 @@ function FloatingHearts({ trackId }) {
   const pollRef    = React.useRef(null);
 
   React.useEffect(() => {
-    if (!trackId) return;
+    if (!trackId || !isActive) return; // only run when card is visible
 
     // ── Step 1: load all likers once on mount ──────────────────────────────
     const loadLikers = async () => {
@@ -211,16 +211,19 @@ function FloatingHearts({ trackId }) {
 
         // Batch fetch profiles
         const ids = likes.map(l => l.user_id).filter(Boolean);
-        const [{ data: artists }, { data: profiles }] = await Promise.all([
+        const [{ data: artists }, { data: profiles }, { data: listenerRows }] = await Promise.all([
           supabase.from('artists').select('user_id, artist_name, profile_image_url').in('user_id', ids),
           supabase.from('user_profiles').select('user_id, name, avatar_url').in('user_id', ids),
+          supabase.from('listeners').select('user_id, display_name, avatar_url').in('user_id', ids),
         ]);
 
-        const artistMap  = Object.fromEntries((artists  || []).map(a => [a.user_id, { name: a.artist_name,  avatar: a.profile_image_url }]));
-        const profileMap = Object.fromEntries((profiles || []).map(p => [p.user_id, { name: p.name,          avatar: p.avatar_url }]));
+        const artistMap   = Object.fromEntries((artists      || []).map(a => [a.user_id, { name: a.artist_name,   avatar: a.profile_image_url }]));
+        const profileMap  = Object.fromEntries((profiles     || []).map(p => [p.user_id, { name: p.name,           avatar: p.avatar_url }]));
+        const listenerMap = Object.fromEntries((listenerRows || []).map(l => [l.user_id, { name: l.display_name,   avatar: l.avatar_url }]));
 
+        // Priority: artist name > user_profiles name > listener display_name
         likersRef.current = ids
-          .map(id => artistMap[id] || profileMap[id])
+          .map(id => artistMap[id] || profileMap[id] || listenerMap[id])
           .filter(l => l?.name)
           // Shuffle so order is random
           .sort(() => Math.random() - 0.5);
@@ -311,7 +314,7 @@ function FloatingHearts({ trackId }) {
       clearInterval(pollRef.current);
       ambientRef.current = null;
     };
-  }, [trackId]);
+  }, [trackId, isActive]); // eslint-disable-line
 
   if (!hearts.length && !bubbles.length) return null;
 
@@ -618,7 +621,7 @@ function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare, onN
       )}
 
       {/* Floating hearts — only on active card */}
-      {isActive && isThisOne && <FloatingHearts trackId={track.id} />}
+      {isActive && isThisOne && <FloatingHearts trackId={track.id} isActive={isActive} />}
 
       {/* Right action bar */}
       <div className="absolute right-3 bottom-32 z-20 flex flex-col items-center space-y-5"
@@ -1056,17 +1059,22 @@ export default function ForYouPage() {
     if (lastPlayedIdx.current === idx) lastPlayedIdx.current = -1;
   }, [currentTrackId]); // eslint-disable-line
 
+  const hasUserGestured = React.useRef(false);
+
   useEffect(() => {
     if (!filteredTracks.length) return;
     const item = filteredTracks[idx];
-    if (!item || item._type === 'story') return; // skip story cards
-    if (idx === lastPlayedIdx.current) return;   // already played this idx
+    if (!item || item._type === 'story') return;
+    if (idx === lastPlayedIdx.current) return;
+    // iOS fix: skip auto-play on first mount (idx=0) until user has swiped
+    // The goTo handler sets hasUserGestured=true on first swipe
+    if (idx === 0 && !hasUserGestured.current) return;
     lastPlayedIdx.current = idx;
     if (item.file_url && !item.youtube_url) {
       window.__feelz_play_source = 'for_you';
       const playableQueue = filteredTracks.filter(t => t?.file_url && !t?.youtube_url);
       playTrack(item, playableQueue, playableQueue.findIndex(t => t.id === item.id));
-      setIsMinimized(true); // keep player hidden while on feed
+      setIsMinimized(true);
     }
   }, [idx, filteredTracks]); // eslint-disable-line
 
@@ -1103,6 +1111,7 @@ export default function ForYouPage() {
         }, { onConflict: 'user_id,track_id' });
       }
     }
+    hasUserGestured.current = true;
     trackStartTime.current = Date.now();
     // iOS fix: call playTrack synchronously here (inside user gesture)
     // rather than waiting for the useEffect to fire after setIdx
@@ -1322,19 +1331,44 @@ export default function ForYouPage() {
       )}
 
       {/* Comment sheet — fixed overlay, unaffected by keyboard */}
-      {activeSheet?.type === 'comments' && (
-        <div key={activeSheet?.track?.id} className="fixed inset-0 z-[800] flex items-end justify-center"
-          style={{ background: 'rgba(0,0,0,0.5)' }}
-          onClick={() => setActiveSheet(null)}>
-          <div className="w-full md:max-w-lg md:mb-6 md:rounded-2xl"
-            onClick={e => e.stopPropagation()}
-            style={{ maxHeight: 'calc(100vh - 80px)', height: '65vh', display: 'flex', flexDirection: 'column',
-                     background: 'rgba(10,10,10,0.98)', borderTop: '1px solid rgba(255,255,255,0.08)',
-                     borderRadius: '24px 24px 0 0' }}>
-            <TrackCommentSheet track={activeSheet.track} user={user} onClose={() => setActiveSheet(null)} />
+      {activeSheet?.type === 'comments' && (() => {
+        // iOS: track keyboard height so sheet moves up with keyboard
+        const [kbHeight, setKbHeight] = React.useState(0);
+        React.useEffect(() => {
+          if (!window.visualViewport) return;
+          const update = () => {
+            const kh = Math.max(0, window.innerHeight - window.visualViewport.height - window.visualViewport.offsetTop);
+            setKbHeight(kh);
+          };
+          window.visualViewport.addEventListener('resize', update);
+          window.visualViewport.addEventListener('scroll', update);
+          return () => {
+            window.visualViewport.removeEventListener('resize', update);
+            window.visualViewport.removeEventListener('scroll', update);
+          };
+        }, []);
+        return (
+          <div key={activeSheet?.track?.id} className="fixed inset-0 z-[800] flex items-end justify-center"
+            style={{ background: 'rgba(0,0,0,0.5)' }}
+            onClick={() => setActiveSheet(null)}>
+            <div className="w-full md:max-w-lg md:mb-6 md:rounded-2xl"
+              onClick={e => e.stopPropagation()}
+              style={{
+                maxHeight: 'calc(100vh - 80px)',
+                height: '65vh',
+                display: 'flex',
+                flexDirection: 'column',
+                background: 'rgba(10,10,10,0.98)',
+                borderTop: '1px solid rgba(255,255,255,0.08)',
+                borderRadius: '24px 24px 0 0',
+                marginBottom: kbHeight > 0 ? `${kbHeight}px` : 0,
+                transition: 'margin-bottom 0.15s ease',
+              }}>
+              <TrackCommentSheet track={activeSheet.track} user={user} onClose={() => setActiveSheet(null)} />
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Playlist sheet — fixed overlay */}
       {activeSheet?.type === 'playlist' && (

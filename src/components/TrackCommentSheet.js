@@ -1,6 +1,5 @@
 // src/components/TrackCommentSheet.js
-// Based on the original working CommentSheet from ForYouPage.
-// Added: replies (parent_comment_id) and emoji reactions.
+// Fixed: input always visible, reply context chip, iOS keyboard handling
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Loader, X, Send, CornerDownRight, Smile } from 'lucide-react';
@@ -8,14 +7,14 @@ import { supabase } from '../supabaseClient';
 
 const REACTIONS = ['🔥','❤️','😤','🎯','💯','🙌'];
 
-// ── Keyboard offset — exact original from ForYouPage ─────────────────────────
+// ── Keyboard offset ───────────────────────────────────────────────────────────
 function useKeyboardOffset() {
   const [offset, setOffset] = React.useState(0);
   React.useEffect(() => {
     if (!window.visualViewport) return;
     const update = () => {
-      const keyboardHeight = window.innerHeight - window.visualViewport.height - window.visualViewport.offsetTop;
-      setOffset(Math.max(0, keyboardHeight));
+      const kh = window.innerHeight - window.visualViewport.height - window.visualViewport.offsetTop;
+      setOffset(Math.max(0, kh));
     };
     window.visualViewport.addEventListener('resize', update);
     window.visualViewport.addEventListener('scroll', update);
@@ -114,23 +113,21 @@ export default function TrackCommentSheet({ track, user, onClose, routePrefix = 
   const inputRef = useRef(null);
 
   useEffect(() => {
-    // Pre-fetch current user's profile for instant comment display
     if (user?.id) {
       Promise.all([
         supabase.from('artists').select('user_id, artist_name, profile_image_url').eq('user_id', user.id).maybeSingle(),
         supabase.from('user_profiles').select('user_id, name, avatar_url').eq('user_id', user.id).maybeSingle(),
-      ]).then(([{ data: a }, { data: p }]) => {
-        if (a) user.__artist = a;
+        supabase.from('listeners').select('user_id, display_name, avatar_url').eq('user_id', user.id).maybeSingle(),
+      ]).then(([{ data: a }, { data: p }, { data: l }]) => {
+        if (a) user.__artist  = a;
         if (p) user.__profile = p;
+        // Use listener display_name as fallback profile name
+        if (l && !p?.name) user.__profile = { ...l, name: l.display_name, avatar_url: l.avatar_url };
       });
     }
     load();
-    setTimeout(() => {
-      if (inputRef.current) {
-        inputRef.current.focus();
-        inputRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }
-    }, 300);
+    // Focus input after sheet animates in
+    setTimeout(() => inputRef.current?.focus(), 400);
   }, [track.id]); // eslint-disable-line
 
   const load = useCallback(async () => {
@@ -151,14 +148,15 @@ export default function TrackCommentSheet({ track, user, onClose, routePrefix = 
           supabase.from('listeners').select('user_id, display_name, avatar_url').in('user_id', uids),
         ])
       : [{ data: [] }, { data: [] }, { data: [] }];
-    const artistMap   = Object.fromEntries((artists         || []).map(a => [a.user_id, a]));
-    const profileMap  = Object.fromEntries((profiles        || []).map(p => [p.user_id, p]));
-    const listenerMap = Object.fromEntries((listenerProfiles|| []).map(l => [l.user_id, l]));
+
+    const artistMap   = Object.fromEntries((artists          || []).map(a => [a.user_id, a]));
+    const profileMap  = Object.fromEntries((profiles         || []).map(p => [p.user_id, p]));
+    const listenerMap = Object.fromEntries((listenerProfiles || []).map(l => [l.user_id, { ...l, name: l.display_name }]));
 
     setComments(raw.map(c => ({
       ...c,
-      artists:       artistMap[c.user_id]   || null,
-      user_profiles: profileMap[c.user_id]  || listenerMap[c.user_id] || null,
+      artists:       artistMap[c.user_id]  || null,
+      user_profiles: profileMap[c.user_id] || listenerMap[c.user_id] || null,
     })));
     setLoading(false);
   }, [track.id]);
@@ -178,20 +176,14 @@ export default function TrackCommentSheet({ track, user, onClose, routePrefix = 
       .single();
 
     if (data) {
-      const enriched = {
-        ...data,
-        artists:       user.__artist  || null,
-        user_profiles: user.__profile || null,
-      };
-      setComments(prev => [enriched, ...prev]);
-      // Notify track artist
+      setComments(prev => [{ ...data, artists: user.__artist || null, user_profiles: user.__profile || null }, ...prev]);
       try {
         const [{ data: trackRow }, { data: commenterArtist }] = await Promise.all([
           supabase.from('tracks').select('artist_id, title, slug, artists(user_id)').eq('id', track.id).maybeSingle(),
           supabase.from('artists').select('id, artist_name, profile_image_url').eq('user_id', user.id).maybeSingle(),
         ]);
         if (trackRow?.artists?.user_id && trackRow.artists.user_id !== user.id) {
-          const name = commenterArtist?.artist_name || 'Someone';
+          const name = commenterArtist?.artist_name || user.__profile?.name || 'Someone';
           await supabase.from('notifications').insert({
             user_id:        trackRow.artists.user_id,
             artist_id:      trackRow.artist_id,
@@ -218,7 +210,6 @@ export default function TrackCommentSheet({ track, user, onClose, routePrefix = 
     setPosting(false);
   };
 
-  // Separate top-level and replies
   const topLevel = comments.filter(c => !c.parent_comment_id);
   const replyMap = {};
   comments.filter(c => c.parent_comment_id).forEach(r => {
@@ -246,28 +237,19 @@ export default function TrackCommentSheet({ track, user, onClose, routePrefix = 
           <ReactionBar commentId={c.id} userId={user?.id} />
           {!isReply && user && (
             <button
-              onClick={() => setReplyingTo(replyingTo?.id === c.id ? null : { id: c.id, authorName: name })}
+              onClick={() => {
+                setReplyingTo(replyingTo?.id === c.id ? null : { id: c.id, authorName: name });
+                setTimeout(() => inputRef.current?.focus(), 100);
+              }}
               className="mt-1 text-[10px] text-white/25 hover:text-white/50 transition font-medium">
-              {replyingTo?.id === c.id ? 'Cancel' : 'Reply'}
+              {replyingTo?.id === c.id ? 'Cancel reply' : 'Reply'}
             </button>
           )}
+          {/* Reply indicator under the comment being replied to */}
           {replyingTo?.id === c.id && (
-            <div className="flex items-center space-x-2 mt-2">
-              <CornerDownRight className="w-3 h-3 text-white/20 flex-shrink-0" />
-              <input
-                autoFocus
-                value={text}
-                onChange={e => setText(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && post()}
-                placeholder={`Reply to ${name}…`}
-                maxLength={200}
-                className="flex-1 bg-white/[0.05] rounded-xl px-3 py-1.5 text-sm text-white placeholder-white/20 outline-none border border-white/[0.06] focus:border-white/20"
-              />
-              <button onClick={post} disabled={!text.trim() || posting}
-                className="w-7 h-7 flex items-center justify-center rounded-xl disabled:opacity-30 active:scale-95"
-                style={{ background: 'rgba(167,139,250,0.2)', border: '1px solid rgba(167,139,250,0.3)' }}>
-                {posting ? <Loader className="w-3 h-3 animate-spin text-purple-400" /> : <Send className="w-3 h-3 text-purple-400" />}
-              </button>
+            <div className="flex items-center space-x-1 mt-1">
+              <CornerDownRight className="w-3 h-3 text-purple-400/50 flex-shrink-0" />
+              <span className="text-[11px] text-purple-400/60">Type your reply below ↓</span>
             </div>
           )}
         </div>
@@ -320,36 +302,55 @@ export default function TrackCommentSheet({ track, user, onClose, routePrefix = 
         )}
       </div>
 
-      {/* Input — exact original structure + keyboard offset */}
+      {/* Input bar — always visible, moves up with iOS keyboard ─────────────── */}
       <div
-        className="flex items-center space-x-2 pl-4 pr-4 py-3 border-t border-white/[0.06] flex-shrink-0 sticky bottom-0 bg-black overflow-visible"
+        className="flex-shrink-0 border-t border-white/[0.06] bg-black"
         style={{
-          paddingBottom: 'max(12px, env(safe-area-inset-bottom))',
-          marginBottom:  keyboardOffset ? `${keyboardOffset}px` : undefined,
+          position: 'sticky',
+          bottom: keyboardOffset > 0 ? `${keyboardOffset}px` : 0,
+          paddingBottom: keyboardOffset > 0 ? '8px' : 'max(12px, env(safe-area-inset-bottom))',
+          transition: 'bottom 0.15s ease, padding-bottom 0.15s ease',
         }}
       >
-        {!replyingTo && (
-          <>
-            <input
-              ref={inputRef}
-              value={text}
-              onChange={e => setText(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && post()}
-              onFocus={() => setTimeout(() => inputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 300)}
-              placeholder="Add a comment…"
-              maxLength={300}
-              className="flex-1 min-w-0 bg-white/[0.06] rounded-xl px-3 py-2 text-sm text-white placeholder-white/25 outline-none border border-white/[0.06] focus:border-white/20"
-            />
+        {/* Reply context chip */}
+        {replyingTo && (
+          <div className="flex items-center justify-between px-4 pt-2 pb-1">
+            <div className="flex items-center space-x-1.5">
+              <CornerDownRight className="w-3 h-3 text-purple-400/60" />
+              <span className="text-[11px] text-purple-400/70">
+                Replying to <span className="font-semibold">{replyingTo.authorName}</span>
+              </span>
+            </div>
             <button
-              onClick={post}
-              disabled={!text.trim() || !user || posting}
-              className="w-9 h-9 flex items-center justify-center rounded-xl transition disabled:opacity-30"
-              style={{ background: 'rgba(167,139,250,0.2)', border: '1px solid rgba(167,139,250,0.3)' }}
+              onClick={() => { setReplyingTo(null); setText(''); }}
+              className="text-white/30 hover:text-white/60 transition p-1"
             >
-              {posting ? <Loader className="w-4 h-4 animate-spin text-purple-400" /> : <Send className="w-4 h-4 text-purple-400" />}
+              <X className="w-3 h-3" />
             </button>
-          </>
+          </div>
         )}
+        {/* Input row */}
+        <div className="flex items-center space-x-2 px-4 py-2">
+          <input
+            ref={inputRef}
+            value={text}
+            onChange={e => setText(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && !e.shiftKey && post()}
+            placeholder={replyingTo ? `Reply to ${replyingTo.authorName}…` : 'Add a comment…'}
+            maxLength={300}
+            className="flex-1 min-w-0 bg-white/[0.06] rounded-xl px-3 py-2.5 text-sm text-white placeholder-white/25 outline-none border border-white/[0.06] focus:border-white/20"
+          />
+          <button
+            onClick={post}
+            disabled={!text.trim() || !user || posting}
+            className="w-9 h-9 flex-shrink-0 flex items-center justify-center rounded-xl transition active:scale-95 disabled:opacity-30"
+            style={{ background: 'rgba(167,139,250,0.2)', border: '1px solid rgba(167,139,250,0.3)' }}
+          >
+            {posting
+              ? <Loader className="w-4 h-4 animate-spin text-purple-400" />
+              : <Send className="w-4 h-4 text-purple-400" />}
+          </button>
+        </div>
       </div>
     </div>
   );
