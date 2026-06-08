@@ -165,6 +165,7 @@ export default function HomePage() {
   const [topArtists, setTopArtists]                 = useState([]);
   const [recommended, setRecommended]               = useState([]);
   const [similarArtists, setSimilarArtists]         = useState([]);
+  const [featuredPlaylists, setFeaturedPlaylists]   = useState([]);
   const [followedReleases, setFollowedReleases]     = useState([]);
   const [loading, setLoading]                       = useState(true);
   const [actionSheetTrack, setActionSheetTrack]     = useState(null);
@@ -241,7 +242,7 @@ export default function HomePage() {
       setTopArtists(artists || []);
 
       if (user) {
-        await Promise.all([fetchRecommendations(), fetchFollowedReleases(), fetchCompetitions(), fetchWrapped(), fetchLiveSessions(), fetchSimilarArtists()]);
+        await Promise.all([fetchRecommendations(), fetchFollowedReleases(), fetchCompetitions(), fetchWrapped(), fetchLiveSessions(), fetchSimilarArtists(), fetchFeaturedPlaylists()]);
       } else {
         await Promise.all([fetchCompetitions(), fetchLiveSessions()]);
       }
@@ -286,7 +287,6 @@ export default function HomePage() {
     } catch (err) { console.error('Live sessions fetch error:', err); }
   };
 
-  const [wheelChallenge, setWheelChallenge] = useState(null);
 
   const fetchCompetitions = async () => {
     try {
@@ -299,14 +299,6 @@ export default function HomePage() {
       setActiveCompetitions(data || []);
     } catch (err) { console.error('Competitions fetch error:', err); }
 
-    // Fetch current wheel challenge separately for the Roulette pill
-    try {
-      const { data: wc } = await supabase
-        .from('wheel_challenges')
-        .select('id, prompt, mode, competition_id, spun_at')
-        .eq('is_current', true)
-        .maybeSingle();
-      setWheelChallenge(wc || null);
     } catch {}
   };
 
@@ -387,6 +379,20 @@ export default function HomePage() {
         artist_slug: t.artists?.slug || null,
       })), topArtists.length));
     } catch (err) { console.error('Recommendations error:', err); }
+  };
+
+  const fetchFeaturedPlaylists = async () => {
+    try {
+      const { data } = await supabase
+        .from('playlists')
+        .select('id, name, cover_url, user_id, created_at, is_public, playlist_tracks(id, tracks(cover_artwork_url)), artists:users!playlists_user_id_fkey(artists(artist_name, slug, profile_image_url))')
+        .eq('is_public', true)
+        .order('created_at', { ascending: false })
+        .limit(8);
+      // Fallback simpler query if join fails
+      if (!data) return;
+      setFeaturedPlaylists(data.filter(p => p.playlist_tracks?.length > 0));
+    } catch {}
   };
 
   const fetchSimilarArtists = async () => {
@@ -641,34 +647,7 @@ export default function HomePage() {
       {/* On This Day — resurface a track from exactly 1 year ago */}
       <OnThisDay user={user} />
 
-      {/* ── Collab Roulette pill — always visible if active ── */}
-      {wheelChallenge && (
-        <div className="px-6 mb-4">
-          <button
-            onClick={() => navigate('/wheel')}
-            className="w-full flex items-center space-x-3 px-4 py-3 rounded-2xl text-left transition active:scale-[0.98]"
-            style={{ background: 'linear-gradient(135deg, rgba(139,92,246,0.25), rgba(120,75,160,0.20))', border: '1px solid rgba(139,92,246,0.45)', boxShadow: '0 2px 12px rgba(139,92,246,0.15)' }}
-          >
-            <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 text-lg"
-              style={{ background: 'rgba(139,92,246,0.15)' }}>
-              🎲
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center space-x-2">
-                <p className="text-xs font-bold text-white">Collab Roulette</p>
-                <span className="text-[9px] px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wide"
-                  style={{ background: 'rgba(139,92,246,0.15)', color: '#a78bfa' }}>
-                  {wheelChallenge.mode === 'singer' ? '🎤 Vocalist' : '🎛️ Producer'}
-                </span>
-              </div>
-              <p className="text-[11px] truncate mt-0.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
-                {wheelChallenge.prompt.split('\n').join(' ')}
-              </p>
-            </div>
-            <span className="text-[10px] font-bold flex-shrink-0" style={{ color: '#a78bfa' }}>Enter →</span>
-          </button>
-        </div>
-      )}
+
 
       {/* Active Competitions */}
       {activeCompetitions.filter(c => !c.wheel_challenge).length > 0 && (
@@ -872,6 +851,47 @@ export default function HomePage() {
             ))}
           </div>
         </Section>
+      )}
+
+      {/* ── Playlists row ── */}
+      {featuredPlaylists.length > 0 && (
+        <div className="mb-8">
+          <div className="flex items-center justify-between mb-3 px-6">
+            <div className="flex items-center space-x-2">
+              <ListMusic className="w-3.5 h-3.5 text-white/30" />
+              <span className="section-label">Playlists</span>
+            </div>
+            <button onClick={() => navigate('/library/playlists')}
+              className="text-xs text-white/30 hover:text-white/50 transition">See all →</button>
+          </div>
+          <div className="mx-6 rounded-2xl py-4 px-4"
+            style={{ background: 'linear-gradient(135deg, rgba(15,15,35,0.95) 0%, rgba(20,10,40,0.9) 100%)', border: '1px solid rgba(255,255,255,0.06)' }}>
+            <div className="flex space-x-4 overflow-x-auto scrollbar-hide">
+              {featuredPlaylists.map(pl => {
+                const coverUrl = pl.cover_url || pl.playlist_tracks?.find(pt => pt.tracks?.cover_artwork_url)?.tracks?.cover_artwork_url;
+                return (
+                  <button key={pl.id}
+                    onClick={() => navigate(`/library/playlists/${pl.id}`)}
+                    className="flex-shrink-0 w-28 text-left group">
+                    <div className="w-28 h-28 rounded-xl overflow-hidden mb-2 relative"
+                      style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                      {coverUrl
+                        ? <img src={coverUrl} alt={pl.name} loading="lazy"
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                        : <div className="w-full h-full flex items-center justify-center">
+                            <ListMusic className="w-8 h-8 text-white/10" />
+                          </div>}
+                    </div>
+                    <p className="text-xs font-semibold text-white truncate">{pl.name}</p>
+                    <p className="text-[10px] text-white/30 truncate mt-0.5">
+                      {pl.playlist_tracks?.length || 0} tracks
+                    </p>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Featured */}

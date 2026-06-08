@@ -317,6 +317,7 @@ export default function ProfilePage() {
         mood:         form.mood  || null,
         social_links: sl,
         paypal_email: form.paypal_email?.trim() || null,
+        is_published: true,
         updated_at:   new Date().toISOString(),
       };
       if (profileImgFile) updateData.profile_image_url = await uploadFile(profileImgFile, 'profile-images/');
@@ -345,11 +346,12 @@ export default function ProfilePage() {
       }
       // Update artist profile
       const artistUpdate = {
-        artist_name: editDisplayName.trim() || artist?.artist_name,
-        bio:         editBio.trim() || null,
-        genre:       editGenres[0] || null,
-        mood:        editMood || null,
-        updated_at:  new Date().toISOString(),
+        artist_name:  editDisplayName.trim() || artist?.artist_name,
+        bio:          editBio.trim() || null,
+        genre:        editGenres[0] || null,
+        mood:         editMood || null,
+        is_published: true,
+        updated_at:   new Date().toISOString(),
       };
       if (newAvatarUrl && newAvatarUrl !== artist?.profile_image_url) {
         artistUpdate.profile_image_url = newAvatarUrl;

@@ -193,8 +193,10 @@ export default function TrackActionSheet({ track, artist, onClose }) {
     const loadPlaylists = async () => {
         if (!user) { navigate('/login'); onClose(); return; }
         const { data } = await supabase
-            .from('playlists').select('id, name')
-            .eq('user_id', user.id).order('name');
+            .from('playlists')
+            .select('id, name, cover_url, playlist_tracks(id, tracks(cover_artwork_url))')
+            .eq('user_id', user.id)
+            .order('name');
         setPlaylists(data || []);
         setView('playlists');
     };
@@ -385,13 +387,34 @@ export default function TrackActionSheet({ track, artist, onClose }) {
                             {playlists.length === 0 && !showNewPlaylist && (
                                 <p className="text-xs text-white/30 px-5 py-3">No playlists yet — create one above</p>
                             )}
-                            {playlists.map(pl => (
-                                <button key={pl.id} onClick={() => handleAddToPlaylist(pl.id)} disabled={addingTo === pl.id}
-                                    className="w-full flex items-center justify-between px-5 py-3.5 active:bg-white/[0.04] transition">
-                                    <span className="text-sm text-white/70 truncate">{pl.name}</span>
-                                    {addedTo[pl.id] ? <Check className="w-4 h-4 text-green-400" /> : addingTo === pl.id ? <Loader className="w-4 h-4 animate-spin text-white/30" /> : null}
-                                </button>
-                            ))}
+                            {playlists.map(pl => {
+                                const covers = (pl.playlist_tracks || [])
+                                    .map(pt => pt.tracks?.cover_artwork_url).filter(Boolean);
+                                const thumb = pl.cover_url || covers[0] || null;
+                                const count = pl.playlist_tracks?.length || 0;
+                                return (
+                                    <button key={pl.id} onClick={() => handleAddToPlaylist(pl.id)} disabled={addingTo === pl.id}
+                                        className="w-full flex items-center space-x-3 px-4 py-2.5 active:bg-white/[0.04] transition">
+                                        <div className="w-9 h-9 rounded-lg flex-shrink-0 overflow-hidden"
+                                            style={{ background: 'linear-gradient(135deg, rgba(139,92,246,0.3), rgba(59,130,246,0.2))' }}>
+                                            {thumb
+                                                ? <img src={thumb} alt="" className="w-full h-full object-cover" />
+                                                : <div className="w-full h-full flex items-center justify-center">
+                                                    <Music className="w-4 h-4 text-white/20" />
+                                                  </div>}
+                                        </div>
+                                        <div className="flex-1 min-w-0 text-left">
+                                            <p className="text-sm text-white/80 truncate">{pl.name}</p>
+                                            <p className="text-xs text-white/30">{count} track{count !== 1 ? 's' : ''}</p>
+                                        </div>
+                                        {addedTo[pl.id]
+                                            ? <Check className="w-4 h-4 text-green-400 flex-shrink-0" />
+                                            : addingTo === pl.id
+                                                ? <Loader className="w-4 h-4 animate-spin text-white/30 flex-shrink-0" />
+                                                : null}
+                                    </button>
+                                );
+                            })}
                         </div>
                     )}
 

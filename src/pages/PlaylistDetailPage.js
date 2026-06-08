@@ -6,7 +6,7 @@ import TrackActionSheet from '../components/TrackActionSheet';
 import { usePlayer } from '../contexts/PlayerContext';
 import {
   ArrowLeft, Play, Pause, Music, Loader, Trash2,
-  Plus, Search, X, Globe, Lock, MoreVertical, Users
+  Plus, Search, X, Globe, Lock, MoreVertical, Users, Camera, GripVertical
 } from 'lucide-react';
 
 function formatDuration(seconds) {
@@ -38,6 +38,8 @@ export default function PlaylistDetailPage() {
   const [isCollaborator, setIsCollaborator] = useState(false);
   const [collaborators, setCollaborators] = useState([]);
   const [copiedLink, setCopiedLink] = useState(false);
+  const [coverUploading, setCoverUploading] = useState(false);
+  const coverInputRef = React.useRef(null);
 
   useEffect(() => {
     if (id) fetchPlaylist();
@@ -132,7 +134,19 @@ export default function PlaylistDetailPage() {
       .delete()
       .eq('playlist_id', id)
       .eq('track_id', trackId);
-    setTracks(prev => prev.filter(pt => pt.track.id !== trackId));
+    // Reindex positions so gaps don't accumulate
+    const updated = tracks
+      .filter(pt => pt.track.id !== trackId)
+      .map((pt, i) => ({ ...pt, position: i }));
+    setTracks(updated);
+    // Persist reindexed positions in background
+    updated.forEach(pt => {
+      supabase.from('playlist_tracks')
+        .update({ position: pt.position })
+        .eq('playlist_id', id)
+        .eq('track_id', pt.track.id)
+        .catch(() => {});
+    });
     setRemoving(null);
   };
 
@@ -158,14 +172,34 @@ export default function PlaylistDetailPage() {
     setTimeout(() => setCopiedLink(false), 2000);
   };
 
+  const uploadCover = async (file) => {
+    if (!file || !isOwner) return;
+    setCoverUploading(true);
+    try {
+      const ext  = file.name.split('.').pop();
+      const path = `playlist-covers/${user?.id}/${id}-${Date.now()}.${ext}`;
+      const { error: upErr } = await supabase.storage.from('artist-images').upload(path, file, { upsert: true });
+      if (!upErr) {
+        const { data: { publicUrl } } = supabase.storage.from('artist-images').getPublicUrl(path);
+        await supabase.from('playlists').update({ cover_url: publicUrl }).eq('id', id);
+        setPlaylist(prev => ({ ...prev, cover_url: publicUrl }));
+      }
+    } catch {}
+    setCoverUploading(false);
+  };
+
   const handlePlay = (track) => {
     if (currentTrack?.id === track.id) { togglePlay(); return; }
-    playTrack(track, tracks.map(pt => pt.track));
+    const queue = tracks.map(pt => pt.track).filter(Boolean);
+    const idx   = queue.findIndex(t => t.id === track.id);
+    playTrack(track, queue, idx >= 0 ? idx : 0);
   };
 
   const playAll = () => {
     if (tracks.length === 0) return;
-    playTrack(tracks[0].track, tracks.map(pt => pt.track));
+    const queue = tracks.map(pt => pt.track).filter(Boolean);
+    if (!queue.length) return;
+    playTrack(queue[0], queue, 0);
   };
 
   const isOwner  = playlist?.user_id === user?.id;
@@ -179,10 +213,135 @@ export default function PlaylistDetailPage() {
     );
   }
 
+  // Build collage from first 4 track covers
+  const collageSrcs = tracks
+    .map(pt => pt.track?.cover_artwork_url)
+    .filter(Boolean)
+    .slice(0, 4);
+  const heroCover = playlist?.cover_url || (collageSrcs.length === 1 ? collageSrcs[0] : null);
+
   return (
-    <div className="pt-14 md:pt-0 pb-32 px-4 max-w-2xl">
-      {/* Header */}
+    <div className="pt-14 md:pt-0 pb-32 max-w-2xl">
+      {/* Hero cover */}
+      <div className="relative w-full aspect-square max-h-64 overflow-hidden mb-0">
+        {heroCover ? (
+          <img src={heroCover} alt={playlist?.name} className="w-full h-full object-cover" />
+        ) : collageSrcs.length >= 2 ? (
+          <div className="w-full h-full grid grid-cols-2 grid-rows-2">
+            {[0,1,2,3].map(i => (
+              <div key={i} className="overflow-hidden">
+                {collageSrcs[i]
+                  ? <img src={collageSrcs[i]} alt="" className="w-full h-full object-cover" />
+                  : <div className="w-full h-full" style={{ background: 'rgba(255,255,255,0.04)' }} />}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="w-full h-full flex items-center justify-center"
+            style={{ background: 'linear-gradient(135deg, rgba(139,92,246,0.2), rgba(59,130,246,0.1))' }}>
+            <Music className="w-16 h-16 text-white/10" />
+          </div>
+        )}
+        {/* Dark gradient overlay */}
+        <div className="absolute inset-0" style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,0.1) 0%, rgba(0,0,0,0.7) 100%)' }} />
+        {/* Back button */}
+        <button onClick={() => navigate('/library/playlists')}
+          className="absolute top-4 left-4 w-9 h-9 flex items-center justify-center rounded-full backdrop-blur-md"
+          style={{ background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.15)' }}>
+          <ArrowLeft className="w-5 h-5 text-white" />
+        </button>
+        {/* Upload cover button for owners */}
+        {isOwner && (
+          <label className="absolute top-4 right-4 w-9 h-9 flex items-center justify-center rounded-full cursor-pointer backdrop-blur-md transition"
+            style={{ background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.15)' }}>
+            {coverUploading
+              ? <Loader className="w-4 h-4 animate-spin text-white" />
+              : <Camera className="w-4 h-4 text-white" />}
+            <input ref={coverInputRef} type="file" accept="image/*" className="hidden"
+              onChange={e => { const f = e.target.files?.[0]; if (f) uploadCover(f); }} />
+          </label>
+        )}
+        {/* Playlist name overlay */}
+        <div className="absolute bottom-0 left-0 right-0 px-4 pb-4">
+          {editingName ? (
+            <div className="flex items-center space-x-2">
+              <input type="text" value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') saveName(); if (e.key === 'Escape') setEditingName(false); }}
+                autoFocus
+                className="flex-1 px-3 py-1.5 rounded-lg text-white text-lg font-bold outline-none"
+                style={{ background: 'rgba(255,255,255,0.15)' }} />
+              <button onClick={saveName} disabled={saving}
+                className="px-3 py-1.5 bg-white text-black rounded-lg text-xs font-medium">
+                {saving ? '...' : 'Save'}
+              </button>
+              <button onClick={() => setEditingName(false)}
+                className="p-1.5 rounded-lg" style={{ background: 'rgba(255,255,255,0.1)' }}>
+                <X className="w-3.5 h-3.5 text-white/60" />
+              </button>
+            </div>
+          ) : (
+            <button onClick={() => canEdit && setEditingName(true)}
+              className="text-left group/name">
+              <p className="text-xl font-bold text-white drop-shadow-lg">{playlist?.name}</p>
+              <p className="text-xs text-white/50">{tracks.length} tracks{canEdit ? ' · tap name to rename' : ''}</p>
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Controls row */}
+      <div className="px-4">
+      {/* Header controls (share/public toggle) */}
+      <div className="flex items-center space-x-2 flex-wrap gap-y-2 py-3 border-b mb-4"
+        style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
+        <div className="flex-1" />
+        {canEdit && isOwner && (
+          <button onClick={togglePublic}
+            className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs text-white/50 transition"
+            style={{ background: 'rgba(255,255,255,0.06)' }}>
+            {playlist?.is_public ? <Globe className="w-3.5 h-3.5" /> : <Lock className="w-3.5 h-3.5" />}
+            <span>{playlist?.is_public ? 'Public' : 'Private'}</span>
+          </button>
+        )}
+        {playlist?.is_shared && isOwner && (
+          <button onClick={copyShareLink}
+            className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs text-blue-400 transition"
+            style={{ background: 'rgba(59,130,246,0.15)', border: '1px solid rgba(59,130,246,0.25)' }}>
+            {copiedLink ? <span>✓ Copied!</span> : (
+              <><Users className="w-3.5 h-3.5" /><span>Share · {collaborators.length} joined</span></>
+            )}
+          </button>
+        )}
+        {isCollaborator && (
+          <span className="flex items-center space-x-1 px-2 py-1 rounded-lg text-[10px] text-blue-400"
+            style={{ background: 'rgba(59,130,246,0.1)' }}>
+            <Users className="w-3 h-3" /><span>Collaborator</span>
+          </span>
+        )}
+      </div>
+
+      {/* Play all + Add tracks */}
       <div className="flex items-center space-x-3 mb-6">
+        {tracks.length > 0 && (
+          <button onClick={playAll}
+            className="flex items-center space-x-2 px-5 py-2.5 bg-white text-black rounded-full text-sm font-semibold hover:bg-white/90 transition">
+            <Play className="w-4 h-4" fill="black" />
+            <span>Play All</span>
+          </button>
+        )}
+        {canEdit && (
+          <button onClick={() => setShowAddTracks(!showAddTracks)}
+            className="flex items-center space-x-2 px-4 py-2.5 text-white rounded-full text-sm font-medium transition"
+            style={{ background: 'rgba(255,255,255,0.06)' }}>
+            <Plus className="w-4 h-4" />
+            <span>Add Tracks</span>
+          </button>
+        )}
+      </div>
+
+      {/* ─── old header div was here — removed, replaced by hero above ─── */}
+      {false && <div className="flex items-center space-x-3 mb-6">
         <button onClick={() => navigate('/library/playlists')}
           className="w-9 h-9 flex items-center justify-center rounded-full bg-white/[0.06] hover:bg-white/[0.1] transition">
           <ArrowLeft className="w-5 h-5 text-white" />
@@ -218,50 +377,10 @@ export default function PlaylistDetailPage() {
           )}
         </div>
 
-        {/* Controls */}
-        {canEdit && (
-          <div className="flex items-center space-x-2 flex-wrap gap-y-2">
-            {isOwner && (
-              <button onClick={togglePublic}
-                className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-white/[0.06] text-xs text-white/50 hover:bg-white/[0.1] transition">
-                {playlist?.is_public ? <Globe className="w-3.5 h-3.5" /> : <Lock className="w-3.5 h-3.5" />}
-                <span>{playlist?.is_public ? 'Public' : 'Private'}</span>
-              </button>
-            )}
-            {playlist?.is_shared && isOwner && (
-              <button onClick={copyShareLink}
-                className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-blue-500/15 border border-blue-500/25 text-xs text-blue-400 hover:bg-blue-500/25 transition">
-                {copiedLink ? <span>✓ Copied!</span> : (
-                  <><Users className="w-3.5 h-3.5" /><span>Share · {collaborators.length} joined</span></>
-                )}
-              </button>
-            )}
-            {isCollaborator && (
-              <span className="flex items-center space-x-1 px-2 py-1 rounded-lg bg-blue-500/10 text-[10px] text-blue-400">
-                <Users className="w-3 h-3" /><span>Collaborator</span>
-              </span>
-            )}
-          </div>
-        )}
+        </div>
       </div>
 
-      {/* Play all + Add tracks */}
-      <div className="flex items-center space-x-3 mb-6">
-        {tracks.length > 0 && (
-          <button onClick={playAll}
-            className="flex items-center space-x-2 px-5 py-2.5 bg-white text-black rounded-full text-sm font-semibold hover:bg-white/90 transition">
-            <Play className="w-4 h-4" fill="black" />
-            <span>Play All</span>
-          </button>
-        )}
-        {canEdit && (
-          <button onClick={() => setShowAddTracks(!showAddTracks)}
-            className="flex items-center space-x-2 px-4 py-2.5 bg-white/[0.06] text-white rounded-full text-sm font-medium hover:bg-white/[0.1] transition">
-            <Plus className="w-4 h-4" />
-            <span>Add Tracks</span>
-          </button>
-        )}
-      </div>
+
 
       {/* Add Tracks Panel */}
       {showAddTracks && (
@@ -372,6 +491,7 @@ export default function PlaylistDetailPage() {
         </div>
       )}
       <TrackActionSheet track={actionSheetTrack} artist={actionSheetTrack ? { artist_name: actionSheetTrack.artist_name } : null} onClose={() => setActionSheetTrack(null)} />
+      </div>{/* end px-4 */}
     </div>
   );
 }

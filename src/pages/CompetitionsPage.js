@@ -120,7 +120,7 @@ function clearChallenge() {
 }
 
 function SpinForYourselfTab() {
-  const { user } = useAuth();
+  const { user, artist } = useAuth();
   const navigate = useNavigate();
 
   // Hydrate from localStorage on mount
@@ -178,20 +178,15 @@ function SpinForYourselfTab() {
     setClaiming(true);
     setXpError('');
     try {
-      // Verify the user has actually submitted an entry to an active competition
-      // Get current wheel challenge competition_id if available
-      const { data: currentChallenge } = await supabase
-        .from('wheel_challenges')
-        .select('competition_id')
-        .eq('is_current', true)
+      // Verify the user has actually submitted a competition entry
+      const { data: entry } = await supabase
+        .from('competition_entries')
+        .select('id')
+        .eq('user_id', user.id)
+        .limit(1)
         .maybeSingle();
-      const query = supabase.from('competition_entries').select('id').eq('user_id', user.id);
-      if (currentChallenge?.competition_id) {
-        query.eq('competition_id', currentChallenge.competition_id);
-      }
-      const { data: entry } = await query.limit(1).maybeSingle();
       if (!entry) {
-        setXpError('Upload your track to this competition first before claiming XP');
+        setXpError('Upload your track first before claiming XP');
         setClaiming(false);
         return;
       }
@@ -863,15 +858,29 @@ export default function CompetitionsPage() {
         </div>
       )}
 
-      {/* ── Spin for Yourself tab ── */}
+      {/* ── Spin for Yourself tab — artists/beatmakers only ── */}
       {activeTab === 'spin' && (
         <div className="py-4">
           <div className="px-4 mb-5">
             <h2 className="text-lg font-bold text-white mb-1">Challenge Wheel</h2>
-            <p className="text-sm text-white/40">Spin for a random creative prompt. For fun, for videos, for when you need a spark. No competition required.</p>
+            <p className="text-sm text-white/40">Spin for a random creative prompt — for fun, for videos, for when you need a spark.</p>
           </div>
           <div className="px-4">
-            <SpinForYourselfTab />
+            {artist ? (
+              <SpinForYourselfTab />
+            ) : (
+              <div className="flex flex-col items-center justify-center py-16 px-6 text-center rounded-2xl"
+                style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)' }}>
+                <span className="text-5xl mb-4">🎡</span>
+                <p className="text-base font-bold text-white mb-2">Artists only</p>
+                <p className="text-sm text-white/40 mb-6">The challenge wheel is for artists and beatmakers. Create an artist profile to unlock it.</p>
+                <button onClick={() => navigate('/dashboard')}
+                  className="px-5 py-2.5 rounded-xl text-sm font-semibold text-black transition active:scale-95"
+                  style={{ background: 'white' }}>
+                  Set up artist profile
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}

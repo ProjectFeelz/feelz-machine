@@ -142,6 +142,7 @@ export default function BrowsePage() {
     } catch (err) { console.error('Browse recs error:', err); }
   };
 
+
   // Search effect — save history when searching
   useEffect(() => {
     if (query.trim().length >= 2) {
@@ -539,6 +540,9 @@ export default function BrowsePage() {
                 </div>
               </div>
             )}
+
+
+
             <p className="section-label mb-3">Filter by Genre</p>
             <div className="flex space-x-2 overflow-x-auto scrollbar-hide mb-3 -mx-1 px-1">
               {GENRE_TAGS.map(genre => (

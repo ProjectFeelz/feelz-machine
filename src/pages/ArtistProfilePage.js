@@ -450,7 +450,7 @@ export default function ArtistProfilePage() {
         .map(([uid, count]) => ({ user_id: uid, count }));
 
       // Enrich with profile data
-      const uids = top5.map(t => t.user_id).filter(id => id && id !== 'null');
+      const uids = top5.map(t => t.user_id).filter(Boolean);
       if (!uids.length) return;
       const [{ data: artistProfiles }, { data: listenerProfiles }] = await Promise.all([
         supabase.from('artists').select('user_id, artist_name, profile_image_url, slug').in('user_id', uids),
@@ -1673,6 +1673,59 @@ export default function ArtistProfilePage() {
           </div>
         </div>
       )}
+
+      {/* ── New Music row — artist's latest drops ── */}
+      {tracks.length > 0 && (() => {
+        const recent = [...tracks]
+          .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+          .slice(0, 8);
+        return (
+          <div className="mb-8 mx-6 rounded-2xl py-4"
+            style={{ background: `linear-gradient(135deg, ${secondaryColor}12 0%, ${accentColor}08 100%)`, border: `1px solid ${secondaryColor}20` }}>
+            <div className="px-4 mb-3 flex items-center space-x-2">
+              <span className="text-base">🆕</span>
+              <p className="text-sm font-bold" style={{ color: textColor }}>New Music</p>
+              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full"
+                style={{ background: `${secondaryColor}25`, color: secondaryColor, border: `1px solid ${secondaryColor}35` }}>
+                Just dropped
+              </span>
+            </div>
+            <div className="flex space-x-3 overflow-x-auto scrollbar-hide px-4">
+              {recent.map((track, i) => {
+                const isNewest = i === 0;
+                const withinWeek = (Date.now() - new Date(track.created_at).getTime()) < 7 * 24 * 60 * 60 * 1000;
+                const showGlow = isNewest && withinWeek;
+                return (
+                  <div key={track.id} className="flex-shrink-0 w-32 cursor-pointer group"
+                    onClick={() => handlePlayTrack(track)}>
+                    <div className="aspect-square rounded-xl overflow-hidden mb-1.5 relative"
+                      style={{
+                        backgroundColor: `${textColor}08`,
+                        boxShadow: showGlow ? `0 0 0 2px ${secondaryColor}, 0 0 20px ${secondaryColor}60, 0 0 40px ${secondaryColor}30` : 'none',
+                      }}>
+                      {track.cover_artwork_url
+                        ? <img src={track.cover_artwork_url} alt={track.title}
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                        : <div className="w-full h-full flex items-center justify-center"
+                            style={{ background: `linear-gradient(135deg, ${secondaryColor}30, ${accentColor}15)` }}>
+                            <Music className="w-6 h-6" style={{ color: `${textColor}20` }} />
+                          </div>}
+                      {showGlow && (
+                        <div className="absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded-full text-[9px] font-bold"
+                          style={{ background: secondaryColor, color: '#fff' }}>
+                          NEW
+                        </div>
+                      )}
+                    </div>
+                    <p className="text-sm font-medium truncate" style={{ color: showGlow ? secondaryColor : textColor }}>{track.title}</p>
+                    <p className="text-xs truncate" style={{ color: `${textColor}50` }}>{track.albums?.title || 'Single'}</p>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
 
       {albums.length > 0 && (
         <div className="mb-8">
