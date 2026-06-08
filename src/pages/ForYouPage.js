@@ -826,6 +826,46 @@ function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare, onN
 }
 
 // ── Main feed ─────────────────────────────────────────────────────────────────
+
+// ── Keyboard-aware comment sheet overlay ─────────────────────────────────────
+function CommentSheetOverlay({ track, user, onClose }) {
+  const [kbHeight, setKbHeight] = React.useState(0);
+  React.useEffect(() => {
+    if (!window.visualViewport) return;
+    const update = () => {
+      const kh = Math.max(0, window.innerHeight - window.visualViewport.height - window.visualViewport.offsetTop);
+      setKbHeight(kh);
+    };
+    window.visualViewport.addEventListener('resize', update);
+    window.visualViewport.addEventListener('scroll', update);
+    return () => {
+      window.visualViewport.removeEventListener('resize', update);
+      window.visualViewport.removeEventListener('scroll', update);
+    };
+  }, []);
+  return (
+    <div className="fixed inset-0 z-[800] flex items-end justify-center"
+      style={{ background: 'rgba(0,0,0,0.5)' }}
+      onClick={onClose}>
+      <div className="w-full md:max-w-lg md:mb-6 md:rounded-2xl"
+        onClick={e => e.stopPropagation()}
+        style={{
+          maxHeight: 'calc(100vh - 80px)',
+          height: '65vh',
+          display: 'flex',
+          flexDirection: 'column',
+          background: 'rgba(10,10,10,0.98)',
+          borderTop: '1px solid rgba(255,255,255,0.08)',
+          borderRadius: '24px 24px 0 0',
+          marginBottom: kbHeight > 0 ? `${kbHeight}px` : 0,
+          transition: 'margin-bottom 0.15s ease',
+        }}>
+        <TrackCommentSheet track={track} user={user} onClose={onClose} />
+      </div>
+    </div>
+  );
+}
+
 export default function ForYouPage() {
   const { user, isBeatmaker } = useAuth();
   const navigate    = useNavigate();
@@ -1330,45 +1370,15 @@ export default function ForYouPage() {
         </div>
       )}
 
-      {/* Comment sheet — fixed overlay, unaffected by keyboard */}
-      {activeSheet?.type === 'comments' && (() => {
-        // iOS: track keyboard height so sheet moves up with keyboard
-        const [kbHeight, setKbHeight] = React.useState(0);
-        React.useEffect(() => {
-          if (!window.visualViewport) return;
-          const update = () => {
-            const kh = Math.max(0, window.innerHeight - window.visualViewport.height - window.visualViewport.offsetTop);
-            setKbHeight(kh);
-          };
-          window.visualViewport.addEventListener('resize', update);
-          window.visualViewport.addEventListener('scroll', update);
-          return () => {
-            window.visualViewport.removeEventListener('resize', update);
-            window.visualViewport.removeEventListener('scroll', update);
-          };
-        }, []);
-        return (
-          <div key={activeSheet?.track?.id} className="fixed inset-0 z-[800] flex items-end justify-center"
-            style={{ background: 'rgba(0,0,0,0.5)' }}
-            onClick={() => setActiveSheet(null)}>
-            <div className="w-full md:max-w-lg md:mb-6 md:rounded-2xl"
-              onClick={e => e.stopPropagation()}
-              style={{
-                maxHeight: 'calc(100vh - 80px)',
-                height: '65vh',
-                display: 'flex',
-                flexDirection: 'column',
-                background: 'rgba(10,10,10,0.98)',
-                borderTop: '1px solid rgba(255,255,255,0.08)',
-                borderRadius: '24px 24px 0 0',
-                marginBottom: kbHeight > 0 ? `${kbHeight}px` : 0,
-                transition: 'margin-bottom 0.15s ease',
-              }}>
-              <TrackCommentSheet track={activeSheet.track} user={user} onClose={() => setActiveSheet(null)} />
-            </div>
-          </div>
-        );
-      })()}
+      {/* Comment sheet — keyboard-aware wrapper component */}
+      {activeSheet?.type === 'comments' && (
+        <CommentSheetOverlay
+          key={activeSheet.track?.id}
+          track={activeSheet.track}
+          user={user}
+          onClose={() => setActiveSheet(null)}
+        />
+      )}
 
       {/* Playlist sheet — fixed overlay */}
       {activeSheet?.type === 'playlist' && (
