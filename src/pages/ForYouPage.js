@@ -551,7 +551,7 @@ function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare, onN
       {isActive && isThisOne && <FloatingHearts trackId={track.id} />}
 
       {/* Right action bar */}
-      <div className="absolute right-3 bottom-28 z-20 flex flex-col items-center space-y-3 max-h-[75vh] overflow-hidden"
+      <div className="absolute right-3 bottom-32 z-20 flex flex-col items-center space-y-5"
         onClick={e => e.stopPropagation()}>
 
         {/* Artist avatar */}
@@ -631,8 +631,8 @@ function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare, onN
                 signal:     'not_interested',
                 listen_pct: 0,
                 updated_at: new Date().toISOString(),
-              }, { onConflict: 'user_id,track_id' });
-              onHide(track.id);
+              }, { onConflict: 'user_id,track_id' }).catch(() => {});
+              if (onHide) onHide(track.id); else onNext();
             }}
             className="flex flex-col items-center space-y-1 opacity-40 hover:opacity-80 transition active:scale-90"
           >
@@ -926,6 +926,13 @@ export default function ForYouPage() {
 
   // Single source of truth for playback — fires when idx changes
   const lastPlayedIdx = React.useRef(-1);
+  // Reset lastPlayedIdx when the track at current idx changes (e.g. after hide)
+  const currentTrackId = filteredTracks[idx]?.id;
+  React.useEffect(() => {
+    // If the track at current index changed (hide removed it), force playback
+    if (lastPlayedIdx.current === idx) lastPlayedIdx.current = -1;
+  }, [currentTrackId]); // eslint-disable-line
+
   useEffect(() => {
     if (!filteredTracks.length) return;
     const item = filteredTracks[idx];
@@ -960,7 +967,7 @@ export default function ForYouPage() {
           signal:     'skip',
           listen_pct: pct,
           updated_at: new Date().toISOString(),
-        }, { onConflict: 'user_id,track_id' });
+        }, { onConflict: 'user_id,track_id' }).catch(() => {});
       } else if (pct >= 70) {
         // Deep listen — positive signal
         supabase.from('listener_feedback').upsert({
@@ -970,7 +977,7 @@ export default function ForYouPage() {
           signal:     'deep_listen',
           listen_pct: pct,
           updated_at: new Date().toISOString(),
-        }, { onConflict: 'user_id,track_id' });
+        }, { onConflict: 'user_id,track_id' }).catch(() => {});
       }
     }
     trackStartTime.current = Date.now();
@@ -1128,7 +1135,7 @@ export default function ForYouPage() {
                   navigate={navigate}
                 />
               ) : (
-                filteredTracks[i] ? <ForYouCard track={filteredTracks[i]} isActive={i === idx} user={user} navigate={navigate} onOpenSheet={setActiveSheet} onShare={setShareCard} onNext={() => setIdx(i + 1)} onHide={(id) => setTracks(prev => prev.filter(t => t.id !== id))} queue={filteredTracks} queueIndex={i} /> : null
+                filteredTracks[i] ? <ForYouCard track={filteredTracks[i]} isActive={i === idx} user={user} navigate={navigate} onOpenSheet={setActiveSheet} onShare={setShareCard} onNext={() => setIdx(i + 1)} onHide={(id) => { setTracks(prev => prev.filter(t => t.id !== id)); setIdx(prev => prev); }} queue={filteredTracks} queueIndex={i} /> : null
               )}
             </div>
           );

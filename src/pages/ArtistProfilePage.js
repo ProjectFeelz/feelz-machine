@@ -1680,9 +1680,9 @@ export default function ArtistProfilePage() {
           .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
           .slice(0, 8);
         return (
-          <div className="mb-8 mx-6 rounded-2xl py-4"
+          <div className="mb-8 mx-6 rounded-2xl pt-5 pb-4"
             style={{ background: `linear-gradient(135deg, ${secondaryColor}12 0%, ${accentColor}08 100%)`, border: `1px solid ${secondaryColor}20` }}>
-            <div className="px-4 mb-3 flex items-center space-x-2">
+            <div className="px-4 mb-4 flex items-center space-x-2">
               <span className="text-base">🆕</span>
               <p className="text-sm font-bold" style={{ color: textColor }}>New Music</p>
               <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full"
@@ -1690,7 +1690,7 @@ export default function ArtistProfilePage() {
                 Just dropped
               </span>
             </div>
-            <div className="flex space-x-3 overflow-x-auto scrollbar-hide px-4">
+            <div className="flex space-x-3 overflow-x-auto scrollbar-hide px-4 pb-2" style={{ overflowY: "visible" }}>
               {recent.map((track, i) => {
                 const isNewest = i === 0;
                 const withinWeek = (Date.now() - new Date(track.created_at).getTime()) < 7 * 24 * 60 * 60 * 1000;
