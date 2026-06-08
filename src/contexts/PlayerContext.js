@@ -29,8 +29,10 @@ export function PlayerProvider({ children }) {
   const [repeat, setRepeat]             = useState('none');
   const [isMinimized, setIsMinimized]   = useState(false);
 
-  const audioRef        = useRef(new Audio());
-  const audioRefB       = useRef(new Audio());  // second element for crossfade
+  const _audioA = new Audio(); _audioA.playsInline = true; _audioA.setAttribute('playsinline', ''); _audioA.setAttribute('webkit-playsinline', '');
+  const _audioB = new Audio(); _audioB.playsInline = true; _audioB.setAttribute('playsinline', ''); _audioB.setAttribute('webkit-playsinline', '');
+  const audioRef        = useRef(_audioA);
+  const audioRefB       = useRef(_audioB);  // second element for crossfade
   const crossfadingRef  = useRef(false);
   const CROSSFADE_SECS  = 1.5; // seconds of overlap — short enough to not echo
   const streamLoggedRef = useRef(false);
@@ -319,18 +321,27 @@ export function PlayerProvider({ children }) {
         todayStart.setHours(0, 0, 0, 0);
         const todayStartISO = todayStart.toISOString();
 
+        // Get all track_ids for this artist (needed since streams has no artist_id)
+        const { data: artistTracks } = await supabase
+          .from('tracks')
+          .select('id')
+          .eq('artist_id', track.artist_id)
+          .eq('is_published', true);
+        const artistTrackIds = (artistTracks || []).map(t => t.id);
+        if (!artistTrackIds.length) return;
+
         // Count today's total streams for this artist
         const { count: todayStreams } = await supabase
           .from('streams')
           .select('*', { count: 'exact', head: true })
-          .eq('artist_id', track.artist_id)
+          .in('track_id', artistTrackIds)
           .gte('created_at', todayStartISO);
 
         // Find today's top track by stream count
         const { data: topTrackData } = await supabase
           .from('streams')
           .select('track_id, tracks(title, slug, cover_artwork_url, file_url)')
-          .eq('artist_id', track.artist_id)
+          .in('track_id', artistTrackIds)
           .gte('created_at', todayStartISO);
 
         // Count per track
@@ -469,11 +480,15 @@ export function PlayerProvider({ children }) {
     audio.src = track.file_url;
     audio.volume = volumeRef.current;
     audio.load();
-    const playWhenReady = () => {
-      audio.play().catch(() => {});
-      audio.removeEventListener('canplay', playWhenReady);
-    };
-    audio.addEventListener('canplay', playWhenReady);
+    // Call play() immediately to stay within iOS gesture context,
+    // then re-attempt on canplay in case it wasn't buffered yet
+    audio.play().catch(() => {
+      const playWhenReady = () => {
+        audio.play().catch(() => {});
+        audio.removeEventListener('canplay', playWhenReady);
+      };
+      audio.addEventListener('canplay', playWhenReady);
+    });
     setCurrentTrack(track);
     preloadCover(track);
     setCurrentTime(0);

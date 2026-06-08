@@ -1104,9 +1104,18 @@ export default function ForYouPage() {
       }
     }
     trackStartTime.current = Date.now();
+    // iOS fix: call playTrack synchronously here (inside user gesture)
+    // rather than waiting for the useEffect to fire after setIdx
+    const nextItem = filteredTracks[newIdx];
+    if (nextItem && nextItem.file_url && !nextItem.youtube_url && nextItem._type !== 'story') {
+      window.__feelz_play_source = 'for_you';
+      const playableQueue = filteredTracks.filter(t => t?.file_url && !t?.youtube_url);
+      playTrack(nextItem, playableQueue, playableQueue.findIndex(t => t.id === nextItem.id));
+      lastPlayedIdx.current = newIdx;
+    }
     setIdx(newIdx);
     setDragOffset(0);
-  }, [tracks.length, filteredTracks, idx, user]);
+  }, [tracks.length, filteredTracks, idx, user, playTrack]);
 
   const onTouchStart = useCallback((e) => {
     touchStartY.current = e.touches[0].clientY;
