@@ -362,7 +362,7 @@ function StoryFeedCard({ item, isActive, onOpen, navigate }) {
 }
 
 // ── Single card ───────────────────────────────────────────────────────────────
-function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare, onNext, queue, queueIndex }) {
+function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare, onNext, onHide, queue, queueIndex }) {
   const { currentTrack, isPlaying, currentTime, setIsMinimized } = usePlayer();
   const { artist: myArtist } = useAuth();
   const isOwnTrack = myArtist?.id === track.artist_id;
@@ -632,7 +632,7 @@ function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare, onN
                 listen_pct: 0,
                 updated_at: new Date().toISOString(),
               }, { onConflict: 'user_id,track_id' });
-              onNext();
+              onHide(track.id);
             }}
             className="flex flex-col items-center space-y-1 opacity-40 hover:opacity-80 transition active:scale-90"
           >
@@ -1128,7 +1128,7 @@ export default function ForYouPage() {
                   navigate={navigate}
                 />
               ) : (
-                filteredTracks[i] ? <ForYouCard track={filteredTracks[i]} isActive={i === idx} user={user} navigate={navigate} onOpenSheet={setActiveSheet} onShare={setShareCard} onNext={() => setIdx(i + 1)} queue={filteredTracks} queueIndex={i} /> : null
+                filteredTracks[i] ? <ForYouCard track={filteredTracks[i]} isActive={i === idx} user={user} navigate={navigate} onOpenSheet={setActiveSheet} onShare={setShareCard} onNext={() => setIdx(i + 1)} onHide={(id) => setTracks(prev => prev.filter(t => t.id !== id))} queue={filteredTracks} queueIndex={i} /> : null
               )}
             </div>
           );
