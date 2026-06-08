@@ -1106,9 +1106,10 @@ export default function ForYouPage() {
     const item = filteredTracks[idx];
     if (!item || item._type === 'story') return;
     if (idx === lastPlayedIdx.current) return;
-    // iOS fix: skip auto-play on first mount (idx=0) until user has swiped
-    // The goTo handler sets hasUserGestured=true on first swipe
-    if (idx === 0 && !hasUserGestured.current) return;
+    // iOS Safari fix: skip auto-play on first mount until user has swiped
+    // iOS blocks programmatic audio unless called within a user gesture
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+    if (isIOS && idx === 0 && !hasUserGestured.current) return;
     lastPlayedIdx.current = idx;
     if (item.file_url && !item.youtube_url) {
       window.__feelz_play_source = 'for_you';

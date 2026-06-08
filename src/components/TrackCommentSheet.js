@@ -257,6 +257,9 @@ export default function TrackCommentSheet({ track, user, onClose, routePrefix = 
     );
   };
 
+  // Fixed bottom position — accounts for keyboard on all platforms
+  const inputBarBottom = keyboardOffset > 0 ? keyboardOffset : 0;
+
   return (
     <div className="flex flex-col w-full h-full" onClick={e => e.stopPropagation()}>
       {/* Header */}
@@ -284,7 +287,7 @@ export default function TrackCommentSheet({ track, user, onClose, routePrefix = 
       </div>
 
       {/* Comment list */}
-      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-4">
+      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-4" style={{ paddingBottom: "80px" }}>
         {loading ? (
           <div className="flex justify-center py-8"><Loader className="w-5 h-5 animate-spin text-white/20" /></div>
         ) : topLevel.length === 0 ? (
@@ -302,14 +305,17 @@ export default function TrackCommentSheet({ track, user, onClose, routePrefix = 
         )}
       </div>
 
-      {/* Input bar — always visible, moves up with iOS keyboard ─────────────── */}
+      {/* Input bar — fixed to bottom, moves up with keyboard on all platforms */}
       <div
-        className="flex-shrink-0 border-t border-white/[0.06] bg-black"
+        className="border-t border-white/[0.06] bg-black"
         style={{
-          position: 'sticky',
-          bottom: keyboardOffset > 0 ? `${keyboardOffset}px` : 0,
-          paddingBottom: keyboardOffset > 0 ? '8px' : 'max(12px, env(safe-area-inset-bottom))',
-          transition: 'bottom 0.15s ease, padding-bottom 0.15s ease',
+          position: 'fixed',
+          left: 0,
+          right: 0,
+          bottom: `${inputBarBottom}px`,
+          paddingBottom: inputBarBottom > 0 ? '8px' : 'max(8px, env(safe-area-inset-bottom))',
+          transition: 'bottom 0.12s ease',
+          zIndex: 10,
         }}
       >
         {/* Reply context chip */}
