@@ -298,8 +298,6 @@ export default function HomePage() {
         .limit(4);
       setActiveCompetitions(data || []);
     } catch (err) { console.error('Competitions fetch error:', err); }
-
-    } catch {}
   };
 
   const fetchWrapped = async () => {
