@@ -23,8 +23,7 @@ const supabase = createClient(
 );
 
 const PRINTFUL_API = 'https://api.printful.com';
-const PRINTFUL_CLIENT_ID     = process.env.PRINTFUL_CLIENT_ID;
-const PRINTFUL_CLIENT_SECRET = process.env.PRINTFUL_CLIENT_SECRET;
+// OAuth credentials removed — using direct API key flow
 
 const cors = {
   'Access-Control-Allow-Origin':  '*',
@@ -77,49 +76,36 @@ exports.handler = async (event) => {
     const { action, artist_id } = body;
     const authHeader = event.headers['authorization'] || event.headers['Authorization'];
 
-    // ── Connect OAuth ─────────────────────────────────────────────────────────
-    if (action === 'connect_oauth') {
-      const userId = await verifyUser(authHeader);
-      const { code, redirect_uri } = body;
+    // ── Connect via API key (replaces OAuth) ────────────────────────────────
+    if (action === 'connect_api_key') {
+      const userId  = await verifyUser(authHeader);
+      const { api_key } = body;
+      if (!api_key) throw new Error('API key required');
 
-      // Exchange code for access token
-      const tokenRes = await fetch('https://www.printful.com/oauth/token', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          grant_type:    'authorization_code',
-          client_id:     PRINTFUL_CLIENT_ID,
-          client_secret: PRINTFUL_CLIENT_SECRET,
-          code,
-          redirect_uri,
-        }),
-      });
-      const tokenData = await tokenRes.json();
-      if (!tokenRes.ok || !tokenData.access_token) {
-        throw new Error(tokenData.error_description || 'Failed to get access token');
-      }
-
-      const accessToken = tokenData.access_token;
-
-      // Get store info
-      const storeData = await printfulFetch('/store', accessToken);
+      // Verify the key works by fetching store info
+      const storeData = await printfulFetch('/store', api_key);
       const storeId   = storeData.result?.id;
-      if (!storeId) throw new Error('Could not retrieve store info');
+      if (!storeId) throw new Error('Could not retrieve store — check your API key');
 
       // Verify artist ownership
       const { data: artist } = await supabase
         .from('artists').select('id, user_id').eq('id', artist_id).maybeSingle();
       if (!artist || artist.user_id !== userId) throw new Error('Forbidden');
 
-      // Save to artists table
+      // Store API key as the access token — same field, same proxy usage
       await supabase.from('artists').update({
-        printful_access_token: accessToken,
+        printful_access_token: api_key,
         printful_store_id:     String(storeId),
-        merch_enabled:         false, // requires validation before enabling
+        merch_enabled:         false, // validate_store enables it
         updated_at:            new Date().toISOString(),
       }).eq('id', artist_id);
 
       return { statusCode: 200, headers: cors, body: JSON.stringify({ ok: true, store_id: storeId }) };
+    }
+
+    // ── Legacy OAuth handler (kept for backwards compat, proxies to api_key flow) ──
+    if (action === 'connect_oauth') {
+      return { statusCode: 400, headers: cors, body: JSON.stringify({ ok: false, error: 'OAuth flow deprecated. Use connect_api_key instead.' }) };
     }
 
     // ── Validate store (billing + products) ──────────────────────────────────

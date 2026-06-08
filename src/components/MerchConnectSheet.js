@@ -1,21 +1,13 @@
 /**
  * MerchConnectSheet.js
- *
- * Bottom sheet for connecting/managing a Printful store.
- * Shown to Premium artists only.
- *
- * Props:
- *   artist       — full artist object
- *   onClose      — close handler
- *   onConnected  — called after successful connect + validation
+ * API key flow — no OAuth, no redirect URLs, no platform fees.
+ * Artist pastes their Printful API key, it's stored on their artist row.
+ * Printful bills them directly for all orders.
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { supabase } from '../supabaseClient';
-import { ExternalLink, Check, X, Loader, AlertCircle, Store, Unlink } from 'lucide-react';
-
-const PRINTFUL_CLIENT_ID = process.env.REACT_APP_PRINTFUL_CLIENT_ID;
-const REDIRECT_URI       = `${window.location.origin}/merch-connect-callback`;
+import { ExternalLink, Check, X, Loader, AlertCircle, Store, Unlink, Key, Eye, EyeOff } from 'lucide-react';
 
 async function printfulProxy(action, artistId, params = {}) {
   const { data: { session } } = await supabase.auth.getSession();
@@ -33,85 +25,72 @@ async function printfulProxy(action, artistId, params = {}) {
 }
 
 export default function MerchConnectSheet({ artist, onClose, onConnected }) {
-  const [step, setStep]         = useState('intro'); // intro | connecting | validating | connected | error | disconnect_confirm
-  const [error, setError]       = useState('');
-  const [validation, setValidation] = useState(null);
+  const [step, setStep]       = useState(artist?.printful_store_id ? 'connected' : 'intro');
+  const [apiKey, setApiKey]   = useState('');
+  const [showKey, setShowKey] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError]     = useState('');
 
-  const isConnected = !!artist?.printful_store_id;
-
-  useEffect(() => {
-    if (isConnected) setStep('connected');
-  }, [isConnected]);
-
-  // Handle OAuth callback — AppRouter redirects back here with ?printful_code=
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const code   = params.get('printful_code');
-    if (code) {
-      const url = new URL(window.location.href);
-      url.searchParams.delete('printful_code');
-      window.history.replaceState({}, '', url.toString());
-      handleOAuthCallback(code);
-    }
-  }, []); // eslint-disable-line
-
-  const handleOAuthCallback = async (code) => {
-    setStep('connecting');
+  const handleConnect = async () => {
+    if (!apiKey.trim()) { setError('Paste your Printful API key first'); return; }
+    setLoading(true);
     setError('');
     try {
-      await printfulProxy('connect_oauth', artist.id, { code, redirect_uri: REDIRECT_URI });
-      await validateStore();
-    } catch (err) {
-      setError(err.message);
-      setStep('error');
-    }
-  };
-
-  const validateStore = async () => {
-    setStep('validating');
-    try {
+      await printfulProxy('connect_api_key', artist.id, { api_key: apiKey.trim() });
+      // Validate store after connecting
       const result = await printfulProxy('validate_store', artist.id);
-      setValidation(result);
       if (result.valid) {
         setStep('connected');
         onConnected?.();
       } else {
-        setStep('error');
         const issues = [];
-        if (!result.billingOk)   issues.push('billing details not set up in Printful');
-        if (!result.hasProducts) issues.push('no products in your Printful store');
-        setError(`Store validation failed: ${issues.join(' and ')}. Fix these in Printful then reconnect.`);
+        if (!result.billingOk)    issues.push('billing not set up in Printful');
+        if (!result.hasProducts)  issues.push('no products in your store yet');
+        setError(`Connected but: ${issues.join(' and ')}. Fix in Printful then re-validate.`);
+        setStep('connected'); // still connected, just needs store setup
+        onConnected?.();
       }
     } catch (err) {
       setError(err.message);
-      setStep('error');
     }
-  };
-
-  const handleConnect = () => {
-    const authUrl = new URL('https://www.printful.com/oauth/authorize');
-    authUrl.searchParams.set('client_id',    PRINTFUL_CLIENT_ID);
-    authUrl.searchParams.set('redirect_uri', REDIRECT_URI);
-    authUrl.searchParams.set('response_type', 'code');
-    authUrl.searchParams.set('scope', 'orders products store');
-    authUrl.searchParams.set('state', artist.slug); // used by callback to return to artist profile
-    window.location.href = authUrl.toString();
+    setLoading(false);
   };
 
   const handleDisconnect = async () => {
-    setStep('connecting');
+    setLoading(true);
     try {
       await printfulProxy('disconnect', artist.id);
       setStep('intro');
+      setApiKey('');
       onConnected?.();
     } catch (err) {
       setError(err.message);
-      setStep('error');
     }
+    setLoading(false);
+  };
+
+  const handleRevalidate = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const result = await printfulProxy('validate_store', artist.id);
+      if (result.valid) {
+        setError('');
+        onConnected?.();
+      } else {
+        const issues = [];
+        if (!result.billingOk)   issues.push('billing not set up');
+        if (!result.hasProducts) issues.push('no products yet');
+        setError(`Store needs: ${issues.join(' and ')}`);
+      }
+    } catch (err) {
+      setError(err.message);
+    }
+    setLoading(false);
   };
 
   return (
-    <div className="fixed inset-0 z-[700] flex items-center justify-center bg-black/70 backdrop-blur-sm px-4"
+    <div className="fixed inset-0 z-[700] flex items-end md:items-center justify-center bg-black/70 backdrop-blur-sm px-4"
       onClick={onClose}>
       <div className="w-full max-w-sm rounded-t-3xl md:rounded-3xl overflow-hidden"
         style={{ backgroundColor: '#0f0f0f', border: '1px solid rgba(255,255,255,0.08)', boxShadow: '0 -16px 48px rgba(0,0,0,0.6)' }}
@@ -136,17 +115,24 @@ export default function MerchConnectSheet({ artist, onClose, onConnected }) {
 
         <div className="p-5 space-y-4">
 
-          {/* Intro */}
+          {/* Intro / connect */}
           {step === 'intro' && (
             <>
-              <div className="rounded-2xl p-4 space-y-3" style={{ background: 'rgba(139,92,246,0.08)', border: '1px solid rgba(139,92,246,0.2)' }}>
-                <p className="text-sm font-semibold text-white">Connect your Printful store</p>
+              <div className="rounded-2xl p-4 space-y-3"
+                style={{ background: 'rgba(139,92,246,0.08)', border: '1px solid rgba(139,92,246,0.2)' }}>
+                <p className="text-sm font-semibold text-white">How it works</p>
                 <p className="text-xs text-white/50 leading-relaxed">
-                  Printful handles printing, packing and shipping. You set up products on Printful,
-                  we display them on your profile. Fans order directly and Printful fulfils it.
+                  You set up your products on Printful. Fans order from your profile.
+                  Printful prints and ships everything — you keep the profit margin.
+                  No platform fees from us.
                 </p>
                 <div className="space-y-1.5 pt-1">
-                  {['Create a free Printful account', 'Design products (tees, hoodies, etc)', 'Add billing details in Printful', 'Connect here — your store goes live'].map((s, i) => (
+                  {[
+                    'Create a free Printful account',
+                    'Design your products (tees, hoodies, etc)',
+                    'Add billing details in Printful',
+                    'Generate an API key and paste it below',
+                  ].map((s, i) => (
                     <div key={i} className="flex items-center space-x-2">
                       <div className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 text-[10px] font-bold"
                         style={{ background: 'rgba(139,92,246,0.2)', color: '#a78bfa' }}>{i + 1}</div>
@@ -156,28 +142,65 @@ export default function MerchConnectSheet({ artist, onClose, onConnected }) {
                 </div>
               </div>
 
-              <a href="https://www.printful.com/signup" target="_blank" rel="noopener noreferrer"
-                className="w-full flex items-center justify-center space-x-2 py-2.5 rounded-xl text-xs font-semibold text-white/50 border border-white/[0.08] hover:bg-white/[0.04] transition">
-                <ExternalLink className="w-3.5 h-3.5" />
-                <span>Create Printful account first</span>
-              </a>
+              {/* API key instructions */}
+              <div className="rounded-xl p-3 space-y-1"
+                style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                <p className="text-xs font-semibold text-white/60">Where to get your API key</p>
+                <p className="text-xs text-white/35 leading-relaxed">
+                  Printful dashboard → Settings → Stores → select your store → API → Generate token
+                </p>
+                <a href="https://www.printful.com/dashboard/settings" target="_blank" rel="noopener noreferrer"
+                  className="inline-flex items-center space-x-1 text-xs text-purple-400 hover:text-purple-300 transition mt-1">
+                  <ExternalLink className="w-3 h-3" />
+                  <span>Open Printful Settings →</span>
+                </a>
+              </div>
 
-              <button onClick={handleConnect}
-                className="w-full py-3.5 rounded-2xl text-sm font-bold text-white transition active:scale-[0.98]"
-                style={{ background: 'linear-gradient(135deg, #a78bfa, #7c3aed)' }}>
-                Connect Printful Store
-              </button>
+              {/* API key input */}
+              <div>
+                <label className="block text-xs font-semibold text-white/40 uppercase tracking-wider mb-1.5">
+                  Printful API Key
+                </label>
+                <div className="relative">
+                  <Key className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20" />
+                  <input
+                    type={showKey ? 'text' : 'password'}
+                    value={apiKey}
+                    onChange={e => setApiKey(e.target.value)}
+                    placeholder="Paste your API key here"
+                    className="w-full pl-9 pr-10 py-3 rounded-xl text-sm text-white placeholder-white/20 outline-none transition"
+                    style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)' }}
+                    onFocus={e => e.target.style.borderColor = 'rgba(139,92,246,0.5)'}
+                    onBlur={e => e.target.style.borderColor = 'rgba(255,255,255,0.08)'}
+                  />
+                  <button type="button" onClick={() => setShowKey(s => !s)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60 transition">
+                    {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              {error && (
+                <div className="flex items-start space-x-2 rounded-xl p-3"
+                  style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.15)' }}>
+                  <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
+                  <p className="text-xs text-red-300/80">{error}</p>
+                </div>
+              )}
+
+              <div className="flex space-x-2">
+                <a href="https://www.printful.com/signup" target="_blank" rel="noopener noreferrer"
+                  className="flex-shrink-0 flex items-center justify-center space-x-1.5 px-4 py-3 rounded-2xl text-xs font-semibold text-white/50 border border-white/[0.08] hover:bg-white/[0.04] transition">
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  <span>Sign up</span>
+                </a>
+                <button onClick={handleConnect} disabled={loading || !apiKey.trim()}
+                  className="flex-1 py-3 rounded-2xl text-sm font-bold text-white transition active:scale-[0.98] disabled:opacity-40 flex items-center justify-center space-x-2"
+                  style={{ background: 'linear-gradient(135deg, #a78bfa, #7c3aed)' }}>
+                  {loading ? <Loader className="w-4 h-4 animate-spin" /> : <><Store className="w-4 h-4" /><span>Connect Store</span></>}
+                </button>
+              </div>
             </>
-          )}
-
-          {/* Connecting / validating */}
-          {(step === 'connecting' || step === 'validating') && (
-            <div className="py-8 flex flex-col items-center space-y-3">
-              <Loader className="w-8 h-8 text-purple-400 animate-spin" />
-              <p className="text-sm text-white/60">
-                {step === 'connecting' ? 'Connecting to Printful...' : 'Validating your store...'}
-              </p>
-            </div>
           )}
 
           {/* Connected */}
@@ -186,14 +209,31 @@ export default function MerchConnectSheet({ artist, onClose, onConnected }) {
               <div className="rounded-2xl p-4 flex items-start space-x-3"
                 style={{ background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)' }}>
                 <Check className="w-5 h-5 text-green-400 flex-shrink-0 mt-0.5" />
-                <div>
+                <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-white">Store connected</p>
-                  <p className="text-xs text-white/50 mt-0.5">
+                  <p className="text-xs text-white/50 mt-0.5 leading-relaxed">
                     Your merch is live on your profile. Fans can browse and order directly.
+                    Printful handles fulfilment — no fees from us.
                   </p>
-                  <p className="text-[10px] text-white/30 mt-1">Store ID: {artist?.printful_store_id}</p>
+                  {artist?.printful_store_id && (
+                    <p className="text-[10px] text-white/25 mt-1 font-mono">Store ID: {artist.printful_store_id}</p>
+                  )}
                 </div>
               </div>
+
+              {error && (
+                <div className="space-y-2">
+                  <div className="flex items-start space-x-2 rounded-xl p-3"
+                    style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)' }}>
+                    <AlertCircle className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
+                    <p className="text-xs text-amber-300/80">{error}</p>
+                  </div>
+                  <button onClick={handleRevalidate} disabled={loading}
+                    className="w-full py-2.5 rounded-xl text-xs font-semibold text-white/60 border border-white/[0.08] hover:bg-white/[0.04] transition disabled:opacity-40 flex items-center justify-center space-x-1.5">
+                    {loading ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <><Check className="w-3.5 h-3.5" /><span>Re-validate store</span></>}
+                  </button>
+                </div>
+              )}
 
               <button onClick={() => setStep('disconnect_confirm')}
                 className="w-full flex items-center justify-center space-x-2 py-2.5 rounded-xl text-xs font-medium text-red-400/60 border border-red-500/10 hover:bg-red-500/5 transition">
@@ -206,31 +246,21 @@ export default function MerchConnectSheet({ artist, onClose, onConnected }) {
           {/* Disconnect confirm */}
           {step === 'disconnect_confirm' && (
             <>
-              <div className="rounded-2xl p-4" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}>
+              <div className="rounded-2xl p-4"
+                style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}>
                 <p className="text-sm font-semibold text-white mb-1">Disconnect store?</p>
                 <p className="text-xs text-white/50">Your merch tab will be hidden from your profile. You can reconnect any time.</p>
               </div>
               <div className="flex space-x-2">
                 <button onClick={() => setStep('connected')}
-                  className="flex-1 py-2.5 rounded-xl text-sm font-medium text-white/40 border border-white/[0.08] hover:bg-white/[0.04] transition">Cancel</button>
-                <button onClick={handleDisconnect}
-                  className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white bg-red-500/20 border border-red-500/30 hover:bg-red-500/30 transition">Disconnect</button>
+                  className="flex-1 py-2.5 rounded-xl text-sm font-medium text-white/40 border border-white/[0.08] hover:bg-white/[0.04] transition">
+                  Cancel
+                </button>
+                <button onClick={handleDisconnect} disabled={loading}
+                  className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white bg-red-500/20 border border-red-500/30 hover:bg-red-500/30 transition disabled:opacity-40 flex items-center justify-center space-x-1.5">
+                  {loading ? <Loader className="w-4 h-4 animate-spin" /> : <span>Disconnect</span>}
+                </button>
               </div>
-            </>
-          )}
-
-          {/* Error */}
-          {step === 'error' && (
-            <>
-              <div className="rounded-2xl p-4 flex items-start space-x-3"
-                style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}>
-                <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
-                <p className="text-xs text-white/60 leading-relaxed">{error}</p>
-              </div>
-              <button onClick={() => { setStep('intro'); setError(''); }}
-                className="w-full py-3 rounded-2xl text-sm font-semibold text-white border border-white/[0.08] hover:bg-white/[0.04] transition">
-                Try Again
-              </button>
             </>
           )}
         </div>
