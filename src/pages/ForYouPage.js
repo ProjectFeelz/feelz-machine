@@ -1100,16 +1100,36 @@ export default function ForYouPage() {
   }, [currentTrackId]); // eslint-disable-line
 
   const hasUserGestured = React.useRef(false);
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+  const [showTapToPlay, setShowTapToPlay] = useState(false);
+
+  // Show tap-to-play prompt on iOS until first gesture
+  useEffect(() => {
+    if (isIOS && filteredTracks.length > 0 && !hasUserGestured.current) {
+      setShowTapToPlay(true);
+    }
+  }, [filteredTracks.length]); // eslint-disable-line
+
+  const unlockAndPlay = () => {
+    hasUserGestured.current = true;
+    setShowTapToPlay(false);
+    const item = filteredTracks[idx];
+    if (item && item.file_url && !item.youtube_url) {
+      window.__feelz_play_source = 'for_you';
+      const playableQueue = filteredTracks.filter(t => t?.file_url && !t?.youtube_url);
+      playTrack(item, playableQueue, playableQueue.findIndex(t => t.id === item.id));
+      lastPlayedIdx.current = idx;
+      setIsMinimized(true);
+    }
+  };
 
   useEffect(() => {
     if (!filteredTracks.length) return;
     const item = filteredTracks[idx];
     if (!item || item._type === 'story') return;
     if (idx === lastPlayedIdx.current) return;
-    // iOS Safari fix: skip auto-play on first mount until user has swiped
-    // iOS blocks programmatic audio unless called within a user gesture
-    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
-    if (isIOS && idx === 0 && !hasUserGestured.current) return;
+    // iOS: skip useEffect auto-play until unlocked via tap or swipe
+    if (isIOS && !hasUserGestured.current) return;
     lastPlayedIdx.current = idx;
     if (item.file_url && !item.youtube_url) {
       window.__feelz_play_source = 'for_you';
