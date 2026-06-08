@@ -141,14 +141,19 @@ export function PlayerProvider({ children }) {
       } catch {}
 
       // Now switch primary to the NEW track (silent, fades in)
+      // iOS fix: call play() immediately after src change without load()
+      // — iOS carries over the "already playing" audio permission to the new src
       primaryAudio.src    = nextTrack.file_url;
       primaryAudio.volume = 0;
-      primaryAudio.load();
-      const startFadeIn = () => {
-        primaryAudio.play().catch(() => {});
-        primaryAudio.removeEventListener('canplay', startFadeIn);
-      };
-      primaryAudio.addEventListener('canplay', startFadeIn);
+      primaryAudio.play().catch(() => {
+        // Fallback for browsers that need load() first
+        primaryAudio.load();
+        const startFadeIn = () => {
+          primaryAudio.play().catch(() => {});
+          primaryAudio.removeEventListener('canplay', startFadeIn);
+        };
+        primaryAudio.addEventListener('canplay', startFadeIn);
+      });
 
       setCurrentTrack(nextTrack);
       preloadCover(nextTrack);
@@ -482,7 +487,11 @@ export function PlayerProvider({ children }) {
     audio.load();
     // Call play() immediately to stay within iOS gesture context,
     // then re-attempt on canplay in case it wasn't buffered yet
+    // iOS: play() immediately after src change — no load() needed
+    // iOS carries over gesture permission as long as we call play() synchronously
     audio.play().catch(() => {
+      // Desktop fallback: some browsers need load() before play()
+      audio.load();
       const playWhenReady = () => {
         audio.play().catch(() => {});
         audio.removeEventListener('canplay', playWhenReady);
