@@ -188,98 +188,129 @@ function LyricsCaption({ lyrics, currentTime, isActive }) {
 const HEART_COLORS = ['#ef4444','#f472b6','#fb923c','#a78bfa','#f43f5e'];
 
 function FloatingHearts({ trackId }) {
-  const [hearts, setHearts] = React.useState([]);
+  const [hearts, setHearts]   = React.useState([]);
   const [bubbles, setBubbles] = React.useState([]);
-  const timerRef = React.useRef(null);
+  const likersRef  = React.useRef([]); // cached liker profiles [{ name, avatar }]
+  const burstIdx   = React.useRef(0);  // which liker to show next
+  const ambientRef = React.useRef(null);
+  const pollRef    = React.useRef(null);
 
-  // Poll for recent likes + ambient hearts from existing like count
   React.useEffect(() => {
     if (!trackId) return;
 
-    // Spawn a single ambient heart based on existing like count
-    const spawnAmbient = (likeCount) => {
-      if (!likeCount || likeCount < 1) return;
-      // Probability scales with likes: 1 like = 15%, 5 likes = 40%, 20+ = 80%
-      const prob = Math.min(0.8, 0.1 + (likeCount / 25));
-      if (Math.random() > prob) return;
-      const h = {
-        id: Date.now() + Math.random(),
-        x: 10 + Math.random() * 70,
-        color: HEART_COLORS[Math.floor(Math.random() * HEART_COLORS.length)],
-        size: 12 + Math.random() * 10,
-        delay: 0,
-        ambient: true,
-      };
-      setHearts(prev => [...prev, h]);
-      setTimeout(() => setHearts(prev => prev.filter(x => x.id !== h.id)), 2500);
-    };
-
-    const poll = async () => {
+    // ── Step 1: load all likers once on mount ──────────────────────────────
+    const loadLikers = async () => {
       try {
-        const since = new Date(Date.now() - 15000).toISOString();
-        const [{ data: likes }, { count: totalLikes }] = await Promise.all([
-          supabase
-            .from('track_likes')
-            .select('id, user_id, created_at')
-            .eq('track_id', trackId)
-            .gte('created_at', since)
-            .limit(5),
-          supabase
-            .from('track_likes')
-            .select('*', { count: 'exact', head: true })
-            .eq('track_id', trackId),
-        ]);
-
-        // Ambient heart from existing likes
-        spawnAmbient(totalLikes || 0);
+        const { data: likes } = await supabase
+          .from('track_likes')
+          .select('user_id')
+          .eq('track_id', trackId)
+          .limit(30);
 
         if (!likes?.length) return;
 
-        // Spawn hearts from real-time likes
-        const newHearts = likes.map((_, i) => ({
-          id: Date.now() + i,
-          x: 15 + Math.random() * 60,
-          color: HEART_COLORS[Math.floor(Math.random() * HEART_COLORS.length)],
-          size: 16 + Math.random() * 14,
-          delay: i * 150,
-        }));
-        setHearts(prev => [...prev, ...newHearts]);
-        setTimeout(() => setHearts(prev => prev.filter(h => !newHearts.find(n => n.id === h.id))), 3000);
+        // Batch fetch profiles
+        const ids = likes.map(l => l.user_id).filter(Boolean);
+        const [{ data: artists }, { data: profiles }] = await Promise.all([
+          supabase.from('artists').select('user_id, artist_name, profile_image_url').in('user_id', ids),
+          supabase.from('user_profiles').select('user_id, name, avatar_url').in('user_id', ids),
+        ]);
 
-        // Get liker profile — try artists first, then user_profiles
-        const likerId = likes[0].user_id;
-        if (!likerId) return;
+        const artistMap  = Object.fromEntries((artists  || []).map(a => [a.user_id, { name: a.artist_name,  avatar: a.profile_image_url }]));
+        const profileMap = Object.fromEntries((profiles || []).map(p => [p.user_id, { name: p.name,          avatar: p.avatar_url }]));
 
-        let name = '', avatar = null;
-        const { data: artist } = await supabase
-          .from('artists')
-          .select('artist_name, profile_image_url')
-          .eq('user_id', likerId)
-          .maybeSingle();
-
-        if (artist) {
-          name = artist.artist_name || '';
-          avatar = artist.profile_image_url || null;
-        } else {
-          const { data: profile } = await supabase
-            .from('user_profiles')
-            .select('name, avatar_url')
-            .eq('user_id', likerId)
-            .maybeSingle();
-          if (profile) { name = profile.name || ''; avatar = profile.avatar_url || null; }
-        }
-
-        if (name) {
-          const bubble = { id: Date.now(), name, avatar, x: 5 + Math.random() * 45 };
-          setBubbles(prev => [...prev, bubble]);
-          setTimeout(() => setBubbles(prev => prev.filter(b => b.id !== bubble.id)), 3200);
-        }
+        likersRef.current = ids
+          .map(id => artistMap[id] || profileMap[id])
+          .filter(l => l?.name)
+          // Shuffle so order is random
+          .sort(() => Math.random() - 0.5);
       } catch {}
     };
 
-    poll();
-    timerRef.current = setInterval(poll, 8000);
-    return () => clearInterval(timerRef.current);
+    // ── Step 2: spawn a burst (2-4 hearts + one name pill) ────────────────
+    const spawnBurst = () => {
+      const likers = likersRef.current;
+      const count  = likers.length;
+
+      // Hearts — 2 to 4 at a time
+      const n = 2 + Math.floor(Math.random() * 3);
+      const newHearts = Array.from({ length: n }, (_, i) => ({
+        id:    Date.now() + i + Math.random(),
+        x:     10 + Math.random() * 70,
+        color: HEART_COLORS[Math.floor(Math.random() * HEART_COLORS.length)],
+        size:  14 + Math.random() * 12,
+        delay: i * 120,
+      }));
+      setHearts(prev => [...prev, ...newHearts]);
+      setTimeout(() => setHearts(prev => prev.filter(h => !newHearts.find(n => n.id === h.id))), 3000);
+
+      // Name pill — cycle through likers
+      if (count > 0) {
+        const liker = likers[burstIdx.current % count];
+        burstIdx.current++;
+        const bubble = {
+          id:     Date.now() + Math.random(),
+          name:   liker.name,
+          avatar: liker.avatar,
+          x:      8 + Math.random() * 40,
+        };
+        setBubbles(prev => [...prev, bubble]);
+        setTimeout(() => setBubbles(prev => prev.filter(b => b.id !== bubble.id)), 3500);
+      }
+    };
+
+    // ── Step 3: run at natural-feeling intervals ───────────────────────────
+    const startAmbient = (likeCount) => {
+      if (ambientRef.current) return; // already running
+      if (likeCount < 1) return;
+
+      // Interval scales with likes: 1 like = every ~12s, 10 likes = ~6s, 50+ = ~3s
+      const interval = Math.max(3000, 13000 - likeCount * 200);
+
+      const tick = () => {
+        spawnBurst();
+        // Slightly randomise next tick so it feels organic
+        ambientRef.current = setTimeout(tick, interval + (Math.random() - 0.5) * 2000);
+      };
+      // First burst after 1.5s so it feels immediate
+      ambientRef.current = setTimeout(tick, 1500);
+    };
+
+    const init = async () => {
+      await loadLikers();
+      // Also check total like count to decide interval
+      const { count } = await supabase
+        .from('track_likes')
+        .select('*', { count: 'exact', head: true })
+        .eq('track_id', trackId);
+      startAmbient(count || 0);
+
+      // Still poll for real-time new likes every 10s
+      pollRef.current = setInterval(async () => {
+        try {
+          const since = new Date(Date.now() - 12000).toISOString();
+          const { data: newLikes } = await supabase
+            .from('track_likes')
+            .select('user_id')
+            .eq('track_id', trackId)
+            .gte('created_at', since)
+            .limit(3);
+          if (newLikes?.length) {
+            // Reload likers to include new one
+            await loadLikers();
+            spawnBurst();
+          }
+        } catch {}
+      }, 10000);
+    };
+
+    init();
+
+    return () => {
+      clearTimeout(ambientRef.current);
+      clearInterval(pollRef.current);
+      ambientRef.current = null;
+    };
   }, [trackId]);
 
   if (!hearts.length && !bubbles.length) return null;
