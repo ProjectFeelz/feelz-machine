@@ -855,6 +855,7 @@ export default function ForYouPage() {
     if (offset === 0) setLoading(true); else setLoadingMore(true);
     try {
       let fetched = [];
+      let hiddenIds = [];
 
       if (user) {
         // Fetch hidden track IDs so we can exclude them
@@ -863,7 +864,7 @@ export default function ForYouPage() {
           .select('track_id')
           .eq('user_id', user.id)
           .eq('signal', 'not_interested');
-        const hiddenIds = (hiddenData || []).map(h => h.track_id).filter(Boolean);
+        hiddenIds = (hiddenData || []).map(h => h.track_id).filter(Boolean);
 
         let recQuery = supabase
           .from('listener_recommendations')
@@ -900,7 +901,7 @@ export default function ForYouPage() {
       if (fetched.length < PAGE_SIZE) {
         const existingIds = fetched.map(t => t.id);
         // Combine with hidden IDs so fallback query also excludes them
-        const allExcludeIds = [...new Set([...existingIds, ...(typeof hiddenIds !== 'undefined' ? hiddenIds : [])])];
+        const allExcludeIds = [...new Set([...existingIds, ...hiddenIds])];
         // Mix: half by engagement, half by recency so new releases get exposure
         const halfPage = Math.ceil((PAGE_SIZE - fetched.length) / 2);
         const existingIdsStr = allExcludeIds.length > 0 ? `(${allExcludeIds.join(',')})` : null;
