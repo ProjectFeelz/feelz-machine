@@ -287,7 +287,7 @@ export default function TrackCommentSheet({ track, user, onClose, routePrefix = 
       </div>
 
       {/* Comment list */}
-      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-4" style={{ paddingBottom: "80px" }}>
+      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-4" style={{ paddingBottom: "140px" }}>
         {loading ? (
           <div className="flex justify-center py-8"><Loader className="w-5 h-5 animate-spin text-white/20" /></div>
         ) : topLevel.length === 0 ? (
@@ -312,10 +312,14 @@ export default function TrackCommentSheet({ track, user, onClose, routePrefix = 
           position: 'fixed',
           left: 0,
           right: 0,
-          bottom: `${inputBarBottom}px`,
-          paddingBottom: inputBarBottom > 0 ? '8px' : 'max(8px, env(safe-area-inset-bottom))',
+          // Sit above nav (64px) + safe area when keyboard is closed,
+          // or above keyboard when it's open (keyboard already pushes above nav)
+          bottom: inputBarBottom > 0
+            ? `${inputBarBottom}px`
+            : 'calc(64px + env(safe-area-inset-bottom, 0px))',
+          paddingBottom: inputBarBottom > 0 ? '8px' : '8px',
           transition: 'bottom 0.12s ease',
-          zIndex: 10,
+          zIndex: 900,
         }}
       >
         {/* Reply context chip */}

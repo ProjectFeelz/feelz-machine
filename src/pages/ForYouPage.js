@@ -1414,6 +1414,24 @@ export default function ForYouPage() {
           onClose={() => setViewingStory(null)}
         />
       )}
+
+      {/* iOS tap-to-play — unlocks audio context on first interaction */}
+      {showTapToPlay && (
+        <div
+          className="fixed inset-0 z-[900] flex items-center justify-center"
+          style={{ background: 'rgba(0,0,0,0.01)' }}
+          onClick={unlockAndPlay}
+          onTouchEnd={e => { e.preventDefault(); unlockAndPlay(); }}
+        >
+          <div className="flex flex-col items-center space-y-3 pointer-events-none">
+            <div className="w-16 h-16 rounded-full flex items-center justify-center"
+              style={{ background: 'rgba(255,255,255,0.1)', backdropFilter: 'blur(10px)' }}>
+              <span style={{ fontSize: 28 }}>▶️</span>
+            </div>
+            <p className="text-white/60 text-sm font-medium">Tap to play</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
