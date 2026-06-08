@@ -192,22 +192,50 @@ function FloatingHearts({ trackId }) {
   const [bubbles, setBubbles] = React.useState([]);
   const timerRef = React.useRef(null);
 
-  // Poll for recent likes on this track every 8 seconds
+  // Poll for recent likes + ambient hearts from existing like count
   React.useEffect(() => {
     if (!trackId) return;
+
+    // Spawn a single ambient heart based on existing like count
+    const spawnAmbient = (likeCount) => {
+      if (!likeCount || likeCount < 1) return;
+      // Probability scales with likes: 1 like = 15%, 5 likes = 40%, 20+ = 80%
+      const prob = Math.min(0.8, 0.1 + (likeCount / 25));
+      if (Math.random() > prob) return;
+      const h = {
+        id: Date.now() + Math.random(),
+        x: 10 + Math.random() * 70,
+        color: HEART_COLORS[Math.floor(Math.random() * HEART_COLORS.length)],
+        size: 12 + Math.random() * 10,
+        delay: 0,
+        ambient: true,
+      };
+      setHearts(prev => [...prev, h]);
+      setTimeout(() => setHearts(prev => prev.filter(x => x.id !== h.id)), 2500);
+    };
+
     const poll = async () => {
       try {
         const since = new Date(Date.now() - 15000).toISOString();
-        const { data: likes } = await supabase
-          .from('track_likes')
-          .select('id, user_id, created_at')
-          .eq('track_id', trackId)
-          .gte('created_at', since)
-          .limit(5);
+        const [{ data: likes }, { count: totalLikes }] = await Promise.all([
+          supabase
+            .from('track_likes')
+            .select('id, user_id, created_at')
+            .eq('track_id', trackId)
+            .gte('created_at', since)
+            .limit(5),
+          supabase
+            .from('track_likes')
+            .select('*', { count: 'exact', head: true })
+            .eq('track_id', trackId),
+        ]);
+
+        // Ambient heart from existing likes
+        spawnAmbient(totalLikes || 0);
 
         if (!likes?.length) return;
 
-        // Spawn hearts
+        // Spawn hearts from real-time likes
         const newHearts = likes.map((_, i) => ({
           id: Date.now() + i,
           x: 15 + Math.random() * 60,
@@ -363,6 +391,7 @@ function StoryFeedCard({ item, isActive, onOpen, navigate }) {
 
 // ── Single card ───────────────────────────────────────────────────────────────
 function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare, onNext, onHide, queue, queueIndex }) {
+  const [justHid, setJustHid] = React.useState(null); // { id, title } for undo
   const { currentTrack, isPlaying, currentTime, setIsMinimized } = usePlayer();
   const { artist: myArtist } = useAuth();
   const isOwnTrack = myArtist?.id === track.artist_id;
@@ -624,6 +653,8 @@ function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare, onN
           <button
             onClick={e => {
               e.stopPropagation();
+              setJustHid({ id: track.id, title: track.title });
+              // Write feedback immediately
               supabase.from('listener_feedback').upsert({
                 user_id:    user.id,
                 track_id:   track.id,
@@ -632,7 +663,12 @@ function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare, onN
                 listen_pct: 0,
                 updated_at: new Date().toISOString(),
               }, { onConflict: 'user_id,track_id' });
-              if (onHide) onHide(track.id); else onNext();
+              // Delay actual hide by 3s to allow undo
+              const t = setTimeout(() => {
+                if (onHide) onHide(track.id); else onNext();
+              }, 3000);
+              // Store timeout so undo can cancel it
+              window.__feelz_hide_timer = t;
             }}
             className="flex flex-col items-center space-y-1 opacity-40 hover:opacity-80 transition active:scale-90"
           >
@@ -641,6 +677,33 @@ function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare, onN
             </div>
             <span className="text-[11px] font-semibold text-white/80">Hide</span>
           </button>
+
+          {/* Undo hide toast */}
+          {justHid && (
+            <div
+              className="absolute bottom-28 left-1/2 -translate-x-1/2 flex items-center space-x-3 px-4 py-2.5 rounded-2xl z-50 pointer-events-auto"
+              style={{ background: 'rgba(20,20,30,0.95)', border: '1px solid rgba(255,255,255,0.12)', boxShadow: '0 4px 24px rgba(0,0,0,0.5)', whiteSpace: 'nowrap' }}
+              onClick={e => e.stopPropagation()}
+            >
+              <span className="text-xs text-white/60">Hidden</span>
+              <button
+                onClick={e => {
+                  e.stopPropagation();
+                  clearTimeout(window.__feelz_hide_timer);
+                  // Remove the feedback signal
+                  supabase.from('listener_feedback')
+                    .delete()
+                    .eq('user_id', user.id)
+                    .eq('track_id', justHid.id);
+                  setJustHid(null);
+                }}
+                className="text-xs font-bold px-2.5 py-1 rounded-xl transition active:scale-95"
+                style={{ background: 'rgba(139,92,246,0.25)', color: '#a78bfa', border: '1px solid rgba(139,92,246,0.4)' }}
+              >
+                Undo
+              </button>
+            </div>
+          )}
         )}
       </div>
 
