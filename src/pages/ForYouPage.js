@@ -648,8 +648,9 @@ function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare, onN
           <span className="text-[11px] font-semibold text-white/80">{track.is_beat ? 'Buy' : 'Info'}</span>
         </button>
 
-        {/* Not interested */}
+        {/* Not interested + undo toast */}
         {user && !isOwnTrack && (
+          <>
           <button
             onClick={e => {
               e.stopPropagation();
@@ -704,6 +705,7 @@ function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare, onN
               </button>
             </div>
           )}
+          </>
         )}
       </div>
 
