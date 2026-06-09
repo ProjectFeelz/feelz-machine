@@ -17,7 +17,10 @@ export default function DesktopPlayer() {
           duration, currentTime, seek, volume, setVolume,
           shuffle, toggleShuffle, repeat, toggleRepeat,
           queue, queueIndex, setIsMinimized,
+          jumpToIndex, moveInQueue,
     } = usePlayer();
+  const [draggingIdx, setDraggingIdx] = useState(null);
+  const [dragOverIdx, setDragOverIdx] = useState(null);
 
   const [liked, setLiked] = useState(false);
     const [showQueue, setShowQueue] = useState(false);
@@ -80,27 +83,43 @@ export default function DesktopPlayer() {
           <div className="px-3 py-2 space-y-0.5">
 {queue.map((track, i) => (
                 <div
-                           key={`${track.id}-${i}`}
-                className={`flex items-center space-x-3 px-3 py-2.5 rounded-xl transition ${
-                                    i === queueIndex ? 'bg-white/[0.08]' : 'hover:bg-white/[0.04]'
-                }`}>
-                <div className="w-9 h-9 rounded-lg overflow-hidden bg-white/[0.06] flex-shrink-0">
-                {track.cover_artwork_url
-                    ? <img src={track.cover_artwork_url} alt="" className="w-full h-full object-cover" />
-                                      : <div className="w-full h-full flex items-center justify-center text-white/20 text-xs">♪</div>
-}
-</div>
-                <div className="flex-1 min-w-0">
-                    <p className={`text-xs font-medium truncate ${i === queueIndex ? 'text-white' : 'text-white/70'}`}>{track.title}</p>
-                  <p className="text-[10px] text-white/30 truncate">{track.artist_name}</p>
+  key={`${track.id}-${i}`}
+  draggable={i !== queueIndex}
+  onDragStart={() => { if (i !== queueIndex) setDraggingIdx(i); }}
+  onDragOver={e => { e.preventDefault(); if (draggingIdx !== null && i !== queueIndex) setDragOverIdx(i); }}
+  onDrop={() => {
+    if (draggingIdx !== null && draggingIdx !== i) { moveInQueue(draggingIdx, i); }
+    setDraggingIdx(null); setDragOverIdx(null);
+  }}
+  onDragEnd={() => { setDraggingIdx(null); setDragOverIdx(null); }}
+  onClick={() => { if (i !== queueIndex) jumpToIndex(i); }}
+  className={`flex items-center space-x-3 px-3 py-2.5 rounded-xl transition cursor-pointer ${
+    i === queueIndex ? 'bg-white/[0.08]' : 'hover:bg-white/[0.06] active:bg-white/[0.1]'
+  } ${draggingIdx === i ? 'opacity-40' : ''} ${dragOverIdx === i && draggingIdx !== i ? 'border-t-2 border-purple-400' : ''}`}>
+  {/* Drag handle */}
+  {i !== queueIndex && (
+    <div className="flex flex-col space-y-0.5 flex-shrink-0 cursor-grab px-0.5 opacity-20 hover:opacity-50">
+      {[0,1,2].map(j => <div key={j} className="w-3 h-0.5 rounded-full bg-white" />)}
+    </div>
+  )}
+  <div className="w-9 h-9 rounded-lg overflow-hidden bg-white/[0.06] flex-shrink-0">
+    {track.cover_artwork_url
+      ? <img src={track.cover_artwork_url} alt="" className="w-full h-full object-cover" />
+      : <div className="w-full h-full flex items-center justify-center text-white/20 text-xs">♪</div>}
   </div>
-{i === queueIndex && (
-                    <div className="flex items-end space-x-0.5 h-3 flex-shrink-0">
-                      <div className="w-0.5 bg-white rounded-full animate-pulse" style={{ height: '100%' }} />
-                    <div className="w-0.5 bg-white rounded-full animate-pulse" style={{ height: '60%', animationDelay: '0.15s' }} />
-                    <div className="w-0.5 bg-white rounded-full animate-pulse" style={{ height: '80%', animationDelay: '0.3s' }} />
+  <div className="flex-1 min-w-0">
+    <p className={`text-xs font-medium truncate ${i === queueIndex ? 'text-white' : 'text-white/70'}`}>{track.title}</p>
+    <p className="text-[10px] text-white/30 truncate">{track.artist_name}</p>
   </div>
-                )}
+  {i === queueIndex ? (
+    <div className="flex items-end space-x-0.5 h-3 flex-shrink-0">
+      <div className="w-0.5 bg-white rounded-full animate-pulse" style={{ height: '100%' }} />
+      <div className="w-0.5 bg-white rounded-full animate-pulse" style={{ height: '60%', animationDelay: '0.15s' }} />
+      <div className="w-0.5 bg-white rounded-full animate-pulse" style={{ height: '80%', animationDelay: '0.3s' }} />
+    </div>
+  ) : (
+    <span className="text-[9px] text-white/20 flex-shrink-0">{i + 1}</span>
+  )}
 </div>
             ))}
 {queue.length === 0 && (

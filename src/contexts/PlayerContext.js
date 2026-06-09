@@ -29,10 +29,8 @@ export function PlayerProvider({ children }) {
   const [repeat, setRepeat]             = useState('none');
   const [isMinimized, setIsMinimized]   = useState(false);
 
-  const _audioA = new Audio(); _audioA.playsInline = true; _audioA.setAttribute('playsinline', ''); _audioA.setAttribute('webkit-playsinline', '');
-  const _audioB = new Audio(); _audioB.playsInline = true; _audioB.setAttribute('playsinline', ''); _audioB.setAttribute('webkit-playsinline', '');
-  const audioRef        = useRef(_audioA);
-  const audioRefB       = useRef(_audioB);  // second element for crossfade
+  const audioRef        = useRef(new Audio());
+  const audioRefB       = useRef(new Audio());  // second element for crossfade
   const crossfadingRef  = useRef(false);
   const CROSSFADE_SECS  = 1.5; // seconds of overlap — short enough to not echo
   const streamLoggedRef = useRef(false);
@@ -141,19 +139,14 @@ export function PlayerProvider({ children }) {
       } catch {}
 
       // Now switch primary to the NEW track (silent, fades in)
-      // iOS fix: call play() immediately after src change without load()
-      // — iOS carries over the "already playing" audio permission to the new src
       primaryAudio.src    = nextTrack.file_url;
       primaryAudio.volume = 0;
-      primaryAudio.play().catch(() => {
-        // Fallback for browsers that need load() first
-        primaryAudio.load();
-        const startFadeIn = () => {
-          primaryAudio.play().catch(() => {});
-          primaryAudio.removeEventListener('canplay', startFadeIn);
-        };
-        primaryAudio.addEventListener('canplay', startFadeIn);
-      });
+      primaryAudio.load();
+      const startFadeIn = () => {
+        primaryAudio.play().catch(() => {});
+        primaryAudio.removeEventListener('canplay', startFadeIn);
+      };
+      primaryAudio.addEventListener('canplay', startFadeIn);
 
       setCurrentTrack(nextTrack);
       preloadCover(nextTrack);
@@ -326,27 +319,18 @@ export function PlayerProvider({ children }) {
         todayStart.setHours(0, 0, 0, 0);
         const todayStartISO = todayStart.toISOString();
 
-        // Get all track_ids for this artist (needed since streams has no artist_id)
-        const { data: artistTracks } = await supabase
-          .from('tracks')
-          .select('id')
-          .eq('artist_id', track.artist_id)
-          .eq('is_published', true);
-        const artistTrackIds = (artistTracks || []).map(t => t.id);
-        if (!artistTrackIds.length) return;
-
         // Count today's total streams for this artist
         const { count: todayStreams } = await supabase
           .from('streams')
           .select('*', { count: 'exact', head: true })
-          .in('track_id', artistTrackIds)
+          .eq('artist_id', track.artist_id)
           .gte('created_at', todayStartISO);
 
         // Find today's top track by stream count
         const { data: topTrackData } = await supabase
           .from('streams')
           .select('track_id, tracks(title, slug, cover_artwork_url, file_url)')
-          .in('track_id', artistTrackIds)
+          .eq('artist_id', track.artist_id)
           .gte('created_at', todayStartISO);
 
         // Count per track
@@ -485,19 +469,11 @@ export function PlayerProvider({ children }) {
     audio.src = track.file_url;
     audio.volume = volumeRef.current;
     audio.load();
-    // Call play() immediately to stay within iOS gesture context,
-    // then re-attempt on canplay in case it wasn't buffered yet
-    // iOS: play() immediately after src change — no load() needed
-    // iOS carries over gesture permission as long as we call play() synchronously
-    audio.play().catch(() => {
-      // Desktop fallback: some browsers need load() before play()
-      audio.load();
-      const playWhenReady = () => {
-        audio.play().catch(() => {});
-        audio.removeEventListener('canplay', playWhenReady);
-      };
-      audio.addEventListener('canplay', playWhenReady);
-    });
+    const playWhenReady = () => {
+      audio.play().catch(() => {});
+      audio.removeEventListener('canplay', playWhenReady);
+    };
+    audio.addEventListener('canplay', playWhenReady);
     setCurrentTrack(track);
     preloadCover(track);
     setCurrentTime(0);
@@ -604,12 +580,35 @@ export function PlayerProvider({ children }) {
     queueIndexRef.current = idx;
   }, []);
 
+  // Jump to a specific index in the current queue and start playing
+  const jumpToIndex = useCallback((idx) => {
+    const q = queueRef.current;
+    if (!q || idx < 0 || idx >= q.length) return;
+    const track = q[idx];
+    if (!track) return;
+    const audio = audioRef.current;
+    audio.pause();
+    audio.src = track.file_url;
+    audio.volume = volumeRef.current;
+    audio.play().catch(() => {
+      audio.load();
+      const onReady = () => { audio.play().catch(() => {}); audio.removeEventListener('canplay', onReady); };
+      audio.addEventListener('canplay', onReady);
+    });
+    setCurrentTrack(track);
+    setQueueIndex(idx);
+    queueIndexRef.current = idx;
+    setCurrentTime(0);
+    streamLoggedRef.current = false;
+    setIsMinimized(false);
+  }, []); // eslint-disable-line
+
   const value = {
     currentTrack, isPlaying, duration, currentTime, volume, queue, queueIndex,
     shuffle, repeat, isMinimized, setIsMinimized, playTrack, togglePlay, seek,
     setVolume: setVolumeLevel, setVolumeLevel, playNext, playPrev, addToQueue,
     removeFromQueue, moveInQueue, playNextInQueue, clearQueue, toggleShuffle, toggleRepeat,
-    replaceQueue,
+    replaceQueue, jumpToIndex,
   };
 
   return (

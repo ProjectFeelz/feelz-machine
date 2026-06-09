@@ -1317,7 +1317,7 @@ export default function ForYouPage() {
 
   return (
     <div
-      className="bg-black overflow-hidden md:left-64"
+      className="bg-black overflow-hidden"
       onTouchStart={onTouchStart}
       onTouchMove={onTouchMove}
       onTouchEnd={onTouchEnd}
@@ -1327,6 +1327,8 @@ export default function ForYouPage() {
         left: 0,
         right: 0,
         bottom: 0,
+        // On desktop, offset by sidebar width
+        ...(window.innerWidth >= 768 ? { left: '256px' } : {}),
         touchAction: 'none',
         WebkitOverflowScrolling: 'touch',
       }}
