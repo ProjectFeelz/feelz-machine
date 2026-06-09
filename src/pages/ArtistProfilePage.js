@@ -1683,7 +1683,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
           .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
           .slice(0, 8);
         return (
-          <div className="mb-8 mx-6 rounded-2xl pt-5 pb-4"
+          <div className="mb-8 mx-6 rounded-2xl pt-8 pb-4"
             style={{ background: `linear-gradient(135deg, ${secondaryColor}12 0%, ${accentColor}08 100%)`, border: `1px solid ${secondaryColor}20` }}>
             <div className="px-4 mb-4 flex items-center space-x-2">
               <span className="text-base">🆕</span>

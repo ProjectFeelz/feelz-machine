@@ -37,9 +37,16 @@ function formatNumber(n) {
   return n.toString();
 }
 
-function Section({ title, icon: Icon, onSeeAll, children }) {
+function Section({ title, icon: Icon, onSeeAll, children, gradient }) {
+  const gradients = {
+    amber:  { bg: 'linear-gradient(135deg, rgba(120,53,15,0.18) 0%, rgba(30,20,10,0.4) 60%, transparent 100%)', border: '1px solid rgba(245,158,11,0.12)' },
+    purple: { bg: 'linear-gradient(135deg, rgba(88,28,135,0.18) 0%, rgba(30,27,75,0.35) 60%, transparent 100%)', border: '1px solid rgba(139,92,246,0.15)' },
+    teal:   { bg: 'linear-gradient(135deg, rgba(13,148,136,0.15) 0%, rgba(10,30,30,0.4) 60%, transparent 100%)', border: '1px solid rgba(20,184,166,0.15)' },
+    rose:   { bg: 'linear-gradient(135deg, rgba(136,19,55,0.18) 0%, rgba(30,10,20,0.4) 60%, transparent 100%)', border: '1px solid rgba(244,63,94,0.15)' },
+  };
+  const g = gradients[gradient];
   return (
-    <div className="mb-8">
+    <div className="mb-8" style={g ? { borderRadius: 0, padding: '20px 0', background: g.bg, borderTop: g.border, borderBottom: g.border } : {}}>
       <div className="flex items-center justify-between mb-3 px-6">
         <div className="flex items-center space-x-2">
           {Icon && <Icon className="w-3.5 h-3.5 text-white/30" />}
@@ -386,7 +393,7 @@ export default function HomePage() {
         .select('id, name, cover_url, user_id, created_at, is_public, playlist_tracks(id, tracks(cover_artwork_url)), artists:users!playlists_user_id_fkey(artists(artist_name, slug, profile_image_url))')
         .eq('is_public', true)
         .order('created_at', { ascending: false })
-        .limit(8);
+        .limit(12);
       // Fallback simpler query if join fails
       if (!data) return;
       setFeaturedPlaylists(data.filter(p => p.playlist_tracks?.length > 0));
@@ -727,7 +734,7 @@ export default function HomePage() {
 
       {/* You haven't heard this yet */}
       {user && unheardTracks.length > 0 && (
-        <Section title="You Haven't Heard This Yet" icon={Headphones}>
+        <Section title="You Haven't Heard This Yet" icon={Headphones} gradient="teal">
           <div className="flex space-x-3 overflow-x-auto px-6 scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
             {unheardTracks.map(track => (
               <SquareCard key={track.id} item={track} itemList={unheardTracks}
@@ -784,7 +791,7 @@ export default function HomePage() {
 
       {/* Trending — highest social proof, works for every visitor */}
       {trending.length > 0 && (
-        <Section title="Trending" icon={Flame} onSeeAll={() => navigate('/browse?tab=trending')}>
+        <Section title="Trending" icon={Flame} gradient="teal" onSeeAll={() => navigate('/browse?tab=trending')}>
           <div className="flex space-x-3 overflow-x-auto px-6 scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
             {trending.map(track => (
               <SquareCard key={track.id} item={track} itemList={trending}
@@ -797,7 +804,7 @@ export default function HomePage() {
 
       {/* New Releases — tracks only, with NEW badge + date */}
       {newReleases.length > 0 && (
-        <Section title="New Singles" onSeeAll={() => navigate('/browse?tab=new')}>
+        <Section title="New Singles" gradient="purple" onSeeAll={() => navigate('/browse?tab=new')}>
           <div className="flex space-x-3 overflow-x-auto px-6 scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
             {newReleases.map(item => (
               <SquareCard
@@ -827,7 +834,7 @@ export default function HomePage() {
 
       {/* From artists you follow — personal pull, logged-in users only */}
       {followedReleases.length > 0 && (
-        <Section title="From Artists You Follow" icon={Users} onSeeAll={() => navigate('/browse?tab=new')}>
+        <Section title="From Artists You Follow" icon={Users} gradient="rose" onSeeAll={() => navigate('/browse?tab=new')}>
           <div className="flex space-x-3 overflow-x-auto px-6 scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
             {followedReleases.map(track => (
               <SquareCard key={track.id} item={track} itemList={followedReleases}
@@ -840,7 +847,7 @@ export default function HomePage() {
 
       {/* Recommended */}
       {recommended.length > 0 && (
-        <Section title="Recommended For You" icon={Sparkles} onSeeAll={() => navigate('/browse?tab=tracks')}>
+        <Section title="Recommended For You" icon={Sparkles} gradient="amber" onSeeAll={() => navigate('/browse?tab=tracks')}>
           <div className="flex space-x-3 overflow-x-auto px-6 scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
             {recommended.map(track => (
               <SquareCard key={track.id} item={track} itemList={recommended}
@@ -851,19 +858,23 @@ export default function HomePage() {
         </Section>
       )}
 
-      {/* ── Playlists row ── */}
+
+      {/* ── Artist Playlists (replaces Featured) ── */}
       {featuredPlaylists.length > 0 && (
         <div className="mb-8">
           <div className="flex items-center justify-between mb-3 px-6">
             <div className="flex items-center space-x-2">
-              <ListMusic className="w-3.5 h-3.5 text-white/30" />
-              <span className="section-label">Playlists</span>
+              <ListMusic className="w-3.5 h-3.5" style={{ color: 'rgba(167,139,250,0.7)' }} />
+              <span className="section-label">Artist Playlists</span>
             </div>
-            <button onClick={() => navigate('/library/playlists')}
+            <button onClick={() => navigate('/browse')}
               className="text-xs text-white/30 hover:text-white/50 transition">See all →</button>
           </div>
           <div className="mx-6 rounded-2xl py-4 px-4"
-            style={{ background: 'linear-gradient(135deg, rgba(15,15,35,0.95) 0%, rgba(20,10,40,0.9) 100%)', border: '1px solid rgba(255,255,255,0.06)' }}>
+            style={{
+              background: 'linear-gradient(135deg, rgba(88,28,135,0.18) 0%, rgba(30,27,75,0.35) 60%, rgba(15,15,35,0.9) 100%)',
+              border: '1px solid rgba(139,92,246,0.2)',
+            }}>
             <div className="flex space-x-4 overflow-x-auto scrollbar-hide">
               {featuredPlaylists.map(pl => {
                 const coverUrl = pl.cover_url || pl.playlist_tracks?.find(pt => pt.tracks?.cover_artwork_url)?.tracks?.cover_artwork_url;
@@ -871,13 +882,13 @@ export default function HomePage() {
                   <button key={pl.id}
                     onClick={() => navigate(`/library/playlists/${pl.id}`)}
                     className="flex-shrink-0 w-28 text-left group">
-                    <div className="w-28 h-28 rounded-xl overflow-hidden mb-2 relative"
-                      style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                    <div className="w-28 h-28 rounded-xl overflow-hidden mb-2"
+                      style={{ background: 'rgba(139,92,246,0.1)', border: '1px solid rgba(139,92,246,0.15)' }}>
                       {coverUrl
                         ? <img src={coverUrl} alt={pl.name} loading="lazy"
                             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
                         : <div className="w-full h-full flex items-center justify-center">
-                            <ListMusic className="w-8 h-8 text-white/10" />
+                            <ListMusic className="w-8 h-8" style={{ color: 'rgba(139,92,246,0.3)' }} />
                           </div>}
                     </div>
                     <p className="text-xs font-semibold text-white truncate">{pl.name}</p>
@@ -892,22 +903,9 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* Featured */}
-      {featuredTracks.length > 0 && (
-        <Section title="Featured">
-          <div className="flex space-x-3 overflow-x-auto px-6 scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
-            {featuredTracks.map(track => (
-              <SquareCard key={track.id} item={track} itemList={featuredTracks}
-                onPlay={handlePlay} onMore={handleMore}
-                currentTrack={currentTrack} isPlaying={isPlaying} />
-            ))}
-          </div>
-        </Section>
-      )}
-
       {/* Artists to Follow */}
       {topArtists.length > 0 && (
-        <Section title="Artists to Follow" onSeeAll={() => navigate('/browse?tab=artists')}>
+        <Section title="Artists to Follow" gradient="rose" onSeeAll={() => navigate('/browse?tab=artists')}>
           <div className="flex space-x-3 overflow-x-auto px-6 scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
             {topArtists.map(a => (
               <button key={a.id} onClick={() => navigate(`/artist/${a.slug}`)}
@@ -928,36 +926,6 @@ export default function HomePage() {
         </Section>
       )}
 
-      {/* You Might Also Like — artists in the user's genres they haven't heard yet */}
-      {similarArtists.length > 0 && (
-        <Section title="You Might Also Like" icon={Compass} onSeeAll={() => navigate('/browse?tab=artists')}>
-          <div className="flex space-x-3 overflow-x-auto px-6 scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
-            {similarArtists.map(a => (
-              <button key={a.id} onClick={() => navigate(`/artist/${a.slug}`)}
-                className="flex-shrink-0 w-36 md:w-44 text-center group">
-                <div className="w-36 h-36 md:w-44 md:h-44 rounded-2xl overflow-hidden bg-white/[0.06] mb-2 mx-auto relative">
-                  <img src={a.profile_image_url} alt={a.artist_name || ''}
-                    loading="lazy" decoding="async"
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
-                  {/* Genre badge overlay */}
-                  {a.genre && (
-                    <div className="absolute bottom-1.5 left-1.5 right-1.5">
-                      <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-black/60 backdrop-blur text-white/70 font-medium truncate block text-center">
-                        {a.genre}
-                      </span>
-                    </div>
-                  )}
-                </div>
-                <div className="flex items-center justify-center space-x-1">
-                  <p className="text-sm font-medium text-white truncate max-w-[130px]">{a.artist_name}</p>
-                  {a.is_verified && <Verified className="w-3 h-3 text-blue-400 flex-shrink-0" />}
-                </div>
-                <p className="text-xs text-white/30 mt-0.5">{a.follower_count > 0 ? `${formatNumber(a.follower_count)} followers` : 'New artist'}</p>
-              </button>
-            ))}
-          </div>
-        </Section>
-      )}
 
       {actionSheetTrack && (
         <TrackActionSheet
