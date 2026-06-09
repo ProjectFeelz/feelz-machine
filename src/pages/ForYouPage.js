@@ -850,9 +850,11 @@ function CommentSheetOverlay({ track, user, onClose }) {
       onTouchStart={e => e.stopPropagation()}
       onTouchMove={e => e.stopPropagation()}
       onTouchEnd={e => e.stopPropagation()}>
-      <div className="w-full md:max-w-lg md:mb-6 md:rounded-2xl"
+      <div
         onClick={e => e.stopPropagation()}
         style={{
+          width: '100%',
+          maxWidth: '480px',
           maxHeight: 'calc(100vh - 80px)',
           height: '65vh',
           display: 'flex',
@@ -862,6 +864,8 @@ function CommentSheetOverlay({ track, user, onClose }) {
           borderRadius: '24px 24px 0 0',
           marginBottom: kbHeight > 0 ? `${kbHeight}px` : 0,
           transition: 'margin-bottom 0.15s ease',
+          marginLeft: 'auto',
+          marginRight: 'auto',
         }}>
         <TrackCommentSheet track={track} user={user} onClose={onClose} />
       </div>
@@ -1234,8 +1238,11 @@ export default function ForYouPage() {
     lastY.current = e.touches[0].clientY;
     touchStartT.current = now;
     dragYRef.current = dy;
-    // Rubber band: feels natural, less resistance at start
-    setDragOffset(dy * 0.35);
+    // Clamp at boundaries — resist pulling past first/last card
+    let clamped = dy;
+    if (idx === 0 && dy > 0) clamped = dy * 0.12; // rubber band top
+    if (idx >= filteredTracks.length - 1 && dy < 0) clamped = dy * 0.12; // rubber band bottom
+    setDragOffset(clamped * 0.35);
   }, []);
 
   const onTouchEnd = useCallback(() => {
@@ -1245,8 +1252,8 @@ export default function ForYouPage() {
     // Fast flick (>0.3px/ms) only needs 20px. Slow drag needs full threshold.
     const speed     = Math.abs(vel);
     const threshold = speed > 0.3 ? 20 : SWIPE_THRESHOLD;
-    if      (dy < -threshold) goTo(idx + 1);
-    else if (dy >  threshold) goTo(idx - 1);
+    if      (dy < -threshold && idx < filteredTracks.length - 1) goTo(idx + 1);
+    else if (dy >  threshold && idx > 0) goTo(idx - 1);
     else setDragOffset(0);
     dragging.current = false;
     touchStartY.current = null;
@@ -1377,9 +1384,14 @@ export default function ForYouPage() {
       <div className="absolute top-0 inset-x-0 h-20 pointer-events-none z-30"
         style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,0.5), transparent)' }} />
 
-      {/* Feed filter tabs */}
-      <div className="absolute top-16 left-1/2 -translate-x-1/2 z-30 flex space-x-1 rounded-full p-0.5"
-        style={{ background: 'rgba(255,255,255,0.08)', backdropFilter: 'blur(10px)' }}>
+      {/* Feed filter tabs — fixed so they never move */}
+      <div className="fixed left-1/2 -translate-x-1/2 z-[55] flex space-x-1 rounded-full p-0.5"
+        style={{
+          top: 'calc(max(env(safe-area-inset-top, 0px), 12px) + 48px)',
+          background: 'rgba(20,20,20,0.7)',
+          backdropFilter: 'blur(12px)',
+          WebkitBackdropFilter: 'blur(12px)',
+        }}>
         {[
           { id: 'all',    label: 'All' },
           { id: 'music',  label: 'Music' },

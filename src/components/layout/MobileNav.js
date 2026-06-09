@@ -13,9 +13,12 @@ export default function MobileNav() {
   React.useEffect(() => {
     if (!window.visualViewport) return;
     const check = () => {
-      // iPhone 13 keyboard ~340px, browser chrome ~60px — threshold 200px is safe
-      const shrunk = window.innerHeight - window.visualViewport.height > 200;
-      setKeyboardOpen(shrunk);
+      const viewportHeight = window.visualViewport.height;
+      const windowHeight   = window.innerHeight;
+      // Keyboard is open when viewport shrinks by >30% OR more than 200px
+      const shrunkRatio = viewportHeight / windowHeight < 0.7;
+      const shrunkAbs   = windowHeight - viewportHeight > 200;
+      setKeyboardOpen(shrunkRatio || shrunkAbs);
     };
     window.visualViewport.addEventListener('resize', check);
     return () => window.visualViewport.removeEventListener('resize', check);
@@ -44,8 +47,12 @@ export default function MobileNav() {
 
   return (
     <nav
-      className="md:hidden fixed left-0 right-0 z-50 bg-black/95 backdrop-blur-xl transition-all duration-150"
-      style={{ paddingBottom: 'var(--safe-area-bottom, 0px)', bottom: keyboardOpen ? '-120px' : '0px' }}
+      className="md:hidden fixed left-0 right-0 z-50 bg-black/95 backdrop-blur-xl"
+      style={{
+        paddingBottom: 'var(--safe-area-bottom, 0px)',
+        bottom: 0,
+        display: keyboardOpen ? 'none' : 'block',
+      }}
     >
       <div className="flex items-center justify-around h-16 w-full mx-auto px-1">
         {navItems.map(({ path, icon: Icon, label, tourKey }) => {
