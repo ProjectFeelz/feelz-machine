@@ -8,18 +8,20 @@ export default function MobileNav() {
   const navigate        = useNavigate();
   const location        = useLocation();
   const { user, isBeatmaker, isArtist, isListener } = useAuth();
-  const { tap }         = useHaptics();
   const [keyboardOpen, setKeyboardOpen] = React.useState(false);
 
   React.useEffect(() => {
     if (!window.visualViewport) return;
-    const update = () => {
-      const shrunk = window.innerHeight - window.visualViewport.height > 100;
+    const check = () => {
+      // Hide when keyboard takes >150px — real keyboard not just browser chrome resize
+      const shrunk = window.innerHeight - window.visualViewport.height > 150;
       setKeyboardOpen(shrunk);
     };
-    window.visualViewport.addEventListener('resize', update);
-    return () => window.visualViewport.removeEventListener('resize', update);
+    window.visualViewport.addEventListener('resize', check);
+    return () => window.visualViewport.removeEventListener('resize', check);
   }, []);
+
+  const { tap }         = useHaptics();
 
   const handleNav = (path) => {
     tap();
@@ -28,8 +30,6 @@ export default function MobileNav() {
   };
 
   if (location.pathname === '/login' || location.pathname === '/signup') return null;
-  if (keyboardOpen) return null;
-
   // Build nav items based on role
   const navItems = [
     { path: '/',             icon: Sparkles,        label: 'For You',   tourKey: 'nav-foryou'   },
@@ -44,7 +44,7 @@ export default function MobileNav() {
 
   return (
     <nav
-      className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-black/95 backdrop-blur-xl"
+      className={`md:hidden fixed bottom-0 left-0 right-0 z-50 bg-black/95 backdrop-blur-xl transition-transform duration-150 ${keyboardOpen ? 'translate-y-full' : 'translate-y-0'}`}
       style={{ paddingBottom: 'var(--safe-area-bottom, 0px)' }}
     >
       <div className="flex items-center justify-around h-16 w-full mx-auto px-1">

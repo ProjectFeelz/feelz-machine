@@ -1435,20 +1435,29 @@ export default function ForYouPage() {
         />
       )}
 
-      {/* iOS tap-to-play — unlocks audio context on first interaction */}
+      {/* iOS tap-to-play — positioned over the vinyl area (~center of screen minus 12vh) */}
       {showTapToPlay && (
         <div
           className="fixed inset-0 z-[900] flex items-center justify-center"
-          style={{ background: 'rgba(0,0,0,0.01)' }}
-          onClick={unlockAndPlay}
-          onTouchEnd={e => { e.preventDefault(); unlockAndPlay(); }}
+          style={{ background: 'transparent', paddingBottom: '12vh' }}
+          onClick={e => { e.stopPropagation(); unlockAndPlay(); }}
+          onTouchEnd={e => { e.preventDefault(); e.stopPropagation(); unlockAndPlay(); }}
         >
-          <div className="flex flex-col items-center space-y-3 pointer-events-none">
-            <div className="w-16 h-16 rounded-full flex items-center justify-center"
-              style={{ background: 'rgba(255,255,255,0.1)', backdropFilter: 'blur(10px)' }}>
-              <span style={{ fontSize: 28 }}>▶️</span>
-            </div>
-            <p className="text-white/60 text-sm font-medium">Tap to play</p>
+          {/* Clickable zone sized to match vinyl — centered on it */}
+          <div
+            className="flex flex-col items-center justify-center space-y-2"
+            style={{
+              width: `min(calc(100vw - 120px), 42vh)`,
+              height: `min(calc(100vw - 120px), 42vh)`,
+              borderRadius: '50%',
+              background: 'rgba(0,0,0,0.25)',
+              backdropFilter: 'blur(2px)',
+              border: '2px solid rgba(255,255,255,0.12)',
+              marginBottom: '12vh',
+            }}
+          >
+            <span style={{ fontSize: 36 }}>▶️</span>
+            <p className="text-white/70 text-xs font-semibold tracking-wide">Tap vinyl to play</p>
           </div>
         </div>
       )}
