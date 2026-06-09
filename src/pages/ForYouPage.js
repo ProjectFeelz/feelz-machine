@@ -845,8 +845,11 @@ function CommentSheetOverlay({ track, user, onClose }) {
   }, []);
   return (
     <div className="fixed inset-0 z-[800] flex items-end justify-center"
-      style={{ background: 'rgba(0,0,0,0.5)' }}
-      onClick={onClose}>
+      style={{ background: 'rgba(0,0,0,0.5)', touchAction: 'pan-y' }}
+      onClick={onClose}
+      onTouchStart={e => e.stopPropagation()}
+      onTouchMove={e => e.stopPropagation()}
+      onTouchEnd={e => e.stopPropagation()}>
       <div className="w-full md:max-w-lg md:mb-6 md:rounded-2xl"
         onClick={e => e.stopPropagation()}
         style={{
@@ -901,6 +904,24 @@ export default function ForYouPage() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [viewingStory, setViewingStory] = useState(null); // { artist, stories }
   const [activeSheet, setActiveSheet]   = useState(null); // { type, track }
+
+  // Lock body position when sheet open — prevents iOS viewport shift
+  useEffect(() => {
+    if (activeSheet) {
+      document.body.style.overflow = 'hidden';
+      document.body.style.position = 'fixed';
+      document.body.style.width = '100%';
+    } else {
+      document.body.style.overflow = '';
+      document.body.style.position = '';
+      document.body.style.width = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+      document.body.style.position = '';
+      document.body.style.width = '';
+    };
+  }, [activeSheet]);
   const [shareCard, setShareCard]         = useState(null);  // { artist, url }
 
   // When PlayerContext advances to next track (track ended), sync idx
@@ -1283,11 +1304,19 @@ export default function ForYouPage() {
 
   return (
     <div
-      className="fixed inset-0 bg-black overflow-hidden md:left-64"
+      className="bg-black overflow-hidden md:left-64"
       onTouchStart={onTouchStart}
       onTouchMove={onTouchMove}
       onTouchEnd={onTouchEnd}
-      style={{ touchAction: 'none' }}
+      style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        touchAction: 'none',
+        WebkitOverflowScrolling: 'touch',
+      }}
     >
       <Helmet><title>For You · Feelz Machine</title><link rel="icon" href="/favicon.ico" /><link rel="apple-touch-icon" href="/logo192.png" /></Helmet>
 
@@ -1438,29 +1467,34 @@ export default function ForYouPage() {
       {/* iOS tap-to-play — positioned over the vinyl area (~center of screen minus 12vh) */}
       {showTapToPlay && (
         <div
-          className="fixed inset-0 z-[900] flex items-center justify-center"
-          style={{ background: 'transparent', paddingBottom: '12vh' }}
+          className="fixed inset-0 z-[900]"
+          style={{ background: 'transparent' }}
           onClick={e => { e.stopPropagation(); unlockAndPlay(); }}
           onTouchEnd={e => { e.preventDefault(); e.stopPropagation(); unlockAndPlay(); }}
         >
-          {/* Clickable zone sized to match vinyl — centered on it */}
-          <div
-            className="flex flex-col items-center justify-center space-y-2"
-            style={{
-              width: `min(calc(100vw - 120px), 42vh)`,
-              height: `min(calc(100vw - 120px), 42vh)`,
-              borderRadius: '50%',
-              background: 'rgba(0,0,0,0.3)',
-              backdropFilter: 'blur(4px)',
-              border: '2px solid rgba(255,255,255,0.15)',
-              marginTop: '-12vh',
-            }}
-          >
+          {/* Circle positioned to exactly match vinyl: center of screen offset by -12vh */}
+          <div style={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, calc(-50% - 6vh))',
+            width: `min(calc(100vw - 120px), 42vh)`,
+            height: `min(calc(100vw - 120px), 42vh)`,
+            borderRadius: '50%',
+            background: 'rgba(0,0,0,0.3)',
+            backdropFilter: 'blur(4px)',
+            border: '2px solid rgba(255,255,255,0.15)',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '8px',
+          }}>
             <svg width="52" height="52" viewBox="0 0 52 52" fill="none">
               <circle cx="26" cy="26" r="25" fill="rgba(255,255,255,0.15)" stroke="rgba(255,255,255,0.4)" strokeWidth="1.5"/>
               <polygon points="21,16 21,36 38,26" fill="white"/>
             </svg>
-            <p className="text-white/70 text-xs font-semibold tracking-wide mt-2">Tap to play</p>
+            <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: 11, fontWeight: 600, letterSpacing: '0.05em', margin: 0 }}>Tap to play</p>
           </div>
         </div>
       )}
