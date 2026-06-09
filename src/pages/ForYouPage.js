@@ -547,6 +547,22 @@ function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare, onN
 
   const vinylSize = Math.min(window.innerWidth - 120, window.innerHeight * 0.42);
   const fmt = n => n >= 1000 ? (n / 1000).toFixed(1) + 'K' : String(n);
+  const videoRef = React.useRef(null);
+
+  // Sync video to audio player state — start/stop together
+  React.useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    if (playing) {
+      // Seek to match audio currentTime so they stay in sync
+      if (Math.abs(video.currentTime - currentTime) > 0.5) {
+        video.currentTime = currentTime;
+      }
+      video.play().catch(() => {});
+    } else {
+      video.pause();
+    }
+  }, [playing, currentTime]);
 
   return (
     <div className="relative w-full h-full flex items-center justify-center select-none" onClick={handleTap}>
@@ -571,10 +587,10 @@ function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare, onN
       {hasVideo && isActive && (
         <div className="absolute inset-0 z-10">
           {isUploadedVideo ? (
-            /* Native video for Supabase-hosted MP4s */
+            /* Native video for Supabase-hosted MP4s — synced to audio player */
             <video
+              ref={videoRef}
               src={track.youtube_url}
-              autoPlay
               playsInline
               muted
               onEnded={isActive ? onNext : undefined}
@@ -584,7 +600,7 @@ function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare, onN
             /* ReactPlayer only for actual YouTube URLs */
             <ReactPlayer
               url={track.youtube_url}
-              playing={isActive}
+              playing={playing}
               muted
               playsinline
               onEnded={isActive ? onNext : undefined}
@@ -675,32 +691,54 @@ function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare, onN
 
 
 
-        {/* Undo hide toast — positioned on card root so it's not clipped by action bar */}
-        {justHid && (
-          <div
-            className="absolute bottom-28 left-4 right-4 flex items-center justify-between px-4 py-2.5 rounded-2xl z-50 pointer-events-auto"
-            style={{ background: 'rgba(20,20,30,0.95)', border: '1px solid rgba(255,255,255,0.12)', boxShadow: '0 4px 24px rgba(0,0,0,0.5)' }}
-            onClick={e => e.stopPropagation()}
-          >
-            <span className="text-xs text-white/60">Song hidden</span>
-            <button
-              onClick={e => {
-                e.stopPropagation();
-                clearTimeout(window.__feelz_hide_timer);
-                supabase.from('listener_feedback')
-                  .delete()
-                  .eq('user_id', user.id)
-                  .eq('track_id', justHid.id);
-                setJustHid(null);
-              }}
-              className="text-xs font-bold px-3 py-1.5 rounded-xl transition active:scale-95"
-              style={{ background: 'rgba(139,92,246,0.25)', color: '#a78bfa', border: '1px solid rgba(139,92,246,0.4)' }}
-            >
-              Undo
-            </button>
-          </div>
-        )}
       </div>
+
+      {/* Undo hide toast — fixed centered above nav */}
+      {justHid && (
+        <div
+          style={{
+            position: 'fixed',
+            bottom: '90px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 900,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+            padding: '10px 16px',
+            borderRadius: '20px',
+            background: 'rgba(20,20,30,0.95)',
+            border: '1px solid rgba(255,255,255,0.12)',
+            boxShadow: '0 4px 24px rgba(0,0,0,0.6)',
+            whiteSpace: 'nowrap',
+          }}
+          onClick={e => e.stopPropagation()}
+        >
+          <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)' }}>Song hidden</span>
+          <button
+            onClick={e => {
+              e.stopPropagation();
+              clearTimeout(window.__feelz_hide_timer);
+              supabase.from('listener_feedback')
+                .delete()
+                .eq('user_id', user.id)
+                .eq('track_id', justHid.id);
+              setJustHid(null);
+            }}
+            style={{
+              fontSize: 12,
+              fontWeight: 700,
+              padding: '4px 12px',
+              borderRadius: '10px',
+              background: 'rgba(139,92,246,0.25)',
+              color: '#a78bfa',
+              border: '1px solid rgba(139,92,246,0.4)',
+            }}
+          >
+            Undo
+          </button>
+        </div>
+      )}
 
       {/* Bottom info */}
       <div className="absolute bottom-24 left-4 right-16 z-20" onClick={e => e.stopPropagation()}>
@@ -913,11 +951,14 @@ export default function ForYouPage() {
   const preloadedRef = useRef(new Set()); // track IDs already preloaded
   const [dragOffset, setDragOffset]   = useState(0);
 
+  // Persistent hidden IDs ref — survives across loadTracks calls and page re-renders
+  const hiddenIdsRef = React.useRef(new Set());
+
   const loadTracks = useCallback(async (offset = 0) => {
     if (offset === 0) setLoading(true); else setLoadingMore(true);
     try {
       let fetched = [];
-      let hiddenIds = [];
+      let hiddenIds = [...hiddenIdsRef.current]; // start with locally known hidden IDs
 
       if (user) {
         // Fetch hidden track IDs so we can exclude them
@@ -926,7 +967,9 @@ export default function ForYouPage() {
           .select('track_id')
           .eq('user_id', user.id)
           .eq('signal', 'not_interested');
-        hiddenIds = (hiddenData || []).map(h => h.track_id).filter(Boolean);
+        const dbHiddenIds = (hiddenData || []).map(h => h.track_id).filter(Boolean);
+        dbHiddenIds.forEach(id => hiddenIdsRef.current.add(id));
+        hiddenIds = [...hiddenIdsRef.current];
 
         let recQuery = supabase
           .from('listener_recommendations')
@@ -1336,7 +1379,11 @@ export default function ForYouPage() {
                   navigate={navigate}
                 />
               ) : (
-                filteredTracks[i] ? <ForYouCard track={filteredTracks[i]} isActive={i === idx} user={user} navigate={navigate} onOpenSheet={setActiveSheet} onShare={setShareCard} onNext={() => setIdx(i + 1)} onHide={(id) => { setTracks(prev => prev.filter(t => t.id !== id)); setIdx(prev => prev); }} queue={filteredTracks} queueIndex={i} /> : null
+                filteredTracks[i] ? <ForYouCard track={filteredTracks[i]} isActive={i === idx} user={user} navigate={navigate} onOpenSheet={setActiveSheet} onShare={setShareCard} onNext={() => setIdx(i + 1)} onHide={(id) => {
+                    hiddenIdsRef.current.add(id);
+                    setTracks(prev => prev.filter(t => t.id !== id));
+                    setIdx(prev => prev);
+                  }} queue={filteredTracks} queueIndex={i} /> : null
               )}
             </div>
           );
