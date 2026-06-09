@@ -624,27 +624,8 @@ function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare, onN
       {isActive && isThisOne && <FloatingHearts trackId={track.id} isActive={isActive} />}
 
       {/* Right action bar */}
-      <div className="absolute bottom-32 z-20 flex flex-col items-center space-y-5" style={{ right: "max(12px, env(safe-area-inset-right, 12px))" }}
+      <div className="absolute bottom-32 z-20 flex flex-col items-center space-y-5" style={{ right: "16px" }}
         onClick={e => e.stopPropagation()}>
-
-        {/* Artist avatar */}
-        <div className="flex flex-col items-center space-y-1">
-          <button onClick={goToArtist}
-            className="w-11 h-11 rounded-full overflow-hidden border-2 border-white/30">
-            {track.artist_image
-              ? <img src={track.artist_image} alt="" className="w-full h-full object-cover" />
-              : <div className="w-full h-full bg-purple-500/30 flex items-center justify-center text-sm font-bold text-white">{track.artist_name?.[0]}</div>}
-          </button>
-          {!isOwnTrack && (
-            <button onClick={handleFollow}
-              className="w-5 h-5 rounded-full flex items-center justify-center -mt-2.5 border border-white transition"
-              style={{ background: following ? '#22c55e' : '#ef4444' }}>
-              {following
-                ? <UserCheck className="w-2.5 h-2.5 text-white" />
-                : <span className="text-white text-[10px] font-black leading-none">+</span>}
-            </button>
-          )}
-        </div>
 
         {/* Like */}
         <button onClick={handleLike} className="flex flex-col items-center space-y-1">
@@ -692,39 +673,7 @@ function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare, onN
           <span className="text-[11px] font-semibold text-white/80">{track.is_beat ? 'Buy' : 'Info'}</span>
         </button>
 
-        {/* Not interested + undo toast */}
-        {user && !isOwnTrack && (
-          <>
-          <button
-            onClick={e => {
-              e.stopPropagation();
-              setJustHid({ id: track.id, title: track.title });
-              // Write feedback immediately
-              supabase.from('listener_feedback').upsert({
-                user_id:    user.id,
-                track_id:   track.id,
-                artist_id:  track.artist_id,
-                signal:     'not_interested',
-                listen_pct: 0,
-                updated_at: new Date().toISOString(),
-              }, { onConflict: 'user_id,track_id' });
-              // Delay actual hide by 3s to allow undo
-              const t = setTimeout(() => {
-                if (onHide) onHide(track.id); else onNext();
-              }, 3000);
-              // Store timeout so undo can cancel it
-              window.__feelz_hide_timer = t;
-            }}
-            className="flex flex-col items-center space-y-1 opacity-40 hover:opacity-80 transition active:scale-90"
-          >
-            <div className="w-11 h-11 flex items-center justify-center">
-              <EyeOff className="w-6 h-6 text-white/90" strokeWidth={2} />
-            </div>
-            <span className="text-[11px] font-semibold text-white/80">Hide</span>
-          </button>
 
-          </>
-        )}
 
         {/* Undo hide toast — positioned on card root so it's not clipped by action bar */}
         {justHid && (
@@ -755,10 +704,43 @@ function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare, onN
 
       {/* Bottom info */}
       <div className="absolute bottom-24 left-4 right-16 z-20" onClick={e => e.stopPropagation()}>
-        <button onClick={goToArtist}
-          className="text-[13px] font-bold text-white/60 mb-1 text-left hover:text-white transition block">
-          @{track.artist_slug || track.artist_name}
-        </button>
+        <div className="flex items-center space-x-3 mb-1">
+          <button onClick={goToArtist}
+            className="text-[13px] font-bold text-white/60 text-left hover:text-white transition">
+            @{track.artist_slug || track.artist_name}
+          </button>
+          {user && !isOwnTrack && !following && (
+            <button onClick={e => { e.stopPropagation(); handleFollow(); }}
+              className="flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-bold text-white transition active:scale-95"
+              style={{ background: 'rgba(239,68,68,0.25)', border: '1px solid rgba(239,68,68,0.4)' }}>
+              <span>+ Follow</span>
+            </button>
+          )}
+          {user && !isOwnTrack && (
+            <button
+              onClick={e => {
+                e.stopPropagation();
+                setJustHid({ id: track.id, title: track.title });
+                supabase.from('listener_feedback').upsert({
+                  user_id:    user.id,
+                  track_id:   track.id,
+                  artist_id:  track.artist_id,
+                  signal:     'not_interested',
+                  listen_pct: 0,
+                  updated_at: new Date().toISOString(),
+                }, { onConflict: 'user_id,track_id' });
+                const t = setTimeout(() => {
+                  if (onHide) onHide(track.id); else onNext();
+                }, 3000);
+                window.__feelz_hide_timer = t;
+              }}
+              className="flex items-center space-x-1 opacity-40 hover:opacity-70 transition active:scale-90"
+            >
+              <EyeOff className="w-3.5 h-3.5 text-white/70" strokeWidth={2} />
+              <span className="text-[11px] text-white/60">Hide</span>
+            </button>
+          )}
+        </div>
         <p className="text-lg font-black text-white leading-tight mb-2">{track.title}</p>
         <div className="flex items-center flex-wrap gap-1.5">
           {track.is_beat && (
@@ -829,43 +811,40 @@ function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare, onN
 
 // ── Keyboard-aware comment sheet overlay ─────────────────────────────────────
 function CommentSheetOverlay({ track, user, onClose }) {
-  const [kbHeight, setKbHeight] = React.useState(0);
-  React.useEffect(() => {
-    if (!window.visualViewport) return;
-    const update = () => {
-      const kh = Math.max(0, window.innerHeight - window.visualViewport.height - window.visualViewport.offsetTop);
-      setKbHeight(kh);
-    };
-    window.visualViewport.addEventListener('resize', update);
-    window.visualViewport.addEventListener('scroll', update);
-    return () => {
-      window.visualViewport.removeEventListener('resize', update);
-      window.visualViewport.removeEventListener('scroll', update);
-    };
-  }, []);
   return (
-    <div className="fixed inset-0 z-[800] flex items-end justify-center"
-      style={{ background: 'rgba(0,0,0,0.5)', touchAction: 'pan-y' }}
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 800,
+        display: 'flex',
+        alignItems: 'flex-end',
+        justifyContent: 'center',
+        background: 'rgba(0,0,0,0.5)',
+        // Isolate this layer — prevent iOS from reflowing the page beneath
+        transform: 'translateZ(0)',
+        WebkitTransform: 'translateZ(0)',
+      }}
       onClick={onClose}
       onTouchStart={e => e.stopPropagation()}
       onTouchMove={e => e.stopPropagation()}
-      onTouchEnd={e => e.stopPropagation()}>
+      onTouchEnd={e => e.stopPropagation()}
+    >
       <div
         onClick={e => e.stopPropagation()}
         style={{
           width: '100%',
           maxWidth: '480px',
-          maxHeight: 'calc(100vh - 80px)',
           height: '65vh',
+          maxHeight: 'calc(100vh - 80px)',
           display: 'flex',
           flexDirection: 'column',
           background: 'rgba(10,10,10,0.98)',
           borderTop: '1px solid rgba(255,255,255,0.08)',
           borderRadius: '24px 24px 0 0',
-          marginBottom: kbHeight > 0 ? `${kbHeight}px` : 0,
-          transition: 'margin-bottom 0.15s ease',
-          marginLeft: 'auto',
-          marginRight: 'auto',
+          // No marginBottom here — TrackCommentSheet's fixed input handles keyboard
+          transform: 'translateZ(0)',
+          WebkitTransform: 'translateZ(0)',
         }}>
         <TrackCommentSheet track={track} user={user} onClose={onClose} />
       </div>
@@ -909,23 +888,7 @@ export default function ForYouPage() {
   const [viewingStory, setViewingStory] = useState(null); // { artist, stories }
   const [activeSheet, setActiveSheet]   = useState(null); // { type, track }
 
-  // Lock body position when sheet open — prevents iOS viewport shift
-  useEffect(() => {
-    if (activeSheet) {
-      document.body.style.overflow = 'hidden';
-      document.body.style.position = 'fixed';
-      document.body.style.width = '100%';
-    } else {
-      document.body.style.overflow = '';
-      document.body.style.position = '';
-      document.body.style.width = '';
-    }
-    return () => {
-      document.body.style.overflow = '';
-      document.body.style.position = '';
-      document.body.style.width = '';
-    };
-  }, [activeSheet]);
+
   const [shareCard, setShareCard]         = useState(null);  // { artist, url }
 
   // When PlayerContext advances to next track (track ended), sync idx
@@ -1387,7 +1350,7 @@ export default function ForYouPage() {
       {/* Feed filter tabs — fixed so they never move */}
       <div className="fixed left-1/2 -translate-x-1/2 z-[55] flex space-x-1 rounded-full p-0.5"
         style={{
-          top: 'calc(max(env(safe-area-inset-top, 0px), 12px) + 48px)',
+          top: 'calc(max(env(safe-area-inset-top, 0px), 14px) + 56px)',
           background: 'rgba(20,20,20,0.7)',
           backdropFilter: 'blur(12px)',
           WebkitBackdropFilter: 'blur(12px)',
