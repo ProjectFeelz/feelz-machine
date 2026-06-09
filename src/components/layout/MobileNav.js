@@ -15,9 +15,10 @@ export default function MobileNav() {
     const check = () => {
       const viewportHeight = window.visualViewport.height;
       const windowHeight   = window.innerHeight;
-      // Keyboard is open when viewport shrinks by >30% OR more than 200px
-      const shrunkRatio = viewportHeight / windowHeight < 0.7;
-      const shrunkAbs   = windowHeight - viewportHeight > 200;
+      // Keyboard open when viewport shrinks by >20% OR more than 100px
+      // Catches SwiftKey, Gboard, default iOS keyboard on all screen sizes
+      const shrunkRatio = viewportHeight / windowHeight < 0.8;
+      const shrunkAbs   = windowHeight - viewportHeight > 100;
       setKeyboardOpen(shrunkRatio || shrunkAbs);
     };
     window.visualViewport.addEventListener('resize', check);
@@ -33,6 +34,7 @@ export default function MobileNav() {
   };
 
   if (location.pathname === '/login' || location.pathname === '/signup') return null;
+  if (keyboardOpen) return null;
   // Build nav items based on role
   const navItems = [
     { path: '/',             icon: Sparkles,        label: 'For You',   tourKey: 'nav-foryou'   },
@@ -51,7 +53,6 @@ export default function MobileNav() {
       style={{
         paddingBottom: 'var(--safe-area-bottom, 0px)',
         bottom: 0,
-        display: keyboardOpen ? 'none' : 'block',
       }}
     >
       <div className="flex items-center justify-around h-16 w-full mx-auto px-1">
