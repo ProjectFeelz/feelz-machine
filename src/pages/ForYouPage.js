@@ -475,7 +475,7 @@ function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare, onN
 
   const [liked, setLiked]             = useState(false);
   const [likeCount, setLikeCount]     = useState(0);
-  const [following, setFollowing]     = useState(false);
+  const [following, setFollowing]     = useState(null); // null = loading, false = not following, true = following
   const [commentCount, setCommentCount] = useState(0);
 
   useEffect(() => {
@@ -747,7 +747,7 @@ function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare, onN
             className="text-[13px] font-bold text-white/60 text-left hover:text-white transition">
             @{track.artist_slug || track.artist_name}
           </button>
-          {user && !isOwnTrack && !following && (
+          {user && !isOwnTrack && following === false && (
             <button onClick={e => { e.stopPropagation(); handleFollow(); }}
               className="flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-bold text-white transition active:scale-95"
               style={{ background: 'rgba(239,68,68,0.25)', border: '1px solid rgba(239,68,68,0.4)' }}>
@@ -1454,14 +1454,21 @@ export default function ForYouPage() {
 
       {/* Playlist sheet — fixed overlay */}
       {activeSheet?.type === 'playlist' && (
-        <div className="fixed inset-0 z-[800] flex items-end"
+        <div className="fixed inset-0 z-[800] flex items-end justify-center"
           style={{ background: 'rgba(0,0,0,0.5)' }}
           onClick={() => setActiveSheet(null)}>
-          <div className="w-full" onClick={e => e.stopPropagation()}
-            style={{ maxHeight: '60vh', display: 'flex', flexDirection: 'column',
-                     background: 'rgba(10,10,10,0.98)', borderTop: '1px solid rgba(255,255,255,0.08)',
-                     borderRadius: '24px 24px 0 0',
-                     paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
+          <div onClick={e => e.stopPropagation()}
+            style={{
+              width: '100%',
+              maxWidth: '480px',
+              maxHeight: '70vh',
+              display: 'flex',
+              flexDirection: 'column',
+              background: 'rgba(10,10,10,0.98)',
+              borderTop: '1px solid rgba(255,255,255,0.08)',
+              borderRadius: '24px 24px 0 0',
+              paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+            }}>
             <PlaylistSheet track={activeSheet.track} user={user} onClose={() => setActiveSheet(null)} navigate={navigate} />
           </div>
         </div>
