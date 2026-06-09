@@ -13,8 +13,8 @@ export default function MobileNav() {
   React.useEffect(() => {
     if (!window.visualViewport) return;
     const check = () => {
-      // Hide when keyboard takes >150px — real keyboard not just browser chrome resize
-      const shrunk = window.innerHeight - window.visualViewport.height > 150;
+      // iPhone 13 keyboard ~340px, browser chrome ~60px — threshold 200px is safe
+      const shrunk = window.innerHeight - window.visualViewport.height > 200;
       setKeyboardOpen(shrunk);
     };
     window.visualViewport.addEventListener('resize', check);
@@ -44,8 +44,8 @@ export default function MobileNav() {
 
   return (
     <nav
-      className={`md:hidden fixed bottom-0 left-0 right-0 z-50 bg-black/95 backdrop-blur-xl transition-transform duration-150 ${keyboardOpen ? 'translate-y-full' : 'translate-y-0'}`}
-      style={{ paddingBottom: 'var(--safe-area-bottom, 0px)' }}
+      className="md:hidden fixed left-0 right-0 z-50 bg-black/95 backdrop-blur-xl transition-all duration-150"
+      style={{ paddingBottom: 'var(--safe-area-bottom, 0px)', bottom: keyboardOpen ? '-120px' : '0px' }}
     >
       <div className="flex items-center justify-around h-16 w-full mx-auto px-1">
         {navItems.map(({ path, icon: Icon, label, tourKey }) => {

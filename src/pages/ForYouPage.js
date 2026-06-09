@@ -624,7 +624,7 @@ function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare, onN
       {isActive && isThisOne && <FloatingHearts trackId={track.id} isActive={isActive} />}
 
       {/* Right action bar */}
-      <div className="absolute right-3 bottom-32 z-20 flex flex-col items-center space-y-5"
+      <div className="absolute bottom-32 z-20 flex flex-col items-center space-y-5" style={{ right: "max(12px, env(safe-area-inset-right, 12px))" }}
         onClick={e => e.stopPropagation()}>
 
         {/* Artist avatar */}
@@ -1114,9 +1114,9 @@ export default function ForYouPage() {
     hasUserGestured.current = true;
     setShowTapToPlay(false);
     const item = filteredTracks[idx];
-    if (item && item.file_url && !item.youtube_url) {
+    if (item && item.file_url) {
       window.__feelz_play_source = 'for_you';
-      const playableQueue = filteredTracks.filter(t => t?.file_url && !t?.youtube_url);
+      const playableQueue = filteredTracks.filter(t => t?.file_url);
       playTrack(item, playableQueue, playableQueue.findIndex(t => t.id === item.id));
       lastPlayedIdx.current = idx;
       setIsMinimized(true);
@@ -1131,9 +1131,9 @@ export default function ForYouPage() {
     // iOS: skip useEffect auto-play until unlocked via tap or swipe
     if (isIOS && !hasUserGestured.current) return;
     lastPlayedIdx.current = idx;
-    if (item.file_url && !item.youtube_url) {
+    if (item.file_url) {
       window.__feelz_play_source = 'for_you';
-      const playableQueue = filteredTracks.filter(t => t?.file_url && !t?.youtube_url);
+      const playableQueue = filteredTracks.filter(t => t?.file_url);
       playTrack(item, playableQueue, playableQueue.findIndex(t => t.id === item.id));
       setIsMinimized(true);
     }
@@ -1177,9 +1177,9 @@ export default function ForYouPage() {
     // iOS fix: call playTrack synchronously here (inside user gesture)
     // rather than waiting for the useEffect to fire after setIdx
     const nextItem = filteredTracks[newIdx];
-    if (nextItem && nextItem.file_url && !nextItem.youtube_url && nextItem._type !== 'story') {
+    if (nextItem && nextItem.file_url && nextItem._type !== 'story') {
       window.__feelz_play_source = 'for_you';
-      const playableQueue = filteredTracks.filter(t => t?.file_url && !t?.youtube_url);
+      const playableQueue = filteredTracks.filter(t => t?.file_url);
       playTrack(nextItem, playableQueue, playableQueue.findIndex(t => t.id === nextItem.id));
       lastPlayedIdx.current = newIdx;
     }
@@ -1450,14 +1450,17 @@ export default function ForYouPage() {
               width: `min(calc(100vw - 120px), 42vh)`,
               height: `min(calc(100vw - 120px), 42vh)`,
               borderRadius: '50%',
-              background: 'rgba(0,0,0,0.25)',
-              backdropFilter: 'blur(2px)',
-              border: '2px solid rgba(255,255,255,0.12)',
-              marginBottom: '12vh',
+              background: 'rgba(0,0,0,0.3)',
+              backdropFilter: 'blur(4px)',
+              border: '2px solid rgba(255,255,255,0.15)',
+              marginTop: '-12vh',
             }}
           >
-            <span style={{ fontSize: 36 }}>▶️</span>
-            <p className="text-white/70 text-xs font-semibold tracking-wide">Tap vinyl to play</p>
+            <svg width="52" height="52" viewBox="0 0 52 52" fill="none">
+              <circle cx="26" cy="26" r="25" fill="rgba(255,255,255,0.15)" stroke="rgba(255,255,255,0.4)" strokeWidth="1.5"/>
+              <polygon points="21,16 21,36 38,26" fill="white"/>
+            </svg>
+            <p className="text-white/70 text-xs font-semibold tracking-wide mt-2">Tap to play</p>
           </div>
         </div>
       )}
