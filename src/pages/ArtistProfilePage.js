@@ -587,7 +587,10 @@ export default function ArtistProfilePage() {
         return;
       }
       setArtist(artistData);
-      setFollowerCount(artistData.follower_count || 0);
+      // Live follower count — avoids stale cached column
+supabase.from('follows').select('*', { count: 'exact', head: true })
+  .eq('artist_id', artistData.id)
+  .then(({ count }) => setFollowerCount(count || 0));
       const { data: themeData } = await supabase
         .from('artist_themes').select('*').eq('artist_id', artistData.id).maybeSingle();
       if (themeData) setTheme(themeData);

@@ -362,11 +362,26 @@ export default function TrackDetailPage() {
 
       {/* ── TrackCommentSheet overlay ── */}
       {showComments && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm"
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 50,
+            display: 'flex',
+            alignItems: 'flex-end',
+            justifyContent: 'center',
+            background: 'rgba(0,0,0,0.6)',
+            backdropFilter: 'blur(4px)',
+            WebkitBackdropFilter: 'blur(4px)',
+            transform: 'translateZ(0)',
+            WebkitTransform: 'translateZ(0)',
+          }}
           onClick={() => setShowComments(false)}>
-          <div className="w-full md:max-w-lg md:mb-6 md:rounded-2xl"
+          <div
             onClick={e => e.stopPropagation()}
             style={{
+              width: '100%',
+              maxWidth: '480px',
               maxHeight: 'calc(100vh - 80px)',
               height: '70vh',
               display: 'flex',
@@ -374,6 +389,8 @@ export default function TrackDetailPage() {
               background: 'rgba(10,10,10,0.98)',
               borderTop: '1px solid rgba(255,255,255,0.08)',
               borderRadius: '24px 24px 0 0',
+              transform: 'translateZ(0)',
+              WebkitTransform: 'translateZ(0)',
             }}>
             <TrackCommentSheet
               track={{ ...track, artist_name: artist?.artist_name }}

@@ -137,14 +137,7 @@ export default function BeatDetailPage() {
         const { data: existingPurchase } = await supabase
           .from('beat_purchases').select('id, licence_type')
           .eq('track_id', t.id).eq('buyer_user_id', user.id).eq('status', 'completed').maybeSingle();
-        if (existingPurchase) {
-          setAlreadyPurchased(true);
-          setSelectedLicence(existingPurchase.licence_type);
-          // Auto-trigger download if returning from PayFast payment
-          if (searchParams.get('payfast_success') === '1') {
-            setTimeout(() => triggerDownload(), 1200);
-          }
-        }
+        if (existingPurchase) { setAlreadyPurchased(true); setSelectedLicence(existingPurchase.licence_type); }
       }
       setLoading(false);
       // Load PayPal SDK
@@ -167,7 +160,7 @@ export default function BeatDetailPage() {
     if (downloading) return;
     setDownloading(true);
     try {
-      // Server handles downloads row insertion — no client-side duplicate write
+      try { await supabase.from('downloads').upsert({ user_id: user.id, track_id: track.id }, { onConflict: 'user_id,track_id', ignoreDuplicates: true }); } catch {}
       const { data: { session } } = await supabase.auth.getSession();
       await downloadTrack(track.id, track.title, session?.access_token);
     } catch (err) { console.error('Download error:', err); }
@@ -572,11 +565,26 @@ export default function BeatDetailPage() {
       </div>
       {/* ── TrackCommentSheet overlay ── */}
       {showComments && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm"
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 50,
+            display: 'flex',
+            alignItems: 'flex-end',
+            justifyContent: 'center',
+            background: 'rgba(0,0,0,0.6)',
+            backdropFilter: 'blur(4px)',
+            WebkitBackdropFilter: 'blur(4px)',
+            transform: 'translateZ(0)',
+            WebkitTransform: 'translateZ(0)',
+          }}
           onClick={() => setShowComments(false)}>
-          <div className="w-full md:max-w-lg md:mb-6 md:rounded-2xl"
+          <div
             onClick={e => e.stopPropagation()}
             style={{
+              width: '100%',
+              maxWidth: '480px',
               maxHeight: 'calc(100vh - 80px)',
               height: '70vh',
               display: 'flex',
@@ -584,6 +592,8 @@ export default function BeatDetailPage() {
               background: 'rgba(10,10,10,0.98)',
               borderTop: '1px solid rgba(255,255,255,0.08)',
               borderRadius: '24px 24px 0 0',
+              transform: 'translateZ(0)',
+              WebkitTransform: 'translateZ(0)',
             }}>
             <TrackCommentSheet
               track={{ ...track, artist_name: artist?.artist_name }}
