@@ -603,6 +603,17 @@ export function PlayerProvider({ children }) {
     setIsMinimized(false);
   }, []); // eslint-disable-line
 
+  // Expose replaceQueue globally so async callbacks (e.g. notification taps)
+  // can patch the queue after playback has already started
+  React.useEffect(() => {
+    window.__feelz_replaceQueue = (list, idx) => {
+      setQueue(list);
+      queueRef.current = list;
+      if (idx !== undefined) { setQueueIndex(idx); queueIndexRef.current = idx; }
+    };
+    return () => { window.__feelz_replaceQueue = null; };
+  }, []); // eslint-disable-line
+
   const value = {
     currentTrack, isPlaying, duration, currentTime, volume, queue, queueIndex,
     shuffle, repeat, isMinimized, setIsMinimized, playTrack, togglePlay, seek,

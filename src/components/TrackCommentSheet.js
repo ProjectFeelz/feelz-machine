@@ -151,7 +151,7 @@ export default function TrackCommentSheet({ track, user, onClose, routePrefix = 
 
     const artistMap   = Object.fromEntries((artists          || []).map(a => [a.user_id, a]));
     const profileMap  = Object.fromEntries((profiles         || []).map(p => [p.user_id, p]));
-    const listenerMap = Object.fromEntries((listenerProfiles || []).map(l => [l.user_id, { ...l, name: l.display_name }]));
+    const listenerMap = Object.fromEntries((listenerProfiles || []).map(l => [l.user_id, { ...l, name: l.display_name || 'Listener' }]));
 
     setComments(raw.map(c => ({
       ...c,
@@ -176,7 +176,20 @@ export default function TrackCommentSheet({ track, user, onClose, routePrefix = 
       .single();
 
     if (data) {
-      setComments(prev => [{ ...data, artists: user.__artist || null, user_profiles: user.__profile || null }, ...prev]);
+      const enriched = { ...data, artists: user.__artist || null, user_profiles: user.__profile || null };
+      setComments(prev => {
+        if (data.parent_comment_id) {
+          // Insert reply right after its parent comment
+          const idx = prev.findIndex(c => c.id === data.parent_comment_id);
+          if (idx !== -1) {
+            const next = [...prev];
+            next.splice(idx + 1, 0, enriched);
+            return next;
+          }
+        }
+        // Top-level comment — prepend
+        return [enriched, ...prev];
+      });
       try {
         const [{ data: trackRow }, { data: commenterArtist }] = await Promise.all([
           supabase.from('tracks').select('artist_id, title, slug, artists(user_id)').eq('id', track.id).maybeSingle(),
@@ -238,8 +251,12 @@ export default function TrackCommentSheet({ track, user, onClose, routePrefix = 
           {!isReply && user && (
             <button
               onClick={() => {
-                setReplyingTo(replyingTo?.id === c.id ? null : { id: c.id, authorName: name });
-                setTimeout(() => inputRef.current?.focus(), 100);
+                if (replyingTo?.id === c.id) {
+                  setReplyingTo(null);
+                } else {
+                  setReplyingTo({ id: c.id, authorName: name });
+                  setTimeout(() => inputRef.current?.focus(), 150);
+                }
               }}
               className="mt-1 text-[10px] text-white/25 hover:text-white/50 transition font-medium">
               {replyingTo?.id === c.id ? 'Cancel reply' : 'Reply'}

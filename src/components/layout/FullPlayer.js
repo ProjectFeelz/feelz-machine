@@ -635,7 +635,7 @@ export default function FullPlayer() {
     playNext, playPrev, seek, duration, currentTime,
     shuffle, repeat, toggleShuffle, toggleRepeat,
     isMinimized, setIsMinimized, queue, volume, setVolumeLevel,
-    removeFromQueue, moveInQueue,
+    removeFromQueue, moveInQueue, jumpToIndex,
   } = usePlayer();
   const { user } = useAuth();
   const { tap, success, heavy } = useHaptics();
@@ -845,6 +845,7 @@ export default function FullPlayer() {
               return (
                 <div key={`${track.id}-${i}`}
                   draggable={!isActive}
+                  onClick={() => { if (!isActive) { tap(); jumpToIndex(i); } }}
                   onDragStart={() => { if (!isActive) setDraggingIdx(i); }}
                   onDragOver={e => { e.preventDefault(); if (draggingIdx !== null && !isActive) setDragOverIdx(i); }}
                   onDrop={() => {
@@ -856,8 +857,8 @@ export default function FullPlayer() {
                     setDragOverIdx(null);
                   }}
                   onDragEnd={() => { setDraggingIdx(null); setDragOverIdx(null); }}
-                  className={`flex items-center space-x-3 py-3 border-b border-white/[0.04] transition-all
-                    ${isActive ? 'opacity-100' : 'opacity-50'}
+                  className={`flex items-center space-x-3 py-3 border-b border-white/[0.04] transition-all cursor-pointer
+                    ${isActive ? 'opacity-100' : 'opacity-70 hover:opacity-100'}
                     ${isDragging ? 'opacity-30 scale-95' : ''}
                     ${isDragOver && !isActive ? 'border-t-2 border-t-purple-400' : ''}`}>
                   {/* Drag handle — hidden for current track */}

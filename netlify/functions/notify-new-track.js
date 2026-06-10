@@ -23,24 +23,25 @@ exports.handler = async (event) => {
 
   const { track_id, track_title, artist_id, artist_slug, token } = body;
   if (!track_id || !artist_id || !token) return { statusCode: 400, body: 'Missing fields' };
-  // Validate track_id is a real UUID not 'undefined' string
-  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  if (!UUID_RE.test(track_id) || !UUID_RE.test(artist_id)) {
-    return { statusCode: 400, body: 'Invalid track_id or artist_id' };
-  }
 
   // Verify the caller is the artist
   const { data: { user }, error: authErr } = await supabase.auth.getUser(token);
   if (authErr || !user) return { statusCode: 401, body: 'Unauthorized' };
 
   const { data: artist } = await supabase
-    .from('artists').select('id, artist_name, slug, profile_image_url')
+    .from('artists').select('id, artist_name, slug')
     .eq('id', artist_id).eq('user_id', user.id).maybeSingle();
   if (!artist) return { statusCode: 403, body: 'Forbidden' };
 
-  // Fetch track details so we can embed file_url + artwork in metadata for in-app playback
+  // Fetch track details for metadata — include slug for navigation
   const { data: trackData } = await supabase
-    .from('tracks').select('file_url, cover_artwork_url').eq('id', track_id).maybeSingle();
+    .from('tracks')
+    .select('file_url, cover_artwork_url, slug, title')
+    .eq('id', track_id)
+    .maybeSingle();
+
+  // Use track title from DB as source of truth (body param may be empty)
+  const resolvedTitle = trackData?.title || track_title || 'a new track';
 
   // Get all followers
   const { data: followers } = await supabase
@@ -50,7 +51,7 @@ exports.handler = async (event) => {
   // Exclude the artist themselves — they don't need to be notified of their own upload
   const followerIds = followers.map(f => f.follower_id).filter(id => id !== user.id);
   const slug = artist_slug || artist.slug;
-  const title = track_title || 'a new track';
+  const title = track_title || 'a new track'; // kept for push notification body
   const artistName = artist.artist_name;
 
   // 1. In-app notifications for all followers
@@ -69,20 +70,20 @@ exports.handler = async (event) => {
 
   const notifRows = followerIds.map(uid => ({
     user_id:        uid,
-    artist_id:      null,  // null so artist's own feed doesn't pull these in via artist_id filter
+    artist_id:      null,
     type:           'new_track',
-    title:          `${artistName} dropped a new track`,
-    message:        title,
+    title:          `${artistName} released a new track!`,
+    message:        resolvedTitle,
     track_id:       track_id,
     from_artist_id: artist_id,
     metadata: {
       track_id:      track_id,
-      track_title:   title,
+      track_title:   resolvedTitle,
+      track_slug:    trackData?.slug || null,
       track_artwork: trackData?.cover_artwork_url || null,
       file_url:      trackData?.file_url || null,
-      artist_name:        artistName,
-      artist_slug:        slug,
-      from_artist_image:  artist.profile_image_url || null,
+      artist_name:   artistName,
+      artist_slug:   slug,
     },
   }));
 

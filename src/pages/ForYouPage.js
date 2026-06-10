@@ -502,6 +502,63 @@ function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare, onN
     } else {
       await supabase.from('track_likes').insert({ track_id: track.id, user_id: user.id });
       setLiked(true); setLikeCount(p => p + 1);
+      // Notify the track artist
+      if (track.artist_id && track.artist_id !== user.id) {
+        try {
+          const [{ data: liker }, { data: artistRow }] = await Promise.all([
+            supabase.from('artists').select('id, artist_name, profile_image_url, slug').eq('user_id', user.id).maybeSingle(),
+            supabase.from('artists').select('user_id').eq('id', track.artist_id).maybeSingle(),
+          ]);
+          if (artistRow?.user_id) {
+            const likerName = liker?.artist_name || 'Someone';
+            // Check for recent existing like notification for same track to group
+            const since = new Date(Date.now() - 30 * 60 * 1000).toISOString(); // last 30 min
+            const { data: recent } = await supabase
+              .from('notifications')
+              .select('id, title, metadata')
+              .eq('user_id', artistRow.user_id)
+              .eq('type', 'track_liked')
+              .eq('track_id', track.id)
+              .gte('created_at', since)
+              .order('created_at', { ascending: false })
+              .limit(1)
+              .maybeSingle();
+
+            if (recent) {
+              // Update existing notification — group it
+              const count = (recent.metadata?.like_count || 1) + 1;
+              const firstLiker = recent.metadata?.first_liker_name || likerName;
+              await supabase.from('notifications').update({
+                title: `${firstLiker} and ${count - 1} other${count - 1 !== 1 ? 's' : ''} liked "${track.title}"`,
+                read: false,
+                metadata: { ...(recent.metadata || {}), like_count: count, track_title: track.title, track_id: track.id },
+                updated_at: new Date().toISOString(),
+              }).eq('id', recent.id);
+            } else {
+              await supabase.from('notifications').insert({
+                user_id:        artistRow.user_id,
+                artist_id:      track.artist_id,
+                type:           'track_liked',
+                title:          `${likerName} liked "${track.title}"`,
+                message:        '',
+                track_id:       track.id,
+                from_artist_id: liker?.id || null,
+                read:           false,
+                metadata: {
+                  track_id:          track.id,
+                  track_title:       track.title,
+                  track_slug:        track.slug || null,
+                  like_count:        1,
+                  first_liker_name:  likerName,
+                  from_artist_name:  likerName,
+                  from_artist_image: liker?.profile_image_url || null,
+                  from_artist_slug:  liker?.slug || null,
+                },
+              });
+            }
+          }
+        } catch {}
+      }
     }
   };
 
