@@ -136,6 +136,7 @@ function ThoughtBlock({ thought, isOwner, secondaryColor, textColor, bgColor, us
       .eq('thought_id', thought.id).order('created_at', { ascending: true }).limit(50);
     if (error || !data || data.length === 0) { setComments([]); return; }
     const userIds = [...new Set(data.map(c => c.user_id))].filter(Boolean);
+    if (!userIds.length) { setComments(data.map(c => ({ ...c, commenter: null }))); return; }
     const { data: artistsData } = await supabase
       .from('artists').select('user_id, artist_name, slug, profile_image_url, is_verified')
       .in('user_id', userIds);
@@ -586,7 +587,10 @@ export default function ArtistProfilePage() {
         return;
       }
       setArtist(artistData);
-      setFollowerCount(artistData.follower_count || 0);
+      // Live follower count — avoids stale cached column
+supabase.from('follows').select('*', { count: 'exact', head: true })
+  .eq('artist_id', artistData.id)
+  .then(({ count }) => setFollowerCount(count || 0));
       const { data: themeData } = await supabase
         .from('artist_themes').select('*').eq('artist_id', artistData.id).maybeSingle();
       if (themeData) setTheme(themeData);
@@ -626,11 +630,36 @@ export default function ArtistProfilePage() {
         .from('albums').select('*').eq('artist_id', artistData.id).eq('is_published', true)
         .order('release_date', { ascending: false });
       setAlbums(albumData || []);
-      const { data: collabData } = await supabase
+      // Fetch both directions:
+      // 1. Collabs where this artist IS the collaborator on someone else's track
+      // 2. Collabs on tracks owned by this artist (beatmakers/featured artists credited)
+      const { data: asCollaborator } = await supabase
         .from('collaborations')
         .select('*, tracks(id, title, cover_artwork_url, file_url, duration, stream_count, artist_id, is_downloadable, download_price)')
         .eq('artist_id', artistData.id).eq('status', 'accepted');
-      setCollabs(collabData || []);
+
+      // Get track IDs owned by this artist
+      const ownTrackIds = (trackData || []).map(t => t.id).filter(Boolean);
+      let onOwnTracks = [];
+      if (ownTrackIds.length > 0) {
+        const { data: ownTrackCollabs } = await supabase
+          .from('collaborations')
+          .select('*, tracks(id, title, cover_artwork_url, file_url, duration, stream_count, artist_id, is_downloadable, download_price)')
+          .in('track_id', ownTrackIds)
+          .eq('status', 'accepted')
+          .neq('artist_id', artistData.id);
+        onOwnTracks = ownTrackCollabs || [];
+      }
+
+      // Merge and deduplicate by id
+      const allCollabs = [...(asCollaborator || []), ...onOwnTracks];
+      const seenCollabs = new Set();
+      const uniqueCollabs = allCollabs.filter(col => {
+        if (seenCollabs.has(col.id)) return false;
+        seenCollabs.add(col.id);
+        return true;
+      });
+      setCollabs(uniqueCollabs);
       const cutoff = new Date(Date.now() - THOUGHT_TTL_MS).toISOString();
       const { data: thoughtsData } = await supabase
         .from('artist_thoughts').select('id, content, created_at')
@@ -789,7 +818,6 @@ export default function ArtistProfilePage() {
         await supabase.from('artist_alerts').upsert({ artist_id: artist.id, user_id: user.id }, { onConflict: 'user_id,artist_id' });
         setIsFollowing(true);
         setFollowerCount(prev => prev + 1);
-        // Check artist profile first, then listener profile as fallback
         const { data: myProfile } = await supabase.from('artists').select('id, artist_name, profile_image_url, slug').eq('user_id', user.id).maybeSingle();
         let followerName  = myProfile?.artist_name || null;
         let followerImage = myProfile?.profile_image_url || null;
@@ -1661,6 +1689,58 @@ export default function ArtistProfilePage() {
           </div>
         </div>
       )}
+
+      {/* ── New Music row — artist's latest drops ── */}
+      {tracks.length > 0 && (() => {
+        const recent = [...tracks]
+          .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+          .slice(0, 8);
+        return (
+          <div className="mb-8 mx-6 rounded-2xl pt-12 pb-4"
+            style={{ background: `linear-gradient(135deg, ${secondaryColor}12 0%, ${accentColor}08 100%)`, border: `1px solid ${secondaryColor}20`, overflow: 'visible' }}>
+            <div className="px-4 mb-4 flex items-center space-x-2">
+              <p className="text-sm font-bold" style={{ color: textColor }}>New Music</p>
+              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full"
+                style={{ background: `${secondaryColor}25`, color: secondaryColor, border: `1px solid ${secondaryColor}35` }}>
+                Just dropped
+              </span>
+            </div>
+            <div className="flex space-x-3 overflow-x-auto scrollbar-hide px-4 pt-3 pb-3" style={{ overflowY: "visible" }}>
+              {recent.map((track, i) => {
+                const isNewest = i === 0;
+                const withinWeek = (Date.now() - new Date(track.created_at).getTime()) < 7 * 24 * 60 * 60 * 1000;
+                const showGlow = isNewest && withinWeek;
+                return (
+                  <div key={track.id} className="flex-shrink-0 w-32 cursor-pointer group"
+                    onClick={() => handlePlayTrack(track)}>
+                    <div className="aspect-square rounded-xl overflow-hidden mb-1.5 relative"
+                      style={{
+                        backgroundColor: `${textColor}08`,
+                        boxShadow: showGlow ? `0 0 0 2px ${secondaryColor}, 0 0 20px ${secondaryColor}60, 0 0 40px ${secondaryColor}30` : 'none',
+                      }}>
+                      {track.cover_artwork_url
+                        ? <img src={track.cover_artwork_url} alt={track.title}
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                        : <div className="w-full h-full flex items-center justify-center"
+                            style={{ background: `linear-gradient(135deg, ${secondaryColor}30, ${accentColor}15)` }}>
+                            <Music className="w-6 h-6" style={{ color: `${textColor}20` }} />
+                          </div>}
+                      {showGlow && (
+                        <div className="absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded-full text-[9px] font-bold"
+                          style={{ background: secondaryColor, color: '#fff' }}>
+                          NEW
+                        </div>
+                      )}
+                    </div>
+                    <p className="text-sm font-medium truncate" style={{ color: showGlow ? secondaryColor : textColor }}>{track.title}</p>
+                    <p className="text-xs truncate" style={{ color: `${textColor}50` }}>{track.albums?.title || 'Single'}</p>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
 
       {albums.length > 0 && (
         <div className="mb-8">
