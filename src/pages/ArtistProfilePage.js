@@ -417,6 +417,7 @@ export default function ArtistProfilePage() {
   const [purchasedTracks, setPurchasedTracks] = useState({});
   const [liveSession, setLiveSession] = useState(null);
   const [radioLoading, setRadioLoading] = useState(false);
+  const [showAllCollabs, setShowAllCollabs] = useState(false);
   const [showDMModal, setShowDMModal] = useState(false);
   const [showXPModal, setShowXPModal]   = useState(false);
   const [xpData, setXpData]             = useState(null);
@@ -1659,9 +1660,9 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
       )}
 
       {recommendedTracks.length > 0 && (
-        <div className="mb-8">
+        <div className="mb-8 py-5" style={{ background: `linear-gradient(135deg, rgba(120,53,15,0.18) 0%, rgba(30,20,10,0.4) 60%, transparent 100%)`, borderTop: `1px solid rgba(245,158,11,0.12)`, borderBottom: `1px solid rgba(245,158,11,0.08)` }}>
           <h2 className="text-lg font-bold px-6 mb-3" style={{ fontFamily: `"${headingFont}", sans-serif` }}>Recommended For You</h2>
-          <div className="flex space-x-3 overflow-x-auto px-6 scrollbar-hide">
+          <div className="flex space-x-3 overflow-x-auto px-6 scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
             {recommendedTracks.map(track => (
               <div key={track.id} className="flex-shrink-0 w-36 cursor-pointer group" onClick={() => handlePlayTrack(track)}>
                 <div className="aspect-square rounded-xl overflow-hidden mb-2" style={{ backgroundColor: `${textColor}08` }}>
@@ -1730,7 +1731,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
       })()}
 
       {albums.length > 0 && (
-        <div className="mb-8">
+        <div className="mb-8 py-5" style={{ background: `linear-gradient(135deg, rgba(13,148,136,0.15) 0%, rgba(10,30,30,0.4) 60%, transparent 100%)`, borderTop: `1px solid rgba(20,184,166,0.15)`, borderBottom: `1px solid rgba(20,184,166,0.08)` }}>
           <h2 className="text-lg font-bold px-6 mb-3" style={{ fontFamily: `"${headingFont}", sans-serif` }}>Albums</h2>
           <div className="flex space-x-3 overflow-x-auto px-6 scrollbar-hide">
             {albums.map(album => (
@@ -1749,7 +1750,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
       )}
 
       {tracks.filter(t => !t.album_id).length > 0 && (
-        <div className="mb-8">
+        <div className="mb-8 py-5" style={{ background: `linear-gradient(135deg, rgba(88,28,135,0.18) 0%, rgba(30,27,75,0.35) 60%, transparent 100%)`, borderTop: `1px solid rgba(139,92,246,0.15)`, borderBottom: `1px solid rgba(139,92,246,0.08)` }}>
           <h2 className="text-lg font-bold px-6 mb-3" style={{ fontFamily: `"${headingFont}", sans-serif` }}>{isBeatmakerProfile ? "Beat Catalogue" : "Singles"}</h2>
           <div className="flex space-x-3 overflow-x-auto px-6 scrollbar-hide">
             {tracks.filter(t => !t.album_id).map(track => (
@@ -1767,44 +1768,40 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
         </div>
       )}
 
-      {collabs.length > 0 && (() => {
-        const [showAllCollabs, setShowAllCollabs] = React.useState(false);
-        const visibleCollabs = showAllCollabs ? collabs : collabs.slice(0, 5);
-        return (
-          <div className="px-6 mb-8">
-            <h2 className="text-lg font-bold mb-3" style={{ fontFamily: `"${headingFont}", sans-serif` }}>Collaborations</h2>
-            <div className="space-y-2">
-              {visibleCollabs.map(collab => (
-                <div key={collab.id}
-                  className="flex items-center space-x-3 p-3 rounded-xl cursor-pointer transition-opacity hover:opacity-80 active:opacity-60"
-                  style={{ backgroundColor: `${textColor}05`, border: `1px solid ${textColor}08` }}
-                  onClick={() => collab.tracks && handlePlayTrack(collab.tracks)}>
-                  <div className="w-10 h-10 rounded-lg overflow-hidden flex-shrink-0 relative group" style={{ backgroundColor: `${secondaryColor}20` }}>
-                    {collab.tracks?.cover_artwork_url
-                      ? <img src={collab.tracks.cover_artwork_url} alt="" className="w-full h-full object-cover" />
-                      : <div className="w-full h-full flex items-center justify-center"><Music className="w-4 h-4" style={{ color: `${textColor}20` }} /></div>}
-                    <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg">
-                      <Play className="w-4 h-4 text-white" fill="white" />
-                    </div>
+      {collabs.length > 0 && (
+        <div className="px-6 mb-8">
+          <h2 className="text-lg font-bold mb-3" style={{ fontFamily: `"${headingFont}", sans-serif` }}>Collaborations</h2>
+          <div className="space-y-2">
+            {collabs.slice(0, showAllCollabs ? collabs.length : 5).map(collab => (
+              <div key={collab.id}
+                className="flex items-center space-x-3 p-3 rounded-xl cursor-pointer transition-opacity hover:opacity-80 active:opacity-60"
+                style={{ backgroundColor: `${textColor}05`, border: `1px solid ${textColor}08` }}
+                onClick={() => collab.tracks && handlePlayTrack(collab.tracks)}>
+                <div className="w-10 h-10 rounded-lg overflow-hidden flex-shrink-0 relative group" style={{ backgroundColor: `${secondaryColor}20` }}>
+                  {collab.tracks?.cover_artwork_url
+                    ? <img src={collab.tracks.cover_artwork_url} alt="" className="w-full h-full object-cover" />
+                    : <div className="w-full h-full flex items-center justify-center"><Music className="w-4 h-4" style={{ color: `${textColor}20` }} /></div>}
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg">
+                    <Play className="w-4 h-4 text-white" fill="white" />
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate" style={{ color: textColor }}>{collab.tracks?.title || 'Untitled'}</p>
-                    <p className="text-xs" style={{ color: `${textColor}40` }}>{collab.role}</p>
-                  </div>
-                  <span className="text-[10px] px-2 py-0.5 rounded-full font-medium" style={{ backgroundColor: `${secondaryColor}20`, color: secondaryColor }}>Collab</span>
                 </div>
-              ))}
-            </div>
-            {collabs.length > 5 && (
-              <button onClick={() => setShowAllCollabs(p => !p)}
-                className="mt-3 text-sm font-medium transition-colors"
-                style={{ color: `${textColor}50` }}>
-                {showAllCollabs ? 'Show less' : `See all ${collabs.length} collabs`}
-              </button>
-            )}
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate" style={{ color: textColor }}>{collab.tracks?.title || 'Untitled'}</p>
+                  <p className="text-xs" style={{ color: `${textColor}40` }}>{collab.role}</p>
+                </div>
+                <span className="text-[10px] px-2 py-0.5 rounded-full font-medium" style={{ backgroundColor: `${secondaryColor}20`, color: secondaryColor }}>Collab</span>
+              </div>
+            ))}
           </div>
-        );
-      })()}
+          {collabs.length > 5 && (
+            <button onClick={() => setShowAllCollabs(p => !p)}
+              className="mt-3 text-sm font-medium transition-colors"
+              style={{ color: `${textColor}50` }}>
+              {showAllCollabs ? 'Show less' : `See all ${collabs.length} collabs`}
+            </button>
+          )}
+        </div>
+      )}
 
       {tracks.length === 0 && albums.length === 0 && (
         <div className="px-6 py-12 text-center">
@@ -2008,8 +2005,8 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
 
       {/* Artist Playlists */}
       {artistPlaylists.length > 0 && (
-        <div className="mb-8 px-6">
-          <div className="flex items-center justify-between mb-3">
+        <div className="mb-8 py-5" style={{ background: `linear-gradient(135deg, rgba(49,46,129,0.18) 0%, rgba(20,20,50,0.4) 60%, transparent 100%)`, borderTop: `1px solid rgba(99,102,241,0.15)`, borderBottom: `1px solid rgba(99,102,241,0.08)` }}>
+          <div className="flex items-center justify-between mb-3 px-6">
             <h2 className="text-lg font-bold" style={{ fontFamily: `"${headingFont}", sans-serif` }}>Playlists</h2>
             {isProfileOwner && (
               <button onClick={() => navigate('/library/playlists')}
@@ -2019,7 +2016,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
               </button>
             )}
           </div>
-          <div className="flex space-x-3 overflow-x-auto scrollbar-hide -mx-6 px-6">
+          <div className="flex space-x-3 overflow-x-auto scrollbar-hide px-6">
             {artistPlaylists.map(pl => (
               <div key={pl.id} className="flex-shrink-0 w-36 cursor-pointer group"
                 onClick={() => navigate(`/library/playlists/${pl.id}`)}>
@@ -2088,9 +2085,9 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
       )}
 
       {similarArtists.length > 0 && (
-        <div className="mb-8 px-6">
-          <h2 className="text-lg font-bold mb-3" style={{ fontFamily: `"${headingFont}", sans-serif` }}>Artists Like This</h2>
-          <div className="flex space-x-4 overflow-x-auto scrollbar-hide">
+        <div className="mb-8 py-5" style={{ background: `linear-gradient(135deg, rgba(136,19,55,0.18) 0%, rgba(30,10,20,0.4) 60%, transparent 100%)`, borderTop: `1px solid rgba(244,63,94,0.15)`, borderBottom: `1px solid rgba(244,63,94,0.08)` }}>
+          <h2 className="text-lg font-bold mb-3 px-6" style={{ fontFamily: `"${headingFont}", sans-serif` }}>Artists Like This</h2>
+          <div className="flex space-x-4 overflow-x-auto scrollbar-hide px-6">
             {similarArtists.map(a => (
               <div key={a.id} className="flex-shrink-0 w-24 cursor-pointer group" onClick={() => navigate(`/artist/${a.slug}`)}>
                 <div className="w-24 h-24 rounded-full overflow-hidden mb-2 mx-auto" style={{ backgroundColor: `${textColor}08` }}>
