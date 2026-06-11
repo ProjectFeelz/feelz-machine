@@ -1652,7 +1652,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
           {tracks.length > 5 && (
             <button onClick={() => setShowAllTracks(!showAllTracks)}
               className="mt-3 text-sm font-medium transition-colors" style={{ color: `${textColor}50` }}>
-              {showAllTracks ? 'Show less' : `See all ${tracks.length} tracks`}
+              {showAllTracks ? 'Show less' : `See all ${Math.min(tracks.length, 10)} tracks`}
             </button>
           )}
         </div>
@@ -1767,33 +1767,44 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
         </div>
       )}
 
-      {collabs.length > 0 && (
-        <div className="px-6 mb-8">
-          <h2 className="text-lg font-bold mb-3" style={{ fontFamily: `"${headingFont}", sans-serif` }}>Collaborations</h2>
-          <div className="space-y-2">
-            {collabs.map(collab => (
-              <div key={collab.id}
-                className="flex items-center space-x-3 p-3 rounded-xl cursor-pointer transition-opacity hover:opacity-80 active:opacity-60"
-                style={{ backgroundColor: `${textColor}05`, border: `1px solid ${textColor}08` }}
-                onClick={() => collab.tracks && handlePlayTrack(collab.tracks)}>
-                <div className="w-10 h-10 rounded-lg overflow-hidden flex-shrink-0 relative group" style={{ backgroundColor: `${secondaryColor}20` }}>
-                  {collab.tracks?.cover_artwork_url
-                    ? <img src={collab.tracks.cover_artwork_url} alt="" className="w-full h-full object-cover" />
-                    : <div className="w-full h-full flex items-center justify-center"><Music className="w-4 h-4" style={{ color: `${textColor}20` }} /></div>}
-                  <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg">
-                    <Play className="w-4 h-4 text-white" fill="white" />
+      {collabs.length > 0 && (() => {
+        const [showAllCollabs, setShowAllCollabs] = React.useState(false);
+        const visibleCollabs = showAllCollabs ? collabs : collabs.slice(0, 5);
+        return (
+          <div className="px-6 mb-8">
+            <h2 className="text-lg font-bold mb-3" style={{ fontFamily: `"${headingFont}", sans-serif` }}>Collaborations</h2>
+            <div className="space-y-2">
+              {visibleCollabs.map(collab => (
+                <div key={collab.id}
+                  className="flex items-center space-x-3 p-3 rounded-xl cursor-pointer transition-opacity hover:opacity-80 active:opacity-60"
+                  style={{ backgroundColor: `${textColor}05`, border: `1px solid ${textColor}08` }}
+                  onClick={() => collab.tracks && handlePlayTrack(collab.tracks)}>
+                  <div className="w-10 h-10 rounded-lg overflow-hidden flex-shrink-0 relative group" style={{ backgroundColor: `${secondaryColor}20` }}>
+                    {collab.tracks?.cover_artwork_url
+                      ? <img src={collab.tracks.cover_artwork_url} alt="" className="w-full h-full object-cover" />
+                      : <div className="w-full h-full flex items-center justify-center"><Music className="w-4 h-4" style={{ color: `${textColor}20` }} /></div>}
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg">
+                      <Play className="w-4 h-4 text-white" fill="white" />
+                    </div>
                   </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate" style={{ color: textColor }}>{collab.tracks?.title || 'Untitled'}</p>
+                    <p className="text-xs" style={{ color: `${textColor}40` }}>{collab.role}</p>
+                  </div>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full font-medium" style={{ backgroundColor: `${secondaryColor}20`, color: secondaryColor }}>Collab</span>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate" style={{ color: textColor }}>{collab.tracks?.title || 'Untitled'}</p>
-                  <p className="text-xs" style={{ color: `${textColor}40` }}>{collab.role}</p>
-                </div>
-                <span className="text-[10px] px-2 py-0.5 rounded-full font-medium" style={{ backgroundColor: `${secondaryColor}20`, color: secondaryColor }}>Collab</span>
-              </div>
-            ))}
+              ))}
+            </div>
+            {collabs.length > 5 && (
+              <button onClick={() => setShowAllCollabs(p => !p)}
+                className="mt-3 text-sm font-medium transition-colors"
+                style={{ color: `${textColor}50` }}>
+                {showAllCollabs ? 'Show less' : `See all ${collabs.length} collabs`}
+              </button>
+            )}
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {tracks.length === 0 && albums.length === 0 && (
         <div className="px-6 py-12 text-center">
