@@ -398,7 +398,7 @@ export default function NotificationsPage() {
   ]);
 
   const handleClick = (notif) => {
-    if (!notif.read) markAsRead(notif.id);
+    markAsRead(notif.id);
     if (INLINE_ACTION_TYPES.has(notif.type)) return;
     if (READ_ONLY_TYPES.has(notif.type)) return;
 
@@ -414,24 +414,23 @@ export default function NotificationsPage() {
     }
 
     if (type === 'new_stream') {
+      // new_stream is sent to the track's artist — take them to their own track
       const streamTrackId = meta.track_id || notif.track_id;
-      if (streamTrackId) {
-        playTrack({ id: streamTrackId, title: meta.track_title || '', file_url: meta.file_url || null, cover_artwork_url: meta.track_artwork || null, artist_name: meta.artist_name || '', artist_slug: meta.artist_slug || '' }, []);
-      }
       if (meta.track_slug) { navigate(`/track/${meta.track_slug}`); return; }
       if (streamTrackId && artist?.slug) { navigate(`/artist/${artist.slug}?track=${streamTrackId}`); return; }
-      if (meta.artist_slug) { navigate('/artist/' + meta.artist_slug); return; }
+      if (streamTrackId) { navigate(`/track/${streamTrackId}`); return; }
       if (artist?.slug) { navigate(`/artist/${artist.slug}`); return; }
-      navigate('/hub');
+      navigate('/browse');
       return;
     }
 
     if (type === 'track_commented' || type === 'new_comment') {
+      const commentTrackId = meta.track_id || notif.track_id;
       if (meta.post_id) { navigate(`/feed?post=${meta.post_id}`); return; }
-      if (meta.track_slug) { navigate(`/${meta.track_route_prefix || 'track'}/${meta.track_slug}?comments=1`); return; }
-      if (meta.track_id) { navigate(`/track/${meta.track_id}?comments=1`); return; }
+      if (meta.track_slug) { navigate(`/track/${meta.track_slug}?comments=1`); return; }
+      if (commentTrackId) { navigate(`/track/${commentTrackId}?comments=1`); return; }
       if (meta.artist_slug) { navigate(`/artist/${meta.artist_slug}`); return; }
-      navigate('/hub');
+      navigate('/browse');
       return;
     }
 
@@ -516,12 +515,9 @@ export default function NotificationsPage() {
     if (type === 'tier_granted')                         { navigate('/profile'); return; }
     if (type === 'weekly_report')                         { navigate('/dashboard?tab=analytics&section=stats'); return; }
     if (type === 'download') {
-      // Artist sees their own profile with the track highlighted
-      if (meta.track_slug && artist?.slug) {
-        navigate(`/artist/${artist.slug}?track=${meta.track_slug}`); return;
-      }
+      const dlTrackId = meta.track_id || notif.track_id;
       if (meta.track_slug) { navigate(`/track/${meta.track_slug}`); return; }
-      if (meta.track_id) { navigate(`/track/${meta.track_id}`); return; }
+      if (dlTrackId) { navigate(`/track/${dlTrackId}`); return; }
       navigate(artist ? '/dashboard?tab=analytics&section=downloads' : '/library/downloads');
       return;
     }
@@ -533,18 +529,28 @@ export default function NotificationsPage() {
       return;
     }
     if (type === 'first_listener') {
-      if (meta.track_slug && artist?.slug) { navigate(`/artist/${artist.slug}?track=${meta.track_slug}`); return; }
+      const flTrackId = meta.track_id || notif.track_id;
+      if (meta.track_slug) { navigate(`/track/${meta.track_slug}`); return; }
+      if (flTrackId) { navigate(`/track/${flTrackId}`); return; }
       if (artist) { navigate('/dashboard?tab=analytics&section=tracks'); return; }
       if (meta.artist_slug) { navigate(`/artist/${meta.artist_slug}`); return; }
       navigate('/browse');
       return;
     }
     if (type?.startsWith('collab_')) {
-      if (meta.track_slug && artist?.slug) { navigate(`/artist/${artist.slug}?track=${meta.track_slug}`); return; }
+      const collabTrackId = meta.track_id || notif.track_id;
+      if (meta.track_slug) { navigate(`/track/${meta.track_slug}`); return; }
+      if (collabTrackId) { navigate(`/track/${collabTrackId}`); return; }
       navigate(artist ? '/dashboard?tab=collabs' : '/community');
       return;
     }
-    if (type?.startsWith('milestone_'))                  { navigate(artist ? '/dashboard?tab=analytics&section=stats' : '/browse'); return; }
+    if (type?.startsWith('milestone_')) {
+      const msTrackId = meta.track_id || notif.track_id;
+      if (meta.track_slug) { navigate(`/track/${meta.track_slug}`); return; }
+      if (msTrackId) { navigate(`/track/${msTrackId}`); return; }
+      navigate(artist ? '/dashboard?tab=analytics&section=stats' : '/browse');
+      return;
+    }
     if (type === 'competition_winner' || type === 'competition_result') {
       if (meta.competition_id) { navigate(`/competition/${meta.competition_id}`); return; }
       navigate('/competitions');
@@ -556,11 +562,17 @@ export default function NotificationsPage() {
       return;
     }
     if (type === 'top_supporter') {
-      if (meta.artist_id) { navigate(`/artist/${meta.artist_slug || meta.artist_id}`); return; }
+      if (meta.artist_slug) { navigate(`/artist/${meta.artist_slug}`); return; }
       navigate(artist ? '/dashboard?tab=analytics&section=followers' : '/browse');
       return;
     }
-    if (type === 'wheel_challenge') { navigate('/wheel'); return; }
+    if (type === 'wheel_challenge') { navigate('/competitions'); return; }
+    if (type === 'wheel_winner') {
+      if (meta.competition_id) { navigate(`/competition/${meta.competition_id}`); return; }
+      navigate('/competitions');
+      return;
+    }
+    if (type === 'tier_upgrade' || type === 'tier_downgrade') { navigate('/listener/upgrade'); return; }
     if (type === 'artist_thought') { navigate(meta.artist_slug ? `/artist/${meta.artist_slug}` : '/browse'); return; }
   };
 
