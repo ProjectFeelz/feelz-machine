@@ -414,12 +414,14 @@ export default function NotificationsPage() {
     }
 
     if (type === 'new_stream') {
-      if (meta.track_id && meta.track_title) {
-        playTrack({ id: meta.track_id, title: meta.track_title, file_url: meta.file_url || null, cover_artwork_url: meta.track_artwork || null, artist_name: meta.artist_name || '', artist_slug: meta.artist_slug || '' }, []);
+      const streamTrackId = meta.track_id || notif.track_id;
+      if (streamTrackId) {
+        playTrack({ id: streamTrackId, title: meta.track_title || '', file_url: meta.file_url || null, cover_artwork_url: meta.track_artwork || null, artist_name: meta.artist_name || '', artist_slug: meta.artist_slug || '' }, []);
       }
-      if (meta.track_slug && artist?.slug) { navigate(`/artist/${artist.slug}?track=${meta.track_slug}`); return; }
-      if (meta.track_id && artist?.slug) { navigate(`/artist/${artist.slug}`); return; }
+      if (meta.track_slug) { navigate(`/track/${meta.track_slug}`); return; }
+      if (streamTrackId && artist?.slug) { navigate(`/artist/${artist.slug}?track=${streamTrackId}`); return; }
       if (meta.artist_slug) { navigate('/artist/' + meta.artist_slug); return; }
+      if (artist?.slug) { navigate(`/artist/${artist.slug}`); return; }
       navigate('/hub');
       return;
     }
@@ -445,15 +447,13 @@ export default function NotificationsPage() {
     if (type === 'track_liked') {
       // For story likes — no track involved
       if (meta.story_id) { navigate(`/artist/${notif.from_artist?.slug || meta.from_artist_slug || ''}`); return; }
-      // For track likes — go to artist profile with track highlighted
-      if (meta.track_slug && meta.from_artist_slug) {
-        navigate(`/artist/${meta.from_artist_slug}?track=${meta.track_slug}`); return;
-      }
-      if (meta.track_slug && artist?.slug) {
-        navigate(`/artist/${artist.slug}?track=${meta.track_slug}`); return;
-      }
-      if (meta.track_id) { navigate(`/track/${meta.track_id}`); return; }
+      // Use notification row track_id as fallback (most reliable)
+      const likedTrackId = meta.track_id || notif.track_id;
+      const likedTrackSlug = meta.track_slug || null;
+      if (likedTrackSlug) { navigate(`/track/${likedTrackSlug}`); return; }
+      if (likedTrackId) { navigate(`/track/${likedTrackId}`); return; }
       if (meta.artist_slug) { navigate('/artist/' + meta.artist_slug); return; }
+      if (artist?.slug) { navigate(`/artist/${artist.slug}`); return; }
       navigate('/hub');
       return;
     }
