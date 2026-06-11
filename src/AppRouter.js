@@ -64,7 +64,7 @@ import MerchOrdersPage from './pages/MerchOrdersPage';
 import CompetitionsPage from './pages/CompetitionsPage';
 import AdminCompetitions from './pages/AdminCompetitions';
 import AdminEngagement from './pages/AdminEngagement';
-
+import FanLeaderboardPage from './pages/FanLeaderboardPage';
 
 // ── Session keepalive — refreshes token + listens for activity ───────────────
 function SessionManager() {
@@ -220,6 +220,7 @@ export default function AppRouter() {
               <Route path="/competition/:competitionId" element={<CompetitionRoomPage />} />
               <Route path="/session/:sessionId" element={<ListeningSessionPage />} />
               <Route path="/merch-connect-callback" element={<MerchConnectCallback />} />
+              <Route path="/artist/:slug/fans" element={<FanLeaderboardPage />} />
 
               {/* Legal pages — fixed titles */}
               <Route path="/privacy-policy" element={
@@ -273,6 +274,7 @@ export default function AppRouter() {
                 <Route path="/artist/:slug/merch" element={<MerchPage />} />
                 <Route path="/artist/:slug/merch/checkout" element={<MerchCheckoutPage />} />
                 <Route path="/artist/:slug/merch/orders" element={<MerchOrdersPage />} />
+                <Route path="/artist/:slug/fans" element={<FanLeaderboardPage />} />
 
                 <Route path="/track/:slug" element={<TrackPage />} />
                 <Route path="/collab-radar" element={<CollabRadarPage />} />

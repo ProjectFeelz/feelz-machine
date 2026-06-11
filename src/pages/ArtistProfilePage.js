@@ -136,7 +136,6 @@ function ThoughtBlock({ thought, isOwner, secondaryColor, textColor, bgColor, us
       .eq('thought_id', thought.id).order('created_at', { ascending: true }).limit(50);
     if (error || !data || data.length === 0) { setComments([]); return; }
     const userIds = [...new Set(data.map(c => c.user_id))].filter(Boolean);
-    if (!userIds.length) { setComments(data.map(c => ({ ...c, commenter: null }))); return; }
     const { data: artistsData } = await supabase
       .from('artists').select('user_id, artist_name, slug, profile_image_url, is_verified')
       .in('user_id', userIds);
@@ -417,7 +416,6 @@ export default function ArtistProfilePage() {
   const [purchasedTracks, setPurchasedTracks] = useState({});
   const [liveSession, setLiveSession] = useState(null);
   const [radioLoading, setRadioLoading] = useState(false);
-  const [showAllCollabs, setShowAllCollabs] = useState(false);
   const [showDMModal, setShowDMModal] = useState(false);
   const [showXPModal, setShowXPModal]   = useState(false);
   const [xpData, setXpData]             = useState(null);
@@ -588,10 +586,7 @@ export default function ArtistProfilePage() {
         return;
       }
       setArtist(artistData);
-      // Live follower count — avoids stale cached column
-supabase.from('follows').select('*', { count: 'exact', head: true })
-  .eq('artist_id', artistData.id)
-  .then(({ count }) => setFollowerCount(count || 0));
+      setFollowerCount(artistData.follower_count || 0);
       const { data: themeData } = await supabase
         .from('artist_themes').select('*').eq('artist_id', artistData.id).maybeSingle();
       if (themeData) setTheme(themeData);
@@ -631,36 +626,11 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
         .from('albums').select('*').eq('artist_id', artistData.id).eq('is_published', true)
         .order('release_date', { ascending: false });
       setAlbums(albumData || []);
-      // Fetch both directions:
-      // 1. Collabs where this artist IS the collaborator on someone else's track
-      // 2. Collabs on tracks owned by this artist (beatmakers/featured artists credited)
-      const { data: asCollaborator } = await supabase
+      const { data: collabData } = await supabase
         .from('collaborations')
         .select('*, tracks(id, title, cover_artwork_url, file_url, duration, stream_count, artist_id, is_downloadable, download_price)')
         .eq('artist_id', artistData.id).eq('status', 'accepted');
-
-      // Get track IDs owned by this artist
-      const ownTrackIds = (trackData || []).map(t => t.id).filter(Boolean);
-      let onOwnTracks = [];
-      if (ownTrackIds.length > 0) {
-        const { data: ownTrackCollabs } = await supabase
-          .from('collaborations')
-          .select('*, tracks(id, title, cover_artwork_url, file_url, duration, stream_count, artist_id, is_downloadable, download_price)')
-          .in('track_id', ownTrackIds)
-          .eq('status', 'accepted')
-          .neq('artist_id', artistData.id);
-        onOwnTracks = ownTrackCollabs || [];
-      }
-
-      // Merge and deduplicate by id
-      const allCollabs = [...(asCollaborator || []), ...onOwnTracks];
-      const seenCollabs = new Set();
-      const uniqueCollabs = allCollabs.filter(col => {
-        if (seenCollabs.has(col.id)) return false;
-        seenCollabs.add(col.id);
-        return true;
-      });
-      setCollabs(uniqueCollabs);
+      setCollabs(collabData || []);
       const cutoff = new Date(Date.now() - THOUGHT_TTL_MS).toISOString();
       const { data: thoughtsData } = await supabase
         .from('artist_thoughts').select('id, content, created_at')
@@ -819,18 +789,27 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
         await supabase.from('artist_alerts').upsert({ artist_id: artist.id, user_id: user.id }, { onConflict: 'user_id,artist_id' });
         setIsFollowing(true);
         setFollowerCount(prev => prev + 1);
+        // Check artist profile first, then listener profile as fallback
         const { data: myProfile } = await supabase.from('artists').select('id, artist_name, profile_image_url, slug').eq('user_id', user.id).maybeSingle();
+        let followerName  = myProfile?.artist_name || null;
+        let followerImage = myProfile?.profile_image_url || null;
+        let followerSlug  = myProfile?.slug || null;
+        if (!followerName) {
+          const { data: listenerProfile } = await supabase.from('listeners').select('display_name, avatar_url').eq('user_id', user.id).maybeSingle();
+          followerName  = listenerProfile?.display_name || null;
+          followerImage = listenerProfile?.avatar_url || null;
+        }
         await supabase.from('notifications').insert({
           user_id: artist.user_id,
           artist_id: artist.id,
           type: 'new_follower',
-          title: `${myProfile?.artist_name || 'Someone'} followed you`,
+          title: `${followerName || 'Someone'} followed you`,
           message: '',
           from_artist_id: myProfile?.id || null,
           metadata: {
-            from_artist_name:  myProfile?.artist_name || null,
-            from_artist_image: myProfile?.profile_image_url || null,
-            from_artist_slug:  myProfile?.slug || null,
+            from_artist_name:  followerName,
+            from_artist_image: followerImage,
+            from_artist_slug:  followerSlug,
           },
         }).catch(() => {});
       }
@@ -1305,7 +1284,12 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
           )}
         </div>
         <div className="flex items-center space-x-4 mb-4">
-          <span className="text-sm" style={{ color: `${textColor}80` }}>{formatNumber(followerCount)} followers</span>
+          <button
+  onClick={() => isProfileOwner ? navigate(`/artist/${slug}/fans`) : undefined}
+  className={isProfileOwner ? 'hover:opacity-70 transition' : ''}
+  style={{ color: `${textColor}80`, fontSize: '0.875rem' }}>
+  {formatNumber(followerCount)} followers{isProfileOwner ? ' ↗' : ''}
+</button>
           <span className="text-sm" style={{ color: `${textColor}80` }}>{tracks.length} track{tracks.length !== 1 ? 's' : ''}</span>
           <span className="text-sm" style={{ color: `${textColor}80` }}>{formatNumber(artist.total_streams)} streams</span>
           {xpData?.total_xp > 0 && (
@@ -1653,16 +1637,16 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
           {tracks.length > 5 && (
             <button onClick={() => setShowAllTracks(!showAllTracks)}
               className="mt-3 text-sm font-medium transition-colors" style={{ color: `${textColor}50` }}>
-              {showAllTracks ? 'Show less' : `See all ${Math.min(tracks.length, 10)} tracks`}
+              {showAllTracks ? 'Show less' : `See all ${tracks.length} tracks`}
             </button>
           )}
         </div>
       )}
 
       {recommendedTracks.length > 0 && (
-        <div className="mb-8 py-5" style={{ background: `linear-gradient(135deg, rgba(120,53,15,0.18) 0%, rgba(30,20,10,0.4) 60%, transparent 100%)`, borderTop: `1px solid rgba(245,158,11,0.12)`, borderBottom: `1px solid rgba(245,158,11,0.08)` }}>
+        <div className="mb-8">
           <h2 className="text-lg font-bold px-6 mb-3" style={{ fontFamily: `"${headingFont}", sans-serif` }}>Recommended For You</h2>
-          <div className="flex space-x-3 overflow-x-auto px-6 scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
+          <div className="flex space-x-3 overflow-x-auto px-6 scrollbar-hide">
             {recommendedTracks.map(track => (
               <div key={track.id} className="flex-shrink-0 w-36 cursor-pointer group" onClick={() => handlePlayTrack(track)}>
                 <div className="aspect-square rounded-xl overflow-hidden mb-2" style={{ backgroundColor: `${textColor}08` }}>
@@ -1678,60 +1662,8 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
         </div>
       )}
 
-      {/* ── New Music row — artist's latest drops ── */}
-      {tracks.length > 0 && (() => {
-        const recent = [...tracks]
-          .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-          .slice(0, 8);
-        return (
-          <div className="mb-8 mx-6 rounded-2xl pt-5 pb-4"
-            style={{ background: `linear-gradient(135deg, ${secondaryColor}12 0%, ${accentColor}08 100%)`, border: `1px solid ${secondaryColor}20`, overflow: 'visible' }}>
-            <div className="px-4 mb-4 flex items-center space-x-2">
-              <p className="text-sm font-bold" style={{ color: textColor }}>New Music</p>
-              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full"
-                style={{ background: `${secondaryColor}25`, color: secondaryColor, border: `1px solid ${secondaryColor}35` }}>
-                Just dropped
-              </span>
-            </div>
-            <div className="flex space-x-3 overflow-x-auto scrollbar-hide px-4 pt-4 pb-3" style={{ overflowY: "visible" }}>
-              {recent.map((track, i) => {
-                const isNewest = i === 0;
-                const withinWeek = (Date.now() - new Date(track.created_at).getTime()) < 7 * 24 * 60 * 60 * 1000;
-                const showGlow = isNewest && withinWeek;
-                return (
-                  <div key={track.id} className="flex-shrink-0 w-32 cursor-pointer group"
-                    onClick={() => handlePlayTrack(track)}>
-                    <div className="aspect-square rounded-xl overflow-hidden mb-1.5 relative"
-                      style={{
-                        backgroundColor: `${textColor}08`,
-                        boxShadow: showGlow ? `0 0 0 2px ${secondaryColor}, 0 0 20px ${secondaryColor}60, 0 0 40px ${secondaryColor}30` : 'none',
-                      }}>
-                      {track.cover_artwork_url
-                        ? <img src={track.cover_artwork_url} alt={track.title}
-                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
-                        : <div className="w-full h-full flex items-center justify-center"
-                            style={{ background: `linear-gradient(135deg, ${secondaryColor}30, ${accentColor}15)` }}>
-                            <Music className="w-6 h-6" style={{ color: `${textColor}20` }} />
-                          </div>}
-                      {showGlow && (
-                        <div className="absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded-full text-[9px] font-bold"
-                          style={{ background: secondaryColor, color: '#fff' }}>
-                          NEW
-                        </div>
-                      )}
-                    </div>
-                    <p className="text-sm font-medium truncate" style={{ color: showGlow ? secondaryColor : textColor }}>{track.title}</p>
-                    <p className="text-xs truncate" style={{ color: `${textColor}50` }}>{track.albums?.title || 'Single'}</p>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        );
-      })()}
-
       {albums.length > 0 && (
-        <div className="mb-8 py-5" style={{ background: `linear-gradient(135deg, rgba(13,148,136,0.15) 0%, rgba(10,30,30,0.4) 60%, transparent 100%)`, borderTop: `1px solid rgba(20,184,166,0.15)`, borderBottom: `1px solid rgba(20,184,166,0.08)` }}>
+        <div className="mb-8">
           <h2 className="text-lg font-bold px-6 mb-3" style={{ fontFamily: `"${headingFont}", sans-serif` }}>Albums</h2>
           <div className="flex space-x-3 overflow-x-auto px-6 scrollbar-hide">
             {albums.map(album => (
@@ -1750,7 +1682,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
       )}
 
       {tracks.filter(t => !t.album_id).length > 0 && (
-        <div className="mb-8 py-5" style={{ background: `linear-gradient(135deg, rgba(88,28,135,0.18) 0%, rgba(30,27,75,0.35) 60%, transparent 100%)`, borderTop: `1px solid rgba(139,92,246,0.15)`, borderBottom: `1px solid rgba(139,92,246,0.08)` }}>
+        <div className="mb-8">
           <h2 className="text-lg font-bold px-6 mb-3" style={{ fontFamily: `"${headingFont}", sans-serif` }}>{isBeatmakerProfile ? "Beat Catalogue" : "Singles"}</h2>
           <div className="flex space-x-3 overflow-x-auto px-6 scrollbar-hide">
             {tracks.filter(t => !t.album_id).map(track => (
@@ -1772,7 +1704,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
         <div className="px-6 mb-8">
           <h2 className="text-lg font-bold mb-3" style={{ fontFamily: `"${headingFont}", sans-serif` }}>Collaborations</h2>
           <div className="space-y-2">
-            {collabs.slice(0, showAllCollabs ? collabs.length : 5).map(collab => (
+            {collabs.map(collab => (
               <div key={collab.id}
                 className="flex items-center space-x-3 p-3 rounded-xl cursor-pointer transition-opacity hover:opacity-80 active:opacity-60"
                 style={{ backgroundColor: `${textColor}05`, border: `1px solid ${textColor}08` }}
@@ -1793,13 +1725,6 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
               </div>
             ))}
           </div>
-          {collabs.length > 5 && (
-            <button onClick={() => setShowAllCollabs(p => !p)}
-              className="mt-3 text-sm font-medium transition-colors"
-              style={{ color: `${textColor}50` }}>
-              {showAllCollabs ? 'Show less' : `See all ${collabs.length} collabs`}
-            </button>
-          )}
         </div>
       )}
 
@@ -2005,8 +1930,8 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
 
       {/* Artist Playlists */}
       {artistPlaylists.length > 0 && (
-        <div className="mb-8 py-5" style={{ background: `linear-gradient(135deg, rgba(49,46,129,0.18) 0%, rgba(20,20,50,0.4) 60%, transparent 100%)`, borderTop: `1px solid rgba(99,102,241,0.15)`, borderBottom: `1px solid rgba(99,102,241,0.08)` }}>
-          <div className="flex items-center justify-between mb-3 px-6">
+        <div className="mb-8 px-6">
+          <div className="flex items-center justify-between mb-3">
             <h2 className="text-lg font-bold" style={{ fontFamily: `"${headingFont}", sans-serif` }}>Playlists</h2>
             {isProfileOwner && (
               <button onClick={() => navigate('/library/playlists')}
@@ -2016,7 +1941,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
               </button>
             )}
           </div>
-          <div className="flex space-x-3 overflow-x-auto scrollbar-hide px-6">
+          <div className="flex space-x-3 overflow-x-auto scrollbar-hide -mx-6 px-6">
             {artistPlaylists.map(pl => (
               <div key={pl.id} className="flex-shrink-0 w-36 cursor-pointer group"
                 onClick={() => navigate(`/library/playlists/${pl.id}`)}>
@@ -2085,9 +2010,9 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
       )}
 
       {similarArtists.length > 0 && (
-        <div className="mb-8 py-5" style={{ background: `linear-gradient(135deg, rgba(136,19,55,0.18) 0%, rgba(30,10,20,0.4) 60%, transparent 100%)`, borderTop: `1px solid rgba(244,63,94,0.15)`, borderBottom: `1px solid rgba(244,63,94,0.08)` }}>
-          <h2 className="text-lg font-bold mb-3 px-6" style={{ fontFamily: `"${headingFont}", sans-serif` }}>Artists Like This</h2>
-          <div className="flex space-x-4 overflow-x-auto scrollbar-hide px-6">
+        <div className="mb-8 px-6">
+          <h2 className="text-lg font-bold mb-3" style={{ fontFamily: `"${headingFont}", sans-serif` }}>Artists Like This</h2>
+          <div className="flex space-x-4 overflow-x-auto scrollbar-hide">
             {similarArtists.map(a => (
               <div key={a.id} className="flex-shrink-0 w-24 cursor-pointer group" onClick={() => navigate(`/artist/${a.slug}`)}>
                 <div className="w-24 h-24 rounded-full overflow-hidden mb-2 mx-auto" style={{ backgroundColor: `${textColor}08` }}>

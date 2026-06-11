@@ -1438,10 +1438,18 @@ export default function ForYouPage() {
                   navigate={navigate}
                 />
               ) : (
-                filteredTracks[i] ? <ForYouCard track={filteredTracks[i]} isActive={i === idx} user={user} navigate={navigate} onOpenSheet={setActiveSheet} onShare={setShareCard} onNext={() => setIdx(i + 1)} onHide={(id) => {
+                filteredTracks[i] ? <ForYouCard track={filteredTracks[i]} isActive={i === idx} user={user} navigate={navigate} onOpenSheet={setActiveSheet} onShare={setShareCard} onNext={() => setIdx(i + 1)} onHide={async (id) => {
                     hiddenIdsRef.current.add(id);
                     setTracks(prev => prev.filter(t => t.id !== id));
                     setIdx(prev => prev);
+                    if (user) {
+                      await supabase.from('listener_feedback').upsert({
+                        user_id:    user.id,
+                        track_id:   id,
+                        signal:     'not_interested',
+                        created_at: new Date().toISOString(),
+                      }, { onConflict: 'user_id,track_id' }).catch(() => {});
+                    }
                   }} queue={filteredTracks} queueIndex={i} /> : null
               )}
             </div>
