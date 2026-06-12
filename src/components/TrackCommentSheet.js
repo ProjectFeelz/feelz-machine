@@ -210,6 +210,7 @@ export default function TrackCommentSheet({ track, user, onClose, routePrefix = 
               track_slug:         trackRow.slug || track.slug || null,
               track_route_prefix: routePrefix,
               track_title:        trackRow.title,
+              track_artwork:      track.cover_artwork_url || null,
               comment:            text.trim().slice(0, 100),
               from_artist_name:   name,
               from_artist_image:  commenterArtist?.profile_image_url || null,
