@@ -254,7 +254,20 @@ export default function TrackCommentSheet({ track, user, onClose, routePrefix = 
             )}
             {isOwn && <span className="text-[9px] text-purple-400/60 font-medium">you</span>}
           </div>
-          <p className="text-sm text-white/90 leading-relaxed mt-0.5">{c.content}</p>
+          <div className="flex items-start justify-between space-x-2">
+            <p className="text-sm text-white/90 leading-relaxed mt-0.5 flex-1">{c.content}</p>
+            {isOwn && (
+              <button
+                onClick={async (e) => {
+                  e.stopPropagation();
+                  await supabase.from('track_comments').delete().eq('id', c.id).eq('user_id', user.id);
+                  setComments(prev => prev.filter(x => x.id !== c.id));
+                }}
+                className="flex-shrink-0 p-1 rounded-lg hover:bg-white/[0.06] transition active:scale-90 mt-0.5">
+                <X className="w-3 h-3 text-white/20 hover:text-red-400/60" />
+              </button>
+            )}
+          </div>
           <ReactionBar commentId={c.id} userId={user?.id} />
           {!isReply && user && (
             <button
