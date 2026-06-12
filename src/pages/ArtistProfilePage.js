@@ -417,6 +417,7 @@ export default function ArtistProfilePage() {
   const [purchasedTracks, setPurchasedTracks] = useState({});
   const [liveSession, setLiveSession] = useState(null);
   const [radioLoading, setRadioLoading] = useState(false);
+  const [showAllCollabs, setShowAllCollabs] = useState(false);
   const [notifEnabled, setNotifEnabled] = useState(false);
   const [notifLoading, setNotifLoading] = useState(false);
   const [showDMModal, setShowDMModal] = useState(false);
