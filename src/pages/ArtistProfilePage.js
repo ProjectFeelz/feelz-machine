@@ -1218,6 +1218,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
   const headingFont    = theme?.heading_font || 'Inter';
   const bodyFont       = theme?.body_font || 'Inter';
   const visibleTracks  = showAllTracks ? tracks.slice(0, 10) : tracks.slice(0, 5);
+  const totalVisible   = Math.min(tracks.length, 10);
   const isProfileOwner = user && myArtist && myArtist.id === artist.id;
   const isBeatmakerProfile = artist?.role === 'beatmaker';
   const pageUrl        = `${BASE_URL}/artist/${slug}`;
@@ -1700,7 +1701,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
           {tracks.length > 5 && (
             <button onClick={() => setShowAllTracks(!showAllTracks)}
               className="mt-3 text-sm font-medium transition-colors" style={{ color: `${textColor}50` }}>
-              {showAllTracks ? 'Show less' : `See all ${tracks.length} tracks`}
+              {showAllTracks ? 'Show less' : `See all ${totalVisible} tracks`}
             </button>
           )}
         </div>
