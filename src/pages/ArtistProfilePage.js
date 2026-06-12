@@ -1696,8 +1696,8 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
           .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
           .slice(0, 8);
         return (
-          <div className="mb-8 mx-6 rounded-2xl pt-12 pb-4"
-            style={{ background: `linear-gradient(135deg, ${secondaryColor}12 0%, ${accentColor}08 100%)`, border: `1px solid ${secondaryColor}20`, overflow: 'visible' }}>
+          <div className="mb-8 mx-6 rounded-2xl pt-4 pb-4"
+            style={{ background: 'linear-gradient(135deg, rgba(6,182,212,0.18) 0%, rgba(6,182,212,0.08) 60%, rgba(10,30,35,0.95) 100%)', border: '1px solid rgba(6,182,212,0.25)', overflow: 'visible' }}>
             <div className="px-4 mb-4 flex items-center space-x-2">
               <p className="text-sm font-bold" style={{ color: textColor }}>New Music</p>
               <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full"
@@ -1705,31 +1705,61 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
                 Just dropped
               </span>
             </div>
-            <div className="flex space-x-3 overflow-x-auto scrollbar-hide px-4 pt-3 pb-3" style={{ overflowY: "visible" }}>
+            {/* Mobile: hero first card + scrollable rest */}
+            <div className="md:hidden">
+              {recent[0] && (() => {
+                const track = recent[0];
+                const withinWeek = (Date.now() - new Date(track.created_at).getTime()) < 7 * 24 * 60 * 60 * 1000;
+                return (
+                  <div className="px-4 mb-3 cursor-pointer" onClick={() => handlePlayTrack(track)}>
+                    <div className="w-full aspect-square rounded-2xl overflow-hidden relative"
+                      style={{ boxShadow: withinWeek ? `0 0 0 2px ${secondaryColor}, 0 0 30px ${secondaryColor}60` : 'none' }}>
+                      {track.cover_artwork_url
+                        ? <img src={track.cover_artwork_url} alt={track.title} className="w-full h-full object-cover" />
+                        : <div className="w-full h-full flex items-center justify-center" style={{ background: `linear-gradient(135deg, ${secondaryColor}30, ${accentColor}15)` }}><Music className="w-12 h-12" style={{ color: `${textColor}20` }} /></div>}
+                      {withinWeek && (
+                        <div className="absolute top-2 right-2 px-2 py-1 rounded-full text-[10px] font-bold" style={{ background: secondaryColor, color: '#fff' }}>NEW</div>
+                      )}
+                    </div>
+                    <p className="text-base font-bold mt-2 truncate" style={{ color: withinWeek ? secondaryColor : textColor }}>{track.title}</p>
+                    <p className="text-xs truncate" style={{ color: `${textColor}50` }}>{track.albums?.title || 'Single'}</p>
+                  </div>
+                );
+              })()}
+              {recent.length > 1 && (
+                <div className="flex space-x-3 overflow-x-auto scrollbar-hide px-4 pb-3" style={{ overflowY: 'visible' }}>
+                  {recent.slice(1).map(track => {
+                    const withinWeek = (Date.now() - new Date(track.created_at).getTime()) < 7 * 24 * 60 * 60 * 1000;
+                    return (
+                      <div key={track.id} className="flex-shrink-0 w-32 cursor-pointer group" onClick={() => handlePlayTrack(track)}>
+                        <div className="aspect-square rounded-xl overflow-hidden mb-1.5 relative" style={{ backgroundColor: `${textColor}08` }}>
+                          {track.cover_artwork_url
+                            ? <img src={track.cover_artwork_url} alt={track.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                            : <div className="w-full h-full flex items-center justify-center" style={{ background: `linear-gradient(135deg, ${secondaryColor}30, ${accentColor}15)` }}><Music className="w-6 h-6" style={{ color: `${textColor}20` }} /></div>}
+                        </div>
+                        <p className="text-sm font-medium truncate" style={{ color: textColor }}>{track.title}</p>
+                        <p className="text-xs truncate" style={{ color: `${textColor}50` }}>{track.albums?.title || 'Single'}</p>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+            {/* Desktop: normal spread row */}
+            <div className="hidden md:flex space-x-3 overflow-x-auto scrollbar-hide px-4 pt-3 pb-3" style={{ overflowY: 'visible' }}>
               {recent.map((track, i) => {
                 const isNewest = i === 0;
                 const withinWeek = (Date.now() - new Date(track.created_at).getTime()) < 7 * 24 * 60 * 60 * 1000;
                 const showGlow = isNewest && withinWeek;
                 return (
-                  <div key={track.id} className="flex-shrink-0 w-32 cursor-pointer group"
-                    onClick={() => handlePlayTrack(track)}>
+                  <div key={track.id} className="flex-shrink-0 w-32 cursor-pointer group" onClick={() => handlePlayTrack(track)}>
                     <div className="aspect-square rounded-xl overflow-hidden mb-1.5 relative"
-                      style={{
-                        backgroundColor: `${textColor}08`,
-                        boxShadow: showGlow ? `0 0 0 2px ${secondaryColor}, 0 0 20px ${secondaryColor}60, 0 0 40px ${secondaryColor}30` : 'none',
-                      }}>
+                      style={{ backgroundColor: `${textColor}08`, boxShadow: showGlow ? `0 0 0 2px ${secondaryColor}, 0 0 20px ${secondaryColor}60, 0 0 40px ${secondaryColor}30` : 'none' }}>
                       {track.cover_artwork_url
-                        ? <img src={track.cover_artwork_url} alt={track.title}
-                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
-                        : <div className="w-full h-full flex items-center justify-center"
-                            style={{ background: `linear-gradient(135deg, ${secondaryColor}30, ${accentColor}15)` }}>
-                            <Music className="w-6 h-6" style={{ color: `${textColor}20` }} />
-                          </div>}
+                        ? <img src={track.cover_artwork_url} alt={track.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                        : <div className="w-full h-full flex items-center justify-center" style={{ background: `linear-gradient(135deg, ${secondaryColor}30, ${accentColor}15)` }}><Music className="w-6 h-6" style={{ color: `${textColor}20` }} /></div>}
                       {showGlow && (
-                        <div className="absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded-full text-[9px] font-bold"
-                          style={{ background: secondaryColor, color: '#fff' }}>
-                          NEW
-                        </div>
+                        <div className="absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded-full text-[9px] font-bold" style={{ background: secondaryColor, color: '#fff' }}>NEW</div>
                       )}
                     </div>
                     <p className="text-sm font-medium truncate" style={{ color: showGlow ? secondaryColor : textColor }}>{track.title}</p>
