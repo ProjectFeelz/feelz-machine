@@ -14,7 +14,7 @@ import {
   Globe, Music, Loader, Verified, Download,
   Heart, Check, MoreHorizontal, DollarSign, MessageCircle,
   ChevronDown, ChevronUp, Send, Trash2, Shuffle, Users, Plus, ShoppingBag,
-  Radio, X, Search, Info
+  Radio, X, Search, Info, Bell, BellOff
 } from 'lucide-react';
 import { ArtistProfileSkeleton } from '../components/SkeletonLoader';
 import ShareCard from '../components/ShareCard';
@@ -417,6 +417,8 @@ export default function ArtistProfilePage() {
   const [purchasedTracks, setPurchasedTracks] = useState({});
   const [liveSession, setLiveSession] = useState(null);
   const [radioLoading, setRadioLoading] = useState(false);
+  const [notifEnabled, setNotifEnabled] = useState(false);
+  const [notifLoading, setNotifLoading] = useState(false);
   const [showDMModal, setShowDMModal] = useState(false);
   const [showXPModal, setShowXPModal]   = useState(false);
   const [xpData, setXpData]             = useState(null);
@@ -727,10 +729,12 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
         }
       }
       if (user) {
-        const { data: followData } = await supabase
-          .from('follows').select('id')
-          .eq('artist_id', artistData.id).eq('follower_id', user.id).maybeSingle();
+        const [{ data: followData }, { data: alertData }] = await Promise.all([
+          supabase.from('follows').select('id').eq('artist_id', artistData.id).eq('follower_id', user.id).maybeSingle(),
+          supabase.from('artist_alerts').select('id').eq('artist_id', artistData.id).eq('user_id', user.id).maybeSingle(),
+        ]);
         setIsFollowing(!!followData);
+        setNotifEnabled(!!alertData);
       }
     } catch (err) { console.error('Error fetching artist:', err); }
     setLoading(false);
@@ -842,6 +846,21 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
         }).catch(() => {});
       }
     } catch (err) { console.error('Follow error:', err); }
+  };
+  const handleToggleNotif = async () => {
+    if (!user) { navigate('/login'); return; }
+    if (notifLoading) return;
+    setNotifLoading(true);
+    try {
+      if (notifEnabled) {
+        await supabase.from('artist_alerts').delete().eq('artist_id', artist.id).eq('user_id', user.id);
+        setNotifEnabled(false);
+      } else {
+        await supabase.from('artist_alerts').upsert({ artist_id: artist.id, user_id: user.id }, { onConflict: 'user_id,artist_id' });
+        setNotifEnabled(true);
+      }
+    } catch (err) { console.error('Notif toggle error:', err); }
+    setNotifLoading(false);
   };
 
   // Live session track search
@@ -1342,6 +1361,22 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
             {isFollowing ? <UserCheck className="w-3.5 h-3.5" /> : <UserPlus className="w-3.5 h-3.5" />}
             <span>{isFollowing ? 'Following' : 'Follow'}</span>
           </button>
+          {isFollowing && user.id !== artist?.user_id && (
+            <button onClick={handleToggleNotif} disabled={notifLoading}
+              title={notifEnabled ? 'Turn off notifications' : 'Turn on notifications'}
+              className="flex items-center space-x-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all active:scale-95 disabled:opacity-40"
+              style={{
+                backgroundColor: notifEnabled ? `${secondaryColor}25` : 'transparent',
+                color: notifEnabled ? secondaryColor : `${textColor}50`,
+                border: `2px solid ${notifEnabled ? secondaryColor + '40' : textColor + '20'}`,
+              }}>
+              {notifLoading
+                ? <Loader className="w-3.5 h-3.5 animate-spin" />
+                : notifEnabled
+                  ? <Bell className="w-3.5 h-3.5" />
+                  : <BellOff className="w-3.5 h-3.5" />}
+            </button>
+          )}
           {tracks.length > 0 && (
             <>
               <button onClick={() => handlePlayTrack(tracks[0])}
@@ -1814,7 +1849,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
         <div className="px-6 mb-8">
           <h2 className="text-lg font-bold mb-3" style={{ fontFamily: `"${headingFont}", sans-serif` }}>Collaborations</h2>
           <div className="space-y-2">
-            {collabs.map(collab => (
+            {collabs.slice(0, showAllCollabs ? collabs.length : 5).map(collab => (
               <div key={collab.id}
                 className="flex items-center space-x-3 p-3 rounded-xl cursor-pointer transition-opacity hover:opacity-80 active:opacity-60"
                 style={{ backgroundColor: `${textColor}05`, border: `1px solid ${textColor}08` }}

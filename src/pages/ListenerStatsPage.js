@@ -3,7 +3,9 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
+import { useTier } from '../contexts/useTier';
 import { useStreakContext } from '../contexts/StreakContext';
+import { Lock } from 'lucide-react';
 import {
   ChevronLeft, Headphones, Users, Heart, Clock,
   TrendingUp, Music, Zap, Award, BarChart3, Loader
@@ -25,6 +27,8 @@ function StatCard({ icon: Icon, label, value, color, sub }) {
 export default function ListenerStatsPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { listenerTierSlug } = useTier();
+  const isPro = listenerTierSlug === 'pro' || listenerTierSlug === 'premium' || listenerTierSlug === 'fan_pro';
   const { streak, longestStreak, discoveryStreak } = useStreakContext();
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
@@ -218,8 +222,23 @@ export default function ListenerStatsPage() {
             </div>
           )}
 
+          {/* ── Pro gate ── */}
+          {!isPro && (
+            <div className="rounded-xl p-4 text-center"
+              style={{ background: 'rgba(88,28,135,0.08)', border: '1px solid rgba(139,92,246,0.2)' }}>
+              <Lock className="w-5 h-5 text-purple-400/60 mx-auto mb-2" />
+              <p className="text-sm font-semibold text-white mb-1">Fan Pro Feature</p>
+              <p className="text-xs text-white/40 mb-3">Upgrade to see your top artists, tracks and genre breakdown</p>
+              <button onClick={() => navigate('/listener/upgrade')}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-white transition active:scale-95"
+                style={{ background: 'linear-gradient(135deg, #a78bfa, #7c3aed)' }}>
+                Upgrade to Fan Pro
+              </button>
+            </div>
+          )}
+
           {/* ── Top Artists ── */}
-          {topArtists.length > 0 && (
+          {isPro && topArtists.length > 0 && (
             <div>
               <p className="text-[10px] uppercase tracking-wider text-white/20 font-semibold mb-3">Your Top Artists</p>
               <div className="space-y-2">
@@ -251,7 +270,7 @@ export default function ListenerStatsPage() {
           )}
 
           {/* ── Top Tracks ── */}
-          {topTracks.length > 0 && (
+          {isPro && topTracks.length > 0 && (
             <div>
               <p className="text-[10px] uppercase tracking-wider text-white/20 font-semibold mb-3">Most Played Tracks</p>
               <div className="space-y-2">
@@ -277,7 +296,7 @@ export default function ListenerStatsPage() {
           )}
 
           {/* ── Genre breakdown ── */}
-          {topGenres.length > 0 && (
+          {isPro && topGenres.length > 0 && (
             <div>
               <p className="text-[10px] uppercase tracking-wider text-white/20 font-semibold mb-3">Genre Breakdown</p>
               <div className="space-y-2.5">

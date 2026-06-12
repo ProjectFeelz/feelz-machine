@@ -11,6 +11,25 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
+// ── App theme definitions (module-level so they never recreate) ───────────────
+const THEMES = [
+  { key: 'default',   label: 'Default',     bg: '#000000', accent: '#8B5CF6' },
+  { key: 'deep_navy', label: 'Deep Navy',   bg: '#0a0f1e', accent: '#3B82F6' },
+  { key: 'forest',    label: 'Forest Dark', bg: '#0a1a0f', accent: '#22C55E' },
+  { key: 'warm_dark', label: 'Warm Dark',   bg: '#1a0f0a', accent: '#F97316' },
+];
+
+function applyTheme(themeKey) {
+  const theme = THEMES.find(t => t.key === themeKey) || THEMES[0];
+  // CSS vars for components that read them
+  document.documentElement.style.setProperty('--app-bg', theme.bg);
+  document.documentElement.style.setProperty('--app-accent', theme.accent);
+  // Apply to body and root for full bleed coverage
+  document.body.style.backgroundColor = theme.bg;
+  const root = document.getElementById('root');
+  if (root) root.style.backgroundColor = theme.bg;
+}
+
 export default function LibraryPage() {
   const { user, isArtist } = useAuth();
   const { listenerTierSlug } = useTier();
@@ -23,13 +42,6 @@ export default function LibraryPage() {
   const [savingPrefs, setSavingPrefs] = useState(false);
   const [showThemes, setShowThemes] = useState(false);
 
-  const THEMES = [
-    { key: 'default',    label: 'Default',      bg: '#000000', accent: '#8B5CF6', preview: 'bg-black' },
-    { key: 'deep_navy',  label: 'Deep Navy',    bg: '#0a0f1e', accent: '#3B82F6', preview: 'bg-[#0a0f1e]' },
-    { key: 'forest',     label: 'Forest Dark',  bg: '#0a1a0f', accent: '#22C55E', preview: 'bg-[#0a1a0f]' },
-    { key: 'warm_dark',  label: 'Warm Dark',    bg: '#1a0f0a', accent: '#F97316', preview: 'bg-[#1a0f0a]' },
-  ];
-
   // Load preferences from DB
   useEffect(() => {
     if (!user) return;
@@ -39,28 +51,24 @@ export default function LibraryPage() {
       .maybeSingle()
       .then(({ data }) => {
         if (data?.preferences) {
-          setPrefs(prev => ({ ...prev, ...data.preferences }));
+          setPrefs(p => ({ ...p, ...data.preferences }));
           applyTheme(data.preferences.theme || 'default');
         }
-      });
-  }, [user?.id]);
-
-  const applyTheme = (themeKey) => {
-    const theme = THEMES.find(t => t.key === themeKey) || THEMES[0];
-    document.documentElement.style.setProperty('--app-bg', theme.bg);
-    document.documentElement.style.setProperty('--app-accent', theme.accent);
-    // Apply bg to body for full coverage
-    document.body.style.backgroundColor = theme.bg;
-  };
+      })
+      .catch(() => {}); // don't crash if preferences column missing
+  }, [user?.id]); // eslint-disable-line
 
   const savePrefs = async (newPrefs) => {
+    if (!user) return;
     setSavingPrefs(true);
     const merged = { ...prefs, ...newPrefs };
     setPrefs(merged);
     if (newPrefs.theme) applyTheme(newPrefs.theme);
-    await supabase.from('listeners')
-      .update({ preferences: merged, updated_at: new Date().toISOString() })
-      .eq('user_id', user.id);
+    try {
+      await supabase.from('listeners')
+        .update({ preferences: merged, updated_at: new Date().toISOString() })
+        .eq('user_id', user.id);
+    } catch {}
     setSavingPrefs(false);
   };
 
@@ -202,7 +210,7 @@ export default function LibraryPage() {
                     style={{ background: 'linear-gradient(135deg, #a78bfa, #7c3aed)' }}>
                     <Zap className="w-3 h-3 text-white" />
                   </div>
-                  <p className="text-xs font-bold text-white">Fan Pro</p>
+                  <p className="text-sm font-bold text-white">Fan Pro</p>
                 </div>
                 <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full"
                   style={{ background: 'rgba(139,92,246,0.2)', color: '#a78bfa', border: '1px solid rgba(139,92,246,0.3)' }}>
@@ -215,7 +223,7 @@ export default function LibraryPage() {
                 <div className="flex items-center justify-between mb-1.5">
                   <div className="flex items-center space-x-1.5">
                     <Download className="w-3 h-3 text-green-400" />
-                    <p className="text-[11px] font-semibold text-white">Free Downloads</p>
+                    <p className="text-xs font-semibold text-white">Free Downloads</p>
                   </div>
                   <p className="text-[11px] text-white/40">{stats.monthlyDownloads} / {freeQuota} used</p>
                 </div>
@@ -223,7 +231,7 @@ export default function LibraryPage() {
                   <div className={`h-full rounded-full transition-all ${quotaPct >= 100 ? 'bg-red-400' : quotaPct >= 66 ? 'bg-yellow-400' : 'bg-green-400'}`}
                     style={{ width: `${quotaPct}%` }} />
                 </div>
-                <p className="text-[10px] text-white/20 mt-1">
+                <p className="text-[11px] text-white/20 mt-1">
                   {downloadsLeft > 0 ? `${downloadsLeft} left this month` : 'Resets 1st of next month'}
                 </p>
               </div>
@@ -235,7 +243,7 @@ export default function LibraryPage() {
                   className="w-full flex items-center justify-between">
                   <div className="flex items-center space-x-2">
                     <Palette className="w-3.5 h-3.5 text-purple-400" />
-                    <p className="text-[11px] font-semibold text-white">App Theme</p>
+                    <p className="text-xs font-semibold text-white">App Theme</p>
                   </div>
                   <div className="flex items-center space-x-2">
                     <span className="text-[10px] text-white/40 capitalize">{prefs.theme?.replace('_', ' ') || 'Default'}</span>
@@ -259,7 +267,7 @@ export default function LibraryPage() {
                           </div>
                         </div>
                         <div className="flex-1 text-left min-w-0">
-                          <p className="text-[11px] font-medium text-white truncate">{theme.label}</p>
+                          <p className="text-xs font-medium text-white truncate">{theme.label}</p>
                         </div>
                         {prefs.theme === theme.key && (
                           <Check className="w-3 h-3 flex-shrink-0" style={{ color: theme.accent }} />
@@ -276,8 +284,8 @@ export default function LibraryPage() {
                   <div className="flex items-center space-x-2">
                     <Shield className="w-3.5 h-3.5 text-yellow-400" />
                     <div>
-                      <p className="text-[11px] font-semibold text-white">Fan Badge</p>
-                      <p className="text-[10px] text-white/30">Shows on comments & guestbooks</p>
+                      <p className="text-xs font-semibold text-white">Fan Badge</p>
+                      <p className="text-[11px] text-white/30">Shows on comments & guestbooks</p>
                     </div>
                   </div>
                   <button
@@ -296,7 +304,7 @@ export default function LibraryPage() {
                 className="w-full flex items-center justify-between px-4 py-3 hover:bg-white/[0.03] transition">
                 <div className="flex items-center space-x-2">
                   <BarChart2 className="w-3.5 h-3.5 text-cyan-400" />
-                  <p className="text-[11px] font-semibold text-white">Your Stats</p>
+                  <p className="text-xs font-semibold text-white">Your Stats</p>
                 </div>
                 <ChevronRight className="w-3.5 h-3.5 text-white/25" />
               </button>

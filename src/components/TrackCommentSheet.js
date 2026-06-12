@@ -145,13 +145,13 @@ export default function TrackCommentSheet({ track, user, onClose, routePrefix = 
       ? await Promise.all([
           supabase.from('artists').select('user_id, artist_name, profile_image_url').in('user_id', uids),
           supabase.from('user_profiles').select('user_id, name, avatar_url').in('user_id', uids),
-          supabase.from('listeners').select('user_id, display_name, avatar_url').in('user_id', uids),
+          supabase.from('listeners').select('user_id, display_name, avatar_url, tier, preferences').in('user_id', uids),
         ])
       : [{ data: [] }, { data: [] }, { data: [] }];
 
     const artistMap   = Object.fromEntries((artists          || []).map(a => [a.user_id, a]));
     const profileMap  = Object.fromEntries((profiles         || []).map(p => [p.user_id, p]));
-    const listenerMap = Object.fromEntries((listenerProfiles || []).map(l => [l.user_id, { ...l, name: l.display_name || 'Listener' }]));
+    const listenerMap = Object.fromEntries((listenerProfiles || []).map(l => [l.user_id, { ...l, name: l.display_name || 'Listener', isFanPro: ['fan_pro','pro','premium'].includes(l.tier) && l.preferences?.fanBadge !== false }]));
 
     setComments(raw.map(c => ({
       ...c,
@@ -231,8 +231,9 @@ export default function TrackCommentSheet({ track, user, onClose, routePrefix = 
   });
 
   const renderComment = (c, isReply = false) => {
-    const name   = c.artists?.artist_name || c.user_profiles?.name || c.user_profiles?.display_name || 'Listener';
-    const avatar = c.artists?.profile_image_url || c.user_profiles?.avatar_url;
+    const name     = c.artists?.artist_name || c.user_profiles?.name || c.user_profiles?.display_name || 'Listener';
+    const avatar   = c.artists?.profile_image_url || c.user_profiles?.avatar_url;
+    const isFanPro = c.user_profiles?.isFanPro || false;
     const isOwn  = c.user_id === user?.id;
     return (
       <div key={c.id} className={`flex items-start space-x-3 ${isReply ? 'pl-8 mt-2' : ''}`}>
@@ -242,8 +243,14 @@ export default function TrackCommentSheet({ track, user, onClose, routePrefix = 
             : <span className="text-xs text-white/30 font-bold">{name[0]?.toUpperCase()}</span>}
         </div>
         <div className="flex-1 min-w-0">
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center space-x-2 flex-wrap">
             <p className="text-[11px] font-semibold text-white/60">{name}</p>
+            {isFanPro && (
+              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full"
+                style={{ background: 'rgba(139,92,246,0.2)', color: '#a78bfa', border: '1px solid rgba(139,92,246,0.3)' }}>
+                ⚡ Fan
+              </span>
+            )}
             {isOwn && <span className="text-[9px] text-purple-400/60 font-medium">you</span>}
           </div>
           <p className="text-sm text-white/90 leading-relaxed mt-0.5">{c.content}</p>
