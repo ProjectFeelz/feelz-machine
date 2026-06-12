@@ -4,6 +4,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Loader, X, Send, CornerDownRight, Smile } from 'lucide-react';
 import { supabase } from '../supabaseClient';
+import { useLocation } from 'react-router-dom';
 
 const REACTIONS = ['🔥','❤️','😤','🎯','💯','🙌'];
 
@@ -111,6 +112,17 @@ export default function TrackCommentSheet({ track, user, onClose, routePrefix = 
   const [loading,    setLoading]    = useState(true);
   const [replyingTo, setReplyingTo] = useState(null); // { id, authorName }
   const inputRef = useRef(null);
+  const location = useLocation();
+
+  // Pre-fill reply context if navigated from a notification
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const replyName = params.get('reply_name');
+    if (replyName) {
+      setReplyingTo({ id: null, authorName: decodeURIComponent(replyName) });
+      setTimeout(() => inputRef.current?.focus(), 500);
+    }
+  }, []); // eslint-disable-line
 
   useEffect(() => {
     if (user?.id) {
