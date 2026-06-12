@@ -1773,7 +1773,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
       })()}
 
       {albums.length > 0 && (
-        <div className="mb-8 py-5" style={{ background: `linear-gradient(135deg, rgba(13,148,136,0.15) 0%, rgba(10,30,30,0.4) 60%, transparent 100%)`, borderTop: `1px solid rgba(20,184,166,0.15)`, borderBottom: `1px solid rgba(20,184,166,0.08)` }}>
+        <div className="mb-8 py-5" style={{ background: `linear-gradient(135deg, rgba(88,28,135,0.18) 0%, rgba(30,27,75,0.35) 60%, transparent 100%)`, borderTop: `1px solid rgba(139,92,246,0.15)`, borderBottom: `1px solid rgba(139,92,246,0.08)` }}>
           <h2 className="text-lg font-bold px-6 mb-3" style={{ fontFamily: `"${headingFont}", sans-serif` }}>Albums</h2>
           <div className="flex space-x-3 overflow-x-auto px-6 scrollbar-hide">
             {albums.map(album => (
@@ -1792,7 +1792,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
       )}
 
       {tracks.filter(t => !t.album_id).length > 0 && (
-        <div className="mb-8 py-5" style={{ background: `linear-gradient(135deg, rgba(88,28,135,0.18) 0%, rgba(30,27,75,0.35) 60%, transparent 100%)`, borderTop: `1px solid rgba(139,92,246,0.15)`, borderBottom: `1px solid rgba(139,92,246,0.08)` }}>
+        <div className="mb-8 py-5" style={{ background: `linear-gradient(135deg, rgba(13,148,136,0.15) 0%, rgba(10,30,30,0.4) 60%, transparent 100%)`, borderTop: `1px solid rgba(20,184,166,0.15)`, borderBottom: `1px solid rgba(20,184,166,0.08)` }}>
           <h2 className="text-lg font-bold px-6 mb-3" style={{ fontFamily: `"${headingFont}", sans-serif` }}>{isBeatmakerProfile ? "Beat Catalogue" : "Singles"}</h2>
           <div className="flex space-x-3 overflow-x-auto px-6 scrollbar-hide">
             {tracks.filter(t => !t.album_id).map(track => (

@@ -142,6 +142,8 @@ function useTierInternal() {
       fetchTier(artist.id);
       fetchTrackCount(artist.id);
       fetchMonthlyDownloadSalesCount(artist.id);
+      // Also fetch listener tier — artist accounts can have fan_pro too
+      if (user?.id) fetchListenerTier(user.id);
     } else if (user?.id) {
       fetchListenerTier(user.id);
     } else {
@@ -154,15 +156,55 @@ function useTierInternal() {
 
   const fetchListenerTier = async (userId) => {
     try {
+      // Primary: check listeners.tier + tier_expires_at (set by webhook)
+      const { data: listenerRow } = await supabase
+        .from('listeners')
+        .select('tier, tier_expires_at')
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      if (listenerRow?.tier && listenerRow.tier !== 'free') {
+        // Check expiry
+        if (listenerRow.tier_expires_at) {
+          const isExpired = new Date(listenerRow.tier_expires_at) < new Date();
+          if (isExpired) {
+            // Auto-downgrade expired tier
+            await supabase.from('listeners')
+              .update({ tier: 'free', updated_at: new Date().toISOString() })
+              .eq('user_id', userId);
+            setListenerTierSlug('free');
+            setLoading(false);
+            return;
+          }
+        }
+        // Map listeners.tier → canonical slug
+        const tierMap = { fan_pro: 'pro', pro: 'pro', premium: 'premium', free: 'free' };
+        setListenerTierSlug(tierMap[listenerRow.tier] || 'free');
+        setLoading(false);
+        return;
+      }
+
+      // Fallback: check listener_tier_subscriptions table
       const { data: sub } = await supabase
         .from('listener_tier_subscriptions')
-        .select('tier_id, status')
+        .select('tier_id, status, expires_at')
         .eq('user_id', userId)
         .eq('status', 'active')
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle();
+
       if (sub?.tier_id) {
+        // Check expiry
+        if (sub.expires_at && new Date(sub.expires_at) < new Date()) {
+          await supabase.from('listener_tier_subscriptions')
+            .update({ status: 'expired', updated_at: new Date().toISOString() })
+            .eq('user_id', userId)
+            .eq('tier_id', sub.tier_id);
+          setListenerTierSlug('free');
+          setLoading(false);
+          return;
+        }
         const TIER_ID_MAP = {
           '289f65ec-4b2f-4868-b71f-9f560d493225': 'free',
           'a421dac1-f492-461c-88a5-f01b6942a042': 'pro',
@@ -324,9 +366,12 @@ function useTierInternal() {
     ? Infinity
     : Math.max(0, downloadSalesLimit - monthlyDownloadSalesCount);
 
+  const isListenerPro = listenerTierSlug === 'pro' || listenerTierSlug === 'premium' || listenerTierSlug === 'fan_pro';
+
   return {
     tierSlug,
     listenerTierSlug,
+    isListenerPro,
     tierData,
     tierLevel,
     access,
@@ -345,6 +390,9 @@ function useTierInternal() {
         fetchTier(artist.id);
         fetchMonthlyDownloadSalesCount(artist.id);
       }
+    },
+    refreshListenerTier: () => {
+      if (user?.id && !artist) fetchListenerTier(user.id);
     },
     // Download sales limit enforcement
     downloadSalesLimit,

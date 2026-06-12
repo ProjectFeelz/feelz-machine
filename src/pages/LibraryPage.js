@@ -6,7 +6,8 @@ import { getListenerFeature } from '../contexts/useTier';
 import { supabase } from '../supabaseClient';
 import {
   Heart, Download, ListMusic, Users, Clock, ChevronRight,
-  Music, BarChart3, Zap, TrendingUp, Crown
+  Music, BarChart3, Zap, TrendingUp, Crown, Palette,
+  Shield, ChevronDown, Check, BarChart2,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
@@ -18,6 +19,50 @@ export default function LibraryPage() {
     likes: 0, recentTrack: null, playlists: 0, following: 0, downloads: 0,
     totalStreams: 0, topArtist: null, monthlyDownloads: 0,
   });
+  const [prefs, setPrefs] = useState({ theme: 'default', fanBadge: true });
+  const [savingPrefs, setSavingPrefs] = useState(false);
+  const [showThemes, setShowThemes] = useState(false);
+
+  const THEMES = [
+    { key: 'default',    label: 'Default',      bg: '#000000', accent: '#8B5CF6', preview: 'bg-black' },
+    { key: 'deep_navy',  label: 'Deep Navy',    bg: '#0a0f1e', accent: '#3B82F6', preview: 'bg-[#0a0f1e]' },
+    { key: 'forest',     label: 'Forest Dark',  bg: '#0a1a0f', accent: '#22C55E', preview: 'bg-[#0a1a0f]' },
+    { key: 'warm_dark',  label: 'Warm Dark',    bg: '#1a0f0a', accent: '#F97316', preview: 'bg-[#1a0f0a]' },
+  ];
+
+  // Load preferences from DB
+  useEffect(() => {
+    if (!user) return;
+    supabase.from('listeners')
+      .select('preferences')
+      .eq('user_id', user.id)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data?.preferences) {
+          setPrefs(prev => ({ ...prev, ...data.preferences }));
+          applyTheme(data.preferences.theme || 'default');
+        }
+      });
+  }, [user?.id]);
+
+  const applyTheme = (themeKey) => {
+    const theme = THEMES.find(t => t.key === themeKey) || THEMES[0];
+    document.documentElement.style.setProperty('--app-bg', theme.bg);
+    document.documentElement.style.setProperty('--app-accent', theme.accent);
+    // Apply bg to body for full coverage
+    document.body.style.backgroundColor = theme.bg;
+  };
+
+  const savePrefs = async (newPrefs) => {
+    setSavingPrefs(true);
+    const merged = { ...prefs, ...newPrefs };
+    setPrefs(merged);
+    if (newPrefs.theme) applyTheme(newPrefs.theme);
+    await supabase.from('listeners')
+      .update({ preferences: merged, updated_at: new Date().toISOString() })
+      .eq('user_id', user.id);
+    setSavingPrefs(false);
+  };
 
   useEffect(() => {
     if (!user) return;
@@ -86,7 +131,7 @@ export default function LibraryPage() {
     load();
   }, [user]);
 
-  const isPro          = listenerTierSlug === 'pro' || listenerTierSlug === 'premium';
+  const isPro          = listenerTierSlug === 'pro' || listenerTierSlug === 'premium' || listenerTierSlug === 'fan_pro';
   const freeQuota      = 3;
   const downloadsLeft  = Math.max(0, freeQuota - stats.monthlyDownloads);
   const quotaPct       = Math.min(100, Math.round((stats.monthlyDownloads / freeQuota) * 100));
@@ -145,39 +190,129 @@ export default function LibraryPage() {
 
       {/* ── Download quota bar (listener only) ── */}
       {!isArtist && (
-        <div className={`rounded-xl p-3.5 mb-4 border ${
-          isPro ? 'bg-white/[0.02] border-white/[0.05]' : 'bg-purple-500/5 border-purple-500/15'
-        }`}>
+        <div className="mb-4">
           {isPro ? (
-            <div>
-              <div className="flex items-center justify-between mb-2">
+            <div className="rounded-2xl overflow-hidden border border-purple-500/20"
+              style={{ background: 'linear-gradient(135deg, rgba(88,28,135,0.15) 0%, rgba(15,15,30,0.95) 100%)' }}>
+
+              {/* Header */}
+              <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.06]">
                 <div className="flex items-center space-x-2">
-                  <Download className="w-3.5 h-3.5 text-green-400" />
-                  <p className="text-xs font-semibold text-white">Monthly Downloads</p>
+                  <div className="w-6 h-6 rounded-full flex items-center justify-center"
+                    style={{ background: 'linear-gradient(135deg, #a78bfa, #7c3aed)' }}>
+                    <Zap className="w-3 h-3 text-white" />
+                  </div>
+                  <p className="text-xs font-bold text-white">Fan Pro</p>
                 </div>
-                <p className="text-xs text-white/40">{stats.monthlyDownloads} / {freeQuota} used</p>
+                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full"
+                  style={{ background: 'rgba(139,92,246,0.2)', color: '#a78bfa', border: '1px solid rgba(139,92,246,0.3)' }}>
+                  Active
+                </span>
               </div>
-              <div className="h-1.5 bg-white/[0.06] rounded-full overflow-hidden">
-                <div
-                  className={`h-full rounded-full transition-all ${quotaPct >= 100 ? 'bg-red-400' : quotaPct >= 66 ? 'bg-yellow-400' : 'bg-green-400'}`}
-                  style={{ width: `${quotaPct}%` }}
-                />
+
+              {/* Downloads quota */}
+              <div className="px-4 py-3 border-b border-white/[0.04]">
+                <div className="flex items-center justify-between mb-1.5">
+                  <div className="flex items-center space-x-1.5">
+                    <Download className="w-3 h-3 text-green-400" />
+                    <p className="text-[11px] font-semibold text-white">Free Downloads</p>
+                  </div>
+                  <p className="text-[11px] text-white/40">{stats.monthlyDownloads} / {freeQuota} used</p>
+                </div>
+                <div className="h-1.5 bg-white/[0.06] rounded-full overflow-hidden">
+                  <div className={`h-full rounded-full transition-all ${quotaPct >= 100 ? 'bg-red-400' : quotaPct >= 66 ? 'bg-yellow-400' : 'bg-green-400'}`}
+                    style={{ width: `${quotaPct}%` }} />
+                </div>
+                <p className="text-[10px] text-white/20 mt-1">
+                  {downloadsLeft > 0 ? `${downloadsLeft} left this month` : 'Resets 1st of next month'}
+                </p>
               </div>
-              <p className="text-[10px] text-white/20 mt-1.5">
-                {downloadsLeft > 0 ? `${downloadsLeft} free download${downloadsLeft !== 1 ? 's' : ''} left this month` : 'Quota reached — resets 1st of next month'}
-              </p>
+
+              {/* App Themes */}
+              <div className="px-4 py-3 border-b border-white/[0.04]">
+                <button
+                  onClick={() => setShowThemes(p => !p)}
+                  className="w-full flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <Palette className="w-3.5 h-3.5 text-purple-400" />
+                    <p className="text-[11px] font-semibold text-white">App Theme</p>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <span className="text-[10px] text-white/40 capitalize">{prefs.theme?.replace('_', ' ') || 'Default'}</span>
+                    <ChevronDown className={`w-3.5 h-3.5 text-white/30 transition-transform ${showThemes ? 'rotate-180' : ''}`} />
+                  </div>
+                </button>
+                {showThemes && (
+                  <div className="grid grid-cols-2 gap-2 mt-3">
+                    {THEMES.map(theme => (
+                      <button key={theme.key}
+                        onClick={() => savePrefs({ theme: theme.key })}
+                        className="flex items-center space-x-2.5 p-2.5 rounded-xl border transition active:scale-95"
+                        style={{
+                          background: prefs.theme === theme.key ? `${theme.accent}20` : 'rgba(255,255,255,0.03)',
+                          borderColor: prefs.theme === theme.key ? `${theme.accent}50` : 'rgba(255,255,255,0.06)',
+                        }}>
+                        <div className="w-8 h-8 rounded-lg flex-shrink-0 border border-white/10"
+                          style={{ backgroundColor: theme.bg }}>
+                          <div className="w-full h-full rounded-lg flex items-end justify-end p-1">
+                            <div className="w-2 h-2 rounded-full" style={{ backgroundColor: theme.accent }} />
+                          </div>
+                        </div>
+                        <div className="flex-1 text-left min-w-0">
+                          <p className="text-[11px] font-medium text-white truncate">{theme.label}</p>
+                        </div>
+                        {prefs.theme === theme.key && (
+                          <Check className="w-3 h-3 flex-shrink-0" style={{ color: theme.accent }} />
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Fan Badge toggle */}
+              <div className="px-4 py-3 border-b border-white/[0.04]">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <Shield className="w-3.5 h-3.5 text-yellow-400" />
+                    <div>
+                      <p className="text-[11px] font-semibold text-white">Fan Badge</p>
+                      <p className="text-[10px] text-white/30">Shows on comments & guestbooks</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => savePrefs({ fanBadge: !prefs.fanBadge })}
+                    className="relative flex-shrink-0"
+                    style={{ width: 40, height: 22 }}>
+                    <div className={`absolute inset-0 rounded-full transition-colors ${prefs.fanBadge ? 'bg-purple-500' : 'bg-white/10'}`} />
+                    <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${prefs.fanBadge ? 'left-5' : 'left-0.5'}`} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Stats link */}
+              <button
+                onClick={() => navigate('/listener/stats')}
+                className="w-full flex items-center justify-between px-4 py-3 hover:bg-white/[0.03] transition">
+                <div className="flex items-center space-x-2">
+                  <BarChart2 className="w-3.5 h-3.5 text-cyan-400" />
+                  <p className="text-[11px] font-semibold text-white">Your Stats</p>
+                </div>
+                <ChevronRight className="w-3.5 h-3.5 text-white/25" />
+              </button>
+
             </div>
           ) : (
             <button
               onClick={() => navigate('/listener/upgrade')}
-              className="w-full flex items-center space-x-3 text-left active:scale-[0.98] transition"
-            >
+              className="w-full flex items-center space-x-3 p-3.5 rounded-xl text-left active:scale-[0.98] transition"
+              style={{ background: 'rgba(88,28,135,0.08)', border: '1px solid rgba(139,92,246,0.2)' }}>
               <div className="w-8 h-8 rounded-lg bg-purple-500/20 flex items-center justify-center flex-shrink-0">
                 <Zap className="w-4 h-4 text-purple-400" />
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-semibold text-white">Get Fan Pro</p>
-                <p className="text-[10px] text-white/35 mt-0.5">Themes, deep stats, 3 free downloads/month & fan badge</p>
+                <p className="text-[10px] text-white/35 mt-0.5">Themes, stats, 3 free downloads & fan badge</p>
               </div>
               <span className="text-[10px] font-bold text-purple-400 bg-purple-500/10 px-2 py-1 rounded-lg flex-shrink-0">$2.99/mo</span>
             </button>
@@ -207,22 +342,7 @@ export default function LibraryPage() {
           </button>
         ))}
 
-        {/* Stats link */}
-        {!isArtist && (
-          <button
-            onClick={() => navigate('/listener/stats')}
-            className="w-full flex items-center space-x-4 p-3.5 rounded-xl hover:bg-white/[0.04] active:bg-white/[0.06] transition group"
-          >
-            <div className="w-11 h-11 rounded-xl bg-purple-500/10 flex items-center justify-center flex-shrink-0">
-              <BarChart3 className="w-5 h-5 text-purple-400/70" />
-            </div>
-            <div className="flex-1 text-left min-w-0">
-              <span className="text-sm font-medium text-white block">Your Stats</span>
-              <span className="text-xs text-white/30 block mt-0.5">Listening history & insights</span>
-            </div>
-            <ChevronRight className="w-4 h-4 text-white/15 group-hover:text-white/30 transition flex-shrink-0" />
-          </button>
-        )}
+
       </div>
     </div>
   );
