@@ -117,6 +117,52 @@ export default function TrackDetailPage() {
     } else {
       await supabase.from('track_likes').insert({ track_id: track.id, user_id: user.id });
       setLiked(true); setLikeCount(p => p + 1);
+      if (artist?.user_id && artist.user_id !== user.id) {
+        try {
+          const { data: liker } = await supabase
+            .from('artists').select('id, artist_name, profile_image_url, slug')
+            .eq('user_id', user.id).maybeSingle();
+          const likerName = liker?.artist_name || 'Someone';
+          const since = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+          const { data: recent } = await supabase
+            .from('notifications').select('id, metadata')
+            .eq('user_id', artist.user_id).eq('type', 'track_liked')
+            .eq('track_id', track.id).gte('created_at', since)
+            .order('created_at', { ascending: false }).limit(1).maybeSingle();
+          if (recent) {
+            const count = (recent.metadata?.like_count || 1) + 1;
+            const firstLiker = recent.metadata?.first_liker_name || likerName;
+            await supabase.from('notifications').update({
+              title: `${firstLiker} and ${count - 1} other${count - 1 !== 1 ? 's' : ''} liked "${track.title}"`,
+              read: false,
+              metadata: { ...recent.metadata, like_count: count },
+              updated_at: new Date().toISOString(),
+            }).eq('id', recent.id);
+          } else {
+            await supabase.from('notifications').insert({
+              user_id:        artist.user_id,
+              artist_id:      artist.id,
+              type:           'track_liked',
+              title:          `${likerName} liked "${track.title}"`,
+              message:        '',
+              track_id:       track.id,
+              from_artist_id: liker?.id || null,
+              read:           false,
+              metadata: {
+                track_id:          track.id,
+                track_title:       track.title,
+                track_slug:        track.slug || null,
+                track_artwork:     track.cover_artwork_url || null,
+                like_count:        1,
+                first_liker_name:  likerName,
+                from_artist_name:  likerName,
+                from_artist_image: liker?.profile_image_url || null,
+                from_artist_slug:  liker?.slug || null,
+              },
+            });
+          }
+        } catch {}
+      }
     }
   };
 
