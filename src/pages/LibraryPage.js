@@ -6,7 +6,7 @@ import { getListenerFeature } from '../contexts/useTier';
 import { supabase } from '../supabaseClient';
 import {
   Heart, Download, ListMusic, Users, Clock, ChevronRight, TrendingUp,
-  Music, BarChart3, Zap, TrendingUp, Crown, Palette,
+  Music, BarChart3, Zap, Crown, Palette,
   Shield, ChevronDown, Check, BarChart2,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
