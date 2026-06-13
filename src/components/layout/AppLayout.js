@@ -7,6 +7,7 @@ import MiniPlayer from './MiniPlayer';
 import FullPlayer from './FullPlayer';
 import { usePlayer } from '../../contexts/PlayerContext';
 import { useAuth } from '../../contexts/AuthContext';
+import { useAppThemeInit } from '../../hooks/useAppTheme';
 import { ListenerThemeProvider } from '../../contexts/ListenerThemeContext';
 import { Bell, Flame, UserCircle, Compass } from 'lucide-react';
 import useNotifications from '../../contexts/useNotifications';
@@ -165,6 +166,9 @@ export default function AppLayout() {
   const navigate                    = useNavigate();
   const location                    = useLocation();
   const [splashDone, setSplashDone] = useState(false);
+
+  // Load and apply saved listener theme on startup
+  useAppThemeInit();
 
   // Daily streak — fires ONCE here; all other components read from StreakContext
   const streakValue = useStreak(user);

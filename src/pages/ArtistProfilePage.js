@@ -354,7 +354,7 @@ export default function ArtistProfilePage() {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, artist: myArtist } = useAuth();
-  const { isPremium } = useTier();
+  const { isPremium, isListenerPro } = useTier();
   const { playTrack, addToQueue, currentTrack, isPlaying, togglePlay } = usePlayer();
 
   const [artist, setArtist] = useState(null);
@@ -597,11 +597,19 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
       const { data: themeData } = await supabase
         .from('artist_themes').select('*').eq('artist_id', artistData.id).maybeSingle();
       if (themeData) setTheme(themeData);
-      const { data: trackData } = await supabase
+      let trackQuery = supabase
         .from('tracks')
         .select('*, albums(title, cover_artwork_url, price), pay_what_you_want, minimum_price, is_preorder, release_date')
-        .eq('artist_id', artistData.id).eq('is_published', true)
+        .eq('artist_id', artistData.id)
+        .eq('is_published', true)
         .order('engagement_score', { ascending: false });
+      // Fan Pro gets early access to pre-order tracks not yet released
+      if (!isListenerPro) {
+        trackQuery = trackQuery.or(
+          `is_preorder.eq.false,release_date.lte.${new Date().toISOString()},release_date.is.null`
+        );
+      }
+      const { data: trackData } = await trackQuery;
       setTracks(trackData || []);
       if (user) {
         const { data: likes } = await supabase.from('track_likes').select('track_id').eq('user_id', user.id);

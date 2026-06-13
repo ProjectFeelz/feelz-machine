@@ -5,7 +5,7 @@ import { useTier } from '../contexts/useTier';
 import { getListenerFeature } from '../contexts/useTier';
 import { supabase } from '../supabaseClient';
 import {
-  Heart, Download, ListMusic, Users, Clock, ChevronRight,
+  Heart, Download, ListMusic, Users, Clock, ChevronRight, TrendingUp,
   Music, BarChart3, Zap, TrendingUp, Crown, Palette,
   Shield, ChevronDown, Check, BarChart2,
 } from 'lucide-react';
@@ -145,11 +145,12 @@ export default function LibraryPage() {
   const quotaPct       = Math.min(100, Math.round((stats.monthlyDownloads / freeQuota) * 100));
 
   const items = [
-    { icon: Heart,     label: 'Liked Songs',     path: '/library/likes',     iconColor: 'text-red-400/70',    count: stats.likes,     accent: 'bg-red-500/10' },
-    { icon: Clock,     label: 'Recently Played', path: '/library/recent',    iconColor: 'text-cyan-400/70',   count: null,            accent: 'bg-cyan-500/10', sub: stats.recentTrack?.title },
-    { icon: Download,  label: 'Downloads',       path: '/library/downloads', iconColor: 'text-green-400/70',  count: stats.downloads, accent: 'bg-green-500/10' },
-    { icon: ListMusic, label: 'Playlists',        path: '/library/playlists', iconColor: 'text-purple-400/70', count: stats.playlists, accent: 'bg-purple-500/10' },
-    { icon: Users,     label: 'Following',        path: '/library/following', iconColor: 'text-blue-400/70',   count: stats.following, accent: 'bg-blue-500/10' },
+    { icon: Heart,     label: 'Liked Songs',          path: '/library/likes',       iconColor: 'text-red-400/70',    count: stats.likes,     accent: 'bg-red-500/10' },
+    { icon: Clock,     label: 'Recently Played',      path: '/library/recent',      iconColor: 'text-cyan-400/70',   count: null,            accent: 'bg-cyan-500/10', sub: stats.recentTrack?.title },
+    { icon: Download,  label: 'Downloads',            path: '/library/downloads',   iconColor: 'text-green-400/70',  count: stats.downloads, accent: 'bg-green-500/10' },
+    { icon: ListMusic, label: 'Playlists',            path: '/library/playlists',   iconColor: 'text-purple-400/70', count: stats.playlists, accent: 'bg-purple-500/10' },
+    { icon: Users,     label: 'Following',            path: '/library/following',   iconColor: 'text-blue-400/70',   count: stats.following, accent: 'bg-blue-500/10' },
+    { icon: TrendingUp,label: 'Recently Discovered',  path: '/library/discovered',  iconColor: 'text-orange-400/70', count: null,            accent: 'bg-orange-500/10' },
   ];
 
   return (

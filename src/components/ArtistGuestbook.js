@@ -42,7 +42,7 @@ export default function ArtistGuestbook({ artistId, textColor = '#ffffff', accen
     const load = async () => {
       const { data } = await supabase
         .from('artist_guestbook')
-        .select('id, user_id, display_name, message, created_at, pinned')
+        .select('id, user_id, display_name, message, created_at, pinned, listener:listeners(tier, preferences)')
         .eq('artist_id', artistId)
         .order('pinned', { ascending: false })
         .order('created_at', { ascending: false })
@@ -199,6 +199,12 @@ export default function ArtistGuestbook({ artistId, textColor = '#ffffff', accen
               <div className="flex-1 min-w-0">
                 <div className="flex items-center flex-wrap gap-x-2 gap-y-0.5">
                   <span className="text-xs font-semibold" style={{ color: textColor }}>{getName(e)}</span>
+                  {e.listener?.tier && ['fan_pro','pro','premium'].includes(e.listener.tier) && e.listener?.preferences?.fanBadge !== false && (
+                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full"
+                      style={{ background: 'rgba(139,92,246,0.2)', color: '#a78bfa', border: '1px solid rgba(139,92,246,0.3)' }}>
+                      ⚡ Fan
+                    </span>
+                  )}
                   <span className="text-[10px]" style={{ color: `${textColor}30` }}>{timeAgo(e.created_at)}</span>
                   {e.user_id === user?.id && (
                     <span className="text-[10px] px-1.5 py-0.5 rounded-full" style={{ background: `${accentColor}15`, color: accentColor }}>

@@ -18,6 +18,8 @@ export default function LikedSongsPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [showSearch, setShowSearch] = useState(false);
+  const [sortBy,     setSortBy]     = useState('date');
+  const [showSort,   setShowSort]   = useState(false);
   const [menuTrack, setMenuTrack] = useState(null);
   const [playlists, setPlaylists] = useState([]);
   const [showPlaylists, setShowPlaylists] = useState(false);
@@ -36,10 +38,16 @@ export default function LikedSongsPage() {
     setLoading(false);
   };
 
-  const filtered = tracks.filter(({ track }) =>
-    !search || track.title.toLowerCase().includes(search.toLowerCase()) ||
-    track.artist?.artist_name?.toLowerCase().includes(search.toLowerCase())
-  );
+  const filtered = [...tracks]
+    .filter(({ track }) =>
+      !search || track.title.toLowerCase().includes(search.toLowerCase()) ||
+      track.artist?.artist_name?.toLowerCase().includes(search.toLowerCase())
+    )
+    .sort((a, b) => {
+      if (sortBy === 'artist') return (a.track.artist?.artist_name || '').localeCompare(b.track.artist?.artist_name || '');
+      if (sortBy === 'title')  return (a.track.title || '').localeCompare(b.track.title || '');
+      return 0;
+    });
 
   const allTracks = filtered.map(l => ({ ...l.track, artist_name: l.track.artist?.artist_name }));
 
@@ -90,10 +98,29 @@ export default function LikedSongsPage() {
           <h1 className="text-xl font-bold text-white">Liked Songs</h1>
           <p className="text-xs text-white/30">{tracks.length} tracks</p>
         </div>
-        <button onClick={() => { setShowSearch(p => !p); setSearch(''); }}
-          className="w-9 h-9 flex items-center justify-center rounded-full bg-white/[0.06] hover:bg-white/[0.1] transition">
-          {showSearch ? <X className="w-4 h-4 text-white/60" /> : <Search className="w-4 h-4 text-white/60" />}
-        </button>
+        <div className="flex items-center space-x-2">
+          <div className="relative">
+            <button onClick={() => setShowSort(p => !p)}
+              className="w-9 h-9 flex items-center justify-center rounded-full bg-white/[0.06] hover:bg-white/[0.1] transition">
+              <svg className="w-4 h-4 text-white/60" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 6h18M6 12h12M9 18h6"/></svg>
+            </button>
+            {showSort && (
+              <div className="absolute right-0 top-10 z-50 w-40 rounded-xl overflow-hidden shadow-2xl"
+                style={{ backgroundColor: '#1a1a1a', border: '1px solid rgba(255,255,255,0.08)' }}>
+                {[{ key: 'date', label: 'Date liked' }, { key: 'artist', label: 'Artist A–Z' }, { key: 'title', label: 'Title A–Z' }].map(opt => (
+                  <button key={opt.key} onClick={() => { setSortBy(opt.key); setShowSort(false); }}
+                    className={`w-full text-left px-4 py-2.5 text-sm transition hover:bg-white/[0.06] ${sortBy === opt.key ? 'text-white font-semibold' : 'text-white/50'}`}>
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <button onClick={() => { setShowSearch(p => !p); setSearch(''); }}
+            className="w-9 h-9 flex items-center justify-center rounded-full bg-white/[0.06] hover:bg-white/[0.1] transition">
+            {showSearch ? <X className="w-4 h-4 text-white/60" /> : <Search className="w-4 h-4 text-white/60" />}
+          </button>
+        </div>
       </div>
 
       {showSearch && (

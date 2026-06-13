@@ -65,6 +65,8 @@ import CompetitionsPage from './pages/CompetitionsPage';
 import AdminCompetitions from './pages/AdminCompetitions';
 import AdminEngagement from './pages/AdminEngagement';
 import FanLeaderboardPage from './pages/FanLeaderboardPage';
+import RecentlyDiscoveredPage from './pages/RecentlyDiscoveredPage';
+import ListenerProfilePage from './pages/ListenerProfilePage';
 
 // ── Session keepalive — refreshes token + listens for activity ───────────────
 function SessionManager() {
@@ -288,7 +290,8 @@ export default function AppRouter() {
                 <Route path="/admin/duplicates" element={<AdminDuplicates />} />
                 <Route path="/admin/competitions" element={<AdminCompetitions />} />
                 <Route path="/admin/engagement" element={<AdminEngagement />} />
-               
+                <Route path="/library/discovered" element={<RecentlyDiscoveredPage />} />
+                <Route path="/listener/:userId" element={<ListenerProfilePage />} />
 
                 {/* Catch-all: unknown routes redirect home */}
                 <Route path="*" element={<Navigate to="/" replace />} />
