@@ -67,8 +67,8 @@
 # Sunday 18:00 — weekly-listener-recap
 
 [[scheduled_functions]]
-  name = "engagement-drip-cron"
-  # schedule = "0 8 * * 1,4"  # disabled — AI drip not working as intended
+  name = "engagement-drip-background"
+  schedule = "0 8 * * 1,4"
 
 [[scheduled_functions]]
   name = "update-engagement-scores"
