@@ -74,12 +74,16 @@ export function AuthProvider({ children }) {
   };
 
   const checkAdmin = async (userId) => {
-    const { data } = await supabase
-      .from('admins')
-      .select('id')
-      .eq('user_id', userId)
-      .maybeSingle();
-    setIsAdmin(!!data);
+    try {
+      const { data } = await supabase
+        .from('admins')
+        .select('id')
+        .eq('user_id', userId)
+        .maybeSingle();
+      setIsAdmin(!!data);
+    } catch {
+      setIsAdmin(false);
+    }
   };
 
   const loadUser = async (sessionUser) => {
