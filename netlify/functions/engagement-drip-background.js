@@ -602,7 +602,28 @@ async function processIndividuals(users, segmentKey, platform, isArtist) {
   if (!users.length) return 0;
   const userIds = users.map(u => u.user_id).filter(Boolean);
   const weeklyCounts = await getWeeklyMessageCounts(userIds);
-  const eligible = users.filter(u => (weeklyCounts[u.user_id] || 0) < MAX_PER_WEEK);
+  const isDormant = segmentKey.includes('dormant');
+  const cap = isDormant ? 1 : MAX_PER_WEEK;
+
+  // For churned users (gone 30+ days) — check if they've ever been messaged
+  // If so, skip them entirely until they return
+  let eligible = users.filter(u => (weeklyCounts[u.user_id] || 0) < cap);
+
+  if (isDormant) {
+    const churnedCutoff = new Date(Date.now() - 30 * 86400000).toISOString();
+    const churnedUserIds = eligible
+      .filter(u => u.last_seen_at && u.last_seen_at < churnedCutoff)
+      .map(u => u.user_id);
+
+    if (churnedUserIds.length > 0) {
+      const { data: everMessaged } = await supabase
+        .from('engagement_messages')
+        .select('user_id')
+        .in('user_id', churnedUserIds);
+      const alreadyMessaged = new Set((everMessaged || []).map(r => r.user_id));
+      eligible = eligible.filter(u => !alreadyMessaged.has(u.user_id));
+    }
+  }
   if (!eligible.length) return 0;
 
   let sent = 0;
