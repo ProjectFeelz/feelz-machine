@@ -151,6 +151,7 @@ async function getListenerContext(userId) {
     { data: recentStreams },
     { data: streakRow },
     { data: follows },
+    { data: profile },
   ] = await Promise.all([
     supabase.from('streams')
       .select('track_id, created_at, tracks(genre, artists(artist_name))')
@@ -166,6 +167,10 @@ async function getListenerContext(userId) {
       .select('artist_id')
       .eq('follower_id', userId)
       .limit(10),
+    supabase.from('listener_behavior_profiles')
+      .select('tags, behavior_summary, session_type, skip_rate, repeat_rate, like_rate, download_rate, genre_loyalty, top_genres, top_moods, followed_artists, total_streams_30d, total_streams_7d, total_downloads, total_likes, peak_hour, peak_day')
+      .eq('user_id', userId)
+      .maybeSingle(),
   ]);
 
   const genreCounts = {};
@@ -180,15 +185,23 @@ async function getListenerContext(userId) {
     if (s.created_at >= weekAgo) streamsThisWeek++;
   }
 
-  const topGenre = Object.entries(genreCounts).sort((a, b) => b[1] - a[1])[0]?.[0];
+  const topGenre = profile?.top_genres?.[0] || Object.entries(genreCounts).sort((a, b) => b[1] - a[1])[0]?.[0];
 
   return {
-    streamsLastMonth: (recentStreams || []).length,
-    streamsThisWeek,
-    topGenre:         topGenre || null,
-    recentArtists:    [...artistNames].slice(0, 3).join(', ') || null,
-    followCount:      (follows || []).length,
-    currentStreak:    streakRow?.current_streak || 0,
+    streamsLastMonth:  profile?.total_streams_30d  ?? (recentStreams || []).length,
+    streamsThisWeek:   profile?.total_streams_7d   ?? streamsThisWeek,
+    topGenre:          topGenre || null,
+    topMood:           profile?.top_moods?.[0]     || null,
+    recentArtists:     [...artistNames].slice(0, 3).join(', ') || null,
+    followCount:       (follows || []).length,
+    followedArtists:   profile?.followed_artists?.slice(0, 3).join(', ') || null,
+    currentStreak:     streakRow?.current_streak   || 0,
+    likeCount:         profile?.total_likes        || 0,
+    downloadCount:     profile?.total_downloads    || 0,
+    sessionType:       profile?.session_type       || null,
+    behaviorTags:      profile?.tags               || [],
+    behaviorSummary:   profile?.behavior_summary   || null,
+    discoveryStreak:   0,
   };
 }
 
@@ -201,10 +214,9 @@ async function getArtistContext(artistId) {
     { data: recentTracks },
     { count: newFollowers },
     { count: pendingCollabs },
-    ,
-    ,
     { data: artistRow },
     { data: lastSession },
+    { data: profile },
   ] = await Promise.all([
     supabase.from('tracks')
       .select('id, title, created_at, stream_count, download_count')
@@ -220,8 +232,6 @@ async function getArtistContext(artistId) {
       .select('*', { count: 'exact', head: true })
       .eq('to_artist_id', artistId)
       .eq('status', 'pending'),
-    Promise.resolve({ count: 0 }), // streams placeholder
-    Promise.resolve({ count: 0 }), // downloads placeholder
     supabase.from('artists')
       .select('artist_name, total_streams, follower_count, genre, tier')
       .eq('id', artistId)
@@ -232,6 +242,10 @@ async function getArtistContext(artistId) {
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle(),
+    supabase.from('artist_behavior_profiles')
+      .select('tags, behavior_summary, streams_7d, streams_30d, follower_growth_7d, follower_growth_30d, upload_frequency, days_since_upload, collab_activity, uses_live_sessions, competition_entries, stream_velocity')
+      .eq('artist_id', artistId)
+      .maybeSingle(),
   ]);
 
   const tracksThisMonth = (recentTracks || []).filter(t =>
@@ -239,16 +253,9 @@ async function getArtistContext(artistId) {
   ).length;
 
   const latestTrack = recentTracks?.[0];
-
-  const trackIds = (recentTracks || []).map(t => t.id);
-  let streamsThisWeekActual = 0;
-  if (trackIds.length > 0) {
-    const { count } = await supabase.from('streams')
-      .select('*', { count: 'exact', head: true })
-      .in('track_id', trackIds)
-      .gte('created_at', weekAgo);
-    streamsThisWeekActual = count || 0;
-  }
+  const streamsThisWeekActual = profile?.streams_7d ?? (() => {
+    return 0;
+  })();
 
   const daysSinceSession = lastSession?.created_at
     ? Math.floor((Date.now() - new Date(lastSession.created_at)) / 86400000)
@@ -266,6 +273,15 @@ async function getArtistContext(artistId) {
     totalFollowers:       artistRow?.follower_count || 0,
     tier:                 artistRow?.tier || 'free',
     daysSinceLastSession: daysSinceSession,
+    behaviorTags:         profile?.tags || [],
+    behaviorSummary:      profile?.behavior_summary || null,
+    followerGrowth7d:     profile?.follower_growth_7d || 0,
+    uploadFrequency:      profile?.upload_frequency || null,
+    daysSinceUpload:      profile?.days_since_upload || null,
+    collabActivity:       profile?.collab_activity || 0,
+    usesLiveSessions:     profile?.uses_live_sessions || false,
+    competitionEntries:   profile?.competition_entries || 0,
+    streamVelocity:       profile?.stream_velocity || null,
   };
 }
 
@@ -690,8 +706,7 @@ exports.handler = async (event) => {
   console.log(`Engagement drip v2  -  ${new Date().toISOString()}  -  ${isManual ? 'manual' : 'scheduled'}`);
 
   try {
-    console.log('Computing behaviour profiles…');
-    try { await computeAllProfiles(); } catch (e) { console.warn('Profile compute (non-fatal):', e.message); }
+    console.log('Using pre-computed behaviour profiles from scheduled job…');
     const [platform, segments] = await Promise.all([getPlatformContext(), segmentUsers()]);
 
     console.log('Competitions:', platform.competitionSummary || 'none active');
