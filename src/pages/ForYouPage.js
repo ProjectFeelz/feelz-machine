@@ -505,12 +505,13 @@ function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare, onN
       // Notify the track artist
       if (track.artist_id && track.artist_id !== user.id) {
         try {
-          const [{ data: liker }, { data: artistRow }] = await Promise.all([
+          const [{ data: liker }, { data: listenerProfile }, { data: artistRow }] = await Promise.all([
             supabase.from('artists').select('id, artist_name, profile_image_url, slug').eq('user_id', user.id).maybeSingle(),
+            supabase.from('listeners').select('display_name, avatar_url').eq('user_id', user.id).maybeSingle(),
             supabase.from('artists').select('user_id').eq('id', track.artist_id).maybeSingle(),
           ]);
           if (artistRow?.user_id) {
-            const likerName = liker?.artist_name || 'Someone';
+            const likerName = liker?.artist_name || listenerProfile?.display_name || 'Someone';
             // Check for recent existing like notification for same track to group
             const since = new Date(Date.now() - 30 * 60 * 1000).toISOString(); // last 30 min
             const { data: recent } = await supabase

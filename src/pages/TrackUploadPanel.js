@@ -1453,8 +1453,9 @@ export default function TrackUploadPanel() {
   };
 
   const finishAlbum = () => {
-    if (albumTrackQueue.length === 0) {
-      showMessage('error', `Please add at least one track before publishing your ${release.release_type}.`);
+    const minTracks = ['ep', 'album', 'mixtape', 'live', 'compilation'].includes(release.release_type) ? 3 : 1;
+    if (albumTrackQueue.length < minTracks) {
+      showMessage('error', `A ${release.release_type} requires at least ${minTracks} tracks. You've added ${albumTrackQueue.length} so far.`);
       return;
     }
     showMessage('success', `${release.release_type.toUpperCase()} published with ${albumTrackQueue.length} track${albumTrackQueue.length !== 1 ? 's' : ''}!`);
@@ -1819,6 +1820,11 @@ export default function TrackUploadPanel() {
                 className="w-full py-3 bg-white/[0.06] text-white/70 font-medium rounded-lg hover:bg-white/[0.1] transition flex items-center justify-center space-x-2">
                 <Plus className="w-4 h-4" /><span>Add Another Track</span>
               </button>
+              {['ep', 'album', 'mixtape', 'live', 'compilation'].includes(release.release_type) && albumTrackQueue.length < 3 && (
+                <p className="text-xs text-yellow-400/70 text-center">
+                  {release.release_type.toUpperCase()} requires at least 3 tracks — {3 - albumTrackQueue.length} more needed
+                </p>
+              )}
               <button type="button" onClick={finishAlbum}
                 className="w-full py-3 bg-white text-black font-semibold rounded-lg hover:bg-white/90 transition">
                 Done — Publish {release.release_type.toUpperCase()}
