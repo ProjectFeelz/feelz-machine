@@ -42,6 +42,8 @@ export default function TrackPage() {
   const [copied, setCopied]         = useState(false);
   const [showActionSheet, setShowActionSheet] = useState(false);
   const [alreadyPurchased, setAlreadyPurchased] = useState(false);
+  const [dataReady, setDataReady] = useState(false);
+  const autoPlayedRef = React.useRef(false);
 
   const checkExistingPurchase = async (trackId) => {
     if (!user) return;
@@ -67,6 +69,8 @@ export default function TrackPage() {
 
   const fetchTrack = async () => {
     setLoading(true);
+    autoPlayedRef.current = false;
+    setDataReady(false);
     try {
       // Fetch track by slug
       const { data: trackData, error } = await supabase
@@ -108,6 +112,7 @@ export default function TrackPage() {
       console.error('TrackPage fetch error:', err);
     }
     setLoading(false);
+    setDataReady(true);
   };
 
   const handlePlay = () => {
@@ -123,6 +128,18 @@ export default function TrackPage() {
     ];
     playTrack(queue[0], queue);
   };
+
+  // Autoplay once the track (and its discography, for the up-next queue) has
+  // loaded — fires once per page load, and skips if this track is already
+  // the one currently loaded in the player (e.g. navigated back to it).
+  useEffect(() => {
+    if (dataReady && track && !autoPlayedRef.current) {
+      autoPlayedRef.current = true;
+      if (currentTrack?.id !== track.id) {
+        handlePlay();
+      }
+    }
+  }, [dataReady]); // eslint-disable-line
 
   const handleLike = async () => {
     if (!user) { navigate('/login'); return; }
