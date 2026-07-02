@@ -220,6 +220,8 @@ export default function LoginPage() {
   const [loading, setLoading]           = useState(false);
   const [success, setSuccess]           = useState('');
   const [magicSent, setMagicSent]       = useState(false);
+  const [fromPluginGallery, setFromPluginGallery] = useState(false);
+  const [bridgeVerifying, setBridgeVerifying]     = useState(false);
 
   // Currency detection
   const [symbol,       setSymbol]       = useState('$');
@@ -239,6 +241,49 @@ export default function LoginPage() {
         if (c) { setSymbol(c.symbol); setRate(c.rate); }
       }).catch(() => {});
   }, []);
+
+  // Handles arriving back from Plugin Gallery's auth bridge (?bridge_token=&state=)
+  useEffect(() => {
+    const bridgeToken = searchParams.get('bridge_token');
+    const state        = searchParams.get('state');
+    if (!bridgeToken) return;
+
+    const expectedState = sessionStorage.getItem('pg_bridge_state');
+    sessionStorage.removeItem('pg_bridge_state');
+
+    // Strip the token out of the visible URL immediately, regardless of outcome
+    window.history.replaceState({}, '', '/login');
+
+    if (!state || state !== expectedState) {
+      setError('Could not verify your Plugin Gallery sign-in. Please try again.');
+      return;
+    }
+
+    setBridgeVerifying(true);
+    fetch('/.netlify/functions/verify-auth-bridge', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: bridgeToken }),
+    })
+      .then(res => res.json().then(data => ({ ok: res.ok, data })))
+      .then(({ ok, data }) => {
+        if (!ok || !data.email) {
+          setError('Could not verify your Plugin Gallery sign-in. Please try again.');
+          return;
+        }
+        setEmail(data.email);
+        setFromPluginGallery(true);
+      })
+      .catch(() => setError('Could not verify your Plugin Gallery sign-in. Please try again.'))
+      .finally(() => setBridgeVerifying(false));
+  }, []); // eslint-disable-line
+
+  const handlePluginGallery = () => {
+    const state = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
+    sessionStorage.setItem('pg_bridge_state', state);
+    if (redirectTo) sessionStorage.setItem('post_login_redirect', redirectTo);
+    window.location.href = `https://www.projectfeelz.com/api/auth-bridge/start?state=${encodeURIComponent(state)}`;
+  };
 
   const handleGoogle = async () => {
     if (!ageConfirmed) { setError('Please confirm you are 13 or older.'); return; }
@@ -370,6 +415,20 @@ export default function LoginPage() {
                 </svg>
                 <span>Continue with Google</span>
               </button>
+
+              {/* Plugin Gallery bridge */}
+              <button onClick={handlePluginGallery} disabled={loading || bridgeVerifying}
+                className="w-full mt-3 py-3 rounded-xl text-sm font-semibold text-white disabled:opacity-40 transition hover:opacity-90 active:scale-98 flex items-center justify-center space-x-3"
+                style={{ background: 'linear-gradient(90deg, #00f0ff, #a855f7)' }}>
+                <img src="https://www.projectfeelz.com/logo.png" alt="" className="w-5 h-5 rounded" />
+                <span>{bridgeVerifying ? 'Connecting…' : 'Continue with Plugin Gallery'}</span>
+              </button>
+
+              {fromPluginGallery && (
+                <p className="mt-3 text-center text-[11px] text-cyan-400/80">
+                  ✓ Connected from Plugin Gallery — confirm your email below to continue
+                </p>
+              )}
             </>
           )}
         </div>
