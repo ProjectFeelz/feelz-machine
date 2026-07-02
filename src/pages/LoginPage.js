@@ -321,7 +321,10 @@ export default function LoginPage() {
         {/* Header */}
         <div className="text-center mb-10">
           <h1 className="text-3xl font-bold text-white mb-2">Feelz Machine</h1>
-          <p className="text-sm text-white/40">Independent music, no middlemen</p>
+          <p className="text-sm text-white/40 mb-2">Independent music, no middlemen</p>
+          <p className="text-xs text-cyan-400/80 font-medium">
+            Free to listen and follow artists · Artists & beatmakers get paid to share their music
+          </p>
         </div>
 
         {/* ── Auth section ─────────────────────────────────────────────────── */}
@@ -435,11 +438,14 @@ export default function LoginPage() {
 
         {/* ── Pricing section ──────────────────────────────────────────────── */}
         <div className="mt-10">
-          <div className="flex items-center space-x-3 mb-4">
+          <div className="flex items-center space-x-3 mb-2">
             <div className="flex-1 h-px bg-white/[0.07]" />
-            <span className="text-xs text-white/25">Plans & Pricing</span>
+            <span className="text-xs text-white/25">Artist & Beat Maker Plans</span>
             <div className="flex-1 h-px bg-white/[0.07]" />
           </div>
+          <p className="text-center text-xs text-white/40 mb-4">
+            Just here to listen? You're already set — no plan needed.
+          </p>
 
           {/* Role toggle */}
           <div className="flex bg-white/[0.05] rounded-xl p-1 mb-4">
@@ -479,7 +485,7 @@ export default function LoginPage() {
               <TierCard key={tier.key} tier={tier} symbol={symbol} rate={rate} billingCycle={billingCycle} />
             ))}
           </div>
-          <p className="text-center text-[11px] text-white/20 mt-4">
+          <p className="text-center text-xs text-white/35 mt-4">
             Listeners always sign up free · Choose your plan after joining
           </p>
         </div>
