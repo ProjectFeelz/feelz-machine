@@ -1444,12 +1444,14 @@ export default function ForYouPage() {
                     setTracks(prev => prev.filter(t => t.id !== id));
                     setIdx(prev => prev);
                     if (user) {
-                      await supabase.from('listener_feedback').upsert({
-                        user_id:    user.id,
-                        track_id:   id,
-                        signal:     'not_interested',
-                        created_at: new Date().toISOString(),
-                      }, { onConflict: 'user_id,track_id' }).catch(() => {});
+                      try {
+                        await supabase.from('listener_feedback').upsert({
+                          user_id:    user.id,
+                          track_id:   id,
+                          signal:     'not_interested',
+                          created_at: new Date().toISOString(),
+                        }, { onConflict: 'user_id,track_id' });
+                      } catch {}
                     }
                   }} queue={filteredTracks} queueIndex={i} /> : null
               )}

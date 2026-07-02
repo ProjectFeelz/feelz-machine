@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, useLocation, useParams, useNavigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { HelmetProvider } from 'react-helmet-async';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { PlayerProvider } from './contexts/PlayerContext';
@@ -93,15 +93,20 @@ function PageTitle({ title, children }) {
   );
 }
 
-// Handles /@slug short URLs → redirects to /artist/:slug
-// Uses splat syntax (/@*) rather than /@:slug — React Router only recognizes
-// a param when the colon comes immediately after a slash, so /@:slug was
-// never actually matching anything and silently fell through to the
-// wildcard route every time.
-function ArtistProfileRedirect() {
-  const params = useParams();
-  const slug = params['*'];
-  return <Navigate to={`/artist/${slug}`} replace />;
+// Wildcard fallback for anything no other route matches. Also handles
+// /@username short URLs here specifically — React Router's pattern syntax
+// can't express "@" immediately followed by a splat with no separating
+// slash (confirmed: /@:slug never matches because the colon isn't right
+// after a slash, and /@* isn't allowed because * must always follow a
+// slash). Checking the raw pathname here, in the one place guaranteed to
+// run last, sidesteps the limitation entirely instead of fighting it.
+function NotFoundRedirect() {
+  const location = useLocation();
+  const atMatch = location.pathname.match(/^\/@(.+)$/);
+  if (atMatch) {
+    return <Navigate to={`/artist/${atMatch[1]}`} replace />;
+  }
+  return <Navigate to="/" replace />;
 }
 
 // Handles Printful OAuth redirect — passes code back to artist profile
@@ -215,9 +220,6 @@ export default function AppRouter() {
             <TierProvider>
             <OnboardingGuard>
             <Routes>
-              {/* Public redirect — no layout needed, just redirects to /artist/:slug */}
-              <Route path="/@*" element={<ArtistProfileRedirect />} />
-
               {/* Legacy /player/* redirects */}
               <Route path="/player" element={<Navigate to="/" replace />} />
               <Route path="/player/*" element={<Navigate to="/" replace />} />
@@ -305,7 +307,7 @@ export default function AppRouter() {
                 <Route path="/listener/:userId" element={<ListenerProfilePage />} />
 
                 {/* Catch-all: unknown routes redirect home */}
-                <Route path="*" element={<Navigate to="/" replace />} />
+                <Route path="*" element={<NotFoundRedirect />} />
               </Route>
             </Routes>
             </OnboardingGuard>
