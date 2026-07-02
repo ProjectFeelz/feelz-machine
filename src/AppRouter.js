@@ -94,8 +94,13 @@ function PageTitle({ title, children }) {
 }
 
 // Handles /@slug short URLs → redirects to /artist/:slug
+// Uses splat syntax (/@*) rather than /@:slug — React Router only recognizes
+// a param when the colon comes immediately after a slash, so /@:slug was
+// never actually matching anything and silently fell through to the
+// wildcard route every time.
 function ArtistProfileRedirect() {
-  const { slug } = useParams();
+  const params = useParams();
+  const slug = params['*'];
   return <Navigate to={`/artist/${slug}`} replace />;
 }
 
@@ -211,7 +216,7 @@ export default function AppRouter() {
             <OnboardingGuard>
             <Routes>
               {/* Public redirect — no layout needed, just redirects to /artist/:slug */}
-              <Route path="/@:slug" element={<ArtistProfileRedirect />} />
+              <Route path="/@*" element={<ArtistProfileRedirect />} />
 
               {/* Legacy /player/* redirects */}
               <Route path="/player" element={<Navigate to="/" replace />} />
