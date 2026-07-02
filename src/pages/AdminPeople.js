@@ -181,6 +181,19 @@ function DuplicatesTab() {
     try {
       await supabase.from('tracks').update({ artist_id: keepId }).eq('artist_id', deleteId);
       await supabase.from('follows').update({ artist_id: keepId }).eq('artist_id', deleteId);
+
+      // Carry over the duplicate's stream credit before it's gone for good —
+      // otherwise total_streams silently loses whatever that artist had earned
+      const { data: dupArtist } = await supabase
+        .from('artists').select('total_streams').eq('id', deleteId).maybeSingle();
+      if (dupArtist?.total_streams) {
+        const { data: keepArtist } = await supabase
+          .from('artists').select('total_streams').eq('id', keepId).maybeSingle();
+        await supabase.from('artists')
+          .update({ total_streams: (keepArtist?.total_streams || 0) + dupArtist.total_streams })
+          .eq('id', keepId);
+      }
+
       await supabase.from('artists').delete().eq('id', deleteId);
       flash('Tracks moved and duplicate deleted.');
       fetchArtists();
