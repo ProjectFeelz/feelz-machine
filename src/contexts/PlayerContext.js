@@ -222,45 +222,35 @@ export function PlayerProvider({ children }) {
       const userId = session?.user?.id || null;
       if (!userId) return;
 
-      // 1. Fetch track + artist FIRST so we can gate on ownership before touching anything
+      // 1. Fetch track title up front (still needed for notification copy below)
       const { data: track } = await supabase
         .from('tracks')
-        .select('stream_count, artist_id, title')
+        .select('artist_id, title')
         .eq('id', trackId)
         .single();
 
       if (!track) return;
 
-      const { data: art } = await supabase
-        .from('artists')
-        .select('total_streams, user_id')
-        .eq('id', track.artist_id)
-        .single();
-
-      // STREAM GUARD: if the listener IS the track owner, bail out entirely —
-      // don't insert into streams, don't increment counts, don't fire milestones.
-      if (art?.user_id === userId) return;
-
-      // 2. Insert stream record (only for genuine third-party listeners)
-      await supabase.from('streams').insert({
-        track_id: trackId,
-        user_id: userId,
-        duration_played: Math.floor(audioRef.current.currentTime),
-        completed: true,
-        platform: 'web',
-        device_type: /Mobi|Android/i.test(navigator.userAgent) ? 'mobile' : 'desktop',
-        source: window.__feelz_play_source || 'unknown',
+      // 2-4. Atomic RPC: inserts the stream row, increments tracks.stream_count,
+      // increments artists.total_streams (+ collab artists), and self-stream
+      // guard, all in a single Postgres transaction.
+      const { data: logResult, error: logError } = await supabase.rpc('log_stream', {
+        p_track_id: trackId,
+        p_user_id: userId,
+        p_duration_played: Math.floor(audioRef.current.currentTime),
+        p_completed: true,
+        p_platform: 'web',
+        p_device_type: /Mobi|Android/i.test(navigator.userAgent) ? 'mobile' : 'desktop',
+        p_source: window.__feelz_play_source || 'unknown',
       });
 
-      // 3. Increment stream_count on the track (atomic — avoids race conditions)
-      await supabase.rpc('increment_stream_count', { track_id: trackId });
+      if (logError || !logResult?.logged) return; // self-stream or track not found — bail like before
 
-      // 4. Increment artist total_streams
-      await supabase.rpc('increment_artist_streams', { artist_id: track.artist_id });
+      const art = { user_id: logResult.owner_user_id };
 
       // 4b. first_listener — fire once when stream_count goes from 0 to 1
-      // track.stream_count is the BEFORE value (fetched before insert)
-      if (track.stream_count === 0) {
+      // prior_stream_count is the BEFORE value, computed server-side inside the same transaction
+      if (logResult.prior_stream_count === 0) {
         try {
           const { data: fullFirst } = await supabase
             .from('tracks')
@@ -436,21 +426,7 @@ export function PlayerProvider({ children }) {
         }
       } catch { /* fan milestone is non-critical, never let it break playback */ }
 
-      // 6. Collab artists — also increment their total_streams (skip if they're the listener)
-      const { data: collabs } = await supabase
-        .from('collaborations')
-        .select('artist_id, artists!collaborations_artist_id_fkey(user_id)')
-        .eq('track_id', trackId)
-        .eq('status', 'accepted');
-
-      if (collabs?.length) {
-        for (const collab of collabs) {
-          if (collab.artist_id === track.artist_id) continue;
-          // Also skip if this collab artist is the current listener
-          if (collab.artists?.user_id === userId) continue;
-          await supabase.rpc('increment_artist_streams', { artist_id: collab.artist_id });
-        }
-      }
+      // 6. Collab artist increments now handled atomically inside log_stream() above.
     } catch (err) {
       console.error('Failed to log stream:', err);
     }

@@ -13,21 +13,21 @@ import { useNavigate } from 'react-router-dom';
 
 // ── App theme definitions (module-level so they never recreate) ───────────────
 const THEMES = [
-  { key: 'default',   label: 'Default',     bg: '#000000', accent: '#8B5CF6' },
-  { key: 'deep_navy', label: 'Deep Navy',   bg: '#0a0f1e', accent: '#3B82F6' },
-  { key: 'forest',    label: 'Forest Dark', bg: '#0a1a0f', accent: '#22C55E' },
-  { key: 'warm_dark', label: 'Warm Dark',   bg: '#1a0f0a', accent: '#F97316' },
+  { key: 'default',   label: 'Default',     bg: '#0a0a0a', surface: 'rgba(255,255,255,0.055)', surface2: 'rgba(255,255,255,0.08)', border: 'rgba(255,255,255,0.10)', accent: '#8B5CF6' },
+  { key: 'deep_navy', label: 'Deep Navy',   bg: '#060c1a', surface: 'rgba(59,130,246,0.07)',   surface2: 'rgba(59,130,246,0.12)',  border: 'rgba(59,130,246,0.18)',  accent: '#3B82F6' },
+  { key: 'forest',    label: 'Forest Dark', bg: '#040f07', surface: 'rgba(34,197,94,0.06)',    surface2: 'rgba(34,197,94,0.10)',   border: 'rgba(34,197,94,0.16)',   accent: '#22C55E' },
+  { key: 'warm_dark', label: 'Warm Dark',   bg: '#120800', surface: 'rgba(249,115,22,0.06)',   surface2: 'rgba(249,115,22,0.10)',  border: 'rgba(249,115,22,0.16)',  accent: '#F97316' },
 ];
 
 function applyTheme(themeKey) {
   const theme = THEMES.find(t => t.key === themeKey) || THEMES[0];
-  // CSS vars for components that read them
-  document.documentElement.style.setProperty('--app-bg', theme.bg);
-  document.documentElement.style.setProperty('--app-accent', theme.accent);
-  // Apply to body and root for full bleed coverage
-  document.body.style.backgroundColor = theme.bg;
-  const root = document.getElementById('root');
-  if (root) root.style.backgroundColor = theme.bg;
+  const r = document.documentElement;
+  r.style.setProperty('--fm-bg',        theme.bg);
+  r.style.setProperty('--fm-surface',   theme.surface);
+  r.style.setProperty('--fm-surface-2', theme.surface2);
+  r.style.setProperty('--fm-border',    theme.border);
+  r.style.setProperty('--fm-border-2',  theme.border);
+  r.style.setProperty('--app-accent',   theme.accent);
 }
 
 export default function LibraryPage() {

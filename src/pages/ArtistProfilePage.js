@@ -1879,6 +1879,14 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
                 <span className="text-[10px] px-2 py-0.5 rounded-full font-medium" style={{ backgroundColor: `${secondaryColor}20`, color: secondaryColor }}>Collab</span>
               </div>
             ))}
+            {collabs.length > 5 && (
+              <button
+                onClick={() => setShowAllCollabs(p => !p)}
+                className="w-full py-2.5 text-xs font-medium rounded-xl transition-opacity hover:opacity-70 active:opacity-50 mt-1"
+                style={{ color: secondaryColor, backgroundColor: `${secondaryColor}10`, border: `1px solid ${secondaryColor}20` }}>
+                {showAllCollabs ? 'Show less' : `See ${collabs.length - 5} more`}
+              </button>
+            )}
           </div>
         </div>
       )}

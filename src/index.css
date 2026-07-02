@@ -41,7 +41,13 @@ body {
   --fm-surface-2: rgba(255, 255, 255, 0.08);
   --fm-border:    rgba(255, 255, 255, 0.10);
   --fm-border-2:  rgba(255, 255, 255, 0.06);
+  --app-accent:   #8B5CF6;
 }
+
+/* Accent color shifts with listener theme */
+.text-purple-400, .text-purple-500 { color: var(--app-accent) !important; }
+.bg-purple-500, .bg-purple-600     { background-color: var(--app-accent) !important; }
+.border-purple-500                 { border-color: var(--app-accent) !important; }
 
 /* Base background */
 html, body, #root {

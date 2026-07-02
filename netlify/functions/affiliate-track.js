@@ -64,8 +64,13 @@ exports.handler = async (event) => {
       if (existing) return { statusCode: 200, body: JSON.stringify({ already: true }) };
     }
 
-    // Credits for listener signup conversion
-    const creditsEarned = affiliate.role === 'listener' ? 50 : 0;
+    // Credits based on conversion type
+    const creditsEarned = affiliate.role === 'listener'
+      ? conversionType === 'listener_subscription' ? 200
+      : conversionType === 'artist_subscription'   ? 100
+      : conversionType === 'tip'                   ? 25
+      : 50  // default: signup
+      : 0;
     const newBalance = (affiliate.credits_balance || 0) + creditsEarned;
 
     await supabase.from('affiliate_conversions').insert({

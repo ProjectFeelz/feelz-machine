@@ -369,6 +369,19 @@ export default function TierUpgradePage() {
       setSuccess(`Welcome to ${tierSlug === 'pro' ? 'Pro' : 'Premium'}! Your new features are active.`);
       setSelectedTier(null);
       refreshProfile();
+
+      // Affiliate conversion — non-fatal
+      try {
+        const ref = sessionStorage.getItem('feelz_ref');
+        if (ref) {
+          await fetch('/.netlify/functions/affiliate-track', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'convert', refCode: ref, userId: user.id, conversionType: 'artist_subscription' }),
+          });
+          sessionStorage.removeItem('feelz_ref');
+        }
+      } catch {}
     } catch (err) {
       setError('Failed to activate subscription: ' + err.message);
     }

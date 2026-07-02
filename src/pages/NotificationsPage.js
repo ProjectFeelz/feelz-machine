@@ -472,14 +472,24 @@ export default function NotificationsPage() {
       const trackId    = meta.track_id    || notif.track_id;
       const trackTitle = meta.track_title || notif.message;
       if (trackId && trackTitle) {
+        // Verify track still exists and is published before playing
+        const { data: liveTrack } = await supabase
+          .from('tracks')
+          .select('id, title, file_url, cover_artwork_url, slug, artist_id, is_published, artists(artist_name, slug)')
+          .eq('id', trackId)
+          .eq('is_published', true)
+          .maybeSingle();
+
+        if (!liveTrack?.file_url) return; // track deleted or unpublished — bail silently
+
         const seedTrack = {
-          id:                trackId,
-          title:             trackTitle,
-          file_url:          meta.file_url || null,
-          cover_artwork_url: meta.track_artwork || null,
-          artist_name:       meta.artist_name || '',
-          artist_slug:       meta.artist_slug || '',
-          slug:              meta.track_slug || null,
+          id:                liveTrack.id,
+          title:             liveTrack.title,
+          file_url:          liveTrack.file_url,
+          cover_artwork_url: liveTrack.cover_artwork_url || meta.track_artwork || null,
+          artist_name:       liveTrack.artists?.artist_name || meta.artist_name || '',
+          artist_slug:       liveTrack.artists?.slug || meta.artist_slug || '',
+          slug:              liveTrack.slug || meta.track_slug || null,
         };
         // Start playing immediately, then build artist queue in background
         playTrack(seedTrack, [seedTrack]);

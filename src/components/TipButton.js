@@ -76,6 +76,17 @@ export default function TipButton({ artist, onTipSent }) {
               setStep('success');
               // Fire callback so live sessions can inject tip into chat
               if (onTipSent) onTipSent(amountNum);
+              // Affiliate conversion — non-fatal
+              try {
+                const ref = sessionStorage.getItem('feelz_ref');
+                if (ref && user?.id) {
+                  fetch('/.netlify/functions/affiliate-track', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'convert', refCode: ref, userId: user.id, conversionType: 'tip' }),
+                  }).catch(() => {});
+                }
+              } catch {}
             }
             else { setError('Payment failed. Please try again.'); setStep('error'); }
           },
