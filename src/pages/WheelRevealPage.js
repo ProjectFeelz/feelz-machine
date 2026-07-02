@@ -281,6 +281,12 @@ function WheelSVG({ rotation, size }) {
   );
 }
 
+function slugify(text) {
+  const base = text.toString().toLowerCase().trim()
+    .replace(/\s+/g, '-').replace(/[^\w\-]+/g, '').replace(/\-\-+/g, '-');
+  return `${base}-${Date.now().toString(36)}`;
+}
+
 function timeLeft(date) {
   if (!date) return null;
   const ms = new Date(date).getTime() - Date.now();
@@ -363,7 +369,8 @@ function ChallengeUploadSheet({ challenge, user, onClose, onComplete }) {
       const { data: track, error: trackErr } = await supabase.from('tracks').insert({
         artist_id:         artist.id,
         title:             title.trim(),
-        audio_url:         audioUrl,
+        slug:              slugify(title.trim()),
+        file_url:          audioUrl,
         cover_artwork_url: coverUrl,
         is_published:      true,
         is_explicit:       false,

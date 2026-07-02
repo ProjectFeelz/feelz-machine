@@ -118,6 +118,7 @@ export default function AdminAnalytics({ embedded = false }) {
   const [deviceSplit, setDeviceSplit] = useState([]);
   const [tierSplit, setTierSplit] = useState([]);
   const [topTracks, setTopTracks] = useState([]);
+  const [pluginGalleryPlays, setPluginGalleryPlays] = useState([]);
   const [topArtists, setTopArtists] = useState([]);
   const [topGenres, setTopGenres] = useState([]);
   const [retentionStats, setRetentionStats] = useState({});
@@ -295,6 +296,21 @@ export default function AdminAnalytics({ embedded = false }) {
         artist: t.artists?.artist_name || '?',
         streams: t.stream_count || 0,
         downloads: t.download_count || 0,
+      })));
+
+      // ── Plugin Gallery plays — external advertising traffic, kept separate
+      //    from real logged-in-fan streams above ──────────────────────────
+      const { data: externalPlayData } = await supabase
+        .from('tracks')
+        .select('title, external_play_count, artists(artist_name)')
+        .eq('is_published', true)
+        .gt('external_play_count', 0)
+        .order('external_play_count', { ascending: false })
+        .limit(10);
+      setPluginGalleryPlays((externalPlayData || []).map(t => ({
+        title: t.title,
+        artist: t.artists?.artist_name || '?',
+        plays: t.external_play_count || 0,
       })));
 
       // ── Top artists ───────────────────────────────────────────────────────
@@ -685,6 +701,34 @@ export default function AdminAnalytics({ embedded = false }) {
                   ))}
                 </div>
               </div>
+
+              {/* Plugin Gallery plays — cross-property advertising traffic, separate from real streams */}
+              {pluginGalleryPlays.length > 0 && (
+                <div className="rounded-2xl p-4 bg-white/[0.02] border border-white/[0.05] mb-4">
+                  <SectionTitle icon={Globe} title="Plugin Gallery Plays" color="text-cyan-400" />
+                  <p className="text-[10px] text-white/25 -mt-2 mb-3">
+                    Plays from projectfeelz.com previews — not counted in stream_count above
+                  </p>
+                  <div className="space-y-2">
+                    {pluginGalleryPlays.map((t, i) => (
+                      <div key={i} className="flex items-center space-x-3">
+                        <span className="text-xs text-white/20 w-4 flex-shrink-0 font-bold">{i + 1}</span>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm text-white truncate font-medium">{t.title}</p>
+                          <p className="text-[10px] text-white/30 truncate">{t.artist}</p>
+                        </div>
+                        <div className="text-right flex-shrink-0">
+                          <p className="text-xs font-bold text-white">{fmt(t.plays)}</p>
+                          <p className="text-[10px] text-white/30">plays</p>
+                        </div>
+                        <div className="w-20 h-1.5 rounded-full bg-white/[0.06] overflow-hidden flex-shrink-0">
+                          <div className="h-full rounded-full" style={{ width: `${pluginGalleryPlays[0]?.plays ? (t.plays / pluginGalleryPlays[0].plays) * 100 : 0}%`, background: CYAN }} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Top Genres */}
               <div className="rounded-2xl p-4 bg-white/[0.02] border border-white/[0.05] mb-4">

@@ -601,6 +601,7 @@ export default function AlbumDetailPage() {
       {showShareCard && (
         <ShareCard
           track={{ title: album.title, artist_name: artist?.artist_name, cover_artwork_url: album.cover_artwork_url }}
+          shareUrl={`https://www.feelzmachine.com/album/${id}`}
           onClose={() => setShowShareCard(false)}
         />
       )}

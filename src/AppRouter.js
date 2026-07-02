@@ -139,16 +139,17 @@ function OnboardingGuard({ children }) {
   const { user, artist, listener, loading } = useAuth();
   const location = useLocation();
   const skipPaths = ['/setup', '/login', '/about', '/terms-of-use', '/privacy-policy', '/artist/', '/@'];
-  
-  if (loading) {
-    // Still render children during loading for pure redirect routes
-    // so /@slug can fire immediately without waiting for auth
-    if (location.pathname.startsWith('/@')) return children;
-    return null;
-  }
-  if (!user) return children;
+
+  // Public paths always render immediately, regardless of auth loading state.
+  // This matters specifically for the /@slug -> /artist/slug redirect: the URL
+  // changes before auth finishes resolving, and without this check the
+  // /artist/ skip only applied once loading was false — leaving a blank
+  // render in between that looked like the page just wasn't going anywhere.
   if (skipPaths.some(p => location.pathname.startsWith(p))) return children;
-  
+
+  if (loading) return null;
+  if (!user) return children;
+
   // New user — has auth but no profile
   if (user && !artist && !listener) {
     return <Navigate to="/setup" replace />;

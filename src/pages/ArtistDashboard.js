@@ -487,7 +487,7 @@ export default function ArtistDashboard() {
         trackIds.length ? supabase.from('track_likes').select('*', { count: 'exact', head: true }).in('track_id', trackIds) : Promise.resolve({ count: 0 }),
         trackIds.length ? supabase.from('track_comments').select('*', { count: 'exact', head: true }).in('track_id', trackIds) : Promise.resolve({ count: 0 }),
         trackIds.length ? supabase.from('track_presaves').select('*', { count: 'exact', head: true }).in('track_id', trackIds) : Promise.resolve({ count: 0 }),
-        supabase.from('collaborations').select('*', { count: 'exact', head: true }).eq('artist_id', artist.id).eq('status', 'accepted'),
+        supabase.from('collaborations').select('*', { count: 'exact', head: true }).eq('status', 'accepted').or(`artist_id.eq.${artist.id},invited_by.eq.${artist.id}`),
         trackIds.length ? supabase.from('beat_purchases').select('*', { count: 'exact', head: true }).in('track_id', trackIds).eq('status', 'completed') : Promise.resolve({ count: 0 }),
         supabase.from('tips').select('amount').eq('artist_id', artist.id),
         supabase.from('artist_posts').select('id', { count: 'exact', head: true }).eq('artist_id', artist.id),
