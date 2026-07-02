@@ -800,12 +800,11 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
         try {
           const res = await fetch('/.netlify/functions/paypal-order', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'capture', orderId: data.orderID }),
+            body: JSON.stringify({ action: 'capture', orderId: data.orderID, userId: user?.id }),
           });
           const captureData = await res.json();
           if (!captureData.success) throw new Error('Payment capture failed');
-          await supabase.from('downloads').insert({ user_id: user.id, track_id: purchaseTrack.id, amount_paid: getEffectivePrice(purchaseTrack) });
-          // Split payout triggered server-side in paypal-order.js
+          // purchases + downloads recorded server-side in paypal-order.js
           setPurchaseSuccess(true); setPurchasing(false);
           setTimeout(async () => { await triggerDownload(purchaseTrack); setPurchaseTrack(null); setPurchaseSuccess(false); }, 1500);
         } catch (err) { setPurchaseError(err.message); setPurchasing(false); }
@@ -1326,15 +1325,17 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
 
       {/* ARTIST INFO */}
       <div className="px-6 pt-24 flex flex-col items-center text-center">
-        <div className="flex items-center space-x-2 mb-1">
-          <h1 className="text-3xl font-bold" style={{ fontFamily: `"${headingFont}", sans-serif`, color: textColor }}>{artist.artist_name}</h1>
-          {artist.is_verified && (
-            <div className="w-5 h-5 rounded-full flex items-center justify-center" style={{ backgroundColor: accentColor }}>
-              <Verified className="w-3 h-3" style={{ color: bgColor }} />
-            </div>
-          )}
+        <div className="flex flex-col items-center mb-1">
+          <div className="flex items-center space-x-2">
+            <h1 className="text-3xl font-bold" style={{ fontFamily: `"${headingFont}", sans-serif`, color: textColor }}>{artist.artist_name}</h1>
+            {artist.is_verified && (
+              <div className="w-5 h-5 rounded-full flex items-center justify-center" style={{ backgroundColor: accentColor }}>
+                <Verified className="w-3 h-3" style={{ color: bgColor }} />
+              </div>
+            )}
+          </div>
           {isBeatmakerProfile && (
-            <span className="text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full"
+            <span className="mt-1.5 text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full"
               style={{ background: 'rgba(234,179,8,0.15)', color: '#facc15', border: '1px solid rgba(234,179,8,0.25)' }}>
               Beat Maker
             </span>
@@ -1997,8 +1998,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
                             });
                             const captureData = await res.json();
                             if (!captureData.success) throw new Error('Payment capture failed');
-                            try { await supabase.from('downloads').insert({ user_id: user.id, track_id: pwywTrack.id, amount_paid: amount }); } catch {}
-                            // Split payout triggered server-side in paypal-order.js
+                            // purchases + downloads recorded server-side in paypal-order.js
                             setPwywPurchaseSuccess(true);
                             setTimeout(async () => {
                               await triggerDownload(pwywTrack);
@@ -2018,7 +2018,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
                   <button onClick={async () => {
                     const minPrice = parseFloat(pwywTrack.minimum_price) || 0;
                     if (minPrice > 0) { setPwywFanPriceError(`Minimum is $${minPrice.toFixed(2)}`); return; }
-                    try { await supabase.from('downloads').insert({ user_id: user.id, track_id: pwywTrack.id, amount_paid: 0 }); } catch {}
+                    try { await supabase.from('downloads').insert({ user_id: user.id, track_id: pwywTrack.id, amount_paid: 0, download_type: 'free' }); } catch {}
                     await triggerDownload(pwywTrack);
                     setPwywTrack(null);
                   }}

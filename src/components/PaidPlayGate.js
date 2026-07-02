@@ -94,14 +94,11 @@ export default function PaidPlayGate({ track, artist, onClose, onPurchaseComplet
         try {
           const res = await fetch('/.netlify/functions/paypal-order', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'capture', orderId: data.orderID }),
+            body: JSON.stringify({ action: 'capture', orderId: data.orderID, userId: user?.id }),
           });
           const captureData = await res.json();
           if (!captureData.success) throw new Error('Payment capture failed');
-          if (user) {
-            try { await supabase.from('downloads').insert({ user_id: user.id, track_id: track.id, amount_paid: track.download_price }); } catch {}
-            // Split payout is triggered server-side inside paypal-order.js capture — no client call needed.
-          }
+          // purchases + downloads recorded server-side in paypal-order.js
           setSuccess(true); setPurchasing(false);
           setTimeout(() => { onPurchaseComplete?.(track); }, 1500);
         } catch (e) { setError(e.message); setPurchasing(false); }

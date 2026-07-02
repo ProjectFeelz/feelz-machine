@@ -127,6 +127,17 @@ exports.handler = async (event) => {
   if (eventType === 'BILLING.SUBSCRIPTION.ACTIVATED') {
     const subscriptionId = resource?.id;
     await activateArtistSubscription(subscriptionId);
+    // Also handle listener subscription activation
+    const { data: listenerSub } = await supabase
+      .from('listener_tier_subscriptions')
+      .update({ status: 'active' })
+      .eq('paypal_subscription_id', subscriptionId)
+      .select('user_id').maybeSingle();
+    if (listenerSub?.user_id) {
+      await supabase.from('listeners')
+        .update({ tier: 'fan_pro', updated_at: new Date().toISOString() })
+        .eq('user_id', listenerSub.user_id);
+    }
   }
 
   // ── Subscription cancelled by user from PayPal dashboard ─────────────────
@@ -167,6 +178,33 @@ exports.handler = async (event) => {
     if (subscriptionId) {
       // Ensure status is active in case it was briefly suspended
       await activateArtistSubscription(subscriptionId);
+    }
+  }
+
+  // ── Payment reversed / refunded ───────────────────────────────────────────
+  if (eventType === 'PAYMENT.CAPTURE.REFUNDED' || eventType === 'PAYMENT.CAPTURE.REVERSED') {
+    const captureId = resource?.id || resource?.supplementary_data?.related_ids?.capture_id;
+    if (captureId) {
+      // Mark payouts as refunded so admin can claw back
+      await supabase.from('payouts')
+        .update({ status: 'failed', notes: `Reversed by PayPal: ${eventType}` })
+        .eq('paypal_payout_id', captureId);
+      // Mark purchase as refunded
+      await supabase.from('purchases')
+        .update({ status: 'refunded' })
+        .eq('paypal_transaction_id', captureId);
+    }
+  }
+
+  // ── Dispute opened — flag for admin review ────────────────────────────────
+  if (eventType === 'CUSTOMER.DISPUTE.CREATED') {
+    const disputeId = resource?.dispute_id;
+    const captureId = resource?.disputed_transactions?.[0]?.seller_transaction_id;
+    console.warn(`PayPal dispute opened: ${disputeId}, capture: ${captureId}`);
+    if (captureId) {
+      await supabase.from('payouts')
+        .update({ status: 'failed', notes: `Dispute opened: ${disputeId}` })
+        .eq('paypal_payout_id', captureId);
     }
   }
 

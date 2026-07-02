@@ -227,12 +227,23 @@ exports.handler = async (event) => {
             .eq('transaction_id', transaction_id);
         }
       } catch (payoutErr) {
-        // Log the error but don't fail the whole response — payout records exist
-        // and admin can retry via the payouts dashboard
         console.error('PayPal payout error (records saved, manual retry possible):', payoutErr.message);
         await supabase.from('payouts')
           .update({ status: 'payout_failed', notes: payoutErr.message })
           .eq('transaction_id', transaction_id);
+        try {
+          const { data: admins } = await supabase.from('admins').select('user_id');
+          for (const admin of (admins || [])) {
+            await supabase.from('notifications').insert({
+              user_id:    admin.user_id,
+              type:       'admin_message',
+              title:      '⚠️ Payout failed — manual action required',
+              message:    `Split payout for "${track.title}" (tx: ${transaction_id}) failed: ${payoutErr.message}`,
+              admin_only: true,
+              metadata:   { transaction_id, track_id, error: payoutErr.message },
+            });
+          }
+        } catch { /* non-fatal */ }
       }
     }
 

@@ -148,7 +148,7 @@ exports.handler = async (event) => {
       .eq('track_id', trackId)
       .maybeSingle();
     if (!existingDl) {
-      await adminClient.from('downloads').insert({ user_id: user.id, track_id: trackId, amount_paid: 0 });
+      await adminClient.from('downloads').insert({ user_id: user.id, track_id: trackId, amount_paid: 0, download_type: 'free' });
       // Increment download_count on track
       try {
         await adminClient.rpc('increment_download_count', { track_id: trackId });
@@ -197,6 +197,32 @@ exports.handler = async (event) => {
       await adminClient.from('tracks').update({ download_count: (data?.download_count || 0) + 1 }).eq('id', trackId);
     }
   }
+
+  // Notify artist of download — non-fatal
+  try {
+    const { data: artistUser } = await adminClient
+      .from('artists').select('user_id, artist_name').eq('id', track.artist_id).maybeSingle();
+    const { data: downloaderArtist } = await adminClient
+      .from('artists').select('id, artist_name, profile_image_url').eq('user_id', user.id).maybeSingle();
+    const downloaderName = downloaderArtist?.artist_name || 'Someone';
+    if (artistUser?.user_id && artistUser.user_id !== user.id) {
+      await adminClient.from('notifications').insert({
+        artist_id:      track.artist_id,
+        user_id:        artistUser.user_id,
+        type:           'download',
+        title:          `${downloaderName} downloaded ${track.title}`,
+        message:        trackIsFree ? 'Free download' : `Paid download · $${effectivePrice.toFixed(2)}`,
+        from_artist_id: downloaderArtist?.id || null,
+        metadata: {
+          track_id:          trackId,
+          track_title:       track.title,
+          from_artist_name:  downloaderName,
+          from_artist_image: downloaderArtist?.profile_image_url || null,
+          amount_paid:       trackIsFree ? 0 : effectivePrice,
+        },
+      });
+    }
+  } catch { /* non-fatal */ }
 
   const storagePathMatch = track.file_url.match(/\/object\/public\/feelz-samples\/(.+)/);
   if (!storagePathMatch) {
