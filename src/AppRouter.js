@@ -140,7 +140,12 @@ function OnboardingGuard({ children }) {
   const location = useLocation();
   const skipPaths = ['/setup', '/login', '/about', '/terms-of-use', '/privacy-policy', '/artist/', '/@'];
   
-  if (loading) return null;
+  if (loading) {
+    // Still render children during loading for pure redirect routes
+    // so /@slug can fire immediately without waiting for auth
+    if (location.pathname.startsWith('/@')) return children;
+    return null;
+  }
   if (!user) return children;
   if (skipPaths.some(p => location.pathname.startsWith(p))) return children;
   
