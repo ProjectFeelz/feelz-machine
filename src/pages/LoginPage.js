@@ -347,11 +347,14 @@ export default function LoginPage() {
                 We sent a magic link to <span className="text-white/80 font-medium">{email}</span>.
                 Tap the link in the email to sign in — no password needed.
               </p>
-              <p className="text-[11px] text-white/25">
-                Didn't get it? Check spam or{' '}
+              <p className="text-xs text-amber-400/90 font-medium">
+                Not in your inbox? Check your spam or junk folder.
+              </p>
+              <p className="text-xs text-white/35">
+                Still nothing after a few minutes?{' '}
                 <button onClick={() => { setMagicSent(false); setError(''); }}
                   className="text-purple-400 hover:text-purple-300 transition underline">
-                  try again
+                  Try again
                 </button>
               </p>
             </div>
