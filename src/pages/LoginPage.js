@@ -330,6 +330,18 @@ export default function LoginPage() {
         {/* ── Auth section ─────────────────────────────────────────────────── */}
         <div className="bg-white/[0.02] border border-white/[0.07] rounded-2xl p-5">
 
+          {fromPluginGallery && !magicSent && (
+            <div className="mb-4 p-3 rounded-lg bg-cyan-500/10 border border-cyan-500/20">
+              <p className="text-xs font-semibold text-cyan-400 mb-1.5">
+                ✓ Connected from Plugin Gallery
+              </p>
+              <p className="text-xs text-white/60 leading-relaxed">
+                Almost there — <strong className="text-white/80">1)</strong> tick "I confirm I am 13 or older" below,
+                then <strong className="text-white/80">2)</strong> tap "Send Magic Link".
+              </p>
+            </div>
+          )}
+
           {error && (
             <div className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-xs">
               {error}
@@ -429,12 +441,6 @@ export default function LoginPage() {
                 <img src="https://www.projectfeelz.com/logo.png" alt="" className="w-5 h-5 rounded" />
                 <span>{bridgeVerifying ? 'Connecting…' : 'Continue with Plugin Gallery'}</span>
               </button>
-
-              {fromPluginGallery && (
-                <p className="mt-3 text-center text-[11px] text-cyan-400/80">
-                  ✓ Connected from Plugin Gallery — confirm your email below to continue
-                </p>
-              )}
             </>
           )}
         </div>
