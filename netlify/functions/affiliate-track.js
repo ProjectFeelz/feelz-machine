@@ -41,13 +41,17 @@ exports.handler = async (event) => {
     };
   }
 
-  // ── LOG CONVERSION (signup) ────────────────────────────────────────────────
+  // ── LOG CONVERSION (signup / subscription / tip) ───────────────────────────
   if (action === 'convert') {
     const { data: affiliate } = await supabase
       .from('affiliates').select('id, role, credits_balance')
       .eq('ref_code', refCode).eq('status', 'active').maybeSingle();
 
     if (!affiliate) return { statusCode: 404, body: JSON.stringify({ error: 'Invalid ref' }) };
+
+    // The actual kind of conversion this is — defaults to 'signup' when the
+    // caller doesn't specify one (e.g. the initial account-creation call).
+    const effectiveType = conversionType || 'signup';
 
     // Check not self-referral
     if (userId) {
@@ -56,11 +60,14 @@ exports.handler = async (event) => {
       if (affUser?.user_id === userId) {
         return { statusCode: 400, body: JSON.stringify({ error: 'Self-referral not allowed' }) };
       }
-      // Check not already converted from this affiliate
+      // Check not already converted from this affiliate FOR THIS TYPE —
+      // a signup and a later subscription/tip from the same referred user
+      // are each their own milestone and should each count once, not just
+      // the first conversion ever from that person.
       const { data: existing } = await supabase
         .from('affiliate_conversions')
         .select('id').eq('affiliate_id', affiliate.id)
-        .eq('referred_user_id', userId).eq('type', 'signup').maybeSingle();
+        .eq('referred_user_id', userId).eq('type', effectiveType).maybeSingle();
       if (existing) return { statusCode: 200, body: JSON.stringify({ already: true }) };
     }
 
@@ -75,7 +82,7 @@ exports.handler = async (event) => {
 
     await supabase.from('affiliate_conversions').insert({
       affiliate_id:    affiliate.id,
-      type:            'signup',
+      type:            effectiveType,
       referred_user_id: userId || null,
       credits_earned:  creditsEarned,
       status:          'confirmed',
@@ -86,14 +93,14 @@ exports.handler = async (event) => {
     try {
       await supabase.rpc('increment_affiliate_stats', {
         p_affiliate_id: affiliate.id,
-        p_signups: 1,
+        p_signups: effectiveType === 'signup' ? 1 : 0,
         p_conversions: 1,
         p_credits: creditsEarned,
       });
     } catch {
       // Fallback: manual increment
       const updates = {
-        total_signups:    (affiliate.total_signups || 0) + 1,
+        total_signups:    (affiliate.total_signups || 0) + (effectiveType === 'signup' ? 1 : 0),
         total_conversions: (affiliate.total_conversions || 0) + 1,
       };
       if (creditsEarned > 0) {
@@ -104,13 +111,20 @@ exports.handler = async (event) => {
     }
 
     if (creditsEarned > 0) {
+      const description = {
+        signup:              'New user signup via your referral link',
+        artist_subscription: 'Artist subscription via your referral link',
+        listener_subscription: 'Fan Pro subscription via your referral link',
+        tip:                  'Tip sent via your referral link',
+      }[effectiveType] || 'Conversion via your referral link';
+
       await supabase.from('credits_transactions').insert({
         user_id:      userId,
         affiliate_id: affiliate.id,
         type:         'earned',
         amount:       creditsEarned,
         balance_after: newBalance,
-        description:  'New user signup via your referral link',
+        description,
       });
     }
 
