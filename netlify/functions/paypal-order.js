@@ -153,6 +153,11 @@ exports.handler = async (event) => {
         return { statusCode: 400, body: JSON.stringify({ error: 'orderId required' }) };
       }
 
+      const adminClient = createClient(
+        process.env.SUPABASE_URL,
+        process.env.SUPABASE_SERVICE_ROLE_KEY
+      );
+
       const result = await paypalRequest(
         'POST',
         `/v2/checkout/orders/${orderId}/capture`,
@@ -191,6 +196,38 @@ exports.handler = async (event) => {
           }).catch(err => console.error('Split payout trigger failed:', err.message));
         } catch (e) {
           console.error('Split payout trigger error:', e.message);
+        }
+
+        // ── Record purchase + download in DB server-side ──────────────────
+        // Runs server-side so it's guaranteed even if client drops after payment
+        try {
+          const { userId: buyerUserId, albumId } = body;
+
+          // purchases row — financial record
+          await adminClient.from('purchases').insert({
+            user_id:               buyerUserId || null,
+            track_id:              albumId ? null : captureTrackId,
+            album_id:              albumId || null,
+            amount:                capturedAmount,
+            currency:              'USD',
+            paypal_transaction_id: captureId,
+            status:                'completed',
+            purchased_at:          new Date().toISOString(),
+          });
+
+          // downloads row — only for track purchases, not albums
+          if (!albumId && buyerUserId) {
+            await adminClient.from('downloads').insert({
+              track_id:      captureTrackId,
+              user_id:       buyerUserId,
+              download_type: 'paid',
+              amount_paid:   capturedAmount,
+              created_at:    new Date().toISOString(),
+            });
+          }
+        } catch (dbErr) {
+          // Non-fatal — payout records are the financial source of truth
+          console.error('Purchase/download record error (non-fatal):', dbErr.message);
         }
       }
 

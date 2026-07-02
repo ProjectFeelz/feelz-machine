@@ -256,7 +256,7 @@ export default function BeatDetailPage() {
         try {
           const res = await fetch('/.netlify/functions/paypal-order', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'capture', orderId: data.orderID }),
+            body: JSON.stringify({ action: 'capture', orderId: data.orderID, userId: user?.id }),
           });
           const captureData = await res.json();
           if (!captureData.success) throw new Error('Payment capture failed');

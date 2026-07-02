@@ -128,13 +128,11 @@ export default function TrackActionSheet({ track, artist, onClose }) {
                     const res = await fetch('/.netlify/functions/paypal-order', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ action: 'capture', orderId: data.orderID }),
+                        body: JSON.stringify({ action: 'capture', orderId: data.orderID, userId: user?.id }),
                     });
                     const captureData = await res.json();
                     if (!captureData.success) throw new Error('Payment capture failed');
-
-                    try { await supabase.from('downloads').insert({ user_id: user.id, track_id: track.id, amount_paid: effectivePrice }); } catch {}
-                    // Split payout triggered server-side in paypal-order.js
+                    // purchases + downloads recorded server-side in paypal-order.js
 
                     setPurchaseSuccess(true);
                     setPurchasing(false);

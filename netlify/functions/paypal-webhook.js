@@ -113,9 +113,13 @@ exports.handler = async (event) => {
 
   // ── Track purchase capture completed ──────────────────────────────────────
   if (eventType === 'PAYMENT.CAPTURE.COMPLETED') {
-    const orderId = resource?.supplementary_data?.related_ids?.order_id;
+    const captureId = resource?.id;
+    const orderId   = resource?.supplementary_data?.related_ids?.order_id;
+    if (captureId) {
+      await supabase.from('payouts').update({ status: 'paid' }).eq('paypal_payout_id', captureId);
+    }
     if (orderId) {
-      await supabase.from('payouts').update({ status: 'paid' }).eq('transaction_id', orderId);
+      await supabase.from('purchases').update({ status: 'completed' }).eq('paypal_transaction_id', orderId).catch(() => {});
     }
   }
 
@@ -128,20 +132,27 @@ exports.handler = async (event) => {
   // ── Subscription cancelled by user from PayPal dashboard ─────────────────
   if (eventType === 'BILLING.SUBSCRIPTION.CANCELLED') {
     const subscriptionId = resource?.id;
-    // Try artist first, then listener
     await cancelArtistSubscription(subscriptionId, 'user_cancelled');
-    await supabase.from('listener_tier_subscriptions')
+    const { data: listenerSub } = await supabase.from('listener_tier_subscriptions')
       .update({ status: 'cancelled', cancelled_at: new Date().toISOString(), cancel_reason: 'user_cancelled' })
-      .eq('paypal_subscription_id', subscriptionId);
+      .eq('paypal_subscription_id', subscriptionId)
+      .select('user_id').maybeSingle();
+    if (listenerSub?.user_id) {
+      await supabase.from('listeners').update({ tier: 'free', tier_expires_at: null }).eq('user_id', listenerSub.user_id);
+    }
   }
 
   // ── Subscription suspended (payment failed repeatedly) ───────────────────
   if (eventType === 'BILLING.SUBSCRIPTION.SUSPENDED') {
     const subscriptionId = resource?.id;
     await cancelArtistSubscription(subscriptionId, 'payment_failed');
-    await supabase.from('listener_tier_subscriptions')
+    const { data: listenerSub } = await supabase.from('listener_tier_subscriptions')
       .update({ status: 'cancelled', cancelled_at: new Date().toISOString(), cancel_reason: 'payment_failed' })
-      .eq('paypal_subscription_id', subscriptionId);
+      .eq('paypal_subscription_id', subscriptionId)
+      .select('user_id').maybeSingle();
+    if (listenerSub?.user_id) {
+      await supabase.from('listeners').update({ tier: 'free', tier_expires_at: null }).eq('user_id', listenerSub.user_id);
+    }
   }
 
   // ── Subscription expired ──────────────────────────────────────────────────

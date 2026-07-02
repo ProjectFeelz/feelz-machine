@@ -397,7 +397,7 @@ export default function NotificationsPage() {
     'bug_report',
   ]);
 
-  const handleClick = (notif) => {
+  const handleClick = async (notif) => {
     markAsRead(notif.id);
     if (INLINE_ACTION_TYPES.has(notif.type)) return;
     if (READ_ONLY_TYPES.has(notif.type)) return;
@@ -417,8 +417,8 @@ export default function NotificationsPage() {
       // new_stream is sent to the track's artist — take them to their own track
       const streamTrackId = meta.track_id || notif.track_id;
       if (meta.track_slug) { navigate(`/track/${meta.track_slug}`); return; }
-      if (streamTrackId && artist?.slug) { navigate(`/artist/${artist.slug}?track=${streamTrackId}`); return; }
       if (streamTrackId) { navigate(`/track/${streamTrackId}`); return; }
+      if (artist?.slug) { navigate(`/artist/${artist.slug}`); return; }
       if (artist?.slug) { navigate(`/artist/${artist.slug}`); return; }
       navigate('/browse');
       return;

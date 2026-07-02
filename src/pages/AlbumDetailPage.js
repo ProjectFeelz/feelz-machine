@@ -134,23 +134,11 @@ export default function AlbumDetailPage() {
         try {
           const res = await fetch('/.netlify/functions/paypal-order', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'capture', orderId: data.orderID }),
+            body: JSON.stringify({ action: 'capture', orderId: data.orderID, userId: user?.id }),
           });
           const captureData = await res.json();
           if (!captureData.success) throw new Error('Payment capture failed');
-          if (purchaseTarget.type === 'album') {
-            for (const t of tracks) {
-              await supabase.from('downloads')
-                .insert({ user_id: user.id, track_id: t.id, amount_paid: parseFloat((purchaseTarget.price / tracks.length).toFixed(2)) });
-            }
-            // Album split payout: trigger per-track server-side — no client secret needed
-          } else {
-            try {
-              await supabase.from('downloads')
-                .insert({ user_id: user.id, track_id: purchaseTarget.track.id, amount_paid: purchaseTarget.price });
-            } catch {}
-            // Split payout triggered server-side in paypal-order.js
-          }
+          // purchases + downloads recorded server-side in paypal-order.js
           setPurchaseSuccess(true); setPurchasing(false);
           setTimeout(async () => {
             if (purchaseTarget.type === 'album') { await triggerAlbumDownload(); }

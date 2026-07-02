@@ -262,7 +262,7 @@ export default function AppRouter() {
                 <Route path="/hub" element={<HubPage />} />
                 <Route path="/about" element={<AboutPage />} />
                 <Route path="/album/:id" element={<AlbumDetailPage />} />
-                <Route path="/track/:slug" element={<TrackDetailPage />} />
+                {/* TrackDetailPage consolidated into TrackPage below */}
                 <Route path="/affiliates" element={<AffiliatePage />} />
                 <Route path="/payment/success" element={<PaymentSuccess />} />
                 <Route path="/payment/cancel" element={<PaymentCancel />} />

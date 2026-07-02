@@ -124,7 +124,7 @@ exports.handler = async (event) => {
       split_percentage: ownerPercent,
       paypal_payout_id: null, // TODO: populate after real PayPal payout
       // Solo tracks (no collabs) get status 'no_split_required' to distinguish from pending payouts
-      status: collaborators.length > 0 ? 'pending' : 'no_split_required',
+      status: 'pending',
     });
 
     // Collaborator payouts
@@ -180,8 +180,8 @@ exports.handler = async (event) => {
     }
 
     // ── Real PayPal Payouts ──────────────────────────────────────────────────────
-    // Only send payouts if there are collaborators — solo tracks don't need splitting
-    if (collaborators.length > 0) {
+    // Send payouts to all artists — solo tracks pay the owner directly
+    if (payoutRecords.length > 0) {
       try {
         // Fetch each artist's PayPal email from their profile
         const payoutItems = [];
