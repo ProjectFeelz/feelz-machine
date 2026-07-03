@@ -464,12 +464,11 @@ export default function ArtistDashboard() {
         .from('tracks').select('id').eq('artist_id', artist.id);
       const trackIds = (artistTracks || []).map(t => t.id);
 
-      let streamCount = 0, dlCount = 0;
+      let streamCount = artist.total_streams || 0, dlCount = 0;
       if (trackIds.length > 0) {
         const { data: streamData } = await supabase
-          .from('tracks').select('stream_count, download_count').eq('artist_id', artist.id);
-        streamCount = (streamData || []).reduce((s, t) => s + (t.stream_count || 0), 0);
-        dlCount     = (streamData || []).reduce((s, t) => s + (t.download_count || 0), 0);
+          .from('tracks').select('download_count').eq('artist_id', artist.id);
+        dlCount = (streamData || []).reduce((s, t) => s + (t.download_count || 0), 0);
       }
 
       // Run all counts in parallel for speed

@@ -1230,6 +1230,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
   const isProfileOwner = user && myArtist && myArtist.id === artist.id;
   const isBeatmakerProfile = artist?.role === 'beatmaker';
   const pageUrl        = `${BASE_URL}/artist/${slug}`;
+  const shareShortUrl  = `${BASE_URL}/@${slug}`;
   const ogImage        = artist.profile_image_url || `${BASE_URL}/og-default.png`;
   const pageTitle      = `${artist.artist_name} · Feelz Machine`;
   const pageDesc       = artist.bio
@@ -2040,7 +2041,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
       {showShareCard && (
         <ShareCard
           artist={artist}
-          shareUrl={pageUrl}
+          shareUrl={shareShortUrl}
           onClose={() => setShowShareCard(false)}
         />
       )}
