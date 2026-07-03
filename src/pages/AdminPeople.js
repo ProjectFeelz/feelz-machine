@@ -25,6 +25,130 @@ function Tab({ active, onClick, children }) {
   );
 }
 
+// ── LISTENERS TAB ─────────────────────────────────────────────────────────────
+function ListenersTab() {
+  const [listeners, setListeners] = useState([]);
+  const [loading, setLoading]     = useState(true);
+  const [searchQuery, setSearch]  = useState('');
+  const [sortBy, setSortBy]       = useState('newest');
+  const [grantingId, setGranting] = useState(null);
+  const [toast, setToast]         = useState(null);
+
+  const showToast = (msg, type = 'success') => {
+    setToast({ msg, type }); setTimeout(() => setToast(null), 3000);
+  };
+
+  const fetchListeners = useCallback(async () => {
+    setLoading(true);
+    const { data } = await supabase.from('listeners').select('*').order('created_at', { ascending: false });
+    setListeners(data || []);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { fetchListeners(); }, [fetchListeners]);
+
+  const grantTier = async (listenerId, userId, tierSlug, displayName) => {
+    setGranting(listenerId);
+    try {
+      const { data: tier } = await supabase.from('platform_tiers').select('id').eq('slug', tierSlug).single();
+      if (!tier && tierSlug !== 'free') { showToast(`Tier "${tierSlug}" not found`, 'error'); setGranting(null); return; }
+
+      await supabase.from('listener_tier_subscriptions')
+        .update({ status: 'cancelled', cancelled_at: new Date().toISOString() })
+        .eq('user_id', userId).eq('status', 'active');
+
+      if (tierSlug !== 'free') {
+        await supabase.from('listener_tier_subscriptions').insert({
+          user_id: userId, tier_id: tier.id, status: 'active', billing_cycle: 'annual',
+          started_at: new Date().toISOString(),
+          expires_at: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
+        });
+      }
+
+      await supabase.from('listeners')
+        .update({
+          tier: tierSlug,
+          tier_started_at: new Date().toISOString(),
+          tier_expires_at: tierSlug !== 'free' ? new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString() : null,
+        })
+        .eq('id', listenerId);
+
+      await supabase.from('notifications').insert({
+        user_id: userId, type: 'tier_granted',
+        title: tierSlug === 'free' ? 'Plan updated' : 'Fan Pro granted',
+        message: tierSlug === 'free' ? 'Your plan has been updated to Free.' : 'An admin granted you Fan Pro access. Enjoy your themes and badge!',
+        metadata: { tier_slug: tierSlug },
+      }).then(() => {});
+
+      setListeners(prev => prev.map(l => l.id === listenerId ? { ...l, tier: tierSlug } : l));
+      showToast(`${displayName || 'Listener'} → ${tierSlug.toUpperCase()} ✓`);
+    } catch (err) { showToast(`Failed: ${err.message}`, 'error'); }
+    setGranting(null);
+  };
+
+  const filtered = listeners
+    .filter(l => (l.display_name || '').toLowerCase().includes(searchQuery.toLowerCase()))
+    .sort((a, b) => {
+      if (sortBy === 'newest') return new Date(b.created_at) - new Date(a.created_at);
+      if (sortBy === 'name')   return (a.display_name || '').localeCompare(b.display_name || '');
+      return 0;
+    });
+
+  return (
+    <div>
+      {toast && (
+        <div className={`fixed top-6 left-1/2 -translate-x-1/2 z-50 flex items-center space-x-2 px-4 py-3 rounded-xl shadow-2xl text-sm font-medium ${toast.type === 'success' ? 'bg-white text-black' : 'bg-red-500/90 text-white'}`}>
+          {toast.type === 'success' ? <Check className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
+          <span>{toast.msg}</span>
+        </div>
+      )}
+      <div className="flex space-x-2 mb-4">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20" />
+          <input type="text" value={searchQuery} onChange={e => setSearch(e.target.value)} placeholder="Search listeners…"
+            className="w-full pl-10 pr-4 py-2.5 bg-white/[0.04] rounded-xl text-sm text-white placeholder:text-white/20 border border-white/[0.06] focus:border-white/20 focus:outline-none transition" />
+        </div>
+        <select value={sortBy} onChange={e => setSortBy(e.target.value)}
+          className="px-3 py-2.5 bg-white/[0.04] rounded-xl text-xs text-white/60 border border-white/[0.06] focus:outline-none">
+          <option value="newest">Newest</option>
+          <option value="name">A–Z</option>
+        </select>
+      </div>
+      {loading ? (
+        <div className="flex justify-center py-16"><Loader className="w-5 h-5 animate-spin text-white/20" /></div>
+      ) : (
+        <div className="space-y-2">
+          <p className="text-[10px] text-white/25 uppercase tracking-wider mb-2">{filtered.length} listeners</p>
+          {filtered.map(l => (
+            <div key={l.id} className="bg-white/[0.03] rounded-xl p-3.5 border border-white/[0.06] hover:bg-white/[0.05] transition">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-3 min-w-0 flex-1">
+                  <div className="w-10 h-10 rounded-full bg-white/[0.08] flex items-center justify-center flex-shrink-0 overflow-hidden">
+                    {l.avatar_url ? <img src={l.avatar_url} alt="" className="w-full h-full object-cover" />
+                      : <span className="text-sm font-bold text-white/30">{l.display_name?.charAt(0)?.toUpperCase() || '?'}</span>}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-white truncate">{l.display_name || 'Unnamed'}</p>
+                    <span className="text-[10px] text-white/20">{new Date(l.created_at).toLocaleDateString()}</span>
+                  </div>
+                </div>
+                <div className="flex items-center space-x-2 flex-shrink-0 ml-3">
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${l.tier === 'pro' ? 'bg-purple-500/20 text-purple-400' : 'bg-white/10 text-white/30'}`}>{l.tier || 'free'}</span>
+                  {grantingId === l.id ? <Loader className="w-4 h-4 animate-spin text-white/30" /> : (
+                    <select value={l.tier || 'free'} onChange={e => grantTier(l.id, l.user_id, e.target.value, l.display_name)}
+                      className="text-[10px] bg-white/[0.06] text-white/50 rounded-lg px-2 py-1.5 border border-white/[0.08] focus:outline-none cursor-pointer hover:bg-white/[0.10] transition">
+                      <option value="free">Free</option><option value="pro">Fan Pro</option>
+                    </select>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 // ── ARTISTS TAB ───────────────────────────────────────────────────────────────
 function ArtistsTab() {
   const navigate = useNavigate();
@@ -447,12 +571,14 @@ export default function AdminPeople() {
         </div>
         <div className="flex space-x-1 p-1 bg-white/[0.03] rounded-xl border border-white/[0.06] overflow-x-auto">
           <Tab active={tab === 'artists'}    onClick={() => setTab('artists')}>Artists</Tab>
+          <Tab active={tab === 'listeners'}  onClick={() => setTab('listeners')}>Listeners</Tab>
           <Tab active={tab === 'duplicates'} onClick={() => setTab('duplicates')}>Duplicates</Tab>
           <Tab active={tab === 'bugs'}       onClick={() => setTab('bugs')}>Bug Reports</Tab>
         </div>
       </div>
       <div className="px-4 pt-5">
         {tab === 'artists'    && <ArtistsTab />}
+        {tab === 'listeners'  && <ListenersTab />}
         {tab === 'duplicates' && <DuplicatesTab />}
         {tab === 'bugs'       && <BugReportsTab />}
       </div>
