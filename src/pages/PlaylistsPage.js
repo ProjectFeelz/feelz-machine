@@ -18,6 +18,15 @@ export default function PlaylistsPage() {
   const [joinToken, setJoinToken]         = useState('');
   const [joining, setJoining]             = useState(false);
   const [joinError, setJoinError]         = useState('');
+  const [createError, setCreateError]     = useState('');
+
+  // Auto-open the create form if arriving from the "+" quick-create menu
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get('create') === '1') {
+      setCreating(true);
+      window.history.replaceState({}, '', '/library/playlists');
+    }
+  }, []);
   const [copiedId, setCopiedId]           = useState(null);
   const [coverFile, setCoverFile]         = useState(null);
   const [coverPreview, setCoverPreview]   = useState(null);
@@ -46,6 +55,7 @@ export default function PlaylistsPage() {
   const createPlaylist = async () => {
     if (!newName.trim()) return;
     setSaving(true);
+    setCreateError('');
     try {
       let cover_url = null;
       if (coverFile) {
@@ -74,8 +84,14 @@ export default function PlaylistsPage() {
         setNewName(''); setCreating(false); setNewShared(false);
         setCoverFile(null); setCoverPreview(null);
         fetchPlaylists();
+      } else {
+        console.error('Create playlist error:', error);
+        setCreateError(error.message || 'Failed to create playlist');
       }
-    } catch {}
+    } catch (err) {
+      console.error('Create playlist exception:', err);
+      setCreateError(err.message || 'Failed to create playlist');
+    }
     setSaving(false);
   };
 
@@ -302,8 +318,11 @@ export default function PlaylistsPage() {
             </div>
             <span className="text-xs text-white/50">Collaborative — share with friends</span>
           </label>
+          {createError && (
+            <p className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">{createError}</p>
+          )}
           <div className="flex space-x-2">
-            <button onClick={() => { setCreating(false); setNewName(''); setNewShared(false); }}
+            <button onClick={() => { setCreating(false); setNewName(''); setNewShared(false); setCreateError(''); }}
               className="px-3 py-2 text-sm text-white/30 hover:text-white/60 transition">Cancel</button>
             <button onClick={createPlaylist} disabled={saving || !newName.trim()}
               className="flex-1 px-4 py-2 bg-white text-black rounded-lg text-sm font-medium disabled:opacity-40 transition">

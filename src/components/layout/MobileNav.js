@@ -4,6 +4,7 @@ import { Home, Search, Library, LayoutDashboard, Sparkles, Plus } from 'lucide-r
 import { useAuth } from '../../contexts/AuthContext';
 import { useHaptics } from '../../hooks/useHaptics';
 import CreateMenuModal from '../CreateMenuModal';
+import ListenerCreateMenu from '../ListenerCreateMenu';
 
 export default function MobileNav() {
   const navigate        = useNavigate();
@@ -41,11 +42,9 @@ export default function MobileNav() {
   const navItems = [
     { path: '/',             icon: Sparkles,        label: 'For You',   tourKey: 'nav-foryou'   },
     { path: '/browse',       icon: Search,          label: 'Browse',    tourKey: 'nav-browse'   },
-    // Center plus — artists/beatmakers only, opens the same Create menu as
-    // the "+" on their own profile. Hidden entirely for listeners.
-    ...(isArtist || isBeatmaker
-      ? [{ special: 'plus', tourKey: 'nav-create' }]
-      : []),
+    // Center plus — everyone gets one, but artists/beatmakers and
+    // listeners see different menus (handled at render time below)
+    { special: 'plus', tourKey: 'nav-create' },
     { path: '/library',      icon: Library,         label: 'Library',   tourKey: 'nav-library'  },
     // Hub — show for artists and beatmakers, not pure listeners
     ...(isArtist || isBeatmaker
@@ -110,6 +109,9 @@ export default function MobileNav() {
           user={user}
           onClose={() => setShowCreateMenu(false)}
         />
+      )}
+      {showCreateMenu && !isArtist && !isBeatmaker && (
+        <ListenerCreateMenu onClose={() => setShowCreateMenu(false)} />
       )}
     </nav>
   );
