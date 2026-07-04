@@ -13,7 +13,7 @@ const supabase = createClient(
 
 exports.handler = async (event) => {
   const headers = {
-    'Access-Control-Allow-Origin': 'https://www.feelzmachine.com',
+    'Access-Control-Allow-Origin': event.headers.origin || 'https://www.feelzmachine.com',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
   };
