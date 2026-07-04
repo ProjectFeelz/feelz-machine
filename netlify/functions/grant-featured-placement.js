@@ -7,7 +7,7 @@ const crypto = require('crypto');
 const { createClient } = require('@supabase/supabase-js');
 
 const supabase = createClient(
-  process.env.SUPABASE_URL,
+  process.env.SUPABASE_URL || process.env.REACT_APP_SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
@@ -68,13 +68,15 @@ exports.handler = async (event) => {
       .update({ featured: true, featured_until: featuredUntil })
       .eq('id', artist.id);
 
-    await supabase.from('notifications').insert({
-      artist_id: artist.id,
-      type: 'competition_winner',
-      title: '🏆 You\'re featured on Feelz Machine!',
-      message: `You won a Studio Challenge on Plugin Gallery — you're now featured for ${FEATURE_DAYS} days.`,
-      metadata: { source: 'plugin_gallery_challenge' },
-    }).catch(() => {});
+    try {
+      await supabase.from('notifications').insert({
+        artist_id: artist.id,
+        type: 'competition_winner',
+        title: '🏆 You\'re featured on Feelz Machine!',
+        message: `You won a Studio Challenge on Plugin Gallery — you're now featured for ${FEATURE_DAYS} days.`,
+        metadata: { source: 'plugin_gallery_challenge' },
+      });
+    } catch { /* notification failure shouldn't block the actual feature grant */ }
 
     return { statusCode: 200, headers, body: JSON.stringify({ success: true, artist_name: artist.artist_name, featured_until: featuredUntil }) };
   } catch (err) {

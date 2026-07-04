@@ -7,7 +7,7 @@
 const { createClient } = require('@supabase/supabase-js');
 
 const supabase = createClient(
-  process.env.SUPABASE_URL,
+  process.env.SUPABASE_URL || process.env.REACT_APP_SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
@@ -75,12 +75,14 @@ exports.handler = async (event) => {
     }).eq('id', listenerId);
     if (listenerErr) throw new Error(`Update listeners row failed: ${listenerErr.message}`);
 
-    await supabase.from('notifications').insert({
-      user_id: userId, type: 'tier_granted',
-      title: tierSlug === 'free' ? 'Plan updated' : 'Fan Pro granted',
-      message: tierSlug === 'free' ? 'Your plan has been updated to Free.' : 'An admin granted you Fan Pro access. Enjoy your themes and badge!',
-      metadata: { tier_slug: tierSlug },
-    }).catch(() => {});
+    try {
+      await supabase.from('notifications').insert({
+        user_id: userId, type: 'tier_granted',
+        title: tierSlug === 'free' ? 'Plan updated' : 'Fan Pro granted',
+        message: tierSlug === 'free' ? 'Your plan has been updated to Free.' : 'An admin granted you Fan Pro access. Enjoy your themes and badge!',
+        metadata: { tier_slug: tierSlug },
+      });
+    } catch { /* notification failure shouldn't block the actual grant */ }
 
     return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };
   } catch (err) {

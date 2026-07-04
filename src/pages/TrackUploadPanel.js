@@ -239,7 +239,7 @@ function YoutubeField({ value, onChange }) {
     setUploading(true); setUploadError('');
     try {
       const path = Date.now() + '-' + Math.random().toString(36).slice(2) + '.mp4';
-      const { error: upErr } = await supabase.storage.from('track-videos').upload(path, file, { contentType: 'video/mp4' });
+      const { error: upErr } = await supabase.storage.from('track-videos').upload(path, file, { contentType: 'video/mp4', cacheControl: '31536000' });
       if (upErr) throw upErr;
       const { data: { publicUrl } } = supabase.storage.from('track-videos').getPublicUrl(path);
       onChange(publicUrl);
@@ -1191,7 +1191,12 @@ export default function TrackUploadPanel() {
     const fileExt  = file.name.split('.').pop();
     const fileName = `${folder}${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
     for (let attempt = 1; attempt <= retries; attempt++) {
-      const { error } = await supabase.storage.from('feelz-samples').upload(fileName, file);
+      // cacheControl: 1 year — safe because each upload gets a unique
+      // timestamped filename and is never overwritten, so there's no
+      // staleness risk. Without this, Supabase defaults to a 1-hour cache,
+      // meaning every play of every track re-fetches the full file from
+      // origin storage far more often than necessary.
+      const { error } = await supabase.storage.from('feelz-samples').upload(fileName, file, { cacheControl: '31536000' });
       if (!error) {
         const { data: { publicUrl } } = supabase.storage.from('feelz-samples').getPublicUrl(fileName);
         return publicUrl;

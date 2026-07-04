@@ -349,7 +349,7 @@ function ChallengeUploadSheet({ challenge, user, onClose, onComplete }) {
       // Upload audio
       const audioExt = audioFile.name.split('.').pop();
       const audioPath = `${u.id}/${Date.now()}_challenge.${audioExt}`;
-      const { error: audioErr } = await supabase.storage.from('tracks').upload(audioPath, audioFile);
+      const { error: audioErr } = await supabase.storage.from('tracks').upload(audioPath, audioFile, { cacheControl: '31536000' });
       if (audioErr) throw audioErr;
       const { data: { publicUrl: audioUrl } } = supabase.storage.from('tracks').getPublicUrl(audioPath);
 
@@ -358,7 +358,7 @@ function ChallengeUploadSheet({ challenge, user, onClose, onComplete }) {
       if (coverFile) {
         const coverExt = coverFile.name.split('.').pop();
         const coverPath = `${u.id}/${Date.now()}_challenge_cover.${coverExt}`;
-        const { error: covErr } = await supabase.storage.from('covers').upload(coverPath, coverFile);
+        const { error: covErr } = await supabase.storage.from('covers').upload(coverPath, coverFile, { cacheControl: '31536000' });
         if (!covErr) {
           const { data: { publicUrl } } = supabase.storage.from('covers').getPublicUrl(coverPath);
           coverUrl = publicUrl;
