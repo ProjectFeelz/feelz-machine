@@ -50,35 +50,17 @@ function ListenersTab() {
   const grantTier = async (listenerId, userId, tierSlug, displayName) => {
     setGranting(listenerId);
     try {
-      const { data: tier } = await supabase.from('platform_tiers').select('id').eq('slug', tierSlug).single();
-      if (!tier && tierSlug !== 'free') { showToast(`Tier "${tierSlug}" not found`, 'error'); setGranting(null); return; }
-
-      await supabase.from('listener_tier_subscriptions')
-        .update({ status: 'cancelled', cancelled_at: new Date().toISOString() })
-        .eq('user_id', userId).eq('status', 'active');
-
-      if (tierSlug !== 'free') {
-        await supabase.from('listener_tier_subscriptions').insert({
-          user_id: userId, tier_id: tier.id, status: 'active', billing_cycle: 'annual',
-          started_at: new Date().toISOString(),
-          expires_at: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
-        });
-      }
-
-      await supabase.from('listeners')
-        .update({
-          tier: tierSlug,
-          tier_started_at: new Date().toISOString(),
-          tier_expires_at: tierSlug !== 'free' ? new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString() : null,
-        })
-        .eq('id', listenerId);
-
-      await supabase.from('notifications').insert({
-        user_id: userId, type: 'tier_granted',
-        title: tierSlug === 'free' ? 'Plan updated' : 'Fan Pro granted',
-        message: tierSlug === 'free' ? 'Your plan has been updated to Free.' : 'An admin granted you Fan Pro access. Enjoy your themes and badge!',
-        metadata: { tier_slug: tierSlug },
-      }).then(() => {});
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch('/.netlify/functions/grant-listener-tier', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.access_token || ''}`,
+        },
+        body: JSON.stringify({ listenerId, userId, tierSlug }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Grant failed');
 
       setListeners(prev => prev.map(l => l.id === listenerId ? { ...l, tier: tierSlug } : l));
       showToast(`${displayName || 'Listener'} → ${tierSlug.toUpperCase()} ✓`);

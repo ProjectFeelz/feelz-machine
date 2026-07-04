@@ -17,6 +17,10 @@ const THEMES = [
   { key: 'deep_navy', label: 'Deep Navy',   bg: '#060c1a', surface: 'rgba(59,130,246,0.07)',   surface2: 'rgba(59,130,246,0.12)',  border: 'rgba(59,130,246,0.18)',  accent: '#3B82F6' },
   { key: 'forest',    label: 'Forest Dark', bg: '#040f07', surface: 'rgba(34,197,94,0.06)',    surface2: 'rgba(34,197,94,0.10)',   border: 'rgba(34,197,94,0.16)',   accent: '#22C55E' },
   { key: 'warm_dark', label: 'Warm Dark',   bg: '#120800', surface: 'rgba(249,115,22,0.06)',   surface2: 'rgba(249,115,22,0.10)',  border: 'rgba(249,115,22,0.16)',  accent: '#F97316' },
+  // Requested by listeners — pink/sparkle palette
+  { key: 'bubblegum', label: 'Bubblegum',   bg: '#1F0313', surface: 'rgba(236,72,153,0.06)',   surface2: 'rgba(236,72,153,0.10)',  border: 'rgba(236,72,153,0.16)',  accent: '#EC4899' },
+  { key: 'blush',     label: 'Blush',       bg: '#1A0A10', surface: 'rgba(240,168,188,0.06)',  surface2: 'rgba(240,168,188,0.10)', border: 'rgba(240,168,188,0.16)', accent: '#F0A8BC' },
+  { key: 'sparkle',   label: 'Sparkle',     bg: '#180A1F', surface: 'rgba(217,70,239,0.06)',   surface2: 'rgba(217,70,239,0.10)',  border: 'rgba(217,70,239,0.16)',  accent: '#D946EF', sparkle: true },
 ];
 
 function applyTheme(themeKey) {
@@ -28,6 +32,7 @@ function applyTheme(themeKey) {
   r.style.setProperty('--fm-border',    theme.border);
   r.style.setProperty('--fm-border-2',  theme.border);
   r.style.setProperty('--app-accent',   theme.accent);
+  r.toggleAttribute('data-theme-sparkle', !!theme.sparkle);
 }
 
 export default function LibraryPage() {

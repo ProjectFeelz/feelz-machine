@@ -14,7 +14,6 @@ import PaymentSettings from '../components/PaymentSettings';
 import TierGate from '../components/TierGate';
 import { TierBadge } from '../components/TierGate';
 import { useTier } from '../contexts/useTier';
-import { useListenerTheme, LISTENER_THEME_PRESETS } from '../contexts/ListenerThemeContext';
 import ProfileCompletionBanner from '../components/ProfileCompletionBanner';
 import { useStreakContext } from '../contexts/StreakContext';
 
@@ -108,7 +107,6 @@ export default function ProfilePage() {
     rawIsAdmin, rawIsArtist, rawIsMaster, viewAs, setViewAs, deleteAccount,
   } = useAuth();
   const { tierSlug } = useTier();
-  const listenerTheme = useListenerTheme();
   const { streak, longestStreak, discoveryStreak } = useStreakContext();
   const [streakRow, setStreakRow]       = useState(null);
   const [freezing, setFreezing]         = useState(false);
@@ -901,7 +899,7 @@ export default function ProfilePage() {
 
       {/* ── Listener: App Theme + Fan Pro explainer ── */}
       {!isArtist && (
-        <ListenerThemeAndFanProSection tierSlug={tierSlug} listenerTheme={listenerTheme} nav={nav} />
+        <ListenerThemeAndFanProSection tierSlug={tierSlug} nav={nav} />
       )}
 
       {/* ── Nav links ── */}
@@ -990,7 +988,7 @@ export default function ProfilePage() {
   );
 }
 
-function ListenerThemeAndFanProSection({ tierSlug, listenerTheme, nav }) {
+function ListenerThemeAndFanProSection({ tierSlug, nav }) {
   const [showLearnMore, setShowLearnMore] = useState(false);
   const isPro = tierSlug === 'pro';
 
@@ -1008,35 +1006,18 @@ function ListenerThemeAndFanProSection({ tierSlug, listenerTheme, nav }) {
             <Palette className="w-4 h-4 text-purple-400 flex-shrink-0" />
             <div>
               <p className="text-sm text-white font-medium">Unlock App Themes</p>
-              <p className="text-xs text-white/30 mt-0.5">{LISTENER_THEME_PRESETS.length} colour schemes, including pink & sparkle — upgrade to Fan Pro</p>
+              <p className="text-xs text-white/30 mt-0.5">7 colour schemes, including pink & sparkle — upgrade to Fan Pro</p>
             </div>
           </button>
         ) : (
-          <div className="grid grid-cols-5 gap-2">
-            {LISTENER_THEME_PRESETS.map(preset => (
-              <button
-                key={preset.slug}
-                onClick={() => listenerTheme.setTheme(preset.slug)}
-                className="relative flex flex-col items-center space-y-1.5 active:scale-95 transition"
-                title={preset.name}
-              >
-                <div className="w-full aspect-square rounded-lg border-2 overflow-hidden transition-all"
-                  style={{
-                    backgroundColor: preset.bg,
-                    borderColor: listenerTheme.activeSlug === preset.slug ? preset.secondary : 'transparent',
-                  }}>
-                  <div className="w-full h-1/2" style={{ backgroundColor: preset.secondary + '60' }} />
-                  <div className="w-3/4 h-px mx-auto mt-0.5" style={{ backgroundColor: preset.accent + '80' }} />
-                </div>
-                <p className="text-[9px] text-white/40 truncate w-full text-center">{preset.name}</p>
-                {listenerTheme.activeSlug === preset.slug && (
-                  <div className="absolute top-1 right-1 w-3 h-3 rounded-full bg-white flex items-center justify-center">
-                    <Check className="w-2 h-2 text-black" strokeWidth={3} />
-                  </div>
-                )}
-              </button>
-            ))}
-          </div>
+          <button onClick={() => nav('/library')}
+            className="w-full flex items-center space-x-3 p-3 rounded-xl bg-pink-500/5 border border-pink-500/15 text-left hover:bg-pink-500/8 transition active:scale-[0.98]">
+            <Palette className="w-4 h-4 text-pink-400 flex-shrink-0" />
+            <div>
+              <p className="text-sm text-white font-medium">Change Your Theme</p>
+              <p className="text-xs text-white/30 mt-0.5">Head to your Library — theme picker lives there, under Fan Pro</p>
+            </div>
+          </button>
         )}
       </div>
 
@@ -1052,7 +1033,7 @@ function ListenerThemeAndFanProSection({ tierSlug, listenerTheme, nav }) {
 
       {showLearnMore && (
         <div className="px-4 pb-4 space-y-3 border-t border-white/[0.04] pt-3">
-          <FanProBenefitRow icon={Sparkles} color="text-pink-400" title={`${LISTENER_THEME_PRESETS.length} App Themes`} body="Including pink and sparkle palettes — restyle the whole app to match your vibe, change anytime." />
+          <FanProBenefitRow icon={Sparkles} color="text-pink-400" title="7 App Themes" body="Including pink and sparkle palettes — restyle the whole app to match your vibe, change anytime." />
           <FanProBenefitRow icon={Star} color="text-yellow-400" title="Fan Pro Badge" body="A badge on your profile and in chats so artists and other fans know you're a supporter." />
           <FanProBenefitRow icon={Zap} color="text-purple-400" title="Support Independent Artists" body="Your subscription helps fund the artists you listen to, directly." />
           {!isPro && (

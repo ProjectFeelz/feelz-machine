@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Home, Search, Library, LayoutDashboard, Sparkles, Plus } from 'lucide-react';
+import { Home, Search, Library, LayoutDashboard, Sparkles, Plus, DollarSign } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useHaptics } from '../../hooks/useHaptics';
 import CreateMenuModal from '../CreateMenuModal';
@@ -46,10 +46,11 @@ export default function MobileNav() {
     // listeners see different menus (handled at render time below)
     { special: 'plus', tourKey: 'nav-create' },
     { path: '/library',      icon: Library,         label: 'Library',   tourKey: 'nav-library'  },
-    // Hub — show for artists and beatmakers, not pure listeners
+    // Hub for artists/beatmakers, Affiliate Program for listeners — either
+    // way everyone ends up with 5 items so the plus sits at a true center
     ...(isArtist || isBeatmaker
       ? [{ path: '/hub', icon: LayoutDashboard, label: isBeatmaker ? 'Studio' : 'Hub', tourKey: 'nav-hub' }]
-      : []),
+      : [{ path: '/affiliates', icon: DollarSign, label: 'Earn', tourKey: 'nav-affiliate' }]),
   ];
 
   return (
