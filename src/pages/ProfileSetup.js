@@ -980,7 +980,7 @@ export default function ProfilePage() {
                   <Palette className="w-4 h-4 text-purple-400 flex-shrink-0" />
                   <div>
                     <p className="text-sm text-white font-medium">Unlock App Themes</p>
-                    <p className="text-xs text-white/30 mt-0.5">10 colour schemes — upgrade to Fan Pro</p>
+                    <p className="text-xs text-white/30 mt-0.5">{LISTENER_THEME_PRESETS.length} colour schemes — upgrade to Fan Pro</p>
                   </div>
                 </button>
               ) : (

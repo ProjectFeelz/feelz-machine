@@ -4,16 +4,17 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import {
-  LogOut, ChevronRight, User, Music, Globe, Shield, Trophy,
+  LogOut, ChevronRight, User, Music, Globe, Shield,
   Instagram, Twitter, Youtube, MessageCircle, Loader,
   Save, Palette, ExternalLink, DollarSign, Camera, Check,
-  Link, Zap, Crown, Star, Trash2, AlertTriangle, Plus, Mic
+  Link, Zap, Crown, Star, Trash2, AlertTriangle, Plus, Mic, Sparkles, Info
 } from 'lucide-react';
 import ThemeEditor from '../components/ThemeEditor';
 import PaymentSettings from '../components/PaymentSettings';
 import TierGate from '../components/TierGate';
 import { TierBadge } from '../components/TierGate';
 import { useTier } from '../contexts/useTier';
+import { useListenerTheme, LISTENER_THEME_PRESETS } from '../contexts/ListenerThemeContext';
 import ProfileCompletionBanner from '../components/ProfileCompletionBanner';
 import { useStreakContext } from '../contexts/StreakContext';
 
@@ -107,6 +108,7 @@ export default function ProfilePage() {
     rawIsAdmin, rawIsArtist, rawIsMaster, viewAs, setViewAs, deleteAccount,
   } = useAuth();
   const { tierSlug } = useTier();
+  const listenerTheme = useListenerTheme();
   const { streak, longestStreak, discoveryStreak } = useStreakContext();
   const [streakRow, setStreakRow]       = useState(null);
   const [freezing, setFreezing]         = useState(false);
@@ -897,11 +899,15 @@ export default function ProfilePage() {
         </div>
       )}
 
+      {/* ── Listener: App Theme + Fan Pro explainer ── */}
+      {!isArtist && (
+        <ListenerThemeAndFanProSection tierSlug={tierSlug} listenerTheme={listenerTheme} nav={nav} />
+      )}
+
       {/* ── Nav links ── */}
       <div className="rounded-2xl border border-white/[0.06] overflow-hidden mb-4" style={{ background: 'rgba(255,255,255,0.02)' }}>
         {isArtist && <NavRow icon={Music} label="Artist Dashboard" iconColor="text-purple-400" onClick={() => nav('/dashboard')} />}
         {isAdmin  && <NavRow icon={Shield} label="Admin Panel" iconColor="text-yellow-400" onClick={() => nav('/admin')} border />}
-        <NavRow icon={Trophy} label="Competitions" iconColor="text-yellow-400" onClick={() => nav('/competitions')} border />
         <NavRow icon={Link} label="Affiliate Programme" iconColor="text-green-400" onClick={() => nav('/affiliates')} border badge="Earn" />
         <NavRow icon={Globe} label="Privacy Policy" onClick={() => nav('/privacy-policy')} border />
         <NavRow icon={Globe} label="Terms of Use"   onClick={() => nav('/terms-of-use')}   border />
@@ -980,6 +986,98 @@ export default function ProfilePage() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function ListenerThemeAndFanProSection({ tierSlug, listenerTheme, nav }) {
+  const [showLearnMore, setShowLearnMore] = useState(false);
+  const isPro = tierSlug === 'pro';
+
+  return (
+    <div className="rounded-2xl border border-white/[0.06] overflow-hidden mb-4" style={{ background: 'rgba(255,255,255,0.02)' }}>
+      <div className="p-4">
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-xs text-white/40 font-semibold uppercase tracking-wider">App Theme</p>
+          {isPro && <span className="text-[10px] px-1.5 py-0.5 bg-pink-500/10 text-pink-400 rounded font-medium">Fan Pro</span>}
+        </div>
+
+        {!isPro ? (
+          <button onClick={() => nav('/listener/upgrade')}
+            className="w-full flex items-center space-x-3 p-3 rounded-xl bg-purple-500/5 border border-purple-500/15 text-left hover:bg-purple-500/8 transition active:scale-[0.98]">
+            <Palette className="w-4 h-4 text-purple-400 flex-shrink-0" />
+            <div>
+              <p className="text-sm text-white font-medium">Unlock App Themes</p>
+              <p className="text-xs text-white/30 mt-0.5">{LISTENER_THEME_PRESETS.length} colour schemes, including pink & sparkle — upgrade to Fan Pro</p>
+            </div>
+          </button>
+        ) : (
+          <div className="grid grid-cols-5 gap-2">
+            {LISTENER_THEME_PRESETS.map(preset => (
+              <button
+                key={preset.slug}
+                onClick={() => listenerTheme.setTheme(preset.slug)}
+                className="relative flex flex-col items-center space-y-1.5 active:scale-95 transition"
+                title={preset.name}
+              >
+                <div className="w-full aspect-square rounded-lg border-2 overflow-hidden transition-all"
+                  style={{
+                    backgroundColor: preset.bg,
+                    borderColor: listenerTheme.activeSlug === preset.slug ? preset.secondary : 'transparent',
+                  }}>
+                  <div className="w-full h-1/2" style={{ backgroundColor: preset.secondary + '60' }} />
+                  <div className="w-3/4 h-px mx-auto mt-0.5" style={{ backgroundColor: preset.accent + '80' }} />
+                </div>
+                <p className="text-[9px] text-white/40 truncate w-full text-center">{preset.name}</p>
+                {listenerTheme.activeSlug === preset.slug && (
+                  <div className="absolute top-1 right-1 w-3 h-3 rounded-full bg-white flex items-center justify-center">
+                    <Check className="w-2 h-2 text-black" strokeWidth={3} />
+                  </div>
+                )}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Learn about Fan Pro */}
+      <button onClick={() => setShowLearnMore(v => !v)}
+        className="w-full flex items-center justify-between px-4 py-3 border-t border-white/[0.05] hover:bg-white/[0.03] transition">
+        <div className="flex items-center space-x-2">
+          <Info className="w-4 h-4 text-pink-400" />
+          <span className="text-sm text-white">Learn about Fan Pro</span>
+        </div>
+        <ChevronRight className={`w-4 h-4 text-white/20 transition-transform ${showLearnMore ? 'rotate-90' : ''}`} />
+      </button>
+
+      {showLearnMore && (
+        <div className="px-4 pb-4 space-y-3 border-t border-white/[0.04] pt-3">
+          <FanProBenefitRow icon={Sparkles} color="text-pink-400" title={`${LISTENER_THEME_PRESETS.length} App Themes`} body="Including pink and sparkle palettes — restyle the whole app to match your vibe, change anytime." />
+          <FanProBenefitRow icon={Star} color="text-yellow-400" title="Fan Pro Badge" body="A badge on your profile and in chats so artists and other fans know you're a supporter." />
+          <FanProBenefitRow icon={Zap} color="text-purple-400" title="Support Independent Artists" body="Your subscription helps fund the artists you listen to, directly." />
+          {!isPro && (
+            <button onClick={() => nav('/listener/upgrade')}
+              className="w-full mt-2 py-3 rounded-xl text-sm font-semibold text-black transition active:scale-[0.98]"
+              style={{ background: 'linear-gradient(135deg, #EC4899, #D946EF)' }}>
+              Upgrade to Fan Pro
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FanProBenefitRow({ icon: Icon, color, title, body }) {
+  return (
+    <div className="flex items-start space-x-3">
+      <div className="w-8 h-8 rounded-xl bg-white/[0.04] flex items-center justify-center flex-shrink-0">
+        <Icon className={`w-4 h-4 ${color}`} />
+      </div>
+      <div>
+        <p className="text-xs font-bold text-white">{title}</p>
+        <p className="text-xs text-white/40 mt-0.5 leading-relaxed">{body}</p>
+      </div>
     </div>
   );
 }

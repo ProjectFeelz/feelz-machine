@@ -18,6 +18,10 @@ export const LISTENER_THEME_PRESETS = [
   { slug: 'neon',       name: 'Neon',      primary: '#F0FDF4', secondary: '#22C55E', accent: '#4ADE80', bg: '#000000', surface: 'rgba(34,197,94,0.05)',    border: 'rgba(34,197,94,0.10)'   },
   { slug: 'mono',       name: 'Mono',      primary: '#FAFAFA', secondary: '#737373', accent: '#A3A3A3', bg: '#0A0A0A', surface: 'rgba(255,255,255,0.03)', border: 'rgba(255,255,255,0.07)' },
   { slug: 'amethyst',   name: 'Amethyst',  primary: '#F5F3FF', secondary: '#7C3AED', accent: '#A78BFA', bg: '#0D0A1F', surface: 'rgba(124,58,237,0.06)',  border: 'rgba(124,58,237,0.14)'  },
+  // Requested by listeners — pink/sparkle palette
+  { slug: 'bubblegum',  name: 'Bubblegum', primary: '#FFF0F8', secondary: '#EC4899', accent: '#F472B6', bg: '#1F0313', surface: 'rgba(236,72,153,0.06)',  border: 'rgba(236,72,153,0.14)'  },
+  { slug: 'blush',      name: 'Blush',     primary: '#FFF5F7', secondary: '#F0A8BC', accent: '#FBCFE8', bg: '#1A0A10', surface: 'rgba(240,168,188,0.06)', border: 'rgba(240,168,188,0.14)' },
+  { slug: 'sparkle',    name: 'Sparkle',   primary: '#FFF8FC', secondary: '#D946EF', accent: '#FDE68A', bg: '#180A1F', surface: 'rgba(217,70,239,0.06)',  border: 'rgba(217,70,239,0.16)', sparkle: true },
 ];
 
 const ThemeContext = createContext(null);
@@ -31,6 +35,7 @@ function applyTheme(preset) {
   root.style.setProperty('--lt-surface',   preset.surface);
   root.style.setProperty('--lt-border',    preset.border);
   root.setAttribute('data-listener-theme', preset.slug);
+  root.toggleAttribute('data-theme-sparkle', !!preset.sparkle);
 }
 
 function clearTheme() {
@@ -38,6 +43,7 @@ function clearTheme() {
   ['--lt-bg','--lt-primary','--lt-secondary','--lt-accent','--lt-surface','--lt-border']
     .forEach(v => root.style.removeProperty(v));
   root.removeAttribute('data-listener-theme');
+  root.removeAttribute('data-theme-sparkle');
 }
 
 export function ListenerThemeProvider({ children }) {

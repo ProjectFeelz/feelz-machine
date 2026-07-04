@@ -1,14 +1,16 @@
 import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Home, Search, Library, LayoutDashboard, Trophy, Sparkles, Upload } from 'lucide-react';
+import { Home, Search, Library, LayoutDashboard, Sparkles, Plus } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useHaptics } from '../../hooks/useHaptics';
+import CreateMenuModal from '../CreateMenuModal';
 
 export default function MobileNav() {
   const navigate        = useNavigate();
   const location        = useLocation();
-  const { user, isBeatmaker, isArtist, isListener } = useAuth();
+  const { user, artist, isBeatmaker, isArtist, isListener } = useAuth();
   const [keyboardOpen, setKeyboardOpen] = React.useState(false);
+  const [showCreateMenu, setShowCreateMenu] = React.useState(false);
 
   React.useEffect(() => {
     if (!window.visualViewport) return;
@@ -39,7 +41,11 @@ export default function MobileNav() {
   const navItems = [
     { path: '/',             icon: Sparkles,        label: 'For You',   tourKey: 'nav-foryou'   },
     { path: '/browse',       icon: Search,          label: 'Browse',    tourKey: 'nav-browse'   },
-    { path: '/competitions', icon: Trophy,          label: 'Win',       tourKey: 'nav-competitions' },
+    // Center plus — artists/beatmakers only, opens the same Create menu as
+    // the "+" on their own profile. Hidden entirely for listeners.
+    ...(isArtist || isBeatmaker
+      ? [{ special: 'plus', tourKey: 'nav-create' }]
+      : []),
     { path: '/library',      icon: Library,         label: 'Library',   tourKey: 'nav-library'  },
     // Hub — show for artists and beatmakers, not pure listeners
     ...(isArtist || isBeatmaker
@@ -56,7 +62,25 @@ export default function MobileNav() {
       }}
     >
       <div className="flex items-center justify-around h-16 w-full mx-auto px-1">
-        {navItems.map(({ path, icon: Icon, label, tourKey }) => {
+        {navItems.map((item) => {
+          if (item.special === 'plus') {
+            return (
+              <button
+                key="plus"
+                data-tour={item.tourKey}
+                onClick={() => { tap(); setShowCreateMenu(true); }}
+                className="flex flex-col items-center justify-center flex-1 h-full transition-all active:scale-90"
+              >
+                <div
+                  className="w-11 h-11 rounded-full flex items-center justify-center -mt-5 shadow-lg"
+                  style={{ backgroundColor: '#90AF2F', boxShadow: '0 4px 16px rgba(144,175,47,0.4)' }}
+                >
+                  <Plus className="w-6 h-6 text-black" strokeWidth={2.5} />
+                </div>
+              </button>
+            );
+          }
+          const { path, icon: Icon, label, tourKey } = item;
           const isActive = location.pathname === path ||
             (path !== '/' && location.pathname.startsWith(path)) ||
             (path === '/' && location.pathname === '/for-you');
@@ -80,6 +104,13 @@ export default function MobileNav() {
           );
         })}
       </div>
+      {showCreateMenu && (isArtist || isBeatmaker) && (
+        <CreateMenuModal
+          artist={artist}
+          user={user}
+          onClose={() => setShowCreateMenu(false)}
+        />
+      )}
     </nav>
   );
 }
