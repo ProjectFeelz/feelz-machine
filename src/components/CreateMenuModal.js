@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import { useTier } from '../contexts/useTier';
@@ -140,16 +141,17 @@ export default function CreateMenuModal({ artist, user, onClose, primaryColor = 
   };
 
   if (showMerchConnect) {
-    return (
+    return createPortal(
       <MerchConnectSheet
         artist={artist}
         onClose={() => setShowMerchConnect(false)}
         onConnected={() => { setShowMerchConnect(false); close(); window.location.reload(); }}
-      />
+      />,
+      document.body
     );
   }
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-[600] flex items-center justify-center px-6 bg-black/80 backdrop-blur-sm md:pl-64"
       onClick={close}>
       <div className="w-full overflow-y-auto overflow-x-hidden rounded-3xl"
@@ -378,6 +380,7 @@ export default function CreateMenuModal({ artist, user, onClose, primaryColor = 
 
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
