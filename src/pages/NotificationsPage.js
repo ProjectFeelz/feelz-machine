@@ -419,7 +419,6 @@ export default function NotificationsPage() {
       if (meta.track_slug) { navigate(`/track/${meta.track_slug}`); return; }
       if (streamTrackId) { navigate(`/track/${streamTrackId}`); return; }
       if (artist?.slug) { navigate(`/artist/${artist.slug}`); return; }
-      if (artist?.slug) { navigate(`/artist/${artist.slug}`); return; }
       navigate('/browse');
       return;
     }
@@ -427,11 +426,8 @@ export default function NotificationsPage() {
     if (type === 'track_commented' || type === 'new_comment') {
       const commentTrackId = meta.track_id || notif.track_id;
       if (meta.post_id) { navigate(`/feed?post=${meta.post_id}`); return; }
-      const replyParam = meta.from_artist_name
-        ? `&reply_name=${encodeURIComponent(meta.from_artist_name)}`
-        : '';
-      if (meta.track_slug) { navigate(`/track/${meta.track_slug}?comments=1${replyParam}`); return; }
-      if (commentTrackId) { navigate(`/track/${commentTrackId}?comments=1${replyParam}`); return; }
+      if (commentTrackId) { navigate(`/?openComments=${commentTrackId}`); return; }
+      if (meta.track_slug) { navigate(`/?openCommentsSlug=${meta.track_slug}`); return; }
       if (meta.artist_slug) { navigate(`/artist/${meta.artist_slug}`); return; }
       navigate('/browse');
       return;

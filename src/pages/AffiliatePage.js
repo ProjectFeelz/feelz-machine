@@ -39,6 +39,7 @@ export default function AffiliatePage() {
   const [payoutMethod, setPayoutMethod] = useState('paypal');
   const [requestingPayout, setRequestingPayout] = useState(false);
   const [eligibilityInfo, setEligibilityInfo] = useState(null);
+  const [progress, setProgress] = useState(null);
 
   const isListener = !artist;
   const refLink = affiliate ? `${BASE_URL}?ref=${affiliate.ref_code}` : '';
@@ -71,6 +72,29 @@ export default function AffiliatePage() {
         const { data: eligible } = await supabase
           .rpc('check_affiliate_eligibility', { p_user_id: user.id });
         setEligibilityInfo(eligible);
+
+        // Fetch the actual numbers behind each requirement, so the gate can
+        // show real progress instead of a flat pass/fail
+        const accountDays = Math.floor((Date.now() - new Date(user.created_at).getTime()) / 86400000);
+        if (isListener) {
+          const [{ count: followingCount }, { count: streamCount }] = await Promise.all([
+            supabase.from('follows').select('*', { count: 'exact', head: true }).eq('follower_id', user.id),
+            supabase.from('streams').select('*', { count: 'exact', head: true }).eq('user_id', user.id),
+          ]);
+          setProgress({
+            accountDays, accountNeeded: 14,
+            followingCount: followingCount || 0, followingNeeded: 10,
+            streamCount: streamCount || 0, streamNeeded: 20,
+          });
+        } else if (artist) {
+          const { count: trackCount } = await supabase
+            .from('tracks').select('*', { count: 'exact', head: true })
+            .eq('artist_id', artist.id).eq('is_published', true);
+          setProgress({
+            accountDays, accountNeeded: 30,
+            trackCount: trackCount || 0, trackNeeded: 1,
+          });
+        }
       }
 
       // Fetch active campaigns
@@ -186,19 +210,23 @@ export default function AffiliatePage() {
             </p>
 
             {/* Requirements */}
-            <div className="text-left bg-white/[0.03] rounded-xl p-4 space-y-2">
-              <p className="text-xs text-white/40 font-semibold uppercase tracking-wider mb-3">Requirements</p>
-              {isListener ? (
-                <>
-                  <RequirementRow label="Account at least 14 days old" />
-                  <RequirementRow label="Following at least 10 artists" />
-                  <RequirementRow label="At least 20 streams recorded" />
-                </>
+            <div className="text-left bg-white/[0.03] rounded-xl p-4 space-y-4">
+              <p className="text-xs text-white/40 font-semibold uppercase tracking-wider mb-1">Requirements</p>
+              {progress ? (
+                isListener ? (
+                  <>
+                    <RequirementRow label="Account age (days)" current={progress.accountDays} needed={progress.accountNeeded} />
+                    <RequirementRow label="Artists followed" current={progress.followingCount} needed={progress.followingNeeded} />
+                    <RequirementRow label="Streams recorded" current={progress.streamCount} needed={progress.streamNeeded} />
+                  </>
+                ) : (
+                  <>
+                    <RequirementRow label="Account age (days)" current={progress.accountDays} needed={progress.accountNeeded} />
+                    <RequirementRow label="Published tracks" current={progress.trackCount} needed={progress.trackNeeded} />
+                  </>
+                )
               ) : (
-                <>
-                  <RequirementRow label="Account at least 30 days old" />
-                  <RequirementRow label="At least 1 published track" />
-                </>
+                <p className="text-xs text-white/20">Loading your progress…</p>
               )}
             </div>
 
@@ -211,7 +239,22 @@ export default function AffiliatePage() {
             ) : (
               <div className="flex items-center space-x-2 px-4 py-3 bg-yellow-500/10 rounded-xl border border-yellow-500/20">
                 <AlertCircle className="w-4 h-4 text-yellow-400 flex-shrink-0" />
-                <p className="text-xs text-yellow-400">Keep growing your presence to unlock the programme</p>
+                <p className="text-xs text-yellow-400">
+                  {progress
+                    ? (() => {
+                        const missing = [];
+                        if (isListener) {
+                          if (progress.followingCount < progress.followingNeeded) missing.push(`follow ${progress.followingNeeded - progress.followingCount} more artist${progress.followingNeeded - progress.followingCount === 1 ? '' : 's'}`);
+                          if (progress.streamCount < progress.streamNeeded) missing.push(`${progress.streamNeeded - progress.streamCount} more stream${progress.streamNeeded - progress.streamCount === 1 ? '' : 's'}`);
+                          if (progress.accountDays < progress.accountNeeded) missing.push(`${progress.accountNeeded - progress.accountDays} more day${progress.accountNeeded - progress.accountDays === 1 ? '' : 's'} on your account`);
+                        } else {
+                          if (progress.trackCount < progress.trackNeeded) missing.push('publish a track');
+                          if (progress.accountDays < progress.accountNeeded) missing.push(`${progress.accountNeeded - progress.accountDays} more day${progress.accountNeeded - progress.accountDays === 1 ? '' : 's'} on your account`);
+                        }
+                        return missing.length > 0 ? `Almost there — ${missing.join(' and ')}.` : 'Keep growing your presence to unlock the programme';
+                      })()
+                    : 'Keep growing your presence to unlock the programme'}
+                </p>
               </div>
             )}
           </div>
@@ -488,11 +531,26 @@ export default function AffiliatePage() {
   );
 }
 
-function RequirementRow({ label }) {
+function RequirementRow({ label, current, needed }) {
+  const met = current >= needed;
+  const pct = Math.min(100, Math.round((current / needed) * 100));
   return (
-    <div className="flex items-center space-x-2">
-      <CheckCircle className="w-3.5 h-3.5 text-purple-400 flex-shrink-0" />
-      <span className="text-xs text-white/60">{label}</span>
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center space-x-2">
+          {met
+            ? <CheckCircle className="w-3.5 h-3.5 text-green-400 flex-shrink-0" />
+            : <div className="w-3.5 h-3.5 rounded-full border-2 border-white/20 flex-shrink-0" />}
+          <span className={`text-xs ${met ? 'text-white/60' : 'text-white/50'}`}>{label}</span>
+        </div>
+        <span className={`text-[10px] font-medium ${met ? 'text-green-400/70' : 'text-white/30'}`}>
+          {current} / {needed}
+        </span>
+      </div>
+      <div className="h-1.5 bg-white/[0.06] rounded-full overflow-hidden">
+        <div className={`h-full rounded-full transition-all ${met ? 'bg-green-400' : 'bg-purple-400'}`}
+          style={{ width: `${pct}%` }} />
+      </div>
     </div>
   );
 }

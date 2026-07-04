@@ -984,6 +984,27 @@ export default function ForYouPage() {
   const [viewingStory, setViewingStory] = useState(null); // { artist, stories }
   const [activeSheet, setActiveSheet]   = useState(null); // { type, track }
 
+  // Deep-link support — notifications land here with ?openComments=<trackId>
+  // or ?openCommentsSlug=<slug> instead of going to the separate track page
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const trackId = params.get('openComments');
+    const trackSlug = params.get('openCommentsSlug');
+    if (!trackId && !trackSlug) return;
+    (async () => {
+      let query = supabase.from('tracks').select('id, title, slug, cover_artwork_url, artists(artist_name)');
+      query = trackId ? query.eq('id', trackId) : query.eq('slug', trackSlug);
+      const { data } = await query.maybeSingle();
+      if (data) {
+        setActiveSheet({
+          type: 'comments',
+          track: { ...data, artist_name: data.artists?.artist_name || '' },
+        });
+      }
+      window.history.replaceState({}, '', '/');
+    })();
+  }, []); // eslint-disable-line
+
 
   const [shareCard, setShareCard]         = useState(null);  // { artist, url }
 

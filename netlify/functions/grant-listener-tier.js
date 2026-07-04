@@ -32,9 +32,9 @@ exports.handler = async (event) => {
     const { data: { user: caller }, error: authErr } = await supabase.auth.getUser(token);
     if (authErr || !caller) return { statusCode: 401, headers, body: JSON.stringify({ error: 'Invalid session' }) };
 
-    const { data: callerProfile } = await supabase
-      .from('profiles').select('role').eq('id', caller.id).maybeSingle();
-    if (callerProfile?.role !== 'admin') {
+    const { data: adminRow } = await supabase
+      .from('admins').select('id').eq('user_id', caller.id).maybeSingle();
+    if (!adminRow) {
       return { statusCode: 403, headers, body: JSON.stringify({ error: 'Admin access required' }) };
     }
 
