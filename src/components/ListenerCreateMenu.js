@@ -8,8 +8,8 @@ import { useTier } from '../contexts/useTier';
 // and portal approach, different (listener-relevant) options inside.
 export default function ListenerCreateMenu({ onClose }) {
   const navigate = useNavigate();
-  const { tierSlug } = useTier();
-  const isPro = tierSlug === 'pro';
+  const { isListenerPro } = useTier();
+  const isPro = isListenerPro;
 
   const options = [
     { id: 'playlist', icon: '🎵', label: 'Create Playlist', sub: 'Start a new playlist', action: () => { onClose(); navigate('/library/playlists?create=1'); } },

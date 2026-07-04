@@ -106,7 +106,7 @@ export default function ProfilePage() {
     user, profile, artist, isAdmin, isArtist, isBeatmaker, signOut, refreshProfile,
     rawIsAdmin, rawIsArtist, rawIsMaster, viewAs, setViewAs, deleteAccount,
   } = useAuth();
-  const { tierSlug } = useTier();
+  const { tierSlug, listenerTierSlug, isListenerPro } = useTier();
   const { streak, longestStreak, discoveryStreak } = useStreakContext();
   const [streakRow, setStreakRow]       = useState(null);
   const [freezing, setFreezing]         = useState(false);
@@ -899,7 +899,7 @@ export default function ProfilePage() {
 
       {/* ── Listener: App Theme + Fan Pro explainer ── */}
       {!isArtist && (
-        <ListenerThemeAndFanProSection tierSlug={tierSlug} nav={nav} />
+        <ListenerThemeAndFanProSection isListenerPro={isListenerPro} nav={nav} />
       )}
 
       {/* ── Nav links ── */}
@@ -988,9 +988,9 @@ export default function ProfilePage() {
   );
 }
 
-function ListenerThemeAndFanProSection({ tierSlug, nav }) {
+function ListenerThemeAndFanProSection({ isListenerPro, nav }) {
   const [showLearnMore, setShowLearnMore] = useState(false);
-  const isPro = tierSlug === 'pro';
+  const isPro = isListenerPro;
 
   return (
     <div className="rounded-2xl border border-white/[0.06] overflow-hidden mb-4" style={{ background: 'rgba(255,255,255,0.02)' }}>
