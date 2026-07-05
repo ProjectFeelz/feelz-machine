@@ -3,15 +3,12 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { Home, Search, Library, LayoutDashboard, Sparkles, Plus, DollarSign } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useHaptics } from '../../hooks/useHaptics';
-import CreateMenuModal from '../CreateMenuModal';
-import ListenerCreateMenu from '../ListenerCreateMenu';
 
-export default function MobileNav() {
+export default function MobileNav({ onOpenCreateMenu }) {
   const navigate        = useNavigate();
   const location        = useLocation();
-  const { user, artist, isBeatmaker, isArtist, isListener } = useAuth();
+  const { user, isBeatmaker, isArtist } = useAuth();
   const [keyboardOpen, setKeyboardOpen] = React.useState(false);
-  const [showCreateMenu, setShowCreateMenu] = React.useState(false);
 
   React.useEffect(() => {
     if (!window.visualViewport) return;
@@ -68,7 +65,7 @@ export default function MobileNav() {
               <button
                 key="plus"
                 data-tour={item.tourKey}
-                onClick={() => { tap(); setShowCreateMenu(true); }}
+                onClick={() => { tap(); onOpenCreateMenu(); }}
                 className="flex flex-col items-center justify-center flex-1 h-full transition-all active:scale-90"
               >
                 <div
@@ -104,16 +101,6 @@ export default function MobileNav() {
           );
         })}
       </div>
-      {showCreateMenu && (isArtist || isBeatmaker) && (
-        <CreateMenuModal
-          artist={artist}
-          user={user}
-          onClose={() => setShowCreateMenu(false)}
-        />
-      )}
-      {showCreateMenu && !isArtist && !isBeatmaker && (
-        <ListenerCreateMenu onClose={() => setShowCreateMenu(false)} />
-      )}
     </nav>
   );
 }

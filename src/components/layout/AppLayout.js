@@ -18,6 +18,8 @@ import { useStreak } from '../../hooks/useStreak';
 import { StreakContext } from '../../contexts/StreakContext';
 import InstallPrompt from '../InstallPrompt';
 import { usePushNotifications } from '../../hooks/usePushNotifications';
+import CreateMenuModal from '../CreateMenuModal';
+import ListenerCreateMenu from '../ListenerCreateMenu';
 
 const NAV_HEIGHT         = 64;
 const MINI_PLAYER_HEIGHT = 64;
@@ -162,10 +164,11 @@ function MobileBellButton() {
 // ── Main layout ───────────────────────────────────────────────────────────────
 export default function AppLayout() {
   const { currentTrack }            = usePlayer();
-  const { user, hasProfile, loading, isArtist, isBeatmaker, viewAs, setViewAs } = useAuth();
+  const { user, artist, hasProfile, loading, isArtist, isBeatmaker, viewAs, setViewAs } = useAuth();
   const navigate                    = useNavigate();
   const location                    = useLocation();
   const [splashDone, setSplashDone] = useState(false);
+  const [showCreateMenu, setShowCreateMenu] = useState(false);
 
   // Load and apply saved listener theme on startup
   useAppThemeInit();
@@ -292,7 +295,22 @@ export default function AppLayout() {
         {location.pathname !== "/" && <FullPlayer />}
         {location.pathname !== "/" && <DesktopPlayer />}
         {location.pathname !== "/" && <MiniPlayer />}
-        <MobileNav />
+        <MobileNav onOpenCreateMenu={() => setShowCreateMenu(true)} />
+
+        {/* Rendered as a sibling of MobileNav, not a child — MobileNav
+            unmounts itself when the on-screen keyboard opens (sensible for
+            a bottom nav bar on its own), which was taking this modal down
+            with it the instant someone tried to type into it. */}
+        {showCreateMenu && (isArtist || isBeatmaker) && (
+          <CreateMenuModal
+            artist={artist}
+            user={user}
+            onClose={() => setShowCreateMenu(false)}
+          />
+        )}
+        {showCreateMenu && !isArtist && !isBeatmaker && (
+          <ListenerCreateMenu onClose={() => setShowCreateMenu(false)} />
+        )}
 
         {showTour && splashDone && !loading && hasProfile && (
           <AppTour isArtist={isArtist} isBeatmaker={isBeatmaker} onDone={dismissTour} />
