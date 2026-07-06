@@ -131,6 +131,10 @@
   schedule = "0 8 * * *"
 
 [[scheduled_functions]]
+  name = "cleanup-mp4-conversions"
+  schedule = "0 4 * * *"
+
+[[scheduled_functions]]
   name = "feature-education-drip"
   # schedule = "0 10 * * 3"  # disabled — platform tips not landing
 

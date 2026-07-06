@@ -528,6 +528,16 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
 
       // Skip ffmpeg.wasm — requires SharedArrayBuffer which needs COOP/COEP headers
       // that Netlify doesn't send. Go straight to server-side conversion.
+      //
+      // FIXED: this previously awaited res.json() on the background
+      // function's own response, expecting { mp4 } directly. Background
+      // functions always return an immediate 202 with no result body —
+      // that mismatch is why MP4 conversion has never actually worked,
+      // it silently fell back to WebM every single time. The real
+      // conversion takes ~30+ seconds for a 30-second story video, which
+      // is genuinely too long for a regular function's limit anyway, so
+      // background is still the right call, it just needs polling for
+      // the real result instead of trusting the immediate response.
       try {
         const base64 = await new Promise((resolve, reject) => {
           const reader = new FileReader();
@@ -536,23 +546,42 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
           reader.readAsDataURL(webmBlob);
         });
 
-        // convert-to-mp4-background is the actual function name
-        const res = await fetch('/.netlify/functions/convert-to-mp4-background', {
+        const jobId = (window.crypto && window.crypto.randomUUID)
+          ? window.crypto.randomUUID()
+          : `job-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+        // Fire the conversion — the response here is just Netlify's
+        // "accepted" acknowledgment, not the actual result
+        await fetch('/.netlify/functions/convert-to-mp4-background', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ video: base64, mimeType }),
+          body: JSON.stringify({ video: base64, jobId }),
         });
 
-        if (res.ok) {
-          const { mp4 } = await res.json();
-          const bytes   = Uint8Array.from(atob(mp4), c => c.charCodeAt(0));
-          const mp4Blob = new window.Blob([bytes], { type: 'video/mp4' });
-          mp4Blob._ext  = 'mp4';
-          setVideoBlob(mp4Blob);
-          setVideoFormat('MP4');
-        } else {
-          throw new Error(`Server returned ${res.status}`);
+        // Poll for the real result — conversion typically takes ~30-35s
+        // for a full-length story video, so this polls for up to 90s
+        // before giving up and falling back to WebM
+        const pollIntervalMs = 3000;
+        const maxWaitMs = 90000;
+        const startedAt = Date.now();
+        let result = null;
+
+        while (Date.now() - startedAt < maxWaitMs) {
+          await new Promise(r => setTimeout(r, pollIntervalMs));
+          const statusRes = await fetch(`/.netlify/functions/check-mp4-status?jobId=${jobId}`);
+          if (!statusRes.ok) continue;
+          const status = await statusRes.json();
+          if (status.ready) { result = status; break; }
+          if (status.failed) { throw new Error(status.reason || 'Conversion failed server-side'); }
         }
+
+        if (!result) throw new Error('MP4 conversion timed out after 90s');
+
+        const mp4Res = await fetch(result.url);
+        const mp4Blob = await mp4Res.blob();
+        mp4Blob._ext = 'mp4';
+        setVideoBlob(mp4Blob);
+        setVideoFormat('MP4');
       } catch (err) {
         console.error('MP4 conversion failed:', err.message);
         // Fallback — WebM works on Android Chrome and can still be shared/downloaded

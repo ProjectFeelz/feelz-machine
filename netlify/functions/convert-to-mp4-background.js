@@ -1,81 +1,81 @@
 /**
  * netlify/functions/convert-to-mp4-background.js
  *
- * Receives a WebM video as base64, converts it to H.264/AAC MP4 using FFmpeg,
- * returns the MP4 as base64. Background function — 15 min timeout.
+ * FIXED VERSION — this was previously written as a Netlify background
+ * function (immediate 202, no result in the response) while the client
+ * code awaited res.json() expecting the MP4 directly. That mismatch is
+ * exactly why MP4 conversion has never actually worked — the client was
+ * always getting an empty 202 and silently falling back to WebM.
  *
- * POST body: { video: "<base64 webm>", mimeType: "video/webm" }
- * Response:  { mp4: "<base64 mp4>" }
+ * Background functions genuinely are the right choice here though, not
+ * the wrong one — converting a real 30-second story video takes ~30+
+ * seconds with FFmpeg, which exceeds even Netlify's paid-tier regular
+ * function limit (26s). Background functions get up to 15 minutes.
  *
- * Requires in package.json:
- *   "ffmpeg-static": "^5.2.0",
- *   "fluent-ffmpeg": "^2.1.3"
+ * The correct pattern: this function does the conversion, then uploads
+ * the result to Supabase Storage (the existing 'stories' bucket, same
+ * one platform-daily-story.js already uses) instead of trying to return
+ * it directly. The client polls check-mp4-status.js separately until
+ * the file shows up, then downloads it from its public URL.
+ *
+ * POST body: { video: "<base64 webm>", jobId: "<uuid>" }
+ * No meaningful response body — Netlify background functions always
+ * return 202 immediately regardless of what's returned here.
  */
 
-const ffmpeg      = require('fluent-ffmpeg');
-const fs          = require('fs');
-const os          = require('os');
-const path        = require('path');
+const ffmpeg = require('fluent-ffmpeg');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const { createClient } = require('@supabase/supabase-js');
 
-// ffmpeg-static bundles the ffmpeg binary — resolve the actual path
 let ffmpegPath;
 try {
   ffmpegPath = require('ffmpeg-static');
-  // On some environments it returns a path object, ensure string
   if (typeof ffmpegPath !== 'string') ffmpegPath = ffmpegPath.path || String(ffmpegPath);
 } catch {
-  ffmpegPath = '/usr/bin/ffmpeg'; // fallback for environments where it's installed
+  ffmpegPath = '/usr/bin/ffmpeg';
 }
 ffmpeg.setFfmpegPath(ffmpegPath);
 
+const supabase = createClient(
+  process.env.SUPABASE_URL || process.env.REACT_APP_SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+);
+
 exports.handler = async (event) => {
-  // CORS preflight
-  if (event.httpMethod === 'OPTIONS') {
-    return {
-      statusCode: 200,
-      headers: {
-        'Access-Control-Allow-Origin':  '*',
-        'Access-Control-Allow-Methods': 'POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type',
-      },
-      body: '',
-    };
-  }
-
-  if (event.httpMethod !== 'POST') {
-    return { statusCode: 405, body: 'Method not allowed' };
-  }
-
   let body;
   try {
     body = JSON.parse(event.body);
   } catch {
+    console.error('convert-to-mp4-background: invalid JSON body');
     return { statusCode: 400, body: 'Invalid JSON' };
   }
 
-  const { video, mimeType } = body;
-  if (!video) return { statusCode: 400, body: 'Missing video data' };
+  const { video, jobId } = body;
+  if (!video || !jobId) {
+    console.error('convert-to-mp4-background: missing video or jobId');
+    return { statusCode: 400, body: 'Missing video or jobId' };
+  }
 
-  // Write WebM to temp file
-  const tmpDir   = os.tmpdir();
-  const inputPath  = path.join(tmpDir, `fm-input-${Date.now()}.webm`);
-  const outputPath = path.join(tmpDir, `fm-output-${Date.now()}.mp4`);
+  const tmpDir = os.tmpdir();
+  const inputPath = path.join(tmpDir, `mp4-input-${jobId}.webm`);
+  const outputPath = path.join(tmpDir, `mp4-output-${jobId}.mp4`);
 
   try {
     const videoBuffer = Buffer.from(video, 'base64');
     fs.writeFileSync(inputPath, videoBuffer);
 
-    // Convert WebM (VP9+Opus) → MP4 (H.264+AAC)
     await new Promise((resolve, reject) => {
       ffmpeg(inputPath)
         .outputOptions([
-          '-c:v libx264',       // H.264 video
-          '-preset fast',       // Fast encoding
-          '-crf 23',            // Good quality
-          '-c:a aac',           // AAC audio
-          '-b:a 128k',          // Audio bitrate
-          '-movflags +faststart', // Optimise for streaming/stories
-          '-pix_fmt yuv420p',   // Ensure Instagram compatibility
+          '-c:v libx264',
+          '-preset fast',
+          '-crf 23',
+          '-c:a aac',
+          '-b:a 128k',
+          '-movflags +faststart',
+          '-pix_fmt yuv420p',
         ])
         .output(outputPath)
         .on('end', resolve)
@@ -84,25 +84,30 @@ exports.handler = async (event) => {
     });
 
     const mp4Buffer = fs.readFileSync(outputPath);
-    const mp4Base64 = mp4Buffer.toString('base64');
+    const storagePath = `mp4-conversions/${jobId}.mp4`;
 
-    return {
-      statusCode: 200,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-      },
-      body: JSON.stringify({ mp4: mp4Base64 }),
-    };
+    const { error: upErr } = await supabase.storage
+      .from('stories')
+      .upload(storagePath, mp4Buffer, { contentType: 'video/mp4', upsert: true });
+
+    if (upErr) throw upErr;
+
+    console.log(`MP4 conversion complete for job ${jobId}`);
   } catch (err) {
-    console.error('FFmpeg error:', err.message);
-    return {
-      statusCode: 500,
-      body: JSON.stringify({ error: err.message }),
-    };
+    console.error(`MP4 conversion failed for job ${jobId}:`, err.message);
+    // Write a small marker so the status check can distinguish "still
+    // converting" from "failed" instead of polling forever
+    try {
+      await supabase.storage
+        .from('stories')
+        .upload(`mp4-conversions/${jobId}.failed`, Buffer.from(err.message), { contentType: 'text/plain', upsert: true });
+    } catch {}
   } finally {
-    // Clean up temp files
-    try { fs.unlinkSync(inputPath);  } catch {}
+    try { fs.unlinkSync(inputPath); } catch {}
     try { fs.unlinkSync(outputPath); } catch {}
   }
+
+  // This return value is never actually sent to the client — Netlify
+  // already responded with 202 the moment this function was invoked.
+  return { statusCode: 200, body: 'done' };
 };
