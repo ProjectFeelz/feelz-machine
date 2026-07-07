@@ -9,11 +9,6 @@
   directory = "netlify/functions"
   node_bundler = "esbuild"
 
-[functions."convert-to-mp4"]
-  included_files = ["node_modules/ffmpeg-static/**"]
-  timeout = 26
-  memory = 3008
-
 [functions."convert-audio"]
   included_files = ["node_modules/ffmpeg-static/**"]
   timeout = 26
