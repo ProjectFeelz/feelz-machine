@@ -6,6 +6,7 @@ Allow: /artist/
 Allow: /album/
 Allow: /browse
 Allow: /about
+Allow: /vs/
 Allow: /terms-of-use
 Allow: /privacy-policy
 

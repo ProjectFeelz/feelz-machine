@@ -19,6 +19,10 @@ exports.handler = async () => {
     { url: '/about',        priority: '0.6', changefreq: 'monthly' },
     { url: '/terms-of-use', priority: '0.3', changefreq: 'monthly' },
     { url: '/privacy-policy', priority: '0.3', changefreq: 'monthly' },
+    { url: '/vs/spotify',      priority: '0.7', changefreq: 'monthly' },
+    { url: '/vs/soundcloud',   priority: '0.7', changefreq: 'monthly' },
+    { url: '/vs/bandcamp',     priority: '0.7', changefreq: 'monthly' },
+    { url: '/vs/apple-music',  priority: '0.7', changefreq: 'monthly' },
   ];
 
   // Fetch all published artists

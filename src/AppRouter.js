@@ -8,6 +8,7 @@ import { useSessionRefresh } from './useSessionRefresh';
 import { useActivityPing } from './useActivityPing';
 import AppLayout from './components/layout/AppLayout';
 import AboutPage from './pages/AboutPage';
+import ComparisonPage from './pages/ComparisonPage';
 import HomePage from './pages/HomePage';
 import BrowsePage from './pages/BrowsePage';
 import LoginPage from './pages/LoginPage';
@@ -274,6 +275,7 @@ export default function AppRouter() {
                 <Route path="/notifications" element={<NotificationsPage />} />
                 <Route path="/hub" element={<HubPage />} />
                 <Route path="/about" element={<AboutPage />} />
+                <Route path="/vs/:platform" element={<ComparisonPage />} />
                 <Route path="/album/:id" element={<AlbumDetailPage />} />
                 {/* TrackDetailPage consolidated into TrackPage below */}
                 <Route path="/affiliates" element={<AffiliatePage />} />

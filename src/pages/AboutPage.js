@@ -215,6 +215,36 @@ export default function AboutPage() {
         </div>
       </div>
 
+      {/* Comparisons */}
+      <div style={{ padding: '0 24px', maxWidth: 1000, margin: '0 auto 64px' }}>
+        <p style={{ fontSize: 11, fontWeight: 500, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#8CAB2E', marginBottom: 10 }}>
+          How we compare
+        </p>
+        <h2 style={{ fontSize: 'clamp(22px, 3vw, 34px)', fontWeight: 800, letterSpacing: '-0.03em', marginBottom: 40 }}>
+          See the actual numbers.
+        </h2>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
+          {[
+            { platform: 'spotify', label: 'vs Spotify' },
+            { platform: 'soundcloud', label: 'vs SoundCloud' },
+            { platform: 'bandcamp', label: 'vs Bandcamp' },
+            { platform: 'apple-music', label: 'vs Apple Music' },
+          ].map(({ platform, label }) => (
+            <button
+              key={platform}
+              onClick={() => navigate(`/vs/${platform}`)}
+              style={{
+                padding: '18px 20px', borderRadius: 12, textAlign: 'left',
+                background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)',
+                cursor: 'pointer', color: '#fff', fontSize: 14, fontWeight: 600,
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* Legal — promoted to proper nav cards */}
       <div style={{ padding: '0 24px', maxWidth: 600, margin: '0 auto 48px' }}>
         <p style={{ fontSize: 11, fontWeight: 500, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.25)', marginBottom: 16 }}>
