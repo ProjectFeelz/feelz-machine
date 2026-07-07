@@ -7,6 +7,7 @@ import { useTier } from '../contexts/useTier';
 import { supabase } from '../supabaseClient';
 import CollabThread from '../components/CollabThread';
 import ProfileCompletionBanner from '../components/ProfileCompletionBanner';
+import RoleConfirmationPrompt from '../components/RoleConfirmationPrompt';
 import {
   Shield, Users, BarChart3, Music, Flame,
   Upload, HeartHandshake, Bell, Palette, MessageCircle,
@@ -185,6 +186,7 @@ export default function HubPage() {
       {/* Home tab */}
       {(!isArtist || activeTab === 'home') && (
         <>
+          {isArtist && <RoleConfirmationPrompt />}
           {isArtist && <ProfileCompletionBanner />}
 
           {/* Tier card */}

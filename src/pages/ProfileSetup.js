@@ -834,7 +834,7 @@ export default function ProfilePage() {
                     ].map(({ role, emoji, label }) => (
                       <button key={role} type="button"
                         onClick={async () => {
-                          await supabase.from('artists').update({ role }).eq('id', artist.id);
+                          await supabase.from('artists').update({ role, role_confirmed: true }).eq('id', artist.id);
                           await refreshProfile();
                         }}
                         className={`py-2.5 rounded-xl text-xs font-semibold transition border ${

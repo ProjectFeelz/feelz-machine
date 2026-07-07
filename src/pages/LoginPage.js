@@ -290,6 +290,12 @@ export default function LoginPage() {
     setLoading(true); setError('');
     try {
       if (redirectTo) sessionStorage.setItem('post_login_redirect', redirectTo);
+      // The pricing toggle above (Artist / Beat Maker) is the only place
+      // this choice gets made, but the artist row doesn't exist yet at
+      // this point — it's created by a trigger after auth completes.
+      // Stash the selection so it can be applied once that row actually
+      // exists, instead of silently discarding it (the original bug).
+      localStorage.setItem('pending_creator_role', pricingRole);
       await signInWithGoogle();
     } catch (err) { setError(err.message); setLoading(false); }
   };
@@ -300,6 +306,11 @@ export default function LoginPage() {
     if (!email.trim()) { setError('Please enter your email address.'); return; }
     setLoading(true); setError('');
     try {
+      // Same reasoning as the Google path — magic link means leaving this
+      // tab entirely to click the emailed link, so this has to survive
+      // that gap. localStorage (not sessionStorage) since the link may
+      // be opened in a different tab or even a different device.
+      localStorage.setItem('pending_creator_role', pricingRole);
       await signInWithMagicLink(email.trim());
       setMagicSent(true);
     } catch (err) {

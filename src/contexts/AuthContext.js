@@ -36,6 +36,23 @@ export function AuthProvider({ children }) {
       .eq('user_id', userId)
       .maybeSingle();
     if (data) {
+      // Apply a pending role selection from signup, if one exists. This
+      // is what makes the Artist/Beat Maker choice on the login page
+      // actually register — the artist row didn't exist yet when that
+      // choice was made, so it was previously discarded entirely.
+      const pendingRole = localStorage.getItem('pending_creator_role');
+      if (pendingRole && (pendingRole === 'artist' || pendingRole === 'beatmaker') && data.role !== pendingRole) {
+        const { data: updated } = await supabase
+          .from('artists')
+          .update({ role: pendingRole, role_confirmed: true })
+          .eq('id', data.id)
+          .select()
+          .maybeSingle();
+        localStorage.removeItem('pending_creator_role');
+        setArtist(updated || data);
+        return;
+      }
+      if (pendingRole) localStorage.removeItem('pending_creator_role');
       setArtist(data);
     } else if (!error) {
       // Row genuinely doesn't exist — clear any stale state
