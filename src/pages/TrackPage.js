@@ -229,6 +229,22 @@ export default function TrackPage() {
   const pageDesc  = `Stream ${track.title} by ${artist?.artist_name} on Feelz Machine — independent music platform.`;
   const ogImage   = coverArt || `${BASE_URL}/og-default.png`;
 
+  const musicRecordingSchema = {
+    '@context': 'https://schema.org',
+    '@type': 'MusicRecording',
+    name: track.title,
+    url: pageUrl,
+    ...(coverArt ? { image: coverArt } : {}),
+    ...(track.genre ? { genre: track.genre } : {}),
+    ...(track.duration ? { duration: `PT${Math.floor(track.duration / 60)}M${track.duration % 60}S` } : {}),
+    ...(artist?.artist_name ? {
+      byArtist: { '@type': 'MusicGroup', name: artist.artist_name, url: `${BASE_URL}/artist/${artist.slug}` },
+    } : {}),
+    ...(album?.title ? {
+      inAlbum: { '@type': 'MusicAlbum', name: album.title },
+    } : {}),
+  };
+
   return (
     <div className="min-h-screen bg-black text-white pb-32">
 
@@ -246,6 +262,7 @@ export default function TrackPage() {
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content={pageTitle} />
         <meta name="twitter:description" content={pageDesc} />
+        <script type="application/ld+json">{JSON.stringify(musicRecordingSchema)}</script>
         <meta name="twitter:image" content={ogImage} />
       </Helmet>
 

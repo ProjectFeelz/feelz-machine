@@ -1,5 +1,6 @@
 // netlify/functions/sitemap.js
-// Generates a dynamic sitemap including all published artist profiles and albums
+// Generates a dynamic sitemap including all published artist profiles,
+// albums, tracks, beats, and School Sessions.
 // Access at: https://www.feelzmachine.com/sitemap.xml (via netlify.toml redirect)
 
 const { createClient } = require('@supabase/supabase-js');
@@ -17,6 +18,7 @@ exports.handler = async () => {
     { url: '/',             priority: '1.0', changefreq: 'daily'   },
     { url: '/browse',       priority: '0.9', changefreq: 'daily'   },
     { url: '/about',        priority: '0.6', changefreq: 'monthly' },
+    { url: '/schoolsessions', priority: '0.8', changefreq: 'weekly' },
     { url: '/terms-of-use', priority: '0.3', changefreq: 'monthly' },
     { url: '/privacy-policy', priority: '0.3', changefreq: 'monthly' },
     { url: '/vs/spotify',      priority: '0.7', changefreq: 'monthly' },
@@ -39,6 +41,28 @@ exports.handler = async () => {
     .eq('is_published', true)
     .not('slug', 'is', null)
     .limit(5000);
+
+  // Fetch all published, non-beat tracks — these live at /track/:slug.
+  // Sitemap protocol caps at 50,000 URLs per file; if track count ever
+  // approaches that, this needs to split into a sitemap index instead of
+  // one flat file. Not a concern at current scale.
+  const { data: tracks } = await supabase
+    .from('tracks')
+    .select('slug, updated_at')
+    .eq('is_published', true)
+    .eq('is_beat', false)
+    .not('slug', 'is', null)
+    .limit(20000);
+
+  // Beats live at /beat/:slug, not /track/:slug — kept separate so each
+  // only appears once in the sitemap, at its actual canonical URL.
+  const { data: beats } = await supabase
+    .from('tracks')
+    .select('slug, updated_at')
+    .eq('is_published', true)
+    .eq('is_beat', true)
+    .not('slug', 'is', null)
+    .limit(20000);
 
   const now = new Date().toISOString().split('T')[0];
 
@@ -65,6 +89,22 @@ exports.handler = async () => {
     <lastmod>${a.updated_at ? a.updated_at.split('T')[0] : now}</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
+  </url>`),
+
+    ...(tracks || []).map(t => `
+  <url>
+    <loc>${BASE_URL}/track/${t.slug}</loc>
+    <lastmod>${t.updated_at ? t.updated_at.split('T')[0] : now}</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>`),
+
+    ...(beats || []).map(b => `
+  <url>
+    <loc>${BASE_URL}/beat/${b.slug}</loc>
+    <lastmod>${b.updated_at ? b.updated_at.split('T')[0] : now}</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
   </url>`),
   ];
 

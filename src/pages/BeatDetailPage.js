@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Helmet } from 'react-helmet-async';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
@@ -307,8 +308,53 @@ export default function BeatDetailPage() {
 
   const selectedLic = licences.find(l => l.id === selectedLicence);
 
+  const BASE_URL   = 'https://www.feelzmachine.com';
+  const pageUrl     = `${BASE_URL}/beat/${slug}`;
+  const pageTitle   = `${track.title} — beat by ${artist?.artist_name} · Feelz Machine`;
+  const pageDesc    = track.bpm
+    ? `${track.bpm} BPM${track.beat_key ? ` · ${track.beat_key}` : ''} — license "${track.title}" by ${artist?.artist_name} on Feelz Machine.`
+    : `License "${track.title}" by ${artist?.artist_name} on Feelz Machine.`;
+  const ogImage     = track.cover_artwork_url || `${BASE_URL}/og-default.png`;
+
+  const paidLicences = licences.filter(l => l.price > 0);
+  const beatSchema = {
+    '@context': 'https://schema.org',
+    '@type': 'MusicRecording',
+    name: track.title,
+    url: pageUrl,
+    ...(track.cover_artwork_url ? { image: track.cover_artwork_url } : {}),
+    ...(artist?.artist_name ? {
+      byArtist: { '@type': 'MusicGroup', name: artist.artist_name, url: `${BASE_URL}/artist/${artist.slug}` },
+    } : {}),
+    ...(paidLicences.length > 0 ? {
+      offers: paidLicences.map(l => ({
+        '@type': 'Offer',
+        name: l.label,
+        price: l.price,
+        priceCurrency: 'USD',
+        url: pageUrl,
+        availability: 'https://schema.org/InStock',
+      })),
+    } : {}),
+  };
+
   return (
     <div className="min-h-screen bg-black text-white pb-32">
+      <Helmet>
+        <title>{pageTitle}</title>
+        <meta name="description" content={pageDesc} />
+        <link rel="canonical" href={pageUrl} />
+        <meta property="og:title" content={pageTitle} />
+        <meta property="og:description" content={pageDesc} />
+        <meta property="og:url" content={pageUrl} />
+        <meta property="og:image" content={ogImage} />
+        <meta property="og:type" content="music.song" />
+        <meta name="twitter:card" content="summary_large_image" />
+        <script type="application/ld+json">{JSON.stringify(beatSchema)}</script>
+        <meta name="twitter:title" content={pageTitle} />
+        <meta name="twitter:description" content={pageDesc} />
+        <meta name="twitter:image" content={ogImage} />
+      </Helmet>
       {/* ── Hero ── */}
       <div className="relative">
         <div className="absolute inset-0 overflow-hidden">

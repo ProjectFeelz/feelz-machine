@@ -12,6 +12,7 @@
 // if applicable).
 
 import React from 'react';
+import { Helmet } from 'react-helmet-async';
 import { useNavigate, Link } from 'react-router-dom';
 import {
   Loader, ArrowRight, Megaphone,
@@ -88,8 +89,28 @@ export default function SchoolSessionsPage() {
   const platformCourseUrl = gate.config?.platform_course_url;
   const nextSeason = (gate.config?.season || 1) + 1;
 
+  const BASE_URL = 'https://www.feelzmachine.com';
+  const pageUrl = `${BASE_URL}/schoolsessions`;
+  const pageTitle = 'School Sessions — a high school music competition · Feelz Machine';
+  const pageDesc = comp?.prize_breakdown_text || comp?.prize_description
+    || 'Pick a song from the shortlist and cover it. Cash prizes for the winning school and student — judged by a panel, with a public People\u2019s Choice vote too.';
+
   return (
     <div className="min-h-screen bg-black text-white">
+      <Helmet>
+        <title>{pageTitle}</title>
+        <meta name="description" content={pageDesc} />
+        <link rel="canonical" href={pageUrl} />
+        <meta property="og:title" content={pageTitle} />
+        <meta property="og:description" content={pageDesc} />
+        <meta property="og:url" content={pageUrl} />
+        <meta property="og:image" content={`${BASE_URL}/og-default.png`} />
+        <meta property="og:type" content="website" />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content={pageTitle} />
+        <meta name="twitter:description" content={pageDesc} />
+        <meta name="twitter:image" content={`${BASE_URL}/og-default.png`} />
+      </Helmet>
       <div className="max-w-lg mx-auto px-6 pt-14 pb-24 space-y-10">
 
         {/* Brand */}

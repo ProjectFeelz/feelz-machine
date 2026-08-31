@@ -1237,6 +1237,17 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
     ? `${artist.bio.slice(0, 120)}${artist.bio.length > 120 ? '...' : ''}`
     : `Stream music by ${artist.artist_name} on Feelz Machine — independent music platform.`;
 
+  const musicGroupSchema = {
+    '@context': 'https://schema.org',
+    '@type': 'MusicGroup',
+    name: artist.artist_name,
+    url: pageUrl,
+    ...(artist.profile_image_url ? { image: artist.profile_image_url } : {}),
+    ...(artist.bio ? { description: artist.bio } : {}),
+    ...(artist.genre ? { genre: artist.genre } : {}),
+    ...(socialEntries.length > 0 ? { sameAs: socialEntries.map(([, url]) => url) } : {}),
+  };
+
   return (
     <div className="min-h-screen pb-32" style={{ backgroundColor: bgColor, color: textColor, fontFamily: `"${bodyFont}", sans-serif`, ...themeStyles }} {...pullProps}>
       <PullToRefreshIndicator pullProgress={pullProgress} isRefreshing={isRefreshing} />
@@ -1257,6 +1268,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
         <meta name="twitter:title" content={pageTitle} />
         <meta name="twitter:description" content={pageDesc} />
         <meta name="twitter:image" content={ogImage} />
+        <script type="application/ld+json">{JSON.stringify(musicGroupSchema)}</script>
       </Helmet>
 
       {/* BANNER */}

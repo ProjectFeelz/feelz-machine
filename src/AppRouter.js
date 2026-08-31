@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { HelmetProvider } from 'react-helmet-async';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -7,70 +7,70 @@ import { TierProvider } from './contexts/useTier';
 import { useSessionRefresh } from './useSessionRefresh';
 import { useActivityPing } from './useActivityPing';
 import AppLayout from './components/layout/AppLayout';
-import AboutPage from './pages/AboutPage';
-import ComparisonPage from './pages/ComparisonPage';
-import HomePage from './pages/HomePage';
-import BrowsePage from './pages/BrowsePage';
-import LoginPage from './pages/LoginPage';
-import LibraryPage from './pages/LibraryPage';
-import LikedSongsPage from './pages/LikedSongsPage';
-import DownloadsPage from './pages/DownloadsPage';
-import FollowingPage from './pages/FollowingPage';
-import PlaylistsPage from './pages/PlaylistsPage';
-import PlaylistDetailPage from './pages/PlaylistDetailPage';
-import PlaylistJoinPage from './pages/PlaylistJoinPage';
-import ListeningSessionPage from './pages/ListeningSessionPage';
-import ProfilePage from './pages/ProfilePage';
-import FeedPage from './pages/FeedPage';
-import ArtistDashboard from './pages/ArtistDashboard';
-import ArtistProfilePage from './pages/ArtistProfilePage';
-import TierUpgradePage from './pages/TierUpgradePage';
-import ChatRoomsPage from './pages/ChatRoomsPage';
-import ChatRoomView from './pages/ChatRoomView';
-import PrivacyPolicy from './pages/PrivacyPolicy';
-import TermsOfUse from './pages/TermsOfUse';
-import NotificationsPage from './pages/NotificationsPage';
-import HubPage from './pages/HubPage';
-import ProfileSetup from './pages/ProfileSetup';
-import ListenerStatsPage from './pages/ListenerStatsPage';
-import ListenerUpgradePage from './pages/ListenerUpgradePage';
-import AdminDashboard from './pages/AdminDashboard';
-import AdminArtists from './pages/AdminArtists';
-import AdminAnalytics from './pages/AdminAnalytics';
-import AdminModeration from './pages/AdminModeration';
-import AdminBoost from './pages/AdminBoost';
-import AdminBroadcast from './pages/AdminBroadcast';
-import RecentlyPlayedPage from './pages/RecentlyPlayedPage';
-import UserProfilePage from './pages/UserProfilePage';
-import AlbumDetailPage from './pages/AlbumDetailPage';
-import TrackDetailPage from './pages/TrackDetailPage';
-import AffiliatePage from './pages/AffiliatePage';
-import AdminAffiliates from './pages/AdminAffiliates';
-import AdminPeople       from './pages/AdminPeople';
-import AdminIntelligence from './pages/AdminIntelligence';
-import AdminContent      from './pages/AdminContent';
-import AdminGrowth       from './pages/AdminGrowth';
-import BeatDetailPage from './pages/BeatDetailPage';
-import AdminUserBehaviorPage from './pages/AdminUserBehaviorPage';
+const AboutPage = React.lazy(() => import('./pages/AboutPage'));
+const ComparisonPage = React.lazy(() => import('./pages/ComparisonPage'));
+const HomePage = React.lazy(() => import('./pages/HomePage'));
+const BrowsePage = React.lazy(() => import('./pages/BrowsePage'));
+const LoginPage = React.lazy(() => import('./pages/LoginPage'));
+const LibraryPage = React.lazy(() => import('./pages/LibraryPage'));
+const LikedSongsPage = React.lazy(() => import('./pages/LikedSongsPage'));
+const DownloadsPage = React.lazy(() => import('./pages/DownloadsPage'));
+const FollowingPage = React.lazy(() => import('./pages/FollowingPage'));
+const PlaylistsPage = React.lazy(() => import('./pages/PlaylistsPage'));
+const PlaylistDetailPage = React.lazy(() => import('./pages/PlaylistDetailPage'));
+const PlaylistJoinPage = React.lazy(() => import('./pages/PlaylistJoinPage'));
+const ListeningSessionPage = React.lazy(() => import('./pages/ListeningSessionPage'));
+const ProfilePage = React.lazy(() => import('./pages/ProfilePage'));
+const FeedPage = React.lazy(() => import('./pages/FeedPage'));
+const ArtistDashboard = React.lazy(() => import('./pages/ArtistDashboard'));
+const ArtistProfilePage = React.lazy(() => import('./pages/ArtistProfilePage'));
+const TierUpgradePage = React.lazy(() => import('./pages/TierUpgradePage'));
+const ChatRoomsPage = React.lazy(() => import('./pages/ChatRoomsPage'));
+const ChatRoomView = React.lazy(() => import('./pages/ChatRoomView'));
+const PrivacyPolicy = React.lazy(() => import('./pages/PrivacyPolicy'));
+const TermsOfUse = React.lazy(() => import('./pages/TermsOfUse'));
+const NotificationsPage = React.lazy(() => import('./pages/NotificationsPage'));
+const HubPage = React.lazy(() => import('./pages/HubPage'));
+const ProfileSetup = React.lazy(() => import('./pages/ProfileSetup'));
+const ListenerStatsPage = React.lazy(() => import('./pages/ListenerStatsPage'));
+const ListenerUpgradePage = React.lazy(() => import('./pages/ListenerUpgradePage'));
+const AdminDashboard = React.lazy(() => import('./pages/AdminDashboard'));
+const AdminArtists = React.lazy(() => import('./pages/AdminArtists'));
+const AdminAnalytics = React.lazy(() => import('./pages/AdminAnalytics'));
+const AdminModeration = React.lazy(() => import('./pages/AdminModeration'));
+const AdminBoost = React.lazy(() => import('./pages/AdminBoost'));
+const AdminBroadcast = React.lazy(() => import('./pages/AdminBroadcast'));
+const RecentlyPlayedPage = React.lazy(() => import('./pages/RecentlyPlayedPage'));
+const UserProfilePage = React.lazy(() => import('./pages/UserProfilePage'));
+const AlbumDetailPage = React.lazy(() => import('./pages/AlbumDetailPage'));
+const TrackDetailPage = React.lazy(() => import('./pages/TrackDetailPage'));
+const AffiliatePage = React.lazy(() => import('./pages/AffiliatePage'));
+const AdminAffiliates = React.lazy(() => import('./pages/AdminAffiliates'));
+const AdminPeople = React.lazy(() => import('./pages/AdminPeople'));
+const AdminIntelligence = React.lazy(() => import('./pages/AdminIntelligence'));
+const AdminContent = React.lazy(() => import('./pages/AdminContent'));
+const AdminGrowth = React.lazy(() => import('./pages/AdminGrowth'));
+const BeatDetailPage = React.lazy(() => import('./pages/BeatDetailPage'));
+const AdminUserBehaviorPage = React.lazy(() => import('./pages/AdminUserBehaviorPage'));
 import { Helmet } from 'react-helmet-async';
-import TrackPage from './pages/TrackPage';
-import CollabRadarPage from './pages/CollabRadarPage';
-import AdminDuplicates from './pages/AdminDuplicates';
-import CompetitionRoomPage from './pages/CompetitionRoomPage';
-import WheelRevealPage from './pages/WheelRevealPage';
-import ForYouPage from './pages/ForYouPage';
-import MerchPage from './pages/MerchPage';
-import MerchCheckoutPage from './pages/MerchCheckoutPage';
-import MerchOrdersPage from './pages/MerchOrdersPage';
-import CompetitionsPage from './pages/CompetitionsPage';
-import AdminCompetitions from './pages/AdminCompetitions';
-import AdminEngagement from './pages/AdminEngagement';
-import FanLeaderboardPage from './pages/FanLeaderboardPage';
-import RecentlyDiscoveredPage from './pages/RecentlyDiscoveredPage';
-import ListenerProfilePage from './pages/ListenerProfilePage';
-import SchoolSessionsPage from './pages/SchoolSessionsPage';
-import SchoolSessionsVotePage from './pages/SchoolSessionsVotePage';
-import AdminSchoolSessions from './pages/AdminSchoolSessions';
+const TrackPage = React.lazy(() => import('./pages/TrackPage'));
+const CollabRadarPage = React.lazy(() => import('./pages/CollabRadarPage'));
+const AdminDuplicates = React.lazy(() => import('./pages/AdminDuplicates'));
+const CompetitionRoomPage = React.lazy(() => import('./pages/CompetitionRoomPage'));
+const WheelRevealPage = React.lazy(() => import('./pages/WheelRevealPage'));
+const ForYouPage = React.lazy(() => import('./pages/ForYouPage'));
+const MerchPage = React.lazy(() => import('./pages/MerchPage'));
+const MerchCheckoutPage = React.lazy(() => import('./pages/MerchCheckoutPage'));
+const MerchOrdersPage = React.lazy(() => import('./pages/MerchOrdersPage'));
+const CompetitionsPage = React.lazy(() => import('./pages/CompetitionsPage'));
+const AdminCompetitions = React.lazy(() => import('./pages/AdminCompetitions'));
+const AdminEngagement = React.lazy(() => import('./pages/AdminEngagement'));
+const FanLeaderboardPage = React.lazy(() => import('./pages/FanLeaderboardPage'));
+const RecentlyDiscoveredPage = React.lazy(() => import('./pages/RecentlyDiscoveredPage'));
+const ListenerProfilePage = React.lazy(() => import('./pages/ListenerProfilePage'));
+const SchoolSessionsPage = React.lazy(() => import('./pages/SchoolSessionsPage'));
+const SchoolSessionsVotePage = React.lazy(() => import('./pages/SchoolSessionsVotePage'));
+const AdminSchoolSessions = React.lazy(() => import('./pages/AdminSchoolSessions'));
 
 // ── Session keepalive — refreshes token + listens for activity ───────────────
 function SessionManager() {
@@ -223,6 +223,7 @@ export default function AppRouter() {
           <PlayerProvider>
             <TierProvider>
             <OnboardingGuard>
+            <Suspense fallback={<div style={{ minHeight: '100vh', background: '#000' }} />}>
             <Routes>
               {/* Legacy /player/* redirects */}
               <Route path="/player" element={<Navigate to="/" replace />} />
@@ -326,6 +327,7 @@ export default function AppRouter() {
                 <Route path="*" element={<NotFoundRedirect />} />
               </Route>
             </Routes>
+            </Suspense>
             </OnboardingGuard>
             </TierProvider>
           </PlayerProvider>

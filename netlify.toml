@@ -16,6 +16,24 @@
 [functions."engagement-drip-background"]
   timeout = 860
 
+# ── Edge functions ────────────────────────────────────────────────────────────
+
+[[edge_functions]]
+  path = "/artist/*"
+  function = "social-preview"
+
+[[edge_functions]]
+  path = "/track/*"
+  function = "social-preview"
+
+[[edge_functions]]
+  path = "/beat/*"
+  function = "social-preview"
+
+[[edge_functions]]
+  path = "/schoolsessions"
+  function = "social-preview"
+
 # ── Cache headers ─────────────────────────────────────────────────────────────
 
 [[headers]]
