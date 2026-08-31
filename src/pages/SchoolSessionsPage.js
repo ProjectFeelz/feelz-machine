@@ -111,7 +111,7 @@ export default function SchoolSessionsPage() {
         <meta name="twitter:description" content={pageDesc} />
         <meta name="twitter:image" content={`${BASE_URL}/og-default.png`} />
       </Helmet>
-      <div className="max-w-lg mx-auto px-6 pt-14 pb-24 space-y-10">
+      <div className="max-w-lg lg:max-w-3xl mx-auto px-6 lg:px-10 pt-14 lg:pt-20 pb-24 space-y-10 lg:space-y-14">
 
         {/* Brand */}
         <div className="flex items-center space-x-2.5">
@@ -123,14 +123,14 @@ export default function SchoolSessionsPage() {
         </div>
 
         {/* Hero */}
-        <div className="space-y-3">
-          <p className="text-lime-400 text-xs font-bold tracking-[0.2em] uppercase">
+        <div className="space-y-3 lg:space-y-4">
+          <p className="text-lime-400 text-xs lg:text-sm font-bold tracking-[0.2em] uppercase">
             High School Competition {gate.config?.season ? `· Season ${gate.config.season}` : ''}
           </p>
-          <h1 className="text-4xl font-bold leading-[0.98] uppercase">
+          <h1 className="text-4xl lg:text-6xl font-bold leading-[0.98] uppercase">
             School<br /><span className="text-lime-400">Sessions</span>
           </h1>
-          <p className="text-white/50 text-sm leading-relaxed">
+          <p className="text-white/50 text-sm lg:text-lg lg:max-w-xl leading-relaxed">
             Pick a song from the shortlist and cover it — your own vocal performance. Your school could walk away with cash.
           </p>
           {eligible && phase === 'submissions' && comp?.entries_close_at && (
@@ -147,9 +147,9 @@ export default function SchoolSessionsPage() {
         </div>
 
         {/* Prize pot */}
-        <div className="rounded-xl border border-white/10 bg-lime-400/[0.04] p-5">
-          <p className="text-3xl font-bold text-lime-400">{comp?.prize_description || 'R10,000 CASH'}</p>
-          <p className="text-xs text-white/50 mt-2 leading-relaxed">
+        <div className="rounded-xl border border-white/10 bg-lime-400/[0.04] p-5 lg:p-8">
+          <p className="text-3xl lg:text-5xl font-bold text-lime-400">{comp?.prize_description || 'R10,000 CASH'}</p>
+          <p className="text-xs lg:text-sm text-white/50 mt-2 lg:mt-3 leading-relaxed lg:max-w-md">
             {comp?.prize_breakdown_text || 'R5,000 to the winning school + R5,000 to the winning student — split among the group if you enter as one.'}
           </p>
         </div>
@@ -161,11 +161,11 @@ export default function SchoolSessionsPage() {
 
         {/* Song shortlist */}
         {songs.length > 0 && (
-          <div className="space-y-2.5">
-            <p className="text-lime-400 text-xs font-bold tracking-widest uppercase">Songs up for grabs</p>
-            <div className="space-y-1.5">
+          <div className="space-y-2.5 lg:space-y-3">
+            <p className="text-lime-400 text-xs lg:text-sm font-bold tracking-widest uppercase">Songs up for grabs</p>
+            <div className="grid lg:grid-cols-2 gap-1.5 lg:gap-2.5">
               {songs.map(s => (
-                <div key={s.id} className="flex items-center space-x-3 rounded-xl bg-white/[0.03] border border-white/[0.06] px-3.5 py-2.5">
+                <div key={s.id} className="flex items-center space-x-3 rounded-xl bg-white/[0.03] border border-white/[0.06] px-3.5 py-2.5 lg:py-3">
                   <Music className="w-3.5 h-3.5 text-lime-400 flex-shrink-0" />
                   <span className="text-sm text-white flex-1 truncate">{s.title}</span>
                   {s.reference_track?.slug ? (
@@ -190,38 +190,40 @@ export default function SchoolSessionsPage() {
         </div>
 
         {/* Three-phase timeline */}
-        <div className="space-y-3">
-          <p className="text-lime-400 text-xs font-bold tracking-widest uppercase">Three months, three phases</p>
-          {[
-            { key: 'awareness', icon: Megaphone, title: 'Awareness', desc: 'Get ready — take the courses below, check the song shortlist, spread the word.' },
-            { key: 'submissions', icon: UploadIcon, title: 'Submissions', desc: 'Pick a song from the shortlist, record your cover, and toggle "Enter into School Sessions" when you upload.' },
-            { key: 'voting', icon: ThumbsUp, title: 'Voting', desc: 'Judges announce finalists and pick the winner. The public votes separately for the People\u2019s Choice pick.' },
-          ].map((p, i) => {
-            const active = eligible && p.key === phase;
-            return (
-              <div key={p.key} className={`flex items-start space-x-3 rounded-xl p-3.5 border ${active ? 'border-lime-400/40 bg-lime-400/[0.06]' : 'border-white/[0.06] bg-white/[0.02]'}`}>
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${active ? 'bg-lime-400 text-black' : 'bg-white/[0.06] text-white/40'}`}>
-                  <p.icon className="w-4 h-4" />
+        <div className="space-y-3 lg:space-y-4">
+          <p className="text-lime-400 text-xs lg:text-sm font-bold tracking-widest uppercase">Three months, three phases</p>
+          <div className="space-y-3 lg:space-y-0 lg:grid lg:grid-cols-3 lg:gap-4">
+            {[
+              { key: 'awareness', icon: Megaphone, title: 'Awareness', desc: 'Get ready — take the courses below, check the song shortlist, spread the word.' },
+              { key: 'submissions', icon: UploadIcon, title: 'Submissions', desc: 'Pick a song from the shortlist, record your cover, and toggle "Enter into School Sessions" when you upload.' },
+              { key: 'voting', icon: ThumbsUp, title: 'Voting', desc: 'Judges announce finalists and pick the winner. The public votes separately for the People\u2019s Choice pick.' },
+            ].map((p, i) => {
+              const active = eligible && p.key === phase;
+              return (
+                <div key={p.key} className={`flex items-start space-x-3 lg:flex-col lg:space-x-0 lg:space-y-3 rounded-xl p-3.5 lg:p-4 border h-full ${active ? 'border-lime-400/40 bg-lime-400/[0.06]' : 'border-white/[0.06] bg-white/[0.02]'}`}>
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${active ? 'bg-lime-400 text-black' : 'bg-white/[0.06] text-white/40'}`}>
+                    <p.icon className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <p className={`text-sm font-semibold ${active ? 'text-lime-400' : 'text-white'}`}>
+                      {i + 1}. {p.title} {active && <span className="text-[10px] font-bold uppercase tracking-wide ml-1">· Now</span>}
+                    </p>
+                    <p className="text-xs text-white/40 mt-0.5">{p.desc}</p>
+                  </div>
                 </div>
-                <div>
-                  <p className={`text-sm font-semibold ${active ? 'text-lime-400' : 'text-white'}`}>
-                    {i + 1}. {p.title} {active && <span className="text-[10px] font-bold uppercase tracking-wide ml-1">· Now</span>}
-                  </p>
-                  <p className="text-xs text-white/40 mt-0.5">{p.desc}</p>
-                </div>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
 
         {/* Courses */}
         {(viralCourseUrl || platformCourseUrl) && (
-          <div className="space-y-3">
-            <p className="text-lime-400 text-xs font-bold tracking-widest uppercase">Free courses to get you ready</p>
-            <div className="space-y-2.5">
+          <div className="space-y-3 lg:space-y-4">
+            <p className="text-lime-400 text-xs lg:text-sm font-bold tracking-widest uppercase">Free courses to get you ready</p>
+            <div className="grid lg:grid-cols-2 gap-2.5 lg:gap-3">
               {platformCourseUrl && (
                 <a href={platformCourseUrl} target="_blank" rel="noopener noreferrer"
-                  className="flex items-center space-x-3 rounded-xl bg-white/[0.03] border border-white/[0.06] p-3.5 hover:bg-white/[0.05] transition">
+                  className="flex items-center space-x-3 rounded-xl bg-white/[0.03] border border-white/[0.06] p-3.5 lg:p-4 hover:bg-white/[0.05] transition">
                   <PlayCircle className="w-4 h-4 text-lime-400 flex-shrink-0" />
                   <div>
                     <p className="text-sm font-semibold text-white">How to Use Feelz Machine</p>
@@ -231,7 +233,7 @@ export default function SchoolSessionsPage() {
               )}
               {viralCourseUrl && (
                 <a href={viralCourseUrl} target="_blank" rel="noopener noreferrer"
-                  className="flex items-center space-x-3 rounded-xl bg-white/[0.03] border border-white/[0.06] p-3.5 hover:bg-white/[0.05] transition">
+                  className="flex items-center space-x-3 rounded-xl bg-white/[0.03] border border-white/[0.06] p-3.5 lg:p-4 hover:bg-white/[0.05] transition">
                   <BookOpen className="w-4 h-4 text-lime-400 flex-shrink-0" />
                   <div>
                     <p className="text-sm font-semibold text-white">How to Make Viral Content</p>
@@ -248,14 +250,14 @@ export default function SchoolSessionsPage() {
           phase === 'voting' || phase === 'done' ? (
             <button
               onClick={() => navigate('/schoolsessions/vote')}
-              className="w-full py-3.5 bg-lime-400 text-black font-bold rounded-xl flex items-center justify-center space-x-2 hover:bg-lime-300 transition">
+              className="w-full lg:w-auto lg:px-10 py-3.5 bg-lime-400 text-black font-bold rounded-xl flex items-center justify-center space-x-2 hover:bg-lime-300 transition">
               <span>{phase === 'done' ? 'See the results' : "Vote — People's Choice"}</span>
               <ArrowRight className="w-4 h-4" />
             </button>
           ) : (
             <button
               onClick={() => navigate(user ? '/dashboard' : '/login')}
-              className="w-full py-3.5 bg-lime-400 text-black font-bold rounded-xl flex items-center justify-center space-x-2 hover:bg-lime-300 transition">
+              className="w-full lg:w-auto lg:px-10 py-3.5 bg-lime-400 text-black font-bold rounded-xl flex items-center justify-center space-x-2 hover:bg-lime-300 transition">
               <span>{user ? 'Upload your entry' : 'Get started'}</span>
               <ArrowRight className="w-4 h-4" />
             </button>
