@@ -1,6 +1,6 @@
 import React, { useEffect, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
-import { HelmetProvider } from 'react-helmet-async';
+import { HelmetProvider, Helmet } from 'react-helmet-async';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { PlayerProvider } from './contexts/PlayerContext';
 import { TierProvider } from './contexts/useTier';
@@ -52,7 +52,6 @@ const AdminContent = React.lazy(() => import('./pages/AdminContent'));
 const AdminGrowth = React.lazy(() => import('./pages/AdminGrowth'));
 const BeatDetailPage = React.lazy(() => import('./pages/BeatDetailPage'));
 const AdminUserBehaviorPage = React.lazy(() => import('./pages/AdminUserBehaviorPage'));
-import { Helmet } from 'react-helmet-async';
 const TrackPage = React.lazy(() => import('./pages/TrackPage'));
 const CollabRadarPage = React.lazy(() => import('./pages/CollabRadarPage'));
 const AdminDuplicates = React.lazy(() => import('./pages/AdminDuplicates'));
