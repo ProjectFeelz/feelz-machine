@@ -17,6 +17,5 @@ Disallow: /hub
 Disallow: /library
 Disallow: /profile
 Disallow: /admin
-Disallow: /competitions
 
 Sitemap: https://www.feelzmachine.com/sitemap.xml
