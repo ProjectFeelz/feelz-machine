@@ -68,6 +68,9 @@ import AdminEngagement from './pages/AdminEngagement';
 import FanLeaderboardPage from './pages/FanLeaderboardPage';
 import RecentlyDiscoveredPage from './pages/RecentlyDiscoveredPage';
 import ListenerProfilePage from './pages/ListenerProfilePage';
+import SchoolSessionsPage from './pages/SchoolSessionsPage';
+import SchoolSessionsVotePage from './pages/SchoolSessionsVotePage';
+import AdminSchoolSessions from './pages/AdminSchoolSessions';
 
 // ── Session keepalive — refreshes token + listens for activity ───────────────
 function SessionManager() {
@@ -149,7 +152,7 @@ function AffiliateTracker() {
 function OnboardingGuard({ children }) {
   const { user, artist, listener, loading } = useAuth();
   const location = useLocation();
-  const skipPaths = ['/setup', '/login', '/about', '/terms-of-use', '/privacy-policy', '/artist/', '/@'];
+  const skipPaths = ['/setup', '/login', '/about', '/terms-of-use', '/privacy-policy', '/artist/', '/@', '/schoolsessions'];
 
   // Public paths always render immediately, regardless of auth loading state.
   // This matters specifically for the /@slug -> /artist/slug redirect: the URL
@@ -249,6 +252,16 @@ export default function AppRouter() {
                   <TermsOfUse />
                 </PageTitle>
               } />
+              <Route path="/schoolsessions" element={
+                <PageTitle title="School Sessions">
+                  <SchoolSessionsPage />
+                </PageTitle>
+              } />
+              <Route path="/schoolsessions/vote" element={
+                <PageTitle title="Vote — School Sessions">
+                  <SchoolSessionsVotePage />
+                </PageTitle>
+              } />
 
               <Route element={<AppLayout />}>
                 <Route path="/" element={<ForYouPage />} />
@@ -304,6 +317,7 @@ export default function AppRouter() {
                 <Route path="/admin/behavior" element={<AdminUserBehaviorPage />} />
                 <Route path="/admin/duplicates" element={<AdminDuplicates />} />
                 <Route path="/admin/competitions" element={<AdminCompetitions />} />
+                <Route path="/admin/school-sessions" element={<AdminSchoolSessions />} />
                 <Route path="/admin/engagement" element={<AdminEngagement />} />
                 <Route path="/library/discovered" element={<RecentlyDiscoveredPage />} />
                 <Route path="/listener/:userId" element={<ListenerProfilePage />} />

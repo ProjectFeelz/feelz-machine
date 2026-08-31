@@ -8,6 +8,7 @@ import { useNavigate } from 'react-router-dom';
 import AdminBoost from './AdminBoost';
 import AdminCompetitions from './AdminCompetitions';
 import AdminModeration from './AdminModeration';
+import AdminSchoolSessions from './AdminSchoolSessions';
 import { useAuth } from '../contexts/AuthContext';
 import { ArrowLeft, Layers } from 'lucide-react';
 
@@ -49,12 +50,14 @@ export default function AdminContent() {
         <div className="flex space-x-1 p-1 bg-white/[0.03] rounded-xl border border-white/[0.06]">
           <Tab active={tab === 'boost'}        onClick={() => switchTab('boost')}>Boost</Tab>
           <Tab active={tab === 'competitions'} onClick={() => switchTab('competitions')}>Competitions</Tab>
+          <Tab active={tab === 'schoolsessions'} onClick={() => switchTab('schoolsessions')}>School Sessions</Tab>
           <Tab active={tab === 'moderation'}   onClick={() => switchTab('moderation')}>Moderation</Tab>
         </div>
       </div>
 
       <div className={tab === 'boost'        ? '' : 'hidden'}>{mounted.boost        && <AdminBoost        embedded />}</div>
       <div className={tab === 'competitions' ? '' : 'hidden'}>{mounted.competitions && <AdminCompetitions embedded />}</div>
+      <div className={tab === 'schoolsessions' ? '' : 'hidden'}>{mounted.schoolsessions && <AdminSchoolSessions embedded />}</div>
       <div className={tab === 'moderation'   ? '' : 'hidden'}>{mounted.moderation   && <AdminModeration   embedded />}</div>
     </div>
   );

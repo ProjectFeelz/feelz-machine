@@ -6,6 +6,7 @@ import {
   Edit, Search, X, Zap, Disc, AlertCircle, Youtube, HelpCircle,
 } from 'lucide-react';
 import CollaboratorSearch from '../components/CollaboratorSearch';
+import SchoolSessionsEntry, { schoolSessionsFormValid, SCHOOL_SESSIONS_BLANK_FORM } from '../components/SchoolSessionsEntry';
 import TierGate from '../components/TierGate';
 import { useTier } from '../contexts/useTier';
 import { useAudioConverter } from '../hooks/useAudioConverter';
@@ -1136,6 +1137,8 @@ export default function TrackUploadPanel() {
   const [beatEnabled, setBeatEnabled]           = useState({ free: true, basic: true }); // which tiers are on
   const [beatPrices, setBeatPrices]             = useState({}); // { licenceId: price }
   const [collaborators, setCollaborators]       = useState([]);
+  const [schoolSessionsEnabled, setSchoolSessionsEnabled] = useState(false);
+  const [schoolSessionsForm, setSchoolSessionsForm]       = useState(SCHOOL_SESSIONS_BLANK_FORM);
   const [albumCollaborators, setAlbumCollaborators] = useState([]);
   const [albumTrackQueue, setAlbumTrackQueue]   = useState([]);
   const [sessionAlbumId, setSessionAlbumId]     = useState(null);
@@ -1349,6 +1352,11 @@ export default function TrackUploadPanel() {
       return;
     }
 
+    if (!schoolSessionsFormValid(schoolSessionsEnabled, schoolSessionsForm)) {
+      showMessage('error', 'Please fill in the entrant name, email, TikTok handle, school, and (if under 18) guardian consent for the School Sessions entry.');
+      return;
+    }
+
     setUploading(true);
     try {
       let albumId = null;
@@ -1393,6 +1401,7 @@ export default function TrackUploadPanel() {
       }]).select();
       if (error) throw error;
       const trackId = data[0].id;
+      let ssEntryError = null;
 
       if (trackForm.has_versions && versionFiles.length > 0) {
         for (const ver of versionFiles) {
@@ -1410,6 +1419,60 @@ export default function TrackUploadPanel() {
       if (collaborators.length > 0) {
         showMessage('info', 'Sending collab requests…');
         await saveCollaborations(trackId, collaborators);
+      }
+
+      if (schoolSessionsEnabled) {
+        showMessage('info', 'Registering School Sessions entry…');
+        try {
+          const { data: ssConfig } = await supabase
+            .from('school_sessions_config')
+            .select('competition_id')
+            .eq('id', '00000000-0000-0000-0000-000000000001')
+            .maybeSingle();
+
+          if (ssConfig?.competition_id) {
+            const { data: entryRow, error: entryErr } = await supabase
+              .from('school_sessions_entries')
+              .insert({
+                competition_id:    ssConfig.competition_id,
+                track_id:          trackId,
+                artist_id:         artist.id,
+                school_id:         schoolSessionsForm.schoolId || null,
+                school_name_freetext: schoolSessionsForm.schoolId ? null : schoolSessionsForm.schoolFreeText.trim(),
+                candidate_card_no: schoolSessionsForm.candidateCardNo.trim() || null,
+                entrant_full_name: schoolSessionsForm.entrantFullName.trim(),
+                entrant_email:     schoolSessionsForm.entrantEmail.trim(),
+                entrant_tiktok_handle: schoolSessionsForm.tiktokHandle.trim().replace(/^@/, ''),
+                entrant_is_minor:  schoolSessionsForm.isMinor,
+                song_id:           schoolSessionsForm.songId || null,
+                is_group:          schoolSessionsForm.isGroup,
+              })
+              .select('id').single();
+            if (entryErr) throw entryErr;
+
+            if (schoolSessionsForm.isMinor && entryRow?.id) {
+              await supabase.from('school_sessions_guardian_consents').insert({
+                entry_id:         entryRow.id,
+                guardian_name:    schoolSessionsForm.guardianName.trim(),
+                guardian_contact: schoolSessionsForm.guardianContact.trim(),
+                relationship:     schoolSessionsForm.guardianRelationship.trim() || null,
+                consented:        true,
+              });
+            }
+
+            if (schoolSessionsForm.isGroup && entryRow?.id && schoolSessionsForm.groupMembers.length > 0) {
+              const memberRows = schoolSessionsForm.groupMembers
+                .filter(m => m.trim())
+                .map(m => ({ entry_id: entryRow.id, member_name: m.trim() }));
+              if (memberRows.length > 0) {
+                await supabase.from('school_sessions_entry_members').insert(memberRows);
+              }
+            }
+          }
+        } catch (ssErr) {
+          console.error('School Sessions entry save failed:', ssErr);
+          ssEntryError = ssErr.message || 'unknown error';
+        }
       }
 
       if (trackForm.is_published) {
@@ -1439,7 +1502,12 @@ export default function TrackUploadPanel() {
         setVersionFiles([]); setCollaborators([]);
         setAddingAnother(false);
       } else {
-        showMessage('success', 'Track uploaded successfully!');
+        showMessage(
+          ssEntryError ? 'error' : 'success',
+          ssEntryError
+            ? `Track uploaded, but the School Sessions entry couldn't be saved: ${ssEntryError}. Please contact us to enter manually.`
+            : 'Track uploaded successfully!'
+        );
         resetAll();
       }
       fetchTracks();
@@ -1455,6 +1523,7 @@ export default function TrackUploadPanel() {
     setVersionFiles([]); setCollaborators([]);
     setAlbumCollaborators([]); setAlbumTrackQueue([]);
     setSessionAlbumId(null); setAddingAnother(false);
+    setSchoolSessionsEnabled(false); setSchoolSessionsForm(SCHOOL_SESSIONS_BLANK_FORM);
   };
 
   const finishAlbum = () => {
@@ -2080,6 +2149,10 @@ export default function TrackUploadPanel() {
                 <CollaboratorSearch collaborators={collaborators}
                   setCollaborators={setCollaborators} currentArtistId={artist.id} />
               </TierGate>
+
+              <SchoolSessionsEntry
+                enabled={schoolSessionsEnabled} setEnabled={setSchoolSessionsEnabled}
+                form={schoolSessionsForm} setForm={setSchoolSessionsForm} />
 
               <button type="submit" disabled={isWorking}
                 className="w-full py-3 bg-white text-black font-semibold rounded-lg hover:bg-white/90 disabled:opacity-50 transition flex items-center justify-center space-x-2">
