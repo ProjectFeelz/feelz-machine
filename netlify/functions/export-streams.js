@@ -32,11 +32,24 @@ exports.handler = async (event) => {
   try { body = JSON.parse(event.body); }
   catch { return { statusCode: 400, body: JSON.stringify({ error: 'Invalid JSON' }) }; }
 
-  const { artist_id, user_id, track_id, days = 30, export_type = 'streams' } = body;
+  const { artist_id, track_id, days = 30, export_type = 'streams' } = body;
 
-  if (!artist_id || !user_id) {
-    return { statusCode: 400, body: JSON.stringify({ error: 'artist_id and user_id required' }) };
+  if (!artist_id) {
+    return { statusCode: 400, body: JSON.stringify({ error: 'artist_id required' }) };
   }
+
+  // Verify the caller's own session — never trust a user_id from the request
+  // body, since that's just an unverified claim from the client.
+  const authHeader = event.headers.authorization || event.headers.Authorization || '';
+  const token = authHeader.replace(/^Bearer\s+/i, '');
+  if (!token) {
+    return { statusCode: 401, body: JSON.stringify({ error: 'Not signed in' }) };
+  }
+  const { data: { user }, error: authErr } = await supabase.auth.getUser(token);
+  if (authErr || !user) {
+    return { statusCode: 401, body: JSON.stringify({ error: 'Not signed in' }) };
+  }
+  const user_id = user.id;
 
   // Verify ownership
   const { data: artist, error: artistErr } = await supabase

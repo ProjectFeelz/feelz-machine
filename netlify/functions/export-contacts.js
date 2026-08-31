@@ -3,7 +3,7 @@
 
 const https = require('https');
 
-function supabaseRequest(path, method, body, serviceKey, supabaseUrl) {
+function supabaseRequest(path, method, body, key, supabaseUrl, bearerOverride) {
   return new Promise((resolve, reject) => {
     const url = new URL(supabaseUrl);
     const payload = body ? JSON.stringify(body) : null;
@@ -13,8 +13,8 @@ function supabaseRequest(path, method, body, serviceKey, supabaseUrl) {
       method,
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${serviceKey}`,
-        'apikey': serviceKey,
+        'Authorization': `Bearer ${bearerOverride || key}`,
+        'apikey': key,
         ...(payload ? { 'Content-Length': Buffer.byteLength(payload) } : {}),
       },
     };
@@ -30,6 +30,17 @@ function supabaseRequest(path, method, body, serviceKey, supabaseUrl) {
     if (payload) req.write(payload);
     req.end();
   });
+}
+
+// Verifies the caller's own access token against Supabase Auth and returns
+// their real user id — never trust a user_id supplied in the request body,
+// since that's just a claim from the client with nothing behind it.
+async function getVerifiedUserId(authHeader, serviceKey, supabaseUrl) {
+  const token = (authHeader || '').replace(/^Bearer\s+/i, '');
+  if (!token) return null;
+  const res = await supabaseRequest('/auth/v1/user', 'GET', null, serviceKey, supabaseUrl, token);
+  if (res.status !== 200 || !res.body?.id) return null;
+  return res.body.id;
 }
 
 exports.handler = async (event) => {
@@ -48,9 +59,15 @@ exports.handler = async (event) => {
   try { body = JSON.parse(event.body); }
   catch { return { statusCode: 400, body: JSON.stringify({ error: 'Invalid JSON' }) }; }
 
-  const { artist_id, user_id } = body;
-  if (!artist_id || !user_id) {
-    return { statusCode: 400, body: JSON.stringify({ error: 'artist_id and user_id required' }) };
+  const { artist_id } = body;
+  if (!artist_id) {
+    return { statusCode: 400, body: JSON.stringify({ error: 'artist_id required' }) };
+  }
+
+  const authHeader = event.headers.authorization || event.headers.Authorization;
+  const user_id = await getVerifiedUserId(authHeader, serviceKey, supabaseUrl);
+  if (!user_id) {
+    return { statusCode: 401, body: JSON.stringify({ error: 'Not signed in' }) };
   }
 
   try {
