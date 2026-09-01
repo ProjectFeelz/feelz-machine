@@ -1,0 +1,23 @@
+{
+  "short_name": "Feelz Retail",
+  "name": "Feelz Retail — Venue Player",
+  "description": "Background music for your venue, powered by Feelz Machine.",
+  "lang": "en",
+  "dir": "ltr",
+  "categories": ["music", "business"],
+  "icons": [
+    { "src": "/retail-icon-192.png",      "sizes": "192x192", "type": "image/png", "purpose": "any"      },
+    { "src": "/retail-icon-512.png",      "sizes": "512x512", "type": "image/png", "purpose": "any"      },
+    { "src": "/retail-icon-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "start_url": "/retail?source=pwa",
+  "scope": "/retail",
+  "id": "feelzretail-pwa",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "any",
+  "theme_color": "#000000",
+  "background_color": "#000000",
+  "launch_handler": { "client_mode": "navigate-existing" },
+  "prefer_related_applications": false
+}

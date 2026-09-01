@@ -345,7 +345,16 @@ export default function RetailPlayerPage() {
 
   return (
     <div className="min-h-screen bg-black text-white pb-28">
-      <Helmet><title>Feelz Retail — {venue.business_name}</title><meta name="robots" content="noindex, nofollow" /></Helmet>
+      <Helmet>
+        <title>Feelz Retail — {venue.business_name}</title>
+        <meta name="robots" content="noindex, nofollow" />
+        <link rel="manifest" href="/retail-manifest.json" />
+        <link rel="apple-touch-icon" href="/retail-icon-180.png" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-title" content="Feelz Retail" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        <meta name="theme-color" content="#000000" />
+      </Helmet>
       <audio ref={audioRef} onEnded={advance} onTimeUpdate={handleTimeUpdate} />
 
       <div className="sticky top-0 z-10 bg-black/95 backdrop-blur-xl border-b border-white/[0.05] px-4 py-4">
