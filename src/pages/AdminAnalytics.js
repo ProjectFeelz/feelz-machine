@@ -6,7 +6,7 @@ import {
   BarChart3, ChevronLeft, Loader, Music, Users, Mic2,
   TrendingUp, Heart, Download, Headphones, FileDown,
   Smartphone, Monitor, Zap, Crown, Star, Activity,
-  Radio, Globe, RefreshCw, Eye, Flame, DollarSign,
+  Radio, Globe, RefreshCw, Eye, Flame, DollarSign, Mail,
 } from 'lucide-react';
 import {
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
@@ -130,6 +130,8 @@ export default function AdminAnalytics({ embedded = false }) {
   const [listenerTierSplit, setListenerTierSplit] = useState([]);
   const [platformSignals, setPlatformSignals]     = useState([]);
   const [trendingGenres, setTrendingGenres]       = useState([]);
+  const [contactStats, setContactStats]           = useState({});
+  const [topContactedArtists, setTopContactedArtists] = useState([]);
 
   const fetchAll = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true); else setLoading(true);
@@ -440,6 +442,44 @@ export default function AdminAnalytics({ embedded = false }) {
         setPlatformSignals(growingArtists);
       } catch (err) { console.warn('Platform signals error:', err); }
 
+      // ── Contacts / email pipeline (collected automatically, no UI yet) ──
+      try {
+        const [
+          { count: subscribedCount },
+          { count: totalSubsCount },
+          { count: globalContactsCount },
+          { data: artistContactRows },
+        ] = await Promise.all([
+          supabase.from('email_subscribers').select('id', { count: 'exact', head: true }).eq('subscribed', true),
+          supabase.from('email_subscribers').select('id', { count: 'exact', head: true }),
+          supabase.from('global_contacts').select('id', { count: 'exact', head: true }),
+          supabase.from('artist_contacts').select('artist_id').limit(5000),
+        ]);
+
+        const contactCounts = {};
+        (artistContactRows || []).forEach(r => {
+          contactCounts[r.artist_id] = (contactCounts[r.artist_id] || 0) + 1;
+        });
+        const artistIds = Object.keys(contactCounts);
+        let topContacted = [];
+        if (artistIds.length) {
+          const { data: names } = await supabase.from('artists').select('id, artist_name, slug').in('id', artistIds);
+          const nameMap = {};
+          (names || []).forEach(a => { nameMap[a.id] = a; });
+          topContacted = Object.entries(contactCounts)
+            .sort((a, b) => b[1] - a[1]).slice(0, 10)
+            .map(([id, count]) => ({ name: nameMap[id]?.artist_name || id, slug: nameMap[id]?.slug, contacts: count }));
+        }
+
+        setContactStats({
+          subscribed: subscribedCount || 0,
+          totalSubscribers: totalSubsCount || 0,
+          globalContacts: globalContactsCount || 0,
+          totalArtistContacts: (artistContactRows || []).length,
+        });
+        setTopContactedArtists(topContacted);
+      } catch (err) { console.warn('Contacts fetch error:', err); }
+
     } catch (err) {
       console.error('Analytics error:', err);
     }
@@ -519,6 +559,7 @@ export default function AdminAnalytics({ embedded = false }) {
           { key: 'beats',      label: 'Beats'     },
           { key: 'listeners',  label: 'Listeners' },
           { key: 'health',     label: 'Health'    },
+          { key: 'contacts',   label: 'Contacts'  },
           { key: 'export',     label: 'Export'    },
         ].map(t => <TabButton key={t.key} active={tab === t.key} onClick={() => setTab(t.key)}>{t.label}</TabButton>)}
       </div>
@@ -1016,6 +1057,37 @@ export default function AdminAnalytics({ embedded = false }) {
                     </div>
                   );
                 })}
+              </div>
+            </>
+          )}
+
+          {/* ── CONTACTS ─────────────────────────────────────────────────── */}
+          {tab === 'contacts' && (
+            <>
+              <p className="text-xs text-white/30 mb-4">
+                Collected automatically in the background — from follows and profile creation — but never surfaced anywhere until now.
+              </p>
+              <div className="grid grid-cols-2 gap-2 mb-6">
+                <KPI icon={Mail}  label="Email Subscribers" value={contactStats.subscribed} sub={`of ${fmt(contactStats.totalSubscribers)} total`} color="bg-cyan-500/20" />
+                <KPI icon={Users} label="Global Contacts"   value={contactStats.globalContacts} sub="unique people who've followed" color="bg-purple-500/20" />
+                <KPI icon={Star}  label="Artist Contacts"   value={contactStats.totalArtistContacts} sub="per-artist follow records" color="bg-pink-500/20" />
+                <KPI icon={Mail}  label="Unsubscribed"      value={contactStats.totalSubscribers - contactStats.subscribed} sub="opted out" color="bg-white/[0.06]" />
+              </div>
+
+              <div className="rounded-2xl p-4 bg-white/[0.02] border border-white/[0.05]">
+                <SectionTitle icon={Mic2} title="Most-Contacted Artists" color="text-pink-400" />
+                {topContactedArtists.length === 0 ? (
+                  <p className="text-xs text-white/25 py-4 text-center">No contact data yet.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {topContactedArtists.map((a, i) => (
+                      <div key={i} className="flex items-center justify-between py-1.5">
+                        <span className="text-sm text-white/70">{a.name}</span>
+                        <span className="text-sm font-bold text-white">{fmt(a.contacts)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </>
           )}
