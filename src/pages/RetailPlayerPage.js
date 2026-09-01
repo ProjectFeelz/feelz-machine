@@ -15,6 +15,65 @@ import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../supabaseClient';
 
 const QUALIFYING_SECONDS = 30;
+const PAYPAL_CLIENT_ID = process.env.REACT_APP_PAYPAL_CLIENT_ID || '';
+
+// Loads the PayPal SDK once, gets a plan created server-side for this
+// venue's exact negotiated fee, then renders the subscribe button. On
+// approval, links the subscription back to the venue — the webhook
+// confirms/corrects the status afterward, this is the fast path so the
+// venue doesn't sit staring at a spinner waiting on a webhook round-trip.
+function RetailPayPalButton({ venueId, onSubscribed }) {
+  const buttonRef = React.useRef(null);
+  const [ready, setReady] = React.useState(false);
+  const [planId, setPlanId] = React.useState(null);
+  const [error, setError] = React.useState('');
+
+  React.useEffect(() => {
+    if (window.paypal) { setReady(true); return; }
+    const existing = document.querySelector('script[src*="paypal.com/sdk"]');
+    if (existing) { existing.addEventListener('load', () => setReady(true)); return; }
+    const script = document.createElement('script');
+    script.src = `https://www.paypal.com/sdk/js?client-id=${PAYPAL_CLIENT_ID}&vault=true&intent=subscription&currency=ZAR`;
+    script.async = true;
+    script.onload = () => setReady(true);
+    script.onerror = () => setError('Could not load PayPal. Try again shortly.');
+    document.head.appendChild(script);
+  }, []);
+
+  React.useEffect(() => {
+    fetch('/.netlify/functions/retail-paypal-subscription', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'get-plan', venueId }),
+    })
+      .then(r => r.json())
+      .then(data => { if (data.planId) setPlanId(data.planId); else setError(data.error || 'Billing not set up yet — contact us.'); })
+      .catch(() => setError('Could not reach billing. Try again shortly.'));
+  }, [venueId]);
+
+  React.useEffect(() => {
+    if (!ready || !planId || !buttonRef.current || !window.paypal) return;
+    buttonRef.current.innerHTML = '';
+    window.paypal.Buttons({
+      style: { shape: 'pill', color: 'white', layout: 'vertical', label: 'subscribe' },
+      createSubscription: (data, actions) => actions.subscription.create({ plan_id: planId }),
+      onApprove: async (data) => {
+        await fetch('/.netlify/functions/retail-paypal-subscription', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'link', venueId, subscriptionId: data.subscriptionID }),
+        }).catch(() => {});
+        onSubscribed();
+      },
+      onError: () => setError('Payment failed. Try again.'),
+    }).render(buttonRef.current);
+  }, [ready, planId, venueId, onSubscribed]);
+
+  if (error) return <p className="text-xs text-red-400 mt-3">{error}</p>;
+  if (!planId || !ready) return <div className="flex justify-center mt-4"><Loader className="w-4 h-4 text-white/30 animate-spin" /></div>;
+  return <div ref={buttonRef} className="mt-4 max-w-xs mx-auto" />;
+}
+
 
 export default function RetailPlayerPage() {
   const { user } = useAuth();
@@ -230,11 +289,16 @@ export default function RetailPlayerPage() {
   if (venue.status !== 'active') {
     return (
       <div className="min-h-screen bg-black text-white flex items-center justify-center px-6 text-center">
-        <p className="text-sm text-white/50">
-          {venue.status === 'pending'
-            ? 'Your Feelz Retail account is still being set up — check back soon.'
-            : 'This account is currently suspended. Contact us if that seems wrong.'}
-        </p>
+        <div>
+          <p className="text-sm text-white/50 max-w-xs">
+            {venue.status === 'pending'
+              ? 'Set up billing to activate your Feelz Retail player.'
+              : 'This account is currently suspended. Contact us if that seems wrong.'}
+          </p>
+          {venue.status === 'pending' && (
+            <RetailPayPalButton venueId={venue.id} onSubscribed={() => setVenue(v => ({ ...v, status: 'active' }))} />
+          )}
+        </div>
       </div>
     );
   }

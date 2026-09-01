@@ -70,7 +70,18 @@ export default function AdminRetail() {
 
   const loadVenues = useCallback(async () => {
     const { data } = await supabase.from('retail_venues').select('*').order('created_at', { ascending: false });
-    setVenues(data || []);
+    const list = data || [];
+    if (list.length > 0) {
+      const { data: subs } = await supabase.from('retail_subscriptions')
+        .select('venue_id, monthly_fee, status, created_at')
+        .in('venue_id', list.map(v => v.id))
+        .order('created_at', { ascending: false });
+      const latestByVenue = {};
+      (subs || []).forEach(s => { if (!latestByVenue[s.venue_id]) latestByVenue[s.venue_id] = s; });
+      setVenues(list.map(v => ({ ...v, subscription: latestByVenue[v.id] || null })));
+    } else {
+      setVenues([]);
+    }
   }, []);
 
   const loadCatalog = useCallback(async () => {
@@ -183,6 +194,28 @@ export default function AdminRetail() {
   const setVenueStatus = async (venue, status) => {
     await supabase.from('retail_venues').update({ status }).eq('id', venue.id);
     setVenues(prev => prev.map(v => v.id === venue.id ? { ...v, status } : v));
+  };
+
+  const setVenueFee = async (venue) => {
+    const current = venue.subscription?.monthly_fee ?? '';
+    const input = window.prompt(`Monthly fee for "${venue.business_name}" (ZAR):`, current);
+    if (input === null) return;
+    const fee = parseFloat(input);
+    if (isNaN(fee) || fee < 0) { showToast('Enter a valid amount'); return; }
+
+    if (venue.subscription) {
+      const { error } = await supabase.from('retail_subscriptions')
+        .update({ monthly_fee: fee })
+        .eq('venue_id', venue.id)
+        .eq('created_at', venue.subscription.created_at);
+      if (error) { showToast('Error: ' + error.message); return; }
+    } else {
+      const { error } = await supabase.from('retail_subscriptions')
+        .insert({ venue_id: venue.id, monthly_fee: fee, status: 'active' });
+      if (error) { showToast('Error: ' + error.message); return; }
+    }
+    showToast('Fee saved');
+    loadVenues();
   };
 
   const linkVenueUser = async (venue) => {
@@ -443,6 +476,11 @@ export default function AdminRetail() {
                       <div className="min-w-0">
                         <p className="text-sm font-semibold text-white truncate">{v.business_name}</p>
                         <p className="text-xs text-white/40 truncate">{v.contact_email || 'No contact email'}</p>
+                        <p className="text-xs text-white/30 mt-0.5">
+                          {v.subscription?.monthly_fee
+                            ? `R${v.subscription.monthly_fee}/mo${v.subscription.status === 'active' ? ' · billing active' : ''}`
+                            : 'No fee set'}
+                        </p>
                       </div>
                       <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex-shrink-0 ml-2 ${
                         v.status === 'active' ? 'bg-purple-500/20 text-purple-300' :
@@ -451,6 +489,10 @@ export default function AdminRetail() {
                       }`}>{v.status}</span>
                     </div>
                     <div className="flex items-center flex-wrap gap-2">
+                      <button onClick={() => setVenueFee(v)}
+                        className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-white/[0.06] text-white/40 hover:bg-white/[0.1] transition">
+                        {v.subscription?.monthly_fee ? 'Edit fee' : 'Set fee'}
+                      </button>
                       {v.status !== 'active' && (
                         <button onClick={() => setVenueStatus(v, 'active')}
                           className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-purple-500/10 text-purple-300 hover:bg-purple-500/20 transition">Activate</button>

@@ -99,6 +99,42 @@ async function activateArtistSubscription(subscriptionId) {
   if (error) console.error('Activate subscription error:', error);
 }
 
+// ── Retail venue subscriptions ──────────────────────────────────────────
+async function activateRetailSubscription(subscriptionId) {
+  if (!subscriptionId) return;
+  const { data: sub } = await supabase
+    .from('retail_subscriptions')
+    .update({ status: 'active' })
+    .eq('paypal_subscription_id', subscriptionId)
+    .select('venue_id')
+    .maybeSingle();
+  // A venue whose payment just went through shouldn't sit waiting on a
+  // separate manual admin step to actually turn the player on.
+  if (sub?.venue_id) {
+    await supabase.from('retail_venues')
+      .update({ status: 'active' })
+      .eq('id', sub.venue_id)
+      .eq('status', 'pending');
+  }
+}
+
+async function cancelRetailSubscription(subscriptionId, reason) {
+  if (!subscriptionId) return;
+  const { data: sub } = await supabase
+    .from('retail_subscriptions')
+    .update({ status: 'cancelled' })
+    .eq('paypal_subscription_id', subscriptionId)
+    .select('venue_id')
+    .maybeSingle();
+  // Access follows payment — if billing stopped, the player stops too.
+  if (sub?.venue_id) {
+    await supabase.from('retail_venues')
+      .update({ status: 'suspended' })
+      .eq('id', sub.venue_id)
+      .eq('status', 'active');
+  }
+}
+
 exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') return { statusCode: 405, body: 'Method Not Allowed' };
 
@@ -127,6 +163,7 @@ exports.handler = async (event) => {
   if (eventType === 'BILLING.SUBSCRIPTION.ACTIVATED') {
     const subscriptionId = resource?.id;
     await activateArtistSubscription(subscriptionId);
+    await activateRetailSubscription(subscriptionId);
     // Also handle listener subscription activation
     const { data: listenerSub } = await supabase
       .from('listener_tier_subscriptions')
@@ -144,6 +181,7 @@ exports.handler = async (event) => {
   if (eventType === 'BILLING.SUBSCRIPTION.CANCELLED') {
     const subscriptionId = resource?.id;
     await cancelArtistSubscription(subscriptionId, 'user_cancelled');
+    await cancelRetailSubscription(subscriptionId, 'user_cancelled');
     const { data: listenerSub } = await supabase.from('listener_tier_subscriptions')
       .update({ status: 'cancelled', cancelled_at: new Date().toISOString(), cancel_reason: 'user_cancelled' })
       .eq('paypal_subscription_id', subscriptionId)
@@ -157,6 +195,7 @@ exports.handler = async (event) => {
   if (eventType === 'BILLING.SUBSCRIPTION.SUSPENDED') {
     const subscriptionId = resource?.id;
     await cancelArtistSubscription(subscriptionId, 'payment_failed');
+    await cancelRetailSubscription(subscriptionId, 'payment_failed');
     const { data: listenerSub } = await supabase.from('listener_tier_subscriptions')
       .update({ status: 'cancelled', cancelled_at: new Date().toISOString(), cancel_reason: 'payment_failed' })
       .eq('paypal_subscription_id', subscriptionId)
@@ -170,6 +209,7 @@ exports.handler = async (event) => {
   if (eventType === 'BILLING.SUBSCRIPTION.EXPIRED') {
     const subscriptionId = resource?.id;
     await cancelArtistSubscription(subscriptionId, 'expired');
+    await cancelRetailSubscription(subscriptionId, 'expired');
   }
 
   // ── Subscription payment completed (renewal) ─────────────────────────────
@@ -178,6 +218,7 @@ exports.handler = async (event) => {
     if (subscriptionId) {
       // Ensure status is active in case it was briefly suspended
       await activateArtistSubscription(subscriptionId);
+      await activateRetailSubscription(subscriptionId);
     }
   }
 
