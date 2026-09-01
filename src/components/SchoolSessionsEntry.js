@@ -13,10 +13,11 @@ import { GraduationCap, Plus, X } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import useSchoolSessions from '../hooks/useSchoolSessions';
 
-// TODO: confirm these are the real official handles before this goes live —
-// placeholders until Steve confirms.
+// TODO: TikTok handle is a placeholder — Steve is still creating that
+// account. Instagram and YouTube below are confirmed real.
 const OFFICIAL_TIKTOK_HANDLE = 'feelzmachine';
-const OFFICIAL_INSTAGRAM_HANDLE = 'feelzmachine';
+const OFFICIAL_INSTAGRAM_HANDLE = 'feelz.machine';
+const OFFICIAL_YOUTUBE_HANDLE = 'feelz.machine';
 
 const BLANK_FORM = {
   schoolId: '',
@@ -25,12 +26,14 @@ const BLANK_FORM = {
   isGroup: false,
   groupMembers: [''],
   candidateCardNo: '',
+  verificationCode: '',
   entrantFullName: '',
   entrantEmail: '',
   tiktokHandle: '',
   tiktokVideoUrl: '',
   tiktokTaggedConfirmed: false,
   instagramFollowedConfirmed: false,
+  youtubeSubscribedConfirmed: false,
   isMinor: true,
   guardianName: '',
   guardianContact: '',
@@ -64,11 +67,13 @@ function Input(props) {
 export function schoolSessionsFormValid(enabled, form) {
   if (!enabled) return true;
   if (!form.entrantFullName.trim()) return false;
+  if (!form.verificationCode.trim()) return false;
   if (!/^\S+@\S+\.\S+$/.test(form.entrantEmail.trim())) return false;
   if (!form.tiktokHandle.trim()) return false;
   if (!form.tiktokVideoUrl.trim()) return false;
   if (!form.tiktokTaggedConfirmed) return false;
   if (!form.instagramFollowedConfirmed) return false;
+  if (!form.youtubeSubscribedConfirmed) return false;
   if (!form.schoolId && !form.schoolFreeText.trim()) return false;
   if (!form.songId) return false;
   if (form.isGroup && form.groupMembers.filter(m => m.trim()).length === 0) return false;
@@ -162,6 +167,16 @@ export default function SchoolSessionsEntry({ enabled, setEnabled, form, setForm
           </div>
 
           <div>
+            <Label>Verification code</Label>
+            <Input value={form.verificationCode}
+              onChange={e => set('verificationCode', e.target.value.toUpperCase())}
+              placeholder="From the introduction event or school reception" />
+            <p className="text-[11px] text-white/30 mt-1">
+              Handed out in person, not by email — ask at school reception if you missed the introduction.
+            </p>
+          </div>
+
+          <div>
             <Label>Entrant's full name</Label>
             <Input value={form.entrantFullName}
               onChange={e => set('entrantFullName', e.target.value)}
@@ -210,6 +225,15 @@ export default function SchoolSessionsEntry({ enabled, setEnabled, form, setForm
               className="mt-0.5 rounded border-white/20" />
             <span className="text-xs text-white/60">
               I follow <span className="text-lime-400 font-semibold">@{OFFICIAL_INSTAGRAM_HANDLE}</span> on Instagram — this is how you can DM, get tagged, and collab with us directly.
+            </span>
+          </label>
+
+          <label className="flex items-start space-x-2.5 cursor-pointer">
+            <input type="checkbox" checked={form.youtubeSubscribedConfirmed}
+              onChange={e => set('youtubeSubscribedConfirmed', e.target.checked)}
+              className="mt-0.5 rounded border-white/20" />
+            <span className="text-xs text-white/60">
+              I'm subscribed to <span className="text-lime-400 font-semibold">youtube.com/@{OFFICIAL_YOUTUBE_HANDLE}</span> to follow the journey.
             </span>
           </label>
 

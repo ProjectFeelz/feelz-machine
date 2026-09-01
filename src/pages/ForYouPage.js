@@ -436,7 +436,7 @@ function StoryFeedCard({ item, isActive, onOpen, navigate }) {
 // ── Single card ───────────────────────────────────────────────────────────────
 function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare, onNext, onHide, queue, queueIndex }) {
   const [justHid, setJustHid] = React.useState(null); // { id, title } for undo
-  const { currentTrack, isPlaying, currentTime, setIsMinimized } = usePlayer();
+  const { currentTrack, isPlaying, currentTime, setIsMinimized, togglePlay } = usePlayer();
   const { artist: myArtist } = useAuth();
   const isOwnTrack = myArtist?.id === track.artist_id;
 
@@ -600,7 +600,7 @@ function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare, onN
   };
 
   const handleTap = () => {
-    goToArtist();
+    togglePlay();
   };
 
   const vinylSize = Math.min(window.innerWidth - 120, window.innerHeight * 0.42);

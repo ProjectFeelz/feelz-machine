@@ -1,5 +1,5 @@
 // src/pages/VipCardPrintPage.js
-// /admin/vip-card-print/:candidateId — a dedicated, print-only view of one
+// /admin/vip-card-print/:candidateId, a dedicated, print-only view of one
 // issued VIP candidate card. Kept as its own page rather than trying to
 // print out of the middle of the admin panel's DOM, since getting a
 // physical-size printout right needs its own @page rule with nothing else
@@ -27,7 +27,7 @@ export default function VipCardPrintPage() {
   const targetUrl = candidate.ref_code
     ? `https://feelzmachine.com?ref=${candidate.ref_code}`
     : 'https://feelzmachine.com/schoolsessions';
-  // No new dependency for this — a plain image URL from a QR generation
+  // No new dependency for this, a plain image URL from a QR generation
   // service renders exactly like any other <img>, no library needed.
   const qrImgUrl = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&margin=8&data=${encodeURIComponent(targetUrl)}`;
 
@@ -38,7 +38,7 @@ export default function VipCardPrintPage() {
   return (
     <div>
       <Helmet>
-        <title>Card #{String(candidate.candidate_number).padStart(3, '0')} — {candidate.name}</title>
+        <title>Card #{String(candidate.candidate_number).padStart(3, '0')}, {candidate.name}</title>
         <meta name="robots" content="noindex, nofollow" />
         <style>{`
           @page { size: 89mm 61mm; margin: 0; }

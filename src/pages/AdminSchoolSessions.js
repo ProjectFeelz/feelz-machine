@@ -59,6 +59,11 @@ export default function AdminSchoolSessions({ embedded = false }) {
   const [newJudgeName, setNewJudgeName] = useState('');
   const [nominations, setNominations] = useState([]);
   const [vipCandidates, setVipCandidates] = useState([]);
+  const [codeStats, setCodeStats] = useState({ total: 0, used: 0 });
+  const [genCount, setGenCount] = useState('20');
+  const [genSchoolId, setGenSchoolId] = useState('');
+  const [generatingCodes, setGeneratingCodes] = useState(false);
+  const [generatedCodes, setGeneratedCodes] = useState(null);
   const [newVip, setNewVip] = useState({ name: '', refCode: '' });
   const [issuingVip, setIssuingVip] = useState(false);
   const [nominationsLoading, setNominationsLoading] = useState(false);
@@ -97,7 +102,7 @@ export default function AdminSchoolSessions({ embedded = false }) {
     setEntriesLoading(true);
     const { data } = await supabase
       .from('school_sessions_entries')
-      .select('id, entrant_full_name, entrant_email, entrant_tiktok_handle, tiktok_video_url, tiktok_tagged_confirmed, instagram_followed_confirmed, candidate_card_no, created_at, is_finalist, is_winner, is_group, school_name_freetext, song:school_sessions_shortlist_songs(title), school:school_sessions_schools(name), track:tracks(title), artist:artists(artist_name, slug), members:school_sessions_entry_members(id, member_name)')
+      .select('id, entrant_full_name, entrant_email, entrant_tiktok_handle, tiktok_video_url, tiktok_tagged_confirmed, instagram_followed_confirmed, youtube_subscribed_confirmed, needs_school_verification, candidate_card_no, created_at, is_finalist, is_winner, is_group, school_name_freetext, song:school_sessions_shortlist_songs(title), school:school_sessions_schools(name), track:tracks(title), artist:artists(artist_name, slug), members:school_sessions_entry_members(id, member_name)')
       .eq('competition_id', config.competition_id)
       .order('created_at', { ascending: false });
     setEntries(data || []);
@@ -190,6 +195,30 @@ export default function AdminSchoolSessions({ embedded = false }) {
     setNewVip({ name: '', refCode: '' });
     showToast('Candidate issued');
     loadVipCandidates();
+  };
+
+  const loadCodeStats = useCallback(async () => {
+    const [{ count: total }, { count: used }] = await Promise.all([
+      supabase.from('school_sessions_verification_codes').select('id', { count: 'exact', head: true }),
+      supabase.from('school_sessions_verification_codes').select('id', { count: 'exact', head: true }).eq('is_used', true),
+    ]);
+    setCodeStats({ total: total || 0, used: used || 0 });
+  }, []);
+
+  useEffect(() => { loadCodeStats(); }, [loadCodeStats]);
+
+  const generateCodes = async () => {
+    const count = parseInt(genCount, 10);
+    if (!count || count < 1) return;
+    setGeneratingCodes(true);
+    const { data, error } = await supabase.rpc('generate_verification_codes', {
+      p_count: count,
+      p_school_id: genSchoolId || null,
+    });
+    setGeneratingCodes(false);
+    if (error) { showToast('Error: ' + error.message); return; }
+    setGeneratedCodes(data || []);
+    loadCodeStats();
   };
 
   const saveConfig = async (patch) => {
@@ -613,6 +642,42 @@ export default function AdminSchoolSessions({ embedded = false }) {
           </div>
         </div>
 
+        {/* Verification codes */}
+        <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4 space-y-3">
+          <p className="text-xs font-bold text-white/50 uppercase tracking-wide">
+            Verification codes ({codeStats.used} used / {codeStats.total} generated)
+          </p>
+          <p className="text-[11px] text-white/30">
+            Hand these out in person — at the introduction event, or from school reception afterward. No email needed; having a real, unused code is the verification. Each one works exactly once.
+          </p>
+          <div className="flex space-x-2">
+            <input type="number" min="1" max="500" className={inputCls} placeholder="How many?" value={genCount}
+              onChange={e => setGenCount(e.target.value)} />
+            <select className={inputCls} value={genSchoolId} onChange={e => setGenSchoolId(e.target.value)}>
+              <option value="">No specific school</option>
+              {schools.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+            <button onClick={generateCodes} disabled={generatingCodes}
+              className="px-3.5 py-2.5 rounded-lg bg-lime-400 text-black flex-shrink-0 disabled:opacity-40 text-sm font-bold whitespace-nowrap">
+              {generatingCodes ? '…' : 'Generate'}
+            </button>
+          </div>
+          {generatedCodes && (
+            <div className="rounded-lg bg-white/[0.04] p-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="text-[11px] text-white/40">{generatedCodes.length} new codes — copy or write these down now, they aren't shown again here.</p>
+                <button onClick={() => { navigator.clipboard.writeText(generatedCodes.join('\n')); showToast('Copied'); }}
+                  className="text-[10px] font-bold px-2 py-1 rounded-full bg-white/[0.08] text-white/60 hover:bg-white/[0.12] transition flex-shrink-0">Copy all</button>
+              </div>
+              <div className="grid grid-cols-3 gap-1.5 max-h-48 overflow-y-auto">
+                {generatedCodes.map(c => (
+                  <div key={c} className="text-center text-xs font-mono py-1.5 rounded bg-black/40 text-lime-400">{c}</div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
         {/* VIP Candidate Cards */}
         <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4 space-y-3">
           <p className="text-xs font-bold text-white/50 uppercase tracking-wide">
@@ -715,6 +780,12 @@ export default function AdminSchoolSessions({ embedded = false }) {
                     <span className={`text-[10px] px-1.5 py-0.5 rounded ${e.instagram_followed_confirmed ? 'bg-lime-400/10 text-lime-400' : 'bg-red-500/10 text-red-400'}`}>
                       {e.instagram_followed_confirmed ? 'Follows IG' : 'Not following'}
                     </span>
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded ${e.youtube_subscribed_confirmed ? 'bg-lime-400/10 text-lime-400' : 'bg-red-500/10 text-red-400'}`}>
+                      {e.youtube_subscribed_confirmed ? 'Subbed YT' : 'Not subbed'}
+                    </span>
+                    {e.needs_school_verification && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-yellow-500/10 text-yellow-400">School unverified</span>
+                    )}
                   </div>
                 </div>
               ))}

@@ -1451,12 +1451,20 @@ export default function TrackUploadPanel() {
             .maybeSingle();
 
           if (ssConfig?.competition_id) {
+            const { data: redeemedCodeId, error: codeErr } = await supabase.rpc('redeem_verification_code', {
+              p_code: schoolSessionsForm.verificationCode.trim(),
+            });
+            if (codeErr || !redeemedCodeId) {
+              throw new Error('That verification code is invalid or has already been used. Check it and try again, or ask at school reception for a new one.');
+            }
+
             const { data: entryRow, error: entryErr } = await supabase
               .from('school_sessions_entries')
               .insert({
                 competition_id:    ssConfig.competition_id,
                 track_id:          trackId,
                 artist_id:         artist.id,
+                verification_code_id: redeemedCodeId,
                 school_id:         schoolSessionsForm.schoolId || null,
                 school_name_freetext: schoolSessionsForm.schoolId ? null : schoolSessionsForm.schoolFreeText.trim(),
                 candidate_card_no: schoolSessionsForm.candidateCardNo.trim() || null,
@@ -1466,12 +1474,18 @@ export default function TrackUploadPanel() {
                 tiktok_video_url: schoolSessionsForm.tiktokVideoUrl.trim(),
                 tiktok_tagged_confirmed: schoolSessionsForm.tiktokTaggedConfirmed,
                 instagram_followed_confirmed: schoolSessionsForm.instagramFollowedConfirmed,
+                youtube_subscribed_confirmed: schoolSessionsForm.youtubeSubscribedConfirmed,
                 entrant_is_minor:  schoolSessionsForm.isMinor,
                 song_id:           schoolSessionsForm.songId || null,
                 is_group:          schoolSessionsForm.isGroup,
               })
               .select('id').single();
-            if (entryErr) throw entryErr;
+            if (entryErr) {
+              if (entryErr.message?.includes('idx_school_sessions_entries_one_per_email')) {
+                throw new Error('This email has already been used for a School Sessions entry.');
+              }
+              throw entryErr;
+            }
 
             if (schoolSessionsForm.isMinor && entryRow?.id) {
               await supabase.from('school_sessions_guardian_consents').insert({

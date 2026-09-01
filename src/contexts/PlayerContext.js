@@ -443,10 +443,23 @@ export function PlayerProvider({ children }) {
     streamLoggedRef.current = false;
     audio.pause();
     audio.src = track.file_url;
-    audio.volume = volumeRef.current;
+    audio.volume = 0;
     audio.load();
     const playWhenReady = () => {
       audio.play().catch(() => {});
+      // Fade in from silence to half the person's set volume. Never
+      // straight to full. They can turn it up further themselves if they
+      // want it louder; this just stops a track ever "starting shouting."
+      const targetVol = volumeRef.current * 0.5;
+      const steps      = 24;
+      const durationMs = 1400;
+      const interval   = durationMs / steps;
+      let step = 0;
+      const fadeIn = setInterval(() => {
+        step++;
+        audio.volume = Math.min(targetVol, targetVol * (step / steps));
+        if (step >= steps) clearInterval(fadeIn);
+      }, interval);
       audio.removeEventListener('canplay', playWhenReady);
     };
     audio.addEventListener('canplay', playWhenReady);

@@ -1,8 +1,8 @@
 // src/pages/AdminRetail.js
-// /admin/retail — review artist pitches into Feelz Retail, build mood
+// /admin/retail, review artist pitches into Feelz Retail, build mood
 // playlists from the approved catalog, and manage venue accounts. Nothing
 // here makes a venue actually able to play anything publicly beyond what
-// its own status controls — a venue only gets read access to playlists
+// its own status controls, a venue only gets read access to playlists
 // once you set its status to 'active' (see the RLS policies in the
 // foundation migration).
 
@@ -162,7 +162,7 @@ export default function AdminRetail({ embedded = false }) {
     if (cErr) { showToast('Error: ' + cErr.message); return; }
     setPitches(prev => prev.map(p => p.id === pitch.id ? { ...p, status: 'approved' } : p));
     loadCatalog();
-    showToast('Approved — added to retail catalog');
+    showToast('Approved, added to retail catalog');
   };
 
   const rejectPitch = async (pitch) => {
@@ -455,8 +455,8 @@ export default function AdminRetail({ embedded = false }) {
       totalLikes: totalLikes || 0,
       activeVenueCount: activeVenueCount || 0,
       totalAdPlays: totalAdPlays || 0,
-      topTracks: rankBy(playRows, r => r.track_id, r => `${r.tracks?.title || 'Unknown'} — ${r.tracks?.artist?.artist_name || ''}`),
-      topLiked: rankBy(likeRows, r => r.track_id, r => `${r.tracks?.title || 'Unknown'} — ${r.tracks?.artist?.artist_name || ''}`),
+      topTracks: rankBy(playRows, r => r.track_id, r => `${r.tracks?.title || 'Unknown'}, ${r.tracks?.artist?.artist_name || ''}`),
+      topLiked: rankBy(likeRows, r => r.track_id, r => `${r.tracks?.title || 'Unknown'}, ${r.tracks?.artist?.artist_name || ''}`),
       topVenues: rankBy(venuePlayRows, r => r.venue_id, r => r.retail_venues?.business_name || 'Unknown venue'),
       topAds: rankBy(adPlayRows, r => r.ad_id, r => r.retail_ads?.advertiser_name || 'Unknown advertiser'),
     });
@@ -544,7 +544,7 @@ export default function AdminRetail({ embedded = false }) {
                   <p className="text-xs font-bold text-white/50 uppercase tracking-wide">Decided ({decidedPitches.length})</p>
                   {decidedPitches.map(p => (
                     <div key={p.id} className="flex items-center justify-between px-3 py-2 rounded-lg bg-white/[0.02] text-sm">
-                      <span className="text-white/60 truncate">{p.track?.title} — {p.artist?.artist_name}</span>
+                      <span className="text-white/60 truncate">{p.track?.title}, {p.artist?.artist_name}</span>
                       <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex-shrink-0 ml-2 ${p.status === 'approved' ? 'bg-purple-500/15 text-purple-300' : 'bg-red-500/15 text-red-400'}`}>{p.status}</span>
                     </div>
                   ))}
@@ -587,7 +587,7 @@ export default function AdminRetail({ embedded = false }) {
                         <div className="space-y-1.5">
                           {(playlistTracksMap[pl.id] || []).map(pt => (
                             <div key={pt.id} className="flex items-center justify-between text-xs bg-white/[0.03] rounded-lg px-2.5 py-1.5">
-                              <span className="text-white/70 truncate">{pt.track?.title} — {pt.track?.artist?.artist_name}</span>
+                              <span className="text-white/70 truncate">{pt.track?.title}, {pt.track?.artist?.artist_name}</span>
                               <button onClick={() => removeTrackFromPlaylist(pl.id, pt.id)}
                                 className="text-white/20 hover:text-red-400 flex-shrink-0 ml-2"><X className="w-3.5 h-3.5" /></button>
                             </div>
@@ -603,12 +603,12 @@ export default function AdminRetail({ embedded = false }) {
                           if (suggestions.length === 0) return null;
                           return (
                             <div>
-                              <p className="text-[10px] font-bold text-purple-300 uppercase tracking-wide mb-1.5">Trending — not yet in this playlist</p>
+                              <p className="text-[10px] font-bold text-purple-300 uppercase tracking-wide mb-1.5">Trending, not yet in this playlist</p>
                               <div className="space-y-1">
                                 {suggestions.map(c => (
                                   <button key={c.track_id} onClick={() => addTrackToPlaylist(pl.id, c.track_id)}
                                     className="w-full flex items-center justify-between text-xs bg-purple-500/[0.06] hover:bg-purple-500/[0.12] rounded-lg px-2.5 py-1.5 transition text-left">
-                                    <span className="text-white/70 truncate">{c.track?.title} — {c.track?.artist?.artist_name}</span>
+                                    <span className="text-white/70 truncate">{c.track?.title}, {c.track?.artist?.artist_name}</span>
                                     <Plus className="w-3.5 h-3.5 text-purple-300 flex-shrink-0 ml-2" />
                                   </button>
                                 ))}
@@ -624,7 +624,7 @@ export default function AdminRetail({ embedded = false }) {
                               {filteredCatalog.map(c => (
                                 <button key={c.track_id} onClick={() => addTrackToPlaylist(pl.id, c.track_id)}
                                   className="w-full flex items-center justify-between text-xs bg-white/[0.03] hover:bg-white/[0.06] rounded-lg px-2.5 py-1.5 transition text-left">
-                                  <span className="text-white/70 truncate">{c.track?.title} — {c.track?.artist?.artist_name}</span>
+                                  <span className="text-white/70 truncate">{c.track?.title}, {c.track?.artist?.artist_name}</span>
                                   <Plus className="w-3.5 h-3.5 text-purple-300 flex-shrink-0 ml-2" />
                                 </button>
                               ))}
@@ -800,7 +800,7 @@ export default function AdminRetail({ embedded = false }) {
                       <div className="border-t border-white/[0.06] p-3 space-y-1.5">
                         {(periodPayoutsMap[period.id] || []).map(p => (
                           <div key={p.id} className="flex items-center justify-between text-xs bg-white/[0.03] rounded-lg px-2.5 py-1.5">
-                            <span className="text-white/70 truncate">{p.artist?.artist_name} — {p.play_count} plays ({p.share_pct}%)</span>
+                            <span className="text-white/70 truncate">{p.artist?.artist_name}, {p.play_count} plays ({p.share_pct}%)</span>
                             <span className="text-purple-300 font-semibold flex-shrink-0 ml-2">R{p.amount}</span>
                           </div>
                         ))}
@@ -833,7 +833,7 @@ export default function AdminRetail({ embedded = false }) {
 
               <div className="space-y-2">
                 {priceGuide.length === 0 ? (
-                  <p className="text-xs text-white/30 py-4 text-center">No price bands yet — add a few venue types to build your reference sheet.</p>
+                  <p className="text-xs text-white/30 py-4 text-center">No price bands yet, add a few venue types to build your reference sheet.</p>
                 ) : priceGuide.map(p => (
                   <div key={p.id} className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3 flex items-center justify-between">
                     <div className="min-w-0">
@@ -907,7 +907,7 @@ export default function AdminRetail({ embedded = false }) {
               <div className="rounded-xl border border-purple-500/20 bg-purple-500/[0.06] p-4 flex items-center justify-between">
                 <div>
                   <p className="text-sm font-semibold text-white">Compose has moved</p>
-                  <p className="text-xs text-white/40 mt-0.5">Retail notifications now go through the unified Newsletter panel — one place for both audiences.</p>
+                  <p className="text-xs text-white/40 mt-0.5">Retail notifications now go through the unified Newsletter panel, one place for both audiences.</p>
                 </div>
                 <a href="/newsletter/compose" className="text-xs font-bold px-3 py-2 rounded-lg bg-purple-500 text-white flex-shrink-0 ml-3">Open</a>
               </div>
@@ -937,7 +937,7 @@ export default function AdminRetail({ embedded = false }) {
               <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4 space-y-3">
                 <p className="text-xs font-bold text-white/50 uppercase tracking-wide">Generate proposals</p>
                 <p className="text-[11px] text-white/30">
-                  Groups the approved catalog by mood and proposes a playlist for any mood with 5+ tracks that doesn't already have one — ranked by plays and likes. Nothing goes live until you approve it below.
+                  Groups the approved catalog by mood and proposes a playlist for any mood with 5+ tracks that doesn't already have one, ranked by plays and likes. Nothing goes live until you approve it below.
                 </p>
                 <button onClick={generateProposals} disabled={generating}
                   className="w-full py-2.5 rounded-lg bg-purple-500 text-white text-sm font-bold hover:bg-purple-400 transition disabled:opacity-40">
@@ -959,7 +959,7 @@ export default function AdminRetail({ embedded = false }) {
                     {expandedProposalId === p.id && (
                       <div className="border-t border-white/[0.06] p-3 space-y-1.5">
                         {(proposalTracksMap[p.id] || []).map(t => (
-                          <p key={t.id} className="text-xs text-white/60 truncate">{t.title} — {t.artist?.artist_name}</p>
+                          <p key={t.id} className="text-xs text-white/60 truncate">{t.title}, {t.artist?.artist_name}</p>
                         ))}
                       </div>
                     )}

@@ -1,5 +1,5 @@
 // src/pages/NewsletterPostPage.js
-// Public, indexable page for a single newsletter post — where "Read more"
+// Public, indexable page for a single newsletter post, where "Read more"
 // links from either audience's notification actually land.
 
 import React from 'react';
@@ -37,7 +37,7 @@ export default function NewsletterPostPage() {
   return (
     <div className="min-h-screen bg-black text-white">
       <Helmet>
-        <title>{post.title} — Feelz Machine</title>
+        <title>{post.title}, Feelz Machine</title>
         <meta name="description" content={post.excerpt} />
       </Helmet>
       <div className="max-w-xl mx-auto px-5 pt-10 pb-24">

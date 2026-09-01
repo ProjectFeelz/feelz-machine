@@ -1,11 +1,11 @@
 // src/pages/RetailPlayerPage.js
 // The venue-facing product. Two things layered on top of the original
 // build: (1) a play only counts toward the artist payout pool once 30
-// seconds of actual playback has happened — enforced via the audio
+// seconds of actual playback has happened, enforced via the audio
 // element's real timeupdate position, not a wall-clock timer, so pausing
 // doesn't falsely accumulate; (2) ads insert automatically between tracks
 // at a shared frequency (set in platform_settings), using the venue's own
-// uploaded ads if they have any, otherwise falling back to platform ads —
+// uploaded ads if they have any, otherwise falling back to platform ads,
 // unless the venue is on the ad-free premium tier (ads_enabled = false).
 
 import React from 'react';
@@ -19,7 +19,7 @@ const PAYPAL_CLIENT_ID = process.env.REACT_APP_PAYPAL_CLIENT_ID || '';
 
 // Loads the PayPal SDK once, gets a plan created server-side for this
 // venue's exact negotiated fee, then renders the subscribe button. On
-// approval, links the subscription back to the venue — the webhook
+// approval, links the subscription back to the venue, the webhook
 // confirms/corrects the status afterward, this is the fast path so the
 // venue doesn't sit staring at a spinner waiting on a webhook round-trip.
 function RetailPayPalButton({ venueId, onSubscribed }) {
@@ -48,7 +48,7 @@ function RetailPayPalButton({ venueId, onSubscribed }) {
       body: JSON.stringify({ action: 'get-plan', venueId }),
     })
       .then(r => r.json())
-      .then(data => { if (data.planId) { setPlanId(data.planId); setUsdAmount(data.usdAmount); } else setError(data.error || 'Billing not set up yet — contact us.'); })
+      .then(data => { if (data.planId) { setPlanId(data.planId); setUsdAmount(data.usdAmount); } else setError(data.error || 'Billing not set up yet, contact us.'); })
       .catch(() => setError('Could not reach billing. Try again shortly.'));
   }, [venueId]);
 
@@ -76,7 +76,7 @@ function RetailPayPalButton({ venueId, onSubscribed }) {
     <div className="mt-4 max-w-xs mx-auto">
       {usdAmount && (
         <p className="text-xs text-white/40 mb-2 text-center">
-          Billed as ${usdAmount} USD/month via PayPal — pay by bank card, no PayPal account needed.
+          Billed as ${usdAmount} USD/month via PayPal, pay by bank card, no PayPal account needed.
         </p>
       )}
       <div ref={buttonRef} />
@@ -232,7 +232,7 @@ export default function RetailPlayerPage() {
   const currentTrack = tracks[currentIndex];
   const currentAd = ads.length > 0 ? ads[currentAdIndex % ads.length] : null;
 
-  // Drives the actual audio source whenever what should be playing changes —
+  // Drives the actual audio source whenever what should be playing changes,
   // either a new track index or a switch into/out of an ad.
   React.useEffect(() => {
     if (!audioRef.current) return;
@@ -249,7 +249,7 @@ export default function RetailPlayerPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, currentIndex, currentAdIndex]);
 
-  // The 30-second qualifying check — real playback position, not a timer,
+  // The 30-second qualifying check, real playback position, not a timer,
   // so pausing partway through never falsely counts.
   const handleTimeUpdate = () => {
     if (mode !== 'track' || hasLoggedRef.current || !audioRef.current) return;
@@ -259,7 +259,7 @@ export default function RetailPlayerPage() {
     }
   };
 
-  // Shared by "track ended naturally" and "skip button pressed" — keeps ad
+  // Shared by "track ended naturally" and "skip button pressed", keeps ad
   // cadence consistent regardless of how a track stopped.
   const advance = () => {
     if (mode === 'ad') {
@@ -283,7 +283,7 @@ export default function RetailPlayerPage() {
     setMode('track');
   };
 
-  // Manual pick from the list — bypasses ad cadence deliberately, since a
+  // Manual pick from the list, bypasses ad cadence deliberately, since a
   // staff member choosing a specific track shouldn't be interrupted by one.
   const playTrackAt = (index) => {
     setCurrentIndex(index);
@@ -346,7 +346,7 @@ export default function RetailPlayerPage() {
   return (
     <div className="min-h-screen bg-black text-white pb-28">
       <Helmet>
-        <title>Feelz Retail — {venue.business_name}</title>
+        <title>Feelz Retail, {venue.business_name}</title>
         <meta name="robots" content="noindex, nofollow" />
         <link rel="manifest" href="/retail-manifest.json" />
         <link rel="apple-touch-icon" href="/retail-icon-180.png" />

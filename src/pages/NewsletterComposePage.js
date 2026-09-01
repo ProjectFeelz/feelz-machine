@@ -1,6 +1,6 @@
 // src/pages/NewsletterComposePage.js
 // One panel, one send path, two audiences that can never both be selected
-// at once — the toggle below is deliberately either/or, not checkboxes,
+// at once, the toggle below is deliberately either/or, not checkboxes,
 // so an editor physically cannot send to both lists in a single send.
 // Accessible to full admins and to anyone granted newsletter_editors
 // access; an editor gets exactly this page and nothing else on the
@@ -145,9 +145,9 @@ export default function NewsletterComposePage() {
 
         <div className="space-y-3">
           <input className={inputCls} placeholder="Title" value={title} onChange={e => setTitle(e.target.value)} />
-          <textarea className={inputCls} placeholder="Short excerpt — this is what shows in the notification itself"
+          <textarea className={inputCls} placeholder="Short excerpt, this is what shows in the notification itself"
             rows={2} value={excerpt} onChange={e => setExcerpt(e.target.value)} />
-          <textarea className={inputCls} placeholder="Full content — this becomes the linked page"
+          <textarea className={inputCls} placeholder="Full content, this becomes the linked page"
             rows={10} value={body} onChange={e => setBody(e.target.value)} />
         </div>
 
@@ -190,7 +190,7 @@ export default function NewsletterComposePage() {
         {isAdmin && (
           <div className="space-y-3 pt-4 border-t border-white/[0.06]">
             <p className="text-xs font-bold text-white/50 uppercase tracking-wide">Newsletter editors ({editors.length})</p>
-            <p className="text-[11px] text-white/30">Someone with editor access can compose and send from this exact panel — nothing else on the platform opens up to them.</p>
+            <p className="text-[11px] text-white/30">Someone with editor access can compose and send from this exact panel, nothing else on the platform opens up to them.</p>
             <div className="flex space-x-2">
               <input className={inputCls} placeholder="Editor's email" value={newEditorEmail} onChange={e => setNewEditorEmail(e.target.value)} />
               <input className={inputCls} placeholder="Name (optional)" value={newEditorName} onChange={e => setNewEditorName(e.target.value)} />
