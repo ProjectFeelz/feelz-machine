@@ -223,6 +223,16 @@
   to = "/terms-of-use"
   status = 301
 
+# ── retail.feelzmachine.com → straight to the retail player ─────────────────
+# Only takes effect once the subdomain is added as a domain alias in Netlify
+# and its DNS points here — the redirect itself is harmless until then.
+[[redirects]]
+  from = "/"
+  to = "/retail"
+  status = 200
+  force = true
+  conditions = {Host = ["retail.feelzmachine.com"]}
+
 [[redirects]]
   from = "/*"
   to = "/index.html"

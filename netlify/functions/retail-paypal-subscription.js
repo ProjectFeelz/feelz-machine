@@ -96,7 +96,7 @@ exports.handler = async (event) => {
     if (action === 'get-plan') {
       const { data: sub, error: subErr } = await supabase
         .from('retail_subscriptions')
-        .select('id, venue_id, monthly_fee, paypal_plan_id, paypal_product_id, retail_venues(business_name)')
+        .select('id, venue_id, monthly_fee, paypal_plan_id, paypal_product_id, paypal_billed_usd, retail_venues(business_name)')
         .eq('venue_id', venueId)
         .order('created_at', { ascending: false })
         .limit(1)
@@ -109,12 +109,27 @@ exports.handler = async (event) => {
         return { statusCode: 400, body: JSON.stringify({ error: 'No fee set for this venue yet' }) };
       }
       if (sub.paypal_plan_id) {
-        return { statusCode: 200, body: JSON.stringify({ planId: sub.paypal_plan_id }) };
+        return { statusCode: 200, body: JSON.stringify({ planId: sub.paypal_plan_id, usdAmount: sub.paypal_billed_usd }) };
       }
 
       const accessToken = await getPayPalAccessToken();
       const venueName = sub.retail_venues?.business_name || 'Venue';
-      const safeAmount = parseFloat(sub.monthly_fee).toFixed(2);
+
+      // monthly_fee is entered and negotiated in ZAR, but the actual PayPal
+      // charge has to be USD — ZAR-denominated billing plans didn't work
+      // on this PayPal account when tried for artist tiers, so this
+      // mirrors the same approach already proven there: negotiate and
+      // display in ZAR, bill in USD behind the scenes.
+      let usdAmount = parseFloat(sub.monthly_fee);
+      try {
+        const rateRes = await fetch('https://api.exchangerate-api.com/v4/latest/USD');
+        const rateData = await rateRes.json();
+        const rate = rateData?.rates?.ZAR;
+        if (rate && rate > 0) usdAmount = parseFloat(sub.monthly_fee) / rate;
+      } catch (e) {
+        console.error('Exchange rate fetch failed, billing raw ZAR figure as USD:', e.message);
+      }
+      const safeAmount = usdAmount.toFixed(2);
 
       let productId = sub.paypal_product_id;
       if (!productId) {
@@ -137,7 +152,7 @@ exports.handler = async (event) => {
           tenure_type: 'REGULAR',
           sequence: 1,
           total_cycles: 0,
-          pricing_scheme: { fixed_price: { value: safeAmount, currency_code: 'ZAR' } },
+          pricing_scheme: { fixed_price: { value: safeAmount, currency_code: 'USD' } },
         }],
         payment_preferences: {
           auto_bill_outstanding: true,
@@ -150,10 +165,10 @@ exports.handler = async (event) => {
       }
 
       await supabase.from('retail_subscriptions')
-        .update({ paypal_plan_id: planResult.body.id, paypal_product_id: productId })
+        .update({ paypal_plan_id: planResult.body.id, paypal_product_id: productId, paypal_billed_usd: usdAmount })
         .eq('id', sub.id);
 
-      return { statusCode: 200, body: JSON.stringify({ planId: planResult.body.id }) };
+      return { statusCode: 200, body: JSON.stringify({ planId: planResult.body.id, usdAmount }) };
     }
 
     // ========== LINK APPROVED SUBSCRIPTION ==========

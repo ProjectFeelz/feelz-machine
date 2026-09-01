@@ -25,7 +25,7 @@ function TabButton({ active, onClick, children }) {
 
 const inputCls = "w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none focus:bg-white/[0.1] transition";
 
-export default function AdminRetail() {
+export default function AdminRetail({ embedded = false }) {
   const navigate = useNavigate();
   const { isAdmin } = useAuth();
   const [tab, setTab] = useState('pitches');
@@ -36,6 +36,16 @@ export default function AdminRetail() {
   const [playlists, setPlaylists] = useState([]);
   const [venues, setVenues] = useState([]);
   const [catalogTracks, setCatalogTracks] = useState([]);
+  const [trendingScores, setTrendingScores] = useState(null);
+
+  const [notifications, setNotifications] = useState([]);
+  const [proposals, setProposals] = useState([]);
+  const [proposalTracksMap, setProposalTracksMap] = useState({});
+  const [expandedProposalId, setExpandedProposalId] = useState(null);
+  const [generating, setGenerating] = useState(false);
+  const [notifReadCounts, setNotifReadCounts] = useState({});
+
+  const [totalActiveVenues, setTotalActiveVenues] = useState(0);
 
   const [newPlaylist, setNewPlaylist] = useState({ title: '', mood: '', description: '' });
   const [expandedPlaylistId, setExpandedPlaylistId] = useState(null);
@@ -53,6 +63,12 @@ export default function AdminRetail() {
   const [newPeriod, setNewPeriod] = useState({ start: '', end: '' });
   const [newAdRevenue, setNewAdRevenue] = useState({ start: '', end: '', amount: '', note: '' });
   const [calculating, setCalculating] = useState(false);
+
+  const [priceGuide, setPriceGuide] = useState([]);
+  const [newPriceRow, setNewPriceRow] = useState({ venue_type: '', min: '', max: '', notes: '' });
+
+  const [analytics, setAnalytics] = useState(null);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(''), 2500); };
 
@@ -104,13 +120,37 @@ export default function AdminRetail() {
     setPayoutPeriods(data || []);
   }, []);
 
+  const loadPriceGuide = useCallback(async () => {
+    const { data } = await supabase.from('retail_price_guide').select('*').order('sort_order');
+    setPriceGuide(data || []);
+  }, []);
+
+  const loadNotifications = async () => {
+    const { count: activeCount } = await supabase.from('retail_venues')
+      .select('id', { count: 'exact', head: true }).eq('status', 'active');
+    setTotalActiveVenues(activeCount || 0);
+
+    const { data } = await supabase.from('retail_notifications')
+      .select('*').order('created_at', { ascending: false });
+    setNotifications(data || []);
+
+    if ((data || []).length > 0) {
+      const { data: reads } = await supabase.from('retail_notification_reads')
+        .select('notification_id')
+        .in('notification_id', data.map(n => n.id));
+      const counts = {};
+      (reads || []).forEach(r => { counts[r.notification_id] = (counts[r.notification_id] || 0) + 1; });
+      setNotifReadCounts(counts);
+    }
+  };
+
   useEffect(() => {
     (async () => {
       setLoading(true);
-      await Promise.all([loadPitches(), loadPlaylists(), loadVenues(), loadCatalog(), loadAds(), loadPayoutPeriods()]);
+      await Promise.all([loadPitches(), loadPlaylists(), loadVenues(), loadCatalog(), loadAds(), loadPayoutPeriods(), loadPriceGuide()]);
       setLoading(false);
     })();
-  }, [loadPitches, loadPlaylists, loadVenues, loadCatalog, loadAds, loadPayoutPeriods]);
+  }, [loadPitches, loadPlaylists, loadVenues, loadCatalog, loadAds, loadPayoutPeriods, loadPriceGuide]);
 
   const approvePitch = async (pitch) => {
     const { error: pErr } = await supabase.from('retail_pitches')
@@ -159,10 +199,23 @@ export default function AdminRetail() {
     setPlaylistTracksMap(prev => ({ ...prev, [playlistId]: data || [] }));
   };
 
+  const loadTrendingScores = async () => {
+    if (trendingScores) return; // computed once per session
+    const [{ data: playRows }, { data: likeRows }] = await Promise.all([
+      supabase.from('retail_play_logs').select('track_id').limit(3000),
+      supabase.from('retail_venue_likes').select('track_id').limit(3000),
+    ]);
+    const scores = {};
+    (playRows || []).forEach(r => { scores[r.track_id] = (scores[r.track_id] || 0) + 1; });
+    (likeRows || []).forEach(r => { scores[r.track_id] = (scores[r.track_id] || 0) + 3; }); // a like counts for more than a single play
+    setTrendingScores(scores);
+  };
+
   const togglePlaylistExpand = (playlist) => {
     if (expandedPlaylistId === playlist.id) { setExpandedPlaylistId(null); return; }
     setExpandedPlaylistId(playlist.id);
     if (!playlistTracksMap[playlist.id]) loadPlaylistTracks(playlist.id);
+    loadTrendingScores();
   };
 
   const addTrackToPlaylist = async (playlistId, trackId) => {
@@ -302,6 +355,114 @@ export default function AdminRetail() {
     if (!periodPayoutsMap[period.id]) loadPeriodPayouts(period.id);
   };
 
+  const addPriceRow = async () => {
+    if (!newPriceRow.venue_type.trim()) return;
+    const { data, error } = await supabase.from('retail_price_guide')
+      .insert({
+        venue_type: newPriceRow.venue_type.trim(),
+        suggested_fee_min: newPriceRow.min ? parseFloat(newPriceRow.min) : null,
+        suggested_fee_max: newPriceRow.max ? parseFloat(newPriceRow.max) : null,
+        notes: newPriceRow.notes.trim() || null,
+        sort_order: priceGuide.length,
+      }).select().single();
+    if (error) { showToast('Error: ' + error.message); return; }
+    setPriceGuide(prev => [...prev, data]);
+    setNewPriceRow({ venue_type: '', min: '', max: '', notes: '' });
+  };
+
+  const removePriceRow = async (id) => {
+    await supabase.from('retail_price_guide').delete().eq('id', id);
+    setPriceGuide(prev => prev.filter(p => p.id !== id));
+  };
+
+  const loadProposals = async () => {
+    const { data } = await supabase.from('retail_playlist_proposals')
+      .select('*').order('created_at', { ascending: false });
+    setProposals(data || []);
+  };
+
+  const generateProposals = async () => {
+    setGenerating(true);
+    const { data, error } = await supabase.rpc('generate_playlist_proposals');
+    setGenerating(false);
+    if (error) { showToast('Error: ' + error.message); return; }
+    showToast(data > 0 ? `${data} new proposal${data === 1 ? '' : 's'} generated` : 'Nothing new to propose right now');
+    loadProposals();
+  };
+
+  const toggleProposalExpand = async (proposal) => {
+    if (expandedProposalId === proposal.id) { setExpandedProposalId(null); return; }
+    setExpandedProposalId(proposal.id);
+    if (!proposalTracksMap[proposal.id]) {
+      const { data } = await supabase.from('tracks')
+        .select('id, title, artist:artists(artist_name)')
+        .in('id', proposal.track_ids);
+      setProposalTracksMap(prev => ({ ...prev, [proposal.id]: data || [] }));
+    }
+  };
+
+  const approveProposal = async (proposal) => {
+    const { error } = await supabase.rpc('approve_playlist_proposal', { p_proposal_id: proposal.id });
+    if (error) { showToast('Error: ' + error.message); return; }
+    setProposals(prev => prev.map(p => p.id === proposal.id ? { ...p, status: 'approved' } : p));
+    showToast('Playlist created and live');
+    loadPlaylists();
+  };
+
+  const rejectProposal = async (proposal) => {
+    await supabase.from('retail_playlist_proposals')
+      .update({ status: 'rejected', reviewed_by: null, reviewed_at: new Date().toISOString() })
+      .eq('id', proposal.id);
+    setProposals(prev => prev.map(p => p.id === proposal.id ? { ...p, status: 'rejected' } : p));
+  };
+
+  const rankBy = (rows, keyFn, labelFn) => {
+    const counts = {};
+    (rows || []).forEach(r => {
+      const key = keyFn(r);
+      if (!key) return;
+      if (!counts[key]) counts[key] = { label: labelFn(r), count: 0 };
+      counts[key].count += 1;
+    });
+    return Object.values(counts).sort((a, b) => b.count - a.count).slice(0, 10);
+  };
+
+  const loadAnalytics = async () => {
+    if (analytics) return; // already loaded this session
+    setAnalyticsLoading(true);
+    const [
+      { count: totalPlays },
+      { count: totalLikes },
+      { count: activeVenueCount },
+      { count: totalAdPlays },
+      { data: playRows },
+      { data: likeRows },
+      { data: venuePlayRows },
+      { data: adPlayRows },
+    ] = await Promise.all([
+      supabase.from('retail_play_logs').select('id', { count: 'exact', head: true }),
+      supabase.from('retail_venue_likes').select('id', { count: 'exact', head: true }),
+      supabase.from('retail_venues').select('id', { count: 'exact', head: true }).eq('status', 'active'),
+      supabase.from('retail_ad_plays').select('id', { count: 'exact', head: true }),
+      supabase.from('retail_play_logs').select('track_id, tracks(title, artist:artists(artist_name))').limit(3000),
+      supabase.from('retail_venue_likes').select('track_id, tracks(title, artist:artists(artist_name))').limit(3000),
+      supabase.from('retail_play_logs').select('venue_id, retail_venues(business_name)').limit(3000),
+      supabase.from('retail_ad_plays').select('ad_id, retail_ads(advertiser_name)').limit(3000),
+    ]);
+
+    setAnalytics({
+      totalPlays: totalPlays || 0,
+      totalLikes: totalLikes || 0,
+      activeVenueCount: activeVenueCount || 0,
+      totalAdPlays: totalAdPlays || 0,
+      topTracks: rankBy(playRows, r => r.track_id, r => `${r.tracks?.title || 'Unknown'} — ${r.tracks?.artist?.artist_name || ''}`),
+      topLiked: rankBy(likeRows, r => r.track_id, r => `${r.tracks?.title || 'Unknown'} — ${r.tracks?.artist?.artist_name || ''}`),
+      topVenues: rankBy(venuePlayRows, r => r.venue_id, r => r.retail_venues?.business_name || 'Unknown venue'),
+      topAds: rankBy(adPlayRows, r => r.ad_id, r => r.retail_ads?.advertiser_name || 'Unknown advertiser'),
+    });
+    setAnalyticsLoading(false);
+  };
+
   if (!isAdmin) return null;
 
   const pendingPitches = pitches.filter(p => p.status === 'pending');
@@ -311,7 +472,8 @@ export default function AdminRetail() {
     : catalogTracks;
 
   return (
-    <div className="min-h-screen bg-black text-white">
+    <div className={embedded ? "pb-8" : "min-h-screen bg-black text-white"}>
+      {!embedded && (
       <div className="sticky top-0 z-10 bg-black/95 backdrop-blur-xl border-b border-white/[0.05] px-4 py-4 flex items-center space-x-3">
         <button onClick={() => navigate('/admin')} className="p-1.5 hover:bg-white/[0.06] rounded-lg transition">
           <ArrowLeft className="w-5 h-5 text-white/40" />
@@ -319,6 +481,7 @@ export default function AdminRetail() {
         <Store className="w-4 h-4 text-purple-400" />
         <h1 className="text-base font-bold text-white">Feelz Retail</h1>
       </div>
+      )}
 
       {toast && (
         <div className="fixed top-16 left-1/2 -translate-x-1/2 z-20 px-4 py-2 bg-white text-black text-xs font-semibold rounded-lg shadow-lg">
@@ -333,7 +496,11 @@ export default function AdminRetail() {
           { key: 'venues',    label: 'Venues' },
           { key: 'ads',       label: 'Ads' },
           { key: 'payouts',   label: 'Payouts' },
-        ].map(t => <TabButton key={t.key} active={tab === t.key} onClick={() => setTab(t.key)}>{t.label}</TabButton>)}
+          { key: 'pricing',   label: 'Pricing' },
+          { key: 'analytics', label: 'Analytics' },
+          { key: 'notifications', label: 'Notifications' },
+          { key: 'autocompile', label: 'Auto-Compile' },
+        ].map(t => <TabButton key={t.key} active={tab === t.key} onClick={() => { setTab(t.key); if (t.key === 'analytics') loadAnalytics(); if (t.key === 'notifications') loadNotifications(); if (t.key === 'autocompile') loadProposals(); }}>{t.label}</TabButton>)}
       </div>
 
       {loading ? (
@@ -427,6 +594,28 @@ export default function AdminRetail() {
                           ))}
                           {(playlistTracksMap[pl.id] || []).length === 0 && <p className="text-[11px] text-white/25">No tracks in this playlist yet.</p>}
                         </div>
+                        {trendingScores && (() => {
+                          const inPlaylist = new Set((playlistTracksMap[pl.id] || []).map(pt => pt.track?.id));
+                          const suggestions = catalogTracks
+                            .filter(c => !inPlaylist.has(c.track_id) && trendingScores[c.track_id])
+                            .sort((a, b) => (trendingScores[b.track_id] || 0) - (trendingScores[a.track_id] || 0))
+                            .slice(0, 5);
+                          if (suggestions.length === 0) return null;
+                          return (
+                            <div>
+                              <p className="text-[10px] font-bold text-purple-300 uppercase tracking-wide mb-1.5">Trending — not yet in this playlist</p>
+                              <div className="space-y-1">
+                                {suggestions.map(c => (
+                                  <button key={c.track_id} onClick={() => addTrackToPlaylist(pl.id, c.track_id)}
+                                    className="w-full flex items-center justify-between text-xs bg-purple-500/[0.06] hover:bg-purple-500/[0.12] rounded-lg px-2.5 py-1.5 transition text-left">
+                                    <span className="text-white/70 truncate">{c.track?.title} — {c.track?.artist?.artist_name}</span>
+                                    <Plus className="w-3.5 h-3.5 text-purple-300 flex-shrink-0 ml-2" />
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        })()}
                         <div>
                           <input className={inputCls} placeholder="Search the approved catalog to add…" value={trackSearch}
                             onChange={e => setTrackSearch(e.target.value)} />
@@ -621,6 +810,180 @@ export default function AdminRetail() {
                   </div>
                 ))}
               </div>
+            </div>
+          )}
+
+          {tab === 'pricing' && (
+            <div className="space-y-4">
+              <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4 space-y-3">
+                <p className="text-xs font-bold text-white/50 uppercase tracking-wide">Add a venue type</p>
+                <input className={inputCls} placeholder="Venue type (e.g. Small cafe)" value={newPriceRow.venue_type}
+                  onChange={e => setNewPriceRow({ ...newPriceRow, venue_type: e.target.value })} />
+                <div className="grid grid-cols-2 gap-2">
+                  <input type="number" step="0.01" className={inputCls} placeholder="Min (ZAR)" value={newPriceRow.min}
+                    onChange={e => setNewPriceRow({ ...newPriceRow, min: e.target.value })} />
+                  <input type="number" step="0.01" className={inputCls} placeholder="Max (ZAR)" value={newPriceRow.max}
+                    onChange={e => setNewPriceRow({ ...newPriceRow, max: e.target.value })} />
+                </div>
+                <input className={inputCls} placeholder="Notes (optional)" value={newPriceRow.notes}
+                  onChange={e => setNewPriceRow({ ...newPriceRow, notes: e.target.value })} />
+                <button onClick={addPriceRow}
+                  className="w-full py-2.5 rounded-lg bg-purple-500 text-white text-sm font-bold hover:bg-purple-400 transition">Add</button>
+              </div>
+
+              <div className="space-y-2">
+                {priceGuide.length === 0 ? (
+                  <p className="text-xs text-white/30 py-4 text-center">No price bands yet — add a few venue types to build your reference sheet.</p>
+                ) : priceGuide.map(p => (
+                  <div key={p.id} className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3 flex items-center justify-between">
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-white truncate">{p.venue_type}</p>
+                      <p className="text-xs text-purple-300 font-semibold mt-0.5">
+                        {p.suggested_fee_min && p.suggested_fee_max
+                          ? `R${p.suggested_fee_min} – R${p.suggested_fee_max} / mo`
+                          : p.suggested_fee_min ? `From R${p.suggested_fee_min} / mo`
+                          : p.suggested_fee_max ? `Up to R${p.suggested_fee_max} / mo`
+                          : 'No range set'}
+                      </p>
+                      {p.notes && <p className="text-xs text-white/40 mt-1">{p.notes}</p>}
+                    </div>
+                    <button onClick={() => removePriceRow(p.id)} className="text-white/20 hover:text-red-400 flex-shrink-0 ml-2"><X className="w-3.5 h-3.5" /></button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {tab === 'analytics' && (
+            <div className="space-y-6">
+              {analyticsLoading ? (
+                <div className="flex justify-center py-12"><Loader className="w-5 h-5 text-white/30 animate-spin" /></div>
+              ) : !analytics ? null : (
+                <>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="rounded-xl p-3 border border-white/[0.06] bg-white/[0.03]">
+                      <p className="text-2xl font-black text-white">{analytics.totalPlays}</p>
+                      <p className="text-xs text-white/40 mt-0.5">Qualifying plays</p>
+                    </div>
+                    <div className="rounded-xl p-3 border border-white/[0.06] bg-white/[0.03]">
+                      <p className="text-2xl font-black text-white">{analytics.totalLikes}</p>
+                      <p className="text-xs text-white/40 mt-0.5">Likes</p>
+                    </div>
+                    <div className="rounded-xl p-3 border border-white/[0.06] bg-white/[0.03]">
+                      <p className="text-2xl font-black text-white">{analytics.activeVenueCount}</p>
+                      <p className="text-xs text-white/40 mt-0.5">Active venues</p>
+                    </div>
+                    <div className="rounded-xl p-3 border border-white/[0.06] bg-white/[0.03]">
+                      <p className="text-2xl font-black text-white">{analytics.totalAdPlays}</p>
+                      <p className="text-xs text-white/40 mt-0.5">Ad plays</p>
+                    </div>
+                  </div>
+
+                  {[
+                    { title: 'Most played', rows: analytics.topTracks },
+                    { title: 'Most liked', rows: analytics.topLiked },
+                    { title: 'Top venues by plays', rows: analytics.topVenues },
+                    { title: 'Top ads by plays', rows: analytics.topAds },
+                  ].map(section => (
+                    <div key={section.title} className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4 space-y-2">
+                      <p className="text-xs font-bold text-white/50 uppercase tracking-wide">{section.title}</p>
+                      {section.rows.length === 0 ? (
+                        <p className="text-xs text-white/25 py-2">No data yet.</p>
+                      ) : section.rows.map((row, i) => (
+                        <div key={i} className="flex items-center justify-between text-xs">
+                          <span className="text-white/70 truncate">{row.label}</span>
+                          <span className="text-purple-300 font-semibold flex-shrink-0 ml-2">{row.count}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                </>
+              )}
+            </div>
+          )}
+
+          {tab === 'notifications' && (
+            <div className="space-y-4">
+              <div className="rounded-xl border border-purple-500/20 bg-purple-500/[0.06] p-4 flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-white">Compose has moved</p>
+                  <p className="text-xs text-white/40 mt-0.5">Retail notifications now go through the unified Newsletter panel — one place for both audiences.</p>
+                </div>
+                <a href="/newsletter/compose" className="text-xs font-bold px-3 py-2 rounded-lg bg-purple-500 text-white flex-shrink-0 ml-3">Open</a>
+              </div>
+
+              <div className="space-y-2">
+                <p className="text-xs font-bold text-white/50 uppercase tracking-wide">Sent</p>
+                {notifications.length === 0 ? (
+                  <p className="text-xs text-white/30 py-4 text-center">Nothing sent yet.</p>
+                ) : notifications.map(n => (
+                  <div key={n.id} className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3">
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm font-semibold text-white">{n.title}</p>
+                      <span className="text-[10px] text-white/30 flex-shrink-0 ml-2">
+                        {notifReadCounts[n.id] || 0}/{totalActiveVenues} read
+                      </span>
+                    </div>
+                    <p className="text-xs text-white/50 mt-1">{n.body}</p>
+                    <p className="text-[10px] text-white/25 mt-1.5">{new Date(n.created_at).toLocaleDateString()}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {tab === 'autocompile' && (
+            <div className="space-y-4">
+              <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4 space-y-3">
+                <p className="text-xs font-bold text-white/50 uppercase tracking-wide">Generate proposals</p>
+                <p className="text-[11px] text-white/30">
+                  Groups the approved catalog by mood and proposes a playlist for any mood with 5+ tracks that doesn't already have one — ranked by plays and likes. Nothing goes live until you approve it below.
+                </p>
+                <button onClick={generateProposals} disabled={generating}
+                  className="w-full py-2.5 rounded-lg bg-purple-500 text-white text-sm font-bold hover:bg-purple-400 transition disabled:opacity-40">
+                  {generating ? 'Generating…' : 'Generate proposals'}
+                </button>
+              </div>
+
+              <div className="space-y-2">
+                {proposals.filter(p => p.status === 'pending').length === 0 ? (
+                  <p className="text-xs text-white/30 py-4 text-center">No pending proposals.</p>
+                ) : proposals.filter(p => p.status === 'pending').map(p => (
+                  <div key={p.id} className="rounded-xl border border-white/[0.06] bg-white/[0.02] overflow-hidden">
+                    <div className="flex items-center justify-between p-3 cursor-pointer" onClick={() => toggleProposalExpand(p)}>
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-white truncate">{p.title}</p>
+                        <p className="text-xs text-white/40">{p.track_ids.length} tracks</p>
+                      </div>
+                    </div>
+                    {expandedProposalId === p.id && (
+                      <div className="border-t border-white/[0.06] p-3 space-y-1.5">
+                        {(proposalTracksMap[p.id] || []).map(t => (
+                          <p key={t.id} className="text-xs text-white/60 truncate">{t.title} — {t.artist?.artist_name}</p>
+                        ))}
+                      </div>
+                    )}
+                    <div className="flex items-center space-x-2 px-3 pb-3">
+                      <button onClick={() => approveProposal(p)}
+                        className="text-[11px] font-bold px-3 py-1.5 rounded-lg bg-purple-500 text-white hover:bg-purple-400 transition">Approve &amp; publish</button>
+                      <button onClick={() => rejectProposal(p)}
+                        className="text-[11px] font-bold px-3 py-1.5 rounded-lg bg-white/[0.06] text-white/50 hover:bg-white/[0.1] transition">Reject</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {proposals.filter(p => p.status !== 'pending').length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs font-bold text-white/50 uppercase tracking-wide">Decided</p>
+                  {proposals.filter(p => p.status !== 'pending').map(p => (
+                    <div key={p.id} className="flex items-center justify-between px-3 py-2 rounded-lg bg-white/[0.02] text-sm">
+                      <span className="text-white/60 truncate">{p.title}</span>
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex-shrink-0 ml-2 ${p.status === 'approved' ? 'bg-purple-500/15 text-purple-300' : 'bg-red-500/15 text-red-400'}`}>{p.status}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 

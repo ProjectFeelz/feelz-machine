@@ -81,6 +81,12 @@ export default function AdminAffiliates({ embedded = false }) {
     fetchData();
   };
 
+  const handleApproveAffiliate = async (userId) => {
+    const { error } = await supabase.rpc('admin_approve_affiliate', { p_user_id: userId });
+    if (error) { console.error(error); return; }
+    fetchData();
+  };
+
   const handleCreateCampaign = async () => {
     setSaving(true);
     try {
@@ -154,13 +160,21 @@ export default function AdminAffiliates({ embedded = false }) {
                 <p className="text-sm text-white truncate">{a.artists?.artist_name || a.listeners?.display_name || 'User'}</p>
                 <p className="text-[10px] text-white/30">{a.ref_code} · {a.role} · {a.total_conversions} conversions</p>
               </div>
-              <div className="text-right flex-shrink-0">
+              <div className="text-right flex-shrink-0 space-y-1">
                 {a.role === 'listener'
                   ? <p className="text-sm font-bold text-yellow-400">{a.credits_balance || 0} credits</p>
                   : <p className="text-sm font-bold text-green-400">R{(a.total_earned_zar || 0).toFixed(2)}</p>}
-                <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${a.status === 'active' ? 'bg-green-500/15 text-green-400' : 'bg-red-500/15 text-red-400'}`}>
-                  {a.status}
-                </span>
+                <div className="flex items-center justify-end space-x-1.5">
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${a.status === 'active' ? 'bg-green-500/15 text-green-400' : 'bg-red-500/15 text-red-400'}`}>
+                    {a.status}
+                  </span>
+                  {a.status !== 'active' && (
+                    <button onClick={() => handleApproveAffiliate(a.user_id)}
+                      className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-purple-500/15 text-purple-300 hover:bg-purple-500/25 transition">
+                      Approve now
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           ))}

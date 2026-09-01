@@ -64,6 +64,14 @@ exports.handler = async () => {
     .not('slug', 'is', null)
     .limit(20000);
 
+  // Newsletter posts — genuinely public content regardless of which
+  // audience they were originally sent to, so both audiences' posts are
+  // included here.
+  const { data: newsletterPosts } = await supabase
+    .from('newsletter_posts')
+    .select('slug, created_at')
+    .limit(5000);
+
   const now = new Date().toISOString().split('T')[0];
 
   const urls = [
@@ -105,6 +113,14 @@ exports.handler = async () => {
     <lastmod>${b.updated_at ? b.updated_at.split('T')[0] : now}</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
+  </url>`),
+
+    ...(newsletterPosts || []).map(n => `
+  <url>
+    <loc>${BASE_URL}/newsletter/${n.slug}</loc>
+    <lastmod>${n.created_at ? n.created_at.split('T')[0] : now}</lastmod>
+    <changefreq>never</changefreq>
+    <priority>0.5</priority>
   </url>`),
   ];
 

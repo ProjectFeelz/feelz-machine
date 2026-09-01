@@ -10,7 +10,7 @@
 
 import React from 'react';
 import { Helmet } from 'react-helmet-async';
-import { Loader, Play, Pause, SkipForward, Music, MapPin, Megaphone, Heart } from 'lucide-react';
+import { Loader, Play, Pause, SkipForward, Music, MapPin, Megaphone, Heart, Bell } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../supabaseClient';
 
@@ -26,6 +26,7 @@ function RetailPayPalButton({ venueId, onSubscribed }) {
   const buttonRef = React.useRef(null);
   const [ready, setReady] = React.useState(false);
   const [planId, setPlanId] = React.useState(null);
+  const [usdAmount, setUsdAmount] = React.useState(null);
   const [error, setError] = React.useState('');
 
   React.useEffect(() => {
@@ -47,7 +48,7 @@ function RetailPayPalButton({ venueId, onSubscribed }) {
       body: JSON.stringify({ action: 'get-plan', venueId }),
     })
       .then(r => r.json())
-      .then(data => { if (data.planId) setPlanId(data.planId); else setError(data.error || 'Billing not set up yet — contact us.'); })
+      .then(data => { if (data.planId) { setPlanId(data.planId); setUsdAmount(data.usdAmount); } else setError(data.error || 'Billing not set up yet — contact us.'); })
       .catch(() => setError('Could not reach billing. Try again shortly.'));
   }, [venueId]);
 
@@ -71,7 +72,16 @@ function RetailPayPalButton({ venueId, onSubscribed }) {
 
   if (error) return <p className="text-xs text-red-400 mt-3">{error}</p>;
   if (!planId || !ready) return <div className="flex justify-center mt-4"><Loader className="w-4 h-4 text-white/30 animate-spin" /></div>;
-  return <div ref={buttonRef} className="mt-4 max-w-xs mx-auto" />;
+  return (
+    <div className="mt-4 max-w-xs mx-auto">
+      {usdAmount && (
+        <p className="text-xs text-white/40 mb-2 text-center">
+          Billed as ${usdAmount} USD/month via PayPal — pay by bank card, no PayPal account needed.
+        </p>
+      )}
+      <div ref={buttonRef} />
+    </div>
+  );
 }
 
 
@@ -82,6 +92,10 @@ export default function RetailPlayerPage() {
   const [locations, setLocations] = React.useState([]);
   const [activeLocationId, setActiveLocationId] = React.useState(null);
   const [playlists, setPlaylists] = React.useState([]);
+  const [recommended, setRecommended] = React.useState([]);
+  const [inboxNotifs, setInboxNotifs] = React.useState([]);
+  const [readIds, setReadIds] = React.useState(new Set());
+  const [showInbox, setShowInbox] = React.useState(false);
   const [loadingPlaylists, setLoadingPlaylists] = React.useState(false);
   const [selectedPlaylist, setSelectedPlaylist] = React.useState(null);
   const [tracks, setTracks] = React.useState([]);
@@ -120,6 +134,32 @@ export default function RetailPlayerPage() {
     supabase.from('retail_playlists').select('*').eq('is_active', true).order('title')
       .then(({ data }) => { setPlaylists(data || []); setLoadingPlaylists(false); });
   }, [venue]);
+
+  React.useEffect(() => {
+    if (!venue || venue.status !== 'active') return;
+    supabase.rpc('get_venue_playlist_recommendations')
+      .then(({ data }) => setRecommended(data || []));
+  }, [venue]);
+
+  React.useEffect(() => {
+    if (!venue || venue.status !== 'active') return;
+    Promise.all([
+      supabase.from('retail_notifications').select('*, newsletter_posts(slug)').order('created_at', { ascending: false }),
+      supabase.from('retail_notification_reads').select('notification_id').eq('venue_id', venue.id),
+    ]).then(([{ data: notifs }, { data: reads }]) => {
+      setInboxNotifs(notifs || []);
+      setReadIds(new Set((reads || []).map(r => r.notification_id)));
+    });
+  }, [venue]);
+
+  const openInbox = async () => {
+    setShowInbox(true);
+    const unread = inboxNotifs.filter(n => !readIds.has(n.id));
+    if (unread.length === 0 || !venue) return;
+    await supabase.from('retail_notification_reads')
+      .insert(unread.map(n => ({ notification_id: n.id, venue_id: venue.id })));
+    setReadIds(prev => new Set([...prev, ...unread.map(n => n.id)]));
+  };
 
   React.useEffect(() => {
     if (!venue || venue.status !== 'active') return;
@@ -305,12 +345,22 @@ export default function RetailPlayerPage() {
 
   return (
     <div className="min-h-screen bg-black text-white pb-28">
-      <Helmet><title>Feelz Retail — {venue.business_name}</title></Helmet>
+      <Helmet><title>Feelz Retail — {venue.business_name}</title><meta name="robots" content="noindex, nofollow" /></Helmet>
       <audio ref={audioRef} onEnded={advance} onTimeUpdate={handleTimeUpdate} />
 
       <div className="sticky top-0 z-10 bg-black/95 backdrop-blur-xl border-b border-white/[0.05] px-4 py-4">
-        <p className="text-purple-400 text-xs font-bold tracking-widest uppercase">Feelz Retail</p>
-        <h1 className="text-lg font-bold text-white">{venue.business_name}</h1>
+        <div className="flex items-start justify-between">
+          <div>
+            <p className="text-purple-400 text-xs font-bold tracking-widest uppercase">Feelz Retail</p>
+            <h1 className="text-lg font-bold text-white">{venue.business_name}</h1>
+          </div>
+          <button onClick={openInbox} className="relative p-2 rounded-full hover:bg-white/[0.06] transition flex-shrink-0">
+            <Bell className="w-4 h-4 text-white/50" />
+            {inboxNotifs.some(n => !readIds.has(n.id)) && (
+              <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-purple-400" />
+            )}
+          </button>
+        </div>
         {locations.length > 1 && (
           <div className="flex items-center space-x-2 mt-2 overflow-x-auto">
             <MapPin className="w-3.5 h-3.5 text-white/30 flex-shrink-0" />
@@ -324,9 +374,52 @@ export default function RetailPlayerPage() {
         )}
       </div>
 
+      {showInbox && (
+        <div className="fixed inset-0 z-30 bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center" onClick={() => setShowInbox(false)}>
+          <div className="bg-black border border-white/10 rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md max-h-[70vh] overflow-y-auto p-4" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-sm font-bold text-white">Updates</p>
+              <button onClick={() => setShowInbox(false)} className="text-white/30 hover:text-white text-xs">Close</button>
+            </div>
+            {inboxNotifs.length === 0 ? (
+              <p className="text-xs text-white/30 text-center py-8">Nothing yet.</p>
+            ) : (
+              <div className="space-y-2">
+                {inboxNotifs.map(n => (
+                  <div key={n.id} className="rounded-xl bg-white/[0.04] border border-white/[0.06] p-3">
+                    <p className="text-sm font-semibold text-white">{n.title}</p>
+                    <p className="text-xs text-white/50 mt-1">{n.body}</p>
+                    {n.newsletter_posts?.slug && (
+                      <a href={`/newsletter/${n.newsletter_posts.slug}`} target="_blank" rel="noopener noreferrer"
+                        className="text-[11px] text-purple-300 font-semibold mt-1.5 inline-block">Read full update &rarr;</a>
+                    )}
+                    <p className="text-[10px] text-white/25 mt-1.5">{new Date(n.created_at).toLocaleDateString()}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       <div className="max-w-2xl mx-auto px-4 pt-5">
         {!selectedPlaylist ? (
           <>
+            {recommended.length > 0 && (
+              <div className="mb-5">
+                <p className="text-xs text-purple-300 font-bold uppercase tracking-wide mb-2">Recommended for you</p>
+                <div className="flex space-x-2 overflow-x-auto pb-1">
+                  {recommended.map(r => (
+                    <button key={r.playlist_id}
+                      onClick={() => openPlaylist(playlists.find(p => p.id === r.playlist_id) || { id: r.playlist_id, title: r.title, mood: r.mood })}
+                      className="rounded-xl bg-purple-500/10 border border-purple-500/30 px-4 py-3 text-left flex-shrink-0 min-w-[140px] hover:bg-purple-500/15 transition">
+                      <p className="text-sm font-bold text-white">{r.title}</p>
+                      {r.mood && <p className="text-xs text-white/40 mt-0.5">{r.mood}</p>}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             <p className="text-xs text-white/40 mb-3">Pick a vibe to play.</p>
             {loadingPlaylists ? (
               <div className="flex justify-center py-12"><Loader className="w-5 h-5 text-white/30 animate-spin" /></div>

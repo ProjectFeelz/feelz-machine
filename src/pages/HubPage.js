@@ -14,7 +14,7 @@ import {
   ChevronRight, Crown, Zap, Star, LayoutDashboard,
   User, LogOut, DollarSign, Radio, Mic2,
   Loader, X, Youtube, Info, Search,
-  Plus, MessageSquare, Check, Send, 
+  Plus, MessageSquare, Check, Send, Store, Trophy,
 } from 'lucide-react';
 
 function LinkCard({ icon: Icon, label, description, path, color, onClick }) {
@@ -65,6 +65,28 @@ export default function HubPage() {
   const { tierSlug, tierLoading, isPremium } = useTier();
   const { streak } = useStreakContext();
   const [activeTab, setActiveTab] = useState('home');
+  const [isRetailVenue, setIsRetailVenue] = useState(false);
+  const [isNewsletterEditor, setIsNewsletterEditor] = useState(false);
+  const [isSchoolSessionsJudge, setIsSchoolSessionsJudge] = useState(false);
+
+  useEffect(() => {
+    if (!user) return;
+    supabase.from('school_sessions_judges').select('id').eq('user_id', user.id).limit(1)
+      .then(({ data }) => setIsSchoolSessionsJudge((data || []).length > 0));
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
+    supabase.from('newsletter_editors').select('id').eq('user_id', user.id).maybeSingle()
+      .then(({ data }) => setIsNewsletterEditor(!!data));
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
+    supabase.from('retail_venues').select('id').eq('user_id', user.id).maybeSingle()
+      .then(({ data }) => setIsRetailVenue(!!data));
+  }, [user]);
+
   const [showDMModal, setShowDMModal]           = useState(false);
   const [dmUserId, setDmUserId]                 = useState('');
   const [dmArtistId, setDmArtistId]             = useState('');
@@ -212,6 +234,28 @@ export default function HubPage() {
           {isAdmin && (
             <Section title="Admin" icon={Shield}>
               <LinkCard icon={Shield} label="Admin Panel" description="Broadcast · Analytics · Moderation · Users" path="/admin" color="bg-yellow-500/20" />
+              <LinkCard icon={Send} label="Newsletter" description="Compose updates for the app or retail venues" path="/newsletter/compose" color="bg-purple-500/20" />
+            </Section>
+          )}
+
+          {/* Newsletter editor — non-admin */}
+          {!isAdmin && isNewsletterEditor && (
+            <Section title="Newsletter" icon={Send}>
+              <LinkCard icon={Send} label="Compose" description="Write an update for the app or retail venues" path="/newsletter/compose" color="bg-purple-500/20" />
+            </Section>
+          )}
+
+          {/* School Sessions judge */}
+          {isSchoolSessionsJudge && (
+            <Section title="School Sessions" icon={Trophy}>
+              <LinkCard icon={Trophy} label="Judge Panel" description="Mark finalists and pick the winner" path="/schoolsessions/judge" color="bg-lime-500/20" />
+            </Section>
+          )}
+
+          {/* Retail venue */}
+          {isRetailVenue && (
+            <Section title="Feelz Retail" icon={Store}>
+              <LinkCard icon={Store} label="Retail Player" description="Pick a mood, play music for your venue" path="/retail" color="bg-purple-500/20" />
             </Section>
           )}
 

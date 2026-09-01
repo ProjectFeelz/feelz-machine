@@ -9,6 +9,7 @@ import AdminBoost from './AdminBoost';
 import AdminCompetitions from './AdminCompetitions';
 import AdminModeration from './AdminModeration';
 import AdminSchoolSessions from './AdminSchoolSessions';
+import AdminRetail from './AdminRetail';
 import { useAuth } from '../contexts/AuthContext';
 import { ArrowLeft, Layers } from 'lucide-react';
 
@@ -51,6 +52,7 @@ export default function AdminContent() {
           <Tab active={tab === 'boost'}        onClick={() => switchTab('boost')}>Boost</Tab>
           <Tab active={tab === 'competitions'} onClick={() => switchTab('competitions')}>Competitions</Tab>
           <Tab active={tab === 'schoolsessions'} onClick={() => switchTab('schoolsessions')}>School Sessions</Tab>
+          <Tab active={tab === 'retail'} onClick={() => switchTab('retail')}>Retail</Tab>
           <Tab active={tab === 'moderation'}   onClick={() => switchTab('moderation')}>Moderation</Tab>
         </div>
       </div>
@@ -58,6 +60,7 @@ export default function AdminContent() {
       <div className={tab === 'boost'        ? '' : 'hidden'}>{mounted.boost        && <AdminBoost        embedded />}</div>
       <div className={tab === 'competitions' ? '' : 'hidden'}>{mounted.competitions && <AdminCompetitions embedded />}</div>
       <div className={tab === 'schoolsessions' ? '' : 'hidden'}>{mounted.schoolsessions && <AdminSchoolSessions embedded />}</div>
+      <div className={tab === 'retail' ? '' : 'hidden'}>{mounted.retail && <AdminRetail embedded />}</div>
       <div className={tab === 'moderation'   ? '' : 'hidden'}>{mounted.moderation   && <AdminModeration   embedded />}</div>
     </div>
   );

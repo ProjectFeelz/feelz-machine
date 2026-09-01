@@ -40,6 +40,13 @@ export default function AffiliatePage() {
   const [requestingPayout, setRequestingPayout] = useState(false);
   const [eligibilityInfo, setEligibilityInfo] = useState(null);
   const [progress, setProgress] = useState(null);
+  const [isNewsletterEditor, setIsNewsletterEditor] = useState(false);
+
+  useEffect(() => {
+    if (!user) return;
+    supabase.from('newsletter_editors').select('id').eq('user_id', user.id).maybeSingle()
+      .then(({ data }) => setIsNewsletterEditor(!!data));
+  }, [user]);
 
   const isListener = !artist;
   const refLink = affiliate ? `${BASE_URL}?ref=${affiliate.ref_code}` : '';
@@ -192,6 +199,16 @@ export default function AffiliatePage() {
           <p className="text-xs text-white/40">Earn by growing the platform</p>
         </div>
       </div>
+
+      {isNewsletterEditor && (
+        <div className="mx-4 mt-4 rounded-xl border border-purple-500/30 bg-purple-500/[0.08] p-4 flex items-center justify-between">
+          <div>
+            <p className="text-sm font-semibold text-white">Editor tools</p>
+            <p className="text-xs text-white/40 mt-0.5">Compose and send newsletters — nothing else on the platform is affected by this access.</p>
+          </div>
+          <a href="/newsletter/compose" className="text-xs font-bold px-3 py-2 rounded-lg bg-purple-500 text-white flex-shrink-0 ml-3">Open</a>
+        </div>
+      )}
 
       {loading ? (
         <div className="flex justify-center py-16"><Loader className="w-6 h-6 animate-spin text-white/20" /></div>

@@ -17,5 +17,8 @@ Disallow: /hub
 Disallow: /library
 Disallow: /profile
 Disallow: /admin
+Disallow: /retail
+Disallow: /schoolsessions/judge
+Disallow: /newsletter/compose
 
 Sitemap: https://www.feelzmachine.com/sitemap.xml
