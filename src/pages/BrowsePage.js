@@ -674,7 +674,14 @@ function TrackCard({ track, rank, currentTrack, isPlaying, onPlay, onMore, onArt
         </div>
       </div>
       <div className="flex-1 min-w-0">
-        <p className={`text-sm font-medium truncate ${isActive ? 'text-purple-400' : 'text-white'}`}>{track.title}</p>
+        <div className="flex items-center space-x-1">
+          <p className={`text-sm font-medium truncate ${isActive ? 'text-purple-400' : 'text-white'}`}>{track.title}</p>
+          {(() => {
+            const aiEffective = track.ai_content_admin_override || track.ai_content;
+            if (!aiEffective || aiEffective === 'human') return null;
+            return <span className="text-[8px] font-bold px-1 py-0.5 bg-purple-500/20 text-purple-300 rounded flex-shrink-0">AI</span>;
+          })()}
+        </div>
         <button onClick={(e) => { e.stopPropagation(); onArtist(); }}
           className="text-xs text-white/40 truncate hover:text-white/60 transition text-left block w-full">
           {track.artist_name}

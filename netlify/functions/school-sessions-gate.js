@@ -80,6 +80,7 @@ exports.handler = async (event) => {
           target_level: config.target_level,
           viral_course_url: config.viral_course_url,
           platform_course_url: config.platform_course_url,
+          youtube_playlist_url: config.youtube_playlist_url,
           competition: config.competition,
         },
       }),

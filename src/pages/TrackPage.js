@@ -309,6 +309,14 @@ export default function TrackPage() {
               {track.is_explicit && (
                 <span className="text-[9px] font-bold px-1 py-0.5 bg-white/10 text-white/40 rounded">E</span>
               )}
+              {(() => {
+                const aiEffective = track.ai_content_admin_override || track.ai_content;
+                if (!aiEffective || aiEffective === 'human') return null;
+                const aiLabel = aiEffective === 'ai_generated' ? 'AI-Generated' : 'AI-Assisted';
+                return (
+                  <span className="text-[9px] font-bold px-1.5 py-0.5 bg-purple-500/20 text-purple-300 rounded">{aiLabel}</span>
+                );
+              })()}
               {album && (
                 <span className="text-[10px] text-white/30 uppercase tracking-wider">
                   {album.release_type || 'Album'}

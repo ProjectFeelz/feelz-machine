@@ -146,7 +146,7 @@ const BLANK_TRACK = {
   pay_what_you_want: false, minimum_price: '0',
   is_preorder: false, release_date: null,
   track_number: '1', audio_file: null, cover_file: null, has_versions: false,
-  youtube_url: '',
+  youtube_url: '', ai_content: 'human',
   // Beat-specific fields
   is_beat: false, bpm: '', beat_key: '', beat_scale: 'Minor',
   beat_licence: 'basic',
@@ -837,6 +837,7 @@ function AddTrackToAlbum({
         is_preorder:       trackForm.is_preorder || false,
         release_date:      trackForm.is_preorder && trackForm.release_date ? trackForm.release_date : null,
         youtube_url:       trackForm.youtube_url?.trim() || null,
+        ai_content:        trackForm.ai_content || 'human',
         is_beat:           trackForm.is_beat || false,
         bpm:               trackForm.bpm ? parseInt(trackForm.bpm) : null,
         beat_key:          trackForm.beat_key || null,
@@ -1016,6 +1017,24 @@ function AddTrackToAlbum({
           onChange={(val) => setTrackForm({ ...trackForm, youtube_url: val })}
         />
       </TierGate>
+
+      <div>
+        <FieldLabel>AI Content Disclosure <span className="text-red-400">*</span></FieldLabel>
+        <div className="flex flex-wrap gap-2">
+          {[
+            { key: 'human',       label: 'Fully Human-Made' },
+            { key: 'ai_assisted', label: 'AI-Assisted' },
+            { key: 'ai_generated', label: 'AI-Generated' },
+          ].map(opt => (
+            <button key={opt.key} type="button"
+              onClick={() => setTrackForm({ ...trackForm, ai_content: opt.key })}
+              className={`text-xs px-3 py-1.5 rounded-lg border transition ${trackForm.ai_content === opt.key ? 'bg-purple-500 text-white border-purple-500 font-semibold' : 'bg-white/[0.04] text-white/50 border-white/10'}`}>
+              {opt.label}
+            </button>
+          ))}
+        </div>
+        <p className="text-[11px] text-white/30 mt-1.5">Shown publicly on the track. Misrepresenting AI use may be corrected after manual review.</p>
+      </div>
 
       <div className="flex flex-wrap gap-4">
         {[
@@ -1393,6 +1412,7 @@ export default function TrackUploadPanel() {
         is_preorder:       trackForm.is_preorder || false,
         release_date:      trackForm.is_preorder && trackForm.release_date ? trackForm.release_date : null,
         youtube_url:       trackForm.youtube_url?.trim() || null,
+        ai_content:        trackForm.ai_content || 'human',
         is_beat:           trackForm.is_beat || false,
         bpm:               trackForm.bpm ? parseInt(trackForm.bpm) : null,
         beat_key:          trackForm.beat_key || null,
@@ -1673,6 +1693,23 @@ export default function TrackUploadPanel() {
       if (error) throw error;
       showMessage('success', 'Track deleted');
       fetchTracks();
+    } catch (err) { showMessage('error', 'Failed: ' + err.message); }
+  };
+
+  const [retailPitchedIds, setRetailPitchedIds] = useState([]);
+  const submitToRetail = async (track) => {
+    if (!artist?.id) return;
+    const note = window.prompt(`Pitch "${track.title}" for Feelz Retail? Add a short note (optional):`, '');
+    if (note === null) return; // cancelled
+    try {
+      const { error } = await supabase.from('retail_pitches').insert({
+        track_id: track.id,
+        artist_id: artist.id,
+        pitch_note: note.trim() || null,
+      });
+      if (error) throw error;
+      showMessage('success', 'Pitched — you\'ll see the decision once it\'s reviewed');
+      setRetailPitchedIds(prev => [...prev, track.id]);
     } catch (err) { showMessage('error', 'Failed: ' + err.message); }
   };
 
@@ -2081,6 +2118,26 @@ export default function TrackUploadPanel() {
                     />
                   </TierGate>
                 )
+              )}
+
+              {!isBeat && (
+              <div>
+                <FieldLabel>AI Content Disclosure <span className="text-red-400">*</span></FieldLabel>
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { key: 'human',        label: 'Fully Human-Made' },
+                    { key: 'ai_assisted',  label: 'AI-Assisted' },
+                    { key: 'ai_generated', label: 'AI-Generated' },
+                  ].map(opt => (
+                    <button key={opt.key} type="button"
+                      onClick={() => setTrackForm({ ...trackForm, ai_content: opt.key })}
+                      className={`text-xs px-3 py-1.5 rounded-lg border transition ${trackForm.ai_content === opt.key ? 'bg-purple-500 text-white border-purple-500 font-semibold' : 'bg-white/[0.04] text-white/50 border-white/10'}`}>
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[11px] text-white/30 mt-1.5">Shown publicly on the track. Misrepresenting AI use may be corrected after manual review.</p>
+              </div>
               )}
 
               {!isBeat && (
@@ -2595,6 +2652,16 @@ export default function TrackUploadPanel() {
                           </div>
                           <div className="flex flex-col items-end space-y-1 flex-shrink-0">
                             <div className="flex items-center space-x-1">
+                              {track.is_published && (
+                                retailPitchedIds.includes(track.id) ? (
+                                  <span className="text-[10px] px-2 py-1.5 bg-white/[0.04] text-white/30 rounded-lg">Pitched</span>
+                                ) : (
+                                  <button type="button" onClick={() => submitToRetail(track)}
+                                    className="text-[10px] px-2 py-1.5 bg-purple-500/10 text-purple-300 rounded-lg hover:bg-purple-500/20 transition whitespace-nowrap">
+                                    Submit for Retail
+                                  </button>
+                                )
+                              )}
                               <button type="button" onClick={() => startEdit(track)}
                                 className="p-2 bg-white/[0.04] rounded-lg hover:bg-white/[0.08] transition">
                                 <Edit className="w-4 h-4 text-white/40" />

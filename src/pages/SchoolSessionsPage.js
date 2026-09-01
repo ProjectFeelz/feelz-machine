@@ -294,6 +294,17 @@ export default function SchoolSessionsPage() {
           </div>
         )}
 
+        {gate.config?.youtube_playlist_url && (
+          <a href={gate.config.youtube_playlist_url} target="_blank" rel="noopener noreferrer"
+            className="flex items-center space-x-3 rounded-xl bg-white/[0.03] border border-white/[0.06] p-3.5 hover:bg-white/[0.05] transition">
+            <PlayCircle className="w-4 h-4 text-lime-400 flex-shrink-0" />
+            <div>
+              <p className="text-sm font-semibold text-white">Watch the playlist on YouTube</p>
+              <p className="text-xs text-white/40 mt-0.5">Hear the songs before you pick one</p>
+            </div>
+          </a>
+        )}
+
         {/* Judges + public vote */}
         <div className="rounded-xl border border-white/[0.06] bg-white/[0.03] p-4 flex items-start space-x-3">
           <ThumbsUp className="w-4 h-4 text-lime-400 flex-shrink-0 mt-0.5" />

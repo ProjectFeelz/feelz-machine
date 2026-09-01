@@ -413,6 +413,12 @@ export default function AdminSchoolSessions({ embedded = false }) {
               onBlur={e => saveConfig({ viral_course_url: e.target.value || null })}
               placeholder="https://projectfeelz.com/courses/..." />
           </Field>
+          <Field label="YouTube playlist URL" hint="Shown as a clickable link on the School Sessions page — the shortlist songs or entry compilation, whichever you're linking">
+            <input className={inputCls} value={config?.youtube_playlist_url || ''}
+              onChange={e => setConfig({ ...config, youtube_playlist_url: e.target.value })}
+              onBlur={e => saveConfig({ youtube_playlist_url: e.target.value || null })}
+              placeholder="https://youtube.com/playlist?list=..." />
+          </Field>
         </div>
 
         {/* Prize copy */}

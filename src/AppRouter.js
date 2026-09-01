@@ -72,6 +72,8 @@ const SchoolSessionsVotePage = React.lazy(() => import('./pages/SchoolSessionsVo
 const SchoolSessionsTermsPage = React.lazy(() => import('./pages/SchoolSessionsTermsPage'));
 const SchoolSessionsJudgePanel = React.lazy(() => import('./pages/SchoolSessionsJudgePanel'));
 const AdminSchoolSessions = React.lazy(() => import('./pages/AdminSchoolSessions'));
+const AdminRetail = React.lazy(() => import('./pages/AdminRetail'));
+const RetailPlayerPage = React.lazy(() => import('./pages/RetailPlayerPage'));
 
 // ── Session keepalive — refreshes token + listens for activity ───────────────
 function SessionManager() {
@@ -330,6 +332,8 @@ export default function AppRouter() {
                 <Route path="/admin/duplicates" element={<AdminDuplicates />} />
                 <Route path="/admin/competitions" element={<AdminCompetitions />} />
                 <Route path="/admin/school-sessions" element={<AdminSchoolSessions />} />
+                <Route path="/admin/retail" element={<AdminRetail />} />
+                <Route path="/retail" element={<RetailPlayerPage />} />
                 <Route path="/admin/engagement" element={<AdminEngagement />} />
                 <Route path="/library/discovered" element={<RecentlyDiscoveredPage />} />
                 <Route path="/listener/:userId" element={<ListenerProfilePage />} />
