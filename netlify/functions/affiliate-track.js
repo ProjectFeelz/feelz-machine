@@ -149,7 +149,14 @@ exports.handler = async (event) => {
       .eq('user_id', userId)
       .maybeSingle();
 
+    const { data: venue } = artist ? { data: null } : await supabase
+      .from('retail_venues')
+      .select('id, business_name')
+      .eq('user_id', userId)
+      .maybeSingle();
+
     const isArtist = !!artist;
+    const isVenue = !isArtist && !!venue;
     const accountAgeMs = Date.now() - new Date(artist?.created_at || Date.now()).getTime();
     const accountAgeDays = accountAgeMs / 86400000;
 
@@ -163,6 +170,13 @@ exports.handler = async (event) => {
         .eq('artist_id', artist.id)
         .eq('is_published', true);
       eligible = accountAgeDays >= 30 && (trackCount || 0) >= 1;
+    } else if (isVenue) {
+      // Venues don't have a follows/streams history to threshold-check
+      // against — this isn't a "not eligible yet" rejection, it's a
+      // genuine B2B relationship that needs a person to actually look at
+      // it. The application still goes through, just pending instead of
+      // auto-activated; an admin approves it manually (admin_approve_affiliate).
+      eligible = true;
     } else {
       // Listener: account at least 14 days old, 10+ follows, 20+ streams
       const { data: profile } = await supabase
@@ -198,10 +212,10 @@ exports.handler = async (event) => {
     const insertPayload = {
       user_id:  userId,
       ref_code: refCode,
-      role:     isArtist ? (artist.role || 'artist') : 'listener',
-      status:   'active',
+      role:     isArtist ? (artist.role || 'artist') : isVenue ? 'venue' : 'listener',
+      status:   isVenue ? 'pending' : 'active',
     };
-    // Only add artist_id if it exists (avoids FK error for listeners)
+    // Only add artist_id if it exists (avoids FK error for listeners and venues)
     if (artist?.id) insertPayload.artist_id = artist.id;
 
     const { data: newAffiliate, error: insertErr } = await supabase

@@ -41,12 +41,22 @@ export default function AffiliatePage() {
   const [eligibilityInfo, setEligibilityInfo] = useState(null);
   const [progress, setProgress] = useState(null);
   const [isNewsletterEditor, setIsNewsletterEditor] = useState(false);
+  const [retailVenue, setRetailVenue] = useState(null);
+  const [retailVenueChecked, setRetailVenueChecked] = useState(false);
 
   useEffect(() => {
     if (!user) return;
     supabase.from('newsletter_editors').select('id').eq('user_id', user.id).maybeSingle()
       .then(({ data }) => setIsNewsletterEditor(!!data));
   }, [user]);
+
+  useEffect(() => {
+    if (!user || artist) { setRetailVenueChecked(true); return; }
+    supabase.from('retail_venues').select('id, business_name').eq('user_id', user.id).maybeSingle()
+      .then(({ data }) => { setRetailVenue(data); setRetailVenueChecked(true); });
+  }, [user, artist]);
+
+  const isVenue = !artist && !!retailVenue;
 
   const isListener = !artist;
   const refLink = affiliate ? `${BASE_URL}?ref=${affiliate.ref_code}` : '';
@@ -178,6 +188,70 @@ export default function AffiliatePage() {
       <p className="text-white/40 text-sm">Sign in to access the affiliate programme</p>
     </div>
   );
+
+  // Venues get their own simple, self-contained view — a venue account has
+  // no follows/streams history to run the artist/listener eligibility
+  // logic against, so rather than force it through that branching, this is
+  // deliberately separate and much simpler.
+  if (retailVenueChecked && isVenue) {
+    const venueRefLink = affiliate ? `${BASE_URL}?ref=${affiliate.ref_code}` : '';
+    return (
+      <div className="min-h-screen bg-black text-white pb-32">
+        <div className="px-4 pt-14 pb-4 flex items-center space-x-3 border-b border-white/[0.04]">
+          <button onClick={() => navigate(-1)} className="w-9 h-9 flex items-center justify-center rounded-full bg-white/[0.06]">
+            <ChevronLeft className="w-5 h-5" />
+          </button>
+          <div>
+            <h1 className="text-lg font-bold">Affiliate Programme</h1>
+            <p className="text-xs text-white/40">{retailVenue.business_name}</p>
+          </div>
+        </div>
+
+        <div className="px-6 py-8 space-y-6">
+          {loading ? (
+            <div className="flex justify-center py-16"><Loader className="w-6 h-6 animate-spin text-white/20" /></div>
+          ) : !affiliate ? (
+            <div className="rounded-2xl border border-white/[0.06] p-6 text-center space-y-4"
+              style={{ background: 'linear-gradient(135deg, rgba(167,139,250,0.08), rgba(236,72,153,0.05))' }}>
+              <div className="w-16 h-16 rounded-2xl bg-purple-500/20 flex items-center justify-center mx-auto">
+                <Link className="w-8 h-8 text-purple-400" />
+              </div>
+              <div>
+                <h2 className="text-lg font-bold mb-1">Refer other venues, earn rewards</h2>
+                <p className="text-sm text-white/50">Same programme artists and listeners already use. Applications from venues go to an admin for a quick review before activating — not an automatic threshold, just a real look.</p>
+              </div>
+              <button onClick={handleApply} disabled={applying}
+                className="w-full py-3 rounded-xl bg-purple-500 text-white font-bold disabled:opacity-40">
+                {applying ? 'Applying…' : 'Apply now'}
+              </button>
+            </div>
+          ) : affiliate.status === 'pending' ? (
+            <div className="rounded-2xl border border-white/[0.06] p-6 text-center space-y-3">
+              <Clock className="w-8 h-8 text-yellow-400 mx-auto" />
+              <h2 className="text-lg font-bold">Application received</h2>
+              <p className="text-sm text-white/50">We'll activate your link once it's reviewed.</p>
+            </div>
+          ) : (
+            <>
+              <div className="rounded-2xl border border-white/[0.06] p-5 space-y-3">
+                <p className="text-xs text-white/40 uppercase tracking-wide font-bold">Your referral link</p>
+                <div className="flex items-center space-x-2">
+                  <div className="flex-1 px-3 py-2.5 bg-white/[0.06] rounded-lg text-sm text-white/80 truncate">{venueRefLink}</div>
+                  <button onClick={handleCopy} className="p-2.5 rounded-lg bg-white/[0.06] flex-shrink-0">
+                    {copied ? <Check className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4 text-white/50" />}
+                  </button>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <StatCard icon={Users} label="Signups" value={affiliate.total_signups || 0} />
+                <StatCard icon={DollarSign} label="Earned" value={`R${(affiliate.total_earned_zar || 0).toFixed(2)}`} color="text-green-400" />
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   const tabs = [
     { key: 'overview',     label: 'Overview',    icon: BarChart2 },

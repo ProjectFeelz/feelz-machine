@@ -39,7 +39,10 @@ export default function AdminAffiliates({ embedded = false }) {
       const enrichedAffs = await Promise.all((affs || []).map(async (aff) => {
         const { data: art } = await supabase.from('artists').select('artist_name').eq('user_id', aff.user_id).maybeSingle();
         const { data: lst } = await supabase.from('listeners').select('display_name').eq('user_id', aff.user_id).maybeSingle();
-        return { ...aff, display_name: art?.artist_name || lst?.display_name || aff.user_id?.slice(0,8) };
+        const { data: ven } = aff.role === 'venue'
+          ? await supabase.from('retail_venues').select('business_name').eq('user_id', aff.user_id).maybeSingle()
+          : { data: null };
+        return { ...aff, display_name: art?.artist_name || ven?.business_name || lst?.display_name || aff.user_id?.slice(0,8) };
       }));
       setAffiliates(enrichedAffs);
       setCampaigns(camps || []);
@@ -157,7 +160,7 @@ export default function AdminAffiliates({ embedded = false }) {
           {affiliates.map(a => (
             <div key={a.id} className="flex items-center space-x-3 p-3 rounded-xl bg-white/[0.03] border border-white/[0.05]">
               <div className="flex-1 min-w-0">
-                <p className="text-sm text-white truncate">{a.artists?.artist_name || a.listeners?.display_name || 'User'}</p>
+                <p className="text-sm text-white truncate">{a.display_name || 'User'}</p>
                 <p className="text-[10px] text-white/30">{a.ref_code} · {a.role} · {a.total_conversions} conversions</p>
               </div>
               <div className="text-right flex-shrink-0 space-y-1">

@@ -10,7 +10,7 @@
 
 import React from 'react';
 import { Helmet } from 'react-helmet-async';
-import { Loader, Play, Pause, SkipForward, Music, MapPin, Megaphone, Heart, Bell } from 'lucide-react';
+import { Loader, Play, Pause, SkipForward, Music, MapPin, Megaphone, Heart, Bell, DollarSign } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../supabaseClient';
 
@@ -363,12 +363,17 @@ export default function RetailPlayerPage() {
             <p className="text-purple-400 text-xs font-bold tracking-widest uppercase">Feelz Retail</p>
             <h1 className="text-lg font-bold text-white">{venue.business_name}</h1>
           </div>
-          <button onClick={openInbox} className="relative p-2 rounded-full hover:bg-white/[0.06] transition flex-shrink-0">
-            <Bell className="w-4 h-4 text-white/50" />
-            {inboxNotifs.some(n => !readIds.has(n.id)) && (
-              <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-purple-400" />
-            )}
-          </button>
+          <div className="flex items-center space-x-1 flex-shrink-0">
+            <a href="/affiliates" className="p-2 rounded-full hover:bg-white/[0.06] transition flex-shrink-0">
+              <DollarSign className="w-4 h-4 text-white/50" />
+            </a>
+            <button onClick={openInbox} className="relative p-2 rounded-full hover:bg-white/[0.06] transition flex-shrink-0">
+              <Bell className="w-4 h-4 text-white/50" />
+              {inboxNotifs.some(n => !readIds.has(n.id)) && (
+                <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-purple-400" />
+              )}
+            </button>
+          </div>
         </div>
         {locations.length > 1 && (
           <div className="flex items-center space-x-2 mt-2 overflow-x-auto">

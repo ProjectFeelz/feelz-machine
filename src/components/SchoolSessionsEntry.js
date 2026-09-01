@@ -13,6 +13,11 @@ import { GraduationCap, Plus, X } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import useSchoolSessions from '../hooks/useSchoolSessions';
 
+// TODO: confirm these are the real official handles before this goes live —
+// placeholders until Steve confirms.
+const OFFICIAL_TIKTOK_HANDLE = 'feelzmachine';
+const OFFICIAL_INSTAGRAM_HANDLE = 'feelzmachine';
+
 const BLANK_FORM = {
   schoolId: '',
   schoolFreeText: '',
@@ -23,6 +28,9 @@ const BLANK_FORM = {
   entrantFullName: '',
   entrantEmail: '',
   tiktokHandle: '',
+  tiktokVideoUrl: '',
+  tiktokTaggedConfirmed: false,
+  instagramFollowedConfirmed: false,
   isMinor: true,
   guardianName: '',
   guardianContact: '',
@@ -58,6 +66,9 @@ export function schoolSessionsFormValid(enabled, form) {
   if (!form.entrantFullName.trim()) return false;
   if (!/^\S+@\S+\.\S+$/.test(form.entrantEmail.trim())) return false;
   if (!form.tiktokHandle.trim()) return false;
+  if (!form.tiktokVideoUrl.trim()) return false;
+  if (!form.tiktokTaggedConfirmed) return false;
+  if (!form.instagramFollowedConfirmed) return false;
   if (!form.schoolId && !form.schoolFreeText.trim()) return false;
   if (!form.songId) return false;
   if (form.isGroup && form.groupMembers.filter(m => m.trim()).length === 0) return false;
@@ -173,6 +184,34 @@ export default function SchoolSessionsEntry({ enabled, setEnabled, form, setForm
               Part of entering — post about your cover. Judges pick the winner; the public vote adds a People's Choice pick.
             </p>
           </div>
+
+          <div>
+            <Label>Link to your TikTok video</Label>
+            <Input value={form.tiktokVideoUrl}
+              onChange={e => set('tiktokVideoUrl', e.target.value)}
+              placeholder="Paste the link to your posted video" />
+            <p className="text-[11px] text-white/30 mt-1">
+              Post a video of your cover to TikTok and paste the link here — this is how we track and verify real entries.
+            </p>
+          </div>
+
+          <label className="flex items-start space-x-2.5 cursor-pointer">
+            <input type="checkbox" checked={form.tiktokTaggedConfirmed}
+              onChange={e => set('tiktokTaggedConfirmed', e.target.checked)}
+              className="mt-0.5 rounded border-white/20" />
+            <span className="text-xs text-white/60">
+              I tagged <span className="text-lime-400 font-semibold">@{OFFICIAL_TIKTOK_HANDLE}</span> in my TikTok post.
+            </span>
+          </label>
+
+          <label className="flex items-start space-x-2.5 cursor-pointer">
+            <input type="checkbox" checked={form.instagramFollowedConfirmed}
+              onChange={e => set('instagramFollowedConfirmed', e.target.checked)}
+              className="mt-0.5 rounded border-white/20" />
+            <span className="text-xs text-white/60">
+              I follow <span className="text-lime-400 font-semibold">@{OFFICIAL_INSTAGRAM_HANDLE}</span> on Instagram — this is how you can DM, get tagged, and collab with us directly.
+            </span>
+          </label>
 
           <div>
             <Label>School</Label>

@@ -58,6 +58,9 @@ export default function AdminSchoolSessions({ embedded = false }) {
   const [newJudgeEmail, setNewJudgeEmail] = useState('');
   const [newJudgeName, setNewJudgeName] = useState('');
   const [nominations, setNominations] = useState([]);
+  const [vipCandidates, setVipCandidates] = useState([]);
+  const [newVip, setNewVip] = useState({ name: '', refCode: '' });
+  const [issuingVip, setIssuingVip] = useState(false);
   const [nominationsLoading, setNominationsLoading] = useState(false);
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(''), 2500); };
@@ -94,7 +97,7 @@ export default function AdminSchoolSessions({ embedded = false }) {
     setEntriesLoading(true);
     const { data } = await supabase
       .from('school_sessions_entries')
-      .select('id, entrant_full_name, entrant_email, entrant_tiktok_handle, candidate_card_no, created_at, is_finalist, is_winner, is_group, school_name_freetext, song:school_sessions_shortlist_songs(title), school:school_sessions_schools(name), track:tracks(title), artist:artists(artist_name, slug), members:school_sessions_entry_members(id, member_name)')
+      .select('id, entrant_full_name, entrant_email, entrant_tiktok_handle, tiktok_video_url, tiktok_tagged_confirmed, instagram_followed_confirmed, candidate_card_no, created_at, is_finalist, is_winner, is_group, school_name_freetext, song:school_sessions_shortlist_songs(title), school:school_sessions_schools(name), track:tracks(title), artist:artists(artist_name, slug), members:school_sessions_entry_members(id, member_name)')
       .eq('competition_id', config.competition_id)
       .order('created_at', { ascending: false });
     setEntries(data || []);
@@ -165,6 +168,28 @@ export default function AdminSchoolSessions({ embedded = false }) {
   const rejectNomination = async (id) => {
     await supabase.from('school_sessions_district_nominations').delete().eq('id', id);
     setNominations(prev => prev.filter(n => n.id !== id));
+  };
+
+  const loadVipCandidates = useCallback(async () => {
+    const { data } = await supabase.from('school_sessions_vip_candidates')
+      .select('*').order('candidate_number', { ascending: false });
+    setVipCandidates(data || []);
+  }, []);
+
+  useEffect(() => { loadVipCandidates(); }, [loadVipCandidates]);
+
+  const issueVipCandidate = async () => {
+    if (!newVip.name.trim()) return;
+    setIssuingVip(true);
+    const { error } = await supabase.rpc('issue_vip_candidate', {
+      p_name: newVip.name.trim(),
+      p_ref_code: newVip.refCode.trim() || null,
+    });
+    setIssuingVip(false);
+    if (error) { showToast('Error: ' + error.message); return; }
+    setNewVip({ name: '', refCode: '' });
+    showToast('Candidate issued');
+    loadVipCandidates();
   };
 
   const saveConfig = async (patch) => {
@@ -588,6 +613,44 @@ export default function AdminSchoolSessions({ embedded = false }) {
           </div>
         </div>
 
+        {/* VIP Candidate Cards */}
+        <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4 space-y-3">
+          <p className="text-xs font-bold text-white/50 uppercase tracking-wide">
+            VIP candidate cards ({vipCandidates.length}{config?.vip_candidate_cap ? ` / ${config.vip_candidate_cap}` : ''})
+          </p>
+          <p className="text-[11px] text-white/30">
+            For real, qualified entrants only — submitted an entry, signed up as an affiliate, and got at least one referral. Numbers are sequential and permanent once issued.
+          </p>
+          <div className="flex space-x-2">
+            <input className={inputCls} placeholder="Full name" value={newVip.name}
+              onChange={e => setNewVip({ ...newVip, name: e.target.value })}
+              onKeyDown={e => e.key === 'Enter' && issueVipCandidate()} />
+            <input className={inputCls} placeholder="Their ref code (optional)" value={newVip.refCode}
+              onChange={e => setNewVip({ ...newVip, refCode: e.target.value })}
+              onKeyDown={e => e.key === 'Enter' && issueVipCandidate()} />
+            <button onClick={issueVipCandidate} disabled={issuingVip}
+              className="px-3.5 py-2.5 rounded-lg bg-lime-400 text-black flex-shrink-0 disabled:opacity-40">
+              <Plus className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="max-h-64 overflow-y-auto space-y-1.5">
+            {vipCandidates.map(v => (
+              <div key={v.id} className="flex items-center justify-between px-3 py-2 rounded-lg bg-white/[0.03]">
+                <div className="min-w-0">
+                  <span className="text-[10px] font-bold text-lime-400 mr-2">#{String(v.candidate_number).padStart(3, '0')}</span>
+                  <span className="text-sm text-white">{v.name}</span>
+                  {v.ref_code && <span className="text-[10px] text-white/30 ml-2">{v.ref_code}</span>}
+                </div>
+                <a href={`/admin/vip-card-print/${v.id}`} target="_blank" rel="noopener noreferrer"
+                  className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-white/[0.06] text-white/50 hover:bg-white/[0.1] transition flex-shrink-0">
+                  Print
+                </a>
+              </div>
+            ))}
+            {vipCandidates.length === 0 && <p className="text-xs text-white/30 py-2">No candidates issued yet.</p>}
+          </div>
+        </div>
+
         {/* Entries */}
         <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4 space-y-3">
           <div className="flex items-center justify-between">
@@ -641,6 +704,18 @@ export default function AdminSchoolSessions({ embedded = false }) {
                   <p className="text-white/25 mt-0.5">
                     {e.entrant_email}{e.entrant_tiktok_handle ? ` · @${e.entrant_tiktok_handle} on TikTok` : ''}
                   </p>
+                  <div className="flex items-center flex-wrap gap-1.5 mt-1">
+                    {e.tiktok_video_url && (
+                      <a href={e.tiktok_video_url} target="_blank" rel="noopener noreferrer"
+                        className="text-[10px] px-1.5 py-0.5 bg-white/[0.06] text-white/50 rounded hover:text-white transition">Video link</a>
+                    )}
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded ${e.tiktok_tagged_confirmed ? 'bg-lime-400/10 text-lime-400' : 'bg-red-500/10 text-red-400'}`}>
+                      {e.tiktok_tagged_confirmed ? 'Tagged us' : 'Not tagged'}
+                    </span>
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded ${e.instagram_followed_confirmed ? 'bg-lime-400/10 text-lime-400' : 'bg-red-500/10 text-red-400'}`}>
+                      {e.instagram_followed_confirmed ? 'Follows IG' : 'Not following'}
+                    </span>
+                  </div>
                 </div>
               ))}
               {entries.length === 0 && <p className="text-xs text-white/30 py-2">No entries yet.</p>}
