@@ -23,18 +23,36 @@ import useSchoolSessions from '../hooks/useSchoolSessions';
 import DistrictNomination from '../components/DistrictNomination';
 import { supabase } from '../supabaseClient';
 
-function Countdown({ to, label }) {
+// Prominent hero countdown — ticks every second, shown as separate
+// day/hour/min/sec boxes.
+function BigCountdown({ to, label }) {
   const [now, setNow] = React.useState(Date.now());
   React.useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), 1000 * 30);
+    const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
   }, []);
   if (!to) return null;
   const diff = new Date(to).getTime() - now;
   if (diff <= 0) return null;
-  const days = Math.floor(diff / 86400000);
-  const hours = Math.floor((diff % 86400000) / 3600000);
-  return <span>{days}d {hours}h {label}</span>;
+  const units = [
+    { label: 'Days', value: Math.floor(diff / 86400000) },
+    { label: 'Hrs', value: Math.floor((diff % 86400000) / 3600000) },
+    { label: 'Min', value: Math.floor((diff % 3600000) / 60000) },
+    { label: 'Sec', value: Math.floor((diff % 60000) / 1000) },
+  ];
+  return (
+    <div className="space-y-2">
+      {label && <p className="text-lime-400 text-xs lg:text-sm font-bold tracking-widest uppercase">{label}</p>}
+      <div className="flex space-x-2 lg:space-x-3">
+        {units.map(u => (
+          <div key={u.label} className="flex-1 rounded-xl bg-white/[0.04] border border-white/[0.08] py-2.5 lg:py-3.5 text-center">
+            <p className="text-2xl lg:text-4xl font-bold text-white tabular-nums">{String(u.value).padStart(2, '0')}</p>
+            <p className="text-[10px] lg:text-xs text-white/40 mt-0.5">{u.label}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 // Which of the three phases we're in, based on the linked competition's
@@ -59,6 +77,7 @@ export default function SchoolSessionsPage() {
   const { user } = useAuth();
   const gate = useSchoolSessions();
   const [songs, setSongs] = React.useState([]);
+  const [entryCount, setEntryCount] = React.useState(null);
 
   const compId = gate.config?.competition?.id;
   React.useEffect(() => {
@@ -69,6 +88,14 @@ export default function SchoolSessionsPage() {
       .eq('is_active', true)
       .order('display_order')
       .then(({ data }) => setSongs(data || []));
+  }, [compId]);
+
+  React.useEffect(() => {
+    if (!compId) return;
+    supabase.from('school_sessions_entries')
+      .select('id', { count: 'exact', head: true })
+      .eq('competition_id', compId)
+      .then(({ count }) => setEntryCount(count ?? 0));
   }, [compId]);
 
   if (gate.loading) {
@@ -133,11 +160,10 @@ export default function SchoolSessionsPage() {
           <p className="text-white/50 text-sm lg:text-lg lg:max-w-xl leading-relaxed">
             Pick a song from the shortlist and cover it — your own vocal performance. Your school could walk away with cash.
           </p>
-          {eligible && phase === 'submissions' && comp?.entries_close_at && (
-            <p className="text-xs text-white/40 font-medium"><Countdown to={comp.entries_close_at} label="left to submit" /></p>
-          )}
-          {eligible && phase === 'voting' && comp?.voting_close_at && (
-            <p className="text-xs text-white/40 font-medium"><Countdown to={comp.voting_close_at} label="left to vote" /></p>
+          {entryCount !== null && entryCount > 0 && (
+            <p className="text-xs lg:text-sm text-white/40 font-medium">
+              <span className="text-lime-400 font-bold">{entryCount}</span> {entryCount === 1 ? 'entry' : 'entries'} submitted so far
+            </p>
           )}
           {!eligible && (
             <p className="text-xs text-white/30">
@@ -145,6 +171,13 @@ export default function SchoolSessionsPage() {
             </p>
           )}
         </div>
+
+        {eligible && phase === 'submissions' && comp?.entries_close_at && (
+          <BigCountdown to={comp.entries_close_at} label="Time left to submit" />
+        )}
+        {eligible && phase === 'voting' && comp?.voting_close_at && (
+          <BigCountdown to={comp.voting_close_at} label="Time left to vote" />
+        )}
 
         {/* Prize pot */}
         <div className="rounded-xl border border-white/10 bg-lime-400/[0.04] p-5 lg:p-8">
