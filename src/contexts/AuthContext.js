@@ -55,6 +55,57 @@ export function AuthProvider({ children }) {
       if (pendingRole) localStorage.removeItem('pending_creator_role');
       setArtist(data);
     } else if (!error) {
+      // Row genuinely doesn't exist. If they chose Artist/Beat Maker at
+      // signup, that choice was previously discarded here entirely —
+      // nothing anywhere in the app creates a new artists row, so the
+      // person silently stayed a listener regardless of what they picked.
+      const pendingRole = localStorage.getItem('pending_creator_role');
+      if (pendingRole && (pendingRole === 'artist' || pendingRole === 'beatmaker')) {
+        try {
+          const { data: { user: authUser } } = await supabase.auth.getUser();
+          const base = (authUser?.email?.split('@')[0] || 'artist').toLowerCase().replace(/[^a-z0-9]/g, '');
+          const suffix = Math.random().toString(36).slice(2, 8);
+          const placeholderName = `${base}-${suffix}`;
+
+          let { data: created, error: insertErr } = await supabase
+            .from('artists')
+            .insert({
+              user_id: userId,
+              artist_name: placeholderName,
+              slug: placeholderName,
+              role: pendingRole,
+              role_confirmed: true,
+            })
+            .select()
+            .maybeSingle();
+
+          // artist_name and slug are both globally unique — on the rare
+          // collision, retry once with a fresh random suffix rather than
+          // silently failing and leaving the user artist-less again.
+          if (insertErr && insertErr.code === '23505') {
+            const retryName = `${base}-${Math.random().toString(36).slice(2, 8)}`;
+            ({ data: created } = await supabase
+              .from('artists')
+              .insert({
+                user_id: userId,
+                artist_name: retryName,
+                slug: retryName,
+                role: pendingRole,
+                role_confirmed: true,
+              })
+              .select()
+              .maybeSingle());
+          }
+
+          localStorage.removeItem('pending_creator_role');
+          setArtist(created || null);
+          return;
+        } catch (err) {
+          console.warn('Artist row creation failed (non-fatal):', err.message);
+          setArtist(null);
+          return;
+        }
+      }
       // Row genuinely doesn't exist — clear any stale state
       setArtist(null);
     }
