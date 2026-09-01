@@ -70,6 +70,7 @@ const ListenerProfilePage = React.lazy(() => import('./pages/ListenerProfilePage
 const SchoolSessionsPage = React.lazy(() => import('./pages/SchoolSessionsPage'));
 const SchoolSessionsVotePage = React.lazy(() => import('./pages/SchoolSessionsVotePage'));
 const SchoolSessionsTermsPage = React.lazy(() => import('./pages/SchoolSessionsTermsPage'));
+const SchoolSessionsJudgePanel = React.lazy(() => import('./pages/SchoolSessionsJudgePanel'));
 const AdminSchoolSessions = React.lazy(() => import('./pages/AdminSchoolSessions'));
 
 // ── Session keepalive — refreshes token + listens for activity ───────────────
@@ -266,6 +267,11 @@ export default function AppRouter() {
               <Route path="/schoolsessions/terms" element={
                 <PageTitle title="School Sessions — Terms">
                   <SchoolSessionsTermsPage />
+                </PageTitle>
+              } />
+              <Route path="/schoolsessions/judge" element={
+                <PageTitle title="Judge Panel — School Sessions">
+                  <SchoolSessionsJudgePanel />
                 </PageTitle>
               } />
 

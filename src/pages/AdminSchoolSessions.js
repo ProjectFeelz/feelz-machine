@@ -53,6 +53,10 @@ export default function AdminSchoolSessions({ embedded = false }) {
   const [trackSearching, setTrackSearching] = useState(false);
   const [entries, setEntries] = useState([]);
   const [entriesLoading, setEntriesLoading] = useState(false);
+  const [judges, setJudges] = useState([]);
+  const [judgesLoading, setJudgesLoading] = useState(false);
+  const [newJudgeEmail, setNewJudgeEmail] = useState('');
+  const [newJudgeName, setNewJudgeName] = useState('');
   const [nominations, setNominations] = useState([]);
   const [nominationsLoading, setNominationsLoading] = useState(false);
 
@@ -98,6 +102,48 @@ export default function AdminSchoolSessions({ embedded = false }) {
   }, [config?.competition_id]);
 
   useEffect(() => { loadEntries(); }, [loadEntries]);
+
+  const loadJudges = useCallback(async () => {
+    if (!config?.competition_id) return;
+    setJudgesLoading(true);
+    const { data } = await supabase
+      .from('school_sessions_judges')
+      .select('id, user_id, judge_name, created_at')
+      .eq('competition_id', config.competition_id)
+      .order('created_at', { ascending: false });
+    setJudges(data || []);
+    setJudgesLoading(false);
+  }, [config?.competition_id]);
+
+  useEffect(() => { loadJudges(); }, [loadJudges]);
+
+  const addJudge = async () => {
+    if (!newJudgeEmail.trim() || !config?.competition_id) return;
+    const { data: foundUserId, error: lookupError } = await supabase
+      .rpc('admin_find_user_by_email', { p_email: newJudgeEmail.trim() });
+    if (lookupError || !foundUserId) {
+      showToast('No account found with that email');
+      return;
+    }
+    const { data, error } = await supabase
+      .from('school_sessions_judges')
+      .insert({
+        competition_id: config.competition_id,
+        user_id: foundUserId,
+        judge_name: newJudgeName.trim() || null,
+      })
+      .select().single();
+    if (error) { showToast('Error: ' + error.message); return; }
+    setJudges(prev => [data, ...prev]);
+    setNewJudgeEmail('');
+    setNewJudgeName('');
+    showToast('Judge added');
+  };
+
+  const removeJudge = async (id) => {
+    await supabase.from('school_sessions_judges').delete().eq('id', id);
+    setJudges(prev => prev.filter(j => j.id !== id));
+  };
 
   const loadNominations = useCallback(async () => {
     setNominationsLoading(true);
@@ -501,6 +547,38 @@ export default function AdminSchoolSessions({ embedded = false }) {
               </div>
             ))}
             {schools.length === 0 && <p className="text-xs text-white/30 py-2">No schools added yet.</p>}
+          </div>
+        </div>
+
+        {/* Judges */}
+        <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4 space-y-3">
+          <p className="text-xs font-bold text-white/50 uppercase tracking-wide">Judges ({judges.length})</p>
+          <p className="text-[11px] text-white/30">
+            Add someone by the email on their Feelz Machine account. They'll get access to a judge panel that only lets them mark finalists and pick the winner — nothing else on the platform.
+          </p>
+          <div className="flex space-x-2">
+            <input className={inputCls} placeholder="Judge's email…" value={newJudgeEmail}
+              onChange={e => setNewJudgeEmail(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && addJudge()} />
+            <input className={inputCls} placeholder="Name (optional)" value={newJudgeName}
+              onChange={e => setNewJudgeName(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && addJudge()} />
+            <button onClick={addJudge} className="px-3.5 py-2.5 rounded-lg bg-lime-400 text-black flex-shrink-0">
+              <Plus className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="space-y-1.5">
+            {judgesLoading ? (
+              <div className="flex justify-center py-4"><Loader className="w-4 h-4 text-white/30 animate-spin" /></div>
+            ) : judges.map(j => (
+              <div key={j.id} className="flex items-center justify-between px-3 py-2 rounded-lg bg-white/[0.03]">
+                <span className="text-sm text-white">{j.judge_name || j.user_id}</span>
+                <button onClick={() => removeJudge(j.id)} className="text-white/20 hover:text-red-400">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ))}
+            {!judgesLoading && judges.length === 0 && <p className="text-xs text-white/30 py-2">No judges added yet — you're the only one who can mark finalists and winners until you add some.</p>}
           </div>
         </div>
 

@@ -55,7 +55,87 @@ function BigCountdown({ to, label }) {
   );
 }
 
-// Which of the three phases we're in, based on the linked competition's
+// Public gallery of all entries — not just finalists. Paginated so a large
+// competition doesn't load everything at once.
+const PAGE_SIZE = 12;
+function EntryGallery({ compId }) {
+  const [entries, setEntries] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
+  const [loadingMore, setLoadingMore] = React.useState(false);
+  const [hasMore, setHasMore] = React.useState(true);
+
+  const loadPage = React.useCallback((from) => {
+    return supabase.from('school_sessions_entries')
+      .select('id, entrant_full_name, is_group, is_finalist, created_at, school:school_sessions_schools(name), school_name_freetext, song:school_sessions_shortlist_songs(title), track:tracks(title, cover_artwork_url), members:school_sessions_entry_members(member_name)')
+      .eq('competition_id', compId)
+      .order('created_at', { ascending: false })
+      .range(from, from + PAGE_SIZE - 1);
+  }, [compId]);
+
+  React.useEffect(() => {
+    if (!compId) return;
+    setLoading(true);
+    loadPage(0).then(({ data }) => {
+      setEntries(data || []);
+      setHasMore((data || []).length === PAGE_SIZE);
+      setLoading(false);
+    });
+  }, [compId, loadPage]);
+
+  const loadMore = async () => {
+    setLoadingMore(true);
+    const { data } = await loadPage(entries.length);
+    setEntries(prev => [...prev, ...(data || [])]);
+    setHasMore((data || []).length === PAGE_SIZE);
+    setLoadingMore(false);
+  };
+
+  if (loading) {
+    return <div className="flex justify-center py-8"><Loader className="w-4 h-4 text-white/30 animate-spin" /></div>;
+  }
+  if (entries.length === 0) return null;
+
+  return (
+    <div className="space-y-3 lg:space-y-4">
+      <p className="text-lime-400 text-xs lg:text-sm font-bold tracking-widest uppercase">Entries so far</p>
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-2.5 lg:gap-3">
+        {entries.map(e => (
+          <div key={e.id} className={`rounded-xl overflow-hidden border ${e.is_finalist ? 'border-lime-400/40 bg-lime-400/[0.04]' : 'border-white/[0.06] bg-white/[0.02]'}`}>
+            <div className="aspect-square bg-white/[0.04] flex items-center justify-center">
+              {e.track?.cover_artwork_url ? (
+                <img src={e.track.cover_artwork_url} alt="" className="w-full h-full object-cover" />
+              ) : (
+                <Music className="w-6 h-6 text-white/20" />
+              )}
+            </div>
+            <div className="p-2.5">
+              <p className="text-xs font-semibold text-white truncate">
+                {e.entrant_full_name}{e.is_group && e.members?.length > 0 ? ` +${e.members.length}` : ''}
+              </p>
+              <p className="text-[10px] text-white/40 truncate mt-0.5">
+                {e.school?.name || e.school_name_freetext}
+              </p>
+              <p className="text-[10px] text-white/30 truncate">
+                "{e.song?.title || e.track?.title}"
+              </p>
+              {e.is_finalist && (
+                <p className="text-[9px] font-bold text-lime-400 uppercase tracking-wide mt-1">Finalist</p>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+      {hasMore && (
+        <button onClick={loadMore} disabled={loadingMore}
+          className="w-full py-2.5 rounded-xl border border-white/[0.08] text-xs font-semibold text-white/50 hover:text-white hover:bg-white/[0.03] transition disabled:opacity-40">
+          {loadingMore ? 'Loading…' : 'Load more entries'}
+        </button>
+      )}
+    </div>
+  );
+}
+
+
 // entries_open_at / entries_close_at / voting_open_at / voting_close_at.
 function currentPhase(comp) {
   if (!comp) return 'awareness';
@@ -221,6 +301,8 @@ export default function SchoolSessionsPage() {
             <span className="text-white font-semibold">A judging panel picks the finalists and the winner</span> (announced closer to the time). The public vote runs alongside as a separate <span className="text-white font-semibold">People's Choice</span> pick — post your cover on TikTok and rally votes.
           </p>
         </div>
+
+        {compId && <EntryGallery compId={compId} />}
 
         {/* Three-phase timeline */}
         <div className="space-y-3 lg:space-y-4">
