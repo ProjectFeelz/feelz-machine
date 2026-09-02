@@ -38,6 +38,8 @@ export default function AffiliatePage() {
   const [payoutAmount, setPayoutAmount] = useState('');
   const [payoutMethod, setPayoutMethod] = useState('paypal');
   const [requestingPayout, setRequestingPayout] = useState(false);
+  const [redeemingKey, setRedeemingKey] = useState(null);
+  const [redemptions, setRedemptions] = useState([]);
   const [eligibilityInfo, setEligibilityInfo] = useState(null);
   const [progress, setProgress] = useState(null);
   const [isNewsletterEditor, setIsNewsletterEditor] = useState(false);
@@ -84,6 +86,13 @@ export default function AffiliatePage() {
           .eq('affiliate_id', aff.id)
           .order('requested_at', { ascending: false }).limit(20);
         setPayouts(pays || []);
+
+        // Fetch credit redemption history
+        const { data: reds } = await supabase
+          .from('affiliate_credit_redemptions').select('*')
+          .eq('affiliate_id', aff.id)
+          .order('requested_at', { ascending: false }).limit(20);
+        setRedemptions(reds || []);
       } else {
         // Check eligibility
         const { data: eligible } = await supabase
@@ -141,6 +150,18 @@ export default function AffiliatePage() {
       else { setAffiliate(data.affiliate); fetchData(); }
     } catch (err) { alert('Something went wrong. Please try again.'); }
     setApplying(false);
+  };
+
+  const redeemCredits = async (reward) => {
+    setRedeemingKey(reward.key);
+    const { error } = await supabase.rpc('request_credit_redemption', {
+      p_reward_key: reward.key,
+      p_reward_label: reward.label,
+      p_cost: reward.cost,
+    });
+    setRedeemingKey(null);
+    if (error) { alert(error.message); return; }
+    fetchData();
   };
 
   const handleCopy = () => {
@@ -526,11 +547,13 @@ export default function AffiliatePage() {
                     <div className="space-y-2">
                       <p className="text-xs text-white/30 font-semibold uppercase tracking-wider">Redeem For</p>
                       {[
-                        { label: '1 Month Pro Free', cost: 500, icon: '⭐' },
-                        { label: 'Featured Artist Slot', cost: 1000, icon: '🔥' },
-                        { label: 'Priority Upload Badge', cost: 300, icon: '🏅' },
-                      ].map(r => (
-                        <div key={r.label} className="flex items-center justify-between p-3 rounded-xl bg-white/[0.03] border border-white/[0.05]">
+                        { key: 'fan_pro_month', label: '1 Month Fan Pro Free', cost: 500, icon: '⭐' },
+                        { key: 'social_shoutout', label: 'Shoutout on Feelz Socials', cost: 1000, icon: '📣' },
+                        { key: 'founding_fan_badge', label: 'Founding Fan Badge', cost: 300, icon: '🏅' },
+                      ].map(r => {
+                        const pendingForThis = redemptions.find(red => red.reward_key === r.key && red.status === 'pending');
+                        return (
+                        <div key={r.key} className="flex items-center justify-between p-3 rounded-xl bg-white/[0.03] border border-white/[0.05]">
                           <div className="flex items-center space-x-2">
                             <span>{r.icon}</span>
                             <span className="text-sm text-white">{r.label}</span>
@@ -538,14 +561,16 @@ export default function AffiliatePage() {
                           <div className="flex items-center space-x-2">
                             <span className="text-xs font-bold text-yellow-400">{r.cost} credits</span>
                             <button
-                              disabled={affiliate.credits_balance < r.cost}
+                              onClick={() => redeemCredits(r)}
+                              disabled={affiliate.credits_balance < r.cost || redeemingKey === r.key || !!pendingForThis}
                               className="px-3 py-1 rounded-lg text-xs font-bold transition disabled:opacity-30"
                               style={{ background: affiliate.credits_balance >= r.cost ? 'rgba(234,179,8,0.2)' : 'rgba(255,255,255,0.04)', color: affiliate.credits_balance >= r.cost ? '#facc15' : 'rgba(255,255,255,0.2)', border: `1px solid ${affiliate.credits_balance >= r.cost ? 'rgba(234,179,8,0.3)' : 'rgba(255,255,255,0.06)'}` }}>
-                              Redeem
+                              {pendingForThis ? 'Pending' : redeemingKey === r.key ? '...' : 'Redeem'}
                             </button>
                           </div>
                         </div>
-                      ))}
+                        );
+                      })}
                       <p className="text-[10px] text-white/20 text-center pt-1">Redemptions are reviewed and applied manually within 24h</p>
                     </div>
                   </div>

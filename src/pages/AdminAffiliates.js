@@ -7,6 +7,7 @@ import {
 
 export default function AdminAffiliates({ embedded = false }) {
   const [affiliates, setAffiliates]   = useState([]);
+  const [pendingRedemptions, setPendingRedemptions] = useState([]);
   const [campaigns, setCampaigns]     = useState([]);
   const [payouts, setPayouts]         = useState([]);
   const [stats, setStats]             = useState({});
@@ -28,12 +29,15 @@ export default function AdminAffiliates({ embedded = false }) {
         { data: camps },
         { data: pays },
         { data: convStats },
+        { data: reds },
       ] = await Promise.all([
         supabase.from('affiliates').select('*').order('total_earned_zar', { ascending: false }).limit(100),
         supabase.from('affiliate_campaigns').select('*').order('created_at', { ascending: false }),
         supabase.from('affiliate_payouts').select('*').eq('status', 'requested').order('requested_at'),
         supabase.from('affiliate_conversions').select('status, commission_zar, credits_earned, type'),
+        supabase.from('affiliate_credit_redemptions').select('*').eq('status', 'pending').order('requested_at'),
       ]);
+      setPendingRedemptions(reds || []);
 
       // Enrich affiliates with display names separately
       const enrichedAffs = await Promise.all((affs || []).map(async (aff) => {
@@ -88,6 +92,12 @@ export default function AdminAffiliates({ embedded = false }) {
     const { error } = await supabase.rpc('admin_approve_affiliate', { p_user_id: userId });
     if (error) { console.error(error); return; }
     fetchData();
+  };
+
+  const handleFulfillRedemption = async (id, approve) => {
+    const { error } = await supabase.rpc('admin_fulfill_redemption', { p_redemption_id: id, p_approve: approve });
+    if (error) { console.error(error); return; }
+    setPendingRedemptions(prev => prev.filter(r => r.id !== id));
   };
 
   const handleCreateCampaign = async () => {
@@ -146,13 +156,35 @@ export default function AdminAffiliates({ embedded = false }) {
 
       {/* Tabs */}
       <div className="flex space-x-1 bg-white/[0.03] rounded-lg p-1">
-        {['overview', 'payouts', 'campaigns'].map(t => (
+        {['overview', 'payouts', 'redemptions', 'campaigns'].map(t => (
           <button key={t} onClick={() => setTab(t)}
             className={`flex-1 py-2 rounded-md text-xs font-medium capitalize transition ${tab === t ? 'bg-white text-black' : 'text-white/40 hover:text-white/60'}`}>
             {t} {t === 'payouts' && payouts.length > 0 && <span className="ml-1 bg-red-500 text-white text-[9px] rounded-full px-1">{payouts.length}</span>}
+            {t === 'redemptions' && pendingRedemptions.length > 0 && <span className="ml-1 bg-red-500 text-white text-[9px] rounded-full px-1">{pendingRedemptions.length}</span>}
           </button>
         ))}
       </div>
+
+      {tab === 'redemptions' && (
+        <div className="space-y-2">
+          {pendingRedemptions.length === 0 ? (
+            <p className="text-center text-white/20 text-sm py-8">No pending redemptions.</p>
+          ) : pendingRedemptions.map(r => (
+            <div key={r.id} className="flex items-center justify-between p-3 rounded-xl bg-white/[0.03] border border-white/[0.05]">
+              <div className="min-w-0">
+                <p className="text-sm text-white truncate">{r.reward_label}</p>
+                <p className="text-[10px] text-white/30">{r.cost} credits · requested {new Date(r.requested_at).toLocaleDateString()}</p>
+              </div>
+              <div className="flex items-center space-x-1.5 flex-shrink-0">
+                <button onClick={() => handleFulfillRedemption(r.id, true)}
+                  className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-green-500/15 text-green-400 hover:bg-green-500/25 transition">Approve</button>
+                <button onClick={() => handleFulfillRedemption(r.id, false)}
+                  className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-white/[0.06] text-white/50 hover:bg-white/[0.1] transition">Reject</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Overview — affiliate list */}
       {tab === 'overview' && (

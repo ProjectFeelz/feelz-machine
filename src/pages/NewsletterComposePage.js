@@ -22,6 +22,10 @@ export default function NewsletterComposePage() {
   const [title, setTitle] = React.useState('');
   const [excerpt, setExcerpt] = React.useState('');
   const [body, setBody] = React.useState('');
+  const [youtubeUrl, setYoutubeUrl] = React.useState('');
+  const bodyRef = React.useRef(null);
+  const imageInputRef = React.useRef(null);
+  const [uploadingImage, setUploadingImage] = React.useState(false);
   const [sending, setSending] = React.useState(false);
   const [confirmOpen, setConfirmOpen] = React.useState(false);
   const [posts, setPosts] = React.useState([]);
@@ -53,16 +57,41 @@ export default function NewsletterComposePage() {
     }
   }, [authorized, isAdmin]);
 
+  const setBodyFromEditor = () => {
+    if (bodyRef.current) setBody(bodyRef.current.innerHTML);
+  };
+
+  const format = (command, value = null) => {
+    bodyRef.current?.focus();
+    document.execCommand(command, false, value);
+    setBodyFromEditor();
+  };
+
+  const insertImage = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingImage(true);
+    const path = `newsletter/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.]/g, '_')}`;
+    const { error: upErr } = await supabase.storage.from('covers').upload(path, file, { cacheControl: '31536000' });
+    if (upErr) { showToast('Image upload failed: ' + upErr.message); setUploadingImage(false); e.target.value = ''; return; }
+    const { data: { publicUrl } } = supabase.storage.from('covers').getPublicUrl(path);
+    format('insertImage', publicUrl);
+    setUploadingImage(false);
+    e.target.value = '';
+  };
+
   const send = async () => {
     setSending(true);
     const { error } = await supabase.rpc('send_newsletter', {
       p_title: title.trim(), p_excerpt: excerpt.trim(), p_body: body.trim(), p_audience: audience,
+      p_youtube_url: youtubeUrl.trim() || null,
     });
     setSending(false);
     setConfirmOpen(false);
     if (error) { showToast('Error: ' + error.message); return; }
     showToast(`Sent to ${audience === 'retail' ? 'retail venues' : 'the main app'}`);
-    setTitle(''); setExcerpt(''); setBody(''); setAudience(null);
+    setTitle(''); setExcerpt(''); setBody(''); setYoutubeUrl(''); setAudience(null);
+    if (bodyRef.current) bodyRef.current.innerHTML = '';
     loadPosts();
   };
 
@@ -118,10 +147,15 @@ export default function NewsletterComposePage() {
         </div>
       )}
 
-      <div className="max-w-xl mx-auto px-5 pt-8 space-y-6">
+      <div className="max-w-xl lg:max-w-3xl mx-auto px-5 pt-8 space-y-6">
         <div>
           <p className="text-purple-400 text-xs font-bold tracking-widest uppercase mb-1">Newsletter</p>
           <h1 className="text-2xl font-bold">Compose</h1>
+          <p className="text-xs text-white/30 mt-1">
+            Signed in as <span className="text-white/60">{user.email}</span>
+            <span className="mx-1.5 text-white/15">·</span>
+            <span className={`font-semibold ${isAdmin ? 'text-yellow-400' : 'text-purple-400'}`}>{isAdmin ? 'Admin' : 'Newsletter Editor'}</span>
+          </p>
         </div>
 
         <div className="space-y-3">
@@ -147,8 +181,47 @@ export default function NewsletterComposePage() {
           <input className={inputCls} placeholder="Title" value={title} onChange={e => setTitle(e.target.value)} />
           <textarea className={inputCls} placeholder="Short excerpt, this is what shows in the notification itself"
             rows={2} value={excerpt} onChange={e => setExcerpt(e.target.value)} />
-          <textarea className={inputCls} placeholder="Full content, this becomes the linked page"
-            rows={10} value={body} onChange={e => setBody(e.target.value)} />
+
+          <div>
+            <div className="flex items-center flex-wrap gap-1 mb-2 p-1.5 rounded-lg bg-white/[0.04] border border-white/[0.06]">
+              <button type="button" onClick={() => format('bold')} onMouseDown={e => e.preventDefault()} title="Bold"
+                className="px-2.5 py-1.5 rounded text-sm font-bold text-white/70 hover:bg-white/[0.08] transition">B</button>
+              <button type="button" onClick={() => format('italic')} onMouseDown={e => e.preventDefault()} title="Italic"
+                className="px-2.5 py-1.5 rounded text-sm italic text-white/70 hover:bg-white/[0.08] transition">I</button>
+              <div className="w-px h-5 bg-white/10 mx-1" />
+              <button type="button" onClick={() => format('formatBlock', 'h2')} onMouseDown={e => e.preventDefault()} title="Heading"
+                className="px-2.5 py-1.5 rounded text-xs font-bold text-white/70 hover:bg-white/[0.08] transition">H2</button>
+              <button type="button" onClick={() => format('formatBlock', 'h3')} onMouseDown={e => e.preventDefault()} title="Subheading"
+                className="px-2.5 py-1.5 rounded text-xs font-bold text-white/70 hover:bg-white/[0.08] transition">H3</button>
+              <button type="button" onClick={() => format('formatBlock', 'p')} onMouseDown={e => e.preventDefault()} title="Paragraph"
+                className="px-2.5 py-1.5 rounded text-xs text-white/70 hover:bg-white/[0.08] transition">P</button>
+              <div className="w-px h-5 bg-white/10 mx-1" />
+              <button type="button" onClick={() => format('insertUnorderedList')} onMouseDown={e => e.preventDefault()} title="Bullet list"
+                className="px-2.5 py-1.5 rounded text-xs text-white/70 hover:bg-white/[0.08] transition">• List</button>
+              <div className="w-px h-5 bg-white/10 mx-1" />
+              <label title="Text color" className="flex items-center px-1.5 py-1 rounded hover:bg-white/[0.08] transition cursor-pointer">
+                <span className="text-xs text-white/70 mr-1">A</span>
+                <input type="color" defaultValue="#c6ff3d" onChange={e => format('foreColor', e.target.value)}
+                  className="w-5 h-5 rounded cursor-pointer bg-transparent" />
+              </label>
+              <div className="w-px h-5 bg-white/10 mx-1" />
+              <button type="button" onClick={() => imageInputRef.current?.click()} disabled={uploadingImage}
+                className="px-2.5 py-1.5 rounded text-xs font-semibold text-purple-300 hover:bg-white/[0.08] transition disabled:opacity-40">
+                {uploadingImage ? 'Uploading…' : '+ Image'}
+              </button>
+              <input ref={imageInputRef} type="file" accept="image/*" onChange={insertImage} className="hidden" />
+            </div>
+            <div
+              ref={bodyRef}
+              contentEditable
+              onInput={setBodyFromEditor}
+              data-placeholder="Full content, this becomes the linked page"
+              className={`${inputCls} min-h-[220px] max-h-[420px] overflow-y-auto [&_h2]:text-xl [&_h2]:font-bold [&_h2]:mt-3 [&_h2]:mb-1.5 [&_h3]:text-base [&_h3]:font-bold [&_h3]:mt-2 [&_h3]:mb-1 [&_img]:max-w-full [&_img]:rounded-lg [&_img]:my-2 [&_ul]:list-disc [&_ul]:pl-5 empty:before:content-[attr(data-placeholder)] empty:before:text-white/25`}
+            />
+          </div>
+
+          <input className={inputCls} placeholder="YouTube video link (optional)" value={youtubeUrl}
+            onChange={e => setYoutubeUrl(e.target.value)} />
         </div>
 
         <button onClick={() => setConfirmOpen(true)} disabled={!canSend}
@@ -190,7 +263,7 @@ export default function NewsletterComposePage() {
         {isAdmin && (
           <div className="space-y-3 pt-4 border-t border-white/[0.06]">
             <p className="text-xs font-bold text-white/50 uppercase tracking-wide">Newsletter editors ({editors.length})</p>
-            <p className="text-[11px] text-white/30">Someone with editor access can compose and send from this exact panel, nothing else on the platform opens up to them.</p>
+            <p className="text-[11px] text-white/30">Someone with editor access can compose and send from this exact panel, nothing else on the platform opens up to them. Admins already have full access and don't need to be added here, this list is only for granting access to people who aren't admins.</p>
             <div className="flex space-x-2">
               <input className={inputCls} placeholder="Editor's email" value={newEditorEmail} onChange={e => setNewEditorEmail(e.target.value)} />
               <input className={inputCls} placeholder="Name (optional)" value={newEditorName} onChange={e => setNewEditorName(e.target.value)} />

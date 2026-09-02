@@ -689,16 +689,16 @@ export default function NotificationsPage() {
                   const isExpandable  = (notif.message?.length > 80);
                   const isExpanded    = expandedIds.includes(notif.id);
                   const hasTrackPill  = !!meta.track_title && !!meta.track_id;
-                  const hasActionUrl  = !!meta.action_url || !!meta.cta_url || !!meta.url;
-                  // Orphaned stream notification — has no track data
+                  const hasActionUrl  = !!meta.action_url || !!meta.cta_url || !!meta.url || !!meta.link_url;
+                  // Orphaned stream notification, has no track data
                   const isOrphanStream = notif.type === 'new_stream' && !meta.track_title;
                   const isCollabReq   = notif.type === 'collab_request';
                   const isEngagement  = notif.type === 'engagement' || notif.type === 'announcement' || notif.type === 'admin_message';
                   const isNewFollower = notif.type === 'new_follower';
                   const isComment     = notif.type === 'track_commented' || notif.type === 'new_comment';
                   const canReply      = isComment && (meta.post_id || meta.track_id);
-                  const actionUrl     = meta.action_url || meta.cta_url || meta.url || null;
-                  const actionLabel   = meta.cta_label || meta.action_label || (meta.feature_education ? 'Open Feature' : 'Learn more');
+                  const actionUrl     = meta.action_url || meta.cta_url || meta.url || meta.link_url || null;
+                  const actionLabel   = meta.cta_label || meta.action_label || meta.link_label || (meta.feature_education ? 'Open Feature' : 'Learn more');
 
                   // Skip orphaned stream notifications (no track data - old DB trigger leftovers)
                   if (isOrphanStream) return null;
