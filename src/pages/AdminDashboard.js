@@ -275,7 +275,7 @@ export default function AdminDashboard() {
   if (!isAdmin) return null;
 
   return (
-    <div className="pt-14 md:pt-0 pb-32 px-4 max-w-5xl mx-auto">
+    <div className="pt-14 md:pt-0 pb-32 px-4 md:px-0">
 
       {/* Ban confirm modal */}
       {banConfirm && (
@@ -321,42 +321,40 @@ export default function AdminDashboard() {
       </div>
 
       {/* Platform stats grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2 mb-6">
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 mb-8">
         {stats.map(s => {
           const Icon = s.icon;
           return (
-            <div key={s.label} className="bg-white/[0.03] rounded-xl p-3 border border-white/[0.06]">
+            <div key={s.label} className="bg-white/[0.03] rounded-2xl p-5 border border-white/[0.07]">
               <div className="flex items-center justify-between mb-1">
-                <Icon className={`w-3.5 h-3.5 ${s.color} opacity-60`} />
+                <Icon className={`w-5 h-5 ${s.color} opacity-60`} />
               </div>
-              <p className={`text-xl font-black ${s.color} leading-none`}>{typeof s.value === 'number' ? s.value.toLocaleString() : s.value}</p>
-              <p className="text-[10px] text-white/25 mt-1 leading-tight">{s.label}</p>
+              <p className={`text-3xl font-black ${s.color} leading-none`}>{typeof s.value === 'number' ? s.value.toLocaleString() : s.value}</p>
+              <p className="text-xs text-white/30 mt-2 leading-tight">{s.label}</p>
             </div>
           );
         })}
       </div>
 
-      {/* Grouped nav sections */}
-      {ADMIN_SECTIONS.map(({ heading, items }) => (
-        <div key={heading} className="mb-5">
-          <p className="text-[10px] uppercase tracking-widest text-white/25 font-semibold px-1 mb-2">{heading}</p>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-            {items.map(({ label, icon: Icon, path, color, desc }) => (
-              <button key={label} onClick={() => navigate(path)}
-                className="flex items-center space-x-3 px-3 py-3 bg-white/[0.03] rounded-xl border border-white/[0.06] hover:bg-white/[0.06] active:scale-[0.98] transition text-left group">
-                <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${color.split(' ')[0]}`}>
-                  <Icon className={`w-4 h-4 ${color.split(' ')[1]}`} />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-semibold text-white/80 truncate">{label}</p>
-                  <p className="text-[10px] text-white/30 truncate mt-0.5">{desc}</p>
-                </div>
-                <ChevronRight className="w-3.5 h-3.5 text-white/15 group-hover:text-white/30 transition flex-shrink-0" />
-              </button>
-            ))}
-          </div>
-        </div>
-      ))}
+      {/* Main admin areas. These were previously four separate sections with
+          one card each, so every card carried a heading that just repeated
+          its own label and sat alone on a row. Flattened into a 2x2 grid of
+          properly-sized cards instead. */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {ADMIN_SECTIONS.flatMap(s => s.items).map(({ label, icon: Icon, path, color, desc }) => (
+          <button key={label} onClick={() => navigate(path)}
+            className="flex items-center space-x-5 p-6 bg-white/[0.03] rounded-2xl border border-white/[0.07] hover:bg-white/[0.06] hover:border-white/[0.12] active:scale-[0.99] transition text-left group">
+            <div className={`w-16 h-16 rounded-2xl flex items-center justify-center flex-shrink-0 ${color.split(' ')[0]}`}>
+              <Icon className={`w-8 h-8 ${color.split(' ')[1]}`} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-lg font-bold text-white truncate">{label}</p>
+              <p className="text-xs text-white/35 truncate mt-1">{desc}</p>
+            </div>
+            <ChevronRight className="w-5 h-5 text-white/15 group-hover:text-white/40 transition flex-shrink-0" />
+          </button>
+        ))}
+      </div>
 
     </div>
   );

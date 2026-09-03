@@ -1481,6 +1481,27 @@ export default function ForYouPage() {
         })}
       </div>
 
+      {/* Empty state for a filter that matched nothing. Without this, picking
+          Beats when the loaded page happens to contain none just shows a
+          blank screen with no explanation of why. */}
+      {!loading && filteredTracks.length === 0 && (
+        <div className="absolute inset-0 z-40 flex items-center justify-center px-8 pointer-events-none">
+          <div className="text-center pointer-events-auto">
+            <p className="text-white/50 text-sm mb-1">
+              {feedFilter === 'beats' ? 'No beats in your feed right now.'
+                : feedFilter === 'music' ? 'No songs in your feed right now.'
+                : 'Nothing to show yet.'}
+            </p>
+            {feedFilter !== 'all' && (
+              <button onClick={() => setFeedFilter('all')}
+                className="text-xs text-lime-400 hover:text-lime-300 transition mt-1">
+                Show everything instead
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Status bar gradient */}
       <div className="absolute top-0 inset-x-0 h-20 pointer-events-none z-30"
         style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,0.5), transparent)' }} />

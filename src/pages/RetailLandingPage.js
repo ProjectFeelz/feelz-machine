@@ -105,7 +105,7 @@ export default function RetailLandingPage() {
             Pricing is worked out per venue rather than a fixed rate card, so the quickest way to
             find out what it'd cost you is just to ask.
           </p>
-          <a href="mailto:steve@projectfeelz.com?subject=Feelz%20Retail%20enquiry"
+          <a href="mailto:jane@projectfeelz.com?subject=Feelz%20Retail%20enquiry"
             className="inline-flex items-center space-x-2 px-5 py-3 rounded-xl bg-purple-500 text-white font-bold text-sm hover:bg-purple-400 transition">
             <span>Get in touch</span>
             <ArrowRight className="w-4 h-4" />

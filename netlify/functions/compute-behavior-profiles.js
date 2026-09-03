@@ -253,7 +253,7 @@ async function computeListenerProfile(userId) {
     { data: competitionStreams },
   ] = await Promise.all([
     supabase.from('streams')
-      .select('track_id, created_at, duration_played, tracks(genre, mood, artists(artist_name))')
+      .select('track_id, created_at, duration_played, tracks(genre, mood, is_beat, artists(artist_name))')
       .eq('user_id', userId)
       .gte('created_at', d30)
       .order('created_at', { ascending: false })

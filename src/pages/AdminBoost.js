@@ -308,7 +308,7 @@ export default function AdminBoost({ embedded = false }) {
   if (!isAdmin) return null;
 
   return (
-    <div className="pt-4 pb-32 px-4 max-w-4xl mx-auto">
+    <div className="pt-4 pb-32 px-4 md:px-0">
       <Toast message={toast.message} type={toast.type} />
 
       {/* Header */}

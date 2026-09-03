@@ -407,7 +407,7 @@ export default function LibraryPage() {
           {newToYou.length > 0 && (
             <div className="md:col-span-2 mt-6">
               <p className="text-[10px] uppercase tracking-widest text-white/20 font-semibold mb-3">New to you</p>
-              <div className="flex space-x-3 overflow-x-auto pb-2" style={{ scrollbarWidth: 'thin' }}>
+              <div className="flex space-x-3 overflow-x-auto pb-2">
                 {newToYou.map(t => (
                   <button
                     key={t.id}

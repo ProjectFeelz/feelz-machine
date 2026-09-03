@@ -540,14 +540,14 @@ export default function AdminRetail({ embedded = false }) {
       {loading ? (
         <div className="flex justify-center py-20"><Loader className="w-5 h-5 animate-spin text-white/20" /></div>
       ) : (
-        <div className="px-4 pt-5 pb-24 max-w-4xl mx-auto space-y-6">
+        <div className="px-4 pt-5 pb-24 space-y-6">
 
           {tab === 'pitches' && (
             <div className="space-y-6">
               <div className="space-y-2">
                 <p className="text-xs font-bold text-white/50 uppercase tracking-wide">Pending ({pendingPitches.length})</p>
                 {pendingPitches.length === 0 ? (
-                  <p className="text-xs text-white/30 py-4 text-center">No pitches waiting on you.</p>
+                  <p className="text-xs text-white/30 py-4">No pitches waiting on you.</p>
                 ) : pendingPitches.map(p => (
                   <div key={p.id} className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3 space-y-2">
                     <div className="flex items-center space-x-3">
@@ -619,7 +619,7 @@ export default function AdminRetail({ embedded = false }) {
 
               <div className="space-y-2">
                 {playlists.length === 0 ? (
-                  <p className="text-xs text-white/30 py-4 text-center">No playlists yet.</p>
+                  <p className="text-xs text-white/30 py-4">No playlists yet.</p>
                 ) : playlists.map(pl => (
                   <div key={pl.id} className="rounded-xl border border-white/[0.06] bg-white/[0.02] overflow-hidden">
                     <div className="flex items-center justify-between p-3 cursor-pointer group" onClick={() => togglePlaylistExpand(pl)}>
@@ -727,7 +727,7 @@ export default function AdminRetail({ embedded = false }) {
 
               <div className="space-y-2">
                 {venues.length === 0 ? (
-                  <p className="text-xs text-white/30 py-4 text-center">No venues yet.</p>
+                  <p className="text-xs text-white/30 py-4">No venues yet.</p>
                 ) : venues.map(v => (
                   <div key={v.id} className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3 space-y-2">
                     <div className="flex items-center justify-between">
@@ -801,7 +801,7 @@ export default function AdminRetail({ embedded = false }) {
 
               <div className="space-y-2">
                 {ads.length === 0 ? (
-                  <p className="text-xs text-white/30 py-4 text-center">No ads yet.</p>
+                  <p className="text-xs text-white/30 py-4">No ads yet.</p>
                 ) : ads.map(ad => (
                   <div key={ad.id} className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3 flex items-center justify-between">
                     <div className="min-w-0 flex items-center space-x-2">
@@ -860,7 +860,7 @@ export default function AdminRetail({ embedded = false }) {
               <div className="space-y-2">
                 <p className="text-xs font-bold text-white/50 uppercase tracking-wide">Past periods</p>
                 {payoutPeriods.length === 0 ? (
-                  <p className="text-xs text-white/30 py-4 text-center">No payouts calculated yet.</p>
+                  <p className="text-xs text-white/30 py-4">No payouts calculated yet.</p>
                 ) : payoutPeriods.map(period => (
                   <div key={period.id} className="rounded-xl border border-white/[0.06] bg-white/[0.02] overflow-hidden">
                     <div className="flex items-center justify-between p-3 cursor-pointer" onClick={() => togglePeriodExpand(period)}>
@@ -910,7 +910,7 @@ export default function AdminRetail({ embedded = false }) {
 
               <div className="space-y-2">
                 {priceGuide.length === 0 ? (
-                  <p className="text-xs text-white/30 py-4 text-center">No price bands yet, add a few venue types to build your reference sheet.</p>
+                  <p className="text-xs text-white/30 py-4">No price bands yet, add a few venue types to build your reference sheet.</p>
                 ) : priceGuide.map(p => (
                   <div key={p.id} className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3 flex items-center justify-between">
                     <div className="min-w-0">
@@ -994,7 +994,7 @@ export default function AdminRetail({ embedded = false }) {
               <div className="space-y-2">
                 <p className="text-xs font-bold text-white/50 uppercase tracking-wide">Sent</p>
                 {notifications.length === 0 ? (
-                  <p className="text-xs text-white/30 py-4 text-center">Nothing sent yet.</p>
+                  <p className="text-xs text-white/30 py-4">Nothing sent yet.</p>
                 ) : notifications.map(n => (
                   <div key={n.id} className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3">
                     <div className="flex items-center justify-between">
@@ -1026,7 +1026,7 @@ export default function AdminRetail({ embedded = false }) {
 
               <div className="space-y-2">
                 {proposals.filter(p => p.status === 'pending').length === 0 ? (
-                  <p className="text-xs text-white/30 py-4 text-center">No pending proposals.</p>
+                  <p className="text-xs text-white/30 py-4">No pending proposals.</p>
                 ) : proposals.filter(p => p.status === 'pending').map(p => (
                   <div key={p.id} className="rounded-xl border border-white/[0.06] bg-white/[0.02] overflow-hidden">
                     <div className="flex items-center justify-between p-3 cursor-pointer" onClick={() => toggleProposalExpand(p)}>

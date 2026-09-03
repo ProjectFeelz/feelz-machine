@@ -113,7 +113,7 @@ export default function AdminDuplicates() {
   );
 
   return (
-    <div className="min-h-screen pb-32 px-4 pt-4 max-w-4xl mx-auto">
+    <div className="min-h-screen pb-32 px-4 md:px-0 pt-4">
 
       {/* Header */}
       <div className="flex items-center space-x-3 mb-6">
