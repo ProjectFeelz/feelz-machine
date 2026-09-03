@@ -44,6 +44,7 @@ export default function LibraryPage() {
     totalStreams: 0, topArtist: null, monthlyDownloads: 0,
   });
   const [prefs, setPrefs] = useState({ theme: 'default', fanBadge: true });
+  const [featured, setFeatured] = useState([]);
   const [savingPrefs, setSavingPrefs] = useState(false);
   const [showThemes, setShowThemes] = useState(false);
 
@@ -76,6 +77,19 @@ export default function LibraryPage() {
     } catch {}
     setSavingPrefs(false);
   };
+
+  // Featured artwork for the desktop right rail. Deliberately its own
+  // effect and its own state: if this query fails or returns nothing, the
+  // rail just doesn't render and the rest of the page is unaffected.
+  useEffect(() => {
+    supabase.from('tracks')
+      .select('id, title, slug, cover_artwork_url, artists(artist_name)')
+      .eq('is_published', true)
+      .not('cover_artwork_url', 'is', null)
+      .order('created_at', { ascending: false })
+      .limit(6)
+      .then(({ data }) => setFeatured(data || []));
+  }, []);
 
   useEffect(() => {
     if (!user) return;
@@ -159,7 +173,7 @@ export default function LibraryPage() {
   ];
 
   return (
-    <div className="pb-4 px-4 md:px-0 max-w-4xl mx-auto">
+    <div className="pb-4 px-4 md:px-0">
       <Helmet>
         <link rel="icon" href="/favicon.ico" />
         <link rel="apple-touch-icon" href="/logo192.png" />
@@ -334,29 +348,50 @@ export default function LibraryPage() {
         </div>
       )}
 
-      {/* ── Navigation items ── */}
-      <div className="space-y-1 md:grid md:grid-cols-2 md:gap-2 md:space-y-0">
-        {items.map(({ icon: Icon, label, path, iconColor, accent, count, sub }) => (
-          <button
-            key={path}
-            onClick={() => navigate(path)}
-            className="w-full flex items-center space-x-4 p-3.5 rounded-xl hover:bg-white/[0.04] active:bg-white/[0.06] transition group"
-          >
-            <div className={`w-11 h-11 rounded-xl ${accent || 'bg-white/[0.06]'} flex items-center justify-center flex-shrink-0`}>
-              <Icon className={`w-5 h-5 ${iconColor}`} />
-            </div>
-            <div className="flex-1 text-left min-w-0">
-              <span className="text-sm font-medium text-white block">{label}</span>
-              {sub && <span className="text-xs text-white/30 truncate block mt-0.5">{sub}</span>}
-            </div>
-            {count != null && count > 0 && (
-              <span className="text-xs text-white/25 font-medium mr-1 flex-shrink-0">{count}</span>
-            )}
-            <ChevronRight className="w-4 h-4 text-white/15 group-hover:text-white/30 transition flex-shrink-0" />
-          </button>
-        ))}
+      {/* ── Navigation items + featured rail ──
+          On desktop this becomes a two-column layout: the library cards
+          take the space they need, and the previously-empty right side
+          gets filled with real artwork instead of dead space. */}
+      <div className="lg:flex lg:gap-8 lg:items-start">
+        <div className="flex-1 min-w-0 space-y-2 md:grid md:grid-cols-2 md:gap-3 md:space-y-0">
+          {items.map(({ icon: Icon, label, path, iconColor, accent, count, sub }) => (
+            <button
+              key={path}
+              onClick={() => navigate(path)}
+              className="w-full flex items-center space-x-4 p-5 rounded-2xl bg-white/[0.02] border border-white/[0.05] hover:bg-white/[0.05] hover:border-white/[0.1] active:bg-white/[0.06] transition group"
+            >
+              <div className={`w-14 h-14 rounded-2xl ${accent || 'bg-white/[0.06]'} flex items-center justify-center flex-shrink-0`}>
+                <Icon className={`w-7 h-7 ${iconColor}`} />
+              </div>
+              <div className="flex-1 text-left min-w-0">
+                <span className="text-base font-semibold text-white block">{label}</span>
+                {sub && <span className="text-xs text-white/30 truncate block mt-0.5">{sub}</span>}
+              </div>
+              {count != null && count > 0 && (
+                <span className="text-sm text-white/25 font-medium mr-1 flex-shrink-0">{count}</span>
+              )}
+              <ChevronRight className="w-5 h-5 text-white/15 group-hover:text-white/30 transition flex-shrink-0" />
+            </button>
+          ))}
+        </div>
 
-
+        {featured.length > 0 && (
+          <div className="hidden lg:block w-[300px] flex-shrink-0">
+            <p className="text-[10px] uppercase tracking-widest text-white/25 font-semibold mb-3">Fresh on Feelz</p>
+            <div className="grid grid-cols-2 gap-3">
+              {featured.map(t => (
+                <button key={t.id} onClick={() => navigate(`/track/${t.slug || t.id}`)}
+                  className="text-left group">
+                  <div className="w-full aspect-square rounded-xl overflow-hidden bg-white/[0.06] mb-2">
+                    <img src={t.cover_artwork_url} alt="" className="w-full h-full object-cover group-hover:scale-105 transition duration-300" />
+                  </div>
+                  <p className="text-xs font-medium text-white truncate">{t.title}</p>
+                  <p className="text-[11px] text-white/30 truncate">{t.artists?.artist_name}</p>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

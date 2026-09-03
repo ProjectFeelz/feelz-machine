@@ -388,15 +388,32 @@ export default function HomePage() {
 
   const fetchFeaturedPlaylists = async () => {
     try {
-      const { data } = await supabase
+      // Note: no join to a users table here. An earlier version tried
+      // artists:users!playlists_user_id_fkey(...), which 400s because that
+      // relationship doesn't resolve, so this section silently never
+      // rendered. Owner names are looked up separately instead.
+      const { data, error } = await supabase
         .from('playlists')
-        .select('id, name, cover_url, user_id, created_at, is_public, playlist_tracks(id, tracks(cover_artwork_url)), artists:users!playlists_user_id_fkey(artists(artist_name, slug, profile_image_url))')
+        .select('id, name, cover_url, user_id, created_at, is_public, playlist_tracks(id, tracks(cover_artwork_url))')
         .eq('is_public', true)
         .order('created_at', { ascending: false })
         .limit(12);
-      // Fallback simpler query if join fails
-      if (!data) return;
-      setFeaturedPlaylists(data.filter(p => p.playlist_tracks?.length > 0));
+      if (error || !data) return;
+
+      const withTracks = data.filter(p => p.playlist_tracks?.length > 0);
+      if (withTracks.length === 0) { setFeaturedPlaylists([]); return; }
+
+      const ownerIds = [...new Set(withTracks.map(p => p.user_id).filter(Boolean))];
+      let ownerMap = {};
+      if (ownerIds.length > 0) {
+        const { data: owners } = await supabase
+          .from('artists')
+          .select('user_id, artist_name, slug, profile_image_url')
+          .in('user_id', ownerIds);
+        (owners || []).forEach(o => { ownerMap[o.user_id] = o; });
+      }
+
+      setFeaturedPlaylists(withTracks.map(p => ({ ...p, owner: ownerMap[p.user_id] || null })));
     } catch {}
   };
 
