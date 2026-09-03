@@ -229,6 +229,12 @@ export default function SchoolSessionsPage() {
           </div>
         </div>
 
+        {gate.adminPreview && (
+          <div className="mb-4 lg:mb-6 rounded-xl border border-yellow-500/20 bg-yellow-500/10 px-4 py-2.5">
+            <p className="text-xs text-yellow-400">Admin preview: the public toggle is off, you're seeing this because you're an admin or judge. No one else can see this page right now.</p>
+          </div>
+        )}
+
         {/* Hero */}
         <div className="space-y-3 lg:space-y-4">
           <p className="text-lime-400 text-xs lg:text-sm font-bold tracking-[0.2em] uppercase">

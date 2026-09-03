@@ -104,6 +104,12 @@ export default function SchoolSessionsJudgePanel() {
         <h1 className="text-2xl font-bold mb-1">Judge Panel</h1>
         <p className="text-sm text-white/40 mb-6">Mark entries as finalists, then pick the winner once finalists are set.</p>
 
+        {gate.adminPreview && (
+          <div className="mb-4 rounded-xl border border-yellow-500/20 bg-yellow-500/10 px-4 py-2.5">
+            <p className="text-xs text-yellow-400">Admin preview: the public toggle is off. Judging still works normally for testing.</p>
+          </div>
+        )}
+
         {actionError && (
           <p className="text-xs text-red-400 mb-4">{actionError}</p>
         )}

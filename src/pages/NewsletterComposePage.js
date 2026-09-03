@@ -11,6 +11,7 @@ import { Helmet } from 'react-helmet-async';
 import { Loader, Send, Users, Store, Plus, X } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../supabaseClient';
+import { WysiwygEditor } from '../components/admin/WysiwygEditor';
 
 const inputCls = "w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none focus:bg-white/[0.1] transition";
 
@@ -23,9 +24,7 @@ export default function NewsletterComposePage() {
   const [excerpt, setExcerpt] = React.useState('');
   const [body, setBody] = React.useState('');
   const [youtubeUrl, setYoutubeUrl] = React.useState('');
-  const bodyRef = React.useRef(null);
-  const imageInputRef = React.useRef(null);
-  const [uploadingImage, setUploadingImage] = React.useState(false);
+  const [editorResetKey, setEditorResetKey] = React.useState(0);
   const [sending, setSending] = React.useState(false);
   const [confirmOpen, setConfirmOpen] = React.useState(false);
   const [posts, setPosts] = React.useState([]);
@@ -57,29 +56,6 @@ export default function NewsletterComposePage() {
     }
   }, [authorized, isAdmin]);
 
-  const setBodyFromEditor = () => {
-    if (bodyRef.current) setBody(bodyRef.current.innerHTML);
-  };
-
-  const format = (command, value = null) => {
-    bodyRef.current?.focus();
-    document.execCommand(command, false, value);
-    setBodyFromEditor();
-  };
-
-  const insertImage = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setUploadingImage(true);
-    const path = `newsletter/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.]/g, '_')}`;
-    const { error: upErr } = await supabase.storage.from('covers').upload(path, file, { cacheControl: '31536000' });
-    if (upErr) { showToast('Image upload failed: ' + upErr.message); setUploadingImage(false); e.target.value = ''; return; }
-    const { data: { publicUrl } } = supabase.storage.from('covers').getPublicUrl(path);
-    format('insertImage', publicUrl);
-    setUploadingImage(false);
-    e.target.value = '';
-  };
-
   const send = async () => {
     setSending(true);
     const { error } = await supabase.rpc('send_newsletter', {
@@ -91,7 +67,7 @@ export default function NewsletterComposePage() {
     if (error) { showToast('Error: ' + error.message); return; }
     showToast(`Sent to ${audience === 'retail' ? 'retail venues' : 'the main app'}`);
     setTitle(''); setExcerpt(''); setBody(''); setYoutubeUrl(''); setAudience(null);
-    if (bodyRef.current) bodyRef.current.innerHTML = '';
+    setEditorResetKey(k => k + 1);
     loadPosts();
   };
 
@@ -183,41 +159,8 @@ export default function NewsletterComposePage() {
             rows={2} value={excerpt} onChange={e => setExcerpt(e.target.value)} />
 
           <div>
-            <div className="flex items-center flex-wrap gap-1 mb-2 p-1.5 rounded-lg bg-white/[0.04] border border-white/[0.06]">
-              <button type="button" onClick={() => format('bold')} onMouseDown={e => e.preventDefault()} title="Bold"
-                className="px-2.5 py-1.5 rounded text-sm font-bold text-white/70 hover:bg-white/[0.08] transition">B</button>
-              <button type="button" onClick={() => format('italic')} onMouseDown={e => e.preventDefault()} title="Italic"
-                className="px-2.5 py-1.5 rounded text-sm italic text-white/70 hover:bg-white/[0.08] transition">I</button>
-              <div className="w-px h-5 bg-white/10 mx-1" />
-              <button type="button" onClick={() => format('formatBlock', 'h2')} onMouseDown={e => e.preventDefault()} title="Heading"
-                className="px-2.5 py-1.5 rounded text-xs font-bold text-white/70 hover:bg-white/[0.08] transition">H2</button>
-              <button type="button" onClick={() => format('formatBlock', 'h3')} onMouseDown={e => e.preventDefault()} title="Subheading"
-                className="px-2.5 py-1.5 rounded text-xs font-bold text-white/70 hover:bg-white/[0.08] transition">H3</button>
-              <button type="button" onClick={() => format('formatBlock', 'p')} onMouseDown={e => e.preventDefault()} title="Paragraph"
-                className="px-2.5 py-1.5 rounded text-xs text-white/70 hover:bg-white/[0.08] transition">P</button>
-              <div className="w-px h-5 bg-white/10 mx-1" />
-              <button type="button" onClick={() => format('insertUnorderedList')} onMouseDown={e => e.preventDefault()} title="Bullet list"
-                className="px-2.5 py-1.5 rounded text-xs text-white/70 hover:bg-white/[0.08] transition">• List</button>
-              <div className="w-px h-5 bg-white/10 mx-1" />
-              <label title="Text color" className="flex items-center px-1.5 py-1 rounded hover:bg-white/[0.08] transition cursor-pointer">
-                <span className="text-xs text-white/70 mr-1">A</span>
-                <input type="color" defaultValue="#c6ff3d" onChange={e => format('foreColor', e.target.value)}
-                  className="w-5 h-5 rounded cursor-pointer bg-transparent" />
-              </label>
-              <div className="w-px h-5 bg-white/10 mx-1" />
-              <button type="button" onClick={() => imageInputRef.current?.click()} disabled={uploadingImage}
-                className="px-2.5 py-1.5 rounded text-xs font-semibold text-purple-300 hover:bg-white/[0.08] transition disabled:opacity-40">
-                {uploadingImage ? 'Uploading…' : '+ Image'}
-              </button>
-              <input ref={imageInputRef} type="file" accept="image/*" onChange={insertImage} className="hidden" />
-            </div>
-            <div
-              ref={bodyRef}
-              contentEditable
-              onInput={setBodyFromEditor}
-              data-placeholder="Full content, this becomes the linked page"
-              className={`${inputCls} min-h-[220px] max-h-[420px] overflow-y-auto [&_h2]:text-xl [&_h2]:font-bold [&_h2]:mt-3 [&_h2]:mb-1.5 [&_h3]:text-base [&_h3]:font-bold [&_h3]:mt-2 [&_h3]:mb-1 [&_img]:max-w-full [&_img]:rounded-lg [&_img]:my-2 [&_ul]:list-disc [&_ul]:pl-5 empty:before:content-[attr(data-placeholder)] empty:before:text-white/25`}
-            />
+            <p className="text-xs text-white/40 mb-1.5">Full content, this becomes the linked page</p>
+            <WysiwygEditor key={editorResetKey} value={body} onChange={setBody} placeholder="Write the update here..." minHeight="220px" />
           </div>
 
           <input className={inputCls} placeholder="YouTube video link (optional)" value={youtubeUrl}
