@@ -88,7 +88,7 @@ function RetailPayPalButton({ venueId, onSubscribed }) {
 
 export default function RetailPlayerPage() {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
   const [checking, setChecking] = React.useState(true);
   const [venue, setVenue] = React.useState(null);
   const [locations, setLocations] = React.useState([]);
@@ -114,12 +114,36 @@ export default function RetailPlayerPage() {
 
   const audioRef = React.useRef(null);
   const hasLoggedRef = React.useRef(false);
+  const [allVenues, setAllVenues] = React.useState([]);
+  const [previewVenueId, setPreviewVenueId] = React.useState(null);
 
   React.useEffect(() => {
     if (!user) { setChecking(false); return; }
     supabase.from('retail_venues').select('*').eq('user_id', user.id).maybeSingle()
       .then(({ data }) => { setVenue(data); setChecking(false); });
   }, [user]);
+
+  // Admin preview: if this account isn't itself a venue, let an admin pick
+  // an existing venue to preview through, rather than being locked out
+  // entirely, this is genuinely needed for QA and for reviewing playlists
+  // the way a real venue would see them.
+  React.useEffect(() => {
+    if (!isAdmin || venue) return;
+    supabase.from('retail_venues').select('id, business_name').order('business_name')
+      .then(({ data }) => setAllVenues(data || []));
+  }, [isAdmin, venue]);
+
+  React.useEffect(() => {
+    if (!previewVenueId) return;
+    supabase.from('retail_venues').select('*').eq('id', previewVenueId).maybeSingle()
+      .then(({ data }) => setVenue(data));
+  }, [previewVenueId]);
+
+  // True only when an admin is browsing someone else's venue through the
+  // picker above, never for a real venue owner. Gates every write so an
+  // admin poking around doesn't contaminate real play counts, likes, or
+  // ad-revenue numbers, those numbers feed directly into artist payouts.
+  const isPreviewMode = isAdmin && !!previewVenueId;
 
   React.useEffect(() => {
     if (!venue) return;
@@ -157,7 +181,7 @@ export default function RetailPlayerPage() {
   const openInbox = async () => {
     setShowInbox(true);
     const unread = inboxNotifs.filter(n => !readIds.has(n.id));
-    if (unread.length === 0 || !venue) return;
+    if (unread.length === 0 || !venue || isPreviewMode) return;
     await supabase.from('retail_notification_reads')
       .insert(unread.map(n => ({ notification_id: n.id, venue_id: venue.id })));
     setReadIds(prev => new Set([...prev, ...unread.map(n => n.id)]));
@@ -184,7 +208,7 @@ export default function RetailPlayerPage() {
   }, [venue]);
 
   const toggleLike = async (track) => {
-    if (!venue || !track) return;
+    if (!venue || !track || isPreviewMode) return;
     const isLiked = likedTrackIds.has(track.id);
     if (isLiked) {
       await supabase.from('retail_venue_likes').delete().eq('venue_id', venue.id).eq('track_id', track.id);
@@ -212,7 +236,7 @@ export default function RetailPlayerPage() {
   };
 
   const logPlay = React.useCallback((track, playlist, duration) => {
-    if (!venue || !track) return;
+    if (!venue || !track || isPreviewMode) return;
     supabase.from('retail_play_logs').insert({
       venue_id: venue.id,
       location_id: activeLocationId || null,
@@ -220,10 +244,10 @@ export default function RetailPlayerPage() {
       playlist_id: playlist?.id || null,
       duration_played: duration || QUALIFYING_SECONDS,
     }).then(() => {});
-  }, [venue, activeLocationId]);
+  }, [venue, activeLocationId, isPreviewMode]);
 
   const logAdPlay = React.useCallback((ad) => {
-    if (!venue || !ad) return;
+    if (!venue || !ad || isPreviewMode) return;
     supabase.from('retail_ad_plays').insert({
       ad_id: ad.id,
       venue_id: venue.id,
@@ -321,6 +345,26 @@ export default function RetailPlayerPage() {
   }
 
   if (!venue) {
+    if (isAdmin) {
+      return (
+        <div className="min-h-screen bg-black text-white flex items-center justify-center px-6 text-center">
+          <div className="w-full max-w-sm space-y-4">
+            <p className="text-sm text-white/50">Your account isn't itself a venue. Preview through an existing one:</p>
+            <select
+              className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none"
+              value={previewVenueId || ''}
+              onChange={e => setPreviewVenueId(e.target.value || null)}
+            >
+              <option value="">Choose a venue…</option>
+              {allVenues.map(v => <option key={v.id} value={v.id}>{v.business_name}</option>)}
+            </select>
+            {allVenues.length === 0 && (
+              <p className="text-xs text-white/25">No venues exist yet, add one in Admin → Content → Retail → Venues.</p>
+            )}
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="min-h-screen bg-black text-white flex items-center justify-center px-6 text-center">
         <p className="text-sm text-white/50">This account isn't linked to a Feelz Retail venue.</p>
@@ -389,6 +433,35 @@ export default function RetailPlayerPage() {
           </div>
         )}
       </div>
+
+      {isPreviewMode && (
+        <div className="bg-yellow-500/10 border-b border-yellow-500/20 px-4 py-2 flex items-center justify-between">
+          <p className="text-xs text-yellow-400">Admin preview, nothing you do here is recorded against this venue's real numbers.</p>
+          <button onClick={() => { setPreviewVenueId(null); setVenue(null); }} className="text-xs font-bold text-yellow-300 hover:text-yellow-200 flex-shrink-0 ml-3">Exit</button>
+        </div>
+      )}
+
+      {/* Admin bar. Only admins see this. Gives direct access to every retail
+          admin tab from inside the player itself, so you're not bouncing back
+          out to the main admin panel to change a playlist and back in again. */}
+      {isAdmin && (
+        <div className="bg-white/[0.03] border-b border-white/[0.06] px-4 py-2">
+          <div className="flex items-center space-x-2 overflow-x-auto">
+            <span className="text-[10px] uppercase tracking-widest text-white/25 font-semibold flex-shrink-0 mr-1">Admin</span>
+            {[
+              ['Playlists', 'playlists'], ['Venues', 'venues'], ['Ads', 'ads'],
+              ['Pitches', 'pitches'], ['Payouts', 'payouts'], ['Analytics', 'analytics'],
+              ['Pricing', 'pricing'], ['Auto-Compile', 'autocompile'],
+            ].map(([label, tab]) => (
+              <button key={tab}
+                onClick={() => navigate(`/admin/content?tab=retail&sub=${tab}`)}
+                className="text-[11px] font-semibold px-2.5 py-1 rounded-lg bg-white/[0.05] text-white/50 hover:bg-white/[0.1] hover:text-white/80 transition whitespace-nowrap flex-shrink-0">
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {showInbox && (
         <div className="fixed inset-0 z-30 bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center" onClick={() => setShowInbox(false)}>

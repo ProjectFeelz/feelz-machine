@@ -4,7 +4,7 @@
  * Route: /admin/content
  */
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import AdminBoost from './AdminBoost';
 import AdminCompetitions from './AdminCompetitions';
 import AdminModeration from './AdminModeration';
@@ -27,8 +27,12 @@ function Tab({ active, onClick, children }) {
 export default function AdminContent() {
   const navigate = useNavigate();
   const { isAdmin } = useAuth();
-  const [tab, setTab] = useState('boost');
-  const [mounted, setMounted] = useState({ boost: true });
+  // Honour ?tab= so links from elsewhere (the retail player's admin bar)
+  // land on the right tab instead of always defaulting to Boost.
+  const [searchParams] = useSearchParams();
+  const initialTab = searchParams.get('tab') || 'boost';
+  const [tab, setTab] = useState(initialTab);
+  const [mounted, setMounted] = useState({ [initialTab]: true });
 
   const switchTab = (t) => {
     setTab(t);

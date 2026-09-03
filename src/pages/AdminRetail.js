@@ -7,7 +7,7 @@
 // foundation migration).
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import { Store, ArrowLeft, Loader, Plus, X, Music, Megaphone, DollarSign, Image as ImageIcon, Camera } from 'lucide-react';
@@ -28,7 +28,10 @@ const inputCls = "w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-
 export default function AdminRetail({ embedded = false }) {
   const navigate = useNavigate();
   const { isAdmin } = useAuth();
-  const [tab, setTab] = useState('pitches');
+  // Honour ?sub= so the retail player's admin bar can deep-link straight
+  // to a specific tab rather than always opening on Pitches.
+  const [searchParams] = useSearchParams();
+  const [tab, setTab] = useState(searchParams.get('sub') || 'pitches');
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState('');
 
