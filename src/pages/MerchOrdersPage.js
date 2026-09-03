@@ -79,7 +79,7 @@ export default function MerchOrdersPage() {
         </div>
       </div>
 
-      <div className="px-4 pt-5 max-w-lg mx-auto">
+      <div className="px-4 pt-5">
         {loading ? (
           <div className="flex justify-center py-16"><Loader className="w-6 h-6 animate-spin text-white/20" /></div>
         ) : error ? (

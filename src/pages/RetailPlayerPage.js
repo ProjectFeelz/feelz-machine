@@ -403,7 +403,12 @@ export default function RetailPlayerPage() {
       </Helmet>
       <audio ref={audioRef} onEnded={advance} onTimeUpdate={handleTimeUpdate} />
 
-      <div className="sticky top-0 z-10 bg-black/95 backdrop-blur-xl border-b border-white/[0.05] px-4 py-4">
+      <div className="sticky top-0 z-10 backdrop-blur-xl px-4 py-4"
+        style={{
+          background: 'linear-gradient(135deg, rgba(30,20,60,0.97) 0%, rgba(14,14,18,0.97) 60%)',
+          borderBottom: '1px solid rgba(167,139,250,0.18)',
+          boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+        }}>
         <div className="flex items-start justify-between">
           <div>
             <p className="text-purple-400 text-xs font-bold tracking-widest uppercase">Feelz Retail</p>
@@ -445,9 +450,13 @@ export default function RetailPlayerPage() {
           admin tab from inside the player itself, so you're not bouncing back
           out to the main admin panel to change a playlist and back in again. */}
       {isAdmin && (
-        <div className="bg-white/[0.03] border-b border-white/[0.06] px-4 py-2">
+        <div className="px-4 py-2.5"
+          style={{
+            background: 'linear-gradient(90deg, rgba(167,139,250,0.10) 0%, rgba(167,139,250,0.03) 100%)',
+            borderBottom: '1px solid rgba(167,139,250,0.15)',
+          }}>
           <div className="flex items-center space-x-2 overflow-x-auto">
-            <span className="text-[10px] uppercase tracking-widest text-white/25 font-semibold flex-shrink-0 mr-1">Admin</span>
+            <span className="text-[10px] uppercase tracking-widest text-purple-300/70 font-bold flex-shrink-0 mr-1">Admin</span>
             {[
               ['Playlists', 'playlists'], ['Venues', 'venues'], ['Ads', 'ads'],
               ['Pitches', 'pitches'], ['Payouts', 'payouts'], ['Analytics', 'analytics'],
@@ -455,7 +464,7 @@ export default function RetailPlayerPage() {
             ].map(([label, tab]) => (
               <button key={tab}
                 onClick={() => navigate(`/admin/content?tab=retail&sub=${tab}`)}
-                className="text-[11px] font-semibold px-2.5 py-1 rounded-lg bg-white/[0.05] text-white/50 hover:bg-white/[0.1] hover:text-white/80 transition whitespace-nowrap flex-shrink-0">
+                className="text-[11px] font-semibold px-2.5 py-1 rounded-lg bg-purple-500/10 text-purple-200/70 border border-purple-400/15 hover:bg-purple-500/25 hover:text-white hover:border-purple-400/40 transition whitespace-nowrap flex-shrink-0">
                 {label}
               </button>
             ))}
@@ -491,7 +500,7 @@ export default function RetailPlayerPage() {
         </div>
       )}
 
-      <div className="max-w-2xl mx-auto px-4 pt-5">
+      <div className="px-4 pt-5">
         {!selectedPlaylist ? (
           <>
             {recommended.length > 0 && (
@@ -515,12 +524,22 @@ export default function RetailPlayerPage() {
             ) : playlists.length === 0 ? (
               <p className="text-sm text-white/30 text-center py-12">No playlists available yet.</p>
             ) : (
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
                 {playlists.map(pl => (
                   <button key={pl.id} onClick={() => openPlaylist(pl)}
-                    className="rounded-xl bg-white/[0.04] border border-white/[0.08] p-4 text-left hover:bg-white/[0.07] transition">
-                    <p className="text-sm font-bold text-white">{pl.title}</p>
-                    {pl.mood && <p className="text-xs text-white/40 mt-0.5">{pl.mood}</p>}
+                    className="text-left group">
+                    <div className="w-full aspect-square rounded-xl overflow-hidden mb-3 flex items-center justify-center transition duration-300 group-hover:-translate-y-1"
+                      style={{
+                        background: 'linear-gradient(135deg, rgba(167,139,250,0.14) 0%, rgba(30,20,55,0.9) 100%)',
+                        border: '1px solid rgba(167,139,250,0.20)',
+                        boxShadow: '0 6px 24px rgba(0,0,0,0.45)',
+                      }}>
+                      {pl.cover_image_url
+                        ? <img src={pl.cover_image_url} alt="" className="w-full h-full object-cover group-hover:scale-105 transition duration-300" />
+                        : <Music className="w-9 h-9 text-purple-300/25" />}
+                    </div>
+                    <p className="text-sm font-bold text-white truncate">{pl.title}</p>
+                    {pl.mood && <p className="text-xs text-white/40 mt-0.5 truncate">{pl.mood}</p>}
                   </button>
                 ))}
               </div>
@@ -560,8 +579,13 @@ export default function RetailPlayerPage() {
       </div>
 
       {(currentTrack || mode === 'ad') && (
-        <div className="fixed bottom-0 left-0 right-0 bg-black/95 backdrop-blur-xl border-t border-white/[0.08] px-4 py-3">
-          <div className="max-w-2xl mx-auto flex items-center space-x-3">
+        <div className="fixed bottom-0 left-0 right-0 backdrop-blur-xl px-4 py-3"
+          style={{
+            background: 'linear-gradient(180deg, rgba(30,20,60,0.97) 0%, rgba(14,14,18,0.98) 100%)',
+            borderTop: '1px solid rgba(167,139,250,0.20)',
+            boxShadow: '0 -8px 32px rgba(0,0,0,0.6)',
+          }}>
+          <div className="flex items-center space-x-3">
             {mode === 'ad' ? (
               <>
                 <div className="w-10 h-10 rounded-lg bg-purple-500/20 flex items-center justify-center flex-shrink-0">

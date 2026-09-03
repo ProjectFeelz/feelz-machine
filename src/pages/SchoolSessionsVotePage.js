@@ -110,7 +110,7 @@ export default function SchoolSessionsVotePage() {
 
   return (
     <div className="min-h-screen bg-black text-white">
-      <div className="max-w-lg mx-auto px-6 pt-14 pb-24 space-y-6">
+      <div className="px-6 pt-14 pb-24 space-y-6">
         <div className="flex items-center space-x-2.5">
           <div className="w-8 h-8 rounded-lg border border-lime-400 flex items-center justify-center text-lime-400 font-bold text-xs">FM</div>
           <div>

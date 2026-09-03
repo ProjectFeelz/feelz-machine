@@ -195,7 +195,7 @@ export default function UserProfilePage() {
 
   return (
     <div className="min-h-screen bg-black text-white">
-      <div className="max-w-lg mx-auto px-4 py-6 pb-32">
+      <div className="px-4 py-6 pb-32">
 
         {/* Header */}
         <div className="flex items-center space-x-3 mb-8">

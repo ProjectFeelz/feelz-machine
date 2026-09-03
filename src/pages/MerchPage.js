@@ -146,7 +146,7 @@ function ProductDetail({ product, artist, onBack }) {
         </button>
       </div>
 
-      <div className="px-4 pt-4 max-w-lg mx-auto">
+      <div className="px-4 pt-4">
 
         {/* Main image */}
         <div className="aspect-square rounded-2xl overflow-hidden mb-3 bg-white/[0.03] border border-white/[0.06] relative">

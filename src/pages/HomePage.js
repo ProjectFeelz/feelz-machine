@@ -630,14 +630,14 @@ export default function HomePage() {
 
   const { pullProps, pullProgress, isRefreshing } = usePullToRefresh(fetchData);
 
-  if (loading) return <HomeSkeleton />;
-
   // Manually-controlled hero. Its own effect and state so if this fails or
   // nothing is live, Home simply renders without a hero.
   useEffect(() => {
     supabase.from('home_hero').select('*').eq('is_active', true).maybeSingle()
       .then(({ data }) => setHero(data));
   }, []);
+
+  if (loading) return <HomeSkeleton />;
 
   return (
     <div className="pb-4 scroll-page" {...pullProps}>
