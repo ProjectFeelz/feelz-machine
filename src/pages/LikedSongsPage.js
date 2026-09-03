@@ -88,7 +88,7 @@ export default function LikedSongsPage() {
   };
 
   return (
-    <div className="pb-32 px-4 max-w-4xl">
+    <div className="pb-32 px-4">
       <div className="flex items-center space-x-3 mb-4 sticky top-0 z-20 bg-black/95 backdrop-blur-xl md:relative md:top-auto md:bg-transparent md:backdrop-blur-none pt-14 md:pt-4 pb-3 -mx-4 px-4 border-b border-white/[0.04] md:border-none">
         <button onClick={() => navigate('/library')}
           className="w-9 h-9 flex items-center justify-center rounded-full bg-white/[0.06] hover:bg-white/[0.1] transition">

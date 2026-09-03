@@ -99,7 +99,7 @@ export default function SchoolSessionsJudgePanel() {
   return (
     <div className="min-h-screen bg-black text-white">
       <Helmet><title>Judge Panel, School Sessions</title><meta name="robots" content="noindex, nofollow" /></Helmet>
-      <div className="max-w-4xl mx-auto px-5 pt-8 pb-24">
+      <div className="px-5 pt-8 pb-24">
         <p className="text-lime-400 text-xs font-bold tracking-widest uppercase mb-1">School Sessions</p>
         <h1 className="text-2xl font-bold mb-1">Judge Panel</h1>
         <p className="text-sm text-white/40 mb-6">Mark entries as finalists, then pick the winner once finalists are set.</p>

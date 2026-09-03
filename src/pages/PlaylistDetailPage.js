@@ -214,7 +214,7 @@ export default function PlaylistDetailPage() {
   const heroCover = playlist?.cover_url || (collageSrcs.length === 1 ? collageSrcs[0] : null);
 
   return (
-    <div className="pb-32 max-w-4xl mx-auto">
+    <div className="pb-32">
 
       {/* ── Hero cover ── */}
       <div className="relative w-full overflow-hidden mb-0" style={{ height: 220 }}>

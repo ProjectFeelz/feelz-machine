@@ -102,10 +102,11 @@ export default function DesktopSidebar() {
     <aside
       className="hidden md:flex flex-col w-64 fixed left-0 top-0 bottom-0 z-40 border-r border-white/[0.06]"
       style={{
-        background: 'rgba(10,10,10,0.85)',
+        background: 'rgba(14,14,16,0.94)',
         backdropFilter: 'blur(24px)',
         WebkitBackdropFilter: 'blur(24px)',
-        borderRight: '1px solid rgba(255,255,255,0.06)',
+        borderRight: '1px solid rgba(255,255,255,0.12)',
+        boxShadow: '8px 0 32px rgba(0,0,0,0.5)',
       }}>
 
       {/* Logo */}

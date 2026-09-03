@@ -176,7 +176,11 @@ export default function MiniPlayer() {
 
       {/* Player bar */}
       <div
-        className="bg-[#111]/95 backdrop-blur-xl border-t border-white/[0.06] px-3 py-2.5 cursor-pointer"
+        className="bg-[#0e0e10]/97 backdrop-blur-xl px-3 py-2.5 cursor-pointer"
+        style={{
+          borderTop: '1px solid rgba(255,255,255,0.12)',
+          boxShadow: '0 -8px 28px rgba(0,0,0,0.6)',
+        }}
         onClick={handleExpand}
       >
         <div className="flex items-center justify-between max-w-lg mx-auto">

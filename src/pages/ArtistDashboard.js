@@ -646,7 +646,7 @@ export default function ArtistDashboard() {
 
   return (
     <div className="min-h-screen bg-black text-white">
-      <div className="max-w-4xl mx-auto px-6 py-8 pb-32">
+      <div className="px-6 py-8 pb-32">
 
         {/* ── Header ── */}
         <div className="flex items-center space-x-3 mb-6">

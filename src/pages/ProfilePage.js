@@ -416,7 +416,7 @@ export default function ProfilePage() {
   const hasAnyLinks  = SOCIALS.some(p => form[p.key]);
 
   return (
-    <div className="pb-8 px-4 md:px-0 max-w-4xl md:mx-auto">
+    <div className="pb-8 px-4 md:px-0">
       <Helmet>
         <link rel="icon" href="/favicon.ico" />
         <link rel="apple-touch-icon" href="/logo192.png" />

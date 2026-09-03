@@ -157,7 +157,7 @@ export default function HubPage() {
   }
 
   return (
-    <div className="pb-32 px-4 md:px-0 max-w-4xl md:mx-auto">
+    <div className="pb-32 px-4 md:px-0">
       <Helmet>
         <link rel="icon" href="/favicon.ico" />
         <link rel="apple-touch-icon" href="/logo192.png" />
@@ -234,7 +234,7 @@ export default function HubPage() {
           {isAdmin && (
             <Section title="Admin" icon={Shield}>
               <LinkCard icon={Shield} label="Admin Panel" description="Broadcast · Analytics · Moderation · Users" path="/admin" color="bg-yellow-500/20" />
-              <LinkCard icon={Store} label="Retail Player" description="Jump straight into the venue player" path="/retail" color="bg-purple-500/20" />
+              <LinkCard icon={Store} label="Retail Player" description="Jump straight into the venue player" path="/retail/player" color="bg-purple-500/20" />
               <LinkCard icon={Send} label="Newsletter" description="Compose updates for the app or retail venues" path="/newsletter/compose" color="bg-purple-500/20" />
             </Section>
           )}
@@ -256,7 +256,7 @@ export default function HubPage() {
           {/* Retail venue */}
           {isRetailVenue && (
             <Section title="Feelz Retail" icon={Store}>
-              <LinkCard icon={Store} label="Retail Player" description="Pick a mood, play music for your venue" path="/retail" color="bg-purple-500/20" />
+              <LinkCard icon={Store} label="Retail Player" description="Pick a mood, play music for your venue" path="/retail/player" color="bg-purple-500/20" />
             </Section>
           )}
 

@@ -4,10 +4,11 @@ import { useAuth } from '../contexts/AuthContext';
 import { useTier } from '../contexts/useTier';
 import { getListenerFeature } from '../contexts/useTier';
 import { supabase } from '../supabaseClient';
+import { usePlayer } from '../contexts/PlayerContext';
 import {
   Heart, Download, ListMusic, Users, Clock, ChevronRight, TrendingUp,
   Music, BarChart3, Zap, Crown, Palette,
-  Shield, ChevronDown, Check, BarChart2,
+  Shield, ChevronDown, Check, BarChart2, Play,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
@@ -39,12 +40,14 @@ export default function LibraryPage() {
   const { user, isArtist } = useAuth();
   const { listenerTierSlug } = useTier();
   const navigate = useNavigate();
+  const { playTrack } = usePlayer();
   const [stats, setStats] = useState({
     likes: 0, recentTrack: null, playlists: 0, following: 0, downloads: 0,
     totalStreams: 0, topArtist: null, monthlyDownloads: 0,
   });
   const [prefs, setPrefs] = useState({ theme: 'default', fanBadge: true });
   const [featured, setFeatured] = useState([]);
+  const [newToYou, setNewToYou] = useState([]);
   const [savingPrefs, setSavingPrefs] = useState(false);
   const [showThemes, setShowThemes] = useState(false);
 
@@ -90,6 +93,30 @@ export default function LibraryPage() {
       .limit(6)
       .then(({ data }) => setFeatured(data || []));
   }, []);
+
+  // "New to you" strip. Prefers recent tracks from artists this user
+  // actually follows; falls back to recent published tracks if they don't
+  // follow anyone yet, so the strip is never empty for a new account.
+  useEffect(() => {
+    const load = async () => {
+      let ids = [];
+      if (user) {
+        const { data: follows } = await supabase
+          .from('follows').select('artist_id').eq('follower_id', user.id).limit(50);
+        ids = (follows || []).map(f => f.artist_id).filter(Boolean);
+      }
+      let q = supabase.from('tracks')
+        .select('id, title, slug, cover_artwork_url, created_at, artists(artist_name)')
+        .eq('is_published', true)
+        .not('cover_artwork_url', 'is', null)
+        .order('created_at', { ascending: false })
+        .limit(15);
+      if (ids.length > 0) q = q.in('artist_id', ids);
+      const { data } = await q;
+      setNewToYou(data || []);
+    };
+    load();
+  }, [user]);
 
   useEffect(() => {
     if (!user) return;
@@ -173,7 +200,7 @@ export default function LibraryPage() {
   ];
 
   return (
-    <div className="pb-4 px-4 md:px-0">
+    <div className="pb-8 px-4 md:px-0">
       <Helmet>
         <link rel="icon" href="/favicon.ico" />
         <link rel="apple-touch-icon" href="/logo192.png" />
@@ -373,6 +400,40 @@ export default function LibraryPage() {
               <ChevronRight className="w-5 h-5 text-white/15 group-hover:text-white/30 transition flex-shrink-0" />
             </button>
           ))}
+
+          {/* "New to you" strip. Deliberately muted, this sits below the
+              main cards and shouldn't compete with them for attention.
+              Scrolls sideways, click any item to play it directly. */}
+          {newToYou.length > 0 && (
+            <div className="md:col-span-2 mt-6">
+              <p className="text-[10px] uppercase tracking-widest text-white/20 font-semibold mb-3">New to you</p>
+              <div className="flex space-x-3 overflow-x-auto pb-2" style={{ scrollbarWidth: 'thin' }}>
+                {newToYou.map(t => (
+                  <button
+                    key={t.id}
+                    onClick={() => playTrack(t, newToYou)}
+                    className="flex-shrink-0 w-[110px] text-left group"
+                  >
+                    <div className="w-[110px] h-[110px] rounded-lg overflow-hidden bg-white/[0.04] mb-2 relative">
+                      <img
+                        src={t.cover_artwork_url}
+                        alt=""
+                        className="w-full h-full object-cover opacity-50 group-hover:opacity-90 transition duration-300"
+                        style={{ filter: 'grayscale(0.5)' }}
+                      />
+                      <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition">
+                        <div className="w-8 h-8 rounded-full bg-white/90 flex items-center justify-center">
+                          <Play className="w-3.5 h-3.5 text-black ml-0.5" fill="black" />
+                        </div>
+                      </div>
+                    </div>
+                    <p className="text-[11px] text-white/50 truncate group-hover:text-white/80 transition">{t.title}</p>
+                    <p className="text-[10px] text-white/25 truncate">{t.artists?.artist_name}</p>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {featured.length > 0 && (

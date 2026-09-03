@@ -602,7 +602,7 @@ export default function NotificationsPage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto px-4 pb-32">
+    <div className="px-4 pb-32">
       <Helmet>
         <link rel="icon" href="/favicon.ico" />
         <link rel="apple-touch-icon" href="/logo192.png" />

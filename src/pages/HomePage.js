@@ -887,29 +887,34 @@ export default function HomePage() {
             <button onClick={() => navigate('/browse')}
               className="text-xs text-white/30 hover:text-white/50 transition">See all →</button>
           </div>
-          <div className="mx-6 rounded-2xl py-4 px-4"
+          <div className="mx-6 rounded-2xl py-6 px-5"
             style={{
-              background: 'linear-gradient(135deg, rgba(88,28,135,0.18) 0%, rgba(30,27,75,0.35) 60%, rgba(15,15,35,0.9) 100%)',
-              border: '1px solid rgba(139,92,246,0.2)',
+              background: 'linear-gradient(135deg, rgba(139,92,246,0.28) 0%, rgba(88,28,135,0.35) 55%, rgba(20,15,45,0.95) 100%)',
+              border: '1px solid rgba(167,139,250,0.35)',
+              boxShadow: '0 8px 32px rgba(139,92,246,0.15)',
             }}>
-            <div className="flex space-x-4 overflow-x-auto scrollbar-hide">
+            <div className="flex space-x-5 overflow-x-auto scrollbar-hide">
               {featuredPlaylists.map(pl => {
                 const coverUrl = pl.cover_url || pl.playlist_tracks?.find(pt => pt.tracks?.cover_artwork_url)?.tracks?.cover_artwork_url;
                 return (
                   <button key={pl.id}
                     onClick={() => navigate(`/library/playlists/${pl.id}`)}
-                    className="flex-shrink-0 w-28 text-left group">
-                    <div className="w-28 h-28 rounded-xl overflow-hidden mb-2"
-                      style={{ background: 'rgba(139,92,246,0.1)', border: '1px solid rgba(139,92,246,0.15)' }}>
+                    className="flex-shrink-0 w-40 md:w-48 text-left group">
+                    <div className="w-40 h-40 md:w-48 md:h-48 rounded-xl overflow-hidden mb-3 relative"
+                      style={{
+                        background: 'rgba(139,92,246,0.12)',
+                        border: '1px solid rgba(167,139,250,0.25)',
+                        boxShadow: '0 4px 20px rgba(0,0,0,0.4)',
+                      }}>
                       {coverUrl
                         ? <img src={coverUrl} alt={pl.name} loading="lazy"
                             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
                         : <div className="w-full h-full flex items-center justify-center">
-                            <ListMusic className="w-8 h-8" style={{ color: 'rgba(139,92,246,0.3)' }} />
+                            <ListMusic className="w-12 h-12" style={{ color: 'rgba(167,139,250,0.4)' }} />
                           </div>}
                     </div>
-                    <p className="text-xs font-semibold text-white truncate">{pl.name}</p>
-                    <p className="text-[10px] text-white/30 truncate mt-0.5">
+                    <p className="text-sm font-bold text-white truncate">{pl.name}</p>
+                    <p className="text-xs text-white/40 truncate mt-0.5">
                       {pl.playlist_tracks?.length || 0} tracks
                     </p>
                   </button>

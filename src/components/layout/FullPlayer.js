@@ -832,7 +832,8 @@ export default function FullPlayer() {
           background: 'rgba(12,12,12,0.97)',
           backdropFilter: 'blur(24px)',
           WebkitBackdropFilter: 'blur(24px)',
-          borderLeft: '1px solid rgba(255,255,255,0.06)',
+          borderLeft: '1px solid rgba(255,255,255,0.12)',
+          boxShadow: '-8px 0 32px rgba(0,0,0,0.6)',
         } : { y, opacity }}
       >
         {/* Drag handle, mobile only, a docked desktop panel doesn't get dragged closed */}

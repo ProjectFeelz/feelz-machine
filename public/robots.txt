@@ -17,7 +17,7 @@ Disallow: /hub
 Disallow: /library
 Disallow: /profile
 Disallow: /admin
-Disallow: /retail
+Disallow: /retail/player
 Disallow: /schoolsessions/judge
 Disallow: /newsletter/compose
 

@@ -217,7 +217,7 @@ export default function AffiliatePage() {
   if (retailVenueChecked && isVenue) {
     const venueRefLink = affiliate ? `${BASE_URL}?ref=${affiliate.ref_code}` : '';
     return (
-      <div className="min-h-screen bg-black text-white pb-32 max-w-4xl mx-auto">
+      <div className="min-h-screen bg-black text-white pb-32">
         <div className="px-4 pt-14 pb-4 flex items-center space-x-3 border-b border-white/[0.04]">
           <button onClick={() => navigate(-1)} className="w-9 h-9 flex items-center justify-center rounded-full bg-white/[0.06]">
             <ChevronLeft className="w-5 h-5" />
@@ -282,7 +282,7 @@ export default function AffiliatePage() {
   ];
 
   return (
-    <div className="min-h-screen bg-black text-white pb-32 max-w-4xl mx-auto">
+    <div className="min-h-screen bg-black text-white pb-32">
       {/* Header */}
       <div className="px-4 pt-14 pb-4 flex items-center space-x-3 border-b border-white/[0.04]">
         <button onClick={() => navigate(-1)}

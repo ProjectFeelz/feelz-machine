@@ -64,10 +64,11 @@ export default function DesktopPlayer() {
       <div
         className="hidden md:block fixed bottom-0 left-64 right-0 z-50"
         style={{
-                    background: 'rgba(10,10,10,0.92)',
+                    background: 'rgba(14,14,16,0.96)',
                     backdropFilter: 'blur(32px)',
                     WebkitBackdropFilter: 'blur(32px)',
-                    borderTop: '1px solid rgba(255,255,255,0.07)',
+                    borderTop: '1px solid rgba(255,255,255,0.12)',
+                    boxShadow: '0 -8px 32px rgba(0,0,0,0.6), 0 -1px 0 rgba(255,255,255,0.04)',
         }}>
 {/* Seek bar */}
         <div

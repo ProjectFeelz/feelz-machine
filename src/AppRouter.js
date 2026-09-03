@@ -78,6 +78,7 @@ const NewsletterComposePage = React.lazy(() => import('./pages/NewsletterCompose
 const NewsletterPostPage = React.lazy(() => import('./pages/NewsletterPostPage'));
 const VipCardPrintPage = React.lazy(() => import('./pages/VipCardPrintPage'));
 const RetailJoinPage = React.lazy(() => import('./pages/RetailJoinPage'));
+const RetailLandingPage = React.lazy(() => import('./pages/RetailLandingPage'));
 
 // ── Session keepalive — refreshes token + listens for activity ───────────────
 function SessionManager() {
@@ -337,7 +338,8 @@ export default function AppRouter() {
                 <Route path="/admin/competitions" element={<AdminCompetitions />} />
                 <Route path="/admin/school-sessions" element={<AdminSchoolSessions />} />
                 <Route path="/admin/retail" element={<AdminRetail />} />
-                <Route path="/retail" element={<RetailPlayerPage />} />
+                <Route path="/retail" element={<RetailLandingPage />} />
+                <Route path="/retail/player" element={<RetailPlayerPage />} />
                 <Route path="/newsletter/compose" element={<NewsletterComposePage />} />
                 <Route path="/newsletter/:slug" element={<NewsletterPostPage />} />
                 <Route path="/admin/vip-card-print/:candidateId" element={<VipCardPrintPage />} />
