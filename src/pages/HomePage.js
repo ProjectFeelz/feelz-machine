@@ -159,6 +159,13 @@ function SquareCard({ item, itemList = [], isAlbum = false, showNew = false, onP
   );
 }
 
+const HERO_ACCENTS = {
+  lime:   { text: '#C6FF3D', bg: 'linear-gradient(135deg, rgba(198,255,61,0.20) 0%, rgba(20,30,10,0.95) 100%)' },
+  purple: { text: '#A78BFA', bg: 'linear-gradient(135deg, rgba(167,139,250,0.22) 0%, rgba(25,15,45,0.95) 100%)' },
+  amber:  { text: '#FBBF24', bg: 'linear-gradient(135deg, rgba(251,191,36,0.20) 0%, rgba(40,25,5,0.95) 100%)' },
+  rose:   { text: '#FB7185', bg: 'linear-gradient(135deg, rgba(251,113,133,0.20) 0%, rgba(45,12,20,0.95) 100%)' },
+};
+
 export default function HomePage() {
   const { user, artist } = useAuth();
   const { playTrack, currentTrack, isPlaying, togglePlay, replaceQueue } = usePlayer();
@@ -173,6 +180,7 @@ export default function HomePage() {
   const [recommended, setRecommended]               = useState([]);
   const [similarArtists, setSimilarArtists]         = useState([]);
   const [featuredPlaylists, setFeaturedPlaylists]   = useState([]);
+  const [hero, setHero]                             = useState(null);
   const [followedReleases, setFollowedReleases]     = useState([]);
   const [loading, setLoading]                       = useState(true);
   const [actionSheetTrack, setActionSheetTrack]     = useState(null);
@@ -624,6 +632,13 @@ export default function HomePage() {
 
   if (loading) return <HomeSkeleton />;
 
+  // Manually-controlled hero. Its own effect and state so if this fails or
+  // nothing is live, Home simply renders without a hero.
+  useEffect(() => {
+    supabase.from('home_hero').select('*').eq('is_active', true).maybeSingle()
+      .then(({ data }) => setHero(data));
+  }, []);
+
   return (
     <div className="pb-4 scroll-page" {...pullProps}>
       <Helmet>
@@ -637,6 +652,41 @@ export default function HomePage() {
       </Helmet>
 
       <PullToRefreshIndicator pullProgress={pullProgress} isRefreshing={isRefreshing} />
+
+      {hero && (
+        <div className="px-6 pt-2 pb-6">
+          <button
+            onClick={() => hero.cta_path && navigate(hero.cta_path)}
+            className="w-full text-left rounded-2xl overflow-hidden relative group"
+            style={{ minHeight: '200px' }}
+          >
+            {hero.image_url && (
+              <img src={hero.image_url} alt="" className="absolute inset-0 w-full h-full object-cover" />
+            )}
+            <div className="absolute inset-0" style={{
+              background: hero.image_url
+                ? 'linear-gradient(90deg, rgba(0,0,0,0.88) 0%, rgba(0,0,0,0.6) 55%, rgba(0,0,0,0.25) 100%)'
+                : HERO_ACCENTS[hero.accent]?.bg || HERO_ACCENTS.lime.bg,
+            }} />
+            <div className="relative p-7 sm:p-9 max-w-xl">
+              {hero.eyebrow && (
+                <p className="text-[11px] font-bold tracking-[0.2em] uppercase mb-2"
+                  style={{ color: HERO_ACCENTS[hero.accent]?.text || HERO_ACCENTS.lime.text }}>
+                  {hero.eyebrow}
+                </p>
+              )}
+              <h2 className="text-2xl sm:text-3xl font-black text-white leading-tight">{hero.title}</h2>
+              {hero.subtitle && <p className="text-sm text-white/60 mt-2 leading-relaxed">{hero.subtitle}</p>}
+              {hero.cta_label && (
+                <span className="inline-block mt-5 px-5 py-2.5 rounded-xl text-sm font-bold text-black group-hover:scale-105 transition"
+                  style={{ background: HERO_ACCENTS[hero.accent]?.text || HERO_ACCENTS.lime.text }}>
+                  {hero.cta_label}
+                </span>
+              )}
+            </div>
+          </button>
+        </div>
+      )}
 
       <div className="greeting-hero px-6 pt-14 md:pt-6 pb-6 border-b border-white/[0.05] mb-6">
         <div className="flex items-center justify-between mb-1">
@@ -659,15 +709,6 @@ export default function HomePage() {
       {/* Stories rail — followed artists' 24hr clips */}
       <StoriesRail userId={user?.id} />
 
-      {/* Monthly Wrapped card */}
-      {wrappedNotif && (
-        <div className="mx-6 mb-6">
-          <WrappedCard notification={wrappedNotif} compact />
-        </div>
-      )}
-
-      {/* On This Day — resurface a track from exactly 1 year ago */}
-      <OnThisDay user={user} />
 
 
 
@@ -712,6 +753,19 @@ export default function HomePage() {
             ))}
           </div>
         </div>
+      )}
+
+      {/* From artists you follow — personal pull, logged-in users only */}
+      {followedReleases.length > 0 && (
+        <Section title="From Artists You Follow" icon={Users} gradient="rose" onSeeAll={() => navigate('/browse?tab=new')}>
+          <div className="flex space-x-3 overflow-x-auto px-6 scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
+            {followedReleases.map(track => (
+              <SquareCard key={track.id} item={track} itemList={followedReleases}
+                onPlay={handlePlay} onMore={handleMore}
+                currentTrack={currentTrack} isPlaying={isPlaying} />
+            ))}
+          </div>
+        </Section>
       )}
 
       {/* Artist of the Day — one undiscovered artist picked for this user */}
@@ -849,18 +903,6 @@ export default function HomePage() {
         </Section>
       )}
 
-      {/* From artists you follow — personal pull, logged-in users only */}
-      {followedReleases.length > 0 && (
-        <Section title="From Artists You Follow" icon={Users} gradient="rose" onSeeAll={() => navigate('/browse?tab=new')}>
-          <div className="flex space-x-3 overflow-x-auto px-6 scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
-            {followedReleases.map(track => (
-              <SquareCard key={track.id} item={track} itemList={followedReleases}
-                onPlay={handlePlay} onMore={handleMore}
-                currentTrack={currentTrack} isPlaying={isPlaying} />
-            ))}
-          </div>
-        </Section>
-      )}
 
       {/* Recommended */}
       {recommended.length > 0 && (
@@ -924,6 +966,16 @@ export default function HomePage() {
           </div>
         </div>
       )}
+
+      {/* Monthly Wrapped card */}
+      {wrappedNotif && (
+        <div className="mx-6 mb-6">
+          <WrappedCard notification={wrappedNotif} compact />
+        </div>
+      )}
+
+      {/* On This Day — resurface a track from exactly 1 year ago */}
+      <OnThisDay user={user} />
 
       {/* Artists to Follow */}
       {topArtists.length > 0 && (

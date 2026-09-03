@@ -14,7 +14,7 @@ import {
   ChevronRight, Crown, Zap, Star, LayoutDashboard,
   User, LogOut, DollarSign, Radio, Mic2,
   Loader, X, Youtube, Info, Search,
-  Plus, MessageSquare, Check, Send, Store, Trophy,
+  Plus, MessageSquare, Check, Send, Store, Trophy, Sparkles,
 } from 'lucide-react';
 
 function LinkCard({ icon: Icon, label, description, path, color, onClick }) {
@@ -236,6 +236,10 @@ export default function HubPage() {
               <LinkCard icon={Shield} label="Admin Panel" description="Broadcast · Analytics · Moderation · Users" path="/admin" color="bg-yellow-500/20" />
               <LinkCard icon={Store} label="Retail Player" description="Jump straight into the venue player" path="/retail/player" color="bg-purple-500/20" />
               <LinkCard icon={Store} label="Retail Admin" description="Playlists · venues · ads · payouts · analytics" path="/admin/content?tab=retail" color="bg-purple-500/20" />
+              <LinkCard icon={Store} label="Venue Invites" description="Add a venue and copy its signup link" path="/admin/content?tab=retail&sub=venues" color="bg-purple-500/20" />
+              <LinkCard icon={Trophy} label="School Sessions Preview" description="See the public page even while it's switched off" path="/schoolsessions" color="bg-lime-500/20" />
+              <LinkCard icon={Trophy} label="Judge Panel" description="Mark finalists and pick the winner" path="/schoolsessions/judge" color="bg-lime-500/20" />
+              <LinkCard icon={Sparkles} label="Home Hero" description="Control the big slot at the top of Home" path="/admin/home-hero" color="bg-lime-500/20" />
               <LinkCard icon={Send} label="Newsletter" description="Compose updates for the app or retail venues" path="/newsletter/compose" color="bg-purple-500/20" />
             </Section>
           )}
@@ -247,8 +251,9 @@ export default function HubPage() {
             </Section>
           )}
 
-          {/* School Sessions judge */}
-          {isSchoolSessionsJudge && (
+          {/* School Sessions judge — non-admin. Admins already get this in
+              the Admin section above, so this would otherwise double up. */}
+          {!isAdmin && isSchoolSessionsJudge && (
             <Section title="School Sessions" icon={Trophy}>
               <LinkCard icon={Trophy} label="Judge Panel" description="Mark finalists and pick the winner" path="/schoolsessions/judge" color="bg-lime-500/20" />
             </Section>

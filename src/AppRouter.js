@@ -79,6 +79,9 @@ const NewsletterPostPage = React.lazy(() => import('./pages/NewsletterPostPage')
 const VipCardPrintPage = React.lazy(() => import('./pages/VipCardPrintPage'));
 const RetailJoinPage = React.lazy(() => import('./pages/RetailJoinPage'));
 const RetailLandingPage = React.lazy(() => import('./pages/RetailLandingPage'));
+const AdminHomeHero = React.lazy(() => import('./pages/AdminHomeHero'));
+const RetailTermsPage = React.lazy(() => import('./pages/RetailTermsPage'));
+const RetailPrivacyPage = React.lazy(() => import('./pages/RetailPrivacyPage'));
 
 // ── Session keepalive — refreshes token + listens for activity ───────────────
 function SessionManager() {
@@ -344,6 +347,9 @@ export default function AppRouter() {
                 <Route path="/newsletter/:slug" element={<NewsletterPostPage />} />
                 <Route path="/admin/vip-card-print/:candidateId" element={<VipCardPrintPage />} />
                 <Route path="/retail/join/:token" element={<RetailJoinPage />} />
+                <Route path="/retail/terms" element={<RetailTermsPage />} />
+                <Route path="/retail/privacy" element={<RetailPrivacyPage />} />
+                <Route path="/admin/home-hero" element={<AdminHomeHero />} />
                 <Route path="/admin/engagement" element={<AdminEngagement />} />
                 <Route path="/library/discovered" element={<RecentlyDiscoveredPage />} />
                 <Route path="/listener/:userId" element={<ListenerProfilePage />} />

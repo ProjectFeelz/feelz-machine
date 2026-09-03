@@ -1,24 +1,61 @@
 User-agent: *
 Allow: /
 
-# Allow indexing of public pages
+# ── Public, indexable ────────────────────────────────────────────────────────
 Allow: /artist/
 Allow: /album/
+Allow: /track/
+Allow: /beat/
 Allow: /browse
 Allow: /about
 Allow: /vs/
+Allow: /competitions
+Allow: /schoolsessions
+Allow: /newsletter/
+Allow: /retail
 Allow: /terms-of-use
 Allow: /privacy-policy
+Allow: /terms
+Allow: /schoolsessions/terms
+Allow: /retail/terms
+Allow: /retail/privacy
 
-# Disallow private/auth pages
+# ── Private: account and personal surfaces ───────────────────────────────────
 Disallow: /dashboard
 Disallow: /setup
 Disallow: /hub
 Disallow: /library
 Disallow: /profile
+Disallow: /notifications
+Disallow: /listener/
+Disallow: /affiliates
+Disallow: /upgrade
+Disallow: /for-you
+Disallow: /feed
+Disallow: /home
+
+# ── Private: admin ───────────────────────────────────────────────────────────
 Disallow: /admin
+
+# ── Private: retail (the landing page above is public, the rest is not) ──────
 Disallow: /retail/player
+Disallow: /retail/join/
+
+# ── Private: competition tooling ─────────────────────────────────────────────
 Disallow: /schoolsessions/judge
+Disallow: /schoolsessions/vote
+
+# ── Private: compose and messaging ───────────────────────────────────────────
 Disallow: /newsletter/compose
+Disallow: /chat
+Disallow: /community
+Disallow: /collab-radar
+Disallow: /session/
+Disallow: /player
+
+# ── Private: transactional ───────────────────────────────────────────────────
+Disallow: /payment/
+Disallow: /merch-connect-callback
+Disallow: /login
 
 Sitemap: https://www.feelzmachine.com/sitemap.xml

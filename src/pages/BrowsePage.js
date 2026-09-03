@@ -29,14 +29,24 @@ const GENRE_TAGS = [
   'Latin', 'Soul', 'Jazz', 'Indie', 'Lo-Fi', 'Drill', 'Trap', 'House',
 ];
 
+// These values MUST match the mood vocabulary in TrackUploadPanel, otherwise
+// a filter can never match anything. The previous list used labels like
+// "Hype", "Late Night" and "Workout" that no track could ever be tagged
+// with, so five of the six filters always returned zero results.
 const MOOD_TAGS = [
-  { label: 'All Moods', value: null, emoji: '🎵' },
-  { label: 'Hype',      value: 'Hype',      emoji: '🔥' },
-  { label: 'Chill',     value: 'Chill',     emoji: '😌' },
-  { label: 'Late Night',value: 'Late Night', emoji: '🌙' },
-  { label: 'Workout',   value: 'Workout',   emoji: '💪' },
-  { label: 'Emotional', value: 'Emotional', emoji: '💔' },
-  { label: 'Vibes',     value: 'Vibes',     emoji: '✨' },
+  { label: 'All Moods',  value: null,          emoji: '🎵' },
+  { label: 'Chill',      value: 'Chill',       emoji: '😌' },
+  { label: 'Energetic',  value: 'Energetic',   emoji: '🔥' },
+  { label: 'Happy',      value: 'Happy',       emoji: '☀️' },
+  { label: 'Sad',        value: 'Sad',         emoji: '💔' },
+  { label: 'Dark',       value: 'Dark',        emoji: '🌑' },
+  { label: 'Smooth',     value: 'Smooth',      emoji: '🌊' },
+  { label: 'Romantic',   value: 'Romantic',    emoji: '💜' },
+  { label: 'Nostalgic',  value: 'Nostalgic',   emoji: '📼' },
+  { label: 'Groovy',     value: 'Groovy',      emoji: '🕺' },
+  { label: 'Dreamy',     value: 'Dreamy',      emoji: '✨' },
+  { label: 'Aggressive', value: 'Aggressive',  emoji: '⚡' },
+  { label: 'Peaceful',   value: 'Peaceful',    emoji: '🕊️' },
 ];
 
 // ── Search history helpers ────────────────────────────────────────────────────
@@ -543,29 +553,55 @@ export default function BrowsePage() {
 
 
 
-            <p className="section-label mb-3">Filter by Genre</p>
-            <div className="flex space-x-2 overflow-x-auto scrollbar-hide mb-3 -mx-1 px-1">
-              {GENRE_TAGS.map(genre => (
-                <button key={genre} onClick={() => setSelectedGenre(genre)}
-                  className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition ${
-                    selectedGenre === genre ? 'bg-white text-black' : 'bg-white/[0.06] text-white/40 hover:text-white/70'
-                  }`}>
-                  {genre}
-                </button>
-              ))}
+            {/* Genre and mood as the entry point, not a filter strip buried
+                under content. Browse is the "help me find X" surface, so the
+                way in is picking a genre or a mood. */}
+            <p className="section-label mb-3">Genres</p>
+            <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-2.5 mb-6">
+              {GENRE_TAGS.map(genre => {
+                const active = selectedGenre === genre;
+                return (
+                  <button key={genre} onClick={() => setSelectedGenre(genre)}
+                    className={`aspect-[4/3] rounded-xl px-3 flex items-end pb-3 text-left transition border ${
+                      active
+                        ? 'bg-white text-black border-white font-bold'
+                        : 'bg-white/[0.04] text-white/70 border-white/[0.06] hover:bg-white/[0.08] hover:text-white'
+                    }`}>
+                    <span className="text-sm font-semibold leading-tight">{genre}</span>
+                  </button>
+                );
+              })}
             </div>
-            <p className="section-label mb-2 mt-4">Filter by Mood</p>
-            <div className="flex space-x-2 overflow-x-auto scrollbar-hide mb-5 -mx-1 px-1">
-              {MOOD_TAGS.map(({ label, value, emoji }) => (
-                <button key={label} onClick={() => setSelectedMood(selectedMood === value ? null : value)}
-                  className={`flex-shrink-0 flex items-center space-x-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition ${
-                    selectedMood === value ? 'bg-white text-black' : 'bg-white/[0.06] text-white/40 hover:text-white/70'
-                  }`}>
-                  <span style={{fontSize:'11px'}}>{emoji}</span>
-                  <span>{label}</span>
-                </button>
-              ))}
+
+            <p className="section-label mb-3">Moods</p>
+            <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-2.5 mb-6">
+              {MOOD_TAGS.map(({ label, value, emoji }) => {
+                const active = selectedMood === value;
+                return (
+                  <button key={label} onClick={() => setSelectedMood(active ? null : value)}
+                    className={`aspect-[4/3] rounded-xl px-3 flex flex-col items-start justify-end pb-3 text-left transition border ${
+                      active
+                        ? 'bg-white text-black border-white font-bold'
+                        : 'bg-white/[0.04] text-white/70 border-white/[0.06] hover:bg-white/[0.08] hover:text-white'
+                    }`}>
+                    <span className="text-lg mb-1">{emoji}</span>
+                    <span className="text-sm font-semibold leading-tight">{label}</span>
+                  </button>
+                );
+              })}
             </div>
+
+            {(selectedGenre !== 'All' || selectedMood) && (
+              <div className="flex items-center space-x-2 mb-4">
+                <p className="text-xs text-white/40">
+                  Showing {filteredTracks.length} {filteredTracks.length === 1 ? 'track' : 'tracks'}
+                  {selectedGenre !== 'All' && <span className="text-white/70"> in {selectedGenre}</span>}
+                  {selectedMood && <span className="text-white/70"> feeling {selectedMood}</span>}
+                </p>
+                <button onClick={() => { setSelectedGenre('All'); setSelectedMood(null); }}
+                  className="text-xs text-white/30 hover:text-white/60 transition underline">Clear</button>
+              </div>
+            )}
             {filteredTracks.length > 0 ? (
               <>
                 <div className="hidden md:grid md:grid-cols-2 lg:grid-cols-3 gap-3 mb-4">

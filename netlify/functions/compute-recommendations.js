@@ -69,7 +69,7 @@ exports.handler = async (event) => {
       .select(`
         id, artist_id, genre, mood, engagement_score, stream_count,
         like_count, created_at, duration, download_price, is_downloadable,
-        bpm, beat_key, beat_scale,
+        bpm, beat_key, beat_scale, is_beat,
         collaborations(artist_id)
       `)
       .eq('is_published', true)
@@ -125,7 +125,7 @@ exports.handler = async (event) => {
         { data: feedbackData },
       ] = await Promise.all([
         // All-time streams (for genre taste)
-        supabase.from('streams').select('user_id, track_id, tracks(genre, mood, bpm, duration, artist_id)')
+        supabase.from('streams').select('user_id, track_id, tracks(genre, mood, bpm, duration, artist_id, is_beat)')
           .in('user_id', userIds).order('created_at', { ascending: false }).limit(10000),
         // Recent 7d streams (for recency penalty)
         supabase.from('streams').select('user_id, track_id')
@@ -185,6 +185,8 @@ exports.handler = async (event) => {
         const bpmSamples    = [];
         const artistStreams = {};
         const streamedIds   = new Set();
+        let beatStreams = 0;
+        let songStreams = 0;
 
         streams.forEach(s => {
           if (s.track_id) streamedIds.add(s.track_id);
@@ -193,6 +195,8 @@ exports.handler = async (event) => {
           if (m) moodCounts[m]    = (moodCounts[m]    || 0) + 1;
           if (b) bpmSamples.push(b);
           if (a) artistStreams[a] = (artistStreams[a]  || 0) + 1;
+          if (s.tracks?.is_beat === true)  beatStreams++;
+          if (s.tracks?.is_beat === false) songStreams++;
         });
 
         // Use behavior profile if richer than stream history
@@ -202,6 +206,15 @@ exports.handler = async (event) => {
         const topArtistId    = behavior.top_artist_id || Object.entries(artistStreams).sort((a,b)=>b[1]-a[1])[0]?.[0] || null;
         const avgBpm         = behavior.avg_bpm       || (bpmSamples.length ? bpmSamples.reduce((a,b)=>a+b,0)/bpmSamples.length : null);
         const behaviorTags   = new Set(behavior.behavior_tags || []);
+
+        // Beats vs songs. Only forms an opinion once there's enough history
+        // to be meaningful, otherwise a couple of accidental plays would
+        // skew someone's whole feed. Null means "no preference yet", which
+        // scores neutrally rather than guessing.
+        const beatTotal = beatStreams + songStreams;
+        const beatRatio = beatTotal >= 8 ? beatStreams / beatTotal : null;
+        const prefersBeats = beatRatio !== null && beatRatio >= 0.65;
+        const prefersSongs = beatRatio !== null && beatRatio <= 0.20;
 
         // Score every track
         const scored = allTracks.map(track => {
@@ -239,6 +252,17 @@ exports.handler = async (event) => {
 
             // BPM affinity (within ±10)
             if (avgBpm && track.bpm && Math.abs(track.bpm - avgBpm) <= 10) { score += 40; }
+
+            // Beats vs songs preference. Deliberately a nudge, not a wall:
+            // a strong beats listener still sees songs, just fewer of them.
+            // Weighted below genre (60-80) so it shapes the mix rather than
+            // dominating it.
+            if (prefersBeats) {
+              if (track.is_beat) { score += 45; if (reason === 'recommended') reason = 'your_beats'; }
+              else               { score -= 20; }
+            } else if (prefersSongs) {
+              if (track.is_beat) { score -= 25; }
+            }
 
             // Collab featuring a followed artist
             const collabs = collabIndex[track.id];

@@ -1069,7 +1069,7 @@ export default function ForYouPage() {
             mood_match: 'Your mood', new_release: 'New release',
             hidden_gem: 'Hidden gem', trending: 'Trending',
             top_artist: 'Your fave', feat_following: 'Features who you follow',
-            recommended: 'For you',
+            your_beats: 'Your kind of beat', recommended: 'For you',
           };
           fetched = recData.filter(r => r.tracks).map(r => ({
             ...r.tracks,

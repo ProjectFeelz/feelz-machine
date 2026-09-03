@@ -112,8 +112,14 @@ export default function RetailLandingPage() {
           </a>
         </div>
 
+        {/* Legal */}
+        <div className="mt-10 pt-6 border-t border-white/[0.06] flex items-center space-x-4">
+          <button onClick={() => navigate('/retail/terms')} className="text-xs text-white/30 hover:text-white/60 transition underline">Terms of Service</button>
+          <button onClick={() => navigate('/retail/privacy')} className="text-xs text-white/30 hover:text-white/60 transition underline">Privacy Notice</button>
+        </div>
+
         {/* Already a venue */}
-        <div className="mt-10 pt-8 border-t border-white/[0.06]">
+        <div className="mt-6 pt-6 border-t border-white/[0.06]">
           {user ? (
             <div className="flex items-start space-x-2.5">
               <Check className="w-4 h-4 text-white/25 flex-shrink-0 mt-0.5" />
