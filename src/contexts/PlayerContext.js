@@ -28,6 +28,10 @@ export function PlayerProvider({ children }) {
   const [shuffle, setShuffle]           = useState(false);
   const [repeat, setRepeat]             = useState('none');
   const [isMinimized, setIsMinimized]   = useState(false);
+  // Which tab the desktop docked player panel opens on when triggered,
+  // shared so DesktopPlayer's Queue button and FullPlayer's own tabs
+  // drive the same single panel instead of two competing ones.
+  const [desktopPanelView, setDesktopPanelView] = useState('player');
 
   const audioRef        = useRef(new Audio());
   const audioRefB       = useRef(new Audio());  // second element for crossfade
@@ -605,7 +609,7 @@ export function PlayerProvider({ children }) {
 
   const value = {
     currentTrack, isPlaying, duration, currentTime, volume, queue, queueIndex,
-    shuffle, repeat, isMinimized, setIsMinimized, playTrack, togglePlay, seek,
+    shuffle, repeat, isMinimized, setIsMinimized, desktopPanelView, setDesktopPanelView, playTrack, togglePlay, seek,
     setVolume: setVolumeLevel, setVolumeLevel, playNext, playPrev, addToQueue,
     removeFromQueue, moveInQueue, playNextInQueue, clearQueue, toggleShuffle, toggleRepeat,
     replaceQueue, jumpToIndex,

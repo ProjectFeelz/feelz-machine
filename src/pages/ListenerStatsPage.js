@@ -148,7 +148,7 @@ export default function ListenerStatsPage() {
   ];
 
   return (
-    <div className="pb-32 px-4 max-w-2xl mx-auto">
+    <div className="pb-32 px-4 max-w-4xl mx-auto">
       <Helmet>
         <link rel="icon" href="/favicon.ico" />
         <link rel="apple-touch-icon" href="/logo192.png" />

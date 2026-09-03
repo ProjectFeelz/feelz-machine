@@ -114,7 +114,7 @@ export default function ListenerProfilePage() {
   if (!profile) return null;
 
   return (
-    <div className="pb-32 max-w-2xl mx-auto">
+    <div className="pb-32 max-w-4xl mx-auto">
       <Helmet>
         <title>{profile.name} · Feelz Machine</title>
         <link rel="icon" href="/favicon.ico" />

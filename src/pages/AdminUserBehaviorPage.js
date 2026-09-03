@@ -177,7 +177,7 @@ export default function AdminUserBehaviorPage({ embedded = false }) {
   };
 
   return (
-    <div className="pt-4 pb-32 px-4">
+    <div className="pt-4 pb-32 px-4 max-w-4xl mx-auto">
       {/* Header */}
       <div className="flex items-center space-x-3 mb-6">
         <button onClick={() => navigate('/hub')} className="w-9 h-9 flex items-center justify-center rounded-full bg-white/[0.06]">

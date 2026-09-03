@@ -186,18 +186,18 @@ export default function PlaylistsPage() {
     return <Music className="w-5 h-5 text-white/30" />;
   };
 
-  const PlaylistRow = ({ playlist, isCollab = false }) => (
+  const PlaylistCard = ({ playlist, isCollab = false }) => (
     <div
       onClick={() => navigate(`/library/playlists/${playlist.id}`)}
-      className="flex items-center space-x-3 p-3 rounded-xl hover:bg-white/[0.04] transition group cursor-pointer"
+      className="p-3 rounded-xl hover:bg-white/[0.04] transition group cursor-pointer"
     >
-      {/* Cover with tap-to-upload for owners */}
-      <div className="relative w-12 h-12 flex-shrink-0">
-        <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-purple-600/30 to-blue-600/20 flex items-center justify-center relative overflow-hidden">
+      {/* Cover — square, full card width, with tap-to-upload for owners and a play overlay on hover */}
+      <div className="relative w-full aspect-square mb-3">
+        <div className="w-full h-full rounded-lg bg-gradient-to-br from-purple-600/30 to-blue-600/20 flex items-center justify-center relative overflow-hidden">
           <CollageCover playlist={playlist} />
           {(playlist.is_shared || isCollab) && (
-            <div className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-blue-500/80 flex items-center justify-center z-10">
-              <Users className="w-2.5 h-2.5 text-white" />
+            <div className="absolute top-2 left-2 w-6 h-6 rounded-full bg-blue-500/80 flex items-center justify-center z-10">
+              <Users className="w-3.5 h-3.5 text-white" />
             </div>
           )}
         </div>
@@ -207,7 +207,7 @@ export default function PlaylistsPage() {
             className="absolute inset-0 flex items-center justify-center rounded-lg opacity-0 group-hover:opacity-100 transition cursor-pointer bg-black/50"
             title="Change cover"
           >
-            <Camera className="w-3.5 h-3.5 text-white" />
+            <Camera className="w-5 h-5 text-white" />
             <input type="file" accept="image/*" className="hidden"
               ref={editingCoverId === playlist.id ? editCoverRef : null}
               onChange={e => {
@@ -216,31 +216,29 @@ export default function PlaylistsPage() {
               }} />
           </label>
         )}
-      </div>
-
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-white truncate">{playlist.name}</p>
-        <p className="text-xs text-white/30">
-          {playlist.playlist_tracks?.length || 0} tracks
-          {isCollab ? ' · Collaborative' : playlist.is_shared ? ' · Shared' : playlist.is_public ? ' · Public' : ' · Private'}
-        </p>
-      </div>
-
-      <div className="flex items-center space-x-1">
-        {/* Play button — always visible on hover */}
         {(playlist.playlist_tracks?.length || 0) > 0 && (
           <button
             onClick={e => playPlaylist(playlist, e)}
-            className="p-2 rounded-lg hover:bg-white/[0.08] transition opacity-0 group-hover:opacity-100"
+            className="absolute bottom-2 right-2 w-10 h-10 rounded-full bg-lime-400 shadow-lg flex items-center justify-center opacity-0 translate-y-1 group-hover:opacity-100 group-hover:translate-y-0 transition"
             title="Play playlist"
           >
-            <Play className="w-3.5 h-3.5 text-white/60" fill="rgba(255,255,255,0.6)" />
+            <Play className="w-4 h-4 text-black ml-0.5" fill="black" />
           </button>
         )}
+      </div>
+
+      <p className="text-sm font-medium text-white truncate">{playlist.name}</p>
+      <p className="text-xs text-white/30 truncate mb-1.5">
+        {playlist.playlist_tracks?.length || 0} tracks
+        {isCollab ? ' · Collaborative' : playlist.is_shared ? ' · Shared' : playlist.is_public ? ' · Public' : ' · Private'}
+      </p>
+
+      {/* Secondary actions — small, hover-revealed, kept out of the way of the card's main click target */}
+      <div className="flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition h-6">
         {playlist.is_shared && !isCollab && (
           <button
             onClick={e => { e.stopPropagation(); copyShareLink(playlist); }}
-            className="p-2 rounded-lg hover:bg-white/[0.08] transition opacity-0 group-hover:opacity-100"
+            className="p-1 rounded hover:bg-white/[0.08] transition"
             title="Copy share link"
           >
             {copiedId === playlist.id
@@ -251,7 +249,7 @@ export default function PlaylistsPage() {
         {!isCollab && (
           <button
             onClick={e => { e.stopPropagation(); deletePlaylist(playlist.id, playlist.name); }}
-            className="p-2 rounded-lg hover:bg-red-500/10 transition opacity-0 group-hover:opacity-100"
+            className="p-1 rounded hover:bg-red-500/10 transition"
           >
             <Trash2 className="w-3.5 h-3.5 text-red-400" />
           </button>
@@ -261,7 +259,7 @@ export default function PlaylistsPage() {
   );
 
   return (
-    <div className="pb-32 px-4 max-w-4xl">
+    <div className="pb-32 px-4 max-w-6xl">
       <div className="flex items-center mb-6 sticky top-0 z-20 bg-black/95 backdrop-blur-xl md:relative md:top-auto md:bg-transparent md:backdrop-blur-none pt-14 md:pt-4 pb-3 -mx-4 px-4 border-b border-white/[0.04] md:border-none">
         <div className="flex items-center space-x-3">
           <button onClick={() => navigate('/library')} className="w-9 h-9 flex items-center justify-center rounded-full bg-white/[0.06] hover:bg-white/[0.1] transition">
@@ -360,12 +358,12 @@ export default function PlaylistsPage() {
           <p className="text-white/15 text-xs mt-1">Tap "New" above to create one</p>
         </div>
       ) : (
-        <div className="space-y-1">
-          {playlists.map(p => <PlaylistRow key={p.id} playlist={p} />)}
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-1">
+          {playlists.map(p => <PlaylistCard key={p.id} playlist={p} />)}
           {sharedPlaylists.length > 0 && (
             <>
-              <p className="text-[10px] uppercase tracking-widest text-white/20 font-semibold pt-4 pb-2 px-1">Collaborative</p>
-              {sharedPlaylists.map(p => <PlaylistRow key={p.id} playlist={p} isCollab />)}
+              <p className="col-span-full text-[10px] uppercase tracking-widest text-white/20 font-semibold pt-4 pb-1 px-1">Collaborative</p>
+              {sharedPlaylists.map(p => <PlaylistCard key={p.id} playlist={p} isCollab />)}
             </>
           )}
         </div>

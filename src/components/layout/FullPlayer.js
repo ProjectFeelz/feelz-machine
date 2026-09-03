@@ -634,7 +634,7 @@ export default function FullPlayer() {
     currentTrack, isPlaying, togglePlay,
     playNext, playPrev, seek, duration, currentTime,
     shuffle, repeat, toggleShuffle, toggleRepeat,
-    isMinimized, setIsMinimized, queue, volume, setVolumeLevel,
+    isMinimized, setIsMinimized, desktopPanelView, setDesktopPanelView, queue, volume, setVolumeLevel,
     removeFromQueue, moveInQueue, jumpToIndex,
   } = usePlayer();
   const { user } = useAuth();
@@ -644,11 +644,24 @@ export default function FullPlayer() {
   const [draggingIdx, setDraggingIdx]         = useState(null);
   const [dragOverIdx, setDragOverIdx]         = useState(null);
   const [showShareCard, setShowShareCard]      = useState(false);
-  const [showQueue, setShowQueue]             = useState(false);
+  // Shared with DesktopPlayer's Queue button, so both drive the same
+  // single docked panel on desktop instead of two competing ones.
+  const showQueue    = desktopPanelView === 'queue';
+  const setShowQueue = (updater) => {
+    const next = typeof updater === 'function' ? updater(showQueue) : updater;
+    setDesktopPanelView(next ? 'queue' : 'player');
+  };
   const [showActionSheet, setShowActionSheet] = useState(false);
   const [displayMode, setDisplayMode]         = useState('artwork');
   const [lyrics, setLyrics]                   = useState(null);
   const [lyricsLoading, setLyricsLoading]     = useState(false);
+  const [isDesktop, setIsDesktop] = useState(() => typeof window !== 'undefined' && window.innerWidth >= 768);
+
+  React.useEffect(() => {
+    const onResize = () => setIsDesktop(window.innerWidth >= 768);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
 
   // Sleep timer
   const [sleepMinutes, setSleepMinutes]       = useState(null);   // null = off
@@ -803,21 +816,31 @@ export default function FullPlayer() {
   return (
     <>
       <motion.div
-        style={{ y, opacity }}
-        drag="y"
+        drag={isDesktop ? false : "y"}
         dragConstraints={{ top: 0, bottom: window.innerHeight }}
         dragElastic={{ top: 0, bottom: 0.3 }}
         onDragEnd={handleDragEnd}
-        initial={false}
-        animate={{ y: 0 }}
-        exit={{ y: '100%' }}
-        transition={{ type: 'tween', duration: 0.28, ease: [0.32, 0.72, 0, 1] }}
-        className="fixed inset-0 z-[100] bg-black flex flex-col"
+        initial={isDesktop ? { opacity: 0, x: 24 } : false}
+        animate={isDesktop ? { opacity: 1, x: 0 } : { y: 0 }}
+        exit={isDesktop ? { opacity: 0, x: 24 } : { y: '100%' }}
+        transition={isDesktop ? { duration: 0.18 } : { type: 'tween', duration: 0.28, ease: [0.32, 0.72, 0, 1] }}
+        className={isDesktop
+          ? "hidden md:flex fixed right-0 z-40 w-[400px] flex-col overflow-hidden"
+          : "fixed inset-0 z-[100] bg-black flex flex-col"}
+        style={isDesktop ? {
+          top: 0, bottom: '88px',
+          background: 'rgba(12,12,12,0.97)',
+          backdropFilter: 'blur(24px)',
+          WebkitBackdropFilter: 'blur(24px)',
+          borderLeft: '1px solid rgba(255,255,255,0.06)',
+        } : { y, opacity }}
       >
-        {/* Drag handle */}
+        {/* Drag handle, mobile only, a docked desktop panel doesn't get dragged closed */}
+        {!isDesktop && (
         <div className="flex justify-center pt-3 pb-1 cursor-grab active:cursor-grabbing flex-shrink-0">
           <div className="w-10 h-1 rounded-full bg-white/20" />
         </div>
+        )}
 
         {/* Header */}
         <div className="flex items-center justify-between px-5 pt-4 pb-2 flex-shrink-0">

@@ -16,14 +16,10 @@ export default function DesktopPlayer() {
           currentTrack, isPlaying, togglePlay, playNext, playPrev,
           duration, currentTime, seek, volume, setVolume,
           shuffle, toggleShuffle, repeat, toggleRepeat,
-          queue, queueIndex, setIsMinimized,
-          jumpToIndex, moveInQueue,
+          setIsMinimized, desktopPanelView, setDesktopPanelView,
     } = usePlayer();
-  const [draggingIdx, setDraggingIdx] = useState(null);
-  const [dragOverIdx, setDragOverIdx] = useState(null);
 
   const [liked, setLiked] = useState(false);
-    const [showQueue, setShowQueue] = useState(false);
     const [showActionSheet, setShowActionSheet] = useState(false);
 
   // Sync liked state when track changes
@@ -64,71 +60,6 @@ export default function DesktopPlayer() {
 
   return (
         <>
-  {/* Queue panel */}
-  {showQueue && (
-            <div
-             className="hidden md:block fixed right-0 z-40 w-72 overflow-y-auto"
-             style={{
-                           bottom: '88px', top: '0',
-                           background: 'rgba(12,12,12,0.95)',
-                           backdropFilter: 'blur(24px)',
-                           borderLeft: '1px solid rgba(255,255,255,0.06)',
-             }}>
-          <div
-              className="sticky top-0 px-5 py-4 flex items-center justify-between"
-              style={{ background: 'rgba(12,12,12,0.98)', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-            <p className="text-sm font-semibold text-white">Queue</p>
-            <button onClick={() => setShowQueue(false)} className="text-white/30 hover:text-white/60 transition text-lg leading-none">×</button>
-  </div>
-          <div className="px-3 py-2 space-y-0.5">
-{queue.map((track, i) => (
-                <div
-  key={`${track.id}-${i}`}
-  draggable={i !== queueIndex}
-  onDragStart={() => { if (i !== queueIndex) setDraggingIdx(i); }}
-  onDragOver={e => { e.preventDefault(); if (draggingIdx !== null && i !== queueIndex) setDragOverIdx(i); }}
-  onDrop={() => {
-    if (draggingIdx !== null && draggingIdx !== i) { moveInQueue(draggingIdx, i); }
-    setDraggingIdx(null); setDragOverIdx(null);
-  }}
-  onDragEnd={() => { setDraggingIdx(null); setDragOverIdx(null); }}
-  onClick={() => { if (i !== queueIndex) jumpToIndex(i); }}
-  className={`flex items-center space-x-3 px-3 py-2.5 rounded-xl transition cursor-pointer ${
-    i === queueIndex ? 'bg-white/[0.08]' : 'hover:bg-white/[0.06] active:bg-white/[0.1]'
-  } ${draggingIdx === i ? 'opacity-40' : ''} ${dragOverIdx === i && draggingIdx !== i ? 'border-t-2 border-purple-400' : ''}`}>
-  {/* Drag handle */}
-  {i !== queueIndex && (
-    <div className="flex flex-col space-y-0.5 flex-shrink-0 cursor-grab px-0.5 opacity-20 hover:opacity-50">
-      {[0,1,2].map(j => <div key={j} className="w-3 h-0.5 rounded-full bg-white" />)}
-    </div>
-  )}
-  <div className="w-9 h-9 rounded-lg overflow-hidden bg-white/[0.06] flex-shrink-0">
-    {track.cover_artwork_url
-      ? <img src={track.cover_artwork_url} alt="" className="w-full h-full object-cover" />
-      : <div className="w-full h-full flex items-center justify-center text-white/20 text-xs">♪</div>}
-  </div>
-  <div className="flex-1 min-w-0">
-    <p className={`text-xs font-medium truncate ${i === queueIndex ? 'text-white' : 'text-white/70'}`}>{track.title}</p>
-    <p className="text-[10px] text-white/30 truncate">{track.artist_name}</p>
-  </div>
-  {i === queueIndex ? (
-    <div className="flex items-end space-x-0.5 h-3 flex-shrink-0">
-      <div className="w-0.5 bg-white rounded-full animate-pulse" style={{ height: '100%' }} />
-      <div className="w-0.5 bg-white rounded-full animate-pulse" style={{ height: '60%', animationDelay: '0.15s' }} />
-      <div className="w-0.5 bg-white rounded-full animate-pulse" style={{ height: '80%', animationDelay: '0.3s' }} />
-    </div>
-  ) : (
-    <span className="text-[9px] text-white/20 flex-shrink-0">{i + 1}</span>
-  )}
-</div>
-            ))}
-{queue.length === 0 && (
-                <p className="text-center text-white/20 text-xs py-8">Queue is empty</p>
-             )}
-</div>
-  </div>
-      )}
-
 {/* Player bar */}
       <div
         className="hidden md:block fixed bottom-0 left-64 right-0 z-50"
@@ -220,10 +151,10 @@ export default function DesktopPlayer() {
                               <div className="h-full rounded-full bg-white/60" style={{ width: `${volume * 100}%` }} />
                 </div>
 
-{/* Queue toggle */}
+{/* Queue toggle — opens the same docked panel FullPlayer uses, on its queue tab */}
             <button
-              onClick={() => setShowQueue(p => !p)}
-              className={`w-8 h-8 flex items-center justify-center rounded-full transition ${showQueue ? 'text-white bg-white/10' : 'text-white/40 hover:text-white/70 hover:bg-white/[0.04]'}`}>
+              onClick={() => { setDesktopPanelView('queue'); setIsMinimized(false); }}
+              className={`w-8 h-8 flex items-center justify-center rounded-full transition ${desktopPanelView === 'queue' ? 'text-white bg-white/10' : 'text-white/40 hover:text-white/70 hover:bg-white/[0.04]'}`}>
               <ListMusic className="w-4 h-4" />
                 </button>
 
@@ -236,7 +167,7 @@ export default function DesktopPlayer() {
 
 {/* Expand to full player */}
             <button
-              onClick={() => setIsMinimized(false)}
+              onClick={() => { setDesktopPanelView('player'); setIsMinimized(false); }}
               className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/10 transition text-white/40 hover:text-white/70">
                               <Maximize2 className="w-4 h-4" />
                 </button>

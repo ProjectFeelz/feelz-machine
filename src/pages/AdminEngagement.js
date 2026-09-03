@@ -309,7 +309,7 @@ export default function AdminEngagement({ embedded = false }) {
       </div>
 
       )}
-      <div className="px-5 pt-5 space-y-5">
+      <div className="px-5 pt-5 space-y-5 max-w-4xl mx-auto">
         {/* How it works banner */}
         <div className="rounded-xl bg-purple-500/10 border border-purple-500/20 p-4">
           <div className="flex items-center space-x-2 mb-2">

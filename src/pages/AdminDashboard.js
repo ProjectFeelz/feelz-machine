@@ -321,7 +321,7 @@ export default function AdminDashboard() {
       </div>
 
       {/* Platform stats grid */}
-      <div className="grid grid-cols-4 gap-2 mb-6">
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2 mb-6">
         {stats.map(s => {
           const Icon = s.icon;
           return (
@@ -340,7 +340,7 @@ export default function AdminDashboard() {
       {ADMIN_SECTIONS.map(({ heading, items }) => (
         <div key={heading} className="mb-5">
           <p className="text-[10px] uppercase tracking-widest text-white/25 font-semibold px-1 mb-2">{heading}</p>
-          <div className="grid grid-cols-1 gap-2">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
             {items.map(({ label, icon: Icon, path, color, desc }) => (
               <button key={label} onClick={() => navigate(path)}
                 className="flex items-center space-x-3 px-3 py-3 bg-white/[0.03] rounded-xl border border-white/[0.06] hover:bg-white/[0.06] active:scale-[0.98] transition text-left group">

@@ -572,7 +572,7 @@ export default function AdminCompetitions({ embedded = false }) {
       </div>
 
       )}
-      <div className="px-5 pt-5 space-y-5">
+      <div className="px-5 pt-5 space-y-5 max-w-4xl mx-auto">
         {/* Create form */}
         {showCreate && (
           <div className="rounded-2xl bg-white/[0.02] border border-yellow-500/20 p-5">

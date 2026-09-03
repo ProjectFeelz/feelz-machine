@@ -267,7 +267,7 @@ export default function AdminBroadcast({ embedded = false }) {
     };
 
     return (
-        <div className="pt-4 pb-8 px-4">
+        <div className="pt-4 pb-8 px-4 max-w-4xl mx-auto">
             <div className="flex items-center space-x-3 mb-8">
                 <button onClick={() => navigate('/hub')}
                     className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/[0.06] transition">

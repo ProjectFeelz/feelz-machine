@@ -248,14 +248,14 @@ export function AuthProvider({ children }) {
     return data;
   };
 
-  const signUpWithEmail = async (email, password) => {
+  const signUpWithEmail = async (email, password, redirectPath = '/setup') => {
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
-      options: { emailRedirectTo: `${window.location.origin}/setup` },
+      options: { emailRedirectTo: `${window.location.origin}${redirectPath}` },
     });
     if (error) throw error;
-    // Do NOT call loadUser here — the user hasn't confirmed their email yet.
+    // Do NOT call loadUser here, the user hasn't confirmed their email yet.
     // Supabase sends the confirmation email after this call.
     // Once they click the link, the session will load automatically.
     return data;

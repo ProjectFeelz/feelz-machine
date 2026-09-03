@@ -49,7 +49,7 @@ function Section({ title, icon: Icon, children }) {
   return (
     <div className="mb-6">
       <SectionHeader title={title} icon={Icon} />
-      <div className="space-y-2">{children}</div>
+      <div className="space-y-2 md:grid md:grid-cols-2 md:gap-2 md:space-y-0">{children}</div>
     </div>
   );
 }
@@ -157,7 +157,7 @@ export default function HubPage() {
   }
 
   return (
-    <div className="pb-32 px-4 md:px-0">
+    <div className="pb-32 px-4 md:px-0 max-w-4xl md:mx-auto">
       <Helmet>
         <link rel="icon" href="/favicon.ico" />
         <link rel="apple-touch-icon" href="/logo192.png" />

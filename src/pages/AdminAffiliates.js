@@ -133,7 +133,7 @@ export default function AdminAffiliates({ embedded = false }) {
           <p className="text-xs text-white/30 mt-0.5">Manage your affiliate programme</p>
         </div>
       </div>
-      <div className="space-y-4">
+      <div className="space-y-4 max-w-4xl mx-auto">
       {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
         {[

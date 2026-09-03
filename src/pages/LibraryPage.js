@@ -335,7 +335,7 @@ export default function LibraryPage() {
       )}
 
       {/* ── Navigation items ── */}
-      <div className="space-y-1">
+      <div className="space-y-1 md:grid md:grid-cols-2 md:gap-2 md:space-y-0">
         {items.map(({ icon: Icon, label, path, iconColor, accent, count, sub }) => (
           <button
             key={path}

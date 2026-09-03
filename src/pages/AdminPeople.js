@@ -558,7 +558,7 @@ export default function AdminPeople() {
           <Tab active={tab === 'bugs'}       onClick={() => setTab('bugs')}>Bug Reports</Tab>
         </div>
       </div>
-      <div className="px-4 pt-5">
+      <div className="px-4 pt-5 max-w-4xl mx-auto">
         {tab === 'artists'    && <ArtistsTab />}
         {tab === 'listeners'  && <ListenersTab />}
         {tab === 'duplicates' && <DuplicatesTab />}

@@ -1,6 +1,6 @@
 // src/pages/SchoolSessionsPage.js
-// Public landing page at /schoolsessions — linked from the flyer/card QR
-// codes. ALWAYS visible to anyone, regardless of the enabled/region gate —
+// Public landing page at /schoolsessions. Linked from the flyer/card QR
+// codes. ALWAYS visible to anyone, regardless of the enabled/region gate,
 // that gate now only controls the "enter" / "vote" call to action, not the
 // page itself, since schools outside the current season need to be able to
 // see this and nominate their district for next time.
@@ -23,7 +23,7 @@ import useSchoolSessions from '../hooks/useSchoolSessions';
 import DistrictNomination from '../components/DistrictNomination';
 import { supabase } from '../supabaseClient';
 
-// Prominent hero countdown — ticks every second, shown as separate
+// Prominent hero countdown, ticks every second, shown as separate
 // day/hour/min/sec boxes.
 function BigCountdown({ to, label }) {
   const [now, setNow] = React.useState(Date.now());
@@ -55,7 +55,7 @@ function BigCountdown({ to, label }) {
   );
 }
 
-// Public gallery of all entries — not just finalists. Paginated so a large
+// Public gallery of all entries, not just finalists. Paginated so a large
 // competition doesn't load everything at once.
 const PAGE_SIZE = 12;
 function EntryGallery({ compId }) {
@@ -188,7 +188,7 @@ export default function SchoolSessionsPage() {
 
   // Eligible = the current season is switched on AND this visitor passes
   // the region/school gate. Everything below this point renders regardless
-  // — eligibility only changes which call-to-action shows at the bottom.
+  // Eligibility only changes which call-to-action shows at the bottom.
   const eligible = gate.enabled && gate.allowed;
   const comp = gate.config?.competition;
   const phase = currentPhase(comp);
@@ -198,9 +198,9 @@ export default function SchoolSessionsPage() {
 
   const BASE_URL = 'https://www.feelzmachine.com';
   const pageUrl = `${BASE_URL}/schoolsessions`;
-  const pageTitle = 'School Sessions — a high school music competition · Feelz Machine';
+  const pageTitle = 'School Sessions, a high school music competition · Feelz Machine';
   const pageDesc = comp?.prize_breakdown_text || comp?.prize_description
-    || 'Pick a song from the shortlist and cover it. Cash prizes for the winning school and student — judged by a panel, with a public People\u2019s Choice vote too.';
+    || 'Pick a song from the shortlist and cover it. Cash prizes for the winning school and student, judged by a panel, with a public People\u2019s Choice vote too.';
 
   return (
     <div className="min-h-screen bg-black text-white">
@@ -238,7 +238,7 @@ export default function SchoolSessionsPage() {
             School<br /><span className="text-lime-400">Sessions</span>
           </h1>
           <p className="text-white/50 text-sm lg:text-lg lg:max-w-xl leading-relaxed">
-            Pick a song from the shortlist and cover it — your own vocal performance. Your school could walk away with cash.
+            Pick a song from the shortlist and cover it, your own vocal performance. Your school could walk away with cash.
           </p>
           {entryCount !== null && entryCount > 0 && (
             <p className="text-xs lg:text-sm text-white/40 font-medium">
@@ -247,11 +247,14 @@ export default function SchoolSessionsPage() {
           )}
           {!eligible && (
             <p className="text-xs text-white/30">
-              {!gate.enabled ? "Not currently running — see below to put your district forward for next time." : "Not running in your district right now — nominate it below."}
+              {!gate.enabled ? "Not currently running. See below to put your district forward for next time." : "Not running in your district right now, nominate it below."}
             </p>
           )}
         </div>
 
+        {eligible && phase === 'awareness' && comp?.entries_open_at && (
+          <BigCountdown to={comp.entries_open_at} label="Entries open in" />
+        )}
         {eligible && phase === 'submissions' && comp?.entries_close_at && (
           <BigCountdown to={comp.entries_close_at} label="Time left to submit" />
         )}
@@ -263,13 +266,13 @@ export default function SchoolSessionsPage() {
         <div className="rounded-xl border border-white/10 bg-lime-400/[0.04] p-5 lg:p-8">
           <p className="text-3xl lg:text-5xl font-bold text-lime-400">{comp?.prize_description || 'R10,000 CASH'}</p>
           <p className="text-xs lg:text-sm text-white/50 mt-2 lg:mt-3 leading-relaxed lg:max-w-md">
-            {comp?.prize_breakdown_text || 'R5,000 to the winning school + R5,000 to the winning student — split among the group if you enter as one.'}
+            {comp?.prize_breakdown_text || 'R5,000 to the winning school + R5,000 to the winning student, split among the group if you enter as one.'}
           </p>
         </div>
 
         {/* How it works */}
         <p className="text-xs text-white/50 leading-relaxed border-l-2 border-lime-400 pl-3">
-          <span className="text-white font-semibold">Pick a song from the shortlist and cover it</span> — your own vocal performance over the original track. Solo or as a group; if your group wins, the R5,000 student prize splits evenly across everyone listed.
+          <span className="text-white font-semibold">Pick a song from the shortlist and cover it</span>, your own vocal performance over the original track. Solo or as a group; if your group wins, the R5,000 student prize splits evenly across everyone listed.
         </p>
 
         {/* Song shortlist */}
@@ -309,7 +312,7 @@ export default function SchoolSessionsPage() {
         <div className="rounded-xl border border-white/[0.06] bg-white/[0.03] p-4 flex items-start space-x-3">
           <ThumbsUp className="w-4 h-4 text-lime-400 flex-shrink-0 mt-0.5" />
           <p className="text-xs text-white/50 leading-relaxed">
-            <span className="text-white font-semibold">A judging panel picks the finalists and the winner</span> (announced closer to the time). The public vote runs alongside as a separate <span className="text-white font-semibold">People's Choice</span> pick — post your cover on TikTok and rally votes.
+            <span className="text-white font-semibold">A judging panel picks the finalists and the winner</span> (announced closer to the time). The public vote runs alongside as a separate <span className="text-white font-semibold">People's Choice</span> pick, post your cover on TikTok and rally votes.
           </p>
         </div>
 
@@ -320,7 +323,7 @@ export default function SchoolSessionsPage() {
           <p className="text-lime-400 text-xs lg:text-sm font-bold tracking-widest uppercase">Three months, three phases</p>
           <div className="space-y-3 lg:space-y-0 lg:grid lg:grid-cols-3 lg:gap-4">
             {[
-              { key: 'awareness', icon: Megaphone, title: 'Awareness', desc: 'Get ready — take the courses below, check the song shortlist, spread the word.' },
+              { key: 'awareness', icon: Megaphone, title: 'Awareness', desc: 'Get ready, take the courses below, check the song shortlist, spread the word.' },
               { key: 'submissions', icon: UploadIcon, title: 'Submissions', desc: 'Pick a song from the shortlist, record your cover, and toggle "Enter into School Sessions" when you upload.' },
               { key: 'voting', icon: ThumbsUp, title: 'Voting', desc: 'Judges announce finalists and pick the winner. The public votes separately for the People\u2019s Choice pick.' },
             ].map((p, i) => {
@@ -353,7 +356,7 @@ export default function SchoolSessionsPage() {
                   <PlayCircle className="w-4 h-4 text-lime-400 flex-shrink-0" />
                   <div>
                     <p className="text-sm font-semibold text-white">How to Use Feelz Machine</p>
-                    <p className="text-xs text-white/40 mt-0.5">Recording, uploading, splits — so nobody's at a disadvantage.</p>
+                    <p className="text-xs text-white/40 mt-0.5">Recording, uploading, splits, so nobody's at a disadvantage.</p>
                   </div>
                 </a>
               )}
@@ -371,13 +374,13 @@ export default function SchoolSessionsPage() {
           </div>
         )}
 
-        {/* CTA — gated by eligibility; the rest of the page never is */}
+        {/* CTA, gated by eligibility; the rest of the page never is */}
         {eligible ? (
           phase === 'voting' || phase === 'done' ? (
             <button
               onClick={() => navigate('/schoolsessions/vote')}
               className="w-full lg:w-auto lg:px-10 py-3.5 bg-lime-400 text-black font-bold rounded-xl flex items-center justify-center space-x-2 hover:bg-lime-300 transition">
-              <span>{phase === 'done' ? 'See the results' : "Vote — People's Choice"}</span>
+              <span>{phase === 'done' ? 'See the results' : "Vote, People's Choice"}</span>
               <ArrowRight className="w-4 h-4" />
             </button>
           ) : (
@@ -390,7 +393,7 @@ export default function SchoolSessionsPage() {
           )
         ) : null}
 
-        {/* Always visible, regardless of eligibility — this is the whole
+        {/* Always visible, regardless of eligibility, this is the whole
             point: schools outside the current run need a way in too. */}
         <DistrictNomination nextSeason={nextSeason} />
 

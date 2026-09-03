@@ -6,11 +6,11 @@
 // once you set its status to 'active' (see the RLS policies in the
 // foundation migration).
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
-import { Store, ArrowLeft, Loader, Plus, X, Music, Megaphone, DollarSign } from 'lucide-react';
+import { Store, ArrowLeft, Loader, Plus, X, Music, Megaphone, DollarSign, Image as ImageIcon, Camera } from 'lucide-react';
 
 function TabButton({ active, onClick, children }) {
   return (
@@ -48,6 +48,11 @@ export default function AdminRetail({ embedded = false }) {
   const [totalActiveVenues, setTotalActiveVenues] = useState(0);
 
   const [newPlaylist, setNewPlaylist] = useState({ title: '', mood: '', description: '' });
+  const [newPlaylistCoverFile, setNewPlaylistCoverFile] = useState(null);
+  const [newPlaylistCoverPreview, setNewPlaylistCoverPreview] = useState(null);
+  const newPlaylistCoverRef = useRef(null);
+  const [uploadingPlaylistCover, setUploadingPlaylistCover] = useState(null); // playlist id currently uploading, for existing playlists
+  const editPlaylistCoverRef = useRef(null);
   const [expandedPlaylistId, setExpandedPlaylistId] = useState(null);
   const [playlistTracksMap, setPlaylistTracksMap] = useState({});
   const [trackSearch, setTrackSearch] = useState('');
@@ -177,13 +182,34 @@ export default function AdminRetail({ embedded = false }) {
 
   const createPlaylist = async () => {
     if (!newPlaylist.title.trim()) return;
+    let coverUrl = null;
+    if (newPlaylistCoverFile) {
+      const path = `retail-playlists/${Date.now()}-${newPlaylistCoverFile.name.replace(/[^a-zA-Z0-9.]/g, '_')}`;
+      const { error: upErr } = await supabase.storage.from('covers').upload(path, newPlaylistCoverFile, { cacheControl: '31536000' });
+      if (upErr) { showToast('Cover upload failed: ' + upErr.message); return; }
+      coverUrl = supabase.storage.from('covers').getPublicUrl(path).data.publicUrl;
+    }
     const { data, error } = await supabase.from('retail_playlists')
-      .insert({ title: newPlaylist.title.trim(), mood: newPlaylist.mood.trim() || null, description: newPlaylist.description.trim() || null })
+      .insert({ title: newPlaylist.title.trim(), mood: newPlaylist.mood.trim() || null, description: newPlaylist.description.trim() || null, cover_image_url: coverUrl })
       .select().single();
     if (error) { showToast('Error: ' + error.message); return; }
     setPlaylists(prev => [data, ...prev]);
     setNewPlaylist({ title: '', mood: '', description: '' });
+    setNewPlaylistCoverFile(null);
+    setNewPlaylistCoverPreview(null);
     showToast('Playlist created');
+  };
+
+  const updatePlaylistCover = async (playlistId, file) => {
+    setUploadingPlaylistCover(playlistId);
+    const path = `retail-playlists/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.]/g, '_')}`;
+    const { error: upErr } = await supabase.storage.from('covers').upload(path, file, { cacheControl: '31536000' });
+    if (upErr) { showToast('Cover upload failed: ' + upErr.message); setUploadingPlaylistCover(null); return; }
+    const coverUrl = supabase.storage.from('covers').getPublicUrl(path).data.publicUrl;
+    const { error } = await supabase.from('retail_playlists').update({ cover_image_url: coverUrl }).eq('id', playlistId);
+    setUploadingPlaylistCover(null);
+    if (error) { showToast('Error: ' + error.message); return; }
+    setPlaylists(prev => prev.map(p => p.id === playlistId ? { ...p, cover_image_url: coverUrl } : p));
   };
 
   const togglePlaylistActive = async (playlist) => {
@@ -280,6 +306,14 @@ export default function AdminRetail({ embedded = false }) {
     if (error) { showToast('Error: ' + error.message); return; }
     setVenues(prev => prev.map(v => v.id === venue.id ? { ...v, user_id: foundUserId } : v));
     showToast('Login linked');
+  };
+
+  const getInviteLink = async (venue) => {
+    const { data: token, error } = await supabase.rpc('generate_venue_signup_token', { p_venue_id: venue.id });
+    if (error) { showToast('Error: ' + error.message); return; }
+    const link = `${window.location.origin}/retail/join/${token}`;
+    navigator.clipboard.writeText(link);
+    showToast('Invite link copied, valid for 14 days');
   };
 
   const toggleVenueAds = async (venue) => {
@@ -555,12 +589,28 @@ export default function AdminRetail({ embedded = false }) {
 
           {tab === 'playlists' && (
             <div className="space-y-4">
-              <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4 space-y-3">
+              <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4 space-y-3 max-w-2xl">
                 <p className="text-xs font-bold text-white/50 uppercase tracking-wide">New playlist</p>
-                <input className={inputCls} placeholder="Title (e.g. Coffee Mornings)" value={newPlaylist.title}
-                  onChange={e => setNewPlaylist({ ...newPlaylist, title: e.target.value })} />
-                <input className={inputCls} placeholder="Mood / situation (e.g. calm, upbeat)" value={newPlaylist.mood}
-                  onChange={e => setNewPlaylist({ ...newPlaylist, mood: e.target.value })} />
+                <div className="flex items-center space-x-3">
+                  <button type="button" onClick={() => newPlaylistCoverRef.current?.click()}
+                    className="w-14 h-14 rounded-xl overflow-hidden bg-white/[0.06] border border-white/[0.08] flex items-center justify-center flex-shrink-0 hover:bg-white/[0.1] transition">
+                    {newPlaylistCoverPreview
+                      ? <img src={newPlaylistCoverPreview} alt="" className="w-full h-full object-cover" />
+                      : <ImageIcon className="w-5 h-5 text-white/20" />}
+                  </button>
+                  <input ref={newPlaylistCoverRef} type="file" accept="image/*" className="hidden"
+                    onChange={e => {
+                      const f = e.target.files?.[0];
+                      if (f) { setNewPlaylistCoverFile(f); setNewPlaylistCoverPreview(URL.createObjectURL(f)); }
+                    }} />
+                  <p className="text-[11px] text-white/30 flex-1">{newPlaylistCoverPreview ? 'Tap to change cover' : 'Tap square to add a cover image'}</p>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <input className={inputCls} placeholder="Title (e.g. Coffee Mornings)" value={newPlaylist.title}
+                    onChange={e => setNewPlaylist({ ...newPlaylist, title: e.target.value })} />
+                  <input className={inputCls} placeholder="Mood / situation (e.g. calm, upbeat)" value={newPlaylist.mood}
+                    onChange={e => setNewPlaylist({ ...newPlaylist, mood: e.target.value })} />
+                </div>
                 <input className={inputCls} placeholder="Description (optional)" value={newPlaylist.description}
                   onChange={e => setNewPlaylist({ ...newPlaylist, description: e.target.value })} />
                 <button onClick={createPlaylist}
@@ -572,10 +622,27 @@ export default function AdminRetail({ embedded = false }) {
                   <p className="text-xs text-white/30 py-4 text-center">No playlists yet.</p>
                 ) : playlists.map(pl => (
                   <div key={pl.id} className="rounded-xl border border-white/[0.06] bg-white/[0.02] overflow-hidden">
-                    <div className="flex items-center justify-between p-3 cursor-pointer" onClick={() => togglePlaylistExpand(pl)}>
-                      <div className="min-w-0">
-                        <p className="text-sm font-semibold text-white truncate">{pl.title}</p>
-                        <p className="text-xs text-white/40">{pl.mood || 'No mood set'}</p>
+                    <div className="flex items-center justify-between p-3 cursor-pointer group" onClick={() => togglePlaylistExpand(pl)}>
+                      <div className="flex items-center space-x-3 min-w-0">
+                        <div className="relative w-11 h-11 flex-shrink-0">
+                          <div className="w-11 h-11 rounded-lg overflow-hidden bg-white/[0.06] flex items-center justify-center">
+                            {pl.cover_image_url
+                              ? <img src={pl.cover_image_url} alt="" className="w-full h-full object-cover" />
+                              : <ImageIcon className="w-4 h-4 text-white/15" />}
+                          </div>
+                          <label onClick={e => e.stopPropagation()}
+                            className="absolute inset-0 flex items-center justify-center rounded-lg opacity-0 group-hover:opacity-100 transition cursor-pointer bg-black/50">
+                            {uploadingPlaylistCover === pl.id
+                              ? <Loader className="w-3.5 h-3.5 text-white animate-spin" />
+                              : <Camera className="w-3.5 h-3.5 text-white" />}
+                            <input type="file" accept="image/*" className="hidden"
+                              onChange={e => { const f = e.target.files?.[0]; if (f) updatePlaylistCover(pl.id, f); }} />
+                          </label>
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-white truncate">{pl.title}</p>
+                          <p className="text-xs text-white/40">{pl.mood || 'No mood set'}</p>
+                        </div>
                       </div>
                       <button onClick={(e) => { e.stopPropagation(); togglePlaylistActive(pl); }}
                         className={`text-[10px] font-bold px-2 py-1 rounded-full flex-shrink-0 ${pl.is_active ? 'bg-purple-500/20 text-purple-300' : 'bg-white/[0.06] text-white/30'}`}>
@@ -642,16 +709,18 @@ export default function AdminRetail({ embedded = false }) {
 
           {tab === 'venues' && (
             <div className="space-y-4">
-              <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4 space-y-3">
+              <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4 space-y-3 max-w-2xl">
                 <p className="text-xs font-bold text-white/50 uppercase tracking-wide">New venue</p>
-                <input className={inputCls} placeholder="Business name" value={newVenue.business_name}
-                  onChange={e => setNewVenue({ ...newVenue, business_name: e.target.value })} />
-                <input className={inputCls} placeholder="Contact name" value={newVenue.contact_name}
-                  onChange={e => setNewVenue({ ...newVenue, contact_name: e.target.value })} />
-                <input className={inputCls} placeholder="Contact email" value={newVenue.contact_email}
-                  onChange={e => setNewVenue({ ...newVenue, contact_email: e.target.value })} />
-                <input className={inputCls} placeholder="Contact phone" value={newVenue.contact_phone}
-                  onChange={e => setNewVenue({ ...newVenue, contact_phone: e.target.value })} />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <input className={inputCls} placeholder="Business name" value={newVenue.business_name}
+                    onChange={e => setNewVenue({ ...newVenue, business_name: e.target.value })} />
+                  <input className={inputCls} placeholder="Contact name" value={newVenue.contact_name}
+                    onChange={e => setNewVenue({ ...newVenue, contact_name: e.target.value })} />
+                  <input className={inputCls} placeholder="Contact email" value={newVenue.contact_email}
+                    onChange={e => setNewVenue({ ...newVenue, contact_email: e.target.value })} />
+                  <input className={inputCls} placeholder="Contact phone" value={newVenue.contact_phone}
+                    onChange={e => setNewVenue({ ...newVenue, contact_phone: e.target.value })} />
+                </div>
                 <button onClick={createVenue}
                   className="w-full py-2.5 rounded-lg bg-purple-500 text-white text-sm font-bold hover:bg-purple-400 transition">Add venue</button>
               </div>
@@ -694,6 +763,12 @@ export default function AdminRetail({ embedded = false }) {
                         className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-white/[0.06] text-white/40 hover:bg-white/[0.1] transition">
                         {v.user_id ? 'Re-link login' : 'Link login'}
                       </button>
+                      {!v.user_id && (
+                        <button onClick={() => getInviteLink(v)}
+                          className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-purple-500/10 text-purple-300 hover:bg-purple-500/20 transition">
+                          Get invite link
+                        </button>
+                      )}
                       <button onClick={() => toggleVenueAds(v)}
                         className={`text-[11px] font-bold px-2.5 py-1 rounded-lg transition ${v.ads_enabled ? 'bg-white/[0.06] text-white/40 hover:bg-white/[0.1]' : 'bg-purple-500/10 text-purple-300 hover:bg-purple-500/20'}`}>
                         {v.ads_enabled ? 'Ads on' : 'Ad-free'}
@@ -707,12 +782,14 @@ export default function AdminRetail({ embedded = false }) {
 
           {tab === 'ads' && (
             <div className="space-y-4">
-              <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4 space-y-3">
+              <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4 space-y-3 max-w-2xl">
                 <p className="text-xs font-bold text-white/50 uppercase tracking-wide">New ad</p>
-                <input className={inputCls} placeholder="Advertiser name" value={newAd.advertiser_name}
-                  onChange={e => setNewAd({ ...newAd, advertiser_name: e.target.value })} />
-                <input className={inputCls} placeholder="Audio file URL" value={newAd.audio_url}
-                  onChange={e => setNewAd({ ...newAd, audio_url: e.target.value })} />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <input className={inputCls} placeholder="Advertiser name" value={newAd.advertiser_name}
+                    onChange={e => setNewAd({ ...newAd, advertiser_name: e.target.value })} />
+                  <input className={inputCls} placeholder="Audio file URL" value={newAd.audio_url}
+                    onChange={e => setNewAd({ ...newAd, audio_url: e.target.value })} />
+                </div>
                 <select className={inputCls} value={newAd.venue_id}
                   onChange={e => setNewAd({ ...newAd, venue_id: e.target.value })}>
                   <option value="">Platform-wide (fallback for venues with no ads of their own)</option>
@@ -749,7 +826,7 @@ export default function AdminRetail({ embedded = false }) {
 
           {tab === 'payouts' && (
             <div className="space-y-6">
-              <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4 space-y-3">
+              <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4 space-y-3 max-w-2xl">
                 <p className="text-xs font-bold text-white/50 uppercase tracking-wide">Record ad revenue for a period</p>
                 <div className="grid grid-cols-2 gap-2">
                   <input type="date" className={inputCls} value={newAdRevenue.start}
@@ -765,7 +842,7 @@ export default function AdminRetail({ embedded = false }) {
                   className="w-full py-2.5 rounded-lg bg-white/[0.08] text-white text-sm font-bold hover:bg-white/[0.12] transition">Record revenue</button>
               </div>
 
-              <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4 space-y-3">
+              <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4 space-y-3 max-w-2xl">
                 <p className="text-xs font-bold text-white/50 uppercase tracking-wide">Calculate a payout</p>
                 <p className="text-[11px] text-white/30">Pools 50% of active subscription fees with 30% of any ad revenue recorded for this exact date range, split across artists by their share of qualifying plays (30+ seconds).</p>
                 <div className="grid grid-cols-2 gap-2">
@@ -815,7 +892,7 @@ export default function AdminRetail({ embedded = false }) {
 
           {tab === 'pricing' && (
             <div className="space-y-4">
-              <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4 space-y-3">
+              <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4 space-y-3 max-w-2xl">
                 <p className="text-xs font-bold text-white/50 uppercase tracking-wide">Add a venue type</p>
                 <input className={inputCls} placeholder="Venue type (e.g. Small cafe)" value={newPriceRow.venue_type}
                   onChange={e => setNewPriceRow({ ...newPriceRow, venue_type: e.target.value })} />
@@ -860,7 +937,7 @@ export default function AdminRetail({ embedded = false }) {
                 <div className="flex justify-center py-12"><Loader className="w-5 h-5 text-white/30 animate-spin" /></div>
               ) : !analytics ? null : (
                 <>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                     <div className="rounded-xl p-3 border border-white/[0.06] bg-white/[0.03]">
                       <p className="text-2xl font-black text-white">{analytics.totalPlays}</p>
                       <p className="text-xs text-white/40 mt-0.5">Qualifying plays</p>
@@ -879,6 +956,7 @@ export default function AdminRetail({ embedded = false }) {
                     </div>
                   </div>
 
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                   {[
                     { title: 'Most played', rows: analytics.topTracks },
                     { title: 'Most liked', rows: analytics.topLiked },
@@ -897,6 +975,7 @@ export default function AdminRetail({ embedded = false }) {
                       ))}
                     </div>
                   ))}
+                  </div>
                 </>
               )}
             </div>

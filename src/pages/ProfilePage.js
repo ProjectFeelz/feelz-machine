@@ -7,7 +7,7 @@ import {
   LogOut, ChevronRight, User, Music, Globe, Shield,
   Instagram, Twitter, Youtube, MessageCircle, Loader,
   Save, Palette, ExternalLink, DollarSign, Camera, Check,
-  Link, Zap, Crown, Star, Trash2, AlertTriangle, Plus, Mic, Sparkles, Info
+  Link, Zap, Crown, Star, Trash2, AlertTriangle, Plus, Mic, Sparkles, Info, Send
 } from 'lucide-react';
 import ThemeEditor from '../components/ThemeEditor';
 import PaymentSettings from '../components/PaymentSettings';
@@ -141,6 +141,13 @@ export default function ProfilePage() {
     setFreezing(false);
   };
   const [activeTab, setActiveTab]             = useState('profile');
+  const [isNewsletterEditor, setIsNewsletterEditor] = useState(false);
+
+  useEffect(() => {
+    if (!user) return;
+    supabase.from('newsletter_editors').select('id').eq('user_id', user.id).maybeSingle()
+      .then(({ data }) => setIsNewsletterEditor(!!data));
+  }, [user]);
   const [editing, setEditing]                 = useState(false);
   const [saving, setSaving]                   = useState(false);
   const [avatarUploading, setAvatarUploading] = useState(false);
@@ -409,7 +416,7 @@ export default function ProfilePage() {
   const hasAnyLinks  = SOCIALS.some(p => form[p.key]);
 
   return (
-    <div className="pb-8 px-4 md:px-0">
+    <div className="pb-8 px-4 md:px-0 max-w-4xl md:mx-auto">
       <Helmet>
         <link rel="icon" href="/favicon.ico" />
         <link rel="apple-touch-icon" href="/logo192.png" />
@@ -841,13 +848,33 @@ export default function ProfilePage() {
 
           {/* ── Payments tab ── */}
           {activeTab === 'payments' && (
-            <div className="rounded-2xl border border-white/[0.06] overflow-hidden mb-4" style={{ background: 'rgba(255,255,255,0.02)' }}>
-              <div className="flex items-center space-x-2 px-4 py-3 border-b border-white/[0.05]">
-                <DollarSign className="w-4 h-4 text-white/40" />
-                <p className="text-sm font-semibold text-white">Payments & Subscription</p>
+            <>
+              <div className="rounded-2xl border border-white/[0.06] overflow-hidden mb-4" style={{ background: 'rgba(255,255,255,0.02)' }}>
+                <div className="flex items-center space-x-2 px-4 py-3 border-b border-white/[0.05]">
+                  <DollarSign className="w-4 h-4 text-white/40" />
+                  <p className="text-sm font-semibold text-white">Payments & Subscription</p>
+                </div>
+                <div className="p-4"><PaymentSettings /></div>
               </div>
-              <div className="p-4"><PaymentSettings /></div>
-            </div>
+
+              {isNewsletterEditor && (
+                <div className="rounded-2xl border border-purple-500/30 overflow-hidden mb-4" style={{ background: 'rgba(139,92,246,0.06)' }}>
+                  <div className="flex items-center space-x-2 px-4 py-3 border-b border-purple-500/20">
+                    <Send className="w-4 h-4 text-purple-300" />
+                    <p className="text-sm font-semibold text-white">Editor Access</p>
+                  </div>
+                  <div className="p-4">
+                    <p className="text-xs text-white/50 mb-3">
+                      You have newsletter editor access — you can compose and send updates to either the main app or Feelz Retail. Nothing else on the platform opens up to you through this.
+                    </p>
+                    <button onClick={() => nav('/newsletter/compose')}
+                      className="w-full py-2.5 rounded-xl bg-purple-500 hover:bg-purple-400 text-white text-sm font-bold transition">
+                      Open Newsletter Panel
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </>
       )}

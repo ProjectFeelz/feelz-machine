@@ -126,7 +126,11 @@ export default function AdminSchoolSessions({ embedded = false }) {
   useEffect(() => { loadJudges(); }, [loadJudges]);
 
   const addJudge = async () => {
-    if (!newJudgeEmail.trim() || !config?.competition_id) return;
+    if (!newJudgeEmail.trim()) return;
+    if (!config?.competition_id) {
+      showToast('No active competition to add a judge to, check the School Sessions config is set up.');
+      return;
+    }
     const { data: foundUserId, error: lookupError } = await supabase
       .rpc('admin_find_user_by_email', { p_email: newJudgeEmail.trim() });
     if (lookupError || !foundUserId) {
@@ -141,7 +145,14 @@ export default function AdminSchoolSessions({ embedded = false }) {
         judge_name: newJudgeName.trim() || null,
       })
       .select().single();
-    if (error) { showToast('Error: ' + error.message); return; }
+    if (error) {
+      if (error.message?.includes('duplicate') || error.code === '23505') {
+        showToast('That person is already a judge for this competition');
+      } else {
+        showToast('Error: ' + error.message);
+      }
+      return;
+    }
     setJudges(prev => [data, ...prev]);
     setNewJudgeEmail('');
     setNewJudgeName('');
