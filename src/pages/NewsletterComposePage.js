@@ -147,7 +147,7 @@ export default function NewsletterComposePage() {
         </div>
       )}
 
-      <div className="max-w-xl lg:max-w-3xl mx-auto px-5 pt-8 space-y-6">
+      <div className="max-w-xl lg:max-w-4xl mx-auto px-5 pt-8 space-y-6">
         <div>
           <p className="text-purple-400 text-xs font-bold tracking-widest uppercase mb-1">Newsletter</p>
           <h1 className="text-2xl font-bold">Compose</h1>

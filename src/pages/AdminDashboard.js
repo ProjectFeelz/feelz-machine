@@ -275,7 +275,7 @@ export default function AdminDashboard() {
   if (!isAdmin) return null;
 
   return (
-    <div className="pt-14 md:pt-0 pb-32 px-4 max-w-3xl mx-auto">
+    <div className="pt-14 md:pt-0 pb-32 px-4 max-w-5xl mx-auto">
 
       {/* Ban confirm modal */}
       {banConfirm && (

@@ -159,7 +159,7 @@ export default function LibraryPage() {
   ];
 
   return (
-    <div className="pb-4 px-4 md:px-0 max-w-2xl mx-auto">
+    <div className="pb-4 px-4 md:px-0 max-w-4xl mx-auto">
       <Helmet>
         <link rel="icon" href="/favicon.ico" />
         <link rel="apple-touch-icon" href="/logo192.png" />

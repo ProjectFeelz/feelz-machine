@@ -144,7 +144,7 @@ export default function RecentlyPlayedPage() {
   })();
 
   return (
-    <div className="pb-32 max-w-2xl">
+    <div className="pb-32 max-w-4xl">
 
       {/* Header */}
       <div className="flex items-center space-x-3 mb-5 sticky top-0 z-20 bg-black/95 backdrop-blur-xl md:relative md:top-auto md:bg-transparent md:backdrop-blur-none pt-14 md:pt-4 pb-3 -mx-4 px-4 border-b border-white/[0.04] md:border-none">

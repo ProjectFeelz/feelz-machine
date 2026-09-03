@@ -86,7 +86,7 @@ export default function RecentlyDiscoveredPage() {
   });
 
   return (
-    <div className="pb-32 px-4 max-w-2xl mx-auto">
+    <div className="pb-32 px-4 max-w-4xl mx-auto">
       <Helmet>
         <title>Recently Discovered · Feelz Machine</title>
         <link rel="icon" href="/favicon.ico" />

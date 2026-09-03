@@ -384,7 +384,7 @@ export default function AdminSchoolSessions({ embedded = false }) {
       </div>
       )}
 
-      <div className="px-5 py-5 max-w-2xl mx-auto space-y-6">
+      <div className="px-5 py-5 max-w-4xl mx-auto space-y-6">
 
         {/* Master toggle */}
         <div className="flex items-center justify-between rounded-xl border border-lime-400/20 bg-lime-400/[0.04] p-4">

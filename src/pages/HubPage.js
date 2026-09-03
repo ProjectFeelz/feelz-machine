@@ -234,6 +234,7 @@ export default function HubPage() {
           {isAdmin && (
             <Section title="Admin" icon={Shield}>
               <LinkCard icon={Shield} label="Admin Panel" description="Broadcast · Analytics · Moderation · Users" path="/admin" color="bg-yellow-500/20" />
+              <LinkCard icon={Store} label="Retail Player" description="Jump straight into the venue player" path="/retail" color="bg-purple-500/20" />
               <LinkCard icon={Send} label="Newsletter" description="Compose updates for the app or retail venues" path="/newsletter/compose" color="bg-purple-500/20" />
             </Section>
           )}

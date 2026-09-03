@@ -506,7 +506,7 @@ export default function AdminRetail({ embedded = false }) {
       {loading ? (
         <div className="flex justify-center py-20"><Loader className="w-5 h-5 animate-spin text-white/20" /></div>
       ) : (
-        <div className="px-4 pt-5 pb-24 max-w-2xl mx-auto space-y-6">
+        <div className="px-4 pt-5 pb-24 max-w-4xl mx-auto space-y-6">
 
           {tab === 'pitches' && (
             <div className="space-y-6">
@@ -909,7 +909,7 @@ export default function AdminRetail({ embedded = false }) {
                   <p className="text-sm font-semibold text-white">Compose has moved</p>
                   <p className="text-xs text-white/40 mt-0.5">Retail notifications now go through the unified Newsletter panel, one place for both audiences.</p>
                 </div>
-                <a href="/newsletter/compose" className="text-xs font-bold px-3 py-2 rounded-lg bg-purple-500 text-white flex-shrink-0 ml-3">Open</a>
+                <button onClick={() => navigate('/newsletter/compose')} className="text-xs font-bold px-3 py-2 rounded-lg bg-purple-500 text-white flex-shrink-0 ml-3">Open</button>
               </div>
 
               <div className="space-y-2">

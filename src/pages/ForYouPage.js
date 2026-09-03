@@ -1485,8 +1485,12 @@ export default function ForYouPage() {
       <div className="absolute top-0 inset-x-0 h-20 pointer-events-none z-30"
         style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,0.5), transparent)' }} />
 
-      {/* Feed filter tabs — fixed so they never move */}
-      <div className="fixed left-1/2 -translate-x-1/2 z-[55] flex space-x-1 rounded-full p-0.5"
+      {/* Feed filter tabs — fixed so they never move. Centered on the
+          content column, not the full viewport: on mobile there's no
+          sidebar so those are the same thing, but on desktop the sidebar
+          eats 256px off the left, so viewport-center and content-center
+          are different points. */}
+      <div className="fixed left-1/2 -translate-x-1/2 md:left-[calc(50%+128px)] z-[55] flex space-x-1 rounded-full p-0.5"
         style={{
           top: 'calc(max(env(safe-area-inset-top, 0px), 14px) + 56px)',
           background: 'rgba(20,20,20,0.7)',

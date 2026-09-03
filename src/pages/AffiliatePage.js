@@ -301,7 +301,7 @@ export default function AffiliatePage() {
             <p className="text-sm font-semibold text-white">Editor tools</p>
             <p className="text-xs text-white/40 mt-0.5">Compose and send newsletters — nothing else on the platform is affected by this access.</p>
           </div>
-          <a href="/newsletter/compose" className="text-xs font-bold px-3 py-2 rounded-lg bg-purple-500 text-white flex-shrink-0 ml-3">Open</a>
+          <button onClick={() => navigate('/newsletter/compose')} className="text-xs font-bold px-3 py-2 rounded-lg bg-purple-500 text-white flex-shrink-0 ml-3">Open</button>
         </div>
       )}
 

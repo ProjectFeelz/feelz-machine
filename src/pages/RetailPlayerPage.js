@@ -10,6 +10,7 @@
 
 import React from 'react';
 import { Helmet } from 'react-helmet-async';
+import { useNavigate } from 'react-router-dom';
 import { Loader, Play, Pause, SkipForward, Music, MapPin, Megaphone, Heart, Bell, DollarSign } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../supabaseClient';
@@ -86,6 +87,7 @@ function RetailPayPalButton({ venueId, onSubscribed }) {
 
 
 export default function RetailPlayerPage() {
+  const navigate = useNavigate();
   const { user } = useAuth();
   const [checking, setChecking] = React.useState(true);
   const [venue, setVenue] = React.useState(null);
@@ -364,9 +366,9 @@ export default function RetailPlayerPage() {
             <h1 className="text-lg font-bold text-white">{venue.business_name}</h1>
           </div>
           <div className="flex items-center space-x-1 flex-shrink-0">
-            <a href="/affiliates" className="p-2 rounded-full hover:bg-white/[0.06] transition flex-shrink-0">
+            <button onClick={() => navigate('/affiliates')} className="p-2 rounded-full hover:bg-white/[0.06] transition flex-shrink-0">
               <DollarSign className="w-4 h-4 text-white/50" />
-            </a>
+            </button>
             <button onClick={openInbox} className="relative p-2 rounded-full hover:bg-white/[0.06] transition flex-shrink-0">
               <Bell className="w-4 h-4 text-white/50" />
               {inboxNotifs.some(n => !readIds.has(n.id)) && (
