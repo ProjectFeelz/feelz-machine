@@ -102,7 +102,7 @@ export default function AdminSchoolSessions({ embedded = false }) {
     setEntriesLoading(true);
     const { data } = await supabase
       .from('school_sessions_entries')
-      .select('id, entrant_full_name, entrant_email, entrant_tiktok_handle, tiktok_video_url, tiktok_tagged_confirmed, instagram_followed_confirmed, youtube_subscribed_confirmed, needs_school_verification, candidate_card_no, created_at, is_finalist, is_winner, is_group, school_name_freetext, song:school_sessions_shortlist_songs(title), school:school_sessions_schools(name), track:tracks(title), artist:artists(artist_name, slug), members:school_sessions_entry_members(id, member_name)')
+      .select('id, entrant_full_name, entrant_email, entrant_tiktok_handle, tiktok_video_url, tiktok_tagged_confirmed, youtube_subscribed_confirmed, needs_school_verification, candidate_card_no, created_at, is_finalist, is_winner, is_group, school_name_freetext, song:school_sessions_shortlist_songs(title), school:school_sessions_schools(name), track:tracks(title), artist:artists(artist_name, slug), members:school_sessions_entry_members(id, member_name)')
       .eq('competition_id', config.competition_id)
       .order('created_at', { ascending: false });
     setEntries(data || []);
@@ -787,9 +787,6 @@ export default function AdminSchoolSessions({ embedded = false }) {
                     )}
                     <span className={`text-[10px] px-1.5 py-0.5 rounded ${e.tiktok_tagged_confirmed ? 'bg-lime-400/10 text-lime-400' : 'bg-red-500/10 text-red-400'}`}>
                       {e.tiktok_tagged_confirmed ? 'Tagged us' : 'Not tagged'}
-                    </span>
-                    <span className={`text-[10px] px-1.5 py-0.5 rounded ${e.instagram_followed_confirmed ? 'bg-lime-400/10 text-lime-400' : 'bg-red-500/10 text-red-400'}`}>
-                      {e.instagram_followed_confirmed ? 'Follows IG' : 'Not following'}
                     </span>
                     <span className={`text-[10px] px-1.5 py-0.5 rounded ${e.youtube_subscribed_confirmed ? 'bg-lime-400/10 text-lime-400' : 'bg-red-500/10 text-red-400'}`}>
                       {e.youtube_subscribed_confirmed ? 'Subbed YT' : 'Not subbed'}

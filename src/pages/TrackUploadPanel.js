@@ -1372,7 +1372,7 @@ export default function TrackUploadPanel() {
     }
 
     if (!schoolSessionsFormValid(schoolSessionsEnabled, schoolSessionsForm)) {
-      showMessage('error', 'Please fill in the entrant name, email, TikTok handle and video link, school, both social confirmations, and (if under 18) guardian consent for the School Sessions entry.');
+      showMessage('error', 'Please fill in the entrant name, email, TikTok handle and video link, school, the YouTube confirmation, and (if under 18) guardian consent for the School Sessions entry.');
       return;
     }
 
@@ -1473,7 +1473,6 @@ export default function TrackUploadPanel() {
                 entrant_tiktok_handle: schoolSessionsForm.tiktokHandle.trim().replace(/^@/, ''),
                 tiktok_video_url: schoolSessionsForm.tiktokVideoUrl.trim(),
                 tiktok_tagged_confirmed: schoolSessionsForm.tiktokTaggedConfirmed,
-                instagram_followed_confirmed: schoolSessionsForm.instagramFollowedConfirmed,
                 youtube_subscribed_confirmed: schoolSessionsForm.youtubeSubscribedConfirmed,
                 entrant_is_minor:  schoolSessionsForm.isMinor,
                 song_id:           schoolSessionsForm.songId || null,

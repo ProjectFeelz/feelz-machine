@@ -13,11 +13,12 @@ import { GraduationCap, Plus, X } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import useSchoolSessions from '../hooks/useSchoolSessions';
 
-// TODO: TikTok handle is a placeholder — Steve is still creating that
-// account. Instagram and YouTube below are confirmed real.
+// All confirmed real. feelz.machineza is the main channel (required);
+// sfmza is Steve's personal channel, mentioned as an optional extra for
+// session-specific updates that won't necessarily post on the main one.
 const OFFICIAL_TIKTOK_HANDLE = 'feelzmachine';
-const OFFICIAL_INSTAGRAM_HANDLE = 'feelz.machine';
-const OFFICIAL_YOUTUBE_HANDLE = 'feelz.machine';
+const OFFICIAL_YOUTUBE_HANDLE = 'feelz.machineza';
+const PERSONAL_YOUTUBE_HANDLE = 'sfmza';
 
 const BLANK_FORM = {
   schoolId: '',
@@ -32,7 +33,6 @@ const BLANK_FORM = {
   tiktokHandle: '',
   tiktokVideoUrl: '',
   tiktokTaggedConfirmed: false,
-  instagramFollowedConfirmed: false,
   youtubeSubscribedConfirmed: false,
   isMinor: true,
   guardianName: '',
@@ -72,7 +72,6 @@ export function schoolSessionsFormValid(enabled, form) {
   if (!form.tiktokHandle.trim()) return false;
   if (!form.tiktokVideoUrl.trim()) return false;
   if (!form.tiktokTaggedConfirmed) return false;
-  if (!form.instagramFollowedConfirmed) return false;
   if (!form.youtubeSubscribedConfirmed) return false;
   if (!form.schoolId && !form.schoolFreeText.trim()) return false;
   if (!form.songId) return false;
@@ -220,20 +219,11 @@ export default function SchoolSessionsEntry({ enabled, setEnabled, form, setForm
           </label>
 
           <label className="flex items-start space-x-2.5 cursor-pointer">
-            <input type="checkbox" checked={form.instagramFollowedConfirmed}
-              onChange={e => set('instagramFollowedConfirmed', e.target.checked)}
-              className="mt-0.5 rounded border-white/20" />
-            <span className="text-xs text-white/60">
-              I follow <span className="text-lime-400 font-semibold">@{OFFICIAL_INSTAGRAM_HANDLE}</span> on Instagram — this is how you can DM, get tagged, and collab with us directly.
-            </span>
-          </label>
-
-          <label className="flex items-start space-x-2.5 cursor-pointer">
             <input type="checkbox" checked={form.youtubeSubscribedConfirmed}
               onChange={e => set('youtubeSubscribedConfirmed', e.target.checked)}
               className="mt-0.5 rounded border-white/20" />
             <span className="text-xs text-white/60">
-              I'm subscribed to <span className="text-lime-400 font-semibold">youtube.com/@{OFFICIAL_YOUTUBE_HANDLE}</span> to follow the journey.
+              I'm subscribed to <span className="text-lime-400 font-semibold">youtube.com/@{OFFICIAL_YOUTUBE_HANDLE}</span> to follow the journey. For session-specific updates that don't always make the main channel, you can also subscribe to <span className="text-lime-400 font-semibold">youtube.com/@{PERSONAL_YOUTUBE_HANDLE}</span>.
             </span>
           </label>
 
