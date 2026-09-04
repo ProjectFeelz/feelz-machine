@@ -23,6 +23,24 @@ COMMENT ON SCHEMA "public" IS 'standard public schema';
 
 
 
+CREATE OR REPLACE FUNCTION "public"."activate_home_hero"("p_hero_id" "uuid") RETURNS "void"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+begin
+  if not exists (select 1 from admins where user_id = auth.uid()) then
+    raise exception 'Unauthorized';
+  end if;
+
+  update home_hero set is_active = false where is_active = true;
+  update home_hero set is_active = true where id = p_hero_id;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."activate_home_hero"("p_hero_id" "uuid") OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."add_email_subscriber_after_profile"() RETURNS "trigger"
     LANGUAGE "plpgsql" SECURITY DEFINER
     SET "search_path" TO 'public'
@@ -38,6 +56,91 @@ END; $$;
 
 
 ALTER FUNCTION "public"."add_email_subscriber_after_profile"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."admin_approve_affiliate"("p_user_id" "uuid") RETURNS "void"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+begin
+  if not exists (select 1 from admins where user_id = auth.uid()) then
+    raise exception 'Unauthorized';
+  end if;
+
+  if not exists (select 1 from affiliates where user_id = p_user_id) then
+    raise exception 'This account has not signed up for the affiliate program yet';
+  end if;
+
+  update affiliates
+  set is_eligible = true, status = 'active', eligibility_met_at = now()
+  where user_id = p_user_id;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."admin_approve_affiliate"("p_user_id" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."admin_find_user_by_email"("p_email" "text") RETURNS "uuid"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_result uuid;
+begin
+  if not exists (select 1 from admins where user_id = auth.uid()) then
+    raise exception 'Unauthorized';
+  end if;
+
+  select user_id into v_result from user_profiles where lower(email) = lower(p_email) limit 1;
+  return v_result;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."admin_find_user_by_email"("p_email" "text") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."admin_fulfill_redemption"("p_redemption_id" "uuid", "p_approve" boolean) RETURNS "void"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_r record;
+begin
+  if not exists (select 1 from admins where user_id = auth.uid()) then
+    raise exception 'Unauthorized';
+  end if;
+
+  select * into v_r from affiliate_credit_redemptions where id = p_redemption_id and status = 'pending';
+  if v_r is null then
+    raise exception 'Not found or already handled';
+  end if;
+
+  if p_approve then
+    if v_r.reward_key = 'fan_pro_month' then
+      update listeners
+      set tier = 'fan_pro',
+          tier_expires_at = greatest(coalesce(tier_expires_at, now()), now()) + interval '30 days'
+      where user_id = v_r.user_id;
+    end if;
+    -- founding_fan_badge and social_shoutout have no automatic system
+    -- action, they're fulfilled by a person; marking the row fulfilled is
+    -- the record that it happened.
+    update affiliate_credit_redemptions
+    set status = 'fulfilled', fulfilled_at = now(), fulfilled_by = auth.uid()
+    where id = p_redemption_id;
+  else
+    update affiliates set credits_balance = credits_balance + v_r.cost where id = v_r.affiliate_id;
+    update affiliate_credit_redemptions
+    set status = 'rejected', fulfilled_at = now(), fulfilled_by = auth.uid()
+    where id = p_redemption_id;
+  end if;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."admin_fulfill_redemption"("p_redemption_id" "uuid", "p_approve" boolean) OWNER TO "postgres";
 
 
 CREATE OR REPLACE FUNCTION "public"."admin_remove_track"("p_track_id" "uuid") RETURNS "void"
@@ -104,6 +207,48 @@ $$;
 
 
 ALTER FUNCTION "public"."admin_unsuspend_artist"("p_artist_id" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."approve_playlist_proposal"("p_proposal_id" "uuid") RETURNS "uuid"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_proposal record;
+  v_playlist_id uuid;
+  v_track_id uuid;
+  v_pos integer := 0;
+begin
+  if not exists (select 1 from admins where user_id = auth.uid()) then
+    raise exception 'Unauthorized';
+  end if;
+
+  select * into v_proposal from retail_playlist_proposals where id = p_proposal_id and status = 'pending';
+  if v_proposal is null then
+    raise exception 'Proposal not found or already decided';
+  end if;
+
+  insert into retail_playlists (title, mood, created_by)
+  values (v_proposal.title, v_proposal.mood, auth.uid())
+  returning id into v_playlist_id;
+
+  foreach v_track_id in array v_proposal.track_ids loop
+    insert into retail_playlist_tracks (playlist_id, track_id, position)
+    values (v_playlist_id, v_track_id, v_pos)
+    on conflict (playlist_id, track_id) do nothing;
+    v_pos := v_pos + 1;
+  end loop;
+
+  update retail_playlist_proposals
+  set status = 'approved', reviewed_by = auth.uid(), reviewed_at = now()
+  where id = p_proposal_id;
+
+  return v_playlist_id;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."approve_playlist_proposal"("p_proposal_id" "uuid") OWNER TO "postgres";
 
 
 CREATE OR REPLACE FUNCTION "public"."artist_can"("p_artist_id" "uuid", "p_feature" "text") RETURNS boolean
@@ -189,6 +334,50 @@ $$;
 
 
 ALTER FUNCTION "public"."ban_user"("target_user_id" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."block_explicit_retail_catalog"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $$
+declare
+  v_is_explicit boolean;
+  v_title text;
+begin
+  select is_explicit, title into v_is_explicit, v_title
+  from tracks where id = new.track_id;
+
+  if coalesce(v_is_explicit, false) then
+    raise exception 'Cannot approve explicit track "%" into the retail catalogue.', coalesce(v_title, new.track_id::text);
+  end if;
+
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."block_explicit_retail_catalog"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."block_explicit_retail_track"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $$
+declare
+  v_is_explicit boolean;
+  v_title text;
+begin
+  select is_explicit, title into v_is_explicit, v_title
+  from tracks where id = new.track_id;
+
+  if coalesce(v_is_explicit, false) then
+    raise exception 'Cannot add explicit track "%" to a retail playlist. Retail plays in public venues.', coalesce(v_title, new.track_id::text);
+  end if;
+
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."block_explicit_retail_track"() OWNER TO "postgres";
 
 
 CREATE OR REPLACE FUNCTION "public"."boost_track_streams"("p_track_id" "uuid", "p_count" integer) RETURNS json
@@ -314,6 +503,73 @@ $$;
 
 
 ALTER FUNCTION "public"."calc_engagement_score"("p_track_id" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."calculate_retail_payout"("p_period_start" "date", "p_period_end" "date") RETURNS "uuid"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_sub_revenue numeric(10,2);
+  v_ad_revenue numeric(10,2);
+  v_pool numeric(10,2);
+  v_total_plays integer;
+  v_period_id uuid;
+  v_artist record;
+begin
+  if not exists (select 1 from admins where user_id = auth.uid()) then
+    raise exception 'Unauthorized';
+  end if;
+
+  select coalesce(sum(rs.monthly_fee), 0) into v_sub_revenue
+  from retail_subscriptions rs
+  where rs.status = 'active'
+    and rs.started_at::date <= p_period_end;
+
+  select coalesce(sum(rar.amount), 0) into v_ad_revenue
+  from retail_ad_revenue rar
+  where rar.period_start = p_period_start and rar.period_end = p_period_end;
+
+  v_pool := round(v_sub_revenue * 0.5 + v_ad_revenue * 0.3, 2);
+
+  select count(*) into v_total_plays
+  from retail_play_logs
+  where played_at::date between p_period_start and p_period_end;
+
+  insert into retail_payout_periods (
+    period_start, period_end, subscription_revenue, ad_revenue,
+    artist_pool, total_qualifying_plays, calculated_by
+  ) values (
+    p_period_start, p_period_end, v_sub_revenue, v_ad_revenue,
+    v_pool, v_total_plays, auth.uid()
+  )
+  returning id into v_period_id;
+
+  if v_total_plays > 0 then
+    for v_artist in
+      select t.artist_id as artist_id, count(*) as play_count
+      from retail_play_logs rpl
+      join tracks t on t.id = rpl.track_id
+      where rpl.played_at::date between p_period_start and p_period_end
+      group by t.artist_id
+    loop
+      insert into retail_artist_payouts (period_id, artist_id, play_count, share_pct, amount)
+      values (
+        v_period_id,
+        v_artist.artist_id,
+        v_artist.play_count,
+        round(100.0 * v_artist.play_count / v_total_plays, 3),
+        round(v_pool * v_artist.play_count / v_total_plays, 2)
+      );
+    end loop;
+  end if;
+
+  return v_period_id;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."calculate_retail_payout"("p_period_start" "date", "p_period_end" "date") OWNER TO "postgres";
 
 
 CREATE OR REPLACE FUNCTION "public"."check_affiliate_eligibility"("p_user_id" "uuid") RETURNS boolean
@@ -540,6 +796,84 @@ $$;
 ALTER FUNCTION "public"."check_stream_milestones"() OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."complete_venue_signup"("p_token" "text", "p_user_id" "uuid") RETURNS "uuid"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_venue_id uuid;
+begin
+  select id into v_venue_id from retail_venues
+  where signup_token = p_token
+    and signup_token_expires_at > now()
+    and user_id is null;
+
+  if v_venue_id is null then
+    raise exception 'This invite link is invalid or has expired';
+  end if;
+
+  update retail_venues
+  set user_id = p_user_id, signup_token = null, signup_token_expires_at = null
+  where id = v_venue_id;
+
+  return v_venue_id;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."complete_venue_signup"("p_token" "text", "p_user_id" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."convert_artist_to_listener"() RETURNS "jsonb"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_artist       record;
+  v_track_count  int;
+  v_payout_count int;
+  v_display      text;
+begin
+  select * into v_artist from artists where user_id = auth.uid();
+
+  if v_artist is null then
+    -- Already not an artist. Make sure a listener row exists and stop.
+    insert into listeners (user_id, display_name)
+    values (auth.uid(), coalesce((select email from auth.users where id = auth.uid()), 'Listener'))
+    on conflict (user_id) do nothing;
+    return jsonb_build_object('converted', true, 'reason', 'already_listener');
+  end if;
+
+  select count(*) into v_track_count  from tracks where artist_id = v_artist.id;
+  select count(*) into v_payout_count from retail_artist_payouts where artist_id = v_artist.id;
+
+  -- Refuse to destroy real creator history.
+  if v_track_count > 0 or v_payout_count > 0 or coalesce(v_artist.follower_count, 0) > 0 then
+    return jsonb_build_object(
+      'converted', false,
+      'reason', 'has_creator_activity',
+      'tracks', v_track_count,
+      'payouts', v_payout_count,
+      'followers', coalesce(v_artist.follower_count, 0)
+    );
+  end if;
+
+  v_display := coalesce(nullif(v_artist.artist_name, ''), 'Listener');
+
+  insert into listeners (user_id, display_name)
+  values (auth.uid(), v_display)
+  on conflict (user_id) do nothing;
+
+  delete from artists where id = v_artist.id;
+
+  return jsonb_build_object('converted', true, 'reason', 'converted');
+end;
+$$;
+
+
+ALTER FUNCTION "public"."convert_artist_to_listener"() OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."create_fraud_flag"("p_entity_type" "text", "p_entity_id" "uuid", "p_flag_type" "text", "p_severity" "text", "p_details" "jsonb" DEFAULT '{}'::"jsonb") RETURNS "uuid"
     LANGUAGE "plpgsql" SECURITY DEFINER
     SET "search_path" TO 'public'
@@ -601,6 +935,115 @@ END; $$;
 ALTER FUNCTION "public"."extract_key_from_filename"("filename" "text") OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."generate_playlist_proposals"() RETURNS integer
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_mood record;
+  v_count integer := 0;
+  v_track_ids uuid[];
+begin
+  if not exists (select 1 from admins where user_id = auth.uid()) then
+    raise exception 'Unauthorized';
+  end if;
+
+  for v_mood in
+    select t.mood, count(*) as track_count
+    from retail_catalog rc
+    join tracks t on t.id = rc.track_id
+    where rc.is_active = true and t.mood is not null and t.mood != ''
+    group by t.mood
+    having count(*) >= 5
+  loop
+    if exists (select 1 from retail_playlist_proposals where mood = v_mood.mood and status = 'pending') then
+      continue;
+    end if;
+    if exists (select 1 from retail_playlists where mood = v_mood.mood and is_active = true) then
+      continue;
+    end if;
+
+    select array_agg(track_id) into v_track_ids
+    from (
+      select rc.track_id,
+        coalesce((select count(*) from retail_play_logs where track_id = rc.track_id), 0)
+        + coalesce((select count(*) from retail_venue_likes where track_id = rc.track_id), 0) * 3 as score
+      from retail_catalog rc
+      join tracks t on t.id = rc.track_id
+      where rc.is_active = true and t.mood = v_mood.mood
+      order by score desc
+      limit 15
+    ) ranked;
+
+    insert into retail_playlist_proposals (title, mood, track_ids)
+    values ('Feelz for ' || initcap(v_mood.mood), v_mood.mood, v_track_ids);
+
+    v_count := v_count + 1;
+  end loop;
+
+  return v_count;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."generate_playlist_proposals"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."generate_venue_signup_token"("p_venue_id" "uuid") RETURNS "text"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_token text;
+begin
+  if not exists (select 1 from admins where user_id = auth.uid()) then
+    raise exception 'Unauthorized';
+  end if;
+
+  v_token := substring(md5(random()::text || clock_timestamp()::text || p_venue_id::text) from 1 for 12)
+          || substring(md5(random()::text || clock_timestamp()::text) from 1 for 12);
+
+  update retail_venues
+  set signup_token = v_token, signup_token_expires_at = now() + interval '14 days'
+  where id = p_venue_id;
+
+  return v_token;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."generate_venue_signup_token"("p_venue_id" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."generate_verification_codes"("p_count" integer, "p_school_id" "uuid" DEFAULT NULL::"uuid") RETURNS SETOF "text"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  i integer;
+  v_code text;
+begin
+  if not exists (select 1 from admins where user_id = auth.uid()) then
+    raise exception 'Unauthorized';
+  end if;
+  if p_count < 1 or p_count > 500 then
+    raise exception 'Count must be between 1 and 500';
+  end if;
+
+  for i in 1..p_count loop
+    v_code := upper(substring(md5(random()::text || clock_timestamp()::text) from 1 for 8));
+    insert into school_sessions_verification_codes (code, school_id, created_by)
+    values (v_code, p_school_id, auth.uid());
+    return next v_code;
+  end loop;
+  return;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."generate_verification_codes"("p_count" integer, "p_school_id" "uuid") OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."get_district_vote_counts"("p_season" integer) RETURNS TABLE("nomination_id" "uuid", "votes" bigint)
     LANGUAGE "sql" SECURITY DEFINER
     SET "search_path" TO 'public'
@@ -627,6 +1070,62 @@ $$;
 
 
 ALTER FUNCTION "public"."get_school_sessions_vote_counts"("p_competition_id" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."get_venue_by_signup_token"("p_token" "text") RETURNS TABLE("business_name" "text")
+    LANGUAGE "sql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+  select business_name from retail_venues
+  where signup_token = p_token and signup_token_expires_at > now() and user_id is null;
+$$;
+
+
+ALTER FUNCTION "public"."get_venue_by_signup_token"("p_token" "text") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."get_venue_playlist_recommendations"() RETURNS TABLE("playlist_id" "uuid", "title" "text", "mood" "text", "score" integer)
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_venue_id uuid;
+begin
+  select id into v_venue_id from retail_venues where user_id = auth.uid();
+  if v_venue_id is null then
+    return;
+  end if;
+
+  return query
+  with my_likes as (
+    select track_id from retail_venue_likes where venue_id = v_venue_id
+  ),
+  similar_venues as (
+    select rvl.venue_id, count(*) as shared_likes
+    from retail_venue_likes rvl
+    join my_likes ml on ml.track_id = rvl.track_id
+    where rvl.venue_id != v_venue_id
+    group by rvl.venue_id
+  ),
+  similar_venue_likes as (
+    select rvl.track_id, sum(sv.shared_likes) as weight
+    from retail_venue_likes rvl
+    join similar_venues sv on sv.venue_id = rvl.venue_id
+    where rvl.track_id not in (select track_id from my_likes)
+    group by rvl.track_id
+  )
+  select rp.id, rp.title, rp.mood, sum(svl.weight)::integer as score
+  from similar_venue_likes svl
+  join retail_playlist_tracks rpt on rpt.track_id = svl.track_id
+  join retail_playlists rp on rp.id = rpt.playlist_id and rp.is_active = true
+  group by rp.id, rp.title, rp.mood
+  order by score desc
+  limit 5;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."get_venue_playlist_recommendations"() OWNER TO "postgres";
 
 
 CREATE OR REPLACE FUNCTION "public"."handle_new_listener"() RETURNS "trigger"
@@ -916,17 +1415,112 @@ END; $$;
 ALTER FUNCTION "public"."increment_track_download_count"() OWNER TO "postgres";
 
 
-CREATE OR REPLACE FUNCTION "public"."increment_track_stream_count"() RETURNS "trigger"
-    LANGUAGE "plpgsql" SECURITY DEFINER
+CREATE OR REPLACE FUNCTION "public"."is_retail_admin"() RETURNS boolean
+    LANGUAGE "sql" STABLE SECURITY DEFINER
     SET "search_path" TO 'public'
     AS $$
-BEGIN
-  RETURN NEW;
-END;
+  select exists (select 1 from admins        where user_id = auth.uid())
+      or exists (select 1 from retail_admins where user_id = auth.uid());
 $$;
 
 
-ALTER FUNCTION "public"."increment_track_stream_count"() OWNER TO "postgres";
+ALTER FUNCTION "public"."is_retail_admin"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."issue_vip_candidate"("p_name" "text", "p_ref_code" "text") RETURNS integer
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_cap integer;
+  v_next integer;
+begin
+  if not exists (select 1 from admins where user_id = auth.uid()) then
+    raise exception 'Unauthorized';
+  end if;
+
+  select vip_candidate_cap into v_cap from school_sessions_config limit 1;
+  select coalesce(max(candidate_number), 0) + 1 into v_next from school_sessions_vip_candidates;
+
+  if v_next > v_cap then
+    raise exception 'VIP candidate cap (%) reached', v_cap;
+  end if;
+
+  insert into school_sessions_vip_candidates (candidate_number, name, ref_code, issued_by)
+  values (v_next, p_name, p_ref_code, auth.uid());
+
+  return v_next;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."issue_vip_candidate"("p_name" "text", "p_ref_code" "text") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."judge_set_finalist"("p_entry_id" "uuid", "p_value" boolean) RETURNS "void"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_competition_id uuid;
+  v_authorized boolean;
+begin
+  select competition_id into v_competition_id
+  from school_sessions_entries where id = p_entry_id;
+
+  if v_competition_id is null then
+    raise exception 'Entry not found';
+  end if;
+
+  v_authorized := exists (select 1 from admins where user_id = auth.uid())
+    or exists (
+      select 1 from school_sessions_judges
+      where user_id = auth.uid() and competition_id = v_competition_id
+    );
+
+  if not v_authorized then
+    raise exception 'Unauthorized';
+  end if;
+
+  update school_sessions_entries set is_finalist = p_value where id = p_entry_id;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."judge_set_finalist"("p_entry_id" "uuid", "p_value" boolean) OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."judge_set_winner"("p_entry_id" "uuid", "p_value" boolean) RETURNS "void"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_competition_id uuid;
+  v_authorized boolean;
+begin
+  select competition_id into v_competition_id
+  from school_sessions_entries where id = p_entry_id;
+
+  if v_competition_id is null then
+    raise exception 'Entry not found';
+  end if;
+
+  v_authorized := exists (select 1 from admins where user_id = auth.uid())
+    or exists (
+      select 1 from school_sessions_judges
+      where user_id = auth.uid() and competition_id = v_competition_id
+    );
+
+  if not v_authorized then
+    raise exception 'Unauthorized';
+  end if;
+
+  update school_sessions_entries set is_winner = p_value where id = p_entry_id;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."judge_set_winner"("p_entry_id" "uuid", "p_value" boolean) OWNER TO "postgres";
 
 
 CREATE OR REPLACE FUNCTION "public"."log_stream"("p_track_id" "uuid", "p_user_id" "uuid", "p_duration_played" integer, "p_completed" boolean, "p_platform" "text", "p_device_type" "text", "p_source" "text") RETURNS "jsonb"
@@ -939,24 +1533,24 @@ declare
   v_prior_stream_count integer;
   v_collab record;
 begin
-  -- Fetch track + artist, lock the artist row to avoid races on total_streams
   select t.artist_id, t.stream_count
     into v_artist_id, v_prior_stream_count
   from tracks t
   where t.id = p_track_id;
-
+ 
   if v_artist_id is null then
     return jsonb_build_object('logged', false, 'reason', 'track_not_found');
   end if;
-
+ 
   select user_id into v_owner_id from artists where id = v_artist_id for update;
-
-  -- Guard: don't log self-streams
+ 
   if v_owner_id = p_user_id then
     return jsonb_build_object('logged', false, 'reason', 'self_stream');
   end if;
-
-  -- 1. Insert the stream row (source of truth)
+ 
+  -- 1. Insert the stream row (source of truth). This alone now correctly
+  --    increments tracks.stream_count via the on_stream_insert_score trigger
+  --    — no separate manual update needed here anymore.
   insert into streams (
     track_id, user_id, artist_id, duration_played, completed,
     platform, device_type, source
@@ -964,14 +1558,11 @@ begin
     p_track_id, p_user_id, v_artist_id, p_duration_played, p_completed,
     p_platform, p_device_type, p_source
   );
-
-  -- 2. Increment track stream_count
-  update tracks set stream_count = stream_count + 1 where id = p_track_id;
-
-  -- 3. Increment artist total_streams
+ 
+  -- 2. Increment artist total_streams
   update artists set total_streams = total_streams + 1 where id = v_artist_id;
-
-  -- 4. Increment accepted collaborators' total_streams (excluding the listener and the owner)
+ 
+  -- 3. Increment accepted collaborators' total_streams (excluding the listener and the owner)
   for v_collab in
     select c.artist_id
     from collaborations c
@@ -983,7 +1574,7 @@ begin
   loop
     update artists set total_streams = total_streams + 1 where id = v_collab.artist_id;
   end loop;
-
+ 
   return jsonb_build_object(
     'logged', true,
     'artist_id', v_artist_id,
@@ -1212,44 +1803,6 @@ $$;
 ALTER FUNCTION "public"."notify_new_track"() OWNER TO "postgres";
 
 
-CREATE OR REPLACE FUNCTION "public"."notify_post_comment"() RETURNS "trigger"
-    LANGUAGE "plpgsql" SECURITY DEFINER
-    SET "search_path" TO 'public'
-    AS $$
-DECLARE v_post RECORD; v_commenter RECORD;
-BEGIN
-  SELECT id, artist_id FROM posts WHERE id = NEW.post_id INTO v_post;
-  SELECT id, artist_name INTO v_commenter FROM artists WHERE user_id = NEW.user_id;
-  IF v_post.artist_id IS NOT NULL AND v_commenter.id IS DISTINCT FROM v_post.artist_id THEN
-    INSERT INTO notifications (artist_id, type, title, from_artist_id, metadata)
-    VALUES (v_post.artist_id, 'track_commented', COALESCE(v_commenter.artist_name, 'Someone') || ' commented on your post', v_commenter.id, '{"comment": true}'::jsonb);
-  END IF;
-  RETURN NEW;
-END; $$;
-
-
-ALTER FUNCTION "public"."notify_post_comment"() OWNER TO "postgres";
-
-
-CREATE OR REPLACE FUNCTION "public"."notify_post_like"() RETURNS "trigger"
-    LANGUAGE "plpgsql" SECURITY DEFINER
-    SET "search_path" TO 'public'
-    AS $$
-DECLARE v_post RECORD; v_liker RECORD;
-BEGIN
-  SELECT id, artist_id FROM posts WHERE id = NEW.post_id INTO v_post;
-  SELECT id, artist_name INTO v_liker FROM artists WHERE user_id = NEW.user_id;
-  IF v_post.artist_id IS NOT NULL AND v_liker.id IS DISTINCT FROM v_post.artist_id THEN
-    INSERT INTO notifications (artist_id, type, title, from_artist_id, metadata)
-    VALUES (v_post.artist_id, 'track_liked', COALESCE(v_liker.artist_name, 'Someone') || ' liked your post', v_liker.id, '{"post_like": true}'::jsonb);
-  END IF;
-  RETURN NEW;
-END; $$;
-
-
-ALTER FUNCTION "public"."notify_post_like"() OWNER TO "postgres";
-
-
 CREATE OR REPLACE FUNCTION "public"."notify_track_like"() RETURNS "trigger"
     LANGUAGE "plpgsql"
     SET "search_path" TO 'public', 'pg_temp'
@@ -1374,6 +1927,25 @@ END; $$;
 ALTER FUNCTION "public"."recalculate_engagement_scores"() OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."redeem_verification_code"("p_code" "text") RETURNS "uuid"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_id uuid;
+begin
+  update school_sessions_verification_codes
+  set is_used = true, used_at = now()
+  where code = upper(trim(p_code)) and is_used = false
+  returning id into v_id;
+  return v_id;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."redeem_verification_code"("p_code" "text") OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."refresh_engagement_scores"() RETURNS "void"
     LANGUAGE "plpgsql"
     SET "search_path" TO 'public'
@@ -1402,6 +1974,178 @@ BEGIN REFRESH MATERIALIZED VIEW global_sample_analytics; END; $$;
 
 
 ALTER FUNCTION "public"."refresh_global_analytics"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."remove_newly_explicit_from_retail"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $$
+begin
+  if coalesce(new.is_explicit, false) and not coalesce(old.is_explicit, false) then
+    delete from retail_playlist_tracks where track_id = new.id;
+    delete from retail_catalog where track_id = new.id;
+  end if;
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."remove_newly_explicit_from_retail"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."request_credit_redemption"("p_reward_key" "text", "p_reward_label" "text", "p_cost" integer) RETURNS "uuid"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_affiliate record;
+  v_redemption_id uuid;
+begin
+  select * into v_affiliate from affiliates where user_id = auth.uid();
+  if v_affiliate is null then
+    raise exception 'Not an affiliate';
+  end if;
+  if coalesce(v_affiliate.credits_balance, 0) < p_cost then
+    raise exception 'Not enough credits';
+  end if;
+
+  update affiliates set credits_balance = credits_balance - p_cost where id = v_affiliate.id;
+
+  insert into affiliate_credit_redemptions (affiliate_id, user_id, reward_key, reward_label, cost)
+  values (v_affiliate.id, auth.uid(), p_reward_key, p_reward_label, p_cost)
+  returning id into v_redemption_id;
+
+  return v_redemption_id;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."request_credit_redemption"("p_reward_key" "text", "p_reward_label" "text", "p_cost" integer) OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."retail_play_to_stream"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_venue_user uuid;
+begin
+  -- Only qualifying plays count, same 30-second threshold used for payouts.
+  if coalesce(new.duration_played, 0) < 30 then
+    return new;
+  end if;
+
+  -- Attribute to the venue's own account. log_stream() rejects self-streams,
+  -- so a venue owner who is also the artist won't inflate their own numbers.
+  select user_id into v_venue_user from retail_venues where id = new.venue_id;
+
+  perform log_stream(
+    p_track_id        => new.track_id,
+    p_user_id         => v_venue_user,
+    p_duration_played => new.duration_played,
+    p_completed       => true,
+    p_platform        => 'retail',
+    p_device_type     => 'venue',
+    p_source          => 'retail'
+  );
+
+  return new;
+exception when others then
+  -- A failure here must never block the retail play log itself, since that
+  -- is the record payouts are calculated from.
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."retail_play_to_stream"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."send_newsletter"("p_title" "text", "p_excerpt" "text", "p_body" "text", "p_audience" "text") RETURNS TABLE("post_id" "uuid", "post_slug" "text")
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_authorized boolean;
+  v_post_id uuid;
+  v_slug text;
+begin
+  v_authorized := exists (select 1 from admins where user_id = auth.uid())
+    or exists (select 1 from newsletter_editors where user_id = auth.uid());
+  if not v_authorized then
+    raise exception 'Unauthorized';
+  end if;
+
+  if p_audience not in ('main_app', 'retail') then
+    raise exception 'Invalid audience';
+  end if;
+
+  v_slug := lower(regexp_replace(p_title, '[^a-zA-Z0-9]+', '-', 'g')) || '-' || substring(gen_random_uuid()::text, 1, 6);
+
+  insert into newsletter_posts (slug, title, excerpt, body, audience, sent_by)
+  values (v_slug, p_title, p_excerpt, p_body, p_audience, auth.uid())
+  returning id into v_post_id;
+
+  if p_audience = 'retail' then
+    insert into retail_notifications (title, body, sent_by, newsletter_post_id)
+    values (p_title, p_excerpt, auth.uid(), v_post_id);
+  else
+    insert into notifications (artist_id, user_id, type, title, message, metadata)
+    select a.id, a.user_id, 'announcement', p_title, p_excerpt,
+      jsonb_build_object('link_url', '/newsletter/' || v_slug, 'link_label', 'Read more')
+    from artists a
+    where a.user_id is not null;
+  end if;
+
+  return query select v_post_id, v_slug;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."send_newsletter"("p_title" "text", "p_excerpt" "text", "p_body" "text", "p_audience" "text") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."send_newsletter"("p_title" "text", "p_excerpt" "text", "p_body" "text", "p_audience" "text", "p_youtube_url" "text" DEFAULT NULL::"text") RETURNS TABLE("post_id" "uuid", "post_slug" "text")
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_authorized boolean;
+  v_post_id uuid;
+  v_slug text;
+begin
+  v_authorized := exists (select 1 from admins where user_id = auth.uid())
+    or exists (select 1 from newsletter_editors where user_id = auth.uid());
+  if not v_authorized then
+    raise exception 'Unauthorized';
+  end if;
+
+  if p_audience not in ('main_app', 'retail') then
+    raise exception 'Invalid audience';
+  end if;
+
+  v_slug := lower(regexp_replace(p_title, '[^a-zA-Z0-9]+', '-', 'g')) || '-' || substring(gen_random_uuid()::text, 1, 6);
+
+  insert into newsletter_posts (slug, title, excerpt, body, audience, sent_by, youtube_url)
+  values (v_slug, p_title, p_excerpt, p_body, p_audience, auth.uid(), nullif(p_youtube_url, ''))
+  returning id into v_post_id;
+
+  if p_audience = 'retail' then
+    insert into retail_notifications (title, body, sent_by, newsletter_post_id)
+    values (p_title, p_excerpt, auth.uid(), v_post_id);
+  else
+    insert into notifications (artist_id, user_id, type, title, message, metadata)
+    select a.id, a.user_id, 'announcement', p_title, p_excerpt,
+      jsonb_build_object('link_url', '/newsletter/' || v_slug, 'link_label', 'Read more')
+    from artists a
+    where a.user_id is not null;
+  end if;
+
+  return query select v_post_id, v_slug;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."send_newsletter"("p_title" "text", "p_excerpt" "text", "p_body" "text", "p_audience" "text", "p_youtube_url" "text") OWNER TO "postgres";
 
 
 CREATE OR REPLACE FUNCTION "public"."streams_set_artist_id"() RETURNS "trigger"
@@ -1665,20 +2409,6 @@ $$;
 ALTER FUNCTION "public"."update_last_seen"("p_user_id" "uuid") OWNER TO "postgres";
 
 
-CREATE OR REPLACE FUNCTION "public"."update_post_comment_count"() RETURNS "trigger"
-    LANGUAGE "plpgsql" SECURITY DEFINER
-    SET "search_path" TO 'public'
-    AS $$
-BEGIN
-  IF TG_OP = 'INSERT' THEN UPDATE posts SET comment_count = comment_count + 1 WHERE id = NEW.post_id;
-  ELSIF TG_OP = 'DELETE' THEN UPDATE posts SET comment_count = GREATEST(comment_count - 1, 0) WHERE id = OLD.post_id; END IF;
-  RETURN COALESCE(NEW, OLD);
-END; $$;
-
-
-ALTER FUNCTION "public"."update_post_comment_count"() OWNER TO "postgres";
-
-
 CREATE OR REPLACE FUNCTION "public"."update_track_favorite_count"() RETURNS "trigger"
     LANGUAGE "plpgsql" SECURITY DEFINER
     SET "search_path" TO 'public'
@@ -1832,6 +2562,24 @@ CREATE TABLE IF NOT EXISTS "public"."affiliate_conversions" (
 ALTER TABLE "public"."affiliate_conversions" OWNER TO "postgres";
 
 
+CREATE TABLE IF NOT EXISTS "public"."affiliate_credit_redemptions" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "affiliate_id" "uuid" NOT NULL,
+    "user_id" "uuid" NOT NULL,
+    "reward_key" "text" NOT NULL,
+    "reward_label" "text" NOT NULL,
+    "cost" integer NOT NULL,
+    "status" "text" DEFAULT 'pending'::"text" NOT NULL,
+    "requested_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "fulfilled_at" timestamp with time zone,
+    "fulfilled_by" "uuid",
+    CONSTRAINT "affiliate_credit_redemptions_status_check" CHECK (("status" = ANY (ARRAY['pending'::"text", 'fulfilled'::"text", 'rejected'::"text"])))
+);
+
+
+ALTER TABLE "public"."affiliate_credit_redemptions" OWNER TO "postgres";
+
+
 CREATE TABLE IF NOT EXISTS "public"."affiliate_payouts" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
     "affiliate_id" "uuid" NOT NULL,
@@ -1877,7 +2625,7 @@ CREATE TABLE IF NOT EXISTS "public"."affiliates" (
     "payout_account" "text",
     "created_at" timestamp with time zone DEFAULT "now"(),
     "updated_at" timestamp with time zone DEFAULT "now"(),
-    CONSTRAINT "affiliates_role_check" CHECK (("role" = ANY (ARRAY['artist'::"text", 'beatmaker'::"text", 'listener'::"text"]))),
+    CONSTRAINT "affiliates_role_check" CHECK (("role" = ANY (ARRAY['artist'::"text", 'beatmaker'::"text", 'listener'::"text", 'venue'::"text"]))),
     CONSTRAINT "affiliates_status_check" CHECK (("status" = ANY (ARRAY['pending'::"text", 'active'::"text", 'suspended'::"text"])))
 );
 
@@ -1992,29 +2740,6 @@ CREATE TABLE IF NOT EXISTS "public"."artist_payment_profiles" (
 
 
 ALTER TABLE "public"."artist_payment_profiles" OWNER TO "postgres";
-
-
-CREATE TABLE IF NOT EXISTS "public"."artist_personas" (
-    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
-    "artist_id" "uuid" NOT NULL,
-    "avg_engagement_rate" numeric(5,2) DEFAULT 0,
-    "growth_rate" numeric(5,2) DEFAULT 0,
-    "release_frequency" numeric(5,2) DEFAULT 0,
-    "collaboration_rate" numeric(5,2) DEFAULT 0,
-    "primary_genres" "jsonb" DEFAULT '[]'::"jsonb",
-    "primary_moods" "jsonb" DEFAULT '[]'::"jsonb",
-    "avg_track_duration" integer DEFAULT 0,
-    "audience_size" integer DEFAULT 0,
-    "audience_retention" numeric(5,2) DEFAULT 0,
-    "geographic_reach" "jsonb" DEFAULT '{}'::"jsonb",
-    "artist_type" "text",
-    "persona_updated_at" timestamp with time zone,
-    "created_at" timestamp with time zone DEFAULT "now"(),
-    "updated_at" timestamp with time zone DEFAULT "now"()
-);
-
-
-ALTER TABLE "public"."artist_personas" OWNER TO "postgres";
 
 
 CREATE TABLE IF NOT EXISTS "public"."artist_post_comments" (
@@ -2239,19 +2964,6 @@ CREATE TABLE IF NOT EXISTS "public"."bug_reports" (
 ALTER TABLE "public"."bug_reports" OWNER TO "postgres";
 
 
-CREATE TABLE IF NOT EXISTS "public"."campaign_images" (
-    "id" "uuid" DEFAULT "extensions"."uuid_generate_v4"() NOT NULL,
-    "campaign_id" "uuid",
-    "image_url" "text" NOT NULL,
-    "image_name" "text",
-    "order_index" integer DEFAULT 0,
-    "created_at" timestamp with time zone DEFAULT "now"()
-);
-
-
-ALTER TABLE "public"."campaign_images" OWNER TO "postgres";
-
-
 CREATE TABLE IF NOT EXISTS "public"."challenge_completions" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
     "user_id" "uuid" NOT NULL,
@@ -2447,22 +3159,6 @@ CREATE TABLE IF NOT EXISTS "public"."collaborations" (
 ALTER TABLE "public"."collaborations" OWNER TO "postgres";
 
 
-CREATE TABLE IF NOT EXISTS "public"."comments" (
-    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
-    "post_id" "uuid" NOT NULL,
-    "user_id" "uuid" NOT NULL,
-    "content" "text" NOT NULL,
-    "likes_count" integer DEFAULT 0,
-    "created_at" timestamp with time zone DEFAULT "now"(),
-    "artist_id" "uuid",
-    "parent_id" "uuid",
-    "reply_to_name" "text"
-);
-
-
-ALTER TABLE "public"."comments" OWNER TO "postgres";
-
-
 CREATE TABLE IF NOT EXISTS "public"."competition_entries" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
     "competition_id" "uuid" NOT NULL,
@@ -2482,18 +3178,6 @@ CREATE TABLE IF NOT EXISTS "public"."competition_entries" (
 
 
 ALTER TABLE "public"."competition_entries" OWNER TO "postgres";
-
-
-CREATE TABLE IF NOT EXISTS "public"."competition_moderators" (
-    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
-    "competition_id" "uuid" NOT NULL,
-    "artist_id" "uuid" NOT NULL,
-    "granted_by" "uuid",
-    "granted_at" timestamp with time zone DEFAULT "now"()
-);
-
-
-ALTER TABLE "public"."competition_moderators" OWNER TO "postgres";
 
 
 CREATE TABLE IF NOT EXISTS "public"."competition_payouts" (
@@ -2595,27 +3279,6 @@ COMMENT ON COLUMN "public"."competitions"."prize_breakdown_text" IS 'Plain-langu
 
 
 
-CREATE TABLE IF NOT EXISTS "public"."content_drafts" (
-    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
-    "title" "text" NOT NULL,
-    "body" "text" NOT NULL,
-    "content_type" "text" DEFAULT 'news'::"text",
-    "source_data" "jsonb" DEFAULT '{}'::"jsonb",
-    "referenced_artist_ids" "uuid"[] DEFAULT '{}'::"uuid"[],
-    "referenced_track_ids" "uuid"[] DEFAULT '{}'::"uuid"[],
-    "status" "text" DEFAULT 'draft'::"text",
-    "reviewed_by" "uuid",
-    "reviewed_at" timestamp with time zone,
-    "published_at" timestamp with time zone,
-    "published_post_id" "uuid",
-    "created_at" timestamp with time zone DEFAULT "now"(),
-    "updated_at" timestamp with time zone DEFAULT "now"()
-);
-
-
-ALTER TABLE "public"."content_drafts" OWNER TO "postgres";
-
-
 CREATE TABLE IF NOT EXISTS "public"."credits_transactions" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
     "user_id" "uuid" NOT NULL,
@@ -2656,38 +3319,6 @@ CREATE TABLE IF NOT EXISTS "public"."downloads" (
 
 
 ALTER TABLE "public"."downloads" OWNER TO "postgres";
-
-
-CREATE TABLE IF NOT EXISTS "public"."email_campaign_logs" (
-    "id" "uuid" DEFAULT "extensions"."uuid_generate_v4"() NOT NULL,
-    "campaign_id" "uuid",
-    "subscriber_id" "uuid",
-    "sent_at" timestamp with time zone DEFAULT "now"(),
-    "opened_at" timestamp with time zone,
-    "clicked_at" timestamp with time zone
-);
-
-
-ALTER TABLE "public"."email_campaign_logs" OWNER TO "postgres";
-
-
-CREATE TABLE IF NOT EXISTS "public"."email_campaigns" (
-    "id" "uuid" DEFAULT "extensions"."uuid_generate_v4"() NOT NULL,
-    "admin_id" "uuid",
-    "subject" "text" NOT NULL,
-    "body" "text" NOT NULL,
-    "sent_to_count" integer DEFAULT 0,
-    "opened_count" integer DEFAULT 0,
-    "clicked_count" integer DEFAULT 0,
-    "status" "text" DEFAULT 'draft'::"text",
-    "sent_at" timestamp with time zone,
-    "created_at" timestamp with time zone DEFAULT "now"(),
-    "image_url" "text",
-    "html_content" "text"
-);
-
-
-ALTER TABLE "public"."email_campaigns" OWNER TO "postgres";
 
 
 CREATE TABLE IF NOT EXISTS "public"."email_subscribers" (
@@ -2838,16 +3469,22 @@ CREATE TABLE IF NOT EXISTS "public"."global_contacts" (
 ALTER TABLE "public"."global_contacts" OWNER TO "postgres";
 
 
-CREATE TABLE IF NOT EXISTS "public"."likes" (
+CREATE TABLE IF NOT EXISTS "public"."home_hero" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
-    "user_id" "uuid",
-    "target_id" "uuid" NOT NULL,
-    "target_type" "text" NOT NULL,
-    "created_at" timestamp with time zone DEFAULT "now"()
+    "eyebrow" "text",
+    "title" "text" NOT NULL,
+    "subtitle" "text",
+    "image_url" "text",
+    "cta_label" "text",
+    "cta_path" "text",
+    "accent" "text" DEFAULT 'lime'::"text",
+    "is_active" boolean DEFAULT false NOT NULL,
+    "created_by" "uuid",
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL
 );
 
 
-ALTER TABLE "public"."likes" OWNER TO "postgres";
+ALTER TABLE "public"."home_hero" OWNER TO "postgres";
 
 
 CREATE TABLE IF NOT EXISTS "public"."listener_behavior_profiles" (
@@ -2967,7 +3604,11 @@ CREATE TABLE IF NOT EXISTS "public"."tracks" (
     "service_fee_pct" numeric(5,2) DEFAULT 15.00,
     "velocity_score" numeric DEFAULT 0,
     "external_play_count" integer DEFAULT 0 NOT NULL,
-    CONSTRAINT "require_artwork_to_publish" CHECK ((("is_published" = false) OR (("is_published" = true) AND ("cover_artwork_url" IS NOT NULL) AND ("cover_artwork_url" <> ''::"text"))))
+    "ai_content" "text",
+    "ai_content_admin_override" "text",
+    CONSTRAINT "require_artwork_to_publish" CHECK ((("is_published" = false) OR (("is_published" = true) AND ("cover_artwork_url" IS NOT NULL) AND ("cover_artwork_url" <> ''::"text")))),
+    CONSTRAINT "tracks_ai_content_admin_override_check" CHECK (("ai_content_admin_override" = ANY (ARRAY['human'::"text", 'ai_assisted'::"text", 'ai_generated'::"text"]))),
+    CONSTRAINT "tracks_ai_content_check" CHECK (("ai_content" = ANY (ARRAY['human'::"text", 'ai_assisted'::"text", 'ai_generated'::"text"])))
 );
 
 
@@ -2989,30 +3630,6 @@ CREATE OR REPLACE VIEW "public"."listener_monthly_stats" WITH ("security_invoker
 
 
 ALTER VIEW "public"."listener_monthly_stats" OWNER TO "postgres";
-
-
-CREATE TABLE IF NOT EXISTS "public"."listener_personas" (
-    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
-    "user_id" "uuid" NOT NULL,
-    "top_genres" "jsonb" DEFAULT '[]'::"jsonb",
-    "top_moods" "jsonb" DEFAULT '[]'::"jsonb",
-    "top_artists" "jsonb" DEFAULT '[]'::"jsonb",
-    "avg_session_duration" integer DEFAULT 0,
-    "preferred_listening_time" "text",
-    "discovery_score" numeric(5,2) DEFAULT 0,
-    "loyalty_score" numeric(5,2) DEFAULT 0,
-    "social_score" numeric(5,2) DEFAULT 0,
-    "age_range" "text",
-    "country" "text",
-    "city" "text",
-    "persona_type" "text",
-    "persona_updated_at" timestamp with time zone,
-    "created_at" timestamp with time zone DEFAULT "now"(),
-    "updated_at" timestamp with time zone DEFAULT "now"()
-);
-
-
-ALTER TABLE "public"."listener_personas" OWNER TO "postgres";
 
 
 CREATE TABLE IF NOT EXISTS "public"."listener_recommendations" (
@@ -3116,65 +3733,6 @@ CREATE TABLE IF NOT EXISTS "public"."listening_sessions" (
 ALTER TABLE "public"."listening_sessions" OWNER TO "postgres";
 
 
-CREATE TABLE IF NOT EXISTS "public"."lrc_anonymous_sessions" (
-    "id" "text" NOT NULL,
-    "lines" "jsonb",
-    "created_at" timestamp with time zone DEFAULT "now"(),
-    "claimed_by" "uuid"
-);
-
-
-ALTER TABLE "public"."lrc_anonymous_sessions" OWNER TO "postgres";
-
-
-CREATE TABLE IF NOT EXISTS "public"."lrc_corrections" (
-    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
-    "session_token" "text",
-    "user_id" "uuid",
-    "whisper_word" "text" NOT NULL,
-    "whisper_start" numeric,
-    "whisper_end" numeric,
-    "language_hint" "text" DEFAULT 'auto'::"text",
-    "file_name" "text",
-    "created_at" timestamp with time zone DEFAULT "now"()
-);
-
-
-ALTER TABLE "public"."lrc_corrections" OWNER TO "postgres";
-
-
-CREATE TABLE IF NOT EXISTS "public"."lrc_events" (
-    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
-    "event" "text" NOT NULL,
-    "meta" "jsonb",
-    "created_at" timestamp with time zone DEFAULT "now"(),
-    "session_token" "text",
-    "user_id" "uuid",
-    "event_name" "text",
-    "props" "jsonb",
-    "referrer" "text"
-);
-
-
-ALTER TABLE "public"."lrc_events" OWNER TO "postgres";
-
-
-CREATE TABLE IF NOT EXISTS "public"."lyric_projects" (
-    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
-    "user_id" "uuid",
-    "title" "text",
-    "artist" "text",
-    "lines" "jsonb",
-    "lrc_export" "text",
-    "include_in_training" boolean DEFAULT false,
-    "created_at" timestamp with time zone DEFAULT "now"(),
-    "updated_at" timestamp with time zone DEFAULT "now"()
-);
-
-
-ALTER TABLE "public"."lyric_projects" OWNER TO "postgres";
-
-
 CREATE TABLE IF NOT EXISTS "public"."monthly_wrapped_log" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
     "user_id" "uuid" NOT NULL,
@@ -3185,6 +3743,35 @@ CREATE TABLE IF NOT EXISTS "public"."monthly_wrapped_log" (
 
 
 ALTER TABLE "public"."monthly_wrapped_log" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."newsletter_editors" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "user_id" "uuid" NOT NULL,
+    "editor_name" "text",
+    "granted_by" "uuid",
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL
+);
+
+
+ALTER TABLE "public"."newsletter_editors" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."newsletter_posts" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "slug" "text" NOT NULL,
+    "title" "text" NOT NULL,
+    "excerpt" "text" NOT NULL,
+    "body" "text" NOT NULL,
+    "audience" "text" NOT NULL,
+    "sent_by" "uuid",
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "youtube_url" "text",
+    CONSTRAINT "newsletter_posts_audience_check" CHECK (("audience" = ANY (ARRAY['main_app'::"text", 'retail'::"text"])))
+);
+
+
+ALTER TABLE "public"."newsletter_posts" OWNER TO "postgres";
 
 
 CREATE TABLE IF NOT EXISTS "public"."notifications" (
@@ -3265,18 +3852,6 @@ CREATE TABLE IF NOT EXISTS "public"."platform_tiers" (
 ALTER TABLE "public"."platform_tiers" OWNER TO "postgres";
 
 
-CREATE TABLE IF NOT EXISTS "public"."playlist_add_log" (
-    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
-    "track_id" "uuid" NOT NULL,
-    "playlist_id" "uuid" NOT NULL,
-    "user_id" "uuid" NOT NULL,
-    "created_at" timestamp with time zone DEFAULT "now"()
-);
-
-
-ALTER TABLE "public"."playlist_add_log" OWNER TO "postgres";
-
-
 CREATE TABLE IF NOT EXISTS "public"."playlist_collaborators" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
     "playlist_id" "uuid" NOT NULL,
@@ -3319,31 +3894,6 @@ CREATE TABLE IF NOT EXISTS "public"."playlists" (
 
 
 ALTER TABLE "public"."playlists" OWNER TO "postgres";
-
-
-CREATE TABLE IF NOT EXISTS "public"."poll_votes" (
-    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
-    "poll_id" "uuid" NOT NULL,
-    "user_id" "uuid" NOT NULL,
-    "option_index" integer NOT NULL,
-    "created_at" timestamp with time zone DEFAULT "now"()
-);
-
-
-ALTER TABLE "public"."poll_votes" OWNER TO "postgres";
-
-
-CREATE TABLE IF NOT EXISTS "public"."polls" (
-    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
-    "post_id" "uuid" NOT NULL,
-    "question" "text" NOT NULL,
-    "options" "jsonb" DEFAULT '[]'::"jsonb" NOT NULL,
-    "expires_at" timestamp with time zone,
-    "created_at" timestamp with time zone DEFAULT "now"()
-);
-
-
-ALTER TABLE "public"."polls" OWNER TO "postgres";
 
 
 CREATE TABLE IF NOT EXISTS "public"."user_profiles" (
@@ -3391,44 +3941,6 @@ CREATE MATERIALIZED VIEW "public"."popular_genres_by_country" AS
 ALTER MATERIALIZED VIEW "public"."popular_genres_by_country" OWNER TO "postgres";
 
 
-CREATE TABLE IF NOT EXISTS "public"."post_likes" (
-    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
-    "post_id" "uuid" NOT NULL,
-    "user_id" "uuid" NOT NULL,
-    "created_at" timestamp with time zone DEFAULT "now"()
-);
-
-
-ALTER TABLE "public"."post_likes" OWNER TO "postgres";
-
-
-CREATE TABLE IF NOT EXISTS "public"."posts" (
-    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
-    "artist_id" "uuid" NOT NULL,
-    "title" "text",
-    "content" "text" NOT NULL,
-    "post_type" "text" DEFAULT 'update'::"text",
-    "media_urls" "jsonb" DEFAULT '[]'::"jsonb",
-    "is_exclusive" boolean DEFAULT false,
-    "is_pinned" boolean DEFAULT false,
-    "likes_count" integer DEFAULT 0,
-    "comments_count" integer DEFAULT 0,
-    "created_at" timestamp with time zone DEFAULT "now"(),
-    "updated_at" timestamp with time zone DEFAULT "now"(),
-    "tagged_artist_ids" "uuid"[] DEFAULT '{}'::"uuid"[],
-    "is_auto_generated" boolean DEFAULT false,
-    "comment_count" integer DEFAULT 0,
-    "youtube_id" "text",
-    "user_id" "uuid",
-    "track_id" "uuid",
-    "scheduled_at" timestamp with time zone,
-    CONSTRAINT "posts_post_type_check" CHECK (("post_type" = ANY (ARRAY['announcement'::"text", 'update'::"text", 'poll'::"text", 'exclusive'::"text", 'question'::"text", 'media'::"text", 'standard'::"text", 'track_share'::"text", 'blog'::"text"])))
-);
-
-
-ALTER TABLE "public"."posts" OWNER TO "postgres";
-
-
 CREATE TABLE IF NOT EXISTS "public"."profiles" (
     "id" "uuid" NOT NULL,
     "name" "text",
@@ -3472,6 +3984,278 @@ CREATE TABLE IF NOT EXISTS "public"."push_subscriptions" (
 ALTER TABLE "public"."push_subscriptions" OWNER TO "postgres";
 
 
+CREATE TABLE IF NOT EXISTS "public"."retail_ad_plays" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "ad_id" "uuid" NOT NULL,
+    "venue_id" "uuid" NOT NULL,
+    "location_id" "uuid",
+    "played_at" timestamp with time zone DEFAULT "now"() NOT NULL
+);
+
+
+ALTER TABLE "public"."retail_ad_plays" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."retail_ad_revenue" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "period_start" "date" NOT NULL,
+    "period_end" "date" NOT NULL,
+    "amount" numeric(10,2) NOT NULL,
+    "note" "text",
+    "recorded_by" "uuid",
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL
+);
+
+
+ALTER TABLE "public"."retail_ad_revenue" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."retail_admins" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "user_id" "uuid" NOT NULL,
+    "admin_name" "text",
+    "granted_by" "uuid",
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL
+);
+
+
+ALTER TABLE "public"."retail_admins" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."retail_ads" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "venue_id" "uuid",
+    "advertiser_name" "text" NOT NULL,
+    "audio_url" "text" NOT NULL,
+    "is_active" boolean DEFAULT true NOT NULL,
+    "created_by" "uuid",
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL
+);
+
+
+ALTER TABLE "public"."retail_ads" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."retail_artist_payouts" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "period_id" "uuid" NOT NULL,
+    "artist_id" "uuid" NOT NULL,
+    "play_count" integer NOT NULL,
+    "share_pct" numeric(6,3) NOT NULL,
+    "amount" numeric(10,2) NOT NULL,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL
+);
+
+
+ALTER TABLE "public"."retail_artist_payouts" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."retail_catalog" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "track_id" "uuid" NOT NULL,
+    "pitch_id" "uuid",
+    "is_active" boolean DEFAULT true NOT NULL,
+    "added_by" "uuid",
+    "added_at" timestamp with time zone DEFAULT "now"() NOT NULL
+);
+
+
+ALTER TABLE "public"."retail_catalog" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."retail_notification_reads" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "notification_id" "uuid" NOT NULL,
+    "venue_id" "uuid" NOT NULL,
+    "read_at" timestamp with time zone DEFAULT "now"() NOT NULL
+);
+
+
+ALTER TABLE "public"."retail_notification_reads" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."retail_notifications" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "title" "text" NOT NULL,
+    "body" "text" NOT NULL,
+    "sent_by" "uuid",
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "newsletter_post_id" "uuid"
+);
+
+
+ALTER TABLE "public"."retail_notifications" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."retail_payout_periods" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "period_start" "date" NOT NULL,
+    "period_end" "date" NOT NULL,
+    "subscription_revenue" numeric(10,2) DEFAULT 0 NOT NULL,
+    "ad_revenue" numeric(10,2) DEFAULT 0 NOT NULL,
+    "artist_pool" numeric(10,2) DEFAULT 0 NOT NULL,
+    "total_qualifying_plays" integer DEFAULT 0 NOT NULL,
+    "status" "text" DEFAULT 'draft'::"text" NOT NULL,
+    "calculated_by" "uuid",
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    CONSTRAINT "retail_payout_periods_status_check" CHECK (("status" = ANY (ARRAY['draft'::"text", 'finalized'::"text"])))
+);
+
+
+ALTER TABLE "public"."retail_payout_periods" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."retail_pitches" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "track_id" "uuid" NOT NULL,
+    "artist_id" "uuid" NOT NULL,
+    "pitch_note" "text",
+    "status" "text" DEFAULT 'pending'::"text" NOT NULL,
+    "reviewed_by" "uuid",
+    "reviewed_at" timestamp with time zone,
+    "rejection_reason" "text",
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    CONSTRAINT "retail_pitches_status_check" CHECK (("status" = ANY (ARRAY['pending'::"text", 'approved'::"text", 'rejected'::"text"])))
+);
+
+
+ALTER TABLE "public"."retail_pitches" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."retail_play_logs" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "venue_id" "uuid" NOT NULL,
+    "location_id" "uuid",
+    "track_id" "uuid" NOT NULL,
+    "playlist_id" "uuid",
+    "played_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "duration_played" integer
+);
+
+
+ALTER TABLE "public"."retail_play_logs" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."retail_playlist_proposals" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "title" "text" NOT NULL,
+    "mood" "text",
+    "track_ids" "uuid"[] NOT NULL,
+    "status" "text" DEFAULT 'pending'::"text" NOT NULL,
+    "reviewed_by" "uuid",
+    "reviewed_at" timestamp with time zone,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    CONSTRAINT "retail_playlist_proposals_status_check" CHECK (("status" = ANY (ARRAY['pending'::"text", 'approved'::"text", 'rejected'::"text"])))
+);
+
+
+ALTER TABLE "public"."retail_playlist_proposals" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."retail_playlist_tracks" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "playlist_id" "uuid" NOT NULL,
+    "track_id" "uuid" NOT NULL,
+    "position" integer DEFAULT 0 NOT NULL,
+    "added_at" timestamp with time zone DEFAULT "now"() NOT NULL
+);
+
+
+ALTER TABLE "public"."retail_playlist_tracks" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."retail_playlists" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "title" "text" NOT NULL,
+    "mood" "text",
+    "description" "text",
+    "cover_image_url" "text",
+    "is_active" boolean DEFAULT true NOT NULL,
+    "created_by" "uuid",
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL
+);
+
+
+ALTER TABLE "public"."retail_playlists" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."retail_price_guide" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "venue_type" "text" NOT NULL,
+    "suggested_fee_min" numeric(10,2),
+    "suggested_fee_max" numeric(10,2),
+    "notes" "text",
+    "sort_order" integer DEFAULT 0 NOT NULL,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL
+);
+
+
+ALTER TABLE "public"."retail_price_guide" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."retail_subscriptions" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "venue_id" "uuid" NOT NULL,
+    "tier" "text" DEFAULT 'standard'::"text" NOT NULL,
+    "status" "text" DEFAULT 'active'::"text" NOT NULL,
+    "started_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "current_period_end" timestamp with time zone,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "monthly_fee" numeric(10,2) DEFAULT 0 NOT NULL,
+    "paypal_subscription_id" "text",
+    "paypal_plan_id" "text",
+    "paypal_product_id" "text",
+    "paypal_billed_usd" numeric(10,2),
+    CONSTRAINT "retail_subscriptions_status_check" CHECK (("status" = ANY (ARRAY['active'::"text", 'paused'::"text", 'cancelled'::"text"])))
+);
+
+
+ALTER TABLE "public"."retail_subscriptions" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."retail_venue_likes" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "venue_id" "uuid" NOT NULL,
+    "track_id" "uuid" NOT NULL,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL
+);
+
+
+ALTER TABLE "public"."retail_venue_likes" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."retail_venue_locations" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "venue_id" "uuid" NOT NULL,
+    "location_name" "text" NOT NULL,
+    "address" "text",
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL
+);
+
+
+ALTER TABLE "public"."retail_venue_locations" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."retail_venues" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "user_id" "uuid",
+    "business_name" "text" NOT NULL,
+    "contact_name" "text",
+    "contact_email" "text",
+    "contact_phone" "text",
+    "status" "text" DEFAULT 'pending'::"text" NOT NULL,
+    "created_by" "uuid",
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "ads_enabled" boolean DEFAULT true NOT NULL,
+    "signup_token" "text",
+    "signup_token_expires_at" timestamp with time zone,
+    CONSTRAINT "retail_venues_status_check" CHECK (("status" = ANY (ARRAY['pending'::"text", 'active'::"text", 'suspended'::"text", 'cancelled'::"text"])))
+);
+
+
+ALTER TABLE "public"."retail_venues" OWNER TO "postgres";
+
+
 CREATE TABLE IF NOT EXISTS "public"."school_sessions_config" (
     "id" "uuid" DEFAULT '00000000-0000-0000-0000-000000000001'::"uuid" NOT NULL,
     "is_enabled" boolean DEFAULT false NOT NULL,
@@ -3483,6 +4267,8 @@ CREATE TABLE IF NOT EXISTS "public"."school_sessions_config" (
     "viral_course_url" "text",
     "platform_course_url" "text",
     "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "youtube_playlist_url" "text",
+    "vip_candidate_cap" integer DEFAULT 50 NOT NULL,
     CONSTRAINT "school_sessions_config_singleton" CHECK (("id" = '00000000-0000-0000-0000-000000000001'::"uuid"))
 );
 
@@ -3553,7 +4339,13 @@ CREATE TABLE IF NOT EXISTS "public"."school_sessions_entries" (
     "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     "song_id" "uuid",
     "is_group" boolean DEFAULT false NOT NULL,
-    "is_winner" boolean DEFAULT false NOT NULL
+    "is_winner" boolean DEFAULT false NOT NULL,
+    "tiktok_video_url" "text",
+    "tiktok_tagged_confirmed" boolean DEFAULT false NOT NULL,
+    "instagram_followed_confirmed" boolean DEFAULT false NOT NULL,
+    "youtube_subscribed_confirmed" boolean DEFAULT false NOT NULL,
+    "needs_school_verification" boolean GENERATED ALWAYS AS (("school_id" IS NULL)) STORED,
+    "verification_code_id" "uuid"
 );
 
 
@@ -3589,6 +4381,19 @@ CREATE TABLE IF NOT EXISTS "public"."school_sessions_guardian_consents" (
 ALTER TABLE "public"."school_sessions_guardian_consents" OWNER TO "postgres";
 
 
+CREATE TABLE IF NOT EXISTS "public"."school_sessions_judges" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "competition_id" "uuid" NOT NULL,
+    "user_id" "uuid" NOT NULL,
+    "judge_name" "text",
+    "invited_by" "uuid",
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL
+);
+
+
+ALTER TABLE "public"."school_sessions_judges" OWNER TO "postgres";
+
+
 CREATE TABLE IF NOT EXISTS "public"."school_sessions_schools" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
     "name" "text" NOT NULL,
@@ -3622,6 +4427,33 @@ COMMENT ON COLUMN "public"."school_sessions_shortlist_songs"."reference_track_id
 
 COMMENT ON COLUMN "public"."school_sessions_shortlist_songs"."reference_url" IS 'Fallback external link (e.g. a Suno share link) if the original isn''t uploaded as a track.';
 
+
+
+CREATE TABLE IF NOT EXISTS "public"."school_sessions_verification_codes" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "code" "text" NOT NULL,
+    "school_id" "uuid",
+    "is_used" boolean DEFAULT false NOT NULL,
+    "used_at" timestamp with time zone,
+    "created_by" "uuid",
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL
+);
+
+
+ALTER TABLE "public"."school_sessions_verification_codes" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."school_sessions_vip_candidates" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "candidate_number" integer NOT NULL,
+    "name" "text" NOT NULL,
+    "ref_code" "text",
+    "issued_by" "uuid",
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL
+);
+
+
+ALTER TABLE "public"."school_sessions_vip_candidates" OWNER TO "postgres";
 
 
 CREATE TABLE IF NOT EXISTS "public"."school_sessions_votes" (
@@ -3720,19 +4552,6 @@ CREATE TABLE IF NOT EXISTS "public"."story_likes" (
 ALTER TABLE "public"."story_likes" OWNER TO "postgres";
 
 
-CREATE TABLE IF NOT EXISTS "public"."story_reactions" (
-    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
-    "story_id" "uuid" NOT NULL,
-    "user_id" "uuid" NOT NULL,
-    "emoji" "text" NOT NULL,
-    "created_at" timestamp with time zone DEFAULT "now"(),
-    CONSTRAINT "story_reactions_emoji_check" CHECK (("emoji" = ANY (ARRAY['🔥'::"text", '❤️'::"text", '🎵'::"text", '💯'::"text", '😮'::"text"])))
-);
-
-
-ALTER TABLE "public"."story_reactions" OWNER TO "postgres";
-
-
 CREATE TABLE IF NOT EXISTS "public"."story_views" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
     "story_id" "uuid" NOT NULL,
@@ -3743,23 +4562,6 @@ CREATE TABLE IF NOT EXISTS "public"."story_views" (
 
 
 ALTER TABLE "public"."story_views" OWNER TO "postgres";
-
-
-CREATE TABLE IF NOT EXISTS "public"."subscription_tiers" (
-    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
-    "artist_id" "uuid" NOT NULL,
-    "name" "text" NOT NULL,
-    "description" "text",
-    "price" numeric NOT NULL,
-    "currency" "text" DEFAULT 'USD'::"text",
-    "benefits" "jsonb" DEFAULT '[]'::"jsonb",
-    "order_index" integer DEFAULT 0,
-    "is_active" boolean DEFAULT true,
-    "created_at" timestamp with time zone DEFAULT "now"()
-);
-
-
-ALTER TABLE "public"."subscription_tiers" OWNER TO "postgres";
 
 
 CREATE TABLE IF NOT EXISTS "public"."subscriptions" (
@@ -3875,17 +4677,6 @@ CREATE TABLE IF NOT EXISTS "public"."track_comments" (
 ALTER TABLE "public"."track_comments" OWNER TO "postgres";
 
 
-CREATE TABLE IF NOT EXISTS "public"."track_favorites" (
-    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
-    "track_id" "uuid" NOT NULL,
-    "user_id" "uuid" NOT NULL,
-    "created_at" timestamp with time zone DEFAULT "now"()
-);
-
-
-ALTER TABLE "public"."track_favorites" OWNER TO "postgres";
-
-
 CREATE TABLE IF NOT EXISTS "public"."track_likes" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
     "track_id" "uuid" NOT NULL,
@@ -3907,17 +4698,6 @@ CREATE TABLE IF NOT EXISTS "public"."track_presaves" (
 
 
 ALTER TABLE "public"."track_presaves" OWNER TO "postgres";
-
-
-CREATE TABLE IF NOT EXISTS "public"."track_saves" (
-    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
-    "track_id" "uuid" NOT NULL,
-    "user_id" "uuid" NOT NULL,
-    "created_at" timestamp with time zone DEFAULT "now"()
-);
-
-
-ALTER TABLE "public"."track_saves" OWNER TO "postgres";
 
 
 CREATE TABLE IF NOT EXISTS "public"."track_stems" (
@@ -3946,43 +4726,6 @@ CREATE TABLE IF NOT EXISTS "public"."track_versions" (
 
 
 ALTER TABLE "public"."track_versions" OWNER TO "postgres";
-
-
-CREATE TABLE IF NOT EXISTS "public"."transactions" (
-    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
-    "user_id" "uuid",
-    "artist_id" "uuid",
-    "type" "text" NOT NULL,
-    "amount" numeric NOT NULL,
-    "currency" "text" DEFAULT 'USD'::"text",
-    "paypal_transaction_id" "text",
-    "status" "text" DEFAULT 'pending'::"text",
-    "metadata" "jsonb" DEFAULT '{}'::"jsonb",
-    "created_at" timestamp with time zone DEFAULT "now"(),
-    CONSTRAINT "transactions_status_check" CHECK (("status" = ANY (ARRAY['pending'::"text", 'completed'::"text", 'failed'::"text", 'refunded'::"text"]))),
-    CONSTRAINT "transactions_type_check" CHECK (("type" = ANY (ARRAY['download'::"text", 'subscription'::"text", 'tip'::"text", 'album_purchase'::"text"])))
-);
-
-
-ALTER TABLE "public"."transactions" OWNER TO "postgres";
-
-
-CREATE TABLE IF NOT EXISTS "public"."upload_templates" (
-    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
-    "name" "text" NOT NULL,
-    "artist" "text",
-    "genre" "text",
-    "mood" "text",
-    "bpm_min" integer,
-    "bpm_max" integer,
-    "key_signature" "text",
-    "tags" "text"[],
-    "created_by" "uuid",
-    "created_at" timestamp with time zone DEFAULT "timezone"('utc'::"text", "now"()) NOT NULL
-);
-
-
-ALTER TABLE "public"."upload_templates" OWNER TO "postgres";
 
 
 CREATE TABLE IF NOT EXISTS "public"."user_bans" (
@@ -4093,6 +4836,11 @@ ALTER TABLE ONLY "public"."affiliate_conversions"
 
 
 
+ALTER TABLE ONLY "public"."affiliate_credit_redemptions"
+    ADD CONSTRAINT "affiliate_credit_redemptions_pkey" PRIMARY KEY ("id");
+
+
+
 ALTER TABLE ONLY "public"."affiliate_payouts"
     ADD CONSTRAINT "affiliate_payouts_pkey" PRIMARY KEY ("id");
 
@@ -4168,16 +4916,6 @@ ALTER TABLE ONLY "public"."artist_payment_profiles"
 
 
 
-ALTER TABLE ONLY "public"."artist_personas"
-    ADD CONSTRAINT "artist_personas_artist_id_key" UNIQUE ("artist_id");
-
-
-
-ALTER TABLE ONLY "public"."artist_personas"
-    ADD CONSTRAINT "artist_personas_pkey" PRIMARY KEY ("id");
-
-
-
 ALTER TABLE ONLY "public"."artist_post_comments"
     ADD CONSTRAINT "artist_post_comments_pkey" PRIMARY KEY ("id");
 
@@ -4250,11 +4988,6 @@ ALTER TABLE ONLY "public"."beat_purchases"
 
 ALTER TABLE ONLY "public"."bug_reports"
     ADD CONSTRAINT "bug_reports_pkey" PRIMARY KEY ("id");
-
-
-
-ALTER TABLE ONLY "public"."campaign_images"
-    ADD CONSTRAINT "campaign_images_pkey" PRIMARY KEY ("id");
 
 
 
@@ -4348,11 +5081,6 @@ ALTER TABLE ONLY "public"."collaborations"
 
 
 
-ALTER TABLE ONLY "public"."comments"
-    ADD CONSTRAINT "comments_pkey" PRIMARY KEY ("id");
-
-
-
 ALTER TABLE ONLY "public"."competition_entries"
     ADD CONSTRAINT "competition_entries_competition_id_artist_id_key" UNIQUE ("competition_id", "artist_id");
 
@@ -4360,16 +5088,6 @@ ALTER TABLE ONLY "public"."competition_entries"
 
 ALTER TABLE ONLY "public"."competition_entries"
     ADD CONSTRAINT "competition_entries_pkey" PRIMARY KEY ("id");
-
-
-
-ALTER TABLE ONLY "public"."competition_moderators"
-    ADD CONSTRAINT "competition_moderators_competition_id_artist_id_key" UNIQUE ("competition_id", "artist_id");
-
-
-
-ALTER TABLE ONLY "public"."competition_moderators"
-    ADD CONSTRAINT "competition_moderators_pkey" PRIMARY KEY ("id");
 
 
 
@@ -4403,11 +5121,6 @@ ALTER TABLE ONLY "public"."competitions"
 
 
 
-ALTER TABLE ONLY "public"."content_drafts"
-    ADD CONSTRAINT "content_drafts_pkey" PRIMARY KEY ("id");
-
-
-
 ALTER TABLE ONLY "public"."credits_transactions"
     ADD CONSTRAINT "credits_transactions_pkey" PRIMARY KEY ("id");
 
@@ -4430,16 +5143,6 @@ ALTER TABLE ONLY "public"."downloads"
 
 ALTER TABLE ONLY "public"."downloads"
     ADD CONSTRAINT "downloads_user_track_unique" UNIQUE ("user_id", "track_id");
-
-
-
-ALTER TABLE ONLY "public"."email_campaign_logs"
-    ADD CONSTRAINT "email_campaign_logs_pkey" PRIMARY KEY ("id");
-
-
-
-ALTER TABLE ONLY "public"."email_campaigns"
-    ADD CONSTRAINT "email_campaigns_pkey" PRIMARY KEY ("id");
 
 
 
@@ -4513,8 +5216,8 @@ ALTER TABLE ONLY "public"."global_contacts"
 
 
 
-ALTER TABLE ONLY "public"."likes"
-    ADD CONSTRAINT "likes_pkey" PRIMARY KEY ("id");
+ALTER TABLE ONLY "public"."home_hero"
+    ADD CONSTRAINT "home_hero_pkey" PRIMARY KEY ("id");
 
 
 
@@ -4535,16 +5238,6 @@ ALTER TABLE ONLY "public"."listener_feedback"
 
 ALTER TABLE ONLY "public"."listener_feedback"
     ADD CONSTRAINT "listener_feedback_user_id_track_id_key" UNIQUE ("user_id", "track_id");
-
-
-
-ALTER TABLE ONLY "public"."listener_personas"
-    ADD CONSTRAINT "listener_personas_pkey" PRIMARY KEY ("id");
-
-
-
-ALTER TABLE ONLY "public"."listener_personas"
-    ADD CONSTRAINT "listener_personas_user_id_key" UNIQUE ("user_id");
 
 
 
@@ -4593,26 +5286,6 @@ ALTER TABLE ONLY "public"."listening_sessions"
 
 
 
-ALTER TABLE ONLY "public"."lrc_anonymous_sessions"
-    ADD CONSTRAINT "lrc_anonymous_sessions_pkey" PRIMARY KEY ("id");
-
-
-
-ALTER TABLE ONLY "public"."lrc_corrections"
-    ADD CONSTRAINT "lrc_corrections_pkey" PRIMARY KEY ("id");
-
-
-
-ALTER TABLE ONLY "public"."lrc_events"
-    ADD CONSTRAINT "lrc_events_pkey" PRIMARY KEY ("id");
-
-
-
-ALTER TABLE ONLY "public"."lyric_projects"
-    ADD CONSTRAINT "lyric_projects_pkey" PRIMARY KEY ("id");
-
-
-
 ALTER TABLE ONLY "public"."monthly_wrapped_log"
     ADD CONSTRAINT "monthly_wrapped_log_pkey" PRIMARY KEY ("id");
 
@@ -4620,6 +5293,26 @@ ALTER TABLE ONLY "public"."monthly_wrapped_log"
 
 ALTER TABLE ONLY "public"."monthly_wrapped_log"
     ADD CONSTRAINT "monthly_wrapped_log_user_id_year_month_key" UNIQUE ("user_id", "year_month");
+
+
+
+ALTER TABLE ONLY "public"."newsletter_editors"
+    ADD CONSTRAINT "newsletter_editors_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."newsletter_editors"
+    ADD CONSTRAINT "newsletter_editors_user_id_key" UNIQUE ("user_id");
+
+
+
+ALTER TABLE ONLY "public"."newsletter_posts"
+    ADD CONSTRAINT "newsletter_posts_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."newsletter_posts"
+    ADD CONSTRAINT "newsletter_posts_slug_key" UNIQUE ("slug");
 
 
 
@@ -4645,11 +5338,6 @@ ALTER TABLE ONLY "public"."platform_tiers"
 
 ALTER TABLE ONLY "public"."platform_tiers"
     ADD CONSTRAINT "platform_tiers_slug_key" UNIQUE ("slug");
-
-
-
-ALTER TABLE ONLY "public"."playlist_add_log"
-    ADD CONSTRAINT "playlist_add_log_pkey" PRIMARY KEY ("id");
 
 
 
@@ -4688,36 +5376,6 @@ ALTER TABLE ONLY "public"."playlists"
 
 
 
-ALTER TABLE ONLY "public"."poll_votes"
-    ADD CONSTRAINT "poll_votes_pkey" PRIMARY KEY ("id");
-
-
-
-ALTER TABLE ONLY "public"."poll_votes"
-    ADD CONSTRAINT "poll_votes_poll_id_user_id_key" UNIQUE ("poll_id", "user_id");
-
-
-
-ALTER TABLE ONLY "public"."polls"
-    ADD CONSTRAINT "polls_pkey" PRIMARY KEY ("id");
-
-
-
-ALTER TABLE ONLY "public"."post_likes"
-    ADD CONSTRAINT "post_likes_pkey" PRIMARY KEY ("id");
-
-
-
-ALTER TABLE ONLY "public"."post_likes"
-    ADD CONSTRAINT "post_likes_post_id_user_id_key" UNIQUE ("post_id", "user_id");
-
-
-
-ALTER TABLE ONLY "public"."posts"
-    ADD CONSTRAINT "posts_pkey" PRIMARY KEY ("id");
-
-
-
 ALTER TABLE ONLY "public"."profiles"
     ADD CONSTRAINT "profiles_email_key" UNIQUE ("email");
 
@@ -4740,6 +5398,141 @@ ALTER TABLE ONLY "public"."push_subscriptions"
 
 ALTER TABLE ONLY "public"."push_subscriptions"
     ADD CONSTRAINT "push_subscriptions_user_id_endpoint_key" UNIQUE ("user_id", "endpoint");
+
+
+
+ALTER TABLE ONLY "public"."retail_ad_plays"
+    ADD CONSTRAINT "retail_ad_plays_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."retail_ad_revenue"
+    ADD CONSTRAINT "retail_ad_revenue_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."retail_admins"
+    ADD CONSTRAINT "retail_admins_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."retail_admins"
+    ADD CONSTRAINT "retail_admins_user_id_key" UNIQUE ("user_id");
+
+
+
+ALTER TABLE ONLY "public"."retail_ads"
+    ADD CONSTRAINT "retail_ads_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."retail_artist_payouts"
+    ADD CONSTRAINT "retail_artist_payouts_period_id_artist_id_key" UNIQUE ("period_id", "artist_id");
+
+
+
+ALTER TABLE ONLY "public"."retail_artist_payouts"
+    ADD CONSTRAINT "retail_artist_payouts_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."retail_catalog"
+    ADD CONSTRAINT "retail_catalog_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."retail_catalog"
+    ADD CONSTRAINT "retail_catalog_track_id_key" UNIQUE ("track_id");
+
+
+
+ALTER TABLE ONLY "public"."retail_notification_reads"
+    ADD CONSTRAINT "retail_notification_reads_notification_id_venue_id_key" UNIQUE ("notification_id", "venue_id");
+
+
+
+ALTER TABLE ONLY "public"."retail_notification_reads"
+    ADD CONSTRAINT "retail_notification_reads_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."retail_notifications"
+    ADD CONSTRAINT "retail_notifications_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."retail_payout_periods"
+    ADD CONSTRAINT "retail_payout_periods_period_start_period_end_key" UNIQUE ("period_start", "period_end");
+
+
+
+ALTER TABLE ONLY "public"."retail_payout_periods"
+    ADD CONSTRAINT "retail_payout_periods_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."retail_pitches"
+    ADD CONSTRAINT "retail_pitches_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."retail_play_logs"
+    ADD CONSTRAINT "retail_play_logs_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."retail_playlist_proposals"
+    ADD CONSTRAINT "retail_playlist_proposals_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."retail_playlist_tracks"
+    ADD CONSTRAINT "retail_playlist_tracks_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."retail_playlist_tracks"
+    ADD CONSTRAINT "retail_playlist_tracks_playlist_id_track_id_key" UNIQUE ("playlist_id", "track_id");
+
+
+
+ALTER TABLE ONLY "public"."retail_playlists"
+    ADD CONSTRAINT "retail_playlists_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."retail_price_guide"
+    ADD CONSTRAINT "retail_price_guide_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."retail_subscriptions"
+    ADD CONSTRAINT "retail_subscriptions_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."retail_venue_likes"
+    ADD CONSTRAINT "retail_venue_likes_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."retail_venue_likes"
+    ADD CONSTRAINT "retail_venue_likes_venue_id_track_id_key" UNIQUE ("venue_id", "track_id");
+
+
+
+ALTER TABLE ONLY "public"."retail_venue_locations"
+    ADD CONSTRAINT "retail_venue_locations_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."retail_venues"
+    ADD CONSTRAINT "retail_venues_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."retail_venues"
+    ADD CONSTRAINT "retail_venues_signup_token_key" UNIQUE ("signup_token");
 
 
 
@@ -4788,6 +5581,16 @@ ALTER TABLE ONLY "public"."school_sessions_guardian_consents"
 
 
 
+ALTER TABLE ONLY "public"."school_sessions_judges"
+    ADD CONSTRAINT "school_sessions_judges_competition_id_user_id_key" UNIQUE ("competition_id", "user_id");
+
+
+
+ALTER TABLE ONLY "public"."school_sessions_judges"
+    ADD CONSTRAINT "school_sessions_judges_pkey" PRIMARY KEY ("id");
+
+
+
 ALTER TABLE ONLY "public"."school_sessions_schools"
     ADD CONSTRAINT "school_sessions_schools_pkey" PRIMARY KEY ("id");
 
@@ -4795,6 +5598,26 @@ ALTER TABLE ONLY "public"."school_sessions_schools"
 
 ALTER TABLE ONLY "public"."school_sessions_shortlist_songs"
     ADD CONSTRAINT "school_sessions_shortlist_songs_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."school_sessions_verification_codes"
+    ADD CONSTRAINT "school_sessions_verification_codes_code_key" UNIQUE ("code");
+
+
+
+ALTER TABLE ONLY "public"."school_sessions_verification_codes"
+    ADD CONSTRAINT "school_sessions_verification_codes_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."school_sessions_vip_candidates"
+    ADD CONSTRAINT "school_sessions_vip_candidates_candidate_number_key" UNIQUE ("candidate_number");
+
+
+
+ALTER TABLE ONLY "public"."school_sessions_vip_candidates"
+    ADD CONSTRAINT "school_sessions_vip_candidates_pkey" PRIMARY KEY ("id");
 
 
 
@@ -4858,16 +5681,6 @@ ALTER TABLE ONLY "public"."story_likes"
 
 
 
-ALTER TABLE ONLY "public"."story_reactions"
-    ADD CONSTRAINT "story_reactions_pkey" PRIMARY KEY ("id");
-
-
-
-ALTER TABLE ONLY "public"."story_reactions"
-    ADD CONSTRAINT "story_reactions_story_id_user_id_emoji_key" UNIQUE ("story_id", "user_id", "emoji");
-
-
-
 ALTER TABLE ONLY "public"."story_views"
     ADD CONSTRAINT "story_views_pkey" PRIMARY KEY ("id");
 
@@ -4880,11 +5693,6 @@ ALTER TABLE ONLY "public"."story_views"
 
 ALTER TABLE ONLY "public"."streams"
     ADD CONSTRAINT "streams_pkey" PRIMARY KEY ("id");
-
-
-
-ALTER TABLE ONLY "public"."subscription_tiers"
-    ADD CONSTRAINT "subscription_tiers_pkey" PRIMARY KEY ("id");
 
 
 
@@ -4958,16 +5766,6 @@ ALTER TABLE ONLY "public"."track_comments"
 
 
 
-ALTER TABLE ONLY "public"."track_favorites"
-    ADD CONSTRAINT "track_favorites_pkey" PRIMARY KEY ("id");
-
-
-
-ALTER TABLE ONLY "public"."track_favorites"
-    ADD CONSTRAINT "track_favorites_track_id_user_id_key" UNIQUE ("track_id", "user_id");
-
-
-
 ALTER TABLE ONLY "public"."track_likes"
     ADD CONSTRAINT "track_likes_pkey" PRIMARY KEY ("id");
 
@@ -4993,16 +5791,6 @@ ALTER TABLE ONLY "public"."track_presaves"
 
 
 
-ALTER TABLE ONLY "public"."track_saves"
-    ADD CONSTRAINT "track_saves_pkey" PRIMARY KEY ("id");
-
-
-
-ALTER TABLE ONLY "public"."track_saves"
-    ADD CONSTRAINT "track_saves_track_id_user_id_key" UNIQUE ("track_id", "user_id");
-
-
-
 ALTER TABLE ONLY "public"."track_stems"
     ADD CONSTRAINT "track_stems_pkey" PRIMARY KEY ("id");
 
@@ -5023,18 +5811,8 @@ ALTER TABLE ONLY "public"."tracks"
 
 
 
-ALTER TABLE ONLY "public"."transactions"
-    ADD CONSTRAINT "transactions_pkey" PRIMARY KEY ("id");
-
-
-
 ALTER TABLE ONLY "public"."competition_entries"
     ADD CONSTRAINT "uniq_entry_per_artist_competition" UNIQUE ("competition_id", "artist_id");
-
-
-
-ALTER TABLE ONLY "public"."upload_templates"
-    ADD CONSTRAINT "upload_templates_pkey" PRIMARY KEY ("id");
 
 
 
@@ -5330,11 +6108,7 @@ CREATE INDEX "idx_comment_reactions_comment" ON "public"."track_comment_reaction
 
 
 
-CREATE INDEX "idx_comments_post" ON "public"."comments" USING "btree" ("post_id");
-
-
-
-CREATE INDEX "idx_content_drafts_status" ON "public"."content_drafts" USING "btree" ("status");
+CREATE INDEX "idx_credit_redemptions_status" ON "public"."affiliate_credit_redemptions" USING "btree" ("status");
 
 
 
@@ -5414,15 +6188,7 @@ CREATE INDEX "idx_listener_subs_user_id" ON "public"."listener_tier_subscription
 
 
 
-CREATE INDEX "idx_lrc_corr_created" ON "public"."lrc_corrections" USING "btree" ("created_at");
-
-
-
-CREATE INDEX "idx_lrc_corr_lang" ON "public"."lrc_corrections" USING "btree" ("language_hint");
-
-
-
-CREATE INDEX "idx_lrc_corr_word" ON "public"."lrc_corrections" USING "btree" ("whisper_word");
+CREATE INDEX "idx_newsletter_posts_slug" ON "public"."newsletter_posts" USING "btree" ("slug");
 
 
 
@@ -5458,10 +6224,6 @@ CREATE INDEX "idx_payouts_transaction_id" ON "public"."payouts" USING "btree" ("
 
 
 
-CREATE INDEX "idx_playlist_add_track" ON "public"."playlist_add_log" USING "btree" ("track_id");
-
-
-
 CREATE INDEX "idx_playlist_tracks_playlist_id" ON "public"."playlist_tracks" USING "btree" ("playlist_id");
 
 
@@ -5474,30 +6236,6 @@ CREATE INDEX "idx_playlists_user_id" ON "public"."playlists" USING "btree" ("use
 
 
 
-CREATE INDEX "idx_poll_votes_poll_id" ON "public"."poll_votes" USING "btree" ("poll_id");
-
-
-
-CREATE INDEX "idx_polls_post_id" ON "public"."polls" USING "btree" ("post_id");
-
-
-
-CREATE INDEX "idx_post_likes_post" ON "public"."post_likes" USING "btree" ("post_id");
-
-
-
-CREATE INDEX "idx_posts_artist_id" ON "public"."posts" USING "btree" ("artist_id");
-
-
-
-CREATE INDEX "idx_posts_created_at" ON "public"."posts" USING "btree" ("created_at");
-
-
-
-CREATE INDEX "idx_posts_post_type" ON "public"."posts" USING "btree" ("post_type");
-
-
-
 CREATE INDEX "idx_purchases_track_id" ON "public"."purchases" USING "btree" ("track_id");
 
 
@@ -5507,6 +6245,74 @@ CREATE INDEX "idx_purchases_user_id" ON "public"."purchases" USING "btree" ("use
 
 
 CREATE INDEX "idx_push_subs_user_id" ON "public"."push_subscriptions" USING "btree" ("user_id");
+
+
+
+CREATE INDEX "idx_retail_ad_plays_venue" ON "public"."retail_ad_plays" USING "btree" ("venue_id");
+
+
+
+CREATE INDEX "idx_retail_ads_venue" ON "public"."retail_ads" USING "btree" ("venue_id");
+
+
+
+CREATE INDEX "idx_retail_artist_payouts_artist" ON "public"."retail_artist_payouts" USING "btree" ("artist_id");
+
+
+
+CREATE INDEX "idx_retail_artist_payouts_period" ON "public"."retail_artist_payouts" USING "btree" ("period_id");
+
+
+
+CREATE INDEX "idx_retail_notif_reads_notif" ON "public"."retail_notification_reads" USING "btree" ("notification_id");
+
+
+
+CREATE INDEX "idx_retail_notif_reads_venue" ON "public"."retail_notification_reads" USING "btree" ("venue_id");
+
+
+
+CREATE INDEX "idx_retail_pitches_artist" ON "public"."retail_pitches" USING "btree" ("artist_id");
+
+
+
+CREATE INDEX "idx_retail_pitches_status" ON "public"."retail_pitches" USING "btree" ("status");
+
+
+
+CREATE INDEX "idx_retail_play_logs_track" ON "public"."retail_play_logs" USING "btree" ("track_id");
+
+
+
+CREATE INDEX "idx_retail_play_logs_venue_played" ON "public"."retail_play_logs" USING "btree" ("venue_id", "played_at");
+
+
+
+CREATE INDEX "idx_retail_playlist_tracks_playlist" ON "public"."retail_playlist_tracks" USING "btree" ("playlist_id");
+
+
+
+CREATE UNIQUE INDEX "idx_retail_subs_paypal_sub_id" ON "public"."retail_subscriptions" USING "btree" ("paypal_subscription_id") WHERE ("paypal_subscription_id" IS NOT NULL);
+
+
+
+CREATE INDEX "idx_retail_subscriptions_venue" ON "public"."retail_subscriptions" USING "btree" ("venue_id");
+
+
+
+CREATE INDEX "idx_retail_venue_likes_track" ON "public"."retail_venue_likes" USING "btree" ("track_id");
+
+
+
+CREATE INDEX "idx_retail_venue_likes_venue" ON "public"."retail_venue_likes" USING "btree" ("venue_id");
+
+
+
+CREATE INDEX "idx_retail_venue_locations_venue" ON "public"."retail_venue_locations" USING "btree" ("venue_id");
+
+
+
+CREATE UNIQUE INDEX "idx_school_sessions_entries_one_per_email" ON "public"."school_sessions_entries" USING "btree" ("competition_id", "lower"("entrant_email"));
 
 
 
@@ -5523,10 +6329,6 @@ CREATE INDEX "idx_streams_track_id" ON "public"."streams" USING "btree" ("track_
 
 
 CREATE INDEX "idx_streams_user_id" ON "public"."streams" USING "btree" ("user_id");
-
-
-
-CREATE INDEX "idx_subscription_tiers_artist_id" ON "public"."subscription_tiers" USING "btree" ("artist_id");
 
 
 
@@ -5550,19 +6352,11 @@ CREATE INDEX "idx_track_comments_parent" ON "public"."track_comments" USING "btr
 
 
 
-CREATE INDEX "idx_track_favs_track" ON "public"."track_favorites" USING "btree" ("track_id");
-
-
-
 CREATE INDEX "idx_track_likes_track_id" ON "public"."track_likes" USING "btree" ("track_id");
 
 
 
 CREATE INDEX "idx_track_likes_user_id" ON "public"."track_likes" USING "btree" ("user_id");
-
-
-
-CREATE INDEX "idx_track_saves_track" ON "public"."track_saves" USING "btree" ("track_id");
 
 
 
@@ -5610,27 +6404,19 @@ CREATE INDEX "idx_tracks_trending" ON "public"."tracks" USING "btree" ("trending
 
 
 
-CREATE INDEX "idx_transactions_artist_id" ON "public"."transactions" USING "btree" ("artist_id");
-
-
-
-CREATE INDEX "idx_transactions_created_at" ON "public"."transactions" USING "btree" ("created_at");
-
-
-
-CREATE INDEX "idx_transactions_status" ON "public"."transactions" USING "btree" ("status");
-
-
-
-CREATE INDEX "idx_transactions_user_id" ON "public"."transactions" USING "btree" ("user_id");
-
-
-
 CREATE INDEX "idx_user_profiles_created_at" ON "public"."user_profiles" USING "btree" ("created_at" DESC);
 
 
 
 CREATE INDEX "idx_user_profiles_email" ON "public"."user_profiles" USING "btree" ("email");
+
+
+
+CREATE INDEX "idx_verification_codes_school" ON "public"."school_sessions_verification_codes" USING "btree" ("school_id");
+
+
+
+CREATE INDEX "idx_verification_codes_unused" ON "public"."school_sessions_verification_codes" USING "btree" ("is_used") WHERE ("is_used" = false);
 
 
 
@@ -5683,10 +6469,6 @@ CREATE INDEX "school_sessions_shortlist_songs_comp_idx" ON "public"."school_sess
 
 
 CREATE INDEX "school_sessions_votes_entry_idx" ON "public"."school_sessions_votes" USING "btree" ("entry_id");
-
-
-
-CREATE INDEX "story_reactions_story_id_idx" ON "public"."story_reactions" USING "btree" ("story_id");
 
 
 
@@ -5778,10 +6560,6 @@ CREATE OR REPLACE TRIGGER "on_artist_suspended" AFTER UPDATE ON "public"."artist
 
 
 
-CREATE OR REPLACE TRIGGER "on_comment_count" AFTER INSERT OR DELETE ON "public"."comments" FOR EACH ROW EXECUTE FUNCTION "public"."update_post_comment_count"();
-
-
-
 CREATE OR REPLACE TRIGGER "on_competition_vote" AFTER INSERT ON "public"."competition_votes" FOR EACH ROW EXECUTE FUNCTION "public"."increment_entry_votes"();
 
 
@@ -5810,10 +6588,6 @@ CREATE OR REPLACE TRIGGER "on_post_like_change" AFTER INSERT OR DELETE ON "publi
 
 
 
-CREATE OR REPLACE TRIGGER "on_stream_insert" AFTER INSERT ON "public"."streams" FOR EACH ROW EXECUTE FUNCTION "public"."increment_track_stream_count"();
-
-
-
 CREATE OR REPLACE TRIGGER "on_stream_insert_score" AFTER INSERT ON "public"."streams" FOR EACH ROW EXECUTE FUNCTION "public"."on_stream_update_score"();
 
 
@@ -5822,15 +6596,7 @@ CREATE OR REPLACE TRIGGER "on_stream_update_engagement" AFTER INSERT ON "public"
 
 
 
-CREATE OR REPLACE TRIGGER "on_track_fav_count" AFTER INSERT OR DELETE ON "public"."track_favorites" FOR EACH ROW EXECUTE FUNCTION "public"."update_track_favorite_count"();
-
-
-
 CREATE OR REPLACE TRIGGER "on_track_like_count" AFTER INSERT OR DELETE ON "public"."track_likes" FOR EACH ROW EXECUTE FUNCTION "public"."update_track_like_count"();
-
-
-
-CREATE OR REPLACE TRIGGER "on_track_save_count" AFTER INSERT OR DELETE ON "public"."track_saves" FOR EACH ROW EXECUTE FUNCTION "public"."update_track_save_count"();
 
 
 
@@ -5843,6 +6609,14 @@ CREATE OR REPLACE TRIGGER "sync_follower_count_trigger" AFTER INSERT OR DELETE O
 
 
 CREATE OR REPLACE TRIGGER "trg_auto_flag_stream_abuse" AFTER INSERT ON "public"."streams" FOR EACH ROW EXECUTE FUNCTION "public"."auto_flag_stream_abuse"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_block_explicit_catalog" BEFORE INSERT ON "public"."retail_catalog" FOR EACH ROW EXECUTE FUNCTION "public"."block_explicit_retail_catalog"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_block_explicit_playlist_track" BEFORE INSERT ON "public"."retail_playlist_tracks" FOR EACH ROW EXECUTE FUNCTION "public"."block_explicit_retail_track"();
 
 
 
@@ -5874,14 +6648,6 @@ CREATE OR REPLACE TRIGGER "trg_notify_new_track" AFTER INSERT ON "public"."track
 
 
 
-CREATE OR REPLACE TRIGGER "trg_notify_post_comment" AFTER INSERT ON "public"."comments" FOR EACH ROW EXECUTE FUNCTION "public"."notify_post_comment"();
-
-
-
-CREATE OR REPLACE TRIGGER "trg_notify_post_like" AFTER INSERT ON "public"."post_likes" FOR EACH ROW EXECUTE FUNCTION "public"."notify_post_like"();
-
-
-
 CREATE OR REPLACE TRIGGER "trg_prevent_stream_spam" BEFORE INSERT ON "public"."streams" FOR EACH ROW EXECUTE FUNCTION "public"."prevent_stream_spam"();
 
 
@@ -5895,6 +6661,14 @@ CREATE OR REPLACE TRIGGER "trg_protect_profiles_privilege" BEFORE UPDATE ON "pub
 
 
 CREATE OR REPLACE TRIGGER "trg_protect_user_profiles_privilege" BEFORE UPDATE ON "public"."user_profiles" FOR EACH ROW EXECUTE FUNCTION "public"."protect_privilege_columns"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_remove_newly_explicit" AFTER UPDATE OF "is_explicit" ON "public"."tracks" FOR EACH ROW EXECUTE FUNCTION "public"."remove_newly_explicit_from_retail"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_retail_play_to_stream" AFTER INSERT ON "public"."retail_play_logs" FOR EACH ROW EXECUTE FUNCTION "public"."retail_play_to_stream"();
 
 
 
@@ -5974,6 +6748,21 @@ ALTER TABLE ONLY "public"."affiliate_conversions"
 
 
 
+ALTER TABLE ONLY "public"."affiliate_credit_redemptions"
+    ADD CONSTRAINT "affiliate_credit_redemptions_affiliate_id_fkey" FOREIGN KEY ("affiliate_id") REFERENCES "public"."affiliates"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."affiliate_credit_redemptions"
+    ADD CONSTRAINT "affiliate_credit_redemptions_fulfilled_by_fkey" FOREIGN KEY ("fulfilled_by") REFERENCES "auth"."users"("id");
+
+
+
+ALTER TABLE ONLY "public"."affiliate_credit_redemptions"
+    ADD CONSTRAINT "affiliate_credit_redemptions_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "auth"."users"("id") ON DELETE CASCADE;
+
+
+
 ALTER TABLE ONLY "public"."affiliate_payouts"
     ADD CONSTRAINT "affiliate_payouts_affiliate_id_fkey" FOREIGN KEY ("affiliate_id") REFERENCES "public"."affiliates"("id") ON DELETE CASCADE;
 
@@ -6036,11 +6825,6 @@ ALTER TABLE ONLY "public"."artist_guestbook"
 
 ALTER TABLE ONLY "public"."artist_payment_profiles"
     ADD CONSTRAINT "artist_payment_profiles_artist_id_fkey" FOREIGN KEY ("artist_id") REFERENCES "public"."artists"("id") ON DELETE CASCADE;
-
-
-
-ALTER TABLE ONLY "public"."artist_personas"
-    ADD CONSTRAINT "artist_personas_artist_id_fkey" FOREIGN KEY ("artist_id") REFERENCES "public"."artists"("id") ON DELETE CASCADE;
 
 
 
@@ -6131,11 +6915,6 @@ ALTER TABLE ONLY "public"."beat_purchases"
 
 ALTER TABLE ONLY "public"."bug_reports"
     ADD CONSTRAINT "bug_reports_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "auth"."users"("id") ON DELETE CASCADE;
-
-
-
-ALTER TABLE ONLY "public"."campaign_images"
-    ADD CONSTRAINT "campaign_images_campaign_id_fkey" FOREIGN KEY ("campaign_id") REFERENCES "public"."email_campaigns"("id") ON DELETE CASCADE;
 
 
 
@@ -6274,26 +7053,6 @@ ALTER TABLE ONLY "public"."collaborations"
 
 
 
-ALTER TABLE ONLY "public"."comments"
-    ADD CONSTRAINT "comments_artist_id_fkey" FOREIGN KEY ("artist_id") REFERENCES "public"."artists"("id") ON DELETE SET NULL;
-
-
-
-ALTER TABLE ONLY "public"."comments"
-    ADD CONSTRAINT "comments_parent_id_fkey" FOREIGN KEY ("parent_id") REFERENCES "public"."comments"("id");
-
-
-
-ALTER TABLE ONLY "public"."comments"
-    ADD CONSTRAINT "comments_post_id_fkey" FOREIGN KEY ("post_id") REFERENCES "public"."posts"("id") ON DELETE CASCADE;
-
-
-
-ALTER TABLE ONLY "public"."comments"
-    ADD CONSTRAINT "comments_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "auth"."users"("id") ON DELETE CASCADE;
-
-
-
 ALTER TABLE ONLY "public"."competition_entries"
     ADD CONSTRAINT "competition_entries_artist_id_fkey" FOREIGN KEY ("artist_id") REFERENCES "public"."artists"("id") ON DELETE CASCADE;
 
@@ -6306,21 +7065,6 @@ ALTER TABLE ONLY "public"."competition_entries"
 
 ALTER TABLE ONLY "public"."competition_entries"
     ADD CONSTRAINT "competition_entries_track_id_fkey" FOREIGN KEY ("track_id") REFERENCES "public"."tracks"("id") ON DELETE SET NULL;
-
-
-
-ALTER TABLE ONLY "public"."competition_moderators"
-    ADD CONSTRAINT "competition_moderators_artist_id_fkey" FOREIGN KEY ("artist_id") REFERENCES "public"."artists"("id") ON DELETE CASCADE;
-
-
-
-ALTER TABLE ONLY "public"."competition_moderators"
-    ADD CONSTRAINT "competition_moderators_competition_id_fkey" FOREIGN KEY ("competition_id") REFERENCES "public"."competitions"("id") ON DELETE CASCADE;
-
-
-
-ALTER TABLE ONLY "public"."competition_moderators"
-    ADD CONSTRAINT "competition_moderators_granted_by_fkey" FOREIGN KEY ("granted_by") REFERENCES "auth"."users"("id");
 
 
 
@@ -6379,16 +7123,6 @@ ALTER TABLE ONLY "public"."competitions"
 
 
 
-ALTER TABLE ONLY "public"."content_drafts"
-    ADD CONSTRAINT "content_drafts_published_post_id_fkey" FOREIGN KEY ("published_post_id") REFERENCES "public"."posts"("id");
-
-
-
-ALTER TABLE ONLY "public"."content_drafts"
-    ADD CONSTRAINT "content_drafts_reviewed_by_fkey" FOREIGN KEY ("reviewed_by") REFERENCES "auth"."users"("id");
-
-
-
 ALTER TABLE ONLY "public"."credits_transactions"
     ADD CONSTRAINT "credits_transactions_affiliate_id_fkey" FOREIGN KEY ("affiliate_id") REFERENCES "public"."affiliates"("id") ON DELETE SET NULL;
 
@@ -6416,21 +7150,6 @@ ALTER TABLE ONLY "public"."downloads"
 
 ALTER TABLE ONLY "public"."downloads"
     ADD CONSTRAINT "downloads_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "auth"."users"("id") ON DELETE SET NULL;
-
-
-
-ALTER TABLE ONLY "public"."email_campaign_logs"
-    ADD CONSTRAINT "email_campaign_logs_campaign_id_fkey" FOREIGN KEY ("campaign_id") REFERENCES "public"."email_campaigns"("id") ON DELETE CASCADE;
-
-
-
-ALTER TABLE ONLY "public"."email_campaign_logs"
-    ADD CONSTRAINT "email_campaign_logs_subscriber_id_fkey" FOREIGN KEY ("subscriber_id") REFERENCES "public"."email_subscribers"("id") ON DELETE CASCADE;
-
-
-
-ALTER TABLE ONLY "public"."email_campaigns"
-    ADD CONSTRAINT "email_campaigns_admin_id_fkey" FOREIGN KEY ("admin_id") REFERENCES "public"."admins"("id");
 
 
 
@@ -6489,8 +7208,8 @@ ALTER TABLE ONLY "public"."global_contacts"
 
 
 
-ALTER TABLE ONLY "public"."likes"
-    ADD CONSTRAINT "likes_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "auth"."users"("id") ON DELETE CASCADE;
+ALTER TABLE ONLY "public"."home_hero"
+    ADD CONSTRAINT "home_hero_created_by_fkey" FOREIGN KEY ("created_by") REFERENCES "auth"."users"("id");
 
 
 
@@ -6511,11 +7230,6 @@ ALTER TABLE ONLY "public"."listener_feedback"
 
 ALTER TABLE ONLY "public"."listener_feedback"
     ADD CONSTRAINT "listener_feedback_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "auth"."users"("id") ON DELETE CASCADE;
-
-
-
-ALTER TABLE ONLY "public"."listener_personas"
-    ADD CONSTRAINT "listener_personas_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "auth"."users"("id") ON DELETE CASCADE;
 
 
 
@@ -6569,23 +7283,23 @@ ALTER TABLE ONLY "public"."listening_sessions"
 
 
 
-ALTER TABLE ONLY "public"."lrc_anonymous_sessions"
-    ADD CONSTRAINT "lrc_anonymous_sessions_claimed_by_fkey" FOREIGN KEY ("claimed_by") REFERENCES "auth"."users"("id");
-
-
-
-ALTER TABLE ONLY "public"."lrc_corrections"
-    ADD CONSTRAINT "lrc_corrections_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "auth"."users"("id") ON DELETE SET NULL;
-
-
-
-ALTER TABLE ONLY "public"."lyric_projects"
-    ADD CONSTRAINT "lyric_projects_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "auth"."users"("id") ON DELETE CASCADE;
-
-
-
 ALTER TABLE ONLY "public"."monthly_wrapped_log"
     ADD CONSTRAINT "monthly_wrapped_log_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "auth"."users"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."newsletter_editors"
+    ADD CONSTRAINT "newsletter_editors_granted_by_fkey" FOREIGN KEY ("granted_by") REFERENCES "auth"."users"("id");
+
+
+
+ALTER TABLE ONLY "public"."newsletter_editors"
+    ADD CONSTRAINT "newsletter_editors_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "auth"."users"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."newsletter_posts"
+    ADD CONSTRAINT "newsletter_posts_sent_by_fkey" FOREIGN KEY ("sent_by") REFERENCES "auth"."users"("id");
 
 
 
@@ -6625,22 +7339,7 @@ ALTER TABLE ONLY "public"."payouts"
 
 
 ALTER TABLE ONLY "public"."payouts"
-    ADD CONSTRAINT "payouts_transaction_id_fkey" FOREIGN KEY ("transaction_id") REFERENCES "public"."transactions"("id");
-
-
-
-ALTER TABLE ONLY "public"."playlist_add_log"
-    ADD CONSTRAINT "playlist_add_log_playlist_id_fkey" FOREIGN KEY ("playlist_id") REFERENCES "public"."playlists"("id") ON DELETE CASCADE;
-
-
-
-ALTER TABLE ONLY "public"."playlist_add_log"
-    ADD CONSTRAINT "playlist_add_log_track_id_fkey" FOREIGN KEY ("track_id") REFERENCES "public"."tracks"("id") ON DELETE CASCADE;
-
-
-
-ALTER TABLE ONLY "public"."playlist_add_log"
-    ADD CONSTRAINT "playlist_add_log_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "auth"."users"("id") ON DELETE CASCADE;
+    ADD CONSTRAINT "payouts_transaction_id_fkey" FOREIGN KEY ("transaction_id") REFERENCES "archive"."transactions"("id");
 
 
 
@@ -6669,46 +7368,6 @@ ALTER TABLE ONLY "public"."playlists"
 
 
 
-ALTER TABLE ONLY "public"."poll_votes"
-    ADD CONSTRAINT "poll_votes_poll_id_fkey" FOREIGN KEY ("poll_id") REFERENCES "public"."polls"("id") ON DELETE CASCADE;
-
-
-
-ALTER TABLE ONLY "public"."poll_votes"
-    ADD CONSTRAINT "poll_votes_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "auth"."users"("id") ON DELETE CASCADE;
-
-
-
-ALTER TABLE ONLY "public"."polls"
-    ADD CONSTRAINT "polls_post_id_fkey" FOREIGN KEY ("post_id") REFERENCES "public"."posts"("id") ON DELETE CASCADE;
-
-
-
-ALTER TABLE ONLY "public"."post_likes"
-    ADD CONSTRAINT "post_likes_post_id_fkey" FOREIGN KEY ("post_id") REFERENCES "public"."posts"("id") ON DELETE CASCADE;
-
-
-
-ALTER TABLE ONLY "public"."post_likes"
-    ADD CONSTRAINT "post_likes_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "auth"."users"("id") ON DELETE CASCADE;
-
-
-
-ALTER TABLE ONLY "public"."posts"
-    ADD CONSTRAINT "posts_artist_id_fkey" FOREIGN KEY ("artist_id") REFERENCES "public"."artists"("id") ON DELETE CASCADE;
-
-
-
-ALTER TABLE ONLY "public"."posts"
-    ADD CONSTRAINT "posts_track_id_fkey" FOREIGN KEY ("track_id") REFERENCES "public"."tracks"("id") ON DELETE SET NULL;
-
-
-
-ALTER TABLE ONLY "public"."posts"
-    ADD CONSTRAINT "posts_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "auth"."users"("id");
-
-
-
 ALTER TABLE ONLY "public"."profiles"
     ADD CONSTRAINT "profiles_id_fkey" FOREIGN KEY ("id") REFERENCES "auth"."users"("id");
 
@@ -6731,6 +7390,181 @@ ALTER TABLE ONLY "public"."purchases"
 
 ALTER TABLE ONLY "public"."push_subscriptions"
     ADD CONSTRAINT "push_subscriptions_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "auth"."users"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."retail_ad_plays"
+    ADD CONSTRAINT "retail_ad_plays_ad_id_fkey" FOREIGN KEY ("ad_id") REFERENCES "public"."retail_ads"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."retail_ad_plays"
+    ADD CONSTRAINT "retail_ad_plays_location_id_fkey" FOREIGN KEY ("location_id") REFERENCES "public"."retail_venue_locations"("id") ON DELETE SET NULL;
+
+
+
+ALTER TABLE ONLY "public"."retail_ad_plays"
+    ADD CONSTRAINT "retail_ad_plays_venue_id_fkey" FOREIGN KEY ("venue_id") REFERENCES "public"."retail_venues"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."retail_ad_revenue"
+    ADD CONSTRAINT "retail_ad_revenue_recorded_by_fkey" FOREIGN KEY ("recorded_by") REFERENCES "auth"."users"("id");
+
+
+
+ALTER TABLE ONLY "public"."retail_admins"
+    ADD CONSTRAINT "retail_admins_granted_by_fkey" FOREIGN KEY ("granted_by") REFERENCES "auth"."users"("id");
+
+
+
+ALTER TABLE ONLY "public"."retail_admins"
+    ADD CONSTRAINT "retail_admins_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "auth"."users"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."retail_ads"
+    ADD CONSTRAINT "retail_ads_created_by_fkey" FOREIGN KEY ("created_by") REFERENCES "auth"."users"("id");
+
+
+
+ALTER TABLE ONLY "public"."retail_ads"
+    ADD CONSTRAINT "retail_ads_venue_id_fkey" FOREIGN KEY ("venue_id") REFERENCES "public"."retail_venues"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."retail_artist_payouts"
+    ADD CONSTRAINT "retail_artist_payouts_artist_id_fkey" FOREIGN KEY ("artist_id") REFERENCES "public"."artists"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."retail_artist_payouts"
+    ADD CONSTRAINT "retail_artist_payouts_period_id_fkey" FOREIGN KEY ("period_id") REFERENCES "public"."retail_payout_periods"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."retail_catalog"
+    ADD CONSTRAINT "retail_catalog_added_by_fkey" FOREIGN KEY ("added_by") REFERENCES "auth"."users"("id");
+
+
+
+ALTER TABLE ONLY "public"."retail_catalog"
+    ADD CONSTRAINT "retail_catalog_pitch_id_fkey" FOREIGN KEY ("pitch_id") REFERENCES "public"."retail_pitches"("id") ON DELETE SET NULL;
+
+
+
+ALTER TABLE ONLY "public"."retail_catalog"
+    ADD CONSTRAINT "retail_catalog_track_id_fkey" FOREIGN KEY ("track_id") REFERENCES "public"."tracks"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."retail_notification_reads"
+    ADD CONSTRAINT "retail_notification_reads_notification_id_fkey" FOREIGN KEY ("notification_id") REFERENCES "public"."retail_notifications"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."retail_notification_reads"
+    ADD CONSTRAINT "retail_notification_reads_venue_id_fkey" FOREIGN KEY ("venue_id") REFERENCES "public"."retail_venues"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."retail_notifications"
+    ADD CONSTRAINT "retail_notifications_newsletter_post_id_fkey" FOREIGN KEY ("newsletter_post_id") REFERENCES "public"."newsletter_posts"("id") ON DELETE SET NULL;
+
+
+
+ALTER TABLE ONLY "public"."retail_notifications"
+    ADD CONSTRAINT "retail_notifications_sent_by_fkey" FOREIGN KEY ("sent_by") REFERENCES "auth"."users"("id");
+
+
+
+ALTER TABLE ONLY "public"."retail_payout_periods"
+    ADD CONSTRAINT "retail_payout_periods_calculated_by_fkey" FOREIGN KEY ("calculated_by") REFERENCES "auth"."users"("id");
+
+
+
+ALTER TABLE ONLY "public"."retail_pitches"
+    ADD CONSTRAINT "retail_pitches_artist_id_fkey" FOREIGN KEY ("artist_id") REFERENCES "public"."artists"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."retail_pitches"
+    ADD CONSTRAINT "retail_pitches_reviewed_by_fkey" FOREIGN KEY ("reviewed_by") REFERENCES "auth"."users"("id");
+
+
+
+ALTER TABLE ONLY "public"."retail_pitches"
+    ADD CONSTRAINT "retail_pitches_track_id_fkey" FOREIGN KEY ("track_id") REFERENCES "public"."tracks"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."retail_play_logs"
+    ADD CONSTRAINT "retail_play_logs_location_id_fkey" FOREIGN KEY ("location_id") REFERENCES "public"."retail_venue_locations"("id") ON DELETE SET NULL;
+
+
+
+ALTER TABLE ONLY "public"."retail_play_logs"
+    ADD CONSTRAINT "retail_play_logs_playlist_id_fkey" FOREIGN KEY ("playlist_id") REFERENCES "public"."retail_playlists"("id") ON DELETE SET NULL;
+
+
+
+ALTER TABLE ONLY "public"."retail_play_logs"
+    ADD CONSTRAINT "retail_play_logs_track_id_fkey" FOREIGN KEY ("track_id") REFERENCES "public"."tracks"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."retail_play_logs"
+    ADD CONSTRAINT "retail_play_logs_venue_id_fkey" FOREIGN KEY ("venue_id") REFERENCES "public"."retail_venues"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."retail_playlist_proposals"
+    ADD CONSTRAINT "retail_playlist_proposals_reviewed_by_fkey" FOREIGN KEY ("reviewed_by") REFERENCES "auth"."users"("id");
+
+
+
+ALTER TABLE ONLY "public"."retail_playlist_tracks"
+    ADD CONSTRAINT "retail_playlist_tracks_playlist_id_fkey" FOREIGN KEY ("playlist_id") REFERENCES "public"."retail_playlists"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."retail_playlist_tracks"
+    ADD CONSTRAINT "retail_playlist_tracks_track_id_fkey" FOREIGN KEY ("track_id") REFERENCES "public"."tracks"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."retail_playlists"
+    ADD CONSTRAINT "retail_playlists_created_by_fkey" FOREIGN KEY ("created_by") REFERENCES "auth"."users"("id");
+
+
+
+ALTER TABLE ONLY "public"."retail_subscriptions"
+    ADD CONSTRAINT "retail_subscriptions_venue_id_fkey" FOREIGN KEY ("venue_id") REFERENCES "public"."retail_venues"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."retail_venue_likes"
+    ADD CONSTRAINT "retail_venue_likes_track_id_fkey" FOREIGN KEY ("track_id") REFERENCES "public"."tracks"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."retail_venue_likes"
+    ADD CONSTRAINT "retail_venue_likes_venue_id_fkey" FOREIGN KEY ("venue_id") REFERENCES "public"."retail_venues"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."retail_venue_locations"
+    ADD CONSTRAINT "retail_venue_locations_venue_id_fkey" FOREIGN KEY ("venue_id") REFERENCES "public"."retail_venues"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."retail_venues"
+    ADD CONSTRAINT "retail_venues_created_by_fkey" FOREIGN KEY ("created_by") REFERENCES "auth"."users"("id");
+
+
+
+ALTER TABLE ONLY "public"."retail_venues"
+    ADD CONSTRAINT "retail_venues_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "auth"."users"("id") ON DELETE SET NULL;
 
 
 
@@ -6774,6 +7608,11 @@ ALTER TABLE ONLY "public"."school_sessions_entries"
 
 
 
+ALTER TABLE ONLY "public"."school_sessions_entries"
+    ADD CONSTRAINT "school_sessions_entries_verification_code_id_fkey" FOREIGN KEY ("verification_code_id") REFERENCES "public"."school_sessions_verification_codes"("id");
+
+
+
 ALTER TABLE ONLY "public"."school_sessions_entry_members"
     ADD CONSTRAINT "school_sessions_entry_members_entry_id_fkey" FOREIGN KEY ("entry_id") REFERENCES "public"."school_sessions_entries"("id") ON DELETE CASCADE;
 
@@ -6784,6 +7623,21 @@ ALTER TABLE ONLY "public"."school_sessions_guardian_consents"
 
 
 
+ALTER TABLE ONLY "public"."school_sessions_judges"
+    ADD CONSTRAINT "school_sessions_judges_competition_id_fkey" FOREIGN KEY ("competition_id") REFERENCES "public"."competitions"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."school_sessions_judges"
+    ADD CONSTRAINT "school_sessions_judges_invited_by_fkey" FOREIGN KEY ("invited_by") REFERENCES "auth"."users"("id");
+
+
+
+ALTER TABLE ONLY "public"."school_sessions_judges"
+    ADD CONSTRAINT "school_sessions_judges_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "auth"."users"("id") ON DELETE CASCADE;
+
+
+
 ALTER TABLE ONLY "public"."school_sessions_shortlist_songs"
     ADD CONSTRAINT "school_sessions_shortlist_songs_competition_id_fkey" FOREIGN KEY ("competition_id") REFERENCES "public"."competitions"("id") ON DELETE CASCADE;
 
@@ -6791,6 +7645,21 @@ ALTER TABLE ONLY "public"."school_sessions_shortlist_songs"
 
 ALTER TABLE ONLY "public"."school_sessions_shortlist_songs"
     ADD CONSTRAINT "school_sessions_shortlist_songs_reference_track_id_fkey" FOREIGN KEY ("reference_track_id") REFERENCES "public"."tracks"("id") ON DELETE SET NULL;
+
+
+
+ALTER TABLE ONLY "public"."school_sessions_verification_codes"
+    ADD CONSTRAINT "school_sessions_verification_codes_created_by_fkey" FOREIGN KEY ("created_by") REFERENCES "auth"."users"("id");
+
+
+
+ALTER TABLE ONLY "public"."school_sessions_verification_codes"
+    ADD CONSTRAINT "school_sessions_verification_codes_school_id_fkey" FOREIGN KEY ("school_id") REFERENCES "public"."school_sessions_schools"("id") ON DELETE SET NULL;
+
+
+
+ALTER TABLE ONLY "public"."school_sessions_vip_candidates"
+    ADD CONSTRAINT "school_sessions_vip_candidates_issued_by_fkey" FOREIGN KEY ("issued_by") REFERENCES "auth"."users"("id");
 
 
 
@@ -6884,16 +7753,6 @@ ALTER TABLE ONLY "public"."story_likes"
 
 
 
-ALTER TABLE ONLY "public"."story_reactions"
-    ADD CONSTRAINT "story_reactions_story_id_fkey" FOREIGN KEY ("story_id") REFERENCES "public"."artist_stories"("id") ON DELETE CASCADE;
-
-
-
-ALTER TABLE ONLY "public"."story_reactions"
-    ADD CONSTRAINT "story_reactions_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "auth"."users"("id") ON DELETE CASCADE;
-
-
-
 ALTER TABLE ONLY "public"."story_views"
     ADD CONSTRAINT "story_views_story_id_fkey" FOREIGN KEY ("story_id") REFERENCES "public"."artist_stories"("id") ON DELETE CASCADE;
 
@@ -6914,18 +7773,13 @@ ALTER TABLE ONLY "public"."streams"
 
 
 
-ALTER TABLE ONLY "public"."subscription_tiers"
-    ADD CONSTRAINT "subscription_tiers_artist_id_fkey" FOREIGN KEY ("artist_id") REFERENCES "public"."artists"("id") ON DELETE CASCADE;
-
-
-
 ALTER TABLE ONLY "public"."subscriptions"
     ADD CONSTRAINT "subscriptions_artist_id_fkey" FOREIGN KEY ("artist_id") REFERENCES "public"."artists"("id") ON DELETE CASCADE;
 
 
 
 ALTER TABLE ONLY "public"."subscriptions"
-    ADD CONSTRAINT "subscriptions_tier_id_fkey" FOREIGN KEY ("tier_id") REFERENCES "public"."subscription_tiers"("id") ON DELETE CASCADE;
+    ADD CONSTRAINT "subscriptions_tier_id_fkey" FOREIGN KEY ("tier_id") REFERENCES "archive"."subscription_tiers"("id") ON DELETE CASCADE;
 
 
 
@@ -7004,16 +7858,6 @@ ALTER TABLE ONLY "public"."track_comments"
 
 
 
-ALTER TABLE ONLY "public"."track_favorites"
-    ADD CONSTRAINT "track_favorites_track_id_fkey" FOREIGN KEY ("track_id") REFERENCES "public"."tracks"("id") ON DELETE CASCADE;
-
-
-
-ALTER TABLE ONLY "public"."track_favorites"
-    ADD CONSTRAINT "track_favorites_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "auth"."users"("id") ON DELETE CASCADE;
-
-
-
 ALTER TABLE ONLY "public"."track_likes"
     ADD CONSTRAINT "track_likes_track_id_fkey" FOREIGN KEY ("track_id") REFERENCES "public"."tracks"("id") ON DELETE CASCADE;
 
@@ -7034,16 +7878,6 @@ ALTER TABLE ONLY "public"."track_presaves"
 
 
 
-ALTER TABLE ONLY "public"."track_saves"
-    ADD CONSTRAINT "track_saves_track_id_fkey" FOREIGN KEY ("track_id") REFERENCES "public"."tracks"("id") ON DELETE CASCADE;
-
-
-
-ALTER TABLE ONLY "public"."track_saves"
-    ADD CONSTRAINT "track_saves_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "auth"."users"("id") ON DELETE CASCADE;
-
-
-
 ALTER TABLE ONLY "public"."track_stems"
     ADD CONSTRAINT "track_stems_track_id_fkey" FOREIGN KEY ("track_id") REFERENCES "public"."tracks"("id") ON DELETE CASCADE;
 
@@ -7061,21 +7895,6 @@ ALTER TABLE ONLY "public"."tracks"
 
 ALTER TABLE ONLY "public"."tracks"
     ADD CONSTRAINT "tracks_artist_id_fkey" FOREIGN KEY ("artist_id") REFERENCES "public"."artists"("id") ON DELETE CASCADE;
-
-
-
-ALTER TABLE ONLY "public"."transactions"
-    ADD CONSTRAINT "transactions_artist_id_fkey" FOREIGN KEY ("artist_id") REFERENCES "public"."artists"("id") ON DELETE SET NULL;
-
-
-
-ALTER TABLE ONLY "public"."transactions"
-    ADD CONSTRAINT "transactions_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "auth"."users"("id") ON DELETE SET NULL;
-
-
-
-ALTER TABLE ONLY "public"."upload_templates"
-    ADD CONSTRAINT "upload_templates_created_by_fkey" FOREIGN KEY ("created_by") REFERENCES "auth"."users"("id");
 
 
 
@@ -7122,37 +7941,11 @@ CREATE POLICY "Admins can delete any track" ON "public"."tracks" FOR DELETE TO "
 
 
 
-CREATE POLICY "Admins can manage campaign images" ON "public"."campaign_images" USING ((EXISTS ( SELECT 1
-   FROM "public"."admins"
-  WHERE ("admins"."user_id" = "auth"."uid"()))));
-
-
-
-CREATE POLICY "Admins can manage campaigns" ON "public"."email_campaigns" USING ((EXISTS ( SELECT 1
-   FROM "public"."admins"
-  WHERE ("admins"."user_id" = "auth"."uid"()))));
-
-
-
-CREATE POLICY "Admins can manage content drafts" ON "public"."content_drafts" TO "authenticated" USING ((EXISTS ( SELECT 1
-   FROM "public"."admins"
-  WHERE ("admins"."user_id" = "auth"."uid"())))) WITH CHECK ((EXISTS ( SELECT 1
-   FROM "public"."admins"
-  WHERE ("admins"."user_id" = "auth"."uid"()))));
-
-
-
 CREATE POLICY "Admins can manage fraud flags" ON "public"."fraud_flags" TO "authenticated" USING ((EXISTS ( SELECT 1
    FROM "public"."admins"
   WHERE ("admins"."user_id" = "auth"."uid"())))) WITH CHECK ((EXISTS ( SELECT 1
    FROM "public"."admins"
   WHERE ("admins"."user_id" = "auth"."uid"()))));
-
-
-
-CREATE POLICY "Admins can manage templates" ON "public"."upload_templates" USING (("auth"."uid"() IN ( SELECT "admins"."user_id"
-   FROM "public"."admins"))) WITH CHECK (("auth"."uid"() IN ( SELECT "admins"."user_id"
-   FROM "public"."admins")));
 
 
 
@@ -7213,12 +8006,6 @@ CREATE POLICY "Admins can view all global contacts" ON "public"."global_contacts
 
 
 
-CREATE POLICY "Admins can view campaign logs" ON "public"."email_campaign_logs" FOR SELECT USING ((EXISTS ( SELECT 1
-   FROM "public"."admins"
-  WHERE ("admins"."user_id" = "auth"."uid"()))));
-
-
-
 CREATE POLICY "Admins manage members" ON "public"."chat_room_members" FOR UPDATE USING (("room_id" IN ( SELECT "chat_room_members_1"."room_id"
    FROM "public"."chat_room_members" "chat_room_members_1"
   WHERE (("chat_room_members_1"."user_id" = "auth"."uid"()) AND ("chat_room_members_1"."role" = ANY (ARRAY['admin'::"text", 'moderator'::"text"]))))));
@@ -7254,14 +8041,6 @@ CREATE POLICY "Anyone can read live sessions" ON "public"."listening_sessions" F
 
 
 
-CREATE POLICY "Anyone can read playlist logs" ON "public"."playlist_add_log" FOR SELECT USING (true);
-
-
-
-CREATE POLICY "Anyone can read post likes" ON "public"."post_likes" FOR SELECT USING (true);
-
-
-
 CREATE POLICY "Anyone can read queue" ON "public"."listening_session_queue" FOR SELECT USING (true);
 
 
@@ -7278,10 +8057,6 @@ CREATE POLICY "Anyone can read session messages" ON "public"."session_messages" 
 
 
 
-CREATE POLICY "Anyone can read story reactions" ON "public"."story_reactions" FOR SELECT USING (true);
-
-
-
 CREATE POLICY "Anyone can read thoughts" ON "public"."artist_thoughts" FOR SELECT USING (true);
 
 
@@ -7295,18 +8070,6 @@ CREATE POLICY "Anyone can subscribe" ON "public"."email_subscribers" FOR INSERT 
 
 
 CREATE POLICY "Anyone can view active rooms" ON "public"."chat_rooms" FOR SELECT USING (("is_active" = true));
-
-
-
-CREATE POLICY "Anyone can view comments" ON "public"."comments" FOR SELECT USING (true);
-
-
-
-CREATE POLICY "Anyone can view favorite counts" ON "public"."track_favorites" FOR SELECT USING (true);
-
-
-
-CREATE POLICY "Anyone can view save counts" ON "public"."track_saves" FOR SELECT USING (true);
 
 
 
@@ -7336,26 +8099,7 @@ CREATE POLICY "Artists can create own tracks" ON "public"."tracks" FOR INSERT WI
 
 
 
-CREATE POLICY "Artists can create polls" ON "public"."polls" FOR INSERT WITH CHECK (("post_id" IN ( SELECT "p"."id"
-   FROM ("public"."posts" "p"
-     JOIN "public"."artists" "a" ON (("p"."artist_id" = "a"."id")))
-  WHERE ("a"."user_id" = "auth"."uid"()))));
-
-
-
-CREATE POLICY "Artists can create posts" ON "public"."posts" FOR INSERT WITH CHECK ((("artist_id" IN ( SELECT "artists"."id"
-   FROM "public"."artists"
-  WHERE ("artists"."user_id" = "auth"."uid"()))) AND ("user_id" = "auth"."uid"())));
-
-
-
 CREATE POLICY "Artists can delete own albums" ON "public"."albums" FOR DELETE USING (("artist_id" IN ( SELECT "artists"."id"
-   FROM "public"."artists"
-  WHERE ("artists"."user_id" = "auth"."uid"()))));
-
-
-
-CREATE POLICY "Artists can delete own posts" ON "public"."posts" FOR DELETE USING (("artist_id" IN ( SELECT "artists"."id"
    FROM "public"."artists"
   WHERE ("artists"."user_id" = "auth"."uid"()))));
 
@@ -7400,12 +8144,6 @@ CREATE POLICY "Artists can insert stems" ON "public"."track_stems" FOR INSERT TO
    FROM ("public"."tracks"
      JOIN "public"."artists" ON (("artists"."id" = "tracks"."artist_id")))
   WHERE (("tracks"."id" = "track_stems"."track_id") AND ("artists"."user_id" = "auth"."uid"())))));
-
-
-
-CREATE POLICY "Artists can manage own tiers" ON "public"."subscription_tiers" FOR INSERT WITH CHECK (("artist_id" IN ( SELECT "artists"."id"
-   FROM "public"."artists"
-  WHERE ("artists"."user_id" = "auth"."uid"()))));
 
 
 
@@ -7458,19 +8196,7 @@ CREATE POLICY "Artists can update own notifications" ON "public"."notifications"
 
 
 
-CREATE POLICY "Artists can update own posts" ON "public"."posts" FOR UPDATE USING (("artist_id" IN ( SELECT "artists"."id"
-   FROM "public"."artists"
-  WHERE ("artists"."user_id" = "auth"."uid"()))));
-
-
-
 CREATE POLICY "Artists can update own profile" ON "public"."artists" FOR UPDATE USING (("auth"."uid"() = "user_id"));
-
-
-
-CREATE POLICY "Artists can update own tiers" ON "public"."subscription_tiers" FOR UPDATE USING (("artist_id" IN ( SELECT "artists"."id"
-   FROM "public"."artists"
-  WHERE ("artists"."user_id" = "auth"."uid"()))));
 
 
 
@@ -7516,12 +8242,6 @@ CREATE POLICY "Artists can view own notifications" ON "public"."notifications" F
 
 
 
-CREATE POLICY "Artists can view own posts" ON "public"."posts" FOR SELECT USING (("artist_id" IN ( SELECT "artists"."id"
-   FROM "public"."artists"
-  WHERE ("artists"."user_id" = "auth"."uid"()))));
-
-
-
 CREATE POLICY "Artists can view own tracks" ON "public"."tracks" FOR SELECT USING (("artist_id" IN ( SELECT "artists"."id"
    FROM "public"."artists"
   WHERE ("artists"."user_id" = "auth"."uid"()))));
@@ -7537,12 +8257,6 @@ CREATE POLICY "Artists can view their own collaborations" ON "public"."collabora
 
 
 CREATE POLICY "Artists can view their subscribers" ON "public"."subscriptions" FOR SELECT USING (("artist_id" IN ( SELECT "artists"."id"
-   FROM "public"."artists"
-  WHERE ("artists"."user_id" = "auth"."uid"()))));
-
-
-
-CREATE POLICY "Artists can view their transactions" ON "public"."transactions" FOR SELECT USING (("artist_id" IN ( SELECT "artists"."id"
    FROM "public"."artists"
   WHERE ("artists"."user_id" = "auth"."uid"()))));
 
@@ -7636,12 +8350,6 @@ CREATE POLICY "Artists see own payouts" ON "public"."payouts" FOR SELECT USING (
 
 
 
-CREATE POLICY "Artists see own persona" ON "public"."artist_personas" FOR SELECT USING (("artist_id" IN ( SELECT "artists"."id"
-   FROM "public"."artists"
-  WHERE ("artists"."user_id" = "auth"."uid"()))));
-
-
-
 CREATE POLICY "Artists see own subscription" ON "public"."artist_tier_subscriptions" FOR SELECT USING (("artist_id" IN ( SELECT "artists"."id"
    FROM "public"."artists"
   WHERE ("artists"."user_id" = "auth"."uid"()))));
@@ -7696,10 +8404,6 @@ CREATE POLICY "Authenticated users can create artist profiles" ON "public"."arti
 
 
 
-CREATE POLICY "Authenticated users can react" ON "public"."story_reactions" FOR INSERT WITH CHECK (("auth"."uid"() = "user_id"));
-
-
-
 CREATE POLICY "Authenticated users can read all listeners" ON "public"."listeners" FOR SELECT TO "authenticated" USING (true);
 
 
@@ -7717,12 +8421,6 @@ CREATE POLICY "Buyers can read own purchases" ON "public"."beat_purchases" FOR S
 
 
 CREATE POLICY "Collaborators can read their memberships" ON "public"."playlist_collaborators" FOR SELECT USING (("auth"."uid"() = "user_id"));
-
-
-
-CREATE POLICY "Exclusive posts viewable by subscribers" ON "public"."posts" FOR SELECT USING ((("is_exclusive" = true) AND ("artist_id" IN ( SELECT "subscriptions"."artist_id"
-   FROM "public"."subscriptions"
-  WHERE (("subscriptions"."user_id" = "auth"."uid"()) AND ("subscriptions"."status" = 'active'::"text"))))));
 
 
 
@@ -7831,15 +8529,7 @@ CREATE POLICY "Playlist tracks viewable with playlist" ON "public"."playlist_tra
 
 
 
-CREATE POLICY "Poll votes are publicly viewable" ON "public"."poll_votes" FOR SELECT USING (true);
-
-
-
 CREATE POLICY "Poll votes are publicly viewable" ON "public"."session_poll_votes" FOR SELECT USING (true);
-
-
-
-CREATE POLICY "Polls are publicly viewable" ON "public"."polls" FOR SELECT USING (true);
 
 
 
@@ -7865,10 +8555,6 @@ CREATE POLICY "Public playlist tracks viewable" ON "public"."playlist_tracks" FO
 
 
 CREATE POLICY "Public playlists viewable by all" ON "public"."playlists" FOR SELECT USING ((("is_public" = true) OR ("auth"."uid"() = "user_id")));
-
-
-
-CREATE POLICY "Public posts viewable by all" ON "public"."posts" FOR SELECT USING (("is_exclusive" = false));
 
 
 
@@ -7963,14 +8649,6 @@ CREATE POLICY "Streams are viewable by owner" ON "public"."streams" FOR SELECT U
 
 
 
-CREATE POLICY "System can create transactions" ON "public"."transactions" FOR INSERT WITH CHECK (("auth"."uid"() = "user_id"));
-
-
-
-CREATE POLICY "Tiers are publicly viewable" ON "public"."subscription_tiers" FOR SELECT USING (true);
-
-
-
 CREATE POLICY "Track owner delete collab" ON "public"."collaborations" FOR DELETE USING (("invited_by" IN ( SELECT "artists"."id"
    FROM "public"."artists"
   WHERE ("artists"."user_id" = "auth"."uid"()))));
@@ -8011,10 +8689,6 @@ CREATE POLICY "Users can count their own notifications" ON "public"."notificatio
 
 
 
-CREATE POLICY "Users can create comments" ON "public"."comments" FOR INSERT WITH CHECK (("auth"."uid"() = "user_id"));
-
-
-
 CREATE POLICY "Users can create playlists" ON "public"."playlists" FOR INSERT WITH CHECK (("auth"."uid"() = "user_id"));
 
 
@@ -8027,19 +8701,11 @@ CREATE POLICY "Users can create subscriptions" ON "public"."subscriptions" FOR I
 
 
 
-CREATE POLICY "Users can delete own comments" ON "public"."comments" FOR DELETE USING (("auth"."uid"() = "user_id"));
-
-
-
 CREATE POLICY "Users can delete own comments" ON "public"."thought_comments" FOR DELETE USING (("auth"."uid"() = "user_id"));
 
 
 
 CREATE POLICY "Users can delete own comments" ON "public"."track_comments" FOR DELETE USING (("auth"."uid"() = "user_id"));
-
-
-
-CREATE POLICY "Users can delete own likes" ON "public"."likes" FOR DELETE TO "authenticated" USING (("auth"."uid"() = "user_id"));
 
 
 
@@ -8058,10 +8724,6 @@ CREATE POLICY "Users can delete own notifications" ON "public"."notifications" F
 
 
 CREATE POLICY "Users can delete own playlists" ON "public"."playlists" FOR DELETE USING (("auth"."uid"() = "user_id"));
-
-
-
-CREATE POLICY "Users can delete post likes" ON "public"."post_likes" FOR DELETE USING (("auth"."uid"() = "user_id"));
 
 
 
@@ -8093,19 +8755,11 @@ CREATE POLICY "Users can insert own tips" ON "public"."tips" FOR INSERT WITH CHE
 
 
 
-CREATE POLICY "Users can insert post likes" ON "public"."post_likes" FOR INSERT WITH CHECK (("auth"."uid"() = "user_id"));
-
-
-
 CREATE POLICY "Users can log their own streams" ON "public"."streams" FOR INSERT WITH CHECK (("auth"."uid"() = "user_id"));
 
 
 
 CREATE POLICY "Users can manage own likes" ON "public"."artist_post_likes" USING (("auth"."uid"() = "user_id"));
-
-
-
-CREATE POLICY "Users can manage own likes" ON "public"."likes" FOR INSERT TO "authenticated" WITH CHECK (("auth"."uid"() = "user_id"));
 
 
 
@@ -8134,10 +8788,6 @@ CREATE POLICY "Users can read own spotlight" ON "public"."daily_artist_spotlight
 CREATE POLICY "Users can remove from own playlists" ON "public"."playlist_tracks" FOR DELETE USING (("playlist_id" IN ( SELECT "playlists"."id"
    FROM "public"."playlists"
   WHERE ("playlists"."user_id" = "auth"."uid"()))));
-
-
-
-CREATE POLICY "Users can remove their own reactions" ON "public"."story_reactions" FOR DELETE USING (("auth"."uid"() = "user_id"));
 
 
 
@@ -8175,10 +8825,6 @@ CREATE POLICY "Users can update own subscriptions" ON "public"."subscriptions" F
 
 
 
-CREATE POLICY "Users can view all likes" ON "public"."likes" FOR SELECT TO "authenticated" USING (true);
-
-
-
 CREATE POLICY "Users can view own global contact record" ON "public"."global_contacts" FOR SELECT TO "authenticated" USING (("auth"."uid"() = "user_id"));
 
 
@@ -8191,15 +8837,7 @@ CREATE POLICY "Users can view own subscriptions" ON "public"."subscriptions" FOR
 
 
 
-CREATE POLICY "Users can view own transactions" ON "public"."transactions" FOR SELECT USING (("auth"."uid"() = "user_id"));
-
-
-
 CREATE POLICY "Users can view their own boosts" ON "public"."session_priority_boosts" FOR SELECT USING (("auth"."uid"() = "user_id"));
-
-
-
-CREATE POLICY "Users can vote on polls" ON "public"."poll_votes" FOR INSERT WITH CHECK (("auth"."uid"() = "user_id"));
 
 
 
@@ -8227,19 +8865,11 @@ CREATE POLICY "Users leave rooms" ON "public"."chat_room_members" FOR DELETE USI
 
 
 
-CREATE POLICY "Users log own playlist adds" ON "public"."playlist_add_log" FOR INSERT WITH CHECK (("user_id" = "auth"."uid"()));
-
-
-
 CREATE POLICY "Users manage own alerts" ON "public"."artist_alerts" USING (("auth"."uid"() = "user_id"));
 
 
 
 CREATE POLICY "Users manage own entry" ON "public"."artist_guestbook" USING (("auth"."uid"() = "user_id"));
-
-
-
-CREATE POLICY "Users manage own favorites" ON "public"."track_favorites" USING (("user_id" = "auth"."uid"()));
 
 
 
@@ -8274,10 +8904,6 @@ CREATE POLICY "Users manage own reactions" ON "public"."chat_reactions" USING ((
 
 
 CREATE POLICY "Users manage own reactions" ON "public"."track_comment_reactions" USING (("auth"."uid"() = "user_id"));
-
-
-
-CREATE POLICY "Users manage own saves" ON "public"."track_saves" USING (("user_id" = "auth"."uid"()));
 
 
 
@@ -8339,10 +8965,6 @@ CREATE POLICY "Users read reactions" ON "public"."chat_reactions" FOR SELECT USI
 
 
 
-CREATE POLICY "Users see own persona" ON "public"."listener_personas" FOR SELECT USING (("user_id" = "auth"."uid"()));
-
-
-
 CREATE POLICY "Users send own messages" ON "public"."chat_messages" FOR INSERT WITH CHECK ((("user_id" = "auth"."uid"()) AND ("room_id" IN ( SELECT "chat_room_members"."room_id"
    FROM "public"."chat_room_members"
   WHERE ("chat_room_members"."user_id" = "auth"."uid"())))));
@@ -8360,12 +8982,6 @@ CREATE POLICY "abp_admin_read" ON "public"."artist_behavior_profiles" FOR SELECT
 
 
 CREATE POLICY "abp_service_write" ON "public"."artist_behavior_profiles" TO "service_role" USING (true) WITH CHECK (true);
-
-
-
-CREATE POLICY "admin read corrections" ON "public"."lrc_corrections" FOR SELECT USING ((EXISTS ( SELECT 1
-   FROM "public"."admins"
-  WHERE ("admins"."user_id" = "auth"."uid"()))));
 
 
 
@@ -8389,6 +9005,9 @@ ALTER TABLE "public"."affiliate_clicks" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "public"."affiliate_conversions" ENABLE ROW LEVEL SECURITY;
 
 
+ALTER TABLE "public"."affiliate_credit_redemptions" ENABLE ROW LEVEL SECURITY;
+
+
 ALTER TABLE "public"."affiliate_payouts" ENABLE ROW LEVEL SECURITY;
 
 
@@ -8396,22 +9015,6 @@ ALTER TABLE "public"."affiliates" ENABLE ROW LEVEL SECURITY;
 
 
 ALTER TABLE "public"."albums" ENABLE ROW LEVEL SECURITY;
-
-
-CREATE POLICY "anon events" ON "public"."lrc_events" FOR INSERT TO "anon" WITH CHECK (true);
-
-
-
-CREATE POLICY "anon events auth" ON "public"."lrc_events" FOR INSERT TO "authenticated" WITH CHECK (true);
-
-
-
-CREATE POLICY "anon insert" ON "public"."lrc_anonymous_sessions" FOR INSERT WITH CHECK (true);
-
-
-
-CREATE POLICY "anon insert corrections" ON "public"."lrc_corrections" FOR INSERT WITH CHECK (true);
-
 
 
 CREATE POLICY "anyone can like" ON "public"."story_likes" FOR INSERT WITH CHECK (("auth"."uid"() = "user_id"));
@@ -8431,9 +9034,6 @@ ALTER TABLE "public"."artist_guestbook" ENABLE ROW LEVEL SECURITY;
 
 
 ALTER TABLE "public"."artist_payment_profiles" ENABLE ROW LEVEL SECURITY;
-
-
-ALTER TABLE "public"."artist_personas" ENABLE ROW LEVEL SECURITY;
 
 
 ALTER TABLE "public"."artist_post_comments" ENABLE ROW LEVEL SECURITY;
@@ -8479,6 +9079,10 @@ ALTER TABLE "public"."artist_voice_memos" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "public"."artists" ENABLE ROW LEVEL SECURITY;
 
 
+CREATE POLICY "artists_retail_admin_read" ON "public"."artists" FOR SELECT USING ("public"."is_retail_admin"());
+
+
+
 CREATE POLICY "artists_select" ON "public"."artists" FOR SELECT USING (true);
 
 
@@ -8487,9 +9091,6 @@ ALTER TABLE "public"."beat_purchases" ENABLE ROW LEVEL SECURITY;
 
 
 ALTER TABLE "public"."bug_reports" ENABLE ROW LEVEL SECURITY;
-
-
-ALTER TABLE "public"."campaign_images" ENABLE ROW LEVEL SECURITY;
 
 
 ALTER TABLE "public"."challenge_completions" ENABLE ROW LEVEL SECURITY;
@@ -8572,9 +9173,6 @@ CREATE POLICY "collab_requests_update" ON "public"."collab_requests" FOR UPDATE 
 ALTER TABLE "public"."collaborations" ENABLE ROW LEVEL SECURITY;
 
 
-ALTER TABLE "public"."comments" ENABLE ROW LEVEL SECURITY;
-
-
 CREATE POLICY "comments_delete_own_or_admin" ON "public"."artist_post_comments" FOR DELETE USING ((("auth"."uid"() = "user_id") OR (EXISTS ( SELECT 1
    FROM "public"."admins"
   WHERE ("admins"."user_id" = "auth"."uid"())))));
@@ -8607,9 +9205,6 @@ CREATE POLICY "competition_entries_write" ON "public"."competition_entries" FOR 
    FROM "public"."admins"))) WITH CHECK (("auth"."uid"() IN ( SELECT "admins"."user_id"
    FROM "public"."admins")));
 
-
-
-ALTER TABLE "public"."competition_moderators" ENABLE ROW LEVEL SECURITY;
 
 
 ALTER TABLE "public"."competition_payouts" ENABLE ROW LEVEL SECURITY;
@@ -8664,7 +9259,14 @@ CREATE POLICY "completions_select_all" ON "public"."challenge_completions" FOR S
 
 
 
-ALTER TABLE "public"."content_drafts" ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "credit_redemptions_admin_all" ON "public"."affiliate_credit_redemptions" USING (("auth"."uid"() IN ( SELECT "admins"."user_id"
+   FROM "public"."admins"))) WITH CHECK (("auth"."uid"() IN ( SELECT "admins"."user_id"
+   FROM "public"."admins")));
+
+
+
+CREATE POLICY "credit_redemptions_self_select" ON "public"."affiliate_credit_redemptions" FOR SELECT USING (("auth"."uid"() = "user_id"));
+
 
 
 ALTER TABLE "public"."credits_transactions" ENABLE ROW LEVEL SECURITY;
@@ -8684,12 +9286,6 @@ CREATE POLICY "el_admin_read" ON "public"."engagement_learning" FOR SELECT USING
 
 CREATE POLICY "el_service_write" ON "public"."engagement_learning" TO "service_role" USING (true) WITH CHECK (true);
 
-
-
-ALTER TABLE "public"."email_campaign_logs" ENABLE ROW LEVEL SECURITY;
-
-
-ALTER TABLE "public"."email_campaigns" ENABLE ROW LEVEL SECURITY;
 
 
 ALTER TABLE "public"."email_subscribers" ENABLE ROW LEVEL SECURITY;
@@ -8769,6 +9365,30 @@ ALTER TABLE "public"."fraud_flags" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "public"."global_contacts" ENABLE ROW LEVEL SECURITY;
 
 
+ALTER TABLE "public"."home_hero" ENABLE ROW LEVEL SECURITY;
+
+
+CREATE POLICY "home_hero_admin_all" ON "public"."home_hero" USING (("auth"."uid"() IN ( SELECT "admins"."user_id"
+   FROM "public"."admins"))) WITH CHECK (("auth"."uid"() IN ( SELECT "admins"."user_id"
+   FROM "public"."admins")));
+
+
+
+CREATE POLICY "home_hero_read_active" ON "public"."home_hero" FOR SELECT USING (("is_active" = true));
+
+
+
+CREATE POLICY "judges_admin_write" ON "public"."school_sessions_judges" USING (("auth"."uid"() IN ( SELECT "admins"."user_id"
+   FROM "public"."admins"))) WITH CHECK (("auth"."uid"() IN ( SELECT "admins"."user_id"
+   FROM "public"."admins")));
+
+
+
+CREATE POLICY "judges_select" ON "public"."school_sessions_judges" FOR SELECT USING ((("auth"."uid"() = "user_id") OR ("auth"."uid"() IN ( SELECT "admins"."user_id"
+   FROM "public"."admins"))));
+
+
+
 CREATE POLICY "lbp_admin_read" ON "public"."listener_behavior_profiles" FOR SELECT USING ((EXISTS ( SELECT 1
    FROM "public"."admins"
   WHERE ("admins"."user_id" = "auth"."uid"()))));
@@ -8783,16 +9403,10 @@ CREATE POLICY "lbp_service_write" ON "public"."listener_behavior_profiles" TO "s
 
 
 
-ALTER TABLE "public"."likes" ENABLE ROW LEVEL SECURITY;
-
-
 ALTER TABLE "public"."listener_behavior_profiles" ENABLE ROW LEVEL SECURITY;
 
 
 ALTER TABLE "public"."listener_feedback" ENABLE ROW LEVEL SECURITY;
-
-
-ALTER TABLE "public"."listener_personas" ENABLE ROW LEVEL SECURITY;
 
 
 ALTER TABLE "public"."listener_recommendations" ENABLE ROW LEVEL SECURITY;
@@ -8813,38 +9427,40 @@ ALTER TABLE "public"."listening_session_queue" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "public"."listening_sessions" ENABLE ROW LEVEL SECURITY;
 
 
-ALTER TABLE "public"."lrc_anonymous_sessions" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "public"."monthly_wrapped_log" ENABLE ROW LEVEL SECURITY;
 
 
-ALTER TABLE "public"."lrc_corrections" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "public"."newsletter_editors" ENABLE ROW LEVEL SECURITY;
 
 
-ALTER TABLE "public"."lrc_events" ENABLE ROW LEVEL SECURITY;
-
-
-ALTER TABLE "public"."lyric_projects" ENABLE ROW LEVEL SECURITY;
-
-
-CREATE POLICY "mods_admin" ON "public"."competition_moderators" USING (("auth"."uid"() IN ( SELECT "admins"."user_id"
+CREATE POLICY "newsletter_editors_admin_write" ON "public"."newsletter_editors" USING (("auth"."uid"() IN ( SELECT "admins"."user_id"
+   FROM "public"."admins"))) WITH CHECK (("auth"."uid"() IN ( SELECT "admins"."user_id"
    FROM "public"."admins")));
 
 
 
-CREATE POLICY "mods_read" ON "public"."competition_moderators" FOR SELECT USING (true);
+CREATE POLICY "newsletter_editors_select" ON "public"."newsletter_editors" FOR SELECT USING ((("auth"."uid"() = "user_id") OR ("auth"."uid"() IN ( SELECT "admins"."user_id"
+   FROM "public"."admins"))));
 
 
 
-ALTER TABLE "public"."monthly_wrapped_log" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "public"."newsletter_posts" ENABLE ROW LEVEL SECURITY;
+
+
+CREATE POLICY "newsletter_posts_admin_all" ON "public"."newsletter_posts" USING (("auth"."uid"() IN ( SELECT "admins"."user_id"
+   FROM "public"."admins"))) WITH CHECK (("auth"."uid"() IN ( SELECT "admins"."user_id"
+   FROM "public"."admins")));
+
+
+
+CREATE POLICY "newsletter_posts_public_select" ON "public"."newsletter_posts" FOR SELECT USING (true);
+
 
 
 ALTER TABLE "public"."notifications" ENABLE ROW LEVEL SECURITY;
 
 
 CREATE POLICY "own likes visible" ON "public"."story_likes" FOR SELECT USING (true);
-
-
-
-CREATE POLICY "own projects" ON "public"."lyric_projects" USING (("user_id" = "auth"."uid"()));
 
 
 
@@ -8866,9 +9482,6 @@ ALTER TABLE "public"."platform_settings" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "public"."platform_tiers" ENABLE ROW LEVEL SECURITY;
 
 
-ALTER TABLE "public"."playlist_add_log" ENABLE ROW LEVEL SECURITY;
-
-
 ALTER TABLE "public"."playlist_collaborators" ENABLE ROW LEVEL SECURITY;
 
 
@@ -8876,12 +9489,6 @@ ALTER TABLE "public"."playlist_tracks" ENABLE ROW LEVEL SECURITY;
 
 
 ALTER TABLE "public"."playlists" ENABLE ROW LEVEL SECURITY;
-
-
-ALTER TABLE "public"."poll_votes" ENABLE ROW LEVEL SECURITY;
-
-
-ALTER TABLE "public"."polls" ENABLE ROW LEVEL SECURITY;
 
 
 CREATE POLICY "polls_insert" ON "public"."chat_polls" FOR INSERT TO "authenticated" WITH CHECK (("artist_id" IN ( SELECT "artists"."id"
@@ -8892,12 +9499,6 @@ CREATE POLICY "polls_insert" ON "public"."chat_polls" FOR INSERT TO "authenticat
 
 CREATE POLICY "polls_read" ON "public"."chat_polls" FOR SELECT USING (true);
 
-
-
-ALTER TABLE "public"."post_likes" ENABLE ROW LEVEL SECURITY;
-
-
-ALTER TABLE "public"."posts" ENABLE ROW LEVEL SECURITY;
 
 
 ALTER TABLE "public"."profiles" ENABLE ROW LEVEL SECURITY;
@@ -8911,6 +9512,331 @@ ALTER TABLE "public"."purchases" ENABLE ROW LEVEL SECURITY;
 
 
 ALTER TABLE "public"."push_subscriptions" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."retail_ad_plays" ENABLE ROW LEVEL SECURITY;
+
+
+CREATE POLICY "retail_ad_plays_admin_all" ON "public"."retail_ad_plays" USING (("auth"."uid"() IN ( SELECT "admins"."user_id"
+   FROM "public"."admins"))) WITH CHECK (("auth"."uid"() IN ( SELECT "admins"."user_id"
+   FROM "public"."admins")));
+
+
+
+CREATE POLICY "retail_ad_plays_retail_admin_all" ON "public"."retail_ad_plays" USING ("public"."is_retail_admin"()) WITH CHECK ("public"."is_retail_admin"());
+
+
+
+CREATE POLICY "retail_ad_plays_venue_insert" ON "public"."retail_ad_plays" FOR INSERT WITH CHECK (("venue_id" IN ( SELECT "retail_venues"."id"
+   FROM "public"."retail_venues"
+  WHERE (("retail_venues"."user_id" = "auth"."uid"()) AND ("retail_venues"."status" = 'active'::"text")))));
+
+
+
+ALTER TABLE "public"."retail_ad_revenue" ENABLE ROW LEVEL SECURITY;
+
+
+CREATE POLICY "retail_ad_revenue_admin_all" ON "public"."retail_ad_revenue" USING (("auth"."uid"() IN ( SELECT "admins"."user_id"
+   FROM "public"."admins"))) WITH CHECK (("auth"."uid"() IN ( SELECT "admins"."user_id"
+   FROM "public"."admins")));
+
+
+
+ALTER TABLE "public"."retail_admins" ENABLE ROW LEVEL SECURITY;
+
+
+CREATE POLICY "retail_admins_platform_admin_all" ON "public"."retail_admins" USING (("auth"."uid"() IN ( SELECT "admins"."user_id"
+   FROM "public"."admins"))) WITH CHECK (("auth"."uid"() IN ( SELECT "admins"."user_id"
+   FROM "public"."admins")));
+
+
+
+CREATE POLICY "retail_admins_self_read" ON "public"."retail_admins" FOR SELECT USING (("auth"."uid"() = "user_id"));
+
+
+
+ALTER TABLE "public"."retail_ads" ENABLE ROW LEVEL SECURITY;
+
+
+CREATE POLICY "retail_ads_admin_all" ON "public"."retail_ads" USING (("auth"."uid"() IN ( SELECT "admins"."user_id"
+   FROM "public"."admins"))) WITH CHECK (("auth"."uid"() IN ( SELECT "admins"."user_id"
+   FROM "public"."admins")));
+
+
+
+CREATE POLICY "retail_ads_retail_admin_all" ON "public"."retail_ads" USING ("public"."is_retail_admin"()) WITH CHECK ("public"."is_retail_admin"());
+
+
+
+CREATE POLICY "retail_ads_venue_select" ON "public"."retail_ads" FOR SELECT USING ((("is_active" = true) AND (("venue_id" IS NULL) OR ("venue_id" IN ( SELECT "retail_venues"."id"
+   FROM "public"."retail_venues"
+  WHERE ("retail_venues"."user_id" = "auth"."uid"())))) AND (EXISTS ( SELECT 1
+   FROM "public"."retail_venues"
+  WHERE (("retail_venues"."user_id" = "auth"."uid"()) AND ("retail_venues"."status" = 'active'::"text"))))));
+
+
+
+ALTER TABLE "public"."retail_artist_payouts" ENABLE ROW LEVEL SECURITY;
+
+
+CREATE POLICY "retail_artist_payouts_admin_all" ON "public"."retail_artist_payouts" USING (("auth"."uid"() IN ( SELECT "admins"."user_id"
+   FROM "public"."admins"))) WITH CHECK (("auth"."uid"() IN ( SELECT "admins"."user_id"
+   FROM "public"."admins")));
+
+
+
+CREATE POLICY "retail_artist_payouts_artist_select" ON "public"."retail_artist_payouts" FOR SELECT USING (("artist_id" IN ( SELECT "artists"."id"
+   FROM "public"."artists"
+  WHERE ("artists"."user_id" = "auth"."uid"()))));
+
+
+
+ALTER TABLE "public"."retail_catalog" ENABLE ROW LEVEL SECURITY;
+
+
+CREATE POLICY "retail_catalog_admin_all" ON "public"."retail_catalog" USING (("auth"."uid"() IN ( SELECT "admins"."user_id"
+   FROM "public"."admins"))) WITH CHECK (("auth"."uid"() IN ( SELECT "admins"."user_id"
+   FROM "public"."admins")));
+
+
+
+CREATE POLICY "retail_catalog_retail_admin_all" ON "public"."retail_catalog" USING ("public"."is_retail_admin"()) WITH CHECK ("public"."is_retail_admin"());
+
+
+
+CREATE POLICY "retail_locations_admin_all" ON "public"."retail_venue_locations" USING (("auth"."uid"() IN ( SELECT "admins"."user_id"
+   FROM "public"."admins"))) WITH CHECK (("auth"."uid"() IN ( SELECT "admins"."user_id"
+   FROM "public"."admins")));
+
+
+
+CREATE POLICY "retail_locations_self_select" ON "public"."retail_venue_locations" FOR SELECT USING (("venue_id" IN ( SELECT "retail_venues"."id"
+   FROM "public"."retail_venues"
+  WHERE ("retail_venues"."user_id" = "auth"."uid"()))));
+
+
+
+ALTER TABLE "public"."retail_notification_reads" ENABLE ROW LEVEL SECURITY;
+
+
+CREATE POLICY "retail_notification_reads_admin_all" ON "public"."retail_notification_reads" USING (("auth"."uid"() IN ( SELECT "admins"."user_id"
+   FROM "public"."admins"))) WITH CHECK (("auth"."uid"() IN ( SELECT "admins"."user_id"
+   FROM "public"."admins")));
+
+
+
+CREATE POLICY "retail_notification_reads_venue_manage" ON "public"."retail_notification_reads" USING (("venue_id" IN ( SELECT "retail_venues"."id"
+   FROM "public"."retail_venues"
+  WHERE ("retail_venues"."user_id" = "auth"."uid"())))) WITH CHECK (("venue_id" IN ( SELECT "retail_venues"."id"
+   FROM "public"."retail_venues"
+  WHERE ("retail_venues"."user_id" = "auth"."uid"()))));
+
+
+
+ALTER TABLE "public"."retail_notifications" ENABLE ROW LEVEL SECURITY;
+
+
+CREATE POLICY "retail_notifications_admin_all" ON "public"."retail_notifications" USING (("auth"."uid"() IN ( SELECT "admins"."user_id"
+   FROM "public"."admins"))) WITH CHECK (("auth"."uid"() IN ( SELECT "admins"."user_id"
+   FROM "public"."admins")));
+
+
+
+CREATE POLICY "retail_notifications_retail_admin_all" ON "public"."retail_notifications" USING ("public"."is_retail_admin"()) WITH CHECK ("public"."is_retail_admin"());
+
+
+
+CREATE POLICY "retail_notifications_venue_select" ON "public"."retail_notifications" FOR SELECT USING ((EXISTS ( SELECT 1
+   FROM "public"."retail_venues"
+  WHERE (("retail_venues"."user_id" = "auth"."uid"()) AND ("retail_venues"."status" = 'active'::"text")))));
+
+
+
+ALTER TABLE "public"."retail_payout_periods" ENABLE ROW LEVEL SECURITY;
+
+
+CREATE POLICY "retail_payout_periods_admin_all" ON "public"."retail_payout_periods" USING (("auth"."uid"() IN ( SELECT "admins"."user_id"
+   FROM "public"."admins"))) WITH CHECK (("auth"."uid"() IN ( SELECT "admins"."user_id"
+   FROM "public"."admins")));
+
+
+
+ALTER TABLE "public"."retail_pitches" ENABLE ROW LEVEL SECURITY;
+
+
+CREATE POLICY "retail_pitches_admin_all" ON "public"."retail_pitches" USING (("auth"."uid"() IN ( SELECT "admins"."user_id"
+   FROM "public"."admins"))) WITH CHECK (("auth"."uid"() IN ( SELECT "admins"."user_id"
+   FROM "public"."admins")));
+
+
+
+CREATE POLICY "retail_pitches_artist_insert" ON "public"."retail_pitches" FOR INSERT WITH CHECK (("artist_id" IN ( SELECT "artists"."id"
+   FROM "public"."artists"
+  WHERE ("artists"."user_id" = "auth"."uid"()))));
+
+
+
+CREATE POLICY "retail_pitches_artist_select" ON "public"."retail_pitches" FOR SELECT USING (("artist_id" IN ( SELECT "artists"."id"
+   FROM "public"."artists"
+  WHERE ("artists"."user_id" = "auth"."uid"()))));
+
+
+
+CREATE POLICY "retail_pitches_retail_admin_all" ON "public"."retail_pitches" USING ("public"."is_retail_admin"()) WITH CHECK ("public"."is_retail_admin"());
+
+
+
+ALTER TABLE "public"."retail_play_logs" ENABLE ROW LEVEL SECURITY;
+
+
+CREATE POLICY "retail_play_logs_admin_all" ON "public"."retail_play_logs" USING (("auth"."uid"() IN ( SELECT "admins"."user_id"
+   FROM "public"."admins"))) WITH CHECK (("auth"."uid"() IN ( SELECT "admins"."user_id"
+   FROM "public"."admins")));
+
+
+
+CREATE POLICY "retail_play_logs_retail_admin_all" ON "public"."retail_play_logs" USING ("public"."is_retail_admin"()) WITH CHECK ("public"."is_retail_admin"());
+
+
+
+CREATE POLICY "retail_play_logs_venue_insert" ON "public"."retail_play_logs" FOR INSERT WITH CHECK (("venue_id" IN ( SELECT "retail_venues"."id"
+   FROM "public"."retail_venues"
+  WHERE (("retail_venues"."user_id" = "auth"."uid"()) AND ("retail_venues"."status" = 'active'::"text")))));
+
+
+
+CREATE POLICY "retail_play_logs_venue_select" ON "public"."retail_play_logs" FOR SELECT USING (("venue_id" IN ( SELECT "retail_venues"."id"
+   FROM "public"."retail_venues"
+  WHERE ("retail_venues"."user_id" = "auth"."uid"()))));
+
+
+
+ALTER TABLE "public"."retail_playlist_proposals" ENABLE ROW LEVEL SECURITY;
+
+
+CREATE POLICY "retail_playlist_proposals_admin_all" ON "public"."retail_playlist_proposals" USING (("auth"."uid"() IN ( SELECT "admins"."user_id"
+   FROM "public"."admins"))) WITH CHECK (("auth"."uid"() IN ( SELECT "admins"."user_id"
+   FROM "public"."admins")));
+
+
+
+CREATE POLICY "retail_playlist_proposals_retail_admin_all" ON "public"."retail_playlist_proposals" USING ("public"."is_retail_admin"()) WITH CHECK ("public"."is_retail_admin"());
+
+
+
+ALTER TABLE "public"."retail_playlist_tracks" ENABLE ROW LEVEL SECURITY;
+
+
+CREATE POLICY "retail_playlist_tracks_admin_all" ON "public"."retail_playlist_tracks" USING (("auth"."uid"() IN ( SELECT "admins"."user_id"
+   FROM "public"."admins"))) WITH CHECK (("auth"."uid"() IN ( SELECT "admins"."user_id"
+   FROM "public"."admins")));
+
+
+
+CREATE POLICY "retail_playlist_tracks_retail_admin_all" ON "public"."retail_playlist_tracks" USING ("public"."is_retail_admin"()) WITH CHECK ("public"."is_retail_admin"());
+
+
+
+CREATE POLICY "retail_playlist_tracks_venue_select" ON "public"."retail_playlist_tracks" FOR SELECT USING ((EXISTS ( SELECT 1
+   FROM "public"."retail_venues"
+  WHERE (("retail_venues"."user_id" = "auth"."uid"()) AND ("retail_venues"."status" = 'active'::"text")))));
+
+
+
+ALTER TABLE "public"."retail_playlists" ENABLE ROW LEVEL SECURITY;
+
+
+CREATE POLICY "retail_playlists_admin_all" ON "public"."retail_playlists" USING (("auth"."uid"() IN ( SELECT "admins"."user_id"
+   FROM "public"."admins"))) WITH CHECK (("auth"."uid"() IN ( SELECT "admins"."user_id"
+   FROM "public"."admins")));
+
+
+
+CREATE POLICY "retail_playlists_retail_admin_all" ON "public"."retail_playlists" USING ("public"."is_retail_admin"()) WITH CHECK ("public"."is_retail_admin"());
+
+
+
+CREATE POLICY "retail_playlists_venue_select" ON "public"."retail_playlists" FOR SELECT USING ((("is_active" = true) AND (EXISTS ( SELECT 1
+   FROM "public"."retail_venues"
+  WHERE (("retail_venues"."user_id" = "auth"."uid"()) AND ("retail_venues"."status" = 'active'::"text"))))));
+
+
+
+ALTER TABLE "public"."retail_price_guide" ENABLE ROW LEVEL SECURITY;
+
+
+CREATE POLICY "retail_price_guide_admin_all" ON "public"."retail_price_guide" USING (("auth"."uid"() IN ( SELECT "admins"."user_id"
+   FROM "public"."admins"))) WITH CHECK (("auth"."uid"() IN ( SELECT "admins"."user_id"
+   FROM "public"."admins")));
+
+
+
+CREATE POLICY "retail_price_guide_retail_admin_all" ON "public"."retail_price_guide" USING ("public"."is_retail_admin"()) WITH CHECK ("public"."is_retail_admin"());
+
+
+
+ALTER TABLE "public"."retail_subscriptions" ENABLE ROW LEVEL SECURITY;
+
+
+CREATE POLICY "retail_subscriptions_admin_all" ON "public"."retail_subscriptions" USING (("auth"."uid"() IN ( SELECT "admins"."user_id"
+   FROM "public"."admins"))) WITH CHECK (("auth"."uid"() IN ( SELECT "admins"."user_id"
+   FROM "public"."admins")));
+
+
+
+CREATE POLICY "retail_subscriptions_retail_admin_all" ON "public"."retail_subscriptions" USING ("public"."is_retail_admin"()) WITH CHECK ("public"."is_retail_admin"());
+
+
+
+CREATE POLICY "retail_subscriptions_self_select" ON "public"."retail_subscriptions" FOR SELECT USING (("venue_id" IN ( SELECT "retail_venues"."id"
+   FROM "public"."retail_venues"
+  WHERE ("retail_venues"."user_id" = "auth"."uid"()))));
+
+
+
+ALTER TABLE "public"."retail_venue_likes" ENABLE ROW LEVEL SECURITY;
+
+
+CREATE POLICY "retail_venue_likes_admin_all" ON "public"."retail_venue_likes" USING (("auth"."uid"() IN ( SELECT "admins"."user_id"
+   FROM "public"."admins"))) WITH CHECK (("auth"."uid"() IN ( SELECT "admins"."user_id"
+   FROM "public"."admins")));
+
+
+
+CREATE POLICY "retail_venue_likes_retail_admin_all" ON "public"."retail_venue_likes" USING ("public"."is_retail_admin"()) WITH CHECK ("public"."is_retail_admin"());
+
+
+
+CREATE POLICY "retail_venue_likes_venue_manage" ON "public"."retail_venue_likes" USING (("venue_id" IN ( SELECT "retail_venues"."id"
+   FROM "public"."retail_venues"
+  WHERE ("retail_venues"."user_id" = "auth"."uid"())))) WITH CHECK (("venue_id" IN ( SELECT "retail_venues"."id"
+   FROM "public"."retail_venues"
+  WHERE ("retail_venues"."user_id" = "auth"."uid"()))));
+
+
+
+ALTER TABLE "public"."retail_venue_locations" ENABLE ROW LEVEL SECURITY;
+
+
+CREATE POLICY "retail_venue_locations_retail_admin_all" ON "public"."retail_venue_locations" USING ("public"."is_retail_admin"()) WITH CHECK ("public"."is_retail_admin"());
+
+
+
+ALTER TABLE "public"."retail_venues" ENABLE ROW LEVEL SECURITY;
+
+
+CREATE POLICY "retail_venues_admin_all" ON "public"."retail_venues" USING (("auth"."uid"() IN ( SELECT "admins"."user_id"
+   FROM "public"."admins"))) WITH CHECK (("auth"."uid"() IN ( SELECT "admins"."user_id"
+   FROM "public"."admins")));
+
+
+
+CREATE POLICY "retail_venues_retail_admin_all" ON "public"."retail_venues" USING ("public"."is_retail_admin"()) WITH CHECK ("public"."is_retail_admin"());
+
+
+
+CREATE POLICY "retail_venues_self_select" ON "public"."retail_venues" FOR SELECT USING (("auth"."uid"() = "user_id"));
+
 
 
 ALTER TABLE "public"."school_sessions_config" ENABLE ROW LEVEL SECURITY;
@@ -9008,6 +9934,9 @@ CREATE POLICY "school_sessions_entry_members_write" ON "public"."school_sessions
 ALTER TABLE "public"."school_sessions_guardian_consents" ENABLE ROW LEVEL SECURITY;
 
 
+ALTER TABLE "public"."school_sessions_judges" ENABLE ROW LEVEL SECURITY;
+
+
 CREATE POLICY "school_sessions_nominations_delete" ON "public"."school_sessions_district_nominations" FOR DELETE USING (("auth"."uid"() IN ( SELECT "admins"."user_id"
    FROM "public"."admins")));
 
@@ -9054,6 +9983,12 @@ CREATE POLICY "school_sessions_shortlist_write" ON "public"."school_sessions_sho
 
 
 
+ALTER TABLE "public"."school_sessions_verification_codes" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."school_sessions_vip_candidates" ENABLE ROW LEVEL SECURITY;
+
+
 ALTER TABLE "public"."school_sessions_votes" ENABLE ROW LEVEL SECURITY;
 
 
@@ -9086,9 +10021,6 @@ ALTER TABLE "public"."session_review_submissions" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "public"."story_likes" ENABLE ROW LEVEL SECURITY;
 
 
-ALTER TABLE "public"."story_reactions" ENABLE ROW LEVEL SECURITY;
-
-
 ALTER TABLE "public"."story_views" ENABLE ROW LEVEL SECURITY;
 
 
@@ -9105,9 +10037,6 @@ CREATE POLICY "streaks_own_update" ON "public"."user_streaks" FOR UPDATE USING (
 
 
 ALTER TABLE "public"."streams" ENABLE ROW LEVEL SECURITY;
-
-
-ALTER TABLE "public"."subscription_tiers" ENABLE ROW LEVEL SECURITY;
 
 
 ALTER TABLE "public"."subscriptions" ENABLE ROW LEVEL SECURITY;
@@ -9138,16 +10067,10 @@ ALTER TABLE "public"."track_comment_reactions" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "public"."track_comments" ENABLE ROW LEVEL SECURITY;
 
 
-ALTER TABLE "public"."track_favorites" ENABLE ROW LEVEL SECURITY;
-
-
 ALTER TABLE "public"."track_likes" ENABLE ROW LEVEL SECURITY;
 
 
 ALTER TABLE "public"."track_presaves" ENABLE ROW LEVEL SECURITY;
-
-
-ALTER TABLE "public"."track_saves" ENABLE ROW LEVEL SECURITY;
 
 
 ALTER TABLE "public"."track_stems" ENABLE ROW LEVEL SECURITY;
@@ -9159,17 +10082,11 @@ ALTER TABLE "public"."track_versions" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "public"."tracks" ENABLE ROW LEVEL SECURITY;
 
 
-ALTER TABLE "public"."transactions" ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "tracks_retail_admin_read" ON "public"."tracks" FOR SELECT USING (("public"."is_retail_admin"() AND ("is_published" = true)));
+
 
 
 CREATE POLICY "unlike own" ON "public"."story_likes" FOR DELETE USING (("auth"."uid"() = "user_id"));
-
-
-
-ALTER TABLE "public"."upload_templates" ENABLE ROW LEVEL SECURITY;
-
-
-CREATE POLICY "user claim" ON "public"."lrc_anonymous_sessions" FOR UPDATE USING ((("claimed_by" = "auth"."uid"()) OR ("claimed_by" IS NULL)));
 
 
 
@@ -9198,6 +10115,18 @@ ALTER TABLE "public"."user_streaks" ENABLE ROW LEVEL SECURITY;
 
 
 CREATE POLICY "user_votes_admin" ON "public"."competition_user_votes" FOR SELECT USING (("auth"."uid"() IN ( SELECT "admins"."user_id"
+   FROM "public"."admins")));
+
+
+
+CREATE POLICY "verification_codes_admin_all" ON "public"."school_sessions_verification_codes" USING (("auth"."uid"() IN ( SELECT "admins"."user_id"
+   FROM "public"."admins"))) WITH CHECK (("auth"."uid"() IN ( SELECT "admins"."user_id"
+   FROM "public"."admins")));
+
+
+
+CREATE POLICY "vip_candidates_admin_all" ON "public"."school_sessions_vip_candidates" USING (("auth"."uid"() IN ( SELECT "admins"."user_id"
+   FROM "public"."admins"))) WITH CHECK (("auth"."uid"() IN ( SELECT "admins"."user_id"
    FROM "public"."admins")));
 
 
@@ -9267,9 +10196,33 @@ GRANT USAGE ON SCHEMA "public" TO "service_role";
 
 
 
+GRANT ALL ON FUNCTION "public"."activate_home_hero"("p_hero_id" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."activate_home_hero"("p_hero_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."activate_home_hero"("p_hero_id" "uuid") TO "service_role";
+
+
+
 GRANT ALL ON FUNCTION "public"."add_email_subscriber_after_profile"() TO "anon";
 GRANT ALL ON FUNCTION "public"."add_email_subscriber_after_profile"() TO "authenticated";
 GRANT ALL ON FUNCTION "public"."add_email_subscriber_after_profile"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."admin_approve_affiliate"("p_user_id" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."admin_approve_affiliate"("p_user_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."admin_approve_affiliate"("p_user_id" "uuid") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."admin_find_user_by_email"("p_email" "text") TO "anon";
+GRANT ALL ON FUNCTION "public"."admin_find_user_by_email"("p_email" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."admin_find_user_by_email"("p_email" "text") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."admin_fulfill_redemption"("p_redemption_id" "uuid", "p_approve" boolean) TO "anon";
+GRANT ALL ON FUNCTION "public"."admin_fulfill_redemption"("p_redemption_id" "uuid", "p_approve" boolean) TO "authenticated";
+GRANT ALL ON FUNCTION "public"."admin_fulfill_redemption"("p_redemption_id" "uuid", "p_approve" boolean) TO "service_role";
 
 
 
@@ -9288,6 +10241,12 @@ GRANT ALL ON FUNCTION "public"."admin_suspend_artist"("p_artist_id" "uuid", "p_r
 GRANT ALL ON FUNCTION "public"."admin_unsuspend_artist"("p_artist_id" "uuid") TO "anon";
 GRANT ALL ON FUNCTION "public"."admin_unsuspend_artist"("p_artist_id" "uuid") TO "authenticated";
 GRANT ALL ON FUNCTION "public"."admin_unsuspend_artist"("p_artist_id" "uuid") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."approve_playlist_proposal"("p_proposal_id" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."approve_playlist_proposal"("p_proposal_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."approve_playlist_proposal"("p_proposal_id" "uuid") TO "service_role";
 
 
 
@@ -9315,6 +10274,18 @@ GRANT ALL ON FUNCTION "public"."ban_user"("target_user_id" "uuid") TO "service_r
 
 
 
+GRANT ALL ON FUNCTION "public"."block_explicit_retail_catalog"() TO "anon";
+GRANT ALL ON FUNCTION "public"."block_explicit_retail_catalog"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."block_explicit_retail_catalog"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."block_explicit_retail_track"() TO "anon";
+GRANT ALL ON FUNCTION "public"."block_explicit_retail_track"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."block_explicit_retail_track"() TO "service_role";
+
+
+
 REVOKE ALL ON FUNCTION "public"."boost_track_streams"("p_track_id" "uuid", "p_count" integer) FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."boost_track_streams"("p_track_id" "uuid", "p_count" integer) TO "anon";
 GRANT ALL ON FUNCTION "public"."boost_track_streams"("p_track_id" "uuid", "p_count" integer) TO "authenticated";
@@ -9325,6 +10296,12 @@ GRANT ALL ON FUNCTION "public"."boost_track_streams"("p_track_id" "uuid", "p_cou
 GRANT ALL ON FUNCTION "public"."calc_engagement_score"("p_track_id" "uuid") TO "anon";
 GRANT ALL ON FUNCTION "public"."calc_engagement_score"("p_track_id" "uuid") TO "authenticated";
 GRANT ALL ON FUNCTION "public"."calc_engagement_score"("p_track_id" "uuid") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."calculate_retail_payout"("p_period_start" "date", "p_period_end" "date") TO "anon";
+GRANT ALL ON FUNCTION "public"."calculate_retail_payout"("p_period_start" "date", "p_period_end" "date") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."calculate_retail_payout"("p_period_start" "date", "p_period_end" "date") TO "service_role";
 
 
 
@@ -9364,6 +10341,18 @@ GRANT ALL ON FUNCTION "public"."check_stream_milestones"() TO "service_role";
 
 
 
+GRANT ALL ON FUNCTION "public"."complete_venue_signup"("p_token" "text", "p_user_id" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."complete_venue_signup"("p_token" "text", "p_user_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."complete_venue_signup"("p_token" "text", "p_user_id" "uuid") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."convert_artist_to_listener"() TO "anon";
+GRANT ALL ON FUNCTION "public"."convert_artist_to_listener"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."convert_artist_to_listener"() TO "service_role";
+
+
+
 GRANT ALL ON FUNCTION "public"."create_fraud_flag"("p_entity_type" "text", "p_entity_id" "uuid", "p_flag_type" "text", "p_severity" "text", "p_details" "jsonb") TO "anon";
 GRANT ALL ON FUNCTION "public"."create_fraud_flag"("p_entity_type" "text", "p_entity_id" "uuid", "p_flag_type" "text", "p_severity" "text", "p_details" "jsonb") TO "authenticated";
 GRANT ALL ON FUNCTION "public"."create_fraud_flag"("p_entity_type" "text", "p_entity_id" "uuid", "p_flag_type" "text", "p_severity" "text", "p_details" "jsonb") TO "service_role";
@@ -9388,6 +10377,24 @@ GRANT ALL ON FUNCTION "public"."extract_key_from_filename"("filename" "text") TO
 
 
 
+GRANT ALL ON FUNCTION "public"."generate_playlist_proposals"() TO "anon";
+GRANT ALL ON FUNCTION "public"."generate_playlist_proposals"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."generate_playlist_proposals"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."generate_venue_signup_token"("p_venue_id" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."generate_venue_signup_token"("p_venue_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."generate_venue_signup_token"("p_venue_id" "uuid") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."generate_verification_codes"("p_count" integer, "p_school_id" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."generate_verification_codes"("p_count" integer, "p_school_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."generate_verification_codes"("p_count" integer, "p_school_id" "uuid") TO "service_role";
+
+
+
 GRANT ALL ON FUNCTION "public"."get_district_vote_counts"("p_season" integer) TO "anon";
 GRANT ALL ON FUNCTION "public"."get_district_vote_counts"("p_season" integer) TO "authenticated";
 GRANT ALL ON FUNCTION "public"."get_district_vote_counts"("p_season" integer) TO "service_role";
@@ -9397,6 +10404,18 @@ GRANT ALL ON FUNCTION "public"."get_district_vote_counts"("p_season" integer) TO
 GRANT ALL ON FUNCTION "public"."get_school_sessions_vote_counts"("p_competition_id" "uuid") TO "anon";
 GRANT ALL ON FUNCTION "public"."get_school_sessions_vote_counts"("p_competition_id" "uuid") TO "authenticated";
 GRANT ALL ON FUNCTION "public"."get_school_sessions_vote_counts"("p_competition_id" "uuid") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."get_venue_by_signup_token"("p_token" "text") TO "anon";
+GRANT ALL ON FUNCTION "public"."get_venue_by_signup_token"("p_token" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."get_venue_by_signup_token"("p_token" "text") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."get_venue_playlist_recommendations"() TO "anon";
+GRANT ALL ON FUNCTION "public"."get_venue_playlist_recommendations"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."get_venue_playlist_recommendations"() TO "service_role";
 
 
 
@@ -9520,9 +10539,27 @@ GRANT ALL ON FUNCTION "public"."increment_track_download_count"() TO "service_ro
 
 
 
-GRANT ALL ON FUNCTION "public"."increment_track_stream_count"() TO "anon";
-GRANT ALL ON FUNCTION "public"."increment_track_stream_count"() TO "authenticated";
-GRANT ALL ON FUNCTION "public"."increment_track_stream_count"() TO "service_role";
+GRANT ALL ON FUNCTION "public"."is_retail_admin"() TO "anon";
+GRANT ALL ON FUNCTION "public"."is_retail_admin"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."is_retail_admin"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."issue_vip_candidate"("p_name" "text", "p_ref_code" "text") TO "anon";
+GRANT ALL ON FUNCTION "public"."issue_vip_candidate"("p_name" "text", "p_ref_code" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."issue_vip_candidate"("p_name" "text", "p_ref_code" "text") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."judge_set_finalist"("p_entry_id" "uuid", "p_value" boolean) TO "anon";
+GRANT ALL ON FUNCTION "public"."judge_set_finalist"("p_entry_id" "uuid", "p_value" boolean) TO "authenticated";
+GRANT ALL ON FUNCTION "public"."judge_set_finalist"("p_entry_id" "uuid", "p_value" boolean) TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."judge_set_winner"("p_entry_id" "uuid", "p_value" boolean) TO "anon";
+GRANT ALL ON FUNCTION "public"."judge_set_winner"("p_entry_id" "uuid", "p_value" boolean) TO "authenticated";
+GRANT ALL ON FUNCTION "public"."judge_set_winner"("p_entry_id" "uuid", "p_value" boolean) TO "service_role";
 
 
 
@@ -9568,18 +10605,6 @@ GRANT ALL ON FUNCTION "public"."notify_new_track"() TO "service_role";
 
 
 
-GRANT ALL ON FUNCTION "public"."notify_post_comment"() TO "anon";
-GRANT ALL ON FUNCTION "public"."notify_post_comment"() TO "authenticated";
-GRANT ALL ON FUNCTION "public"."notify_post_comment"() TO "service_role";
-
-
-
-GRANT ALL ON FUNCTION "public"."notify_post_like"() TO "anon";
-GRANT ALL ON FUNCTION "public"."notify_post_like"() TO "authenticated";
-GRANT ALL ON FUNCTION "public"."notify_post_like"() TO "service_role";
-
-
-
 GRANT ALL ON FUNCTION "public"."notify_track_like"() TO "anon";
 GRANT ALL ON FUNCTION "public"."notify_track_like"() TO "authenticated";
 GRANT ALL ON FUNCTION "public"."notify_track_like"() TO "service_role";
@@ -9610,6 +10635,12 @@ GRANT ALL ON FUNCTION "public"."recalculate_engagement_scores"() TO "service_rol
 
 
 
+GRANT ALL ON FUNCTION "public"."redeem_verification_code"("p_code" "text") TO "anon";
+GRANT ALL ON FUNCTION "public"."redeem_verification_code"("p_code" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."redeem_verification_code"("p_code" "text") TO "service_role";
+
+
+
 GRANT ALL ON FUNCTION "public"."refresh_engagement_scores"() TO "anon";
 GRANT ALL ON FUNCTION "public"."refresh_engagement_scores"() TO "authenticated";
 GRANT ALL ON FUNCTION "public"."refresh_engagement_scores"() TO "service_role";
@@ -9619,6 +10650,36 @@ GRANT ALL ON FUNCTION "public"."refresh_engagement_scores"() TO "service_role";
 GRANT ALL ON FUNCTION "public"."refresh_global_analytics"() TO "anon";
 GRANT ALL ON FUNCTION "public"."refresh_global_analytics"() TO "authenticated";
 GRANT ALL ON FUNCTION "public"."refresh_global_analytics"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."remove_newly_explicit_from_retail"() TO "anon";
+GRANT ALL ON FUNCTION "public"."remove_newly_explicit_from_retail"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."remove_newly_explicit_from_retail"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."request_credit_redemption"("p_reward_key" "text", "p_reward_label" "text", "p_cost" integer) TO "anon";
+GRANT ALL ON FUNCTION "public"."request_credit_redemption"("p_reward_key" "text", "p_reward_label" "text", "p_cost" integer) TO "authenticated";
+GRANT ALL ON FUNCTION "public"."request_credit_redemption"("p_reward_key" "text", "p_reward_label" "text", "p_cost" integer) TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."retail_play_to_stream"() TO "anon";
+GRANT ALL ON FUNCTION "public"."retail_play_to_stream"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."retail_play_to_stream"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."send_newsletter"("p_title" "text", "p_excerpt" "text", "p_body" "text", "p_audience" "text") TO "anon";
+GRANT ALL ON FUNCTION "public"."send_newsletter"("p_title" "text", "p_excerpt" "text", "p_body" "text", "p_audience" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."send_newsletter"("p_title" "text", "p_excerpt" "text", "p_body" "text", "p_audience" "text") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."send_newsletter"("p_title" "text", "p_excerpt" "text", "p_body" "text", "p_audience" "text", "p_youtube_url" "text") TO "anon";
+GRANT ALL ON FUNCTION "public"."send_newsletter"("p_title" "text", "p_excerpt" "text", "p_body" "text", "p_audience" "text", "p_youtube_url" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."send_newsletter"("p_title" "text", "p_excerpt" "text", "p_body" "text", "p_audience" "text", "p_youtube_url" "text") TO "service_role";
 
 
 
@@ -9712,12 +10773,6 @@ GRANT ALL ON FUNCTION "public"."update_last_seen"("p_user_id" "uuid") TO "servic
 
 
 
-GRANT ALL ON FUNCTION "public"."update_post_comment_count"() TO "anon";
-GRANT ALL ON FUNCTION "public"."update_post_comment_count"() TO "authenticated";
-GRANT ALL ON FUNCTION "public"."update_post_comment_count"() TO "service_role";
-
-
-
 GRANT ALL ON FUNCTION "public"."update_track_favorite_count"() TO "anon";
 GRANT ALL ON FUNCTION "public"."update_track_favorite_count"() TO "authenticated";
 GRANT ALL ON FUNCTION "public"."update_track_favorite_count"() TO "service_role";
@@ -9772,6 +10827,12 @@ GRANT ALL ON TABLE "public"."affiliate_conversions" TO "service_role";
 
 
 
+GRANT ALL ON TABLE "public"."affiliate_credit_redemptions" TO "anon";
+GRANT ALL ON TABLE "public"."affiliate_credit_redemptions" TO "authenticated";
+GRANT ALL ON TABLE "public"."affiliate_credit_redemptions" TO "service_role";
+
+
+
 GRANT ALL ON TABLE "public"."affiliate_payouts" TO "anon";
 GRANT ALL ON TABLE "public"."affiliate_payouts" TO "authenticated";
 GRANT ALL ON TABLE "public"."affiliate_payouts" TO "service_role";
@@ -9817,12 +10878,6 @@ GRANT ALL ON TABLE "public"."artist_guestbook" TO "service_role";
 GRANT ALL ON TABLE "public"."artist_payment_profiles" TO "anon";
 GRANT ALL ON TABLE "public"."artist_payment_profiles" TO "authenticated";
 GRANT ALL ON TABLE "public"."artist_payment_profiles" TO "service_role";
-
-
-
-GRANT ALL ON TABLE "public"."artist_personas" TO "anon";
-GRANT ALL ON TABLE "public"."artist_personas" TO "authenticated";
-GRANT ALL ON TABLE "public"."artist_personas" TO "service_role";
 
 
 
@@ -9889,12 +10944,6 @@ GRANT ALL ON TABLE "public"."beat_purchases" TO "service_role";
 GRANT ALL ON TABLE "public"."bug_reports" TO "anon";
 GRANT ALL ON TABLE "public"."bug_reports" TO "authenticated";
 GRANT ALL ON TABLE "public"."bug_reports" TO "service_role";
-
-
-
-GRANT ALL ON TABLE "public"."campaign_images" TO "anon";
-GRANT ALL ON TABLE "public"."campaign_images" TO "authenticated";
-GRANT ALL ON TABLE "public"."campaign_images" TO "service_role";
 
 
 
@@ -9970,21 +11019,9 @@ GRANT ALL ON TABLE "public"."collaborations" TO "service_role";
 
 
 
-GRANT ALL ON TABLE "public"."comments" TO "anon";
-GRANT ALL ON TABLE "public"."comments" TO "authenticated";
-GRANT ALL ON TABLE "public"."comments" TO "service_role";
-
-
-
 GRANT ALL ON TABLE "public"."competition_entries" TO "anon";
 GRANT ALL ON TABLE "public"."competition_entries" TO "authenticated";
 GRANT ALL ON TABLE "public"."competition_entries" TO "service_role";
-
-
-
-GRANT ALL ON TABLE "public"."competition_moderators" TO "anon";
-GRANT ALL ON TABLE "public"."competition_moderators" TO "authenticated";
-GRANT ALL ON TABLE "public"."competition_moderators" TO "service_role";
 
 
 
@@ -10012,12 +11049,6 @@ GRANT ALL ON TABLE "public"."competitions" TO "service_role";
 
 
 
-GRANT ALL ON TABLE "public"."content_drafts" TO "anon";
-GRANT ALL ON TABLE "public"."content_drafts" TO "authenticated";
-GRANT ALL ON TABLE "public"."content_drafts" TO "service_role";
-
-
-
 GRANT ALL ON TABLE "public"."credits_transactions" TO "anon";
 GRANT ALL ON TABLE "public"."credits_transactions" TO "authenticated";
 GRANT ALL ON TABLE "public"."credits_transactions" TO "service_role";
@@ -10033,18 +11064,6 @@ GRANT ALL ON TABLE "public"."daily_artist_spotlight" TO "service_role";
 GRANT ALL ON TABLE "public"."downloads" TO "anon";
 GRANT ALL ON TABLE "public"."downloads" TO "authenticated";
 GRANT ALL ON TABLE "public"."downloads" TO "service_role";
-
-
-
-GRANT ALL ON TABLE "public"."email_campaign_logs" TO "anon";
-GRANT ALL ON TABLE "public"."email_campaign_logs" TO "authenticated";
-GRANT ALL ON TABLE "public"."email_campaign_logs" TO "service_role";
-
-
-
-GRANT ALL ON TABLE "public"."email_campaigns" TO "anon";
-GRANT ALL ON TABLE "public"."email_campaigns" TO "authenticated";
-GRANT ALL ON TABLE "public"."email_campaigns" TO "service_role";
 
 
 
@@ -10102,9 +11121,9 @@ GRANT ALL ON TABLE "public"."global_contacts" TO "service_role";
 
 
 
-GRANT ALL ON TABLE "public"."likes" TO "anon";
-GRANT ALL ON TABLE "public"."likes" TO "authenticated";
-GRANT ALL ON TABLE "public"."likes" TO "service_role";
+GRANT ALL ON TABLE "public"."home_hero" TO "anon";
+GRANT ALL ON TABLE "public"."home_hero" TO "authenticated";
+GRANT ALL ON TABLE "public"."home_hero" TO "service_role";
 
 
 
@@ -10135,12 +11154,6 @@ GRANT ALL ON TABLE "public"."tracks" TO "service_role";
 GRANT ALL ON TABLE "public"."listener_monthly_stats" TO "anon";
 GRANT ALL ON TABLE "public"."listener_monthly_stats" TO "authenticated";
 GRANT ALL ON TABLE "public"."listener_monthly_stats" TO "service_role";
-
-
-
-GRANT ALL ON TABLE "public"."listener_personas" TO "anon";
-GRANT ALL ON TABLE "public"."listener_personas" TO "authenticated";
-GRANT ALL ON TABLE "public"."listener_personas" TO "service_role";
 
 
 
@@ -10180,33 +11193,21 @@ GRANT ALL ON TABLE "public"."listening_sessions" TO "service_role";
 
 
 
-GRANT ALL ON TABLE "public"."lrc_anonymous_sessions" TO "anon";
-GRANT ALL ON TABLE "public"."lrc_anonymous_sessions" TO "authenticated";
-GRANT ALL ON TABLE "public"."lrc_anonymous_sessions" TO "service_role";
-
-
-
-GRANT ALL ON TABLE "public"."lrc_corrections" TO "anon";
-GRANT ALL ON TABLE "public"."lrc_corrections" TO "authenticated";
-GRANT ALL ON TABLE "public"."lrc_corrections" TO "service_role";
-
-
-
-GRANT ALL ON TABLE "public"."lrc_events" TO "anon";
-GRANT ALL ON TABLE "public"."lrc_events" TO "authenticated";
-GRANT ALL ON TABLE "public"."lrc_events" TO "service_role";
-
-
-
-GRANT ALL ON TABLE "public"."lyric_projects" TO "anon";
-GRANT ALL ON TABLE "public"."lyric_projects" TO "authenticated";
-GRANT ALL ON TABLE "public"."lyric_projects" TO "service_role";
-
-
-
 GRANT ALL ON TABLE "public"."monthly_wrapped_log" TO "anon";
 GRANT ALL ON TABLE "public"."monthly_wrapped_log" TO "authenticated";
 GRANT ALL ON TABLE "public"."monthly_wrapped_log" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."newsletter_editors" TO "anon";
+GRANT ALL ON TABLE "public"."newsletter_editors" TO "authenticated";
+GRANT ALL ON TABLE "public"."newsletter_editors" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."newsletter_posts" TO "anon";
+GRANT ALL ON TABLE "public"."newsletter_posts" TO "authenticated";
+GRANT ALL ON TABLE "public"."newsletter_posts" TO "service_role";
 
 
 
@@ -10234,12 +11235,6 @@ GRANT ALL ON TABLE "public"."platform_tiers" TO "service_role";
 
 
 
-GRANT ALL ON TABLE "public"."playlist_add_log" TO "anon";
-GRANT ALL ON TABLE "public"."playlist_add_log" TO "authenticated";
-GRANT ALL ON TABLE "public"."playlist_add_log" TO "service_role";
-
-
-
 GRANT ALL ON TABLE "public"."playlist_collaborators" TO "anon";
 GRANT ALL ON TABLE "public"."playlist_collaborators" TO "authenticated";
 GRANT ALL ON TABLE "public"."playlist_collaborators" TO "service_role";
@@ -10258,18 +11253,6 @@ GRANT ALL ON TABLE "public"."playlists" TO "service_role";
 
 
 
-GRANT ALL ON TABLE "public"."poll_votes" TO "anon";
-GRANT ALL ON TABLE "public"."poll_votes" TO "authenticated";
-GRANT ALL ON TABLE "public"."poll_votes" TO "service_role";
-
-
-
-GRANT ALL ON TABLE "public"."polls" TO "anon";
-GRANT ALL ON TABLE "public"."polls" TO "authenticated";
-GRANT ALL ON TABLE "public"."polls" TO "service_role";
-
-
-
 GRANT ALL ON TABLE "public"."user_profiles" TO "anon";
 GRANT ALL ON TABLE "public"."user_profiles" TO "authenticated";
 GRANT ALL ON TABLE "public"."user_profiles" TO "service_role";
@@ -10279,18 +11262,6 @@ GRANT ALL ON TABLE "public"."user_profiles" TO "service_role";
 GRANT INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,MAINTAIN,UPDATE ON TABLE "public"."popular_genres_by_country" TO "anon";
 GRANT INSERT,REFERENCES,DELETE,TRIGGER,TRUNCATE,MAINTAIN,UPDATE ON TABLE "public"."popular_genres_by_country" TO "authenticated";
 GRANT ALL ON TABLE "public"."popular_genres_by_country" TO "service_role";
-
-
-
-GRANT ALL ON TABLE "public"."post_likes" TO "anon";
-GRANT ALL ON TABLE "public"."post_likes" TO "authenticated";
-GRANT ALL ON TABLE "public"."post_likes" TO "service_role";
-
-
-
-GRANT ALL ON TABLE "public"."posts" TO "anon";
-GRANT ALL ON TABLE "public"."posts" TO "authenticated";
-GRANT ALL ON TABLE "public"."posts" TO "service_role";
 
 
 
@@ -10309,6 +11280,120 @@ GRANT ALL ON TABLE "public"."purchases" TO "service_role";
 GRANT ALL ON TABLE "public"."push_subscriptions" TO "anon";
 GRANT ALL ON TABLE "public"."push_subscriptions" TO "authenticated";
 GRANT ALL ON TABLE "public"."push_subscriptions" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."retail_ad_plays" TO "anon";
+GRANT ALL ON TABLE "public"."retail_ad_plays" TO "authenticated";
+GRANT ALL ON TABLE "public"."retail_ad_plays" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."retail_ad_revenue" TO "anon";
+GRANT ALL ON TABLE "public"."retail_ad_revenue" TO "authenticated";
+GRANT ALL ON TABLE "public"."retail_ad_revenue" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."retail_admins" TO "anon";
+GRANT ALL ON TABLE "public"."retail_admins" TO "authenticated";
+GRANT ALL ON TABLE "public"."retail_admins" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."retail_ads" TO "anon";
+GRANT ALL ON TABLE "public"."retail_ads" TO "authenticated";
+GRANT ALL ON TABLE "public"."retail_ads" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."retail_artist_payouts" TO "anon";
+GRANT ALL ON TABLE "public"."retail_artist_payouts" TO "authenticated";
+GRANT ALL ON TABLE "public"."retail_artist_payouts" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."retail_catalog" TO "anon";
+GRANT ALL ON TABLE "public"."retail_catalog" TO "authenticated";
+GRANT ALL ON TABLE "public"."retail_catalog" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."retail_notification_reads" TO "anon";
+GRANT ALL ON TABLE "public"."retail_notification_reads" TO "authenticated";
+GRANT ALL ON TABLE "public"."retail_notification_reads" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."retail_notifications" TO "anon";
+GRANT ALL ON TABLE "public"."retail_notifications" TO "authenticated";
+GRANT ALL ON TABLE "public"."retail_notifications" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."retail_payout_periods" TO "anon";
+GRANT ALL ON TABLE "public"."retail_payout_periods" TO "authenticated";
+GRANT ALL ON TABLE "public"."retail_payout_periods" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."retail_pitches" TO "anon";
+GRANT ALL ON TABLE "public"."retail_pitches" TO "authenticated";
+GRANT ALL ON TABLE "public"."retail_pitches" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."retail_play_logs" TO "anon";
+GRANT ALL ON TABLE "public"."retail_play_logs" TO "authenticated";
+GRANT ALL ON TABLE "public"."retail_play_logs" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."retail_playlist_proposals" TO "anon";
+GRANT ALL ON TABLE "public"."retail_playlist_proposals" TO "authenticated";
+GRANT ALL ON TABLE "public"."retail_playlist_proposals" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."retail_playlist_tracks" TO "anon";
+GRANT ALL ON TABLE "public"."retail_playlist_tracks" TO "authenticated";
+GRANT ALL ON TABLE "public"."retail_playlist_tracks" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."retail_playlists" TO "anon";
+GRANT ALL ON TABLE "public"."retail_playlists" TO "authenticated";
+GRANT ALL ON TABLE "public"."retail_playlists" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."retail_price_guide" TO "anon";
+GRANT ALL ON TABLE "public"."retail_price_guide" TO "authenticated";
+GRANT ALL ON TABLE "public"."retail_price_guide" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."retail_subscriptions" TO "anon";
+GRANT ALL ON TABLE "public"."retail_subscriptions" TO "authenticated";
+GRANT ALL ON TABLE "public"."retail_subscriptions" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."retail_venue_likes" TO "anon";
+GRANT ALL ON TABLE "public"."retail_venue_likes" TO "authenticated";
+GRANT ALL ON TABLE "public"."retail_venue_likes" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."retail_venue_locations" TO "anon";
+GRANT ALL ON TABLE "public"."retail_venue_locations" TO "authenticated";
+GRANT ALL ON TABLE "public"."retail_venue_locations" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."retail_venues" TO "anon";
+GRANT ALL ON TABLE "public"."retail_venues" TO "authenticated";
+GRANT ALL ON TABLE "public"."retail_venues" TO "service_role";
 
 
 
@@ -10348,6 +11433,12 @@ GRANT ALL ON TABLE "public"."school_sessions_guardian_consents" TO "service_role
 
 
 
+GRANT ALL ON TABLE "public"."school_sessions_judges" TO "anon";
+GRANT ALL ON TABLE "public"."school_sessions_judges" TO "authenticated";
+GRANT ALL ON TABLE "public"."school_sessions_judges" TO "service_role";
+
+
+
 GRANT ALL ON TABLE "public"."school_sessions_schools" TO "anon";
 GRANT ALL ON TABLE "public"."school_sessions_schools" TO "authenticated";
 GRANT ALL ON TABLE "public"."school_sessions_schools" TO "service_role";
@@ -10357,6 +11448,18 @@ GRANT ALL ON TABLE "public"."school_sessions_schools" TO "service_role";
 GRANT ALL ON TABLE "public"."school_sessions_shortlist_songs" TO "anon";
 GRANT ALL ON TABLE "public"."school_sessions_shortlist_songs" TO "authenticated";
 GRANT ALL ON TABLE "public"."school_sessions_shortlist_songs" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."school_sessions_verification_codes" TO "anon";
+GRANT ALL ON TABLE "public"."school_sessions_verification_codes" TO "authenticated";
+GRANT ALL ON TABLE "public"."school_sessions_verification_codes" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."school_sessions_vip_candidates" TO "anon";
+GRANT ALL ON TABLE "public"."school_sessions_vip_candidates" TO "authenticated";
+GRANT ALL ON TABLE "public"."school_sessions_vip_candidates" TO "service_role";
 
 
 
@@ -10402,21 +11505,9 @@ GRANT ALL ON TABLE "public"."story_likes" TO "service_role";
 
 
 
-GRANT ALL ON TABLE "public"."story_reactions" TO "anon";
-GRANT ALL ON TABLE "public"."story_reactions" TO "authenticated";
-GRANT ALL ON TABLE "public"."story_reactions" TO "service_role";
-
-
-
 GRANT ALL ON TABLE "public"."story_views" TO "anon";
 GRANT ALL ON TABLE "public"."story_views" TO "authenticated";
 GRANT ALL ON TABLE "public"."story_views" TO "service_role";
-
-
-
-GRANT ALL ON TABLE "public"."subscription_tiers" TO "anon";
-GRANT ALL ON TABLE "public"."subscription_tiers" TO "authenticated";
-GRANT ALL ON TABLE "public"."subscription_tiers" TO "service_role";
 
 
 
@@ -10468,12 +11559,6 @@ GRANT ALL ON TABLE "public"."track_comments" TO "service_role";
 
 
 
-GRANT ALL ON TABLE "public"."track_favorites" TO "anon";
-GRANT ALL ON TABLE "public"."track_favorites" TO "authenticated";
-GRANT ALL ON TABLE "public"."track_favorites" TO "service_role";
-
-
-
 GRANT ALL ON TABLE "public"."track_likes" TO "anon";
 GRANT ALL ON TABLE "public"."track_likes" TO "authenticated";
 GRANT ALL ON TABLE "public"."track_likes" TO "service_role";
@@ -10486,12 +11571,6 @@ GRANT ALL ON TABLE "public"."track_presaves" TO "service_role";
 
 
 
-GRANT ALL ON TABLE "public"."track_saves" TO "anon";
-GRANT ALL ON TABLE "public"."track_saves" TO "authenticated";
-GRANT ALL ON TABLE "public"."track_saves" TO "service_role";
-
-
-
 GRANT ALL ON TABLE "public"."track_stems" TO "anon";
 GRANT ALL ON TABLE "public"."track_stems" TO "authenticated";
 GRANT ALL ON TABLE "public"."track_stems" TO "service_role";
@@ -10501,18 +11580,6 @@ GRANT ALL ON TABLE "public"."track_stems" TO "service_role";
 GRANT ALL ON TABLE "public"."track_versions" TO "anon";
 GRANT ALL ON TABLE "public"."track_versions" TO "authenticated";
 GRANT ALL ON TABLE "public"."track_versions" TO "service_role";
-
-
-
-GRANT ALL ON TABLE "public"."transactions" TO "anon";
-GRANT ALL ON TABLE "public"."transactions" TO "authenticated";
-GRANT ALL ON TABLE "public"."transactions" TO "service_role";
-
-
-
-GRANT ALL ON TABLE "public"."upload_templates" TO "anon";
-GRANT ALL ON TABLE "public"."upload_templates" TO "authenticated";
-GRANT ALL ON TABLE "public"."upload_templates" TO "service_role";
 
 
 

@@ -1099,11 +1099,17 @@ export default function ForYouPage() {
           .limit(halfPage);
         if (existingIdsStr) recentQuery = recentQuery.not('id', 'in', existingIdsStr);
 
-        // Fallback: mix engagement + recency so new users get a meaningful feed
-        // Sort by stream_count as proxy when engagement_score is null
+        // Fallback: mix engagement + recency so new users get a meaningful feed.
+        // Ordered by engagement_score, which as of migration 60 has a single
+        // writer (the nightly update-engagement-scores job, normalised 0-100).
+        // Before that three functions fought over this column and it drifted
+        // through the day, so stream_count was the safer proxy. It is no
+        // longer, stream_count ignores likes, comments and downloads entirely.
+        // stream_count stays as the tiebreak for tracks not yet scored.
         let topQuery = supabase.from('tracks')
           .select('id, title, slug, genre, mood, cover_artwork_url, file_url, youtube_url, duration, lyrics, artist_id, is_beat, stream_count, like_count, bpm, beat_key, beat_scale, download_price, engagement_score, artists(artist_name, slug, profile_image_url)')
           .eq('is_published', true)
+          .order('engagement_score', { ascending: false, nullsFirst: false })
           .order('stream_count', { ascending: false })
           .limit(PAGE_SIZE - fetched.length);
 

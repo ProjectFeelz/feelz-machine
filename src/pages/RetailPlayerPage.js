@@ -11,9 +11,10 @@
 import React from 'react';
 import { Helmet } from 'react-helmet-async';
 import { useNavigate } from 'react-router-dom';
-import { Loader, Play, Pause, SkipForward, Music, MapPin, Megaphone, Heart, Bell, DollarSign } from 'lucide-react';
+import { Loader, Play, Pause, SkipForward, Music, MapPin, Megaphone, Heart, Bell, DollarSign, Bookmark, MessageCircle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../supabaseClient';
+import RetailPlaylistComments from '../components/retail/RetailPlaylistComments';
 
 const QUALIFYING_SECONDS = 30;
 const PAYPAL_CLIENT_ID = process.env.REACT_APP_PAYPAL_CLIENT_ID || '';
@@ -111,6 +112,8 @@ export default function RetailPlayerPage() {
   const [mode, setMode] = React.useState('track'); // 'track' | 'ad'
   const [currentAdIndex, setCurrentAdIndex] = React.useState(0);
   const [likedTrackIds, setLikedTrackIds] = React.useState(new Set());
+  const [savedPlaylistIds, setSavedPlaylistIds] = React.useState(new Set());
+  const [showComments, setShowComments] = React.useState(false);
 
   const audioRef = React.useRef(null);
   const hasLoggedRef = React.useRef(false);
@@ -157,6 +160,11 @@ export default function RetailPlayerPage() {
   }, [tracks]);
   const featuredArtists = distinctArtists.slice(0, 5);
   const distinctArtistCount = distinctArtists.length;
+
+  const savedPlaylists = React.useMemo(
+    () => playlists.filter(p => savedPlaylistIds.has(p.id)),
+    [playlists, savedPlaylistIds]
+  );
 
   React.useEffect(() => {
     if (!venue) return;
@@ -232,6 +240,33 @@ export default function RetailPlayerPage() {
     }
   };
 
+  React.useEffect(() => {
+    if (!venue) return;
+    supabase.from('retail_venue_saved_playlists').select('playlist_id').eq('venue_id', venue.id)
+      .then(({ data }) => setSavedPlaylistIds(new Set((data || []).map(s => s.playlist_id))));
+  }, [venue]);
+
+  // Save is the combined signal here, there is no separate like on a
+  // playlist. Saving puts the vibe in the venue's library and is also
+  // what feeds get_venue_playlist_recommendations, so recommendations
+  // are refetched afterwards, the RPC filters out anything already saved.
+  const toggleSave = async (playlist) => {
+    if (!venue || !playlist || isPreviewMode) return;
+    const isSaved = savedPlaylistIds.has(playlist.id);
+    if (isSaved) {
+      await supabase.from('retail_venue_saved_playlists')
+        .delete().eq('venue_id', venue.id).eq('playlist_id', playlist.id);
+      setSavedPlaylistIds(prev => { const next = new Set(prev); next.delete(playlist.id); return next; });
+    } else {
+      const { error } = await supabase.from('retail_venue_saved_playlists')
+        .insert({ venue_id: venue.id, playlist_id: playlist.id });
+      if (error) return;
+      setSavedPlaylistIds(prev => new Set(prev).add(playlist.id));
+    }
+    supabase.rpc('get_venue_playlist_recommendations')
+      .then(({ data }) => setRecommended(data || []));
+  };
+
   const openPlaylist = async (playlist) => {
     audioRef.current?.pause();
     setIsPlaying(false);
@@ -266,7 +301,7 @@ export default function RetailPlayerPage() {
       venue_id: venue.id,
       location_id: activeLocationId || null,
     }).then(() => {});
-  }, [venue, activeLocationId]);
+  }, [venue, activeLocationId, isPreviewMode]);
 
   const currentTrack = tracks[currentIndex];
   const currentAd = ads.length > 0 ? ads[currentAdIndex % ads.length] : null;
@@ -516,6 +551,30 @@ export default function RetailPlayerPage() {
       <div className="px-4 pt-5">
         {!selectedPlaylist ? (
           <>
+            {savedPlaylists.length > 0 && (
+              <div className="mb-5">
+                <p className="text-xs text-purple-300 font-bold uppercase tracking-wide mb-2">Your vibes</p>
+                <div className="flex space-x-3 overflow-x-auto pb-1">
+                  {savedPlaylists.map(pl => (
+                    <button key={pl.id} onClick={() => openPlaylist(pl)}
+                      className="text-left flex-shrink-0 w-32 group">
+                      <div className="w-32 h-32 rounded-xl overflow-hidden mb-2 flex items-center justify-center transition duration-300 group-hover:-translate-y-1"
+                        style={{
+                          background: 'linear-gradient(135deg, rgba(167,139,250,0.16) 0%, rgba(30,20,55,0.9) 100%)',
+                          border: '1px solid rgba(167,139,250,0.24)',
+                          boxShadow: '0 6px 24px rgba(0,0,0,0.45)',
+                        }}>
+                        {pl.cover_image_url
+                          ? <img src={pl.cover_image_url} alt="" className="w-full h-full object-cover" />
+                          : <Music className="w-8 h-8 text-purple-300/25" />}
+                      </div>
+                      <p className="text-sm font-bold text-white truncate">{pl.title}</p>
+                      {pl.mood && <p className="text-xs text-white/40 mt-0.5 truncate">{pl.mood}</p>}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             {recommended.length > 0 && (
               <div className="mb-5">
                 <p className="text-xs text-purple-300 font-bold uppercase tracking-wide mb-2">Recommended for you</p>
@@ -598,6 +657,24 @@ export default function RetailPlayerPage() {
                     )}
                   </p>
                 )}
+
+                <div className="flex items-center gap-2 mt-4">
+                  <button onClick={() => toggleSave(selectedPlaylist)}
+                    className={`flex items-center gap-1.5 text-xs font-semibold px-3.5 py-2 rounded-full transition ${
+                      savedPlaylistIds.has(selectedPlaylist.id)
+                        ? 'bg-purple-500 text-white'
+                        : 'bg-white/[0.06] text-white/60 border border-white/[0.08] hover:bg-white/[0.1]'
+                    }`}>
+                    <Bookmark className="w-3.5 h-3.5"
+                      fill={savedPlaylistIds.has(selectedPlaylist.id) ? 'currentColor' : 'none'} />
+                    {savedPlaylistIds.has(selectedPlaylist.id) ? 'Saved' : 'Save this vibe'}
+                  </button>
+                  <button onClick={() => setShowComments(true)}
+                    className="flex items-center gap-1.5 text-xs font-semibold px-3.5 py-2 rounded-full bg-white/[0.06] text-white/60 border border-white/[0.08] hover:bg-white/[0.1] transition">
+                    <MessageCircle className="w-3.5 h-3.5" />
+                    Comments
+                  </button>
+                </div>
               </div>
             </div>
             {loadingTracks ? (
@@ -626,6 +703,15 @@ export default function RetailPlayerPage() {
           </>
         )}
       </div>
+
+      {showComments && selectedPlaylist && (
+        <RetailPlaylistComments
+          playlist={selectedPlaylist}
+          venue={venue}
+          isPreviewMode={isPreviewMode}
+          onClose={() => setShowComments(false)}
+        />
+      )}
 
       {(currentTrack || mode === 'ad') && (
         <div className="fixed bottom-0 left-0 right-0 backdrop-blur-xl px-4 py-3"

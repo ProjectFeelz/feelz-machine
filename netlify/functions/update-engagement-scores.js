@@ -11,6 +11,7 @@
  *   like_count      × 5.0   (quality signal)
  *   comment_count   × 8.0   (strong intent signal)
  *   download_count  × 12.0  (highest intent — someone paid attention)
+ *   playlist_adds   × 6.0   (deliberate keep — listener filed it away)
  *   follower_bonus  × 2.0   (tracks from followed artists get slight lift)
  *
  * Score is normalised to 0-100 scale across all tracks.
@@ -36,7 +37,7 @@ exports.handler = async (event) => {
     // 1. Load all published tracks
     const { data: tracks } = await supabase
       .from('tracks')
-      .select('id, artist_id, like_count, download_count')
+      .select('id, artist_id, like_count, download_count, playlist_add_count')
       .eq('is_published', true)
       .limit(2000);
 
@@ -72,9 +73,11 @@ exports.handler = async (event) => {
       const cmts = cMap[t.id]    || 0;
       const likes = t.like_count || 0;
       const dls   = t.download_count || 0;
+      const padds = t.playlist_add_count || 0;
 
       const raw = (s30 * 1.0) + (s7 * 3.0) + (s24 * 10.0)
-                + (likes * 5.0) + (cmts * 8.0) + (dls * 12.0);
+                + (likes * 5.0) + (cmts * 8.0) + (dls * 12.0)
+                + (padds * 6.0);
 
       // Velocity: how much of last 30d streams happened in last 7d
       const velocity = s30 > 0 ? Math.min(100, Math.round((s7 / s30) * 100 * (s30 / 10))) : 0;
