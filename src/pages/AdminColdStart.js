@@ -30,6 +30,7 @@ export default function AdminColdStart() {
   const [query, setQuery] = React.useState('');
   const [results, setResults] = React.useState([]);
   const [searching, setSearching] = React.useState(false);
+  const [searched, setSearched] = React.useState(false);
 
   const showToast = (m) => { setToast(m); setTimeout(() => setToast(''), 2500); };
 
@@ -48,17 +49,30 @@ export default function AdminColdStart() {
     if (!isAdmin) navigate('/hub');
   }, [isAdmin, navigate]);
 
+  // The embed is aliased as artist:artists(...) to match the searches that
+  // already work elsewhere (PlaylistDetailPage, RetailPlayerPage) rather
+  // than relying on the bare relationship name.
+  //
+  // The error is checked and shown. The first version of this swallowed it
+  // with `const { data } = await ...`, so a failing query and a query with
+  // no matches looked identical: an empty page.
   const search = async () => {
-    if (!query.trim()) { setResults([]); return; }
+    if (!query.trim()) { setResults([]); setSearched(false); return; }
     setSearching(true);
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('tracks')
-      .select('id, title, cover_artwork_url, genre, mood, artists(artist_name)')
+      .select('id, title, cover_artwork_url, genre, mood, artist:artists(id, artist_name)')
       .eq('is_published', true)
       .ilike('title', `%${query.trim()}%`)
       .limit(20);
-    setResults(data || []);
     setSearching(false);
+    setSearched(true);
+    if (error) {
+      setResults([]);
+      showToast('Search failed: ' + error.message);
+      return;
+    }
+    setResults(data || []);
   };
 
   const add = async (track) => {
@@ -74,6 +88,7 @@ export default function AdminColdStart() {
     }
     setQuery('');
     setResults([]);
+    setSearched(false);
     showToast('Added to the cold start feed');
     load();
   };
@@ -146,6 +161,12 @@ export default function AdminColdStart() {
           </button>
         </div>
 
+        {searched && !searching && results.length === 0 && (
+          <p className="text-sm text-white/30 mt-4">
+            No published tracks match "{query.trim()}".
+          </p>
+        )}
+
         {results.length > 0 && (
           <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2">
             {results.map(t => (
@@ -158,7 +179,7 @@ export default function AdminColdStart() {
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="text-sm text-white truncate">{t.title}</p>
-                  <p className="text-xs text-white/40 truncate">{t.artists?.artist_name}</p>
+                  <p className="text-xs text-white/40 truncate">{t.artist?.artist_name}</p>
                 </div>
               </button>
             ))}

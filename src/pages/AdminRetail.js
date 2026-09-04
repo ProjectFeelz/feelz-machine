@@ -1,4 +1,30 @@
-// src/pages/RetailAdminPage.js
+// src/pages/AdminRetail.js
+//
+// WARNING: THIS FILE IS A RECOVERY STUB. THE REAL PANEL IS MISSING.
+//
+// This file was found byte-identical to RetailAdminPage.js: at some point
+// it was overwritten with a copy of the page that is supposed to wrap it.
+// The copy imported itself and rendered <AdminRetail embedded /> at the
+// bottom, so the component mounted itself forever. That is the duplicated
+// header and KPI block, repeating down the page.
+//
+// The recursion is removed below so the page is usable again. But the
+// actual retail admin panel, the tabbed Playlists / Venues / Ads /
+// Pitches / Payouts / Analytics / Pricing / Auto-Compile UI, is not in
+// this repo any more. It was not deleted by anything in this session, it
+// was already gone.
+//
+// RESTORE IT FROM GIT rather than rebuilding it:
+//   git log --oneline --follow -- src/pages/AdminRetail.js
+//   git show <sha>:src/pages/AdminRetail.js | head -40   # confirm it is
+//                                                        # the real panel
+//   git checkout <sha> -- src/pages/AdminRetail.js
+//
+// Pick the newest commit whose version does NOT import './AdminRetail'.
+// Restoring will overwrite this stub, which is the intended outcome.
+//
+// Original header follows.
+//
 // Standalone retail admin panel at /retail-admin.
 //
 // Separate from the main admin panel on purpose: a retail admin can run
@@ -15,9 +41,8 @@ import { Helmet } from 'react-helmet-async';
 import { Store, Loader, ArrowLeft, Music, Users, Megaphone, ListMusic } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
-import AdminRetail from './AdminRetail';
 
-export default function RetailAdminPage() {
+export default function AdminRetail({ embedded = false }) {
   const navigate = useNavigate();
   const { user, rawIsAdmin } = useAuth();
 
@@ -48,6 +73,24 @@ export default function RetailAdminPage() {
       ads: a.count || 0,
     }));
   }, [allowed]);
+
+  const MissingPanelNotice = (
+    <div className="rounded-2xl border border-amber-500/20 bg-amber-500/[0.06] p-5">
+      <p className="text-sm font-bold text-amber-200">Retail panel not loaded</p>
+      <p className="text-xs text-amber-100/60 mt-1.5 leading-relaxed">
+        The tabbed retail admin panel is missing from this build. Restore
+        src/pages/AdminRetail.js from git history, see the note at the top of
+        that file.
+      </p>
+    </div>
+  );
+
+  // Embedded is the normal case: both RetailAdminPage and AdminContent
+  // render their own header and KPIs, so rendering them again here is what
+  // produced the duplicated layers.
+  if (embedded) {
+    return <div className="px-6 pb-10">{MissingPanelNotice}</div>;
+  }
 
   if (checking) {
     return (
@@ -127,9 +170,11 @@ export default function RetailAdminPage() {
         )}
       </div>
 
-      {/* The retail tabs themselves, reused rather than duplicated so there's
-          only ever one implementation to maintain. */}
-      <AdminRetail embedded />
+      {/* Where the retail tabs belong. The component that rendered them is
+          missing from the repo, see the note at the top of this file. This
+          says so rather than showing an empty page, because silent
+          emptiness is what let the problem sit unnoticed. */}
+      <div className="px-6 pb-10">{MissingPanelNotice}</div>
     </div>
   );
 }
