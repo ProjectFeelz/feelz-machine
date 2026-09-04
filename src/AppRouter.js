@@ -82,6 +82,7 @@ const RetailLandingPage = React.lazy(() => import('./pages/RetailLandingPage'));
 const AdminHomeHero = React.lazy(() => import('./pages/AdminHomeHero'));
 const RetailTermsPage = React.lazy(() => import('./pages/RetailTermsPage'));
 const RetailPrivacyPage = React.lazy(() => import('./pages/RetailPrivacyPage'));
+const RetailAdminPage = React.lazy(() => import('./pages/RetailAdminPage'));
 
 // ── Session keepalive — refreshes token + listens for activity ───────────────
 function SessionManager() {
@@ -349,6 +350,7 @@ export default function AppRouter() {
                 <Route path="/retail/join/:token" element={<RetailJoinPage />} />
                 <Route path="/retail/terms" element={<RetailTermsPage />} />
                 <Route path="/retail/privacy" element={<RetailPrivacyPage />} />
+                <Route path="/retail-admin" element={<RetailAdminPage />} />
                 <Route path="/admin/home-hero" element={<AdminHomeHero />} />
                 <Route path="/admin/engagement" element={<AdminEngagement />} />
                 <Route path="/library/discovered" element={<RecentlyDiscoveredPage />} />

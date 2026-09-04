@@ -17,6 +17,18 @@ import MerchConnectSheet from './MerchConnectSheet';
 // center plus button — without the two call sites fighting over shared state.
 export default function CreateMenuModal({ artist, user, onClose, primaryColor = '#90AF2F', bgColor = '#000000' }) {
   const navigate = useNavigate();
+  // Newsletter shortcut, shown only to admins and newsletter editors so
+  // Jane can reach it in one tap instead of Monetize > Affiliates > Newsletter.
+  const [canNewsletter, setCanNewsletter] = useState(false);
+  useEffect(() => {
+    if (!user) return;
+    // isAdmin isn't passed to this component, so check both tables directly.
+    Promise.all([
+      supabase.from('admins').select('user_id').eq('user_id', user.id).maybeSingle(),
+      supabase.from('newsletter_editors').select('id').eq('user_id', user.id).maybeSingle(),
+    ]).then(([a, e]) => setCanNewsletter(!!a.data || !!e.data));
+  }, [user]);
+
   const { isPremium } = useTier();
 
   const [createTab, setCreateTab] = useState('menu'); // 'menu' | 'story' | 'thought' | 'dm' | 'memo' | 'live'
@@ -193,6 +205,7 @@ export default function CreateMenuModal({ artist, user, onClose, primaryColor = 
                 { id: 'dm', icon: '📣', label: 'Message Fans', sub: 'Send a notification to all followers', color: 'green' },
                 { id: 'memo', icon: '🎙️', label: 'Voice Memo', sub: 'Record a message for your fans', color: 'pink' },
                 { id: 'live', icon: '🔴', label: 'Go Live', sub: 'Start a live session', color: 'red' },
+                ...(canNewsletter ? [{ id: 'newsletter', icon: '📨', label: 'Newsletter', sub: 'Write an update for the app or venues', color: 'purple' }] : []),
               ].map(({ id, icon, label, sub }) => (
                 <button key={id}
                   onClick={() => {
@@ -202,6 +215,7 @@ export default function CreateMenuModal({ artist, user, onClose, primaryColor = 
                     else if (id === 'edit') { close(); navigate('/profile/edit'); }
                     else if (id === 'merch') { setShowMerchConnect(true); }
                     else if (id === 'merch_locked') { close(); navigate('/upgrade'); }
+                    else if (id === 'newsletter') { close(); navigate('/newsletter/compose'); }
                     else setCreateTab(id);
                   }}
                   className="w-full flex items-center space-x-3 p-4 rounded-2xl border transition active:scale-[0.98] text-left"

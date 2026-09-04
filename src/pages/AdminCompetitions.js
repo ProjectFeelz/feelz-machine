@@ -141,7 +141,7 @@ function CompetitionForm({ initial, onSave, onCancel, saving }) {
             className="w-full bg-white/[0.06] rounded-xl px-4 py-2.5 text-sm text-white placeholder-white/20 outline-none border border-white/[0.06] focus:border-white/20" />
         </div>
 
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-3 lg:grid-cols-6 gap-3">
           <div>
             <label className="text-xs text-white/40 uppercase tracking-wide block mb-1.5">Genre</label>
             <input value={form.genre} onChange={e => set('genre', e.target.value)}
@@ -572,7 +572,7 @@ export default function AdminCompetitions({ embedded = false }) {
       </div>
 
       )}
-      <div className="px-5 pt-5 space-y-5 max-w-4xl mx-auto">
+      <div className="px-5 pt-5 space-y-5">
         {/* Create form */}
         {showCreate && (
           <div className="rounded-2xl bg-white/[0.02] border border-yellow-500/20 p-5">

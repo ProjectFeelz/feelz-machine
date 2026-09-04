@@ -133,9 +133,9 @@ export default function AdminAffiliates({ embedded = false }) {
           <p className="text-xs text-white/30 mt-0.5">Manage your affiliate programme</p>
         </div>
       </div>
-      <div className="space-y-4 max-w-4xl mx-auto">
+      <div className="space-y-4">
       {/* Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3">
         {[
           { label: 'Active Affiliates', value: stats.activeAffiliates || 0, icon: Users, color: 'text-purple-400' },
           { label: 'Total Commission', value: `R${(stats.totalCommission || 0).toFixed(2)}`, icon: DollarSign, color: 'text-green-400' },

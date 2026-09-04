@@ -7,7 +7,7 @@ import {
   UserX, Crown, MoreVertical, Music, Mail, Calendar,
   Megaphone, BarChart3, AlertTriangle, Zap, Trophy,
   Brain, Copy, ChevronRight, Ban, Trash2, Check, Layers,
-  Headphones, DollarSign, TrendingUp, Radio, Heart, Star, Download,
+  Headphones, DollarSign, TrendingUp, Radio, Heart, Star, Download, ArrowLeft,
 } from 'lucide-react';
 
 const ADMIN_SECTIONS = [
@@ -307,6 +307,10 @@ export default function AdminDashboard() {
       {/* Header */}
       <div className="flex items-center justify-between mb-6 pt-2">
         <div className="flex items-center space-x-3">
+          <button onClick={() => navigate('/hub')}
+            className="w-8 h-8 flex items-center justify-center rounded-full bg-white/[0.06] hover:bg-white/[0.1] transition">
+            <ArrowLeft className="w-4 h-4 text-white" />
+          </button>
           <Shield className="w-5 h-5 text-yellow-400/70" />
           <h1 className="text-base font-bold text-white">Admin Panel</h1>
         </div>

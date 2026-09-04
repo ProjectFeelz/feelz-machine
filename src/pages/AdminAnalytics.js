@@ -567,12 +567,12 @@ export default function AdminAnalytics({ embedded = false }) {
       {loading ? (
         <div className="flex justify-center py-20"><Loader className="w-5 h-5 animate-spin text-white/20" /></div>
       ) : (
-        <div className="px-4 pt-5 max-w-4xl mx-auto">
+        <div className="px-4 pt-5">
 
           {/* ── OVERVIEW ─────────────────────────────────────────────────── */}
           {tab === 'overview' && (
             <>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mb-6">
+              <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 mb-6">
                 <KPI icon={Headphones} label={`Streams (${range}d)`}  value={kpis.streamsInRange} color="bg-purple-500/20" delta={kpis.streamDelta} />
                 <KPI icon={Mic2}       label="Total Artists"          value={kpis.artists}        color="bg-pink-500/20"   delta={kpis.artistDelta} />
                 <KPI icon={Users}      label="Listeners"              value={kpis.listeners}      color="bg-cyan-500/20"   />
@@ -623,7 +623,7 @@ export default function AdminAnalytics({ embedded = false }) {
           {tab === 'revenue' && (
             <>
               {/* Total revenue KPIs */}
-              <div className="grid grid-cols-2 gap-2 mb-4">
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
                 <KPI icon={DollarSign}  label="Total Revenue"    value={`$${revenueStats.total || '0.00'}`}     color="bg-green-500/20"  sub={`Last ${range} days`} />
                 <KPI icon={Heart}       label="Tips"             value={`$${revenueStats.tips || '0.00'}`}      color="bg-pink-500/20"   />
                 <KPI icon={Download}    label="Download Sales"   value={`$${revenueStats.downloads || '0.00'}`} color="bg-blue-500/20"   />
@@ -633,7 +633,7 @@ export default function AdminAnalytics({ embedded = false }) {
               {/* Subscription breakdown */}
               <div className="rounded-2xl p-4 bg-white/[0.02] border border-white/[0.05] mb-4">
                 <SectionTitle icon={Crown} title="Active Subscriptions" color="text-yellow-400" />
-                <div className="grid grid-cols-3 gap-3 mt-3">
+                <div className="grid grid-cols-3 lg:grid-cols-6 gap-3 mt-3">
                   {[
                     { label: 'Artist Pro',     value: revenueStats.artistPro  || 0, color: 'text-purple-400', est: ((revenueStats.artistPro || 0) * 4.99).toFixed(0) },
                     { label: 'Artist Premium', value: revenueStats.artistPrem || 0, color: 'text-yellow-400', est: ((revenueStats.artistPrem || 0) * 9.99).toFixed(0) },
@@ -918,7 +918,7 @@ export default function AdminAnalytics({ embedded = false }) {
           {tab === 'listeners' && (
             <>
               {/* Retention KPIs */}
-              <div className="grid grid-cols-2 gap-2 mb-4">
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
                 <KPI icon={Activity} label="Active (7d)"   value={retentionStats.dau} color="bg-purple-500/20" sub="Unique sessions" />
                 <KPI icon={Activity} label="Active (30d)"  value={retentionStats.mau} color="bg-cyan-500/20"   sub={`${retentionStats.activePct} of all users`} />
                 <KPI icon={Zap}      label="DAU/MAU Ratio" value={retentionStats.dauMauRatio} color="bg-green-500/20" sub="Higher = more sticky" />

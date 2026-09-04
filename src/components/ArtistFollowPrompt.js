@@ -116,11 +116,22 @@ export default function ArtistFollowPrompt({ onDone }) {
     const normalise = (s) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
     const genreSet  = new Set(genres.map(normalise));
     const matched   = allArtists.filter(a => genreSet.has(normalise(a.genre)));
-    // If fewer than 6 matched artists, pad with popular ones to avoid an empty screen
+    // If fewer than 6 matched artists, pad to avoid an empty screen.
+    //
+    // The padding is SHUFFLED rather than taken in stream-count order. The
+    // previous version sliced the top of a list sorted by popularity with
+    // the platform owner pinned to the front, so with few artists per genre
+    // the padding dominated and every genre showed the same handful of
+    // names. That made the genre picker look broken even though the filter
+    // itself was working.
     if (matched.length < 6) {
       const matchedIds = new Set(matched.map(a => a.id));
-      const padding    = allArtists.filter(a => !matchedIds.has(a.id)).slice(0, 20 - matched.length);
-      setDisplayArtists([...matched, ...padding]);
+      const pool = allArtists.filter(a => !matchedIds.has(a.id));
+      for (let i = pool.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [pool[i], pool[j]] = [pool[j], pool[i]];
+      }
+      setDisplayArtists([...matched, ...pool.slice(0, 20 - matched.length)]);
     } else {
       setDisplayArtists(matched);
     }

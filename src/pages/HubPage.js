@@ -235,7 +235,7 @@ export default function HubPage() {
             <Section title="Admin" icon={Shield}>
               <LinkCard icon={Shield} label="Admin Panel" description="Broadcast · Analytics · Moderation · Users" path="/admin" color="bg-yellow-500/20" />
               <LinkCard icon={Store} label="Retail Player" description="Jump straight into the venue player" path="/retail/player" color="bg-purple-500/20" />
-              <LinkCard icon={Store} label="Retail Admin" description="Playlists · venues · ads · payouts · analytics" path="/admin/content?tab=retail" color="bg-purple-500/20" />
+              <LinkCard icon={Store} label="Retail Admin" description="Standalone panel · playlists · venues · ads" path="/retail-admin" color="bg-purple-500/20" />
               <LinkCard icon={Store} label="Venue Invites" description="Add a venue and copy its signup link" path="/admin/content?tab=retail&sub=venues" color="bg-purple-500/20" />
               <LinkCard icon={Trophy} label="School Sessions Preview" description="See the public page even while it's switched off" path="/schoolsessions" color="bg-lime-500/20" />
               <LinkCard icon={Trophy} label="Judge Panel" description="Mark finalists and pick the winner" path="/schoolsessions/judge" color="bg-lime-500/20" />

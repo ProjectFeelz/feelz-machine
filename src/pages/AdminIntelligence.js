@@ -49,7 +49,9 @@ export default function AdminIntelligence() {
         <div className="flex space-x-1 p-1 bg-white/[0.03] rounded-xl border border-white/[0.06] overflow-x-auto">
           <Tab active={tab === 'analytics'} onClick={() => switchTab('analytics')}>Platform Stats</Tab>
           <Tab active={tab === 'behavior'}  onClick={() => switchTab('behavior')}>User Behavior</Tab>
-          <Tab active={tab === 'drip'}      onClick={() => switchTab('drip')}>AI Drip</Tab>
+          {/* AI Drip hidden: not in use. The component below is left mounted-
+              on-demand and the route still works, so re-enabling is just
+              restoring this one line. */}
         </div>
       </div>
 

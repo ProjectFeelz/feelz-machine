@@ -86,7 +86,7 @@ export default function LibraryPage() {
   // rail just doesn't render and the rest of the page is unaffected.
   useEffect(() => {
     supabase.from('tracks')
-      .select('id, title, slug, cover_artwork_url, artists(artist_name)')
+      .select('id, title, slug, file_url, cover_artwork_url, artists(artist_name)')
       .eq('is_published', true)
       .not('cover_artwork_url', 'is', null)
       .order('created_at', { ascending: false })
@@ -106,7 +106,7 @@ export default function LibraryPage() {
         ids = (follows || []).map(f => f.artist_id).filter(Boolean);
       }
       let q = supabase.from('tracks')
-        .select('id, title, slug, cover_artwork_url, created_at, artists(artist_name)')
+        .select('id, title, slug, file_url, cover_artwork_url, created_at, artists(artist_name)')
         .eq('is_published', true)
         .not('cover_artwork_url', 'is', null)
         .order('created_at', { ascending: false })
@@ -441,10 +441,15 @@ export default function LibraryPage() {
             <p className="text-[10px] uppercase tracking-widest text-white/25 font-semibold mb-3">Fresh on Feelz</p>
             <div className="grid grid-cols-2 gap-3">
               {featured.map(t => (
-                <button key={t.id} onClick={() => navigate(`/track/${t.slug || t.id}`)}
+                <button key={t.id} onClick={() => playTrack(t, featured)}
                   className="text-left group">
-                  <div className="w-full aspect-square rounded-xl overflow-hidden bg-white/[0.06] mb-2">
+                  <div className="w-full aspect-square rounded-xl overflow-hidden bg-white/[0.06] mb-2 relative">
                     <img src={t.cover_artwork_url} alt="" className="w-full h-full object-cover group-hover:scale-105 transition duration-300" />
+                    <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition bg-black/30">
+                      <div className="w-9 h-9 rounded-full bg-white/90 flex items-center justify-center shadow-lg">
+                        <Play className="w-4 h-4 text-black ml-0.5" fill="black" />
+                      </div>
+                    </div>
                   </div>
                   <p className="text-xs font-medium text-white truncate">{t.title}</p>
                   <p className="text-[11px] text-white/30 truncate">{t.artists?.artist_name}</p>
