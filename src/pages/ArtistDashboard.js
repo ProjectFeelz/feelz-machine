@@ -11,6 +11,7 @@ import {
 import TrackUploadPanel from './TrackUploadPanel';
 import CollabRequests, { CollabBadge } from '../components/CollabRequests';
 import TierGate, { UploadGate, TierBadge } from '../components/TierGate';
+import ArtistListenerStats from '../components/artist/ArtistListenerStats';
 import { VoiceMemoCard, VoiceMemoUpload } from '../components/VoiceMemo';
 
 function ContactExportButton({ artist }) {
@@ -436,7 +437,7 @@ export default function ArtistDashboard() {
   const [trackStreams, setTrackStreams]    = useState([]);
   const [trackLikes, setTrackLikes]       = useState([]);
   const [trackAnalyticsLoading, setTrackAnalyticsLoading] = useState(false);
-  const [demographics, setDemographics]   = useState({ totalStreams: 0, uniqueListeners: 0, repeatRate: 0, completionRate: 0, avgDuration: 0, devices: [], sources: [] });
+  const [demographics, setDemographics]   = useState({ totalStreams: 0, uniqueListeners: 0, repeatRate: 0, completionRate: null, avgDuration: null, devices: [], sources: [] });
   const [memos, setMemos] = useState([]);
 
   const fetchMemos = useCallback(async () => {
@@ -603,13 +604,31 @@ export default function ArtistDashboard() {
       const { data: demoData } = await supabase
         .from('streams').select('user_id, device_type, completed, duration_played, source')
         .eq('track_id', trackId).gte('created_at', since).limit(5000);
+
+      // Real completion comes from listening_events. It cannot come from
+      // streams: log_stream() hardcodes completed to true and writes
+      // duration_played once at the 30 second mark, so those two columns
+      // are constants and the figures derived from them were always
+      // 100 percent and about 30 seconds for every track.
+      const { data: eventData } = await supabase
+        .from('listening_events')
+        .select('completion_pct, listened_seconds')
+        .eq('track_id', trackId).gte('created_at', since).limit(5000);
       if (demoData?.length) {
         const total = demoData.length;
         const unique = new Set(demoData.map(s => s.user_id).filter(Boolean)).size;
         const repeatRate = total > 0 ? Math.round(((total - unique) / total) * 100) : 0;
-        const completionRate = total > 0 ? Math.round((demoData.filter(s => s.completed).length / total) * 100) : 0;
-        const durations = demoData.map(s => s.duration_played || 0).filter(d => d > 0);
-        const avgDuration = durations.length > 0 ? Math.round(durations.reduce((a,b) => a+b,0) / durations.length) : 0;
+        // Null rather than 0 when there is not enough data yet, so the UI
+        // can show a dash instead of asserting "0 percent completion",
+        // which would be a different lie from the old one.
+        const pcts = (eventData || []).map(e => e.completion_pct).filter(p => p !== null && p !== undefined);
+        const completionRate = pcts.length >= 5
+          ? Math.round(pcts.filter(p => p >= 80).length / pcts.length * 100)
+          : null;
+        const secs = (eventData || []).map(e => e.listened_seconds || 0).filter(d => d > 0);
+        const avgDuration = secs.length >= 5
+          ? Math.round(secs.reduce((a,b) => a+b,0) / secs.length)
+          : null;
         const dc = {}, sc = {};
         demoData.forEach(s => {
           const d = s.device_type || 'unknown'; dc[d] = (dc[d]||0)+1;
@@ -619,7 +638,7 @@ export default function ArtistDashboard() {
         const sources = Object.entries(sc).map(([name,count]) => ({ name: name.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase()), count, pct: Math.round((count/total)*100) })).sort((a,b)=>b.count-a.count);
         setDemographics({ totalStreams: total, uniqueListeners: unique, repeatRate, completionRate, avgDuration, devices, sources });
       } else {
-        setDemographics({ totalStreams: 0, uniqueListeners: 0, repeatRate: 0, completionRate: 0, avgDuration: 0, devices: [], sources: [] });
+        setDemographics({ totalStreams: 0, uniqueListeners: 0, repeatRate: 0, completionRate: null, avgDuration: null, devices: [], sources: [] });
       }
     } catch {}
     setTrackAnalyticsLoading(false);
@@ -739,6 +758,13 @@ export default function ArtistDashboard() {
                     ))}
                   </div>
 
+                  {/* Listener stats: where people are and how far they get.
+                      Sits with the rest of analytics rather than on its own
+                      page, so there is one place to look for artist stats. */}
+                  <div className="rounded-2xl border border-white/[0.07] bg-white/[0.02] p-5">
+                    <ArtistListenerStats artistId={artist?.id} artistName={artist?.artist_name} />
+                  </div>
+
                   {/* Growth snapshot — streams this week vs last week */}
                   <GrowthSnapshot artist={artist} />
 
@@ -844,8 +870,8 @@ export default function ArtistDashboard() {
                                 {[
                                   { label: 'Streams', value: demographics.totalStreams, color: 'text-white' },
                                   { label: 'Unique Listeners', value: demographics.uniqueListeners, color: 'text-purple-400' },
-                                  { label: 'Completion Rate', value: `${demographics.completionRate}%`, color: 'text-green-400' },
-                                  { label: 'Avg Listen', value: demographics.avgDuration > 0 ? `${Math.floor(demographics.avgDuration/60)}:${String(demographics.avgDuration%60).padStart(2,'0')}` : '—', color: 'text-blue-400' },
+                                  { label: 'Played To End', value: demographics.completionRate !== null ? `${demographics.completionRate}%` : '—', color: 'text-green-400' },
+                                  { label: 'Avg Listen', value: demographics.avgDuration ? `${Math.floor(demographics.avgDuration/60)}:${String(demographics.avgDuration%60).padStart(2,'0')}` : '—', color: 'text-blue-400' },
                                 ].map(s => (
                                   <div key={s.label} className="bg-white/[0.03] rounded-xl p-3 border border-white/[0.05] text-center">
                                     <p className={`text-lg font-black ${s.color}`}>{s.value}</p>

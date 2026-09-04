@@ -82,7 +82,7 @@ const RetailLandingPage = React.lazy(() => import('./pages/RetailLandingPage'));
 const AdminHomeHero = React.lazy(() => import('./pages/AdminHomeHero'));
 const AdminColdStart = React.lazy(() => import('./pages/AdminColdStart'));
 const HiddenPage = React.lazy(() => import('./pages/HiddenPage'));
-const ArtistListenerStatsPage = React.lazy(() => import('./pages/ArtistListenerStatsPage'));
+const AdminRetailStaff = React.lazy(() => import('./pages/AdminRetailStaff'));
 const RetailTermsPage = React.lazy(() => import('./pages/RetailTermsPage'));
 const RetailPrivacyPage = React.lazy(() => import('./pages/RetailPrivacyPage'));
 const RetailAdminPage = React.lazy(() => import('./pages/RetailAdminPage'));
@@ -352,7 +352,7 @@ export default function AppRouter() {
                 <Route path="/admin/home-hero" element={<AdminHomeHero />} />
                 <Route path="/admin/cold-start" element={<AdminColdStart />} />
                 <Route path="/hidden" element={<HiddenPage />} />
-                <Route path="/dashboard/listeners" element={<ArtistListenerStatsPage />} />
+                <Route path="/admin/retail-staff" element={<AdminRetailStaff />} />
                 <Route path="/admin/engagement" element={<AdminEngagement />} />
                 <Route path="/library/discovered" element={<RecentlyDiscoveredPage />} />
                 <Route path="/listener/:userId" element={<ListenerProfilePage />} />
