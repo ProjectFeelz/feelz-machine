@@ -1052,6 +1052,65 @@ export default function ForYouPage() {
         dbHiddenIds.forEach(id => hiddenIdsRef.current.add(id));
         hiddenIds = [...hiddenIdsRef.current];
 
+        // ── Session re-rank ──────────────────────────────────────────────
+        // get_ranked_feed reorders the stored candidate pool using what the
+        // listener has done in the last 45 minutes. Only on the first page:
+        // the function applies a random serendipity nudge, so calling it per
+        // page would reshuffle between pages and produce duplicates. Deeper
+        // pages continue on the stable stored ordering below.
+        //
+        // Any failure falls through to that same stored ordering, so a bad
+        // RPC degrades to exactly today's behaviour rather than an empty feed.
+        let rankedIds = null;
+        if (offset === 0) {
+          try {
+            const { data: ranked, error: rankErr } = await supabase
+              .rpc('get_ranked_feed', { p_limit: PAGE_SIZE });
+            if (!rankErr && ranked?.length > 0) {
+              rankedIds = ranked.map(r => ({ id: r.track_id, reason: r.reason }));
+            }
+          } catch {
+            // Fall through to the stored ordering.
+          }
+        }
+
+        if (rankedIds) {
+          const idList = rankedIds.map(r => r.id);
+          const { data: rankedTracks } = await supabase
+            .from('tracks')
+            .select('id, title, slug, genre, mood, cover_artwork_url, file_url, youtube_url, duration, lyrics, artist_id, is_beat, stream_count, like_count, bpm, beat_key, beat_scale, download_price, engagement_score, artists(artist_name, slug, profile_image_url)')
+            .in('id', idList);
+
+          if (rankedTracks?.length > 0) {
+            // Restore the order the RPC returned. The `in` filter does not
+            // preserve it and the order is the entire point here.
+            const byId = Object.fromEntries(rankedTracks.map(t => [t.id, t]));
+            const REASON_LABELS_RANKED = {
+              from_following: 'Following', genre_match: 'Your genre',
+              mood_match: 'Your mood', new_release: 'New release',
+              hidden_gem: 'Hidden gem', trending: 'Trending',
+              top_artist: 'Your fave', feat_following: 'Features who you follow',
+              your_beats: 'Your kind of beat', recommended: 'For you',
+              playlisted_artist: 'In your playlists', downloaded_artist: 'You downloaded them',
+              editors_pick: "Editor's pick",
+            };
+            fetched = rankedIds
+              .map(r => {
+                const t = byId[r.id];
+                if (!t || hiddenIdsRef.current.has(t.id)) return null;
+                return {
+                  ...t,
+                  artist_name:  t.artists?.artist_name || 'Unknown',
+                  artist_slug:  t.artists?.slug || null,
+                  artist_image: t.artists?.profile_image_url || null,
+                  reason:       r.reason || 'recommended',
+                  reason_label: REASON_LABELS_RANKED[r.reason] || 'For you',
+                };
+              })
+              .filter(Boolean);
+          }
+        }
+
         let recQuery = supabase
           .from('listener_recommendations')
           .select('score, reason, tracks(id, title, slug, genre, mood, cover_artwork_url, file_url, youtube_url, duration, lyrics, artist_id, is_beat, stream_count, like_count, bpm, beat_key, beat_scale, download_price, engagement_score, artists(artist_name, slug, profile_image_url))')
@@ -1063,7 +1122,7 @@ export default function ForYouPage() {
           recQuery = recQuery.not('track_id', 'in', `(${hiddenIds.join(',')})`);
         }
 
-        const { data: recData } = await recQuery;
+        const { data: recData } = fetched.length > 0 ? { data: null } : await recQuery;
 
         if (recData?.length > 0) {
           const REASON_LABELS = {

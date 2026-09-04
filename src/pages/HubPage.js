@@ -14,7 +14,7 @@ import {
   ChevronRight, Crown, Zap, Star, LayoutDashboard,
   User, LogOut, DollarSign, Radio, Mic2,
   Loader, X, Youtube, Info, Search,
-  Plus, MessageSquare, Check, Send, Store, Trophy, Sparkles,
+  Plus, MessageSquare, Check, Send, Store, Trophy, Sparkles, EyeOff, MapPin,
 } from 'lucide-react';
 
 function LinkCard({ icon: Icon, label, description, path, color, onClick }) {
@@ -236,12 +236,14 @@ export default function HubPage() {
             <Section title="Platform Admin" icon={Shield}>
               <LinkCard icon={Shield} label="Admin Panel" description="Broadcast · Analytics · Moderation · Users" path="/admin" color="bg-yellow-500/20" />
               <LinkCard icon={Sparkles} label="Home Hero" description="Control the big slot at the top of Home" path="/admin/home-hero" color="bg-yellow-500/20" />
+              <LinkCard icon={Star} label="Cold Start Picks" description="What a brand new listener hears first" path="/admin/cold-start" color="bg-yellow-500/20" />
               <LinkCard icon={Send} label="Newsletter" description="Compose updates for the app or retail venues" path="/newsletter/compose" color="bg-yellow-500/20" />
             </Section>
 
             <Section title="Retail Admin" icon={Store}>
               <LinkCard icon={Store} label="Retail Admin" description="Standalone panel · playlists · venues · ads" path="/retail-admin" color="bg-purple-500/20" />
               <LinkCard icon={Store} label="Venue Invites" description="Add a venue and copy its signup link" path="/admin/content?tab=retail&sub=venues" color="bg-purple-500/20" />
+              <LinkCard icon={Radio} label="Retail Player" description="The venue-facing player, admin preview" path="/retail/player" color="bg-purple-500/20" />
             </Section>
 
             <Section title="School Sessions" icon={Trophy}>
@@ -266,8 +268,10 @@ export default function HubPage() {
             </Section>
           )}
 
-          {/* Retail venue */}
-          {isRetailVenue && (
+          {/* Retail venue. Admins get the player under Retail Admin above, so
+              this is gated to non-admins to avoid the same link twice. A real
+              venue owner is not an admin and still needs this. */}
+          {isRetailVenue && !isAdmin && (
             <Section title="Feelz Retail" icon={Store}>
               <LinkCard icon={Store} label="Retail Player" description="Pick a mood, play music for your venue" path="/retail/player" color="bg-purple-500/20" />
             </Section>
@@ -291,6 +295,7 @@ export default function HubPage() {
               <LinkCard icon={Radio}          label="Collab Radar"   description="Find artists who vibe with your sound"  onClick={() => navigate('/collab-radar')} color="bg-purple-500/20" />
               <LinkCard icon={HeartHandshake} label="Collaborations" description="Manage collab requests and credits"     onClick={() => setActiveTab('collabs')}   color="bg-cyan-500/20" />
               <LinkCard icon={BarChart3}      label="Analytics"      description="Track performance and stream data"      path="/dashboard?tab=analytics" color="bg-indigo-500/20" />
+              <LinkCard icon={MapPin}         label="Listener Stats" description="Where people listen, and how far they get" path="/dashboard/listeners"     color="bg-indigo-500/20" />
             </Section>
           )}
 
@@ -301,6 +306,7 @@ export default function HubPage() {
             {isArtist && (
               <LinkCard icon={DollarSign} label="Payments" description="PayPal settings and earnings" path="/profile" color="bg-emerald-500/20" />
             )}
+            <LinkCard icon={EyeOff} label="Hidden" description="Artists and tracks you took out of your feed" path="/hidden" color="bg-white/[0.06]" />
             <LinkCard icon={Info} label="About" description="App info, plans, privacy and terms" path="/about" color="bg-white/[0.06]" />
           </Section>
 

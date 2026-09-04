@@ -140,6 +140,10 @@
   schedule = "30 3,15 * * *"
 
 [[scheduled_functions]]
+  name = "prune-listening-events"
+  schedule = "0 4 * * *"
+
+[[scheduled_functions]]
   name = "platform-daily-story"
   schedule = "0 8 * * *"
 

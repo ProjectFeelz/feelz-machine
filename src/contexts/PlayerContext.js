@@ -38,6 +38,96 @@ export function PlayerProvider({ children }) {
   const crossfadingRef  = useRef(false);
   const CROSSFADE_SECS  = 1.5; // seconds of overlap — short enough to not echo
   const streamLoggedRef = useRef(false);
+
+  // ── Listening events ────────────────────────────────────────────────────
+  // Taste signal capture for the For You model. Deliberately separate from
+  // log_stream: that writes one row at 30 seconds with completed hardcoded
+  // true and drives artist payouts, so it carries no completion signal and
+  // must not be changed for scoring reasons.
+  //
+  // This lives in PlayerContext rather than in any single page so every
+  // surface that plays through playTrack is covered by one write point.
+  //
+  // currentTrackRef mirrors currentTrack because the flush runs inside
+  // callbacks and event listeners where the state value would be stale.
+  const currentTrackRef  = useRef(null);
+  const lastFlushedRef   = useRef(null);
+  const geoRef           = useRef(null);
+
+  // Approximate location for the play, from Netlify's edge geo header.
+  // Resolved once and cached in sessionStorage: it does not change mid
+  // listen, and a busy listener would otherwise hit this on every track
+  // change. Any failure resolves to nulls rather than throwing, because a
+  // play with unknown location must still be recorded.
+  const resolveGeo = useCallback(async () => {
+    if (geoRef.current) return geoRef.current;
+    try {
+      const cached = sessionStorage.getItem('feelz_geo');
+      if (cached) {
+        geoRef.current = JSON.parse(cached);
+        return geoRef.current;
+      }
+    } catch {}
+    try {
+      const res = await fetch('/.netlify/functions/geo');
+      const geo = await res.json();
+      geoRef.current = geo;
+      try { sessionStorage.setItem('feelz_geo', JSON.stringify(geo)); } catch {}
+      return geo;
+    } catch {
+      geoRef.current = { country: null, country_name: null, city: null, region: null };
+      return geoRef.current;
+    }
+  }, []);
+
+  const flushListeningEvent = useCallback(async (endReason) => {
+    const track = currentTrackRef.current;
+    const audio = audioRef.current;
+    if (!track || !audio) return;
+
+    const listened = Math.floor(audio.currentTime || 0);
+    // Under three seconds is a mis-tap or a queue skip-through, not a
+    // listening decision. Recording it would be noise.
+    if (listened < 3) return;
+
+    // Guard against double flush when two paths fire for the same play,
+    // for example ended followed by a track change.
+    const flushKey = `${track.id}:${Math.floor(Date.now() / 1000)}`;
+    if (lastFlushedRef.current === flushKey) return;
+    lastFlushedRef.current = flushKey;
+
+    const trackSeconds = Math.floor(audio.duration || track.duration || 0) || null;
+    const pct = trackSeconds ? Math.min(100, Math.round((listened / trackSeconds) * 1000) / 10) : null;
+    const geo = await resolveGeo();
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const userId = session?.user?.id;
+      if (!userId) return;
+
+      await supabase.from('listening_events').insert({
+        user_id:          userId,
+        track_id:         track.id,
+        artist_id:        track.artist_id || null,
+        genre:            track.genre || null,
+        mood:             track.mood || null,
+        bpm:              track.bpm || null,
+        is_beat:          track.is_beat === true,
+        listened_seconds: listened,
+        track_seconds:    trackSeconds,
+        completion_pct:   pct,
+        end_reason:       endReason,
+        event_source:     window.__feelz_play_source || 'unknown',
+        country:          geo?.country || null,
+        country_name:     geo?.country_name || null,
+        city:             geo?.city || null,
+        region:           geo?.region || null,
+      });
+    } catch {
+      // Never let signal capture break playback. A lost event is a lost
+      // data point, a thrown error here would be a broken player.
+    }
+  }, [resolveGeo]);
   const queueRef        = useRef([]);
   const queueIndexRef   = useRef(-1);
   const shuffleRef      = useRef(false);
@@ -115,6 +205,9 @@ export function PlayerProvider({ children }) {
     }
     const nextTrack = q[nextIndex];
     if (nextTrack?.file_url) {
+      // Before the crossfade overwrites the playhead, capture how far the
+      // outgoing track actually got.
+      flushListeningEvent('track_change');
       streamLoggedRef.current = false;
 
       // ── Crossfade: use a temporary second element to fade out the current
@@ -182,13 +275,29 @@ export function PlayerProvider({ children }) {
         extendQueueWithSuggestions(nextTrack);
       }
     }
-  }, [extendQueueWithSuggestions]);
+  }, [extendQueueWithSuggestions, flushListeningEvent]);
+
+  useEffect(() => { currentTrackRef.current = currentTrack; }, [currentTrack]);
+
+  // Catches the listener closing the tab or backgrounding the app, which
+  // is otherwise the most common way a play goes unrecorded.
+  useEffect(() => {
+    const onHide = () => { flushListeningEvent('page_hide'); };
+    window.addEventListener('pagehide', onHide);
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') onHide();
+    });
+    return () => {
+      window.removeEventListener('pagehide', onHide);
+    };
+  }, [flushListeningEvent]);
 
   useEffect(() => {
     const audio = audioRef.current;
     const onTimeUpdate      = () => setCurrentTime(audio.currentTime);
     const onDurationChange  = () => setDuration(audio.duration || 0);
     const onEnded           = () => {
+      flushListeningEvent('ended');
       if (repeatRef.current === 'one') {
         audio.currentTime = 0;
         audio.play().catch(console.error);
@@ -211,7 +320,7 @@ export function PlayerProvider({ children }) {
       audio.removeEventListener('pause',          onPause);
       audio.pause();
     };
-  }, [playNextFromRef]);
+  }, [playNextFromRef, flushListeningEvent]);
 
   useEffect(() => {
     if (currentTime >= 30 && !streamLoggedRef.current && currentTrack) {
@@ -444,6 +553,7 @@ export function PlayerProvider({ children }) {
       setIsMinimized(false);
       return;
     }
+    flushListeningEvent('track_change');
     streamLoggedRef.current = false;
     audio.pause();
     audio.src = track.file_url;
@@ -482,7 +592,7 @@ export function PlayerProvider({ children }) {
       const nextIdx = resolvedIdx + 1;
       if (nextIdx < trackList.length) preloadCover(trackList[nextIdx]);
     }
-  }, [currentTrack, isPlaying]);
+  }, [currentTrack, isPlaying, flushListeningEvent]);
 
   const togglePlay = useCallback(() => {
     const audio = audioRef.current;

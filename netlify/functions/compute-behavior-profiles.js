@@ -251,9 +251,10 @@ async function computeListenerProfile(userId) {
     { data: follows },
     { data: listener },
     { data: competitionStreams },
+    { data: listeningEvents },
   ] = await Promise.all([
     supabase.from('streams')
-      .select('track_id, created_at, duration_played, tracks(genre, mood, is_beat, artists(artist_name))')
+      .select('track_id, created_at, duration_played, tracks(genre, mood, is_beat, bpm, artist_id, artists(artist_name))')
       .eq('user_id', userId)
       .gte('created_at', d30)
       .order('created_at', { ascending: false })
@@ -289,6 +290,15 @@ async function computeListenerProfile(userId) {
       .eq('user_id', userId)
       .gte('created_at', d30)
       .limit(5),
+    // Real completion data. This is the only source of it: streams
+    // carries a constant ~30s duration_played by construction, so it can
+    // never tell us how far anyone actually got.
+    supabase.from('listening_events')
+      .select('track_id, artist_id, genre, mood, bpm, completion_pct, listened_seconds, end_reason')
+      .eq('user_id', userId)
+      .gte('created_at', d30)
+      .order('created_at', { ascending: false })
+      .limit(300),
   ]);
 
   const allStreams = streams30 || [];
@@ -339,10 +349,64 @@ async function computeListenerProfile(userId) {
   const repeatStreams = Object.values(trackFreq).filter(n => n > 1).reduce((s,n) => s + n - 1, 0);
   const repeatRate = allStreams.length > 0 ? (repeatStreams / allStreams.length) * 100 : 0;
 
-  // Skip rate — streams with duration_played < 30s (if we have the column)
-  const streamsWithDuration = allStreams.filter(s => s.duration_played !== undefined && s.duration_played !== null);
-  const skips = streamsWithDuration.filter(s => s.duration_played < 30).length;
-  const skipRate = streamsWithDuration.length > 0 ? (skips / streamsWithDuration.length) * 100 : 0;
+  // ── Completion, from listening_events ───────────────────────────────────
+  // The old skip rate here counted streams with duration_played < 30. That
+  // column is always about 30 by construction, because PlayerContext writes
+  // one stream row at the 30 second mark using the playhead at that instant.
+  // So the comparison was never true and skip_rate was always 0, which also
+  // meant the skip_heavy tag could never fire.
+  //
+  // listening_events carries the real playhead. Until it has data this
+  // falls back to null rather than to the old broken number, so a profile
+  // says "unknown" instead of confidently saying "never skips".
+  const events = listeningEvents || [];
+  const eventsWithPct = events.filter(e => e.completion_pct !== null && e.completion_pct !== undefined);
+
+  // Below 10 percent is an abandon. Steve's rule: a fast skip is mostly
+  // noise about today's mood, so it counts here for the profile summary
+  // but is deliberately NOT used as a negative taste signal anywhere.
+  const abandons = eventsWithPct.filter(e => e.completion_pct < 10).length;
+  const skipRate = eventsWithPct.length >= 5
+    ? (abandons / eventsWithPct.length) * 100
+    : 0;
+
+  const avgCompletionPct = eventsWithPct.length >= 5
+    ? eventsWithPct.reduce((s, e) => s + Number(e.completion_pct), 0) / eventsWithPct.length
+    : null;
+
+  // ── BPM affinity ────────────────────────────────────────────────────────
+  // Weighted toward tracks actually finished. Someone who abandons every
+  // fast track should not read as a fast-track listener just because those
+  // tracks were served to them.
+  const bpmSamples = [];
+  eventsWithPct.forEach(e => {
+    if (!e.bpm) return;
+    const weight = e.completion_pct >= 80 ? 3 : e.completion_pct >= 40 ? 1 : 0;
+    for (let i = 0; i < weight; i++) bpmSamples.push(e.bpm);
+  });
+  // Fall back to plain stream history when there are no events yet.
+  if (bpmSamples.length === 0) {
+    allStreams.forEach(s => { if (s.tracks?.bpm) bpmSamples.push(s.tracks.bpm); });
+  }
+  const avgBpm = bpmSamples.length > 0
+    ? Math.round(bpmSamples.reduce((a, b) => a + b, 0) / bpmSamples.length)
+    : null;
+
+  // ── Top artist ──────────────────────────────────────────────────────────
+  // Prefer completed listens, fall back to raw stream counts.
+  const artistPlayCounts = {};
+  eventsWithPct.forEach(e => {
+    if (!e.artist_id || e.completion_pct < 40) return;
+    artistPlayCounts[e.artist_id] = (artistPlayCounts[e.artist_id] || 0) + 1;
+  });
+  if (Object.keys(artistPlayCounts).length === 0) {
+    allStreams.forEach(s => {
+      const a = s.tracks?.artist_id;
+      if (a) artistPlayCounts[a] = (artistPlayCounts[a] || 0) + 1;
+    });
+  }
+  const topArtistId = Object.entries(artistPlayCounts)
+    .sort((a, b) => b[1] - a[1])[0]?.[0] || null;
 
   // Engagement rates
   const streamBase = Math.max(allStreams.length, 1);
@@ -392,6 +456,10 @@ async function computeListenerProfile(userId) {
     session_type:      sessionType,
     avg_listen_pct:    null, // requires per-track duration data
     skip_rate:         parseFloat(skipRate.toFixed(2)),
+    avg_completion_pct: avgCompletionPct !== null ? parseFloat(avgCompletionPct.toFixed(2)) : null,
+    events_sampled:     eventsWithPct.length,
+    avg_bpm:            avgBpm,
+    top_artist_id:      topArtistId,
     repeat_rate:       parseFloat(repeatRate.toFixed(2)),
     like_rate:         parseFloat(likeRate.toFixed(4)),
     download_rate:     parseFloat(downloadRate.toFixed(4)),

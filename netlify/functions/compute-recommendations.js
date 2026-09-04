@@ -191,8 +191,15 @@ exports.handler = async (event) => {
         // Followed artists
         supabase.from('follows').select('follower_id, artist_id').in('follower_id', userIds),
         // Behavior profiles with tags
+        // These column names were wrong in every previous version:
+        // top_genre / second_genre / top_mood / behavior_tags / streams_30d
+        // do not exist on this table, and avg_bpm / top_artist_id were
+        // never written until migration 63. PostgREST errors on unknown
+        // columns and returns null, so `behavior` was {} for every listener
+        // on every run, and the BPM rule plus all four behaviour-tag
+        // bonuses below have never once fired.
         supabase.from('listener_behavior_profiles').select(
-          'user_id, top_genre, second_genre, top_mood, behavior_tags, top_artist_id, avg_bpm, streams_30d'
+          'user_id, top_genres, top_moods, tags, top_artist_id, avg_bpm, avg_completion_pct, events_sampled, total_streams_30d'
         ).in('user_id', userIds),
         // Downloads
         supabase.from('downloads').select('user_id, track_id').in('user_id', userIds),
@@ -284,13 +291,17 @@ exports.handler = async (event) => {
           if (s.tracks?.is_beat === false) songStreams++;
         });
 
-        // Use behavior profile if richer than stream history
-        const primaryGenre   = behavior.top_genre    || Object.entries(genreCounts).sort((a,b)=>b[1]-a[1])[0]?.[0] || null;
-        const secondGenre    = behavior.second_genre  || Object.entries(genreCounts).sort((a,b)=>b[1]-a[1])[1]?.[0] || null;
-        const topMood        = behavior.top_mood      || Object.entries(moodCounts).sort((a,b)=>b[1]-a[1])[0]?.[0]  || null;
+        // Use behavior profile if richer than stream history. The profile
+        // stores ordered arrays, so first and second entries are the
+        // primary and secondary taste.
+        const profileGenres  = behavior.top_genres || [];
+        const profileMoods   = behavior.top_moods  || [];
+        const primaryGenre   = profileGenres[0]       || Object.entries(genreCounts).sort((a,b)=>b[1]-a[1])[0]?.[0] || null;
+        const secondGenre    = profileGenres[1]       || Object.entries(genreCounts).sort((a,b)=>b[1]-a[1])[1]?.[0] || null;
+        const topMood        = profileMoods[0]        || Object.entries(moodCounts).sort((a,b)=>b[1]-a[1])[0]?.[0]  || null;
         const topArtistId    = behavior.top_artist_id || Object.entries(artistStreams).sort((a,b)=>b[1]-a[1])[0]?.[0] || null;
         const avgBpm         = behavior.avg_bpm       || (bpmSamples.length ? bpmSamples.reduce((a,b)=>a+b,0)/bpmSamples.length : null);
-        const behaviorTags   = new Set(behavior.behavior_tags || []);
+        const behaviorTags   = new Set(behavior.tags || []);
 
         // Beats vs songs. Only forms an opinion once there's enough history
         // to be meaningful, otherwise a couple of accidental plays would
