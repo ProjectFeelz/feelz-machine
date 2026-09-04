@@ -15,6 +15,7 @@ import { Loader, Play, Pause, SkipForward, Music, MapPin, Megaphone, Heart, Bell
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../supabaseClient';
 import RetailPlaylistComments from '../components/retail/RetailPlaylistComments';
+import { buildPlayRow, sendPlay, flushQueue } from '../utils/retailPlayQueue';
 
 const QUALIFYING_SECONDS = 30;
 const PAYPAL_CLIENT_ID = process.env.REACT_APP_PAYPAL_CLIENT_ID || '';
@@ -283,16 +284,38 @@ export default function RetailPlayerPage() {
     setLoadingTracks(false);
   };
 
+  // These rows are what calculate_retail_payout() divides the artist pool
+  // by, so a failed insert is an artist being underpaid, not a lost
+  // analytics event. It used to be fire and forget with the error
+  // swallowed. Now a failure queues the row locally and it is retried,
+  // with the id generated up front so a retry of a play that actually
+  // landed is discarded rather than counted twice.
   const logPlay = React.useCallback((track, playlist, duration) => {
     if (!venue || !track || isPreviewMode) return;
-    supabase.from('retail_play_logs').insert({
-      venue_id: venue.id,
-      location_id: activeLocationId || null,
-      track_id: track.id,
-      playlist_id: playlist?.id || null,
-      duration_played: duration || QUALIFYING_SECONDS,
-    }).then(() => {});
+    const row = buildPlayRow({
+      venueId: venue.id,
+      locationId: activeLocationId,
+      trackId: track.id,
+      playlistId: playlist?.id,
+      durationPlayed: duration || QUALIFYING_SECONDS,
+    });
+    sendPlay(supabase, row);
   }, [venue, activeLocationId, isPreviewMode]);
+
+  // Drain anything stranded by an earlier outage: on open, when the
+  // browser reports it is back online, and every few minutes while the
+  // player is running, since a venue tablet can sit open for days.
+  React.useEffect(() => {
+    if (!venue || isPreviewMode) return;
+    const drain = () => { flushQueue(supabase); };
+    drain();
+    window.addEventListener('online', drain);
+    const interval = setInterval(drain, 5 * 60 * 1000);
+    return () => {
+      window.removeEventListener('online', drain);
+      clearInterval(interval);
+    };
+  }, [venue, isPreviewMode]);
 
   const logAdPlay = React.useCallback((ad) => {
     if (!venue || !ad || isPreviewMode) return;
