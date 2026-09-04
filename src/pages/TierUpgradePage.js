@@ -433,7 +433,10 @@ export default function TierUpgradePage() {
   }
 
   return (
-    <div className="min-h-screen bg-black pb-32">
+    // No min-h-screen or background: this renders inside AppLayout, which
+    // provides the shell, the sidebar and the player. It was previously
+    // routed outside the layout, so choosing a plan meant losing the nav.
+    <div className="pb-32">
       {/* Header */}
       <div className="flex items-center p-5">
         <button onClick={() => navigate(-1)}

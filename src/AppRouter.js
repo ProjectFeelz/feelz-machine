@@ -82,6 +82,7 @@ const RetailLandingPage = React.lazy(() => import('./pages/RetailLandingPage'));
 const AdminHomeHero = React.lazy(() => import('./pages/AdminHomeHero'));
 const AdminColdStart = React.lazy(() => import('./pages/AdminColdStart'));
 const HiddenPage = React.lazy(() => import('./pages/HiddenPage'));
+const ContactPreferencesPage = React.lazy(() => import('./pages/ContactPreferencesPage'));
 const AdminRetailStaff = React.lazy(() => import('./pages/AdminRetailStaff'));
 const RetailTermsPage = React.lazy(() => import('./pages/RetailTermsPage'));
 const RetailPrivacyPage = React.lazy(() => import('./pages/RetailPrivacyPage'));
@@ -249,8 +250,6 @@ export default function AppRouter() {
 
               <Route path="/login" element={<LoginPage />} />
               <Route path="/setup" element={<ProfileSetup />} />
-              <Route path="/dashboard" element={<ArtistDashboard />} />
-              <Route path="/upgrade" element={<TierUpgradePage />} />
               <Route path="/chat/:roomId" element={<ChatRoomView />} />
               <Route path="/competition/:competitionId" element={<CompetitionRoomPage />} />
               <Route path="/session/:sessionId" element={<ListeningSessionPage />} />
@@ -308,6 +307,7 @@ export default function AppRouter() {
                 <Route path="/library/recent" element={<RecentlyPlayedPage />} />
                 <Route path="/library/following" element={<FollowingPage />} />
                 <Route path="/listener/stats"   element={<ListenerStatsPage />} />
+                <Route path="/upgrade" element={<TierUpgradePage />} />
                 <Route path="/listener/upgrade" element={<ListenerUpgradePage />} />
                 <Route path="/library/playlists" element={<PlaylistsPage />} />
                 <Route path="/library/playlists/join/:token" element={<PlaylistJoinPage />} />
@@ -339,6 +339,7 @@ export default function AppRouter() {
                 <Route path="/artist/:slug/fans" element={<FanLeaderboardPage />} />
 
                 <Route path="/track/:slug" element={<TrackPage />} />
+                <Route path="/dashboard" element={<ArtistDashboard />} />
                 <Route path="/collab-radar" element={<CollabRadarPage />} />
                 <Route path="/admin" element={<AdminDashboard />} />
                 <Route path="/admin/artists" element={<AdminArtists />} />
@@ -356,6 +357,7 @@ export default function AppRouter() {
                 <Route path="/admin/home-hero" element={<AdminHomeHero />} />
                 <Route path="/admin/cold-start" element={<AdminColdStart />} />
                 <Route path="/hidden" element={<HiddenPage />} />
+                <Route path="/contact-preferences" element={<ContactPreferencesPage />} />
                 <Route path="/admin/retail-staff" element={<AdminRetailStaff />} />
                 <Route path="/admin/engagement" element={<AdminEngagement />} />
                 <Route path="/library/discovered" element={<RecentlyDiscoveredPage />} />

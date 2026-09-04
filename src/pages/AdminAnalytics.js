@@ -106,6 +106,8 @@ export default function AdminAnalytics({ embedded = false }) {
   const navigate = useNavigate();
   const { isAdmin } = useAuth();
   const [loading, setLoading] = useState(true);
+  const [exporting, setExporting]   = useState(null);
+  const [exportError, setExportError] = useState('');
   const [refreshing, setRefreshing] = useState(false);
   const [tab, setTab] = useState('overview');
   const [range, setRange] = useState(7); // days for charts
@@ -247,7 +249,7 @@ export default function AdminAnalytics({ embedded = false }) {
       });
       const totalStreamsForPct = (deviceRows || []).length || 1;
       setSourceSplit(Object.entries(sc).map(([name, count]) => ({
-        name: name.replace(/_/g,' ').replace(/\w/g, c => c.toUpperCase()),
+        name: name.replace(/_/g,' ').replace(/\b\w/g, c => c.toUpperCase()),
         value: count, pct: Math.round((count/totalStreamsForPct)*100),
       })).sort((a,b) => b.value - a.value));
       setCompletionStats({
@@ -488,15 +490,35 @@ export default function AdminAnalytics({ embedded = false }) {
     setRefreshing(false);
   }, [range]);
 
+  // Quote anything containing a comma, quote or newline, and double up inner
+  // quotes. The previous version only handled commas, so a track title with
+  // an apostrophe-free quote or a bio with a line break produced a corrupt
+  // file that looked fine until you opened it in a spreadsheet.
+  const csvCell = (val) => {
+    if (val === null || val === undefined) return '';
+    const s = String(val);
+    return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  };
+
   const exportCSV = (data, headers, filename) => {
-    const csv = [headers.join(','), ...data.map(row => headers.map(h => {
-      const val = row[h] ?? '';
-      return typeof val === 'string' && val.includes(',') ? '"' + val + '"' : val;
-    }).join(','))].join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
+    const csv = [headers.join(','), ...data.map(row => headers.map(h => csvCell(row[h])).join(','))].join('\n');
+    // BOM so Excel opens UTF-8 correctly. Artist names carry accents.
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a'); a.href = url; a.download = filename; a.click();
     URL.revokeObjectURL(url);
+  };
+
+  // Shared runner so every export reports failure instead of silently doing
+  // nothing, which is what `if (data)` did when a query errored.
+  const runExport = async (label, query, headers, filename) => {
+    setExporting(label);
+    const { data, error } = await query;
+    setExporting(null);
+    if (error) { setExportError(`${label} failed: ${error.message}`); return; }
+    if (!data || data.length === 0) { setExportError(`${label}: nothing to export`); return; }
+    setExportError('');
+    exportCSV(data, headers, filename);
   };
 
   const exportAll = async () => {
@@ -512,6 +534,80 @@ export default function AdminAnalytics({ embedded = false }) {
   const exportTracks = async () => {
     const { data } = await supabase.from('tracks').select('title, genre, mood, stream_count, download_count, is_published, created_at').order('stream_count', { ascending: false });
     if (data) exportCSV(data, ['title','genre','mood','stream_count','download_count','is_published','created_at'], 'tracks.csv');
+  };
+
+  const exportListeners = () => runExport('Listeners',
+    supabase.from('listeners').select('display_name, tier, engagement_segment, last_seen_at, created_at').order('created_at', { ascending: false }),
+    ['display_name','tier','engagement_segment','last_seen_at','created_at'], 'listeners.csv');
+
+  const exportFollows = () => runExport('Follows',
+    supabase.from('follows').select('follower_id, artist_id, created_at').order('created_at', { ascending: false }).limit(10000),
+    ['follower_id','artist_id','created_at'], 'follows.csv');
+
+  const exportContacts = () => runExport('Contacts',
+    supabase.from('global_contacts').select('user_id, email, name, total_follows, total_streams, opted_in, last_active').order('last_active', { ascending: false }),
+    ['user_id','email','name','total_follows','total_streams','opted_in','last_active'], 'contacts.csv');
+
+  const exportSubscribers = () => runExport('Subscribers',
+    supabase.from('email_subscribers').select('email, name, source, subscribed, subscribed_at, unsubscribed_at').order('subscribed_at', { ascending: false }),
+    ['email','name','source','subscribed','subscribed_at','unsubscribed_at'], 'email_subscribers.csv');
+
+  // Real completion and location, which streams cannot give you: that table
+  // stores a constant ~30s duration and completed = true on every row.
+  const exportListeningEvents = () => runExport('Listening events',
+    supabase.from('listening_events').select('track_id, artist_id, genre, mood, bpm, listened_seconds, track_seconds, completion_pct, end_reason, event_source, country, city, created_at').order('created_at', { ascending: false }).limit(10000),
+    ['track_id','artist_id','genre','mood','bpm','listened_seconds','track_seconds','completion_pct','end_reason','event_source','country','city','created_at'], 'listening_events.csv');
+
+  const exportDownloads = () => runExport('Downloads',
+    supabase.from('downloads').select('track_id, user_id, download_type, amount_paid, created_at').order('created_at', { ascending: false }).limit(10000),
+    ['track_id','user_id','download_type','amount_paid','created_at'], 'downloads.csv');
+
+  const exportRetailPlays = () => runExport('Retail plays',
+    supabase.from('retail_play_logs').select('venue_id, location_id, track_id, playlist_id, duration_played, played_at').order('played_at', { ascending: false }).limit(10000),
+    ['venue_id','location_id','track_id','playlist_id','duration_played','played_at'], 'retail_play_logs.csv');
+
+  const exportVenues = () => runExport('Venues',
+    supabase.from('retail_venues').select('business_name, contact_name, contact_email, status, ads_enabled, last_seen_at, created_at').order('created_at', { ascending: false }),
+    ['business_name','contact_name','contact_email','status','ads_enabled','last_seen_at','created_at'], 'retail_venues.csv');
+
+  // One file, every dataset, as separate labelled blocks. A single CSV cannot
+  // hold different shapes, so each section gets its own header row with a
+  // blank line between. Spreadsheets handle that fine and it beats
+  // downloading nine files and matching them up by hand.
+  const exportEverything = async () => {
+    setExporting('Everything');
+    setExportError('');
+    const sets = [
+      ['ARTISTS',   supabase.from('artists').select('artist_name, slug, tier, follower_count, total_streams, created_at')],
+      ['TRACKS',    supabase.from('tracks').select('title, genre, mood, stream_count, download_count, is_published, created_at')],
+      ['LISTENERS', supabase.from('listeners').select('display_name, tier, engagement_segment, last_seen_at, created_at')],
+      ['CONTACTS',  supabase.from('global_contacts').select('user_id, email, name, total_follows, total_streams, opted_in, last_active')],
+      ['SUBSCRIBERS', supabase.from('email_subscribers').select('email, name, source, subscribed, subscribed_at')],
+      ['STREAMS',   supabase.from('streams').select('track_id, user_id, duration_played, completed, device_type, platform, source, created_at').order('created_at', { ascending: false }).limit(10000)],
+      ['LISTENING_EVENTS', supabase.from('listening_events').select('track_id, artist_id, genre, mood, completion_pct, listened_seconds, country, city, created_at').order('created_at', { ascending: false }).limit(10000)],
+      ['DOWNLOADS', supabase.from('downloads').select('track_id, user_id, download_type, amount_paid, created_at').limit(10000)],
+      ['RETAIL_PLAYS', supabase.from('retail_play_logs').select('venue_id, track_id, playlist_id, duration_played, played_at').limit(10000)],
+    ];
+
+    const blocks = [];
+    const failed = [];
+    for (const [name, q] of sets) {
+      const { data, error } = await q;
+      if (error) { failed.push(name); continue; }
+      if (!data || data.length === 0) { blocks.push(`## ${name}\n(no rows)`); continue; }
+      const headers = Object.keys(data[0]);
+      blocks.push(`## ${name}\n` + [headers.join(','), ...data.map(r => headers.map(h => csvCell(r[h])).join(','))].join('\n'));
+    }
+    setExporting(null);
+
+    const stamp = new Date().toISOString().slice(0, 10);
+    const blob = new Blob(['\uFEFF' + blocks.join('\n\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = `feelz-machine-export-${stamp}.csv`; a.click();
+    URL.revokeObjectURL(url);
+
+    // Say which parts failed rather than handing over a file with silent holes.
+    if (failed.length) setExportError(`Exported, but these sections failed: ${failed.join(', ')}`);
   };
 
   useEffect(() => {
@@ -1101,22 +1197,54 @@ export default function AdminAnalytics({ embedded = false }) {
           {tab === 'export' && (
             <div className="space-y-3">
               <p className="text-sm text-white/40 mb-4">Export raw data as CSV for external analysis.</p>
+
+              {exportError && (
+                <p className="text-xs text-amber-300 mb-3">{exportError}</p>
+              )}
+
+              <button onClick={exportEverything} disabled={!!exporting}
+                className="w-full flex items-center space-x-4 p-4 rounded-2xl border border-purple-400/25 bg-purple-500/[0.08] hover:bg-purple-500/[0.14] transition text-left mb-4 disabled:opacity-50">
+                <div className="w-10 h-10 rounded-xl bg-purple-500/20 flex items-center justify-center flex-shrink-0">
+                  <FileDown className="w-4 h-4 text-purple-300" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-white">
+                    {exporting === 'Everything' ? 'Building export...' : 'Everything CSV'}
+                  </p>
+                  <p className="text-[10px] text-white/40 mt-0.5">
+                    All datasets in one file, as labelled sections
+                  </p>
+                </div>
+              </button>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
               {[
-                { label: 'Artists',         sub: 'Name, tier, streams, followers, joined',         fn: exportArtists },
-                { label: 'Tracks',          sub: 'Title, genre, mood, streams, downloads',          fn: exportTracks  },
-                { label: 'Streams (10k)',   sub: 'Track, user, duration, device, platform, date',   fn: exportAll     },
+                { label: 'Artists',          sub: 'Name, tier, streams, followers, joined',          fn: exportArtists },
+                { label: 'Tracks',           sub: 'Title, genre, mood, streams, downloads',          fn: exportTracks  },
+                { label: 'Streams (10k)',    sub: 'Track, user, duration, device, platform, date',   fn: exportAll     },
+                { label: 'Listening events (10k)', sub: 'Real completion and location, not in streams', fn: exportListeningEvents },
+                { label: 'Listeners',        sub: 'Name, tier, segment, last seen',                  fn: exportListeners },
+                { label: 'Follows (10k)',    sub: 'Follower, artist, date',                          fn: exportFollows },
+                { label: 'Contacts',         sub: 'Platform-wide people, follows, opt-in',           fn: exportContacts },
+                { label: 'Subscribers',      sub: 'Email, source, subscribed state',                 fn: exportSubscribers },
+                { label: 'Downloads (10k)',  sub: 'Track, user, type, amount, date',                 fn: exportDownloads },
+                { label: 'Retail plays (10k)', sub: 'Venue, track, playlist, duration, played at',   fn: exportRetailPlays },
+                { label: 'Venues',           sub: 'Business, contact, status, ads, last seen',       fn: exportVenues },
               ].map((e, i) => (
-                <button key={i} onClick={e.fn}
-                  className="w-full flex items-center space-x-4 p-4 rounded-2xl border border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.05] transition text-left">
+                <button key={i} onClick={e.fn} disabled={!!exporting}
+                  className="w-full flex items-center space-x-4 p-4 rounded-2xl border border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.05] transition text-left disabled:opacity-50">
                   <div className="w-10 h-10 rounded-xl bg-white/[0.06] flex items-center justify-center flex-shrink-0">
                     <FileDown className="w-4 h-4 text-white/40" />
                   </div>
-                  <div className="flex-1">
-                    <p className="text-sm font-semibold text-white">{e.label} CSV</p>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-white truncate">
+                      {exporting === e.label ? 'Exporting...' : `${e.label} CSV`}
+                    </p>
                     <p className="text-[10px] text-white/30 mt-0.5">{e.sub}</p>
                   </div>
                 </button>
               ))}
+              </div>
             </div>
           )}
 
