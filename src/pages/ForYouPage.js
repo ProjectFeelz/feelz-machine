@@ -1072,6 +1072,7 @@ export default function ForYouPage() {
             hidden_gem: 'Hidden gem', trending: 'Trending',
             top_artist: 'Your fave', feat_following: 'Features who you follow',
             your_beats: 'Your kind of beat', recommended: 'For you',
+            playlisted_artist: 'In your playlists', downloaded_artist: 'You downloaded them',
           };
           fetched = recData.filter(r => r.tracks).map(r => ({
             ...r.tracks,

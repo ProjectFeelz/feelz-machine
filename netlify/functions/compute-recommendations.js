@@ -79,6 +79,11 @@ exports.handler = async (event) => {
     if (trackErr) throw trackErr;
     if (!allTracks?.length) return { statusCode: 200, body: 'No tracks' };
 
+    // track_id -> artist_id, so playlist adds and downloads (which only
+    // carry a track_id) can be turned into artist-level affinity.
+    const artistByTrack = {};
+    allTracks.forEach(t => { if (t.artist_id) artistByTrack[t.id] = t.artist_id; });
+
     // Pre-compute platform-wide stats
     const sortedEng    = [...allTracks].sort((a, b) => (b.engagement_score || 0) - (a.engagement_score || 0));
     const top20cutoff  = sortedEng[Math.floor(sortedEng.length * 0.2)]?.engagement_score || 0;
@@ -144,6 +149,19 @@ exports.handler = async (event) => {
         supabase.from('listener_feedback').select('user_id, track_id, artist_id, signal').in('user_id', userIds),
       ]);
 
+      // Playlist adds. A listener putting a track into their own playlist
+      // is a deliberate keep, the strongest intent signal available short
+      // of a download. Fetched in two steps rather than one embedded
+      // query so a failure surfaces instead of silently returning nothing.
+      const { data: userPlaylists } = await supabase
+        .from('playlists').select('id, user_id').in('user_id', userIds);
+      const playlistOwner = {};
+      (userPlaylists || []).forEach(p => { playlistOwner[p.id] = p.user_id; });
+      const playlistIds = (userPlaylists || []).map(p => p.id);
+      const { data: playlistAddData } = playlistIds.length > 0
+        ? await supabase.from('playlist_tracks').select('playlist_id, track_id').in('playlist_id', playlistIds)
+        : { data: [] };
+
       // Index all data by user_id
       const streamsByUser  = {};
       const recentByUser   = {};
@@ -151,6 +169,8 @@ exports.handler = async (event) => {
       const followsByUser  = {};
       const behaviorByUser = {};
       const downloadsByUser = {};
+      const playlistedByUser = {};
+      const playlistArtistsByUser = {};
 
       (streamsData    || []).forEach(s => { (streamsByUser[s.user_id] = streamsByUser[s.user_id] || []).push(s); });
       (recentStreams  || []).forEach(s => { (recentByUser[s.user_id]  = recentByUser[s.user_id]  || new Set()).add(s.track_id); });
@@ -158,6 +178,13 @@ exports.handler = async (event) => {
       (followsData    || []).forEach(f => { (followsByUser[f.follower_id] = followsByUser[f.follower_id] || new Set()).add(f.artist_id); });
       (behaviorData   || []).forEach(b => { behaviorByUser[b.user_id] = b; });
       (downloadData   || []).forEach(d => { (downloadsByUser[d.user_id] = downloadsByUser[d.user_id] || new Set()).add(d.track_id); });
+      (playlistAddData || []).forEach(pt => {
+        const uid = playlistOwner[pt.playlist_id];
+        if (!uid) return;
+        (playlistedByUser[uid] = playlistedByUser[uid] || new Set()).add(pt.track_id);
+        const artistId = artistByTrack[pt.track_id];
+        if (artistId) (playlistArtistsByUser[uid] = playlistArtistsByUser[uid] || new Set()).add(artistId);
+      });
       const feedbackByUser = {};
       (feedbackData || []).forEach(f => {
         if (!feedbackByUser[f.user_id]) feedbackByUser[f.user_id] = { notInterested: new Set(), deepListen: new Set(), skipped: new Set(), hiddenArtists: new Set() };
@@ -176,6 +203,13 @@ exports.handler = async (event) => {
         const following    = followsByUser[user_id]   || new Set();
         const behavior     = behaviorByUser[user_id]  || {};
         const downloaded   = downloadsByUser[user_id] || new Set();
+        const playlisted       = playlistedByUser[user_id]       || new Set();
+        const playlistArtists  = playlistArtistsByUser[user_id]  || new Set();
+        // Artists whose work this listener has downloaded. downloadsByUser
+        // was already being fetched and indexed here but never read, so the
+        // query cost was being paid for nothing.
+        const downloadedArtists = new Set();
+        downloaded.forEach(tid => { const a = artistByTrack[tid]; if (a) downloadedArtists.add(a); });
         const isColdstart  = streams.length === 0;
         const feedback     = feedbackByUser[user_id] || { notInterested: new Set(), deepListen: new Set(), skipped: new Set(), hiddenArtists: new Set() };
 
@@ -219,6 +253,9 @@ exports.handler = async (event) => {
         // Score every track
         const scored = allTracks.map(track => {
           if (liked.has(track.id)) return null;
+          // Already filed into one of their own playlists, so it is in their
+          // library rather than something to discover.
+          if (playlisted.has(track.id)) return null;
           if (feedback.notInterested.has(track.id)) return null;
           if (feedback.hiddenArtists.has(track.artist_id)) return null;
 
@@ -262,6 +299,17 @@ exports.handler = async (event) => {
               else               { score -= 20; }
             } else if (prefersSongs) {
               if (track.is_beat) { score -= 25; }
+            }
+
+            // Artist affinity from deliberate keeps. Weighted below genre
+            // (60-80) and follows (100), above a plain BPM match, because
+            // filing a track away says more than a passive listen but less
+            // than choosing to follow someone.
+            if (playlistArtists.has(track.artist_id)) {
+              score += 45; if (reason === 'recommended') reason = 'playlisted_artist';
+            }
+            if (downloadedArtists.has(track.artist_id)) {
+              score += 35; if (reason === 'recommended') reason = 'downloaded_artist';
             }
 
             // Collab featuring a followed artist
