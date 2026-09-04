@@ -24,9 +24,60 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
+
+// ── Abuse guard ───────────────────────────────────────────────────────────────
+// These endpoints are publicly reachable and each run does thousands of
+// sequential Supabase writes, so an unauthenticated caller could rack up
+// cost and load by hammering them.
+//
+// Two layers, because Netlify's scheduler invokes over the same HTTP path
+// and cannot attach a custom header. A plain "secret or 401" would have
+// silently killed the nightly job.
+//
+//   1. A valid x-cron-secret header runs immediately and skips the cooldown.
+//      Use this for manual runs.
+//   2. Anything else is allowed through only if the last run was more than
+//      COOLDOWN_MINUTES ago. The real schedule is hours apart so it never
+//      trips this, but it caps an anonymous caller at one run per window,
+//      which is roughly what the cron does anyway. Cost stays bounded even
+//      if the URL leaks and even if CRON_SECRET is never set.
+const CRON_SECRET     = process.env.CRON_SECRET || '';
+const COOLDOWN_MINUTES = 20;
+const RUN_KEY          = 'engagement_last_run';
+
+async function guardRun(event, supabase) {
+  const h = event.headers || {};
+  const provided = h['x-cron-secret'] || h['X-Cron-Secret'] || '';
+  if (CRON_SECRET && provided === CRON_SECRET) return { allowed: true, authorised: true };
+
+  const { data } = await supabase.from('platform_settings')
+    .select('value').eq('key', RUN_KEY).maybeSingle();
+  const last = data?.value ? Date.parse(data.value) : 0;
+  if (last) {
+    const mins = (Date.now() - last) / 60000;
+    if (mins < COOLDOWN_MINUTES) {
+      return { allowed: false, retryIn: Math.ceil(COOLDOWN_MINUTES - mins) };
+    }
+  }
+  return { allowed: true, authorised: false };
+}
+
+async function markRun(supabase) {
+  await supabase.from('platform_settings')
+    .upsert({ key: RUN_KEY, value: new Date().toISOString(), updated_at: new Date().toISOString() },
+            { onConflict: 'key' });
+}
+
 exports.handler = async (event) => {
   const isManual = event.httpMethod === 'POST';
-  console.log(`[engagement] starting — ${isManual ? 'manual' : 'scheduled'}`);
+
+  const gate = await guardRun(event, supabase);
+  if (!gate.allowed) {
+    console.warn(`[engagement] refused, cooldown, retry in ${gate.retryIn}m`);
+    return { statusCode: 429, body: JSON.stringify({ error: 'Cooldown active', retryInMinutes: gate.retryIn }) };
+  }
+  await markRun(supabase);
+  console.log(`[engagement] starting — ${isManual ? 'manual' : 'scheduled'} — authorised=${gate.authorised}`);
 
   try {
     const now      = Date.now();
