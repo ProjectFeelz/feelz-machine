@@ -124,7 +124,7 @@ export default function AdminHomeHero() {
       </div>
 
       {/* Create */}
-      <div className="rounded-2xl border border-white/[0.07] bg-white/[0.02] p-5 space-y-3 max-w-2xl mb-8">
+      <div className="rounded-2xl border border-white/[0.07] bg-white/[0.02] p-5 space-y-3 mb-8">
         <p className="text-xs font-bold text-white/50 uppercase tracking-wide">New hero</p>
 
         <div className="flex items-center space-x-3">

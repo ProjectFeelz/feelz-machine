@@ -391,7 +391,7 @@ export default function SchoolSessionsPage() {
             </button>
           ) : (
             <button
-              onClick={() => navigate(user ? '/dashboard' : '/login')}
+              onClick={() => navigate(user ? '/dashboard?tab=upload' : '/login')}
               className="w-full lg:w-auto lg:px-10 py-3.5 bg-lime-400 text-black font-bold rounded-xl flex items-center justify-center space-x-2 hover:bg-lime-300 transition">
               <span>{user ? 'Upload your entry' : 'Get started'}</span>
               <ArrowRight className="w-4 h-4" />

@@ -6,7 +6,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import AdminAnalytics from './AdminAnalytics';
-import AdminUserBehaviorPage from './AdminUserBehaviorPage';
 import AdminEngagement from './AdminEngagement';
 import { useAuth } from '../contexts/AuthContext';
 import { ArrowLeft, Brain } from 'lucide-react';
@@ -21,6 +20,10 @@ function Tab({ active, onClick, children }) {
     </button>
   );
 }
+
+// Only one tab is live, so the bar is hidden rather than showing a single
+// pointless tab. Set this true when a second tab comes back.
+const SHOW_TAB_BAR = false;
 
 export default function AdminIntelligence() {
   const navigate = useNavigate();
@@ -46,17 +49,19 @@ export default function AdminIntelligence() {
           <Brain className="w-5 h-5 text-purple-400" />
           <h1 className="text-base font-bold text-white">Intelligence</h1>
         </div>
-        <div className="flex space-x-1 p-1 bg-white/[0.03] rounded-xl border border-white/[0.06] overflow-x-auto">
-          <Tab active={tab === 'analytics'} onClick={() => switchTab('analytics')}>Platform Stats</Tab>
-          <Tab active={tab === 'behavior'}  onClick={() => switchTab('behavior')}>User Behavior</Tab>
-          {/* AI Drip hidden: not in use. The component below is left mounted-
-              on-demand and the route still works, so re-enabling is just
-              restoring this one line. */}
-        </div>
+        {/* Tab bar hidden while only one tab is live. User Behavior was
+            removed from here because Analytics already has a Behaviour
+            sub-tab covering the same ground, and the standalone page is
+            still routed at /admin/behavior. AI Drip is not in use. Restore
+            either Tab line and this bar shows itself again. */}
+        {SHOW_TAB_BAR && (
+          <div className="flex space-x-1 p-1 bg-white/[0.03] rounded-xl border border-white/[0.06] overflow-x-auto">
+            <Tab active={tab === 'analytics'} onClick={() => switchTab('analytics')}>Platform Stats</Tab>
+          </div>
+        )}
       </div>
 
       <div className={tab === 'analytics' ? '' : 'hidden'}>{mounted.analytics && <AdminAnalytics        embedded />}</div>
-      <div className={tab === 'behavior'  ? '' : 'hidden'}>{mounted.behavior  && <AdminUserBehaviorPage embedded />}</div>
       <div className={tab === 'drip'      ? '' : 'hidden'}>{mounted.drip      && <AdminEngagement       embedded />}</div>
     </div>
   );

@@ -15,6 +15,7 @@ import { Loader, Play, Pause, SkipForward, Music, MapPin, Megaphone, Heart, Bell
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../supabaseClient';
 import RetailPlaylistComments from '../components/retail/RetailPlaylistComments';
+import InstallPrompt from '../components/InstallPrompt';
 import { buildPlayRow, sendPlay, flushQueue } from '../utils/retailPlayQueue';
 
 const QUALIFYING_SECONDS = 30;
@@ -750,6 +751,19 @@ export default function RetailPlayerPage() {
           </>
         )}
       </div>
+
+      {/* Retail used to get this from AppLayout. Moving retail out of
+          AppLayout to remove the main app sidebar took the install prompt
+          with it, so it is rendered here explicitly. Its own name, icon,
+          manifest and dismiss key: dismissing on feelzmachine.com must not
+          hide it for a venue, and vice versa. Sits above the player bar. */}
+      <InstallPrompt
+        appName="Feelz Retail"
+        iconSrc="/retail-icon-192.png"
+        storageKey="retail_install_prompt_dismissed"
+        blurb="Install it on the venue tablet so it opens like an app and keeps playing."
+        positionClass="fixed bottom-28 left-4 right-4 z-40"
+      />
 
       {showComments && selectedPlaylist && (
         <RetailPlaylistComments
