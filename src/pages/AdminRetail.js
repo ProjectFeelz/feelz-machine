@@ -106,7 +106,7 @@ export default function AdminRetail({ embedded = false }) {
         <div className="max-w-sm space-y-3">
           <Store className="w-9 h-9 text-white/15 mx-auto" />
           <p className="text-sm text-white/50">You don't have access to the retail admin panel.</p>
-          <button onClick={() => navigate('/hub')} className="text-xs text-purple-400 hover:text-purple-300 underline">
+          <button onClick={() => navigate('/retail')} className="text-xs text-purple-400 hover:text-purple-300 underline">
             Back to Hub
           </button>
         </div>
@@ -137,7 +137,7 @@ export default function AdminRetail({ embedded = false }) {
         }}>
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
-            <button onClick={() => navigate(rawIsAdmin ? '/hub' : '/retail/player')}
+            <button onClick={() => navigate('/retail/player')}
               className="w-9 h-9 flex items-center justify-center rounded-full bg-white/[0.08] hover:bg-white/[0.14] transition">
               <ArrowLeft className="w-4 h-4 text-white" />
             </button>

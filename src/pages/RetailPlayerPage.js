@@ -11,7 +11,7 @@
 import React from 'react';
 import { Helmet } from 'react-helmet-async';
 import { useNavigate } from 'react-router-dom';
-import { Loader, Play, Pause, SkipForward, Music, MapPin, Megaphone, Heart, Bell, DollarSign, Bookmark, MessageCircle } from 'lucide-react';
+import { Loader, Play, Pause, SkipForward, Music, MapPin, Megaphone, Heart, Bell, Bookmark, MessageCircle, User, LogOut, FileText, Shield } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../supabaseClient';
 import RetailPlaylistComments from '../components/retail/RetailPlaylistComments';
@@ -91,7 +91,7 @@ function RetailPayPalButton({ venueId, onSubscribed }) {
 
 export default function RetailPlayerPage() {
   const navigate = useNavigate();
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, signOut } = useAuth();
   const [checking, setChecking] = React.useState(true);
   const [venue, setVenue] = React.useState(null);
   const [locations, setLocations] = React.useState([]);
@@ -116,6 +116,7 @@ export default function RetailPlayerPage() {
   const [likedTrackIds, setLikedTrackIds] = React.useState(new Set());
   const [savedPlaylistIds, setSavedPlaylistIds] = React.useState(new Set());
   const [showComments, setShowComments] = React.useState(false);
+  const [showAccount, setShowAccount] = React.useState(false);
 
   const audioRef = React.useRef(null);
   const hasLoggedRef = React.useRef(false);
@@ -511,17 +512,15 @@ export default function RetailPlayerPage() {
             <h1 className="text-lg font-bold text-white">{venue.business_name}</h1>
           </div>
           <div className="flex items-center space-x-1 flex-shrink-0">
-            {/* Venues can be affiliates: 'venue' is a valid role on the
-                affiliates table, so this is a referral earnings link, not a
-                stray icon. It was unlabelled, which made it unguessable.
-                Note it jumps out of Retail into the main app, since
-                /affiliates renders inside AppLayout. */}
-            <button onClick={() => navigate('/affiliates')}
-              title="Referral earnings"
-              aria-label="Referral earnings"
-              className="flex items-center gap-1.5 px-2.5 py-2 rounded-full hover:bg-white/[0.06] transition flex-shrink-0">
-              <DollarSign className="w-4 h-4 text-white/50" />
-              <span className="hidden sm:inline text-xs text-white/50">Referrals</span>
+            {/* The referrals link that used to sit here navigated to
+                /affiliates, which renders inside AppLayout, so a venue was
+                dropped into the main Feelz Machine app with its sidebar.
+                Retail is a separate product, so it is gone until there is a
+                retail-native referrals view. */}
+            <button onClick={() => setShowAccount(true)}
+              title="Account" aria-label="Account"
+              className="p-2 rounded-full hover:bg-white/[0.06] transition flex-shrink-0">
+              <User className="w-4 h-4 text-white/50" />
             </button>
             <button onClick={openInbox} title="Updates" aria-label="Updates"
               className="relative p-2 rounded-full hover:bg-white/[0.06] transition flex-shrink-0">
@@ -774,6 +773,57 @@ export default function RetailPlayerPage() {
         blurb="Install it on the venue tablet so it opens like an app and keeps playing."
         positionClass="fixed bottom-28 left-4 right-4 z-40"
       />
+
+      {/* Account. There was no way to see who you were signed in as or to
+          sign out without leaving Retail for the main app, which defeats
+          keeping the two separate. Everything here stays in Retail. */}
+      {showAccount && (
+        <div className="fixed inset-0 z-30 bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center"
+          onClick={() => setShowAccount(false)}>
+          <div className="w-full sm:max-w-sm rounded-t-2xl sm:rounded-2xl overflow-hidden"
+            style={{
+              background: 'linear-gradient(180deg, rgba(30,20,60,0.98) 0%, rgba(14,14,18,0.99) 100%)',
+              border: '1px solid rgba(167,139,250,0.22)',
+            }}
+            onClick={e => e.stopPropagation()}>
+
+            <div className="p-5 border-b border-white/[0.06]">
+              <p className="text-[10px] uppercase tracking-[0.2em] text-purple-400 font-bold mb-1.5">Signed in as</p>
+              <p className="text-lg font-bold text-white leading-tight">{venue.business_name}</p>
+              <p className="text-xs text-white/40 mt-1">{venue.contact_email || user?.email}</p>
+              <div className="flex items-center gap-2 mt-3">
+                <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-purple-500/15 text-purple-200 border border-purple-400/20">
+                  {venue.status === 'active' ? 'Active' : venue.status}
+                </span>
+                {locations.length > 0 && (
+                  <span className="text-[11px] text-white/30">
+                    {locations.length} {locations.length === 1 ? 'location' : 'locations'}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            <div className="p-2">
+              <button onClick={() => { setShowAccount(false); navigate('/retail/terms'); }}
+                className="w-full flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-white/[0.05] transition text-left">
+                <FileText className="w-4 h-4 text-white/35 flex-shrink-0" />
+                <span className="text-sm text-white/70">Terms of service</span>
+              </button>
+              <button onClick={() => { setShowAccount(false); navigate('/retail/privacy'); }}
+                className="w-full flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-white/[0.05] transition text-left">
+                <Shield className="w-4 h-4 text-white/35 flex-shrink-0" />
+                <span className="text-sm text-white/70">Privacy notice</span>
+              </button>
+              {/* Back to the retail landing page, not the main app hub. */}
+              <button onClick={async () => { await signOut(); navigate('/retail'); }}
+                className="w-full flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-red-500/10 transition text-left">
+                <LogOut className="w-4 h-4 text-red-400/70 flex-shrink-0" />
+                <span className="text-sm text-red-300/80">Sign out</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showComments && selectedPlaylist && (
         <RetailPlaylistComments
