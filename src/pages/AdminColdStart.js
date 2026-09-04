@@ -56,24 +56,52 @@ export default function AdminColdStart() {
   // The error is checked and shown. The first version of this swallowed it
   // with `const { data } = await ...`, so a failing query and a query with
   // no matches looked identical: an empty page.
-  const search = async () => {
-    if (!query.trim()) { setResults([]); setSearched(false); return; }
+  // Live search, debounced. The first version only fired on a button press
+  // and only matched the title, which meant you had to already know the exact
+  // song you wanted. That is impossible in a catalogue of any size, which is
+  // the whole situation this page exists for.
+  //
+  // Two queries rather than one: PostgREST cannot OR across a base column and
+  // an embedded one in a single filter, so title matches and artist matches
+  // are fetched separately and merged. Artist matching is what lets you type
+  // a name and see everything they have.
+  const runSearch = React.useCallback(async (raw) => {
+    const q = raw.trim();
+    if (q.length < 2) { setResults([]); setSearched(false); return; }
     setSearching(true);
-    const { data, error } = await supabase
-      .from('tracks')
-      .select('id, title, cover_artwork_url, genre, mood, artist:artists(id, artist_name)')
-      .eq('is_published', true)
-      .ilike('title', `%${query.trim()}%`)
-      .limit(20);
+
+    const cols = 'id, title, cover_artwork_url, genre, mood, artist:artists(id, artist_name)';
+
+    const [byTitle, byArtist] = await Promise.all([
+      supabase.from('tracks').select(cols)
+        .eq('is_published', true).ilike('title', `%${q}%`).limit(25),
+      supabase.from('tracks').select('id, title, cover_artwork_url, genre, mood, artist:artists!inner(id, artist_name)')
+        .eq('is_published', true).ilike('artists.artist_name', `%${q}%`).limit(25),
+    ]);
+
     setSearching(false);
     setSearched(true);
-    if (error) {
+
+    if (byTitle.error && byArtist.error) {
       setResults([]);
-      showToast('Search failed: ' + error.message);
+      showToast('Search failed: ' + byTitle.error.message);
       return;
     }
-    setResults(data || []);
-  };
+
+    const merged = [];
+    const seen = new Set();
+    [...(byTitle.data || []), ...(byArtist.data || [])].forEach(t => {
+      if (seen.has(t.id)) return;
+      seen.add(t.id);
+      merged.push(t);
+    });
+    setResults(merged);
+  }, []);
+
+  React.useEffect(() => {
+    const t = setTimeout(() => { runSearch(query); }, 300);
+    return () => clearTimeout(t);
+  }, [query, runSearch]);
 
   const add = async (track) => {
     const nextPos = picks.length > 0 ? Math.max(...picks.map(p => p.position)) + 1 : 0;
@@ -146,24 +174,22 @@ export default function AdminColdStart() {
 
       <div className="rounded-2xl border border-white/[0.07] bg-white/[0.02] p-5 mb-8">
         <p className="text-xs font-bold text-white/50 uppercase tracking-wide mb-3">Add a track</p>
-        <div className="flex items-center gap-2">
+        <div className="relative">
+          <Search className="w-4 h-4 text-white/25 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
           <input
-            className={inputCls}
-            placeholder="Search published tracks by title"
+            className={`${inputCls} pl-9`}
+            placeholder="Start typing a song or artist name"
             value={query}
             onChange={e => setQuery(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && search()}
           />
-          <button onClick={search}
-            className="px-4 py-2.5 rounded-lg bg-white/[0.08] hover:bg-white/[0.14] transition flex items-center gap-2 text-sm text-white flex-shrink-0">
-            {searching ? <Loader className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
-            Search
-          </button>
+          {searching && (
+            <Loader className="w-4 h-4 text-white/30 animate-spin absolute right-3 top-1/2 -translate-y-1/2" />
+          )}
         </div>
 
         {searched && !searching && results.length === 0 && (
           <p className="text-sm text-white/30 mt-4">
-            No published tracks match "{query.trim()}".
+            Nothing published matches "{query.trim()}", by title or artist.
           </p>
         )}
 
@@ -179,7 +205,10 @@ export default function AdminColdStart() {
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="text-sm text-white truncate">{t.title}</p>
-                  <p className="text-xs text-white/40 truncate">{t.artist?.artist_name}</p>
+                  <p className="text-xs text-white/40 truncate">
+                    {t.artist?.artist_name}
+                    {t.genre ? ` · ${t.genre}` : ''}
+                  </p>
                 </div>
               </button>
             ))}

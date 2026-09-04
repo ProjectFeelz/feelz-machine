@@ -242,7 +242,7 @@ export default function HubPage() {
 
             <Section title="Retail Admin" icon={Store}>
               <LinkCard icon={Store} label="Retail Admin" description="Standalone panel · playlists · venues · ads" path="/retail-admin" color="bg-purple-500/20" />
-              <LinkCard icon={Store} label="Venue Invites" description="Add a venue and copy its signup link" path="/admin/content?tab=retail&sub=venues" color="bg-purple-500/20" />
+              <LinkCard icon={Store} label="Venue Invites" description="Add a venue and copy its signup link" path="/retail-admin?sub=venues" color="bg-purple-500/20" />
               <LinkCard icon={Radio} label="Retail Player" description="The venue-facing player, admin preview" path="/retail/player" color="bg-purple-500/20" />
               <LinkCard icon={Users} label="Retail Staff" description="Who can manage catalogue, venues and ads" path="/admin/retail-staff" color="bg-purple-500/20" />
             </Section>

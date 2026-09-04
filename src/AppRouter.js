@@ -255,7 +255,6 @@ export default function AppRouter() {
               <Route path="/competition/:competitionId" element={<CompetitionRoomPage />} />
               <Route path="/session/:sessionId" element={<ListeningSessionPage />} />
               <Route path="/merch-connect-callback" element={<MerchConnectCallback />} />
-              <Route path="/artist/:slug/fans" element={<FanLeaderboardPage />} />
 
               {/* Legal pages — fixed titles */}
               <Route path="/privacy-policy" element={
@@ -279,6 +278,14 @@ export default function AppRouter() {
                 </PageTitle>
               } />
               <Route path="/admin/vip-card-print/:candidateId" element={<VipCardPrintPage />} />
+              {/* Retail renders its own full-screen shell and is a separate
+                  product, so it must stay outside AppLayout or it gets the
+                  Feelz Machine sidebar on top of its own chrome. Same reason
+                  VipCardPrintPage, RetailJoinPage, RetailTermsPage and
+                  RetailPrivacyPage were moved out previously. */}
+              <Route path="/retail" element={<RetailLandingPage />} />
+              <Route path="/retail/player" element={<RetailPlayerPage />} />
+              <Route path="/retail-admin" element={<RetailAdminPage />} />
               <Route path="/retail/join/:token" element={<RetailJoinPage />} />
               <Route path="/retail/terms" element={<RetailTermsPage />} />
               <Route path="/retail/privacy" element={<RetailPrivacyPage />} />
@@ -344,11 +351,8 @@ export default function AppRouter() {
                 <Route path="/admin/competitions" element={<AdminCompetitions />} />
                 <Route path="/admin/school-sessions" element={<AdminSchoolSessions />} />
                 <Route path="/admin/retail" element={<AdminRetail />} />
-                <Route path="/retail" element={<RetailLandingPage />} />
-                <Route path="/retail/player" element={<RetailPlayerPage />} />
                 <Route path="/newsletter/compose" element={<NewsletterComposePage />} />
                 <Route path="/newsletter/:slug" element={<NewsletterPostPage />} />
-                <Route path="/retail-admin" element={<RetailAdminPage />} />
                 <Route path="/admin/home-hero" element={<AdminHomeHero />} />
                 <Route path="/admin/cold-start" element={<AdminColdStart />} />
                 <Route path="/hidden" element={<HiddenPage />} />

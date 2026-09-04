@@ -127,7 +127,7 @@ export default function AdminRetailStaff() {
         </div>
       </div>
 
-      <div className="rounded-2xl border border-white/[0.07] bg-white/[0.02] p-4 mb-6 flex items-start gap-3 max-w-3xl">
+      <div className="rounded-2xl border border-white/[0.07] bg-white/[0.02] p-4 mb-6 flex items-start gap-3">
         <Shield className="w-4 h-4 text-white/25 flex-shrink-0 mt-0.5" />
         <p className="text-xs text-white/40 leading-relaxed">
           Retail staff can see and manage the catalogue, playlists, venues and ads.
@@ -136,7 +136,7 @@ export default function AdminRetailStaff() {
         </p>
       </div>
 
-      <div className="rounded-2xl border border-white/[0.07] bg-white/[0.02] p-5 mb-8 max-w-3xl">
+      <div className="rounded-2xl border border-white/[0.07] bg-white/[0.02] p-5 mb-8">
         <p className="text-xs font-bold text-white/50 uppercase tracking-wide mb-3">Grant access</p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
           <input className={inputCls} placeholder="Their account email" value={email}
@@ -164,7 +164,7 @@ export default function AdminRetailStaff() {
       {loading ? (
         <div className="flex justify-center py-12"><Loader className="w-5 h-5 text-white/30 animate-spin" /></div>
       ) : staff.length === 0 ? (
-        <div className="rounded-2xl border border-white/[0.07] bg-white/[0.02] p-8 text-center max-w-3xl">
+        <div className="rounded-2xl border border-white/[0.07] bg-white/[0.02] p-8 text-center">
           <p className="text-sm text-white/40">Nobody has retail admin access yet.</p>
           <p className="text-xs text-white/25 mt-1">Platform admins already have it by default.</p>
         </div>

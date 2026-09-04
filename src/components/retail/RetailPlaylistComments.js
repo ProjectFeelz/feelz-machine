@@ -97,7 +97,7 @@ export default function RetailPlaylistComments({ playlist, venue, isPreviewMode 
     <div className="fixed inset-0 z-40 bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center"
       onClick={onClose}>
       <div
-        className="w-full sm:max-w-lg h-[80vh] sm:h-[70vh] flex flex-col rounded-t-2xl sm:rounded-2xl overflow-hidden"
+        className="relative w-full sm:max-w-lg h-[80vh] sm:h-[70vh] flex flex-col rounded-t-2xl sm:rounded-2xl overflow-hidden"
         style={{
           background: 'linear-gradient(180deg, rgba(30,20,60,0.98) 0%, rgba(14,14,18,0.99) 100%)',
           border: '1px solid rgba(167,139,250,0.22)',

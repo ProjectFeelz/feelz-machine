@@ -558,7 +558,7 @@ export default function RetailPlayerPage() {
               ['Pricing', 'pricing'], ['Auto-Compile', 'autocompile'],
             ].map(([label, tab]) => (
               <button key={tab}
-                onClick={() => navigate(`/admin/content?tab=retail&sub=${tab}`)}
+                onClick={() => navigate(`/retail-admin?sub=${tab}`)}
                 className="text-[11px] font-semibold px-2.5 py-1 rounded-lg bg-purple-500/10 text-purple-200/70 border border-purple-400/15 hover:bg-purple-500/25 hover:text-white hover:border-purple-400/40 transition whitespace-nowrap flex-shrink-0">
                 {label}
               </button>
