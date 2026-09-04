@@ -302,6 +302,30 @@ export default function RetailPlayerPage() {
     sendPlay(supabase, row);
   }, [venue, activeLocationId, isPreviewMode]);
 
+  // Heartbeat. Says the player is open, which is not the same as music
+  // playing: a venue can sit paused between sets. get_venue_activity()
+  // reads this alongside play logs to tell "idle" apart from "offline",
+  // and offline on an active subscription is the churn signal.
+  //
+  // Written through touch_venue_heartbeat() rather than a direct update,
+  // because retail_venues RLS deliberately does not let a venue update its
+  // own row. That is what stops a venue changing its own status or
+  // ads_enabled, and this narrow function keeps that intact.
+  //
+  // ONE heartbeat effect only. There were three at one point, all firing
+  // the same RPC on different intervals. If you are adding another, you
+  // want this one.
+  //
+  // Skipped in preview so an admin looking at a venue does not make a
+  // dormant one look alive.
+  React.useEffect(() => {
+    if (!venue || venue.status !== 'active' || isPreviewMode) return;
+    const beat = () => { supabase.rpc('touch_venue_heartbeat').then(() => {}); };
+    beat();
+    const interval = setInterval(beat, 3 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [venue, isPreviewMode]);
+
   // Drain anything stranded by an earlier outage: on open, when the
   // browser reports it is back online, and every few minutes while the
   // player is running, since a venue tablet can sit open for days.

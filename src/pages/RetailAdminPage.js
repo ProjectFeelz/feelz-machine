@@ -12,10 +12,11 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
-import { Store, Loader, ArrowLeft, Music, Users, Megaphone, ListMusic } from 'lucide-react';
+import { Store, Loader, ArrowLeft, Music, Users, Megaphone, ListMusic, Radio, Pause, WifiOff } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import AdminRetail from './AdminRetail';
+import VenueActivity from '../components/retail/VenueActivity';
 
 export default function RetailAdminPage() {
   const navigate = useNavigate();
@@ -24,6 +25,7 @@ export default function RetailAdminPage() {
   const [checking, setChecking] = React.useState(true);
   const [allowed, setAllowed]   = React.useState(false);
   const [stats, setStats]       = React.useState(null);
+  const [activity, setActivity] = React.useState(null);
 
   React.useEffect(() => {
     if (!user) { setChecking(false); return; }
@@ -47,6 +49,16 @@ export default function RetailAdminPage() {
       tracks: c.count || 0,
       ads: a.count || 0,
     }));
+  }, [allowed]);
+
+  // Who is actually using it. get_venue_activity() returns three states:
+  // playing, idle (player open, nothing playing) and offline. An active
+  // subscription sitting offline is the one worth acting on, and the
+  // function already sorts those to the top.
+  React.useEffect(() => {
+    if (!allowed) return;
+    supabase.rpc('get_venue_activity')
+      .then(({ data, error }) => setActivity(error ? [] : (data || [])));
   }, [allowed]);
 
   if (checking) {
@@ -126,6 +138,55 @@ export default function RetailAdminPage() {
           </div>
         )}
       </div>
+
+      {/* Which venues are actually playing. Sits above the tabs because a
+          paying venue playing nothing is the thing worth noticing first. */}
+      <div className="px-6 pb-8">
+        <VenueActivity />
+      </div>
+
+      {/* Venue activity. A venue can be billed monthly while their tablet
+          sits switched off, and nothing showed that before. */}
+      {activity && activity.length > 0 && (
+        <div className="px-6 pb-8">
+          <p className="text-xs font-bold text-white/50 uppercase tracking-wide mb-3">Venue activity</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2">
+            {activity.map(v => {
+              const state = v.activity;
+              const tone = state === 'playing'
+                ? { icon: Radio, cls: 'text-lime-300', bg: 'bg-lime-500/15', label: 'Playing' }
+                : state === 'idle'
+                ? { icon: Pause, cls: 'text-amber-300', bg: 'bg-amber-500/15', label: 'Open, not playing' }
+                : { icon: WifiOff, cls: 'text-white/40', bg: 'bg-white/[0.06]', label: 'Offline' };
+              const Icon = tone.icon;
+              const stale = v.status === 'active' && state === 'offline';
+              return (
+                <div key={v.venue_id}
+                  className={`flex items-center gap-3 p-3.5 rounded-xl border ${
+                    stale ? 'border-amber-500/25 bg-amber-500/[0.05]' : 'border-white/[0.07] bg-white/[0.03]'
+                  }`}>
+                  <div className={`w-9 h-9 rounded-lg ${tone.bg} flex items-center justify-center flex-shrink-0`}>
+                    <Icon className={`w-4 h-4 ${tone.cls}`} />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm text-white truncate">{v.business_name}</p>
+                    <p className="text-xs text-white/35 truncate">
+                      {tone.label}
+                      {v.status !== 'active' && ` · ${v.status}`}
+                      {` · ${v.plays_7d} plays this week`}
+                    </p>
+                  </div>
+                  {stale && (
+                    <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-amber-500/15 text-amber-200 border border-amber-400/20 flex-shrink-0">
+                      Paying, not using
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* The retail tabs themselves, reused rather than duplicated so there's
           only ever one implementation to maintain. */}
