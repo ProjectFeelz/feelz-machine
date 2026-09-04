@@ -1065,13 +1065,18 @@ export default function AdminAnalytics({ embedded = false }) {
           {tab === 'contacts' && (
             <>
               <p className="text-xs text-white/30 mb-4">
-                Collected automatically in the background — from follows and profile creation — but never surfaced anywhere until now.
+                Collected automatically from follows and profile creation.
+                These four count different things and are not meant to match:
+                Global is unique people across the whole platform, Artist is one
+                row per person per artist, and Subscribers is the mailing list.
+                A person who unfollows stays a contact until they opt out in
+                Contact Preferences, which is deliberate.
               </p>
               <div className="grid grid-cols-2 gap-2 mb-6">
                 <KPI icon={Mail}  label="Email Subscribers" value={contactStats.subscribed} sub={`of ${fmt(contactStats.totalSubscribers)} total`} color="bg-cyan-500/20" />
-                <KPI icon={Users} label="Global Contacts"   value={contactStats.globalContacts} sub="unique people who've followed" color="bg-purple-500/20" />
-                <KPI icon={Star}  label="Artist Contacts"   value={contactStats.totalArtistContacts} sub="per-artist follow records" color="bg-pink-500/20" />
-                <KPI icon={Mail}  label="Unsubscribed"      value={contactStats.totalSubscribers - contactStats.subscribed} sub="opted out" color="bg-white/[0.06]" />
+                <KPI icon={Users} label="Global Contacts"   value={contactStats.globalContacts} sub="unique people, platform-wide" color="bg-purple-500/20" />
+                <KPI icon={Star}  label="Artist Contacts"   value={contactStats.totalArtistContacts} sub="one row per person per artist" color="bg-pink-500/20" />
+                <KPI icon={Mail}  label="Unsubscribed"      value={contactStats.totalSubscribers - contactStats.subscribed} sub="opted out, they stay listed" color="bg-white/[0.06]" />
               </div>
 
               <div className="rounded-2xl p-4 bg-white/[0.02] border border-white/[0.05]">
