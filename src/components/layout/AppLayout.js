@@ -163,7 +163,7 @@ function MobileBellButton() {
 
 // ── Main layout ───────────────────────────────────────────────────────────────
 export default function AppLayout() {
-  const { currentTrack }            = usePlayer();
+  const { currentTrack, isMinimized }            = usePlayer();
   const { user, artist, hasProfile, loading, isArtist, isBeatmaker, viewAs, setViewAs } = useAuth();
   const navigate                    = useNavigate();
   const location                    = useLocation();
@@ -228,21 +228,12 @@ export default function AppLayout() {
           }
         }).catch(() => {});
 
-      } else if (Notification.permission === 'default') {
-        // Not yet decided — prompt if this user follows anyone (backfill existing followers)
-        import('../../supabaseClient').then(async ({ supabase: sb }) => {
-          const { count } = await sb
-            .from('follows')
-            .select('*', { count: 'exact', head: true })
-            .eq('follower_id', user.id);
-          if (count > 0) {
-            const permission = await Notification.requestPermission();
-            if (permission === 'granted') {
-              subscribe().catch(() => {});
-            }
-          }
-        }).catch(() => {});
       }
+      // Deliberately no prompt here. Asking on app load gets denied
+      // permanently by most people, and the browser gives no second chance.
+      // The ask now happens right after a follow, via
+      // utils/askNotificationPermission.js, where it connects to something
+      // the person just chose to do.
     } catch {}
   }, [user, supported, subscribed, splashDone]);
 
@@ -283,6 +274,14 @@ export default function AppLayout() {
           <style>{`
             @media (min-width: 768px) {
               main { padding-bottom: ${currentTrack ? '100px' : '0px'} !important; }
+            }
+            /* When the docked desktop player is expanded it sits fixed at
+               right-0 over 400px. Reserve that space so it pushes content
+               aside instead of covering it, otherwise "browse while
+               listening" doesn't actually work, the player just hides
+               whatever is on the right of the page. */
+            @media (min-width: 1024px) {
+              main { padding-right: ${currentTrack && !isMinimized ? '400px' : '0px'}; transition: padding-right 0.18s ease; }
             }
           `}</style>
           <div className="md:px-8 md:pt-8 w-full">

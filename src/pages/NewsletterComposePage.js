@@ -8,7 +8,8 @@
 
 import React from 'react';
 import { Helmet } from 'react-helmet-async';
-import { Loader, Send, Users, Store, Plus, X } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Loader, Send, Users, Store, Plus, X, ArrowLeft } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../supabaseClient';
 import { WysiwygEditor } from '../components/admin/WysiwygEditor';
@@ -16,6 +17,7 @@ import { WysiwygEditor } from '../components/admin/WysiwygEditor';
 const inputCls = "w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none focus:bg-white/[0.1] transition";
 
 export default function NewsletterComposePage() {
+  const navigate = useNavigate();
   const { user, isAdmin } = useAuth();
   const [checking, setChecking] = React.useState(true);
   const [authorized, setAuthorized] = React.useState(false);
@@ -123,8 +125,13 @@ export default function NewsletterComposePage() {
         </div>
       )}
 
-      <div className="max-w-xl lg:max-w-4xl mx-auto px-5 pt-8 space-y-6">
-        <div>
+      <div className="px-5 md:px-8 pt-8 space-y-6">
+        <div className="flex items-start space-x-3">
+          <button onClick={() => navigate('/hub')}
+            className="w-9 h-9 flex items-center justify-center rounded-full bg-white/[0.06] hover:bg-white/[0.1] transition flex-shrink-0 mt-1">
+            <ArrowLeft className="w-4 h-4 text-white" />
+          </button>
+          <div>
           <p className="text-purple-400 text-xs font-bold tracking-widest uppercase mb-1">Newsletter</p>
           <h1 className="text-2xl font-bold">Compose</h1>
           <p className="text-xs text-white/30 mt-1">
@@ -132,6 +139,7 @@ export default function NewsletterComposePage() {
             <span className="mx-1.5 text-white/15">·</span>
             <span className={`font-semibold ${isAdmin ? 'text-yellow-400' : 'text-purple-400'}`}>{isAdmin ? 'Admin' : 'Newsletter Editor'}</span>
           </p>
+        </div>
         </div>
 
         <div className="space-y-3">

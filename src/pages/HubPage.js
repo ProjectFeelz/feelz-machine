@@ -232,16 +232,23 @@ export default function HubPage() {
 
           {/* Admin */}
           {isAdmin && (
-            <Section title="Admin" icon={Shield}>
+            <>
+            <Section title="Platform Admin" icon={Shield}>
               <LinkCard icon={Shield} label="Admin Panel" description="Broadcast · Analytics · Moderation · Users" path="/admin" color="bg-yellow-500/20" />
-              <LinkCard icon={Store} label="Retail Player" description="Jump straight into the venue player" path="/retail/player" color="bg-purple-500/20" />
+              <LinkCard icon={Sparkles} label="Home Hero" description="Control the big slot at the top of Home" path="/admin/home-hero" color="bg-yellow-500/20" />
+              <LinkCard icon={Send} label="Newsletter" description="Compose updates for the app or retail venues" path="/newsletter/compose" color="bg-yellow-500/20" />
+            </Section>
+
+            <Section title="Retail Admin" icon={Store}>
               <LinkCard icon={Store} label="Retail Admin" description="Standalone panel · playlists · venues · ads" path="/retail-admin" color="bg-purple-500/20" />
               <LinkCard icon={Store} label="Venue Invites" description="Add a venue and copy its signup link" path="/admin/content?tab=retail&sub=venues" color="bg-purple-500/20" />
-              <LinkCard icon={Trophy} label="School Sessions Preview" description="See the public page even while it's switched off" path="/schoolsessions" color="bg-lime-500/20" />
-              <LinkCard icon={Trophy} label="Judge Panel" description="Mark finalists and pick the winner" path="/schoolsessions/judge" color="bg-lime-500/20" />
-              <LinkCard icon={Sparkles} label="Home Hero" description="Control the big slot at the top of Home" path="/admin/home-hero" color="bg-lime-500/20" />
-              <LinkCard icon={Send} label="Newsletter" description="Compose updates for the app or retail venues" path="/newsletter/compose" color="bg-purple-500/20" />
             </Section>
+
+            <Section title="School Sessions" icon={Trophy}>
+              <LinkCard icon={Trophy} label="Public Page Preview" description="See it even while it's switched off" path="/schoolsessions" color="bg-lime-500/20" />
+              <LinkCard icon={Trophy} label="Judge Panel" description="Mark finalists and pick the winner" path="/schoolsessions/judge" color="bg-lime-500/20" />
+            </Section>
+            </>
           )}
 
           {/* Newsletter editor — non-admin */}

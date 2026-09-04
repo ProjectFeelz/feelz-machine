@@ -6,12 +6,14 @@
 
 import React from 'react';
 import { Helmet } from 'react-helmet-async';
-import { Loader, Trophy } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Loader, Trophy, ArrowLeft } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import useSchoolSessions from '../hooks/useSchoolSessions';
 import { supabase } from '../supabaseClient';
 
 export default function SchoolSessionsJudgePanel() {
+  const navigate = useNavigate();
   const { user, isAdmin } = useAuth();
   const gate = useSchoolSessions();
   const [checking, setChecking] = React.useState(true);
@@ -100,8 +102,16 @@ export default function SchoolSessionsJudgePanel() {
     <div className="min-h-screen bg-black text-white">
       <Helmet><title>Judge Panel, School Sessions</title><meta name="robots" content="noindex, nofollow" /></Helmet>
       <div className="px-5 pt-8 pb-24">
-        <p className="text-lime-400 text-xs font-bold tracking-widest uppercase mb-1">School Sessions</p>
-        <h1 className="text-2xl font-bold mb-1">Judge Panel</h1>
+        <div className="flex items-start space-x-3 mb-1">
+          <button onClick={() => navigate('/hub')}
+            className="w-9 h-9 flex items-center justify-center rounded-full bg-white/[0.06] hover:bg-white/[0.1] transition flex-shrink-0 mt-1">
+            <ArrowLeft className="w-4 h-4 text-white" />
+          </button>
+          <div>
+            <p className="text-lime-400 text-xs font-bold tracking-widest uppercase mb-1">School Sessions</p>
+            <h1 className="text-2xl font-bold">Judge Panel</h1>
+          </div>
+        </div>
         <p className="text-sm text-white/40 mb-6">Mark entries as finalists, then pick the winner once finalists are set.</p>
 
         {gate.adminPreview && (

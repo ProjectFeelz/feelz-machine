@@ -145,6 +145,19 @@ export default function RetailPlayerPage() {
   // ad-revenue numbers, those numbers feed directly into artist payouts.
   const isPreviewMode = isAdmin && !!previewVenueId;
 
+  // Distinct artists on the open playlist, for the "Featuring ..." line.
+  // Order preserved so it reads as the playlist does, not alphabetically.
+  const distinctArtists = React.useMemo(() => {
+    const seen = [];
+    tracks.forEach(t => {
+      const n = t.artist?.artist_name;
+      if (n && !seen.includes(n)) seen.push(n);
+    });
+    return seen;
+  }, [tracks]);
+  const featuredArtists = distinctArtists.slice(0, 5);
+  const distinctArtistCount = distinctArtists.length;
+
   React.useEffect(() => {
     if (!venue) return;
     supabase.from('retail_venue_locations').select('*').eq('venue_id', venue.id).order('location_name')
@@ -548,9 +561,45 @@ export default function RetailPlayerPage() {
         ) : (
           <>
             <button onClick={() => { setSelectedPlaylist(null); setIsPlaying(false); audioRef.current?.pause(); }}
-              className="text-xs text-white/40 mb-3">&larr; All playlists</button>
-            <h2 className="text-xl font-bold text-white mb-1">{selectedPlaylist.title}</h2>
-            {selectedPlaylist.description && <p className="text-xs text-white/40 mb-4">{selectedPlaylist.description}</p>}
+              className="text-xs text-white/40 mb-4 hover:text-white/70 transition">&larr; All playlists</button>
+
+            {/* Album-style header: cover, mood, description, featured artists */}
+            <div className="flex flex-col sm:flex-row sm:items-end gap-5 mb-6">
+              <div className="w-40 h-40 rounded-xl overflow-hidden flex-shrink-0 flex items-center justify-center"
+                style={{
+                  background: 'linear-gradient(135deg, rgba(167,139,250,0.16) 0%, rgba(30,20,55,0.9) 100%)',
+                  border: '1px solid rgba(167,139,250,0.22)',
+                  boxShadow: '0 8px 28px rgba(0,0,0,0.5)',
+                }}>
+                {selectedPlaylist.cover_image_url
+                  ? <img src={selectedPlaylist.cover_image_url} alt="" className="w-full h-full object-cover" />
+                  : <Music className="w-10 h-10 text-purple-300/25" />}
+              </div>
+
+              <div className="min-w-0 flex-1">
+                <p className="text-[10px] uppercase tracking-[0.2em] text-purple-400 font-bold mb-1.5">Playlist</p>
+                <h2 className="text-3xl font-black text-white leading-tight mb-2">{selectedPlaylist.title}</h2>
+                {selectedPlaylist.description && (
+                  <p className="text-sm text-white/45 mb-3 max-w-xl leading-relaxed">{selectedPlaylist.description}</p>
+                )}
+                <div className="flex items-center flex-wrap gap-2 mb-3">
+                  {selectedPlaylist.mood && (
+                    <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-purple-500/15 text-purple-200 border border-purple-400/20">
+                      {selectedPlaylist.mood}
+                    </span>
+                  )}
+                  <span className="text-xs text-white/30">{tracks.length} {tracks.length === 1 ? 'track' : 'tracks'}</span>
+                </div>
+                {featuredArtists.length > 0 && (
+                  <p className="text-xs text-white/35">
+                    Featuring <span className="text-white/65">{featuredArtists.join(', ')}</span>
+                    {distinctArtistCount > featuredArtists.length && (
+                      <span className="text-white/30"> and {distinctArtistCount - featuredArtists.length} more</span>
+                    )}
+                  </p>
+                )}
+              </div>
+            </div>
             {loadingTracks ? (
               <div className="flex justify-center py-12"><Loader className="w-5 h-5 text-white/30 animate-spin" /></div>
             ) : tracks.length === 0 ? (

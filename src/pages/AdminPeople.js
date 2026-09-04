@@ -99,8 +99,9 @@ function ListenersTab() {
       {loading ? (
         <div className="flex justify-center py-16"><Loader className="w-5 h-5 animate-spin text-white/20" /></div>
       ) : (
+        <>
+        <p className="text-[10px] text-white/25 uppercase tracking-wider mb-2">{filtered.length} listeners</p>
         <div className="space-y-2 xl:grid xl:grid-cols-2 xl:gap-2 xl:space-y-0">
-          <p className="text-[10px] text-white/25 uppercase tracking-wider mb-2">{filtered.length} listeners</p>
           {filtered.map(l => (
             <div key={l.id} className="bg-white/[0.03] rounded-xl p-3.5 border border-white/[0.06] hover:bg-white/[0.05] transition">
               <div className="flex items-center justify-between">
@@ -127,6 +128,7 @@ function ListenersTab() {
             </div>
           ))}
         </div>
+        </>
       )}
     </div>
   );
@@ -215,8 +217,9 @@ function ArtistsTab() {
       {loading ? (
         <div className="flex justify-center py-16"><Loader className="w-5 h-5 animate-spin text-white/20" /></div>
       ) : (
+        <>
+        <p className="text-[10px] text-white/25 uppercase tracking-wider mb-2">{filtered.length} artists</p>
         <div className="space-y-2 xl:grid xl:grid-cols-2 xl:gap-2 xl:space-y-0">
-          <p className="text-[10px] text-white/25 uppercase tracking-wider mb-2">{filtered.length} artists</p>
           {filtered.map(a => (
             <div key={a.id} className="bg-white/[0.03] rounded-xl p-3.5 border border-white/[0.06] hover:bg-white/[0.05] transition">
               <div className="flex items-center justify-between">
@@ -250,6 +253,7 @@ function ArtistsTab() {
             </div>
           ))}
         </div>
+        </>
       )}
     </div>
   );

@@ -21,6 +21,7 @@ import { usePlayer } from '../contexts/PlayerContext';
 import VinylRecord from '../components/VinylRecord';
 import { ArtistStoryView } from '../components/ArtistStories';
 import ShareCard from '../components/ShareCard';
+import { askNotificationPermission } from '../utils/askNotificationPermission';
 import {
   Heart, MessageCircle, ListMusic, UserCheck,
   Share2, Loader, X, Send, ChevronUp,
@@ -578,6 +579,7 @@ function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare, onN
         await supabase.from('follows').insert({ artist_id: track.artist_id, follower_id: user.id });
       }
       setFollowing(true);
+      askNotificationPermission();
     }
   };
 

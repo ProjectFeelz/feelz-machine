@@ -104,7 +104,7 @@ export default function AdminHomeHero() {
   if (!isAdmin) return null;
 
   return (
-    <div className="pt-4 pb-32 px-4 md:px-0">
+    <div className="pt-4 pb-32 px-4 md:px-8">
       <Helmet><title>Home Hero</title><meta name="robots" content="noindex, nofollow" /></Helmet>
 
       {toast && (
@@ -171,7 +171,7 @@ export default function AdminHomeHero() {
       </div>
 
       {/* Existing */}
-      <div className="flex items-center justify-between mb-3 max-w-2xl">
+      <div className="flex items-center justify-between mb-3">
         <p className="text-xs font-bold text-white/50 uppercase tracking-wide">Heroes ({heroes.length})</p>
         {heroes.some(h => h.is_active) && (
           <button onClick={clearActive} className="text-[11px] text-white/30 hover:text-white/60 transition">
@@ -185,7 +185,7 @@ export default function AdminHomeHero() {
       ) : heroes.length === 0 ? (
         <p className="text-xs text-white/30 py-4">No heroes yet. Create one above.</p>
       ) : (
-        <div className="space-y-2 max-w-2xl">
+        <div className="space-y-2 xl:grid xl:grid-cols-2 xl:gap-2 xl:space-y-0">
           {heroes.map(h => (
             <div key={h.id} className={`rounded-xl border p-4 flex items-center space-x-4 ${h.is_active ? 'border-lime-400/30 bg-lime-400/[0.04]' : 'border-white/[0.06] bg-white/[0.02]'}`}>
               <div className="w-16 h-16 rounded-lg overflow-hidden bg-white/[0.06] flex-shrink-0 flex items-center justify-center">

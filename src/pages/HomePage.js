@@ -181,6 +181,7 @@ export default function HomePage() {
   const [similarArtists, setSimilarArtists]         = useState([]);
   const [featuredPlaylists, setFeaturedPlaylists]   = useState([]);
   const [hero, setHero]                             = useState(null);
+  const [libraryPeek, setLibraryPeek]               = useState([]);
   const [followedReleases, setFollowedReleases]     = useState([]);
   const [loading, setLoading]                       = useState(true);
   const [actionSheetTrack, setActionSheetTrack]     = useState(null);
@@ -630,6 +631,36 @@ export default function HomePage() {
 
   const { pullProps, pullProgress, isRefreshing } = usePullToRefresh(fetchData);
 
+  // Small library shortcut on Home: your own playlists first, then artists
+  // you follow. Own effect and state, so a failure here leaves Home intact.
+  useEffect(() => {
+    if (!user) return;
+    const load = async () => {
+      const [{ data: pls }, { data: fols }] = await Promise.all([
+        supabase.from('playlists')
+          .select('id, name, cover_url, playlist_tracks(id, tracks(cover_artwork_url))')
+          .eq('user_id', user.id).order('created_at', { ascending: false }).limit(4),
+        supabase.from('follows')
+          .select('artist:artists(id, artist_name, slug, profile_image_url)')
+          .eq('follower_id', user.id).limit(4),
+      ]);
+      const items = [
+        ...(pls || []).map(p => ({
+          key: `pl-${p.id}`, kind: 'playlist', label: p.name,
+          image: p.cover_url || p.playlist_tracks?.find(t => t.tracks?.cover_artwork_url)?.tracks?.cover_artwork_url,
+          path: `/library/playlists/${p.id}`,
+        })),
+        ...(fols || []).filter(f => f.artist).map(f => ({
+          key: `ar-${f.artist.id}`, kind: 'artist', label: f.artist.artist_name,
+          image: f.artist.profile_image_url,
+          path: `/artist/${f.artist.slug || f.artist.id}`,
+        })),
+      ];
+      setLibraryPeek(items.slice(0, 6));
+    };
+    load();
+  }, [user]);
+
   // Manually-controlled hero. Its own effect and state so if this fails or
   // nothing is live, Home simply renders without a hero.
   useEffect(() => {
@@ -687,6 +718,32 @@ export default function HomePage() {
           </button>
         </div>
       )}
+
+      {/* Library shortcut: jump back into your own playlists and the artists
+          you follow, without leaving Home. */}
+      {libraryPeek.length > 0 && (
+        <div className="px-6 mb-6">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-[10px] uppercase tracking-widest text-white/25 font-semibold">Your library</p>
+            <button onClick={() => navigate('/library')}
+              className="text-[11px] text-white/30 hover:text-white/60 transition">Open library &rarr;</button>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+            {libraryPeek.map(item => (
+              <button key={item.key} onClick={() => navigate(item.path)}
+                className="flex items-center space-x-2.5 p-2 rounded-xl bg-white/[0.03] border border-white/[0.05] hover:bg-white/[0.07] transition text-left group">
+                <div className={`w-10 h-10 flex-shrink-0 overflow-hidden bg-white/[0.06] flex items-center justify-center ${item.kind === 'artist' ? 'rounded-full' : 'rounded-md'}`}>
+                  {item.image
+                    ? <img src={item.image} alt="" className="w-full h-full object-cover" />
+                    : <ListMusic className="w-4 h-4 text-white/20" />}
+                </div>
+                <p className="text-xs font-medium text-white truncate">{item.label}</p>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
 
       <div className="greeting-hero px-6 pt-14 md:pt-6 pb-6 border-b border-white/[0.05] mb-6">
         <div className="flex items-center justify-between mb-1">

@@ -28,6 +28,7 @@ import PreSaveButton from '../components/PreSaveButton';
 import ArtistGuestbook from '../components/ArtistGuestbook';
 import MerchConnectSheet from '../components/MerchConnectSheet';
 import ChallengeXPModal from '../components/ChallengeXPModal';
+import { askNotificationPermission } from '../utils/askNotificationPermission';
 
 const PAYPAL_CLIENT_ID = process.env.REACT_APP_PAYPAL_CLIENT_ID;
 const EMOJI_REACTIONS = ['🔥', '❤️', '👏', '😮', '😂', '🎵'];
@@ -829,6 +830,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
         await supabase.from('follows').insert({ artist_id: artist.id, follower_id: user.id });
         await supabase.from('artist_alerts').upsert({ artist_id: artist.id, user_id: user.id }, { onConflict: 'user_id,artist_id' });
         setIsFollowing(true);
+        askNotificationPermission();
         setFollowerCount(prev => prev + 1);
         const { data: myProfile } = await supabase.from('artists').select('id, artist_name, profile_image_url, slug').eq('user_id', user.id).maybeSingle();
         let followerName  = myProfile?.artist_name || null;

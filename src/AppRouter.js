@@ -275,20 +275,19 @@ export default function AppRouter() {
                   <SchoolSessionsVotePage />
                 </PageTitle>
               } />
+              <Route path="/admin/vip-card-print/:candidateId" element={<VipCardPrintPage />} />
+              <Route path="/retail/join/:token" element={<RetailJoinPage />} />
+              <Route path="/retail/terms" element={<RetailTermsPage />} />
+              <Route path="/retail/privacy" element={<RetailPrivacyPage />} />
               <Route path="/schoolsessions/terms" element={
                 <PageTitle title="School Sessions — Terms">
                   <SchoolSessionsTermsPage />
                 </PageTitle>
               } />
-              <Route path="/schoolsessions/judge" element={
-                <PageTitle title="Judge Panel — School Sessions">
-                  <SchoolSessionsJudgePanel />
-                </PageTitle>
-              } />
-
               <Route element={<AppLayout />}>
                 <Route path="/" element={<ForYouPage />} />
                 <Route path="/home" element={<HomePage />} />
+                <Route path="/schoolsessions/judge" element={<SchoolSessionsJudgePanel />} />
                 <Route path="/for-you" element={<Navigate to="/" replace />} />
                 <Route path="/browse" element={<BrowsePage />} />
                 <Route path="/wheel" element={<WheelRevealPage />} />
@@ -346,10 +345,6 @@ export default function AppRouter() {
                 <Route path="/retail/player" element={<RetailPlayerPage />} />
                 <Route path="/newsletter/compose" element={<NewsletterComposePage />} />
                 <Route path="/newsletter/:slug" element={<NewsletterPostPage />} />
-                <Route path="/admin/vip-card-print/:candidateId" element={<VipCardPrintPage />} />
-                <Route path="/retail/join/:token" element={<RetailJoinPage />} />
-                <Route path="/retail/terms" element={<RetailTermsPage />} />
-                <Route path="/retail/privacy" element={<RetailPrivacyPage />} />
                 <Route path="/retail-admin" element={<RetailAdminPage />} />
                 <Route path="/admin/home-hero" element={<AdminHomeHero />} />
                 <Route path="/admin/engagement" element={<AdminEngagement />} />
