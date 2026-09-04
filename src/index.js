@@ -76,3 +76,38 @@ if ('serviceWorker' in navigator) {
     });
   });
 }
+
+
+// ── Horizontal rows scroll with a normal mouse wheel ─────────────────────────
+//
+// Scrollbars are hidden site-wide, which is right on touch and wrong on a
+// desktop mouse: rows like "New to you" in Library, the Home carousels and
+// Browse had no way to reach the content past the fold. A trackpad can swipe
+// sideways, a mouse wheel cannot.
+//
+// One global listener instead of touching all 47 rows. Vertical wheel input
+// over a horizontally scrollable element moves it sideways.
+//
+// It only takes over while that row still has somewhere to go in the
+// direction you are scrolling. At either end the event passes through and the
+// page scrolls normally, so a row can never trap you on the way down a page.
+// Shift-wheel is left alone since browsers already map it to horizontal.
+if (typeof window !== 'undefined') {
+  window.addEventListener('wheel', (e) => {
+    if (e.shiftKey || e.ctrlKey) return;
+    if (Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;
+
+    const row = e.target?.closest?.('.overflow-x-auto, .overflow-x-scroll');
+    if (!row) return;
+
+    const maxScroll = row.scrollWidth - row.clientWidth;
+    if (maxScroll <= 1) return;
+
+    const atStart = row.scrollLeft <= 0;
+    const atEnd   = row.scrollLeft >= maxScroll - 1;
+    if ((e.deltaY < 0 && atStart) || (e.deltaY > 0 && atEnd)) return;
+
+    row.scrollLeft += e.deltaY;
+    e.preventDefault();
+  }, { passive: false });
+}

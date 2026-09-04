@@ -670,7 +670,11 @@ export default function ArtistDashboard() {
         {/* ── Header ── */}
         <div className="flex items-center space-x-3 mb-6">
           <button
-            onClick={() => navigate('/')}
+            // Go back where they came from. This used to be navigate('/'),
+            // and '/' is For You, so leaving the dashboard dumped you into
+            // the feed no matter how you arrived. Falls back to the hub when
+            // there is no history, which happens on a deep link.
+            onClick={() => (window.history.length > 1 ? navigate(-1) : navigate('/hub'))}
             className="w-9 h-9 flex items-center justify-center rounded-full bg-white/[0.06] hover:bg-white/[0.1] transition"
           >
             <ChevronLeft className="w-5 h-5 text-white" />

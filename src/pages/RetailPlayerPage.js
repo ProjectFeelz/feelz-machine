@@ -511,10 +511,20 @@ export default function RetailPlayerPage() {
             <h1 className="text-lg font-bold text-white">{venue.business_name}</h1>
           </div>
           <div className="flex items-center space-x-1 flex-shrink-0">
-            <button onClick={() => navigate('/affiliates')} className="p-2 rounded-full hover:bg-white/[0.06] transition flex-shrink-0">
+            {/* Venues can be affiliates: 'venue' is a valid role on the
+                affiliates table, so this is a referral earnings link, not a
+                stray icon. It was unlabelled, which made it unguessable.
+                Note it jumps out of Retail into the main app, since
+                /affiliates renders inside AppLayout. */}
+            <button onClick={() => navigate('/affiliates')}
+              title="Referral earnings"
+              aria-label="Referral earnings"
+              className="flex items-center gap-1.5 px-2.5 py-2 rounded-full hover:bg-white/[0.06] transition flex-shrink-0">
               <DollarSign className="w-4 h-4 text-white/50" />
+              <span className="hidden sm:inline text-xs text-white/50">Referrals</span>
             </button>
-            <button onClick={openInbox} className="relative p-2 rounded-full hover:bg-white/[0.06] transition flex-shrink-0">
+            <button onClick={openInbox} title="Updates" aria-label="Updates"
+              className="relative p-2 rounded-full hover:bg-white/[0.06] transition flex-shrink-0">
               <Bell className="w-4 h-4 text-white/50" />
               {inboxNotifs.some(n => !readIds.has(n.id)) && (
                 <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-purple-400" />
