@@ -1073,6 +1073,7 @@ export default function ForYouPage() {
             top_artist: 'Your fave', feat_following: 'Features who you follow',
             your_beats: 'Your kind of beat', recommended: 'For you',
             playlisted_artist: 'In your playlists', downloaded_artist: 'You downloaded them',
+            editors_pick: "Editor's pick",
           };
           fetched = recData.filter(r => r.tracks).map(r => ({
             ...r.tracks,
@@ -1081,6 +1082,36 @@ export default function ForYouPage() {
             artist_image: r.tracks.artists?.profile_image_url || null,
             reason:       r.reason,
             reason_label: REASON_LABELS[r.reason] || 'For you',
+          }));
+        }
+      }
+
+      // Cold start. A listener with no recommendation rows at all is either
+      // brand new or has never been scored, and this is their first
+      // impression of the app. compute-recommendations cannot help here,
+      // there is no history to learn from, so curated picks lead instead.
+      // Only on the first page, and only when the recommender returned
+      // nothing, so an established listener who simply reached the end of
+      // their list never sees these.
+      if (offset === 0 && fetched.length === 0) {
+        const { data: picks } = await supabase
+          .from('cold_start_picks')
+          .select('position, tracks(id, title, slug, genre, mood, cover_artwork_url, file_url, youtube_url, duration, lyrics, artist_id, is_beat, stream_count, like_count, bpm, beat_key, beat_scale, download_price, engagement_score, artists(artist_name, slug, profile_image_url))')
+          .eq('is_active', true)
+          .order('position');
+
+        const pickTracks = (picks || [])
+          .map(p => p.tracks)
+          .filter(t => t && !hiddenIdsRef.current.has(t.id));
+
+        if (pickTracks.length > 0) {
+          fetched = pickTracks.slice(0, PAGE_SIZE).map(t => ({
+            ...t,
+            artist_name:  t.artists?.artist_name || 'Unknown',
+            artist_slug:  t.artists?.slug || null,
+            artist_image: t.artists?.profile_image_url || null,
+            reason:       'editors_pick',
+            reason_label: "Editor's pick",
           }));
         }
       }
