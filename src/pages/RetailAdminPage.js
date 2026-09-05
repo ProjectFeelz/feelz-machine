@@ -15,7 +15,10 @@ import { Helmet } from 'react-helmet-async';
 import { Store, Loader, ArrowLeft, Music, Users, Megaphone, ListMusic, Radio, Pause, WifiOff } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
-import RetailAdminPanel from '../components/retail/RetailAdminPanel';
+// RetailAdminPanel lives in src/pages/ alongside this file. It was written
+// for src/components/retail/, but it landed here on the way in and moving it
+// now would be a second chance to get the path wrong for no benefit.
+import RetailAdminPanel from './RetailAdminPanel';
 import VenueActivity from '../components/retail/VenueActivity';
 
 export default function RetailAdminPage() {

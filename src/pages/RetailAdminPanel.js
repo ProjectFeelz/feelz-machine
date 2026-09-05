@@ -1,4 +1,4 @@
-// src/components/retail/RetailAdminPanel.js
+// src/pages/RetailAdminPanel.js
 //
 // The tabbed retail admin panel. The original was lost from the repo (see
 // the note in src/pages/AdminRetail.js), which left the Playlists, Venues,
@@ -20,8 +20,8 @@ import { useSearchParams } from 'react-router-dom';
 import {
   Loader, Plus, Trash2, Search, Music, Link2, Check, UserPlus, Store, ListMusic, Users,
 } from 'lucide-react';
-import { supabase } from '../../supabaseClient';
-import { useAuth } from '../../contexts/AuthContext';
+import { supabase } from '../supabaseClient';
+import { useAuth } from '../contexts/AuthContext';
 
 const inputCls = "w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none focus:bg-white/[0.1] transition";
 const btnCls = "flex items-center gap-2 text-sm font-semibold px-4 py-2.5 rounded-lg bg-purple-500 hover:bg-purple-400 text-white transition disabled:opacity-40";
