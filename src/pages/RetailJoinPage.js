@@ -9,8 +9,10 @@ import { Helmet } from 'react-helmet-async';
 import { Loader, Store } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
+import useRetailManifest from '../hooks/useRetailManifest';
 
 export default function RetailJoinPage() {
+  useRetailManifest();
   const { token } = useParams();
   const navigate = useNavigate();
   const { signUpWithEmail } = useAuth();

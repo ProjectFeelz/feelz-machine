@@ -11,12 +11,13 @@
 import React from 'react';
 import { Helmet } from 'react-helmet-async';
 import { useNavigate } from 'react-router-dom';
-import { Loader, Play, Pause, SkipForward, Music, MapPin, Megaphone, Heart, Bell, Bookmark, MessageCircle, User, LogOut, FileText, Shield } from 'lucide-react';
+import { Loader, Play, Pause, SkipForward, Music, MapPin, Megaphone, Heart, Bell, Bookmark, MessageCircle, User, LogOut, FileText, Shield, Menu, ChevronRight } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../supabaseClient';
 import RetailPlaylistComments from '../components/retail/RetailPlaylistComments';
 import InstallPrompt from '../components/InstallPrompt';
 import { buildPlayRow, sendPlay, flushQueue } from '../utils/retailPlayQueue';
+import useRetailManifest from '../hooks/useRetailManifest';
 
 const QUALIFYING_SECONDS = 30;
 const PAYPAL_CLIENT_ID = process.env.REACT_APP_PAYPAL_CLIENT_ID || '';
@@ -90,6 +91,7 @@ function RetailPayPalButton({ venueId, onSubscribed }) {
 
 
 export default function RetailPlayerPage() {
+  useRetailManifest();
   const navigate = useNavigate();
   const { user, isAdmin, signOut } = useAuth();
   const [checking, setChecking] = React.useState(true);
@@ -117,6 +119,8 @@ export default function RetailPlayerPage() {
   const [savedPlaylistIds, setSavedPlaylistIds] = React.useState(new Set());
   const [showComments, setShowComments] = React.useState(false);
   const [showAccount, setShowAccount] = React.useState(false);
+  const [impact, setImpact] = React.useState(null);
+  const [showAdminMenu, setShowAdminMenu] = React.useState(false);
 
   const audioRef = React.useRef(null);
   const hasLoggedRef = React.useRef(false);
@@ -242,6 +246,14 @@ export default function RetailPlayerPage() {
       if (!error) setLikedTrackIds(prev => new Set(prev).add(track.id));
     }
   };
+
+  // What this venue has actually done for artists. Counted from the same
+  // play logs the payout is calculated from, so the numbers here and the
+  // money artists receive cannot disagree.
+  React.useEffect(() => {
+    if (!venue || isPreviewMode) return;
+    supabase.rpc('get_venue_impact').then(({ data }) => setImpact(data));
+  }, [venue, isPreviewMode]);
 
   React.useEffect(() => {
     if (!venue) return;
@@ -522,6 +534,16 @@ export default function RetailPlayerPage() {
               className="p-2 rounded-full hover:bg-white/[0.06] transition flex-shrink-0">
               <User className="w-4 h-4 text-white/50" />
             </button>
+            {/* Admin shortcuts moved off the always-on bar into a menu. Kept,
+                not removed: it is the fastest way into a retail admin tab
+                without leaving the player. Admin only. */}
+            {isAdmin && (
+              <button onClick={() => setShowAdminMenu(true)}
+                title="Retail admin" aria-label="Retail admin"
+                className="p-2 rounded-full hover:bg-white/[0.06] transition flex-shrink-0">
+                <Menu className="w-4 h-4 text-purple-300/70" />
+              </button>
+            )}
             <button onClick={openInbox} title="Updates" aria-label="Updates"
               className="relative p-2 rounded-full hover:bg-white/[0.06] transition flex-shrink-0">
               <Bell className="w-4 h-4 text-white/50" />
@@ -551,28 +573,36 @@ export default function RetailPlayerPage() {
         </div>
       )}
 
-      {/* Admin bar. Only admins see this. Gives direct access to every retail
-          admin tab from inside the player itself, so you're not bouncing back
-          out to the main admin panel to change a playlist and back in again. */}
-      {isAdmin && (
-        <div className="px-4 py-2.5"
-          style={{
-            background: 'linear-gradient(90deg, rgba(167,139,250,0.10) 0%, rgba(167,139,250,0.03) 100%)',
-            borderBottom: '1px solid rgba(167,139,250,0.15)',
-          }}>
-          <div className="flex items-center space-x-2 overflow-x-auto">
-            <span className="text-[10px] uppercase tracking-widest text-purple-300/70 font-bold flex-shrink-0 mr-1">Admin</span>
-            {[
-              ['Playlists', 'playlists'], ['Venues', 'venues'], ['Ads', 'ads'],
-              ['Pitches', 'pitches'], ['Payouts', 'payouts'], ['Analytics', 'analytics'],
-              ['Pricing', 'pricing'], ['Auto-Compile', 'autocompile'],
-            ].map(([label, tab]) => (
-              <button key={tab}
-                onClick={() => navigate(`/retail-admin?sub=${tab}`)}
-                className="text-[11px] font-semibold px-2.5 py-1 rounded-lg bg-purple-500/10 text-purple-200/70 border border-purple-400/15 hover:bg-purple-500/25 hover:text-white hover:border-purple-400/40 transition whitespace-nowrap flex-shrink-0">
-                {label}
-              </button>
-            ))}
+      {/* Admin menu. Was a full-width bar of eight chips under the header,
+          which ate vertical space on a venue tablet and is only ever used by
+          an admin. Same destinations, now behind the burger. */}
+      {showAdminMenu && isAdmin && (
+        <div className="fixed inset-0 z-30 bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center"
+          onClick={() => setShowAdminMenu(false)}>
+          <div className="w-full sm:max-w-sm rounded-t-2xl sm:rounded-2xl overflow-hidden max-h-[80vh] overflow-y-auto"
+            style={{
+              background: 'linear-gradient(180deg, rgba(30,20,60,0.98) 0%, rgba(14,14,18,0.99) 100%)',
+              border: '1px solid rgba(167,139,250,0.22)',
+            }}
+            onClick={e => e.stopPropagation()}>
+            <div className="px-5 py-4 border-b border-white/[0.06]">
+              <p className="text-[10px] uppercase tracking-[0.2em] text-purple-400 font-bold">Feelz Retail</p>
+              <p className="text-base font-bold text-white">Admin</p>
+            </div>
+            <div className="p-2">
+              {[
+                ['Playlists', 'playlists'], ['Venue invites', 'venues'], ['Ads', 'ads'],
+                ['Pitches', 'pitches'], ['Payouts', 'payouts'], ['Analytics', 'analytics'],
+                ['Pricing', 'pricing'], ['Auto-Compile', 'autocompile'], ['Retail staff', 'staff'],
+              ].map(([label, tab]) => (
+                <button key={tab}
+                  onClick={() => { setShowAdminMenu(false); navigate(`/retail-admin?sub=${tab}`); }}
+                  className="w-full flex items-center justify-between gap-3 px-3 py-3 rounded-xl hover:bg-white/[0.05] transition text-left">
+                  <span className="text-sm text-white/75">{label}</span>
+                  <ChevronRight className="w-3.5 h-3.5 text-white/20 flex-shrink-0" />
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       )}
@@ -610,7 +640,50 @@ export default function RetailPlayerPage() {
           <>
             {savedPlaylists.length > 0 && (
               <div className="mb-5">
-                <p className="text-xs text-purple-300 font-bold uppercase tracking-wide mb-2">Your vibes</p>
+                {/* What playing this music has actually done. A venue sees a monthly
+                bill and never sees what it bought: half of it is pooled to the
+                artists whose tracks played here. These are counted from the same
+                logs the payout uses. */}
+            {impact && impact.total_plays > 0 && (
+              <div className="mb-6 rounded-2xl border border-purple-400/20 p-4"
+                style={{ background: 'linear-gradient(135deg, rgba(167,139,250,0.10) 0%, rgba(30,20,55,0.5) 100%)' }}>
+                <p className="text-[10px] uppercase tracking-[0.2em] text-purple-300 font-bold mb-3">
+                  Your impact
+                </p>
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div>
+                    <p className="text-2xl font-black text-white">{impact.artists_supported}</p>
+                    <p className="text-[11px] text-white/45 mt-0.5">
+                      {impact.artists_supported === 1 ? 'artist supported' : 'artists supported'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-2xl font-black text-white">{impact.tracks_played}</p>
+                    <p className="text-[11px] text-white/45 mt-0.5">tracks played in here</p>
+                  </div>
+                  <div>
+                    <p className="text-2xl font-black text-white">{impact.hours_played}</p>
+                    <p className="text-[11px] text-white/45 mt-0.5">hours of music</p>
+                  </div>
+                  <div>
+                    <p className="text-2xl font-black text-white">{impact.plays_this_month}</p>
+                    <p className="text-[11px] text-white/45 mt-0.5">plays this month</p>
+                  </div>
+                </div>
+                {(impact.top_artist || impact.top_playlist) && (
+                  <p className="text-[11px] text-white/35 mt-3 pt-3 border-t border-white/[0.06]">
+                    {impact.top_artist && <>Most played here: <span className="text-white/70">{impact.top_artist}</span></>}
+                    {impact.top_artist && impact.top_playlist && ' · '}
+                    {impact.top_playlist && <>Favourite vibe: <span className="text-white/70">{impact.top_playlist}</span></>}
+                  </p>
+                )}
+                <p className="text-[10px] text-white/25 mt-2">
+                  Half of what you pay is pooled to the artists whose music plays in your space.
+                </p>
+              </div>
+            )}
+
+            <p className="text-xs text-purple-300 font-bold uppercase tracking-wide mb-2">Your vibes</p>
                 <div className="flex space-x-3 overflow-x-auto pb-1">
                   {savedPlaylists.map(pl => (
                     <button key={pl.id} onClick={() => openPlaylist(pl)}

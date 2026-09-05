@@ -13,8 +13,10 @@ import { Helmet } from 'react-helmet-async';
 import { Store, Music, Users, Loader, ArrowRight, Check } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
+import useRetailManifest from '../hooks/useRetailManifest';
 
 export default function RetailLandingPage() {
+  useRetailManifest();
   const navigate = useNavigate();
   const { user, isAdmin } = useAuth();
   const [checking, setChecking] = React.useState(true);
