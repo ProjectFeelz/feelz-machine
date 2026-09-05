@@ -83,7 +83,10 @@ const AdminHomeHero = React.lazy(() => import('./pages/AdminHomeHero'));
 const AdminColdStart = React.lazy(() => import('./pages/AdminColdStart'));
 const HiddenPage = React.lazy(() => import('./pages/HiddenPage'));
 const ContactPreferencesPage = React.lazy(() => import('./pages/ContactPreferencesPage'));
-const AdminRetailStaff = React.lazy(() => import('./pages/AdminRetailStaff'));
+// AdminRetailStaff.js is superseded by the Staff tab in RetailAdminPanel.
+// Retail management belongs inside Retail, and keeping two implementations
+// is how ProfilePage and ProfileSetup drifted apart. The old path redirects
+// so existing links and bookmarks still work. The page file can be deleted.
 const RetailTermsPage = React.lazy(() => import('./pages/RetailTermsPage'));
 const RetailPrivacyPage = React.lazy(() => import('./pages/RetailPrivacyPage'));
 const RetailAdminPage = React.lazy(() => import('./pages/RetailAdminPage'));
@@ -358,7 +361,7 @@ export default function AppRouter() {
                 <Route path="/admin/cold-start" element={<AdminColdStart />} />
                 <Route path="/hidden" element={<HiddenPage />} />
                 <Route path="/contact-preferences" element={<ContactPreferencesPage />} />
-                <Route path="/admin/retail-staff" element={<AdminRetailStaff />} />
+                <Route path="/admin/retail-staff" element={<Navigate to="/retail-admin?sub=staff" replace />} />
                 <Route path="/admin/engagement" element={<AdminEngagement />} />
                 <Route path="/library/discovered" element={<RecentlyDiscoveredPage />} />
                 <Route path="/listener/:userId" element={<ListenerProfilePage />} />

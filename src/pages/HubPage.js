@@ -14,7 +14,7 @@ import {
   ChevronRight, Crown, Zap, Star, LayoutDashboard,
   User, LogOut, DollarSign, Radio, Mic2,
   Loader, X, Youtube, Info, Search,
-  Plus, MessageSquare, Check, Send, Store, Trophy, Sparkles, EyeOff,
+  Plus, MessageSquare, Check, Send, Store, Trophy, Sparkles, EyeOff, ListMusic,
 } from 'lucide-react';
 
 function LinkCard({ icon: Icon, label, description, path, color, onClick }) {
@@ -244,7 +244,8 @@ export default function HubPage() {
               <LinkCard icon={Store} label="Retail Admin" description="Standalone panel · playlists · venues · ads" path="/retail-admin" color="bg-purple-500/20" />
               <LinkCard icon={Store} label="Venue Invites" description="Add a venue and copy its signup link" path="/retail-admin?sub=venues" color="bg-purple-500/20" />
               <LinkCard icon={Radio} label="Retail Player" description="The venue-facing player, admin preview" path="/retail/player" color="bg-purple-500/20" />
-              <LinkCard icon={Users} label="Retail Staff" description="Who can manage catalogue, venues and ads" path="/admin/retail-staff" color="bg-purple-500/20" />
+              <LinkCard icon={ListMusic} label="Retail Playlists" description="Create a vibe and fill it with tracks" path="/retail-admin?sub=playlists" color="bg-purple-500/20" />
+              <LinkCard icon={Users} label="Retail Staff" description="Who can manage catalogue, venues and ads" path="/retail-admin?sub=staff" color="bg-purple-500/20" />
             </Section>
 
             <Section title="School Sessions" icon={Trophy}>
