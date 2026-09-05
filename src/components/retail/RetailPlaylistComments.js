@@ -14,7 +14,7 @@
 //     exactly the same iOS keyboard problem.
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Loader, X, Send, MessageCircle } from 'lucide-react';
+import { Loader, X, Send, MessageCircle, Heart, CornerDownRight } from 'lucide-react';
 import { supabase } from '../../supabaseClient';
 
 function useKeyboardOffset() {
@@ -38,19 +38,20 @@ function useKeyboardOffset() {
 export default function RetailPlaylistComments({ playlist, venue, isPreviewMode = false, onClose }) {
   const keyboardOffset = useKeyboardOffset();
   const [comments, setComments] = useState([]);
+  const [replyTo, setReplyTo] = useState(null);
   const [text, setText] = useState('');
   const [posting, setPosting] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const inputRef = useRef(null);
 
+  // One call for the whole thread. get_retail_playlist_comments returns
+  // like counts and whether this venue liked each comment, which would
+  // otherwise be a query per comment on a venue tablet.
   const load = useCallback(async () => {
-    const { data } = await supabase
-      .from('retail_playlist_comments')
-      .select('id, content, created_at, venue_id, venue_name')
-      .eq('playlist_id', playlist.id)
-      .order('created_at', { ascending: false })
-      .limit(100);
+    const { data, error: rpcError } = await supabase
+      .rpc('get_retail_playlist_comments', { p_playlist_id: playlist.id });
+    if (rpcError) setError('Could not load comments.');
     setComments(data || []);
     setLoading(false);
   }, [playlist.id]);
@@ -68,18 +69,24 @@ export default function RetailPlaylistComments({ playlist, venue, isPreviewMode 
     }
     setPosting(true);
     setError('');
-    const { data, error: insertError } = await supabase
+    const { error: insertError } = await supabase
       .from('retail_playlist_comments')
-      .insert({ playlist_id: playlist.id, venue_id: venue.id, content: text.trim() })
-      .select('id, content, created_at, venue_id, venue_name')
-      .single();
+      .insert({
+        playlist_id: playlist.id,
+        venue_id: venue.id,
+        content: text.trim(),
+        parent_comment_id: replyTo?.id || null,
+      });
     setPosting(false);
     if (insertError) {
       setError('Could not post that. Try again.');
       return;
     }
-    setComments(prev => [data, ...prev]);
     setText('');
+    setReplyTo(null);
+    // Reload rather than splice: a reply has to land under its parent, and
+    // the ordering that does that lives in the function.
+    load();
   };
 
   const remove = async (comment) => {
@@ -88,8 +95,98 @@ export default function RetailPlaylistComments({ playlist, venue, isPreviewMode 
       .delete()
       .eq('id', comment.id)
       .eq('venue_id', venue.id);
-    if (!deleteError) setComments(prev => prev.filter(c => c.id !== comment.id));
+    // Deleting a parent cascades to its replies in the database, so the
+    // list is reloaded rather than filtered by id.
+    if (!deleteError) load();
   };
+
+  const toggleLike = async (comment) => {
+    if (!venue || isPreviewMode) return;
+    // Optimistic, then reconciled by load() on failure only. A like that
+    // does not appear instantly feels broken on a tablet.
+    setComments(prev => prev.map(c => c.id === comment.id
+      ? { ...c, liked_by_me: !c.liked_by_me, like_count: c.like_count + (c.liked_by_me ? -1 : 1) }
+      : c));
+
+    if (comment.liked_by_me) {
+      const { error: delError } = await supabase.from('retail_comment_likes')
+        .delete().eq('comment_id', comment.id).eq('venue_id', venue.id);
+      if (delError) load();
+    } else {
+      const { error: insError } = await supabase.from('retail_comment_likes')
+        .insert({ comment_id: comment.id, venue_id: venue.id });
+      if (insError) load();
+    }
+  };
+
+  // The function returns replies grouped under their parent already, so the
+  // tree is built here rather than sorted again.
+  const topLevel = comments.filter(c => !c.parent_comment_id);
+  const repliesFor = (id) => comments.filter(c => c.parent_comment_id === id);
+
+  const Comment = ({ c, isReply }) => {
+    const name = c.venue_name || 'A venue';
+    const isOwn = c.venue_id === venue?.id;
+    return (
+      <div className={`flex items-start space-x-3 ${isReply ? 'mt-3' : ''}`}>
+        <div className={`rounded-full bg-purple-500/15 border border-purple-400/20 flex-shrink-0 flex items-center justify-center ${
+          isReply ? 'w-6 h-6' : 'w-8 h-8'}`}>
+          <span className={`text-purple-200/70 font-bold ${isReply ? 'text-[10px]' : 'text-xs'}`}>
+            {name[0]?.toUpperCase()}
+          </span>
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center space-x-2 flex-wrap">
+            <p className="text-[11px] font-semibold text-white/60">{name}</p>
+            {isOwn && <span className="text-[9px] text-purple-400/60 font-medium">you</span>}
+          </div>
+          <div className="flex items-start justify-between space-x-2">
+            <p className="text-sm text-white/90 leading-relaxed mt-0.5 flex-1">{c.content}</p>
+            {isOwn && (
+              <button onClick={() => remove(c)}
+                className="flex-shrink-0 p-1 rounded-lg hover:bg-white/[0.06] transition active:scale-90 mt-0.5">
+                <X className="w-3 h-3 text-white/20 hover:text-red-400/60" />
+              </button>
+            )}
+          </div>
+          <div className="flex items-center gap-3 mt-1.5">
+            <button onClick={() => toggleLike(c)}
+              className="flex items-center gap-1 group active:scale-90 transition"
+              aria-label={c.liked_by_me ? 'Unlike' : 'Like'}>
+              <Heart className={`w-3.5 h-3.5 transition ${
+                c.liked_by_me ? 'text-red-400 fill-red-400' : 'text-white/25 group-hover:text-white/50'}`} />
+              {c.like_count > 0 && (
+                <span className={`text-[10px] ${c.liked_by_me ? 'text-red-400/70' : 'text-white/25'}`}>
+                  {c.like_count}
+                </span>
+              )}
+            </button>
+            {/* Replies attach to the top level comment, so replying to a
+                reply threads under the same parent rather than nesting
+                without limit. */}
+            <button onClick={() => setReplyTo(isReply ? { id: c.parent_comment_id, venue_name: c.venue_name } : c)}
+              className="text-[10px] text-white/25 hover:text-white/50 transition">
+              Reply
+            </button>
+            <span className="text-[10px] text-white/15">
+              {new Date(c.created_at).toLocaleDateString()}
+            </span>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const Thread = ({ comment, replies }) => (
+    <div>
+      <Comment c={comment} isReply={false} />
+      {replies.length > 0 && (
+        <div className="ml-5 pl-4 border-l border-white/[0.06] mt-1">
+          {replies.map(r => <Comment key={r.id} c={r} isReply />)}
+        </div>
+      )}
+    </div>
+  );
 
   const inputBarBottom = keyboardOffset > 0 ? keyboardOffset : 0;
 
@@ -139,35 +236,7 @@ export default function RetailPlaylistComments({ playlist, venue, isPreviewMode 
               <p className="text-[11px] text-white/15">Tell us how it plays in your space.</p>
             </div>
           ) : (
-            comments.map(c => {
-              const name = c.venue_name || 'A venue';
-              const isOwn = c.venue_id === venue?.id;
-              return (
-                <div key={c.id} className="flex items-start space-x-3">
-                  <div className="w-8 h-8 rounded-full bg-purple-500/15 border border-purple-400/20 flex-shrink-0 flex items-center justify-center">
-                    <span className="text-xs text-purple-200/70 font-bold">{name[0]?.toUpperCase()}</span>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center space-x-2 flex-wrap">
-                      <p className="text-[11px] font-semibold text-white/60">{name}</p>
-                      {isOwn && <span className="text-[9px] text-purple-400/60 font-medium">you</span>}
-                    </div>
-                    <div className="flex items-start justify-between space-x-2">
-                      <p className="text-sm text-white/90 leading-relaxed mt-0.5 flex-1">{c.content}</p>
-                      {isOwn && (
-                        <button onClick={() => remove(c)}
-                          className="flex-shrink-0 p-1 rounded-lg hover:bg-white/[0.06] transition active:scale-90 mt-0.5">
-                          <X className="w-3 h-3 text-white/20 hover:text-red-400/60" />
-                        </button>
-                      )}
-                    </div>
-                    <p className="text-[10px] text-white/20 mt-1">
-                      {new Date(c.created_at).toLocaleDateString()}
-                    </p>
-                  </div>
-                </div>
-              );
-            })
+            topLevel.map(c => <Thread key={c.id} comment={c} replies={repliesFor(c.id)} />)
           )}
         </div>
 
@@ -182,6 +251,18 @@ export default function RetailPlaylistComments({ playlist, venue, isPreviewMode 
             paddingBottom: 'env(safe-area-inset-bottom, 0px)',
             transition: 'bottom 0.12s ease',
           }}>
+          {replyTo && (
+            <div className="flex items-center gap-2 px-4 pt-2.5 pb-1">
+              <CornerDownRight className="w-3 h-3 text-purple-400/60 flex-shrink-0" />
+              <p className="text-[11px] text-white/40 flex-1 truncate">
+                Replying to {replyTo.venue_name || 'a venue'}
+              </p>
+              <button onClick={() => setReplyTo(null)}
+                className="p-1 rounded-lg hover:bg-white/[0.06] transition">
+                <X className="w-3 h-3 text-white/30" />
+              </button>
+            </div>
+          )}
           {error && <p className="text-[11px] text-red-400 px-4 pt-2">{error}</p>}
           <div className="flex items-center space-x-2 px-4 py-2.5">
             <input
@@ -189,7 +270,7 @@ export default function RetailPlaylistComments({ playlist, venue, isPreviewMode 
               value={text}
               onChange={e => setText(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && !e.shiftKey && post()}
-              placeholder="Add a comment…"
+              placeholder={replyTo ? "Write a reply…" : "Add a comment…"}
               maxLength={500}
               className="flex-1 min-w-0 bg-white/[0.06] rounded-xl px-3 py-2.5 text-sm text-white placeholder-white/25 outline-none border border-white/[0.06] focus:border-purple-400/40"
             />

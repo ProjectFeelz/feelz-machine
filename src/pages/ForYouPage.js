@@ -25,7 +25,7 @@ import { askNotificationPermission } from '../utils/askNotificationPermission';
 import {
   Heart, MessageCircle, ListMusic, UserCheck,
   Share2, Loader, X, Send, ChevronUp,
-  Sparkles, Volume2, VolumeX, Info, EyeOff,
+  Sparkles, Volume2, VolumeX, Info, EyeOff, ChevronRight,
 } from 'lucide-react';
 
 const SWIPE_THRESHOLD = 60;
@@ -802,14 +802,29 @@ function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare, onN
 
       {/* Bottom info */}
       <div className="absolute bottom-24 left-4 right-16 z-20" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center space-x-3 mb-1">
+        <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+          {/* The artist is the only thing on this screen that leads anywhere,
+              and it was the smallest element on it: a faint 13px handle that
+              did not read as tappable, worst on mobile. Now a pill with the
+              artist's actual name, their avatar when there is one, and a
+              chevron, so it looks like the link it is. The handle moves
+              underneath, where it identifies without competing. */}
           <button onClick={goToArtist}
-            className="text-[13px] font-bold text-white/60 text-left hover:text-white transition">
-            @{track.artist_slug || track.artist_name}
+            className="flex items-center gap-2 pl-1 pr-3 py-1 rounded-full text-left transition active:scale-95 max-w-full"
+            style={{ background: 'rgba(255,255,255,0.10)', border: '1px solid rgba(255,255,255,0.16)' }}>
+            {track.artist_image
+              ? <img src={track.artist_image} alt="" className="w-7 h-7 rounded-full object-cover flex-shrink-0" />
+              : <span className="w-7 h-7 rounded-full bg-white/15 flex items-center justify-center flex-shrink-0 text-[11px] font-bold text-white/70">
+                  {(track.artist_name || '?')[0]?.toUpperCase()}
+                </span>}
+            <span className="text-[15px] font-bold text-white truncate">
+              {track.artist_name || track.artist_slug}
+            </span>
+            <ChevronRight className="w-3.5 h-3.5 text-white/40 flex-shrink-0" />
           </button>
           {user && !isOwnTrack && following === false && (
             <button onClick={e => { e.stopPropagation(); handleFollow(); }}
-              className="flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-bold text-white transition active:scale-95"
+              className="flex items-center space-x-1 px-3 py-1.5 rounded-full text-xs font-bold text-white transition active:scale-95 flex-shrink-0"
               style={{ background: 'rgba(239,68,68,0.25)', border: '1px solid rgba(239,68,68,0.4)' }}>
               <span>+ Follow</span>
             </button>

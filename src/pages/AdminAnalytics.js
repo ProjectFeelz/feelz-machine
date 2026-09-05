@@ -6,7 +6,7 @@ import {
   BarChart3, ChevronLeft, Loader, Music, Users, Mic2,
   TrendingUp, Heart, Download, Headphones, FileDown,
   Smartphone, Monitor, Zap, Crown, Star, Activity,
-  Radio, Globe, RefreshCw, Eye, Flame, DollarSign, Mail,
+  Radio, Globe, RefreshCw, Eye, Flame, DollarSign, Mail, MapPin,
 } from 'lucide-react';
 import {
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
@@ -102,6 +102,44 @@ const CustomTooltip = ({ active, payload, label }) => {
 };
 
 // ── Main component ────────────────────────────────────────────────────────────
+// A labelled breakdown with a share bar. Percentages are of the rows shown,
+// not of all plays: groups under the suppression floor are absent, so a
+// total taken from these rows is the only honest denominator.
+function DemoList({ title, icon: Icon, rows, sub }) {
+  const list = rows || [];
+  const total = list.reduce((s, r) => s + (r.plays || r.listeners || 0), 0);
+  return (
+    <div className="rounded-2xl p-4 bg-white/[0.02] border border-white/[0.05]">
+      <SectionTitle icon={Icon} title={title} color="text-purple-400" />
+      {sub && <p className="text-[10px] text-white/25 -mt-1 mb-2">{sub}</p>}
+      {list.length === 0 ? (
+        <p className="text-sm text-white/20 py-4 text-center">No data yet.</p>
+      ) : (
+        <div className="space-y-2.5">
+          {list.slice(0, 10).map((r, i) => {
+            const v = r.plays || r.listeners || 0;
+            const pct = total > 0 ? Math.round((v / total) * 100) : 0;
+            return (
+              <div key={i}>
+                <div className="flex items-baseline justify-between mb-1">
+                  <p className="text-sm text-white truncate">
+                    {r.name || 'Unknown'}
+                    {r.country && <span className="text-white/30 text-xs ml-1.5">{r.country}</span>}
+                  </p>
+                  <p className="text-xs text-white/40 flex-shrink-0 ml-3">{v} · {pct}%</p>
+                </div>
+                <div className="h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
+                  <div className="h-full rounded-full bg-purple-500/70" style={{ width: `${pct}%` }} />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function AdminAnalytics({ embedded = false }) {
   const navigate = useNavigate();
   const { isAdmin } = useAuth();
@@ -128,6 +166,7 @@ export default function AdminAnalytics({ embedded = false }) {
   const [sourceSplit, setSourceSplit]     = useState([]);
   const [completionStats, setCompletionStats] = useState({});
   const [beatStats, setBeatStats]         = useState({});
+  const [demo, setDemo]                   = useState(null);
   const [revenueStats, setRevenueStats]   = useState({});
   const [listenerTierSplit, setListenerTierSplit] = useState([]);
   const [platformSignals, setPlatformSignals]     = useState([]);
@@ -257,6 +296,12 @@ export default function AdminAnalytics({ embedded = false }) {
         avgDuration: durAll.length ? Math.round(durAll.reduce((a,b)=>a+b,0)/durAll.length) : 0,
         total: totalStreamsForPct,
       });
+
+      // Sitewide listener demographics. Location and completion come from
+      // listening_events, which no client query can read across accounts,
+      // so this goes through an admin-gated SECURITY DEFINER function.
+      supabase.rpc('get_platform_listener_stats', { p_days: range })
+        .then(({ data }) => setDemo(data));
 
       // Beat stats.
       //
@@ -1182,6 +1227,37 @@ export default function AdminAnalytics({ embedded = false }) {
                   ))}
                 </div>
               </div>
+
+              {/* Sitewide demographics. Location and completion only exist
+                  from when listening_events was deployed and are capped at
+                  90 days retention, while the play counts above cover full
+                  history. Said plainly rather than blended into one number. */}
+              {demo && (
+                <>
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-4">
+                    <KPI icon={Users}      label="Listeners"        value={fmt(demo.plays?.unique_listeners || 0)} color="bg-purple-500/20" sub={`last ${demo.window_days} days`} />
+                    <KPI icon={Activity}   label="Plays"            value={fmt(demo.plays?.total || 0)}            color="bg-cyan-500/20" />
+                    <KPI icon={TrendingUp} label="Avg completion"   value={demo.completion ? `${demo.completion.avg_pct}%` : '--'} color="bg-green-500/20" />
+                    <KPI icon={TrendingUp} label="Played to end"    value={demo.completion ? `${demo.completion.finished_pct}%` : '--'} color="bg-orange-500/20" />
+                  </div>
+
+                  {!demo.completion && (
+                    <p className="text-xs text-white/30 mt-3">
+                      Completion and location need a few plays recorded since listening
+                      events started tracking. Play counts above cover full history.
+                    </p>
+                  )}
+
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4">
+                    <DemoList title="Countries" icon={MapPin} rows={demo.by_country} />
+                    <DemoList title="Cities" icon={MapPin} rows={demo.by_city} sub="Small groups hidden to protect listeners" />
+                    <DemoList title="Genres played" icon={Music} rows={demo.by_genre} />
+                    <DemoList title="Moods played" icon={Music} rows={demo.by_mood} />
+                    <DemoList title="Platform" icon={Monitor} rows={demo.by_platform} />
+                    <DemoList title="Where plays came from" icon={Radio} rows={demo.by_source} sub="Includes Retail, venues playing in their space" />
+                  </div>
+                </>
+              )}
             </>
           )}
 
