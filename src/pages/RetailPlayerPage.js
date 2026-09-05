@@ -192,7 +192,14 @@ export default function RetailPlayerPage() {
   React.useEffect(() => {
     if (!venue || venue.status !== 'active') return;
     supabase.rpc('get_venue_playlist_recommendations')
-      .then(({ data }) => setRecommended(data || []));
+      .then(({ data, error }) => {
+        // This returned 400 on every call for a while and nobody noticed,
+        // because the result was read as `data` only. A failed
+        // recommendation is not worth interrupting a venue over, but it
+        // should not be invisible either.
+        if (error) { console.warn('[retail] recommendations failed:', error.message); return; }
+        setRecommended(data || []);
+      });
   }, [venue]);
 
   React.useEffect(() => {
@@ -279,7 +286,10 @@ export default function RetailPlayerPage() {
       setSavedPlaylistIds(prev => new Set(prev).add(playlist.id));
     }
     supabase.rpc('get_venue_playlist_recommendations')
-      .then(({ data }) => setRecommended(data || []));
+      .then(({ data, error }) => {
+        if (error) { console.warn('[retail] recommendations failed:', error.message); return; }
+        setRecommended(data || []);
+      });
   };
 
   const openPlaylist = async (playlist) => {
@@ -505,6 +515,9 @@ export default function RetailPlayerPage() {
         <meta name="robots" content="noindex, nofollow" />
         <link rel="manifest" href="/retail-manifest.json" />
         <link rel="apple-touch-icon" href="/retail-icon-180.png" />
+        <meta name="mobile-web-app-capable" content="yes" />
+        {/* Kept alongside the standard tag above: older iOS still reads the
+            prefixed one, newer browsers warn about it in the console. */}
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-title" content="Feelz Retail" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
