@@ -2,6 +2,8 @@ import { Helmet } from 'react-helmet-async';
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
+// Shared with ProfilePage, which was missing this behaviour entirely.
+import { generateSlug, getUniqueSlug } from '../utils/artistSlug';
 import { useAuth } from '../contexts/AuthContext';
 import {
   LogOut, ChevronRight, User, Music, Globe, Shield, Trophy,
@@ -55,29 +57,7 @@ const MOODS = [
 const PROFILE_IMAGE_BUCKET = 'artist-images';
 
 // ── Slug generation ───────────────────────────────────────────────────────────
-function generateSlug(name) {
-  return name
-    .toLowerCase()
-    .normalize('NFD').replace(/[̀-ͯ]/g, '')  // strip accents
-    .replace(/[^a-z0-9\s-]/g, '')                       // strip special chars
-    .trim()
-    .replace(/\s+/g, '-')                               // spaces → hyphens
-    .replace(/-+/g, '-')                                // collapse multiple hyphens
-    .slice(0, 50);                                      // max length
-}
 
-async function getUniqueSlug(base, currentArtistId) {
-  // Try the base slug first
-  const { count } = await supabase
-    .from('artists')
-    .select('*', { count: 'exact', head: true })
-    .eq('slug', base)
-    .neq('id', currentArtistId);
-  if (!count) return base;
-  // Collision — append a short random suffix
-  const suffix = Math.random().toString(36).slice(2, 6);
-  return `${base}-${suffix}`;
-}
 const MAX_DAILY_THOUGHTS   = 3;
 const THOUGHT_TTL_MS       = 24 * 60 * 60 * 1000;
 const BIO_MAX              = 300;

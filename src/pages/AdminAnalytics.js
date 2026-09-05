@@ -258,16 +258,42 @@ export default function AdminAnalytics({ embedded = false }) {
         total: totalStreamsForPct,
       });
 
-      // Beat stats
+      // Beat stats.
+      //
+      // This tab used to measure purchases only, so with no sales it showed
+      // two numbers and an empty state. Beats have plenty of other signal
+      // already recorded: plays, downloads, BPM, key, and how many people
+      // make them. That is what a beatmaker platform actually wants to see.
       try {
-        const [{ count: beatCount }, { data: beatPurchases }] = await Promise.all([
+        const [{ count: beatCount }, { data: beatPurchases }, { data: beats }] = await Promise.all([
           supabase.from('tracks').select('*', { count: 'exact', head: true }).eq('is_beat', true).eq('is_published', true),
           supabase.from('beat_purchases').select('amount_paid, licence_type, status').eq('status', 'completed').gte('created_at', cutoff),
+          supabase.from('tracks')
+            .select('id, title, bpm, beat_key, stream_count, download_count, artist_id, artists(artist_name)')
+            .eq('is_beat', true).eq('is_published', true)
+            .order('stream_count', { ascending: false }).limit(500),
         ]);
         const revenue = (beatPurchases || []).reduce((s, p) => s + (parseFloat(p.amount_paid) || 0), 0);
         const licenceCounts = {};
         (beatPurchases || []).forEach(p => { licenceCounts[p.licence_type] = (licenceCounts[p.licence_type] || 0) + 1; });
-        setBeatStats({ count: beatCount || 0, purchases: (beatPurchases || []).length, revenue: revenue.toFixed(2), licenceCounts });
+
+        const rows = beats || [];
+        const bpms = rows.map(b => b.bpm).filter(Boolean);
+        const keyCounts = {};
+        rows.forEach(b => { if (b.beat_key) keyCounts[b.beat_key] = (keyCounts[b.beat_key] || 0) + 1; });
+
+        setBeatStats({
+          count: beatCount || 0,
+          purchases: (beatPurchases || []).length,
+          revenue: revenue.toFixed(2),
+          licenceCounts,
+          plays:      rows.reduce((s, b) => s + (b.stream_count || 0), 0),
+          downloads:  rows.reduce((s, b) => s + (b.download_count || 0), 0),
+          beatmakers: new Set(rows.map(b => b.artist_id).filter(Boolean)).size,
+          avgBpm:     bpms.length ? Math.round(bpms.reduce((a, b) => a + b, 0) / bpms.length) : null,
+          topBeats:   rows.slice(0, 8),
+          keyCounts,
+        });
       } catch { setBeatStats({ count: 0, purchases: 0, revenue: '0.00', licenceCounts: {} }); }
       const total = dc.mobile + dc.desktop + dc.unknown;
       setDeviceSplit([
@@ -985,10 +1011,49 @@ export default function AdminAnalytics({ embedded = false }) {
           {/* ── BEATS ────────────────────────────────────────────────────── */}
           {tab === 'beats' && (
             <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-3">
-                <KPI icon={Music}       label="Published Beats"  value={beatStats.count || 0}     color="bg-yellow-500/20" />
-                <KPI icon={TrendingUp}  label="Purchases"        value={beatStats.purchases || 0} color="bg-green-500/20"  sub={`$${beatStats.revenue || '0.00'} revenue`} />
+              <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
+                <KPI icon={Music}       label="Published Beats"  value={beatStats.count || 0}      color="bg-yellow-500/20" />
+                <KPI icon={TrendingUp}  label="Beat Plays"       value={fmt(beatStats.plays || 0)} color="bg-cyan-500/20" />
+                <KPI icon={FileDown}    label="Beat Downloads"   value={fmt(beatStats.downloads || 0)} color="bg-blue-500/20" />
+                <KPI icon={Users}       label="Beatmakers"       value={beatStats.beatmakers || 0} color="bg-purple-500/20" sub="with a published beat" />
+                <KPI icon={TrendingUp}  label="Average BPM"      value={beatStats.avgBpm || '--'}  color="bg-pink-500/20" />
+                <KPI icon={TrendingUp}  label="Purchases"        value={beatStats.purchases || 0}  color="bg-green-500/20"  sub={`$${beatStats.revenue || '0.00'} revenue`} />
               </div>
+
+              {(beatStats.topBeats || []).length > 0 && (
+                <div className="rounded-2xl p-4 bg-white/[0.02] border border-white/[0.05]">
+                  <SectionTitle icon={Music} title="Most played beats" color="text-yellow-400" />
+                  <div className="space-y-2">
+                    {beatStats.topBeats.map((b, i) => (
+                      <div key={b.id} className="flex items-center gap-3 py-1.5 border-b border-white/[0.04] last:border-0">
+                        <span className="text-xs text-white/25 font-mono w-5">{i + 1}</span>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm text-white truncate">{b.title}</p>
+                          <p className="text-xs text-white/35 truncate">
+                            {b.artists?.artist_name}
+                            {b.bpm ? ` · ${b.bpm} BPM` : ''}
+                            {b.beat_key ? ` · ${b.beat_key}` : ''}
+                          </p>
+                        </div>
+                        <span className="text-sm font-bold text-white flex-shrink-0">{fmt(b.stream_count || 0)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {Object.keys(beatStats.keyCounts || {}).length > 0 && (
+                <div className="rounded-2xl p-4 bg-white/[0.02] border border-white/[0.05]">
+                  <SectionTitle icon={Music} title="Keys beatmakers work in" color="text-yellow-400" />
+                  <div className="flex flex-wrap gap-2">
+                    {Object.entries(beatStats.keyCounts).sort((a, b) => b[1] - a[1]).slice(0, 12).map(([k, n]) => (
+                      <span key={k} className="text-xs px-2.5 py-1 rounded-full bg-white/[0.06] text-white/60">
+                        {k} <span className="text-white/30">{n}</span>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
               {Object.keys(beatStats.licenceCounts || {}).length > 0 && (
                 <div className="rounded-2xl p-4 bg-white/[0.02] border border-white/[0.05]">
                   <SectionTitle icon={TrendingUp} title="Licence Type Breakdown" color="text-yellow-400" />
@@ -1003,9 +1068,10 @@ export default function AdminAnalytics({ embedded = false }) {
                 </div>
               )}
               {(beatStats.purchases || 0) === 0 && (
-                <div className="text-center py-10 text-white/20">
-                  <p className="text-sm">No beat purchases yet in this period</p>
-                </div>
+                <p className="text-xs text-white/25 text-center py-4">
+                  No beat sales in this period. The figures above cover all published beats,
+                  not just this window.
+                </p>
               )}
             </div>
           )}

@@ -2,6 +2,7 @@ import { Helmet } from 'react-helmet-async';
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
+import { slugForNameChange } from '../utils/artistSlug';
 import { useAuth } from '../contexts/AuthContext';
 import {
   LogOut, ChevronRight, User, Music, Globe, Shield,
@@ -327,6 +328,12 @@ export default function ProfilePage() {
         is_published: true,
         updated_at:   new Date().toISOString(),
       };
+      // Keep the vanity URL in step with the name. ProfileSetup did this and
+      // this page did not, so editing your name here left the old slug in
+      // place while editing it at /setup updated it.
+      const newSlug = await slugForNameChange(form.artist_name, artist);
+      if (newSlug) updateData.slug = newSlug;
+
       if (profileImgFile) updateData.profile_image_url = await uploadFile(profileImgFile, 'profile-images/');
       const { error } = await supabase.from('artists').update(updateData).eq('id', artist.id);
       if (error) throw error;
