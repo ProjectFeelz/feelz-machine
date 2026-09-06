@@ -366,7 +366,6 @@ export default function ArtistProfilePage() {
   const [isFollowing, setIsFollowing] = useState(false);
   const [followerCount, setFollowerCount] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [showAllTracks, setShowAllTracks] = useState(false);
   const [actionSheetTrack, setActionSheetTrack] = useState(null);
   const [copied, setCopied] = useState(false);
   const [showShareCard, setShowShareCard] = useState(false);
@@ -570,8 +569,11 @@ export default function ArtistProfilePage() {
     if (trackSlug && tracks.length > 0) {
       const match = tracks.find(t => t.slug === trackSlug);
       if (match) {
+        // The list is a fixed top ten now, so a link to a track outside it
+        // would highlight something that is not rendered. visibleTracks
+        // appends the linked track when it is missing, so the deep link
+        // still lands on it.
         setHighlightedTrackId(match.id);
-        setShowAllTracks(true);
         setTimeout(() => {
           const el = document.getElementById(`track-${match.id}`);
           if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -1227,7 +1229,14 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
   const socialEntries  = Object.entries(socials).filter(([_, v]) => v);
   const headingFont    = theme?.heading_font || 'Inter';
   const bodyFont       = theme?.body_font || 'Inter';
-  const visibleTracks  = showAllTracks ? tracks.slice(0, 10) : tracks.slice(0, 5);
+  // Popular is a top ten by definition, so it stays capped. Showing the
+  // whole catalogue here would contradict the heading. Since the list now
+  // scrolls sideways on desktop, all ten are reachable without an expand
+  // control, so the "see all" toggle is gone.
+  const topTen = tracks.slice(0, 10);
+  const visibleTracks = highlightedTrackId && !topTen.some(t => t.id === highlightedTrackId)
+    ? [...topTen, ...tracks.filter(t => t.id === highlightedTrackId)]
+    : topTen;
   const totalVisible   = Math.min(tracks.length, 10);
   const isProfileOwner = user && myArtist && myArtist.id === artist.id;
   const isBeatmakerProfile = artist?.role === 'beatmaker';
@@ -1237,7 +1246,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
   const pageTitle      = `${artist.artist_name} · Feelz Machine`;
   const pageDesc       = artist.bio
     ? `${artist.bio.slice(0, 120)}${artist.bio.length > 120 ? '...' : ''}`
-    : `Stream music by ${artist.artist_name} on Feelz Machine — independent music platform.`;
+    : `Stream music by ${artist.artist_name} on Feelz Machine, independent music platform.`;
 
   const musicGroupSchema = {
     '@context': 'https://schema.org',
@@ -1273,8 +1282,10 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
         <script type="application/ld+json">{JSON.stringify(musicGroupSchema)}</script>
       </Helmet>
 
-      {/* BANNER */}
-      <div className="relative w-full" style={{ height: '220px' }}>
+      {/* BANNER
+          Shorter on desktop. At 220px the banner plus the centred avatar
+          pushed the music below the fold on every laptop. */}
+      <div className="relative w-full h-[220px] lg:h-[150px]">
         {artist.banner_image_url || theme?.banner_image_url ? (
           <img src={artist.banner_image_url || theme?.banner_image_url} alt="" className="absolute inset-0 w-full h-full object-cover" />
         ) : (
@@ -1298,7 +1309,10 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
               : <Share2 className="w-4 h-4" style={{ color: textColor }} />}
           </button>
         </div>
-        <div className="absolute -bottom-16 left-1/2 -translate-x-1/2 z-10">
+        {/* Centred on mobile as before. On desktop it moves hard left and
+            grows, so the name and controls sit beside it rather than under
+            it, matching the large-image-left layout used in Library. */}
+        <div className="absolute -bottom-16 left-1/2 -translate-x-1/2 lg:left-8 lg:translate-x-0 lg:-bottom-20 z-10">
           {/* Story ring — clickable if artist has active stories */}
           <div
             className="relative"
@@ -1311,7 +1325,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
                 <div className="w-full h-full rounded-2xl" style={{ backgroundColor: bgColor }} />
               </div>
             )}
-            <div className="relative w-32 h-32 rounded-2xl overflow-hidden border-4 shadow-2xl"
+            <div className="relative w-32 h-32 lg:w-44 lg:h-44 rounded-2xl overflow-hidden border-4 shadow-2xl"
               style={{ borderColor: stories.length > 0 ? 'transparent' : bgColor, backgroundColor: `${secondaryColor}30` }}>
               {artist.profile_image_url ? (
                 <img src={artist.profile_image_url} alt={artist.artist_name} className="w-full h-full object-cover" />
@@ -1338,9 +1352,13 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
           </div>
         </div>
 
-      {/* ARTIST INFO */}
-      <div className="px-6 pt-24 flex flex-col items-center text-center">
-        <div className="flex flex-col items-center mb-1">
+      {/* ARTIST INFO
+          Mobile is unchanged: avatar above, everything centred. On desktop
+          the whole block shifts right of the avatar and left-aligns, which
+          is what puts the name, stats and buttons beside the image instead
+          of stacked under it. */}
+      <div className="px-6 pt-24 flex flex-col items-center text-center lg:pt-6 lg:pl-60 lg:items-start lg:text-left">
+        <div className="flex flex-col items-center lg:items-start mb-1">
           <div className="flex items-center space-x-2">
             <h1 className="text-3xl font-bold" style={{ fontFamily: `"${headingFont}", sans-serif`, color: textColor }}>{artist.artist_name}</h1>
             {artist.is_verified && (
@@ -1356,7 +1374,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
             </span>
           )}
         </div>
-        <div className="flex items-center space-x-4 mb-4">
+        <div className="flex items-center justify-center lg:justify-start space-x-4 mb-4 flex-wrap gap-y-1">
           <button
   onClick={() => isProfileOwner ? navigate(`/artist/${slug}/fans`) : undefined}
   className={isProfileOwner ? 'hover:opacity-70 transition' : ''}
@@ -1376,7 +1394,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
         </div>
 
 
-        <div className="flex items-center justify-center flex-wrap gap-2 mb-4 px-4">
+        <div className="flex items-center justify-center lg:justify-start flex-wrap gap-2 mb-4 px-4 lg:px-0">
           <button onClick={handleFollow}
             className="flex items-center space-x-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all active:scale-95"
             style={{
@@ -1552,7 +1570,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
               </span>
               <span className="text-sm font-semibold text-red-400">Live Now</span>
               {liveSession.title && (
-                <span className="text-sm text-red-300/70 truncate max-w-[120px]">— {liveSession.title}</span>
+                <span className="text-sm text-red-300/70 truncate max-w-[120px]"> {liveSession.title}</span>
               )}
             </div>
             <Radio className="w-4 h-4 text-red-400 flex-shrink-0" />
@@ -1613,7 +1631,15 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
       {tracks.length > 0 && (
         <div className="px-6 mb-8">
           <h2 className="text-lg font-bold mb-3 text-white" style={{ fontFamily: `"${headingFont}", sans-serif`, opacity: 1 }}>{isBeatmakerProfile ? "Beats" : "Popular"}</h2>
-          <div className="space-y-1">
+          {/* Mobile keeps the plain vertical list. On desktop the same rows
+              flow into columns of five that scroll sideways, so the whole
+              catalogue is reachable without pushing everything else down
+              the page. Laid out rather than re-rendered: the row markup
+              carries play state, menus and highlight handling, and a second
+              desktop copy would be two things to keep in step.
+              overflow-x-auto also opts this into the global wheel handler in
+              src/index.js, so a mouse wheel scrolls it horizontally. */}
+          <div className="space-y-1 lg:space-y-0 lg:grid lg:grid-flow-col lg:grid-rows-5 lg:auto-cols-[minmax(340px,1fr)] lg:gap-x-6 lg:gap-y-1 lg:overflow-x-auto lg:pb-3">
             {visibleTracks.map((track, i) => {
               const isActive = currentTrack?.id === track.id;
               const isTrackPlaying = isActive && isPlaying;
@@ -1723,11 +1749,10 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
               );
             })}
           </div>
-          {tracks.length > 5 && (
-            <button onClick={() => setShowAllTracks(!showAllTracks)}
-              className="mt-3 text-sm font-medium transition-colors" style={{ color: `${textColor}50` }}>
-              {showAllTracks ? 'Show less' : `See all ${totalVisible} tracks`}
-            </button>
+          {tracks.length > 10 && (
+            <p className="mt-3 text-sm" style={{ color: `${textColor}40` }}>
+              Top 10 of {tracks.length} tracks
+            </p>
           )}
         </div>
       )}
@@ -2286,7 +2311,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
                     { id: 'edit',    icon: '✏️', label: 'Edit Profile',        sub: 'Update your bio, photo and links',      color: 'gray' },
                     isPremium
                       ? { id: 'merch',        icon: '🛍️', label: 'Merch Store',    sub: 'Connect Printful · sell to your fans', color: 'purple' }
-                      : { id: 'merch_locked', icon: '🛍️', label: 'Merch Store',    sub: 'Premium only — upgrade to unlock',     color: 'gray'   },
+                      : { id: 'merch_locked', icon: '🛍️', label: 'Merch Store',    sub: 'Premium only, upgrade to unlock',     color: 'gray'   },
                     { id: 'dm',      icon: '📣', label: 'Message Fans',        sub: 'Send a notification to all followers',  color: 'green' },
                     { id: 'memo',    icon: '🎙️', label: 'Voice Memo',          sub: 'Record a message for your fans',        color: 'pink' },
                     { id: 'live',    icon: '🔴', label: 'Go Live',             sub: 'Start a live session',                  color: 'red' },
@@ -2587,7 +2612,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
               )}
 
               {thoughts.length === 0 && voiceMemos.length === 0 && (
-                <p className="text-xs text-white/20 text-center py-4">Nothing here yet — check back soon</p>
+                <p className="text-xs text-white/20 text-center py-4">Nothing here yet, check back soon</p>
               )}
             </div>
           </div>

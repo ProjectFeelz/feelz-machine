@@ -11,11 +11,13 @@
 import React from 'react';
 import { Helmet } from 'react-helmet-async';
 import { useNavigate } from 'react-router-dom';
-import { Loader, Play, Pause, SkipForward, Music, MapPin, Megaphone, Heart, Bell, Bookmark, MessageCircle, User, LogOut, FileText, Shield, Menu, ChevronRight } from 'lucide-react';
+import { Loader, Play, Pause, SkipForward, Music, MapPin, Megaphone, Heart, Bell, Bookmark, MessageCircle, User, LogOut, FileText, Shield, Menu, ChevronRight , TrendingUp} from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../supabaseClient';
 import RetailPlaylistComments from '../components/retail/RetailPlaylistComments';
 import InstallPrompt from '../components/InstallPrompt';
+import VinylRecord from '../components/VinylRecord';
+import RetailReferrals from '../components/retail/RetailReferrals';
 import { buildPlayRow, sendPlay, flushQueue } from '../utils/retailPlayQueue';
 import useRetailManifest from '../hooks/useRetailManifest';
 
@@ -119,6 +121,7 @@ export default function RetailPlayerPage() {
   const [savedPlaylistIds, setSavedPlaylistIds] = React.useState(new Set());
   const [showComments, setShowComments] = React.useState(false);
   const [showAccount, setShowAccount] = React.useState(false);
+  const [showReferrals, setShowReferrals] = React.useState(false);
   const [impact, setImpact] = React.useState(null);
   const [showAdminMenu, setShowAdminMenu] = React.useState(false);
 
@@ -602,19 +605,20 @@ export default function RetailPlayerPage() {
               <p className="text-[10px] uppercase tracking-[0.2em] text-purple-400 font-bold">Feelz Retail</p>
               <p className="text-base font-bold text-white">Admin</p>
             </div>
+            {/* One link, not nine. Every entry here went to the same page
+                with a different ?sub=, and the page already has tabs, so the
+                menu was just a second, worse copy of them. Pages get added
+                as tabs in RetailAdminPanel instead. */}
             <div className="p-2">
-              {[
-                ['Playlists', 'playlists'], ['Venue invites', 'venues'], ['Ads', 'ads'],
-                ['Pitches', 'pitches'], ['Payouts', 'payouts'], ['Analytics', 'analytics'],
-                ['Pricing', 'pricing'], ['Auto-Compile', 'autocompile'], ['Retail staff', 'staff'],
-              ].map(([label, tab]) => (
-                <button key={tab}
-                  onClick={() => { setShowAdminMenu(false); navigate(`/retail-admin?sub=${tab}`); }}
-                  className="w-full flex items-center justify-between gap-3 px-3 py-3 rounded-xl hover:bg-white/[0.05] transition text-left">
-                  <span className="text-sm text-white/75">{label}</span>
-                  <ChevronRight className="w-3.5 h-3.5 text-white/20 flex-shrink-0" />
-                </button>
-              ))}
+              <button
+                onClick={() => { setShowAdminMenu(false); navigate('/retail-admin'); }}
+                className="w-full flex items-center justify-between gap-3 px-3 py-3 rounded-xl hover:bg-white/[0.05] transition text-left">
+                <span className="text-sm text-white/75">Retail Admin</span>
+                <ChevronRight className="w-3.5 h-3.5 text-white/20 flex-shrink-0" />
+              </button>
+              <p className="text-[11px] text-white/25 px-3 pb-2 pt-1">
+                Playlists, venues, staff and the rest live as tabs in there.
+              </p>
             </div>
           </div>
         </div>
@@ -767,15 +771,41 @@ export default function RetailPlayerPage() {
 
             {/* Album-style header: cover, mood, description, featured artists */}
             <div className="flex flex-col sm:flex-row sm:items-end gap-5 mb-6">
-              <div className="w-40 h-40 rounded-xl overflow-hidden flex-shrink-0 flex items-center justify-center"
-                style={{
-                  background: 'linear-gradient(135deg, rgba(167,139,250,0.16) 0%, rgba(30,20,55,0.9) 100%)',
-                  border: '1px solid rgba(167,139,250,0.22)',
-                  boxShadow: '0 8px 28px rgba(0,0,0,0.5)',
-                }}>
-                {selectedPlaylist.cover_image_url
-                  ? <img src={selectedPlaylist.cover_image_url} alt="" className="w-full h-full object-cover" />
-                  : <Music className="w-10 h-10 text-purple-300/25" />}
+              {/* Artwork with half a record sliding out from behind it while
+                  this playlist is playing. Same VinylRecord component the
+                  mini player and For You use, not a copy: it already handles
+                  the spin, the grooves and putting the current track's
+                  artwork on the centre label, and a second implementation
+                  would drift from it.
+
+                  Clipped to its left half by the overflow-hidden wrapper, so
+                  it reads as a record sitting in a sleeve. Hidden on small
+                  screens, where there is no room beside the cover. */}
+              <div className="relative flex-shrink-0 flex items-center">
+                <div className="w-56 h-56 rounded-xl overflow-hidden flex items-center justify-center relative z-10"
+                  style={{
+                    background: 'linear-gradient(135deg, rgba(167,139,250,0.16) 0%, rgba(30,20,55,0.9) 100%)',
+                    border: '1px solid rgba(167,139,250,0.22)',
+                    boxShadow: '0 8px 28px rgba(0,0,0,0.5)',
+                  }}>
+                  {selectedPlaylist.cover_image_url
+                    ? <img src={selectedPlaylist.cover_image_url} alt="" className="w-full h-full object-cover" />
+                    : <Music className="w-14 h-14 text-purple-300/25" />}
+                </div>
+
+                {/* tracks are loaded for the open playlist, so currentTrack
+                    already belongs to it. No playlist comparison needed. */}
+                {currentTrack && (
+                  <div className="hidden sm:block absolute left-full top-1/2 -translate-y-1/2 h-56 w-28 overflow-hidden pointer-events-none">
+                    <div className="-ml-28">
+                      <VinylRecord
+                        coverUrl={currentTrack.cover_artwork_url}
+                        isPlaying={isPlaying}
+                        size={224}
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="min-w-0 flex-1">
@@ -890,6 +920,11 @@ export default function RetailPlayerPage() {
             </div>
 
             <div className="p-2">
+              <button onClick={() => { setShowAccount(false); setShowReferrals(true); }}
+                className="w-full flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-white/[0.05] transition text-left">
+                <TrendingUp className="w-4 h-4 text-white/35 flex-shrink-0" />
+                <span className="text-sm text-white/70">Refer another venue</span>
+              </button>
               <button onClick={() => { setShowAccount(false); navigate('/retail/terms'); }}
                 className="w-full flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-white/[0.05] transition text-left">
                 <FileText className="w-4 h-4 text-white/35 flex-shrink-0" />
@@ -909,6 +944,10 @@ export default function RetailPlayerPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {showReferrals && (
+        <RetailReferrals venue={venue} user={user} onClose={() => setShowReferrals(false)} />
       )}
 
       {showComments && selectedPlaylist && (

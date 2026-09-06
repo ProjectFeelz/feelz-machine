@@ -275,7 +275,7 @@ export default function AppRouter() {
                 </PageTitle>
               } />
               <Route path="/schoolsessions/vote" element={
-                <PageTitle title="Vote — School Sessions">
+                <PageTitle title="Vote: School Sessions">
                   <SchoolSessionsVotePage />
                 </PageTitle>
               } />
@@ -292,7 +292,7 @@ export default function AppRouter() {
               <Route path="/retail/terms" element={<RetailTermsPage />} />
               <Route path="/retail/privacy" element={<RetailPrivacyPage />} />
               <Route path="/schoolsessions/terms" element={
-                <PageTitle title="School Sessions — Terms">
+                <PageTitle title="School Sessions: Terms">
                   <SchoolSessionsTermsPage />
                 </PageTitle>
               } />

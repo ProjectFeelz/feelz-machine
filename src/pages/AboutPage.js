@@ -6,7 +6,7 @@ import { Lock, Globe, ChevronRight } from 'lucide-react';
 const features = [
   { emoji: '🎵', title: 'Upload & Stream',   desc: 'Upload tracks, create albums, and let fans stream instantly from anywhere.' },
   { emoji: '💰', title: 'Sell Downloads',    desc: 'Set your own prices. Fans pay via PayPal and get instant high-quality downloads.' },
-  { emoji: '🤝', title: 'Collaborations',    desc: 'Invite collabs, set royalty splits, and manage credits — all built in.' },
+  { emoji: '🤝', title: 'Collaborations',    desc: 'Invite collabs, set royalty splits, and manage credits, all built in.' },
   { emoji: '📊', title: 'Real Analytics',    desc: 'Streams, downloads, followers, engagement. Know how your music performs.' },
   { emoji: '🎨', title: 'Custom Profile',    desc: 'Build a branded artist page with your own colors, fonts, and themes.' },
   { emoji: '📣', title: 'Community Feed',    desc: 'Post updates, embed YouTube videos, connect directly with your fanbase.' },
@@ -101,7 +101,7 @@ export default function AboutPage() {
           <span style={{ color: 'rgba(255,255,255,0.25)' }}>No middlemen.</span>
         </h1>
         <p style={{ fontSize: 15, color: 'rgba(255,255,255,0.4)', lineHeight: 1.75, maxWidth: 480, margin: '0 auto 32px' }}>
-          Feelz Machine is built for independent artists who want full control of their music —
+          Feelz Machine is built for independent artists who want full control of their music:
           upload, stream, sell, and connect with fans directly.
         </p>
         <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>

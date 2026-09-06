@@ -22,6 +22,10 @@ import { useEffect } from 'react';
 
 const MAIN_MANIFEST   = '/manifest.json';
 const RETAIL_MANIFEST = '/retail-manifest.json';
+// There is no retail favicon.ico, but the PNG icons exist and every current
+// browser accepts a PNG favicon. Using the 192 avoids shipping another asset
+// just to have an .ico.
+const RETAIL_FAVICON  = '/retail-icon-192.png';
 
 export default function useRetailManifest() {
   useEffect(() => {
@@ -44,7 +48,13 @@ export default function useRetailManifest() {
 
     const appleIcon = document.querySelector('link[rel="apple-touch-icon"]');
     const previousAppleIcon = appleIcon?.getAttribute('href');
-    if (appleIcon) appleIcon.setAttribute('href', '/retail-icon-192.png');
+    if (appleIcon) appleIcon.setAttribute('href', RETAIL_FAVICON);
+
+    // Browser tab icon. Retail was showing the Feelz Machine mark, so an
+    // open retail tab was indistinguishable from the main app.
+    const favicon = document.querySelector('link[rel="icon"]');
+    const previousFavicon = favicon?.getAttribute('href');
+    if (favicon) favicon.setAttribute('href', RETAIL_FAVICON);
 
     return () => {
       // Restore on the way out, so navigating from retail back into the main
@@ -52,6 +62,7 @@ export default function useRetailManifest() {
       link.setAttribute('href', previous || MAIN_MANIFEST);
       if (previousAppleTitle) appleTitle.setAttribute('content', previousAppleTitle);
       if (appleIcon && previousAppleIcon) appleIcon.setAttribute('href', previousAppleIcon);
+      if (favicon && previousFavicon) favicon.setAttribute('href', previousFavicon);
     };
   }, []);
 }
