@@ -1285,7 +1285,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
       {/* BANNER
           Shorter on desktop. At 220px the banner plus the centred avatar
           pushed the music below the fold on every laptop. */}
-      <div className="relative w-full h-[220px] lg:h-[150px]">
+      <div className="relative w-full h-[220px] lg:h-[260px]">
         {artist.banner_image_url || theme?.banner_image_url ? (
           <img src={artist.banner_image_url || theme?.banner_image_url} alt="" className="absolute inset-0 w-full h-full object-cover" />
         ) : (
@@ -1312,7 +1312,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
         {/* Centred on mobile as before. On desktop it moves hard left and
             grows, so the name and controls sit beside it rather than under
             it, matching the large-image-left layout used in Library. */}
-        <div className="absolute -bottom-16 left-1/2 -translate-x-1/2 lg:left-8 lg:translate-x-0 lg:-bottom-20 z-10">
+        <div className="absolute -bottom-16 left-1/2 -translate-x-1/2 lg:left-8 lg:translate-x-0 lg:bottom-6 z-10">
           {/* Story ring — clickable if artist has active stories */}
           <div
             className="relative"
@@ -1357,7 +1357,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
           the whole block shifts right of the avatar and left-aligns, which
           is what puts the name, stats and buttons beside the image instead
           of stacked under it. */}
-      <div className="px-6 pt-24 flex flex-col items-center text-center lg:pt-6 lg:pl-60 lg:items-start lg:text-left">
+      <div className="px-6 pt-24 flex flex-col items-center text-center lg:pt-0 lg:-mt-40 lg:pl-64 lg:items-start lg:text-left lg:relative lg:z-20">
         <div className="flex flex-col items-center lg:items-start mb-1">
           <div className="flex items-center space-x-2">
             <h1 className="text-3xl font-bold" style={{ fontFamily: `"${headingFont}", sans-serif`, color: textColor }}>{artist.artist_name}</h1>
@@ -1639,7 +1639,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
               desktop copy would be two things to keep in step.
               overflow-x-auto also opts this into the global wheel handler in
               src/index.js, so a mouse wheel scrolls it horizontally. */}
-          <div className="space-y-1 lg:space-y-0 lg:grid lg:grid-flow-col lg:grid-rows-5 lg:auto-cols-[minmax(340px,1fr)] lg:gap-x-6 lg:gap-y-1 lg:overflow-x-auto lg:pb-3">
+          <div className="space-y-1 lg:space-y-0 lg:flex lg:gap-4 lg:overflow-x-auto lg:pb-3 [&>*]:lg:w-[340px] [&>*]:lg:flex-shrink-0">
             {visibleTracks.map((track, i) => {
               const isActive = currentTrack?.id === track.id;
               const isTrackPlaying = isActive && isPlaying;

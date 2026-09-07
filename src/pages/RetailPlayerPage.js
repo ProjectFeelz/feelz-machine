@@ -781,7 +781,7 @@ export default function RetailPlayerPage() {
                   Clipped to its left half by the overflow-hidden wrapper, so
                   it reads as a record sitting in a sleeve. Hidden on small
                   screens, where there is no room beside the cover. */}
-              <div className="relative flex-shrink-0 flex items-center">
+              <div className="relative flex-shrink-0 flex items-center pr-24">
                 <div className="w-56 h-56 rounded-xl overflow-hidden flex items-center justify-center relative z-10"
                   style={{
                     background: 'linear-gradient(135deg, rgba(167,139,250,0.16) 0%, rgba(30,20,55,0.9) 100%)',
@@ -793,11 +793,15 @@ export default function RetailPlayerPage() {
                     : <Music className="w-14 h-14 text-purple-300/25" />}
                 </div>
 
-                {/* tracks are loaded for the open playlist, so currentTrack
-                    already belongs to it. No playlist comparison needed. */}
+                {/* The record peeks out from BEHIND the cover, not beside it.
+                    The first attempt sat absolutely at left-full, outside the
+                    layout, so it overlapped the title and description. Now it
+                    is clipped to its right half and pushed under the artwork
+                    with a negative margin, so the sleeve hides the rest and
+                    nothing downstream moves. */}
                 {currentTrack && (
-                  <div className="hidden sm:block absolute left-full top-1/2 -translate-y-1/2 h-56 w-28 overflow-hidden pointer-events-none">
-                    <div className="-ml-28">
+                  <div className="hidden sm:block h-56 w-24 overflow-hidden pointer-events-none -ml-24 relative z-0">
+                    <div className="absolute right-0 top-0">
                       <VinylRecord
                         coverUrl={currentTrack.cover_artwork_url}
                         isPlaying={isPlaying}

@@ -218,7 +218,7 @@ export default function SchoolSessionsPage() {
         <meta name="twitter:description" content={pageDesc} />
         <meta name="twitter:image" content={`${BASE_URL}/og-default.png`} />
       </Helmet>
-      <div className="max-w-lg lg:max-w-3xl mx-auto px-6 lg:px-10 pt-14 lg:pt-20 pb-24 space-y-10 lg:space-y-14">
+      <div className="max-w-lg lg:max-w-6xl mx-auto px-6 lg:px-10 pt-14 lg:pt-20 pb-24 space-y-10 lg:space-y-14">
 
         {/* Brand */}
         <div className="flex items-center space-x-2.5">
