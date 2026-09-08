@@ -588,7 +588,9 @@ export function PlayerProvider({ children }) {
     const audio = audioRef.current;
     if (currentTrack?.id === track.id) {
       if (isPlaying) { audio.pause(); } else { audio.play().catch(console.error); }
-      setIsMinimized(false);
+      // Does NOT un-minimise. Tapping the playing track is play/pause, and
+      // forcing the full player back open made it impossible to keep it
+      // minimised.
       return;
     }
     flushListeningEvent('track_change');
@@ -618,7 +620,10 @@ export function PlayerProvider({ children }) {
     setCurrentTrack(track);
     preloadCover(track);
     setCurrentTime(0);
-    setIsMinimized(false);
+    // Deliberately not setIsMinimized(false). This fired on every track
+    // change, so the panel reopened itself as soon as the next song began
+    // and the minimise button looked broken. The mini player's own tap
+    // handler is the explicit way back in.
     if (trackList.length > 0) {
       setQueue(trackList);
       const idx = trackList.findIndex(t => t.id === track.id);

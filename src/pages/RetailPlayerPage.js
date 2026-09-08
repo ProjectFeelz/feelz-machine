@@ -307,8 +307,13 @@ export default function RetailPlayerPage() {
       .select('position, track:tracks(id, title, file_url, cover_artwork_url, artist:artists(artist_name))')
       .eq('playlist_id', playlist.id)
       .order('position');
-    setTracks((data || []).map(d => d.track).filter(Boolean));
+    const loaded = (data || []).map(d => d.track).filter(Boolean);
+    setTracks(loaded);
     setLoadingTracks(false);
+    // Picking a vibe is the instruction to play it. Previously this loaded
+    // the tracks and stopped, so the first track never started until you
+    // clicked a different one, which looked like the first track was broken.
+    if (loaded.length > 0) setIsPlaying(true);
   };
 
   // These rows are what calculate_retail_payout() divides the artist pool
@@ -766,7 +771,10 @@ export default function RetailPlayerPage() {
           </>
         ) : (
           <>
-            <button onClick={() => { setSelectedPlaylist(null); setIsPlaying(false); audioRef.current?.pause(); }}
+            {/* Back is navigation, not a stop button. This used to pause the
+                audio, so a venue browsing other vibes silenced their own
+                room. The player bar stays up and keeps playing. */}
+            <button onClick={() => setSelectedPlaylist(null)}
               className="text-xs text-white/40 mb-4 hover:text-white/70 transition">&larr; All playlists</button>
 
             {/* Album-style header: cover, mood, description, featured artists */}

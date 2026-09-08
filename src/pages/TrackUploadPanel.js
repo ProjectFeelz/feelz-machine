@@ -825,6 +825,14 @@ function AddTrackToAlbum({
         showMessage('info', 'Uploading cover artwork…');
         coverUrl = await uploadFile(trackForm.cover_file, 'covers/');
       }
+      // tracks has a check constraint, require_artwork_to_publish, refusing
+      // any published row with no cover_artwork_url. Without this check the
+      // insert fails with 23514 and the artist sees nothing useful.
+      if (trackForm.is_published && !coverUrl) {
+        setUploading(false);
+        showMessage('error', 'This track needs cover artwork before it can be published. Add artwork, or untick Published to save it as a draft.');
+        return;
+      }
 
       showMessage('info', 'Saving track…');
       const { data, error } = await supabase.from('tracks').insert([{
@@ -1005,7 +1013,7 @@ function AddTrackToAlbum({
             onChange={(e) => {
               const f = e.target.files[0];
               if (f && f.size > 500 * 1024 * 1024) { showMessage('error', 'File too large! Max 500MB'); return; }
-              setTrackForm({ ...trackForm, audio_file: f });
+              setTrackForm(prev => ({ ...prev, audio_file: f }));
             }}
             className="w-full text-sm text-white/60 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:bg-white/[0.06] file:text-white/60 file:text-sm hover:file:bg-white/[0.1]" />
           {trackForm.audio_file && (
@@ -1022,7 +1030,7 @@ function AddTrackToAlbum({
         <div>
           <FieldLabel>Cover Artwork (.jpg, .png)</FieldLabel>
           <input type="file" accept=".jpg,.jpeg,.png,.webp"
-            onChange={(e) => setTrackForm({ ...trackForm, cover_file: e.target.files[0] })}
+            onChange={(e) => setTrackForm(prev => ({ ...prev, cover_file: e.target.files[0] }))}
             className="w-full text-sm text-white/60 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:bg-white/[0.06] file:text-white/60 file:text-sm hover:file:bg-white/[0.1]" />
         </div>
       </div>
@@ -1174,6 +1182,9 @@ export default function TrackUploadPanel() {
   const [albumCollaborators, setAlbumCollaborators] = useState([]);
   const [albumTrackQueue, setAlbumTrackQueue]   = useState([]);
   const [sessionAlbumId, setSessionAlbumId]     = useState(null);
+  // The album's cover, so its tracks can inherit it rather than being
+  // inserted with null and refused by require_artwork_to_publish.
+  const albumCoverUrlRef = React.useRef(null);
   const [addingAnother, setAddingAnother]       = useState(false);
 
   // Edit state
@@ -1408,6 +1419,19 @@ export default function TrackUploadPanel() {
       if (trackForm.cover_file) {
         showMessage('info', 'Uploading cover artwork…');
         coverUrl = await uploadFile(trackForm.cover_file, 'covers/');
+      }
+      // Album tracks inherit the album's artwork, which is what a track on an
+      // album should show anyway.
+      if (!coverUrl && isAlbumRelease) coverUrl = albumCoverUrlRef.current || null;
+
+      // tracks has a check constraint, require_artwork_to_publish, that
+      // refuses any published row with no cover_artwork_url. Only the first
+      // album track was validated, so later tracks hit 23514 and the UI
+      // showed nothing at all. Say it plainly instead.
+      if (trackForm.is_published && !coverUrl) {
+        setUploading(false);
+        showMessage('error', 'This track needs cover artwork before it can be published. Add artwork, or untick Published to save it as a draft.');
+        return;
       }
 
       showMessage('info', 'Saving track…');
@@ -1858,7 +1882,7 @@ export default function TrackUploadPanel() {
               {(isBeatmaker ? ['beat'] : ['single', 'ep', 'album', 'mixtape', 'live', 'compilation']).map(type => (
                 <button key={type} type="button"
                   onClick={() => {
-                    setRelease({ ...release, release_type: type });
+                    setRelease(prev => ({ ...prev, release_type: type }));
                     if (sessionAlbumId && type !== release.release_type) {
                       setSessionAlbumId(null); setAlbumTrackQueue([]);
                     }
@@ -1870,6 +1894,16 @@ export default function TrackUploadPanel() {
                 </button>
               ))}
             </div>
+            {/* Said up front. This requirement existed but was only shown
+                after the first track had been uploaded, so the first anyone
+                heard of it was being refused at the end. */}
+            {['ep', 'album', 'mixtape', 'live', 'compilation'].includes(release.release_type) && (
+              <p className="text-xs text-white/40">
+                An {release.release_type} needs at least 3 tracks, uploaded one at a time.
+                Cover artwork is required, and each track will use the {release.release_type} artwork
+                unless you give it its own.
+              </p>
+            )}
           </div>
 
           {/* Step 2: Album details */}
@@ -1903,7 +1937,7 @@ export default function TrackUploadPanel() {
                     <span className="text-white/20 font-normal ml-1">(required, shown on home page)</span>
                   </FieldLabel>
                   <input type="file" accept=".jpg,.jpeg,.png,.webp"
-                    onChange={(e) => setRelease({ ...release, album_cover_file: e.target.files[0] })}
+                    onChange={(e) => setRelease(prev => ({ ...prev, album_cover_file: e.target.files[0] }))}
                     className={`w-full text-sm text-white/60 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:bg-white/[0.06] file:text-white/60 file:text-sm hover:file:bg-white/[0.1] rounded-lg transition ${
                       !release.album_cover_file ? 'ring-1 ring-red-500/40' : 'ring-1 ring-green-500/30'
                     }`} />
@@ -2106,7 +2140,7 @@ export default function TrackUploadPanel() {
                 <div>
                   <FieldLabel>Cover Artwork (.jpg, .png)</FieldLabel>
                   <input type="file" accept=".jpg,.jpeg,.png,.webp"
-                    onChange={(e) => setTrackForm({ ...trackForm, cover_file: e.target.files[0] })}
+                    onChange={(e) => setTrackForm(prev => ({ ...prev, cover_file: e.target.files[0] }))}
                     className="w-full text-sm text-white/60 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:bg-white/[0.06] file:text-white/60 file:text-sm hover:file:bg-white/[0.1]" />
                 </div>
               </div>
