@@ -1466,16 +1466,16 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
           {user && user.id !== artist?.user_id && (
             <TipButton artist={artist} />
           )}
+          {/* Moved inside the pill row. It used to sit on its own line
+              underneath, which is what broke the straight line of controls
+              and left "Set a tip goal" floating alone under the name. */}
+          <TipGoal
+            artistId={artist.id}
+            primaryColor={primaryColor}
+            textColor={textColor}
+            isOwner={user?.id === artist.user_id}
+          />
         </div>
-
-
-        {/* Tip Goal — full width below pills */}
-        <TipGoal
-          artistId={artist.id}
-          primaryColor={primaryColor}
-          textColor={textColor}
-          isOwner={user?.id === artist.user_id}
-        />
 
 
 
@@ -1528,13 +1528,19 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
             </div>
           </div>
         )}
+        {/* max-w-sm was forcing the bio into a narrow column in the middle of
+            a wide banner, which is the clumping Steve flagged. Wide on
+            desktop, still readable rather than edge to edge. */}
         {artist.bio && (
-          <p className="text-sm leading-relaxed mb-6 max-w-sm" style={{ color: `${textColor}90`, fontFamily: `"${bodyFont}", sans-serif` }}>
+          <p className="text-sm leading-relaxed mb-6 max-w-sm lg:max-w-3xl" style={{ color: `${textColor}90`, fontFamily: `"${bodyFont}", sans-serif` }}>
             {artist.bio}
           </p>
         )}
+        {/* On desktop these sit in the empty top right of the banner, which is
+            where Steve drew them and is otherwise dead space. Below lg they
+            stay in the normal flow, since the banner has no room. */}
         {socialEntries.length > 0 && (
-          <div className="flex items-center space-x-3 mb-8">
+          <div className="flex items-center space-x-3 mb-8 lg:absolute lg:right-8 lg:top-8 lg:mb-0 lg:z-30">
             {socialEntries.map(([platform, value]) => {
               const Icon = SOCIAL_ICONS[platform] || Globe;
               const prefix = SOCIAL_URLS[platform] || '';
@@ -1629,128 +1635,47 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
 
 
       {tracks.length > 0 && (
-        <div className="px-6 mb-8">
-          <h2 className="text-lg font-bold mb-3 text-white" style={{ fontFamily: `"${headingFont}", sans-serif`, opacity: 1 }}>{isBeatmakerProfile ? "Beats" : "Popular"}</h2>
-          {/* Mobile keeps the plain vertical list. On desktop the same rows
-              flow into columns of five that scroll sideways, so the whole
-              catalogue is reachable without pushing everything else down
-              the page. Laid out rather than re-rendered: the row markup
-              carries play state, menus and highlight handling, and a second
-              desktop copy would be two things to keep in step.
-              overflow-x-auto also opts this into the global wheel handler in
-              src/index.js, so a mouse wheel scrolls it horizontally. */}
-          <div className="space-y-1 lg:space-y-0 lg:flex lg:gap-4 lg:overflow-x-auto lg:pb-3 [&>*]:lg:w-[340px] [&>*]:lg:flex-shrink-0">
-            {visibleTracks.map((track, i) => {
-              const isActive = currentTrack?.id === track.id;
-              const isTrackPlaying = isActive && isPlaying;
-              return (
-                <React.Fragment key={track.id}>
-                  <div id={`track-${track.id}`} onClick={() => isBeatmakerProfile && track.is_beat ? navigate(`/beat/${track.slug}`) : handlePlayTrack(track)}
-                    className="w-full flex items-center space-x-3 p-2.5 rounded-lg transition-all cursor-pointer"
-                    style={{
-                      backgroundColor: isActive ? `${secondaryColor}15` : highlightedTrackId === track.id ? `${secondaryColor}25` : 'transparent',
-                      outline: highlightedTrackId === track.id ? `1px solid ${secondaryColor}50` : 'none',
-                    }}>
-                    {/* Track number — always left-aligned */}
-                    <div className="w-6 flex items-center justify-start flex-shrink-0">
-                      {isActive ? (
-                        isTrackPlaying ? (
-                          <div className="flex items-end space-x-0.5 h-4">
-                            <div className="w-0.5 rounded-full animate-pulse" style={{ height: '100%', backgroundColor: secondaryColor }} />
-                            <div className="w-0.5 rounded-full animate-pulse" style={{ height: '60%', backgroundColor: secondaryColor, animationDelay: '0.15s' }} />
-                            <div className="w-0.5 rounded-full animate-pulse" style={{ height: '80%', backgroundColor: secondaryColor, animationDelay: '0.3s' }} />
-                          </div>
-                        ) : <Pause className="w-4 h-4" style={{ color: secondaryColor }} />
-                      ) : (
-                        <span className="text-sm" style={{ color: `${textColor}30` }}>{i + 1}</span>
-                      )}
-                    </div>
-                    {/* Bigger artwork: w-12 h-12 */}
-                    <div className="w-12 h-12 rounded-md overflow-hidden flex-shrink-0" style={{ backgroundColor: `${textColor}08` }}>
-                      {(track.cover_artwork_url || track.albums?.cover_artwork_url) ? (
-                        <img src={track.cover_artwork_url || track.albums?.cover_artwork_url} alt="" className="w-full h-full object-cover" />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center" style={{ background: `linear-gradient(135deg, ${secondaryColor}30, ${accentColor}15)` }}>
-                          <Music className="w-4 h-4" style={{ color: `${textColor}20` }} />
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0 text-left">
-                      <p className="text-sm font-medium truncate" style={{ color: isActive ? secondaryColor : textColor }}>
-                        {track.title}
-                        {track.is_preorder && track.release_date && new Date(track.release_date) > new Date() && (
-                          <span className="ml-1.5 text-[9px] font-bold px-1 py-0.5 rounded-full bg-yellow-400/20 text-yellow-300 border border-yellow-400/30 uppercase tracking-wide align-middle">Pre</span>
-                        )}
-                        {track.created_at && (Date.now() - new Date(track.created_at).getTime()) < 7 * 24 * 60 * 60 * 1000 && (
-                          <span className="ml-1.5 text-[9px] font-bold px-1 py-0.5 rounded-full uppercase tracking-wide align-middle" style={{ background: `${accentColor}25`, color: accentColor, border: `1px solid ${accentColor}40` }}>New</span>
-                        )}
-                      </p>
-                      <div className="flex items-center space-x-2">
-                        {track.is_explicit && (
-                          <span className="text-[9px] font-bold px-1 py-0.5 rounded" style={{ backgroundColor: `${textColor}15`, color: `${textColor}50` }}>E</span>
-                        )}
-                        {isBeatmakerProfile && track.is_beat ? (
-                          <div className="flex items-center gap-1 flex-wrap mt-0.5">
-                            {track.bpm && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded" style={{ background: `${accentColor}20`, color: accentColor }}>{track.bpm} BPM</span>}
-                            {track.beat_key && <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/[0.06] text-white/40">{track.beat_key} {track.beat_scale || ''}</span>}
-                            {track.download_price > 0 && <span className="text-[10px] font-bold" style={{ color: accentColor }}>from ${track.download_price}</span>}
-                          </div>
-                        ) : (
-                          <span className="text-xs truncate" style={{ color: `${textColor}40` }}>{formatNumber(track.stream_count || 0)} plays</span>
-                        )}
-                      </div>
-                    </div>
-                    {track.duration && <span className="text-xs flex-shrink-0" style={{ color: `${textColor}30` }}>{formatDuration(track.duration)}</span>}
-                    {/* Pre-save button for upcoming releases */}
-                    {track.is_preorder && track.release_date && new Date(track.release_date) > new Date() && user && (
-                      <PreSaveButton
-                        track={track}
-                        textColor={textColor}
-                        accentColor={primaryColor}
-                      />
-                    )}
-                    {/* 3-dot menu — like and queue removed for cleaner mobile layout */}
-                    <button onClick={(e) => { e.stopPropagation(); navigate(track.is_beat ? `/beat/${track.slug}` : `/track/${track.slug}`); }}
-                      className="flex-shrink-0 p-1.5 rounded-lg transition-all active:scale-95"
-                      style={{ color: `${textColor}30` }} title={track.is_beat ? 'Buy Beat' : 'Track Info'}>
-                      <Info className="w-4 h-4" />
-                    </button>
-                    <button onClick={(e) => { e.stopPropagation(); setActionSheetTrack(track); }}
-                      className="flex-shrink-0 p-1.5 rounded-lg transition-all active:scale-95"
-                      style={{ color: `${textColor}30` }} title="More">
-                      <MoreHorizontal className="w-4 h-4" />
-                    </button>
-                    {/* Icon-only download button */}
-                    {track.is_downloadable && (
-                      purchasedTracks[track.id] ? (
-                        <button onClick={(e) => { e.stopPropagation(); triggerDownload(track); }} disabled={downloading === track.id}
-                          className="flex-shrink-0 p-1.5 rounded-lg transition-all active:scale-95 disabled:opacity-50"
-                          style={{ color: secondaryColor }} title="Download">
-                          {downloading === track.id ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
-                        </button>
-                      ) : (
-                        <button onClick={(e) => handleDownload(track, e)} disabled={downloading === track.id}
-                          className="flex-shrink-0 p-1.5 rounded-lg transition-all active:scale-95 disabled:opacity-50"
-                          style={{ color: secondaryColor }} title={getEffectivePrice(track) > 0 ? `$${getEffectivePrice(track)}` : 'Download'}>
-                          {downloading === track.id ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
-                        </button>
-                      )
-                    )}
-                  </div>
-                  <TrackVersions track={track} albumPrice={track.albums?.price || 0}
-                    onPlayVersion={(version) => {
-                      playTrack(
-                        { ...version, artist_name: artist?.artist_name, artist_slug: artist?.slug },
-                        tracks.map(t => ({ ...t, artist_name: artist?.artist_name, artist_slug: artist?.slug }))
-                      );
-                    }}
-                    onPurchaseRequired={(t) => setPurchaseTrack(t)} />
-                </React.Fragment>
-              );
-            })}
+        <div className="mb-8">
+          <h2 className="text-lg font-bold mb-3 px-6 text-white" style={{ fontFamily: `"${headingFont}", sans-serif`, opacity: 1 }}>{isBeatmakerProfile ? "Beats" : "Popular"}</h2>
+
+          {/* Cards in a sideways-scrolling row, matching Recommended For You
+              below. The previous version reused the full track rows and only
+              rearranged them, which kept the three-dot menu, the info button
+              and the download icon: fine in a list, noise in a rail, and it
+              never actually scrolled because the rows would not shrink.
+
+              Rank and play count carry the "popular" meaning that the
+              ordering alone does not. Tapping plays, which is the only
+              action this row needs; everything else stays in the full track
+              pages. */}
+          <div className="flex space-x-3 overflow-x-auto px-6 scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
+            {visibleTracks.map((track, i) => (
+              <button
+                key={track.id}
+                onClick={() => handlePlayTrack(track)}
+                className="flex-shrink-0 w-36 text-left cursor-pointer group"
+              >
+                <div className="relative aspect-square rounded-xl overflow-hidden mb-2" style={{ backgroundColor: `${textColor}08` }}>
+                  {track.cover_artwork_url
+                    ? <img src={track.cover_artwork_url} alt={track.title} className="w-full h-full object-cover" />
+                    : <div className="w-full h-full flex items-center justify-center"><Music className="w-8 h-8" style={{ color: `${textColor}20` }} /></div>}
+                  <span
+                    className="absolute top-1.5 left-1.5 w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-black"
+                    style={{ background: 'rgba(0,0,0,0.6)', color: textColor, backdropFilter: 'blur(4px)' }}
+                  >
+                    {i + 1}
+                  </span>
+                </div>
+                <p className="text-sm font-medium truncate" style={{ color: textColor }}>{track.title}</p>
+                <p className="text-xs truncate" style={{ color: `${textColor}50` }}>
+                  {(track.stream_count || 0).toLocaleString()} plays
+                </p>
+              </button>
+            ))}
           </div>
+
           {tracks.length > 10 && (
-            <p className="mt-3 text-sm" style={{ color: `${textColor}40` }}>
+            <p className="mt-3 px-6 text-sm" style={{ color: `${textColor}40` }}>
               Top 10 of {tracks.length} tracks
             </p>
           )}

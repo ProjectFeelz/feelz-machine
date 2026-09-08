@@ -81,7 +81,7 @@ const BEAT_LICENCES = [
       'Up to 50,000 streams across all platforms',
       'Up to 2,500 paid sales / downloads',
       'Must credit producer (Prod. by [name])',
-      'Non-exclusive — beat may be sold to others',
+      'Non-exclusive, beat may be sold to others',
       'No broadcast or sync rights',
       'Licence period: 2 years',
     ],
@@ -98,7 +98,7 @@ const BEAT_LICENCES = [
       'Unlimited streams',
       'Up to 25,000 paid sales / downloads',
       'Must credit producer (Prod. by [name])',
-      'Non-exclusive — beat may be sold to others',
+      'Non-exclusive, beat may be sold to others',
       'Radio & podcast broadcast rights included',
       'No sync / TV / film rights',
       'Licence period: 5 years',
@@ -115,7 +115,7 @@ const BEAT_LICENCES = [
       'MP3 + WAV + Stems (if provided)',
       'Unlimited streams & sales',
       'Must credit producer (Prod. by [name])',
-      'Non-exclusive — beat may be sold to others',
+      'Non-exclusive, beat may be sold to others',
       'Radio, podcast & sync rights included',
       'Licence period: Lifetime',
     ],
@@ -161,6 +161,19 @@ const BLANK_RELEASE = {
   album_price: '0',
   album_is_published: true,
 };
+
+// Supabase errors carry code, details and hint alongside message, and only
+// message was being shown. A failed upload therefore said something vague
+// while the useful part went nowhere, which is how "it glitched" ends up
+// being the only available bug report.
+function describeError(err) {
+  if (!err) return 'Unknown error';
+  const parts = [err.message || String(err)];
+  if (err.code)    parts.push(`code ${err.code}`);
+  if (err.details) parts.push(err.details);
+  if (err.hint)    parts.push(err.hint);
+  return parts.join(' · ');
+}
 
 function slugify(text) {
   const base = text.toString().toLowerCase().trim()
@@ -305,7 +318,7 @@ function BeatLicenceSelector({ beatEnabled, beatPrices, allowedLicences, onChang
       <FieldLabel>
         <span className="flex items-center space-x-1.5">
           <Disc className="w-3 h-3 text-yellow-400" />
-          <span>Beat Licences <span className="text-white/20">(enable tiers & set prices — buyers choose)</span></span>
+          <span>Beat Licences <span className="text-white/20">(enable tiers & set prices, buyers choose)</span></span>
         </span>
       </FieldLabel>
       <p className="text-[10px] text-white/25 mb-2">Enable any combination. Buyers pick which licence to purchase.</p>
@@ -422,7 +435,7 @@ function StemsUploader({ stems, setStems, uploadFile, showMessage }) {
       <FieldLabel>
         <span className="flex items-center space-x-1.5">
           <Disc className="w-3 h-3 text-blue-400" />
-          <span>Stems / Beat Kit <span className="text-white/20">(optional — zip, wav, flac, aiff)</span></span>
+          <span>Stems / Beat Kit <span className="text-white/20">(optional, zip, wav, flac, aiff)</span></span>
         </span>
       </FieldLabel>
       {stems.length > 0 && (
@@ -631,7 +644,7 @@ function LyricsEditor({ lyrics, onChange, audioFile, audioUrl }) {
           className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none resize-none font-mono leading-relaxed" />
         {rawText.includes('[0') && (
           <p className="text-[10px] text-purple-400 mt-1 flex items-center space-x-1">
-            <Zap className="w-2.5 h-2.5" /><span>LRC timestamps detected — lyrics will sync to audio on every platform</span>
+            <Zap className="w-2.5 h-2.5" /><span>LRC timestamps detected, lyrics will sync to audio on every platform</span>
           </p>
         )}
       </div>
@@ -882,7 +895,10 @@ function AddTrackToAlbum({
       onTrackAdded(data[0]);
 
     } catch (err) {
-      showMessage('error', 'Upload failed: ' + err.message);
+      // Logged as well as shown: the artist gets a readable message, and the
+      // console keeps the full object for whoever diagnoses it afterwards.
+      console.error('[upload] failed:', err);
+      showMessage('error', 'Upload failed: ' + describeError(err));
     }
     setUploading(false);
   };
@@ -948,7 +964,7 @@ function AddTrackToAlbum({
                 onChange={(e) => setTrackForm({ ...trackForm, download_price: e.target.value })} />
             ) : (
               <div className="px-3 py-2.5 bg-white/[0.03] rounded-lg border border-white/[0.06] text-xs text-white/30">
-                Monthly limit reached (2/month on Pro) — upgrade to Premium for unlimited
+                Monthly limit reached (2/month on Pro), upgrade to Premium for unlimited
               </div>
             )}
           </div>
@@ -1039,7 +1055,9 @@ function AddTrackToAlbum({
       <div className="flex flex-wrap gap-4">
         {[
           { key: 'is_published',    label: 'Published' },
-          { key: 'featured',        label: 'Featured', premiumOnly: true },
+          // 'featured' deliberately removed: featuring is editorial and is set
+          // in admin. An artist should not be able to feature themselves on
+          // the home page by toggling a switch on their own upload.
           { key: 'is_explicit',     label: 'Explicit' },
           { key: 'is_downloadable', label: 'Downloadable' },
           { key: 'has_versions',    label: 'Has Versions' },
@@ -1060,13 +1078,8 @@ function AddTrackToAlbum({
             </label>
           )
         ))}
-        <TierGate feature="download_sales" inline>
-          <label className="flex items-center space-x-2 cursor-pointer">
-            <Toggle value={trackForm.is_premium}
-              onChange={() => setTrackForm({ ...trackForm, is_premium: !trackForm.is_premium })} />
-            <span className="text-xs text-white/50">Premium</span>
-          </label>
-        </TierGate>
+        {/* 'Premium' removed alongside Featured, for the same reason: it is a
+            placement decision rather than a property of the track. */}
         <TierGate feature="collaborations" inline>
           <label className="flex items-center space-x-2 cursor-pointer">
             <input type="checkbox"
@@ -1284,7 +1297,16 @@ export default function TrackUploadPanel() {
       is_published:      release.album_is_published,
       price:             parseFloat(release.album_price) || 0,
     }]).select().single();
-    if (error) throw error;
+    if (error) {
+      console.error('[upload] album create failed:', error);
+      // 23505 is the unique constraint on (artist_id, slug). slugify appends a
+      // timestamp so this should not fire, but if it ever does the artist
+      // needs to know it is a name clash and not a lost upload.
+      if (error.code === '23505') {
+        throw new Error('An album with that name already exists on your profile. Try a different title.');
+      }
+      throw error;
+    }
     if (albumCollaborators.length > 0) {
       for (const collab of albumCollaborators) {
         try {
@@ -1548,7 +1570,10 @@ export default function TrackUploadPanel() {
       }
       fetchTracks();
     } catch (err) {
-      showMessage('error', 'Upload failed: ' + err.message);
+      // Logged as well as shown: the artist gets a readable message, and the
+      // console keeps the full object for whoever diagnoses it afterwards.
+      console.error('[upload] failed:', err);
+      showMessage('error', 'Upload failed: ' + describeError(err));
     }
     setUploading(false);
   };
@@ -1724,7 +1749,7 @@ export default function TrackUploadPanel() {
         pitch_note: note.trim() || null,
       });
       if (error) throw error;
-      showMessage('success', 'Pitched — you\'ll see the decision once it\'s reviewed');
+      showMessage('success', 'Pitched, you\'ll see the decision once it\'s reviewed');
       setRetailPitchedIds(prev => [...prev, track.id]);
     } catch (err) { showMessage('error', 'Failed: ' + err.message); }
   };
@@ -1792,7 +1817,7 @@ export default function TrackUploadPanel() {
       {isBeatmaker && (
         <div className="flex items-center space-x-2 px-3 py-2 rounded-xl bg-yellow-500/10 border border-yellow-500/20">
           <span className="text-base">🎛️</span>
-          <p className="text-xs text-yellow-400 font-medium">Beat Maker mode — beat upload selected by default</p>
+          <p className="text-xs text-yellow-400 font-medium">Beat Maker mode, beat upload selected by default</p>
         </div>
       )}
 
@@ -1875,7 +1900,7 @@ export default function TrackUploadPanel() {
                 <div>
                   <FieldLabel>
                     Cover Artwork <span className="text-red-400">*</span>
-                    <span className="text-white/20 font-normal ml-1">(required — shown on home page)</span>
+                    <span className="text-white/20 font-normal ml-1">(required, shown on home page)</span>
                   </FieldLabel>
                   <input type="file" accept=".jpg,.jpeg,.png,.webp"
                     onChange={(e) => setRelease({ ...release, album_cover_file: e.target.files[0] })}
@@ -1949,12 +1974,12 @@ export default function TrackUploadPanel() {
               </button>
               {['ep', 'album', 'mixtape', 'live', 'compilation'].includes(release.release_type) && albumTrackQueue.length < 3 && (
                 <p className="text-xs text-yellow-400/70 text-center">
-                  {release.release_type.toUpperCase()} requires at least 3 tracks — {3 - albumTrackQueue.length} more needed
+                  {release.release_type.toUpperCase()} requires at least 3 tracks, {3 - albumTrackQueue.length} more needed
                 </p>
               )}
               <button type="button" onClick={finishAlbum}
                 className="w-full py-3 bg-white text-black font-semibold rounded-lg hover:bg-white/90 transition">
-                Done — Publish {release.release_type.toUpperCase()}
+                Done, Publish {release.release_type.toUpperCase()}
               </button>
             </div>
           ) : (
@@ -2022,7 +2047,7 @@ export default function TrackUploadPanel() {
                         onChange={(e) => setTrackForm({ ...trackForm, download_price: e.target.value })} />
                     ) : (
                       <div className="px-3 py-2.5 bg-white/[0.03] rounded-lg border border-white/[0.06] text-xs text-white/30">
-                        Monthly limit reached (2/month on Pro) — upgrade to Premium for unlimited
+                        Monthly limit reached (2/month on Pro), upgrade to Premium for unlimited
                       </div>
                     )}
                   </div>
@@ -2119,7 +2144,7 @@ export default function TrackUploadPanel() {
                       className="w-full p-3 rounded-xl border border-white/[0.06] bg-white/[0.02] flex items-center space-x-3 hover:bg-white/[0.04] hover:border-purple-500/20 transition text-left group">
                       <span className="text-xl">🔒</span>
                       <div className="flex-1">
-                        <p className="text-xs font-semibold text-white/50 group-hover:text-white/70 transition">Stem uploads — Pro & Premium</p>
+                        <p className="text-xs font-semibold text-white/50 group-hover:text-white/70 transition">Stem uploads, Pro & Premium</p>
                         <p className="text-[10px] text-white/25 mt-0.5 group-hover:text-purple-400/60 transition">Tap to upgrade →</p>
                       </div>
                     </button>
@@ -2160,7 +2185,7 @@ export default function TrackUploadPanel() {
               <div className="flex flex-wrap gap-4">
                 {[
                   { key: 'is_published',    label: 'Published' },
-                  { key: 'featured',        label: 'Featured', premiumOnly: true },
+                  // Featured removed: editorial, set in admin.
                   { key: 'is_explicit',     label: 'Explicit' },
                   { key: 'is_downloadable', label: 'Downloadable' },
                   { key: 'has_versions',    label: 'Has Versions' },
@@ -2245,7 +2270,7 @@ export default function TrackUploadPanel() {
               {addingAnother && (
                 <button type="button" onClick={() => setAddingAnother(false)}
                   className="w-full py-2 text-xs text-white/30 hover:text-white/50 transition">
-                  Cancel — I'm done adding tracks
+                  Cancel, I'm done adding tracks
                 </button>
               )}
             </div>
@@ -2443,7 +2468,7 @@ export default function TrackUploadPanel() {
                             <div className="flex items-center justify-between mb-2">
                               <p className="text-xs font-semibold text-white/60 uppercase tracking-wide flex items-center space-x-1.5">
                                 <Upload className="w-3.5 h-3.5" />
-                                <span>New Track — Track {albumTracks.length + 1}</span>
+                                <span>New Track, Track {albumTracks.length + 1}</span>
                               </p>
                               <button type="button" onClick={() => setShowAddTrackToAlbum(false)}
                                 className="p-1 rounded hover:bg-white/[0.06] transition">
@@ -2490,7 +2515,7 @@ export default function TrackUploadPanel() {
                                   : <div className="w-10 h-10 rounded-lg bg-white/[0.06] flex items-center justify-center flex-shrink-0"><Music className="w-4 h-4 text-white/20" /></div>}
                                 <div className="flex-1 min-w-0">
                                   <div className="flex items-center space-x-1.5">
-                                    <span className="text-[10px] text-white/25">#{track.track_number || '—'}</span>
+                                    <span className="text-[10px] text-white/25">#{track.track_number || '--'}</span>
                                     <p className="text-sm font-medium text-white truncate">{track.title}</p>
                                   </div>
                                   <div className="flex gap-1.5 mt-0.5">
@@ -2560,10 +2585,12 @@ export default function TrackUploadPanel() {
                                 <div className="flex flex-wrap gap-3">
                                   {[
                                     { key: 'is_published',    label: 'Published' },
-                                    { key: 'featured',        label: 'Featured' },
+                                    // Featured and Premium removed: both are
+                                    // placement decisions made in admin, and
+                                    // leaving them here let an artist feature
+                                    // themselves after upload by editing.
                                     { key: 'is_explicit',     label: 'Explicit' },
                                     { key: 'is_downloadable', label: 'Downloadable' },
-                                    { key: 'is_premium',      label: 'Premium' },
                                   ].map(({ key, label }) => (
                                     <label key={key} className="flex items-center space-x-1.5 text-xs text-white/40 cursor-pointer">
                                       <input type="checkbox" checked={editForm[key] || false}
@@ -2751,7 +2778,7 @@ export default function TrackUploadPanel() {
                                   onChange={(e) => setEditForm({ ...editForm, download_price: e.target.value })} />
                               ) : (
                                 <div className="px-3 py-2.5 bg-white/[0.03] rounded-lg border border-white/[0.06] text-xs text-white/30">
-                                  Monthly limit reached — upgrade to Premium for unlimited
+                                  Monthly limit reached, upgrade to Premium for unlimited
                                 </div>
                               )}
                             </div>
@@ -2792,10 +2819,9 @@ export default function TrackUploadPanel() {
                           <div className="flex flex-wrap gap-3">
                             {[
                               { key: 'is_published',    label: 'Published' },
-                              { key: 'featured',        label: 'Featured' },
+                              // Featured and Premium removed: editorial, admin only.
                               { key: 'is_explicit',     label: 'Explicit' },
                               { key: 'is_downloadable', label: 'Downloadable' },
-                              { key: 'is_premium',      label: 'Premium' },
                               { key: 'has_versions',    label: 'Has Versions' },
                               { key: 'is_preorder',     label: 'Pre-order', premiumOnly: true },
                             ].map(({ key, label, premiumOnly, disabled }) => (
