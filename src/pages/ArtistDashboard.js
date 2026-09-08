@@ -60,7 +60,7 @@ function MemoTabPanel({ artist, memos, fetchMemos, deleteMemo }) {
       <div>
         <h2 className="text-base font-semibold text-white mb-1">Voice Memos</h2>
         <p className="text-sm text-white/40 mb-4">
-          Record short audio updates for your followers — thoughts, teasers, behind-the-scenes.
+          Record short audio updates for your followers, thoughts, teasers, behind-the-scenes.
           They'll appear on your artist profile.
         </p>
         <VoiceMemoUpload artistId={artist?.id} onUploaded={fetchMemos} />
@@ -148,7 +148,7 @@ function ExportButton({ artist, trackId, exportType, days = 30, label, small = f
         <Download className="w-3.5 h-3.5" />
         <span>
           {state === 'loading' ? 'Exporting…'
-            : state === 'error' ? 'Error — retry'
+            : state === 'error' ? 'Error, retry'
             : state === 'done' && info?.count === 0 ? 'No data'
             : label}
         </span>
@@ -219,7 +219,7 @@ function GrowthSnapshot({ artist }) {
                     : 'text-red-400 bg-red-500/10'
         }`}>
           {flat ? <Minus className="w-2.5 h-2.5" /> : up ? <ArrowUp className="w-2.5 h-2.5" /> : <ArrowDown className="w-2.5 h-2.5" />}
-          <span>{flat ? '—' : `${Math.abs(pct)}%`}</span>
+          <span>{flat ? '--' : `${Math.abs(pct)}%`}</span>
         </div>
       </div>
     );
@@ -386,7 +386,7 @@ function EarningsSection({ artist, sectionRef, downloadsRef, highlight }) {
           )}
 
           {tips.length === 0 && downloads.length === 0 && failedPayouts.length === 0 && (
-            <p className="text-center text-white/20 text-sm py-4">No earnings yet — share your music to start earning</p>
+            <p className="text-center text-white/20 text-sm py-4">No earnings yet, share your music to start earning</p>
           )}
         </>
       )}
@@ -605,11 +605,16 @@ export default function ArtistDashboard() {
         .from('streams').select('user_id, device_type, completed, duration_played, source')
         .eq('track_id', trackId).gte('created_at', since).limit(5000);
 
-      // Real completion comes from listening_events. It cannot come from
-      // streams: log_stream() hardcodes completed to true and writes
-      // duration_played once at the 30 second mark, so those two columns
-      // are constants and the figures derived from them were always
-      // 100 percent and about 30 seconds for every track.
+      // Completion comes from listening_events, which remains the better
+      // source: it records skips and abandonment as outcomes in their own
+      // right, not just finished plays.
+      //
+      // streams.completed and duration_played used to be constants,
+      // hardcoded true and about 30 seconds, which made every track look
+      // 100 percent complete. Migration 79 fixed that at the source, so
+      // those columns are now real from that point forward. Rows written
+      // before it still carry the old constants, which is the other reason
+      // this reads listening_events rather than switching over.
       const { data: eventData } = await supabase
         .from('listening_events')
         .select('completion_pct, listened_seconds')
@@ -834,7 +839,7 @@ export default function ArtistDashboard() {
                         <div className="space-y-4">
                           {/* Streams chart */}
                           <div className="overflow-hidden">
-                            <p className="text-xs text-white/40 mb-2 font-medium">Streams — {trackRange}d</p>
+                            <p className="text-xs text-white/40 mb-2 font-medium">Streams, {trackRange}d</p>
                             <ResponsiveContainer width="100%" height={120}>
                               <AreaChart data={trackStreams}>
                                 <defs>
@@ -854,7 +859,7 @@ export default function ArtistDashboard() {
 
                           {/* Likes chart */}
                           <div className="overflow-hidden">
-                            <p className="text-xs text-white/40 mb-2 font-medium">Likes — {trackRange}d</p>
+                            <p className="text-xs text-white/40 mb-2 font-medium">Likes, {trackRange}d</p>
                             <ResponsiveContainer width="100%" height={100}>
                               <BarChart data={trackLikes}>
                                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
@@ -874,8 +879,8 @@ export default function ArtistDashboard() {
                                 {[
                                   { label: 'Streams', value: demographics.totalStreams, color: 'text-white' },
                                   { label: 'Unique Listeners', value: demographics.uniqueListeners, color: 'text-purple-400' },
-                                  { label: 'Played To End', value: demographics.completionRate !== null ? `${demographics.completionRate}%` : '—', color: 'text-green-400' },
-                                  { label: 'Avg Listen', value: demographics.avgDuration ? `${Math.floor(demographics.avgDuration/60)}:${String(demographics.avgDuration%60).padStart(2,'0')}` : '—', color: 'text-blue-400' },
+                                  { label: 'Played To End', value: demographics.completionRate !== null ? `${demographics.completionRate}%` : '--', color: 'text-green-400' },
+                                  { label: 'Avg Listen', value: demographics.avgDuration ? `${Math.floor(demographics.avgDuration/60)}:${String(demographics.avgDuration%60).padStart(2,'0')}` : '--', color: 'text-blue-400' },
                                 ].map(s => (
                                   <div key={s.label} className="bg-white/[0.03] rounded-xl p-3 border border-white/[0.05] text-center">
                                     <p className={`text-lg font-black ${s.color}`}>{s.value}</p>

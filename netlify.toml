@@ -31,6 +31,10 @@
   function = "social-preview"
 
 [[edge_functions]]
+  path = "/album/*"
+  function = "social-preview"
+
+[[edge_functions]]
   path = "/schoolsessions"
   function = "social-preview"
 

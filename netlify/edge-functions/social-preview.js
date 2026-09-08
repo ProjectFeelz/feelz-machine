@@ -15,6 +15,10 @@ const ROUTE_PATTERNS = [
   { re: /^\/artist\/([^/]+)\/?$/, type: 'artist' },
   { re: /^\/track\/([^/]+)\/?$/, type: 'track' },
   { re: /^\/beat\/([^/]+)\/?$/, type: 'beat' },
+  // Albums are two segments: /album/:artistSlug/:albumSlug. They are in the
+  // sitemap, so crawlers were being pointed at pages that served the generic
+  // homepage meta.
+  { re: /^\/album\/([^/]+\/[^/]+)\/?$/, type: 'album' },
   { re: /^\/schoolsessions\/?$/, type: 'schoolsessions' },
 ];
 
@@ -60,5 +64,5 @@ export default async (request, context) => {
 };
 
 export const config = {
-  path: ['/artist/*', '/track/*', '/beat/*', '/schoolsessions'],
+  path: ['/artist/*', '/track/*', '/beat/*', '/album/*', '/schoolsessions'],
 };

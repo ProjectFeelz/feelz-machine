@@ -33,6 +33,9 @@ async function buildMeta(type, slug) {
   let description = 'Independent artists. Direct to fans. Stream, support and discover music — no middlemen.';
   let image = DEFAULT_IMAGE;
   let pageUrl = SITE_URL;
+  // Structured data. The crawler only ever sees this HTML, so JSON-LD has to
+  // be emitted here rather than by the React app, which a crawler never runs.
+  let jsonLd = null;
 
   if (type === 'artist' && slug) {
     const { data: artist } = await supabase
@@ -44,6 +47,14 @@ async function buildMeta(type, slug) {
       title = `${artist.artist_name} on Feelz Machine`;
       description = artist.bio ? artist.bio.slice(0, 160) : `Listen to ${artist.artist_name} on Feelz Machine`;
       image = artist.profile_image_url || DEFAULT_IMAGE;
+      jsonLd = {
+        '@context': 'https://schema.org',
+        '@type': 'MusicGroup',
+        name: artist.artist_name,
+        ...(artist.bio ? { description: artist.bio.slice(0, 300) } : {}),
+        ...(artist.profile_image_url ? { image: artist.profile_image_url } : {}),
+        url: `${SITE_URL}/artist/${slug}`,
+      };
     }
     pageUrl = `${SITE_URL}/artist/${slug}`;
   }
@@ -60,6 +71,14 @@ async function buildMeta(type, slug) {
       title = `${track.title} by ${artistName}`;
       description = `Listen to "${track.title}" by ${artistName} on Feelz Machine`;
       image = track.cover_artwork_url || DEFAULT_IMAGE;
+      jsonLd = {
+        '@context': 'https://schema.org',
+        '@type': 'MusicRecording',
+        name: track.title,
+        byArtist: { '@type': 'MusicGroup', name: artistName },
+        ...(track.cover_artwork_url ? { image: track.cover_artwork_url } : {}),
+        url: `${SITE_URL}/track/${slug}`,
+      };
     }
     pageUrl = `${SITE_URL}/track/${slug}`;
   }
@@ -83,6 +102,36 @@ async function buildMeta(type, slug) {
     pageUrl = `${SITE_URL}/beat/${slug}`;
   }
 
+  // Albums are listed in the sitemap but had no branch here, so every album
+  // URL served the generic homepage title and description to crawlers.
+  // Album routes carry two segments: /album/:artistSlug/:albumSlug
+  if (type === 'album' && slug) {
+    const [artistSlug, albumSlug] = slug.split('/');
+    const { data: album } = await supabase
+      .from('albums')
+      .select('title, description, cover_artwork_url, release_date, release_type, artists(artist_name)')
+      .eq('slug', albumSlug)
+      .maybeSingle();
+    if (album) {
+      const artistName = album.artists?.artist_name || 'Feelz Machine';
+      title = `${album.title} by ${artistName}`;
+      description = album.description
+        ? album.description.slice(0, 160)
+        : `Listen to ${album.title} by ${artistName} on Feelz Machine`;
+      image = album.cover_artwork_url || DEFAULT_IMAGE;
+      jsonLd = {
+        '@context': 'https://schema.org',
+        '@type': 'MusicAlbum',
+        name: album.title,
+        byArtist: { '@type': 'MusicGroup', name: artistName },
+        ...(album.cover_artwork_url ? { image: album.cover_artwork_url } : {}),
+        ...(album.release_date ? { datePublished: album.release_date } : {}),
+        url: `${SITE_URL}/album/${artistSlug}/${albumSlug}`,
+      };
+    }
+    pageUrl = `${SITE_URL}/album/${slug}`;
+  }
+
   if (type === 'schoolsessions') {
     const { data: comp } = await supabase
       .from('competitions')
@@ -95,7 +144,7 @@ async function buildMeta(type, slug) {
     pageUrl = `${SITE_URL}/schoolsessions`;
   }
 
-  return { title, description, image, pageUrl };
+  return { title, description, image, pageUrl, jsonLd };
 }
 
 exports.handler = async (event) => {
@@ -108,16 +157,18 @@ exports.handler = async (event) => {
     meta = await buildMeta(type, slug);
   } catch (e) {
     console.error('og-meta error:', e);
-    meta = { title: 'Feelz Machine', description: 'Independent artists. Direct to fans.', image: DEFAULT_IMAGE, pageUrl: SITE_URL };
+    meta = { title: 'Feelz Machine', description: 'Independent artists. Direct to fans.', image: DEFAULT_IMAGE, pageUrl: SITE_URL, jsonLd: null };
   }
 
-  const { title, description, image, pageUrl } = meta;
+  const { title, description, image, pageUrl, jsonLd } = meta;
 
   const html = `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8" />
   <title>${esc(title)}</title>
+  <link rel="canonical" href="${esc(pageUrl)}" />
+  ${jsonLd ? `<script type="application/ld+json">${JSON.stringify(jsonLd).replace(/</g, '\\u003c')}</script>` : ''}
   <meta property="og:title" content="${esc(title)}" />
   <meta property="og:description" content="${esc(description)}" />
   <meta property="og:image" content="${esc(image)}" />

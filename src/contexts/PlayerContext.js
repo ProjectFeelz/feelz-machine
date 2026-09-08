@@ -36,7 +36,7 @@ export function PlayerProvider({ children }) {
   const audioRef        = useRef(new Audio());
   const audioRefB       = useRef(new Audio());  // second element for crossfade
   const crossfadingRef  = useRef(false);
-  const CROSSFADE_SECS  = 1.5; // seconds of overlap — short enough to not echo
+  const CROSSFADE_SECS  = 1.5; // seconds of overlap, short enough to not echo
   const streamLoggedRef = useRef(false);
 
   // ── Listening events ────────────────────────────────────────────────────
@@ -79,6 +79,12 @@ export function PlayerProvider({ children }) {
       return geoRef.current;
     }
   }, []);
+
+  // The id of the stream row logged for the current play, so the real
+  // duration and completion can be written back to it when the play ends.
+  // Cleared on every track change so one track's outcome can never be
+  // written onto another's row.
+  const currentStreamIdRef = useRef(null);
 
   const flushListeningEvent = useCallback(async (endReason) => {
     const track = currentTrackRef.current;
@@ -123,6 +129,27 @@ export function PlayerProvider({ children }) {
         city:             geo?.city || null,
         region:           geo?.region || null,
       });
+
+      // The stream row was written at the 30 second mark with completed
+      // false, because at that point nothing had been completed. Now the
+      // play has actually ended, so tell it what happened. Without this
+      // streams.completed and duration_played stay constants, which is
+      // what made the dashboard report 100% completion and 0:30 average
+      // for every artist.
+      //
+      // 'ended' is the only end reason that means finished. A page hide or
+      // a track change at 95% is still not a completed listen, and
+      // completion_pct on listening_events already records how far they got.
+      const streamId = currentStreamIdRef.current;
+      if (streamId) {
+        currentStreamIdRef.current = null;
+        const { error: finaliseError } = await supabase.rpc('finalise_stream', {
+          p_stream_id: streamId,
+          p_duration_played: listened,
+          p_completed: endReason === 'ended',
+        });
+        if (finaliseError) console.warn('[player] finalise_stream failed:', finaliseError.message);
+      }
     } catch {
       // Never let signal capture break playback. A lost event is a lost
       // data point, a thrown error here would be a broken player.
@@ -208,6 +235,10 @@ export function PlayerProvider({ children }) {
       // Before the crossfade overwrites the playhead, capture how far the
       // outgoing track actually got.
       flushListeningEvent('track_change');
+      // flushListeningEvent clears this itself, but clear it here too: if the
+      // flush bailed early (under three seconds, or a duplicate guard) the id
+      // would otherwise survive into the next track and finalise the wrong row.
+      currentStreamIdRef.current = null;
       streamLoggedRef.current = false;
 
       // ── Crossfade: use a temporary second element to fade out the current
@@ -351,13 +382,20 @@ export function PlayerProvider({ children }) {
         p_track_id: trackId,
         p_user_id: userId,
         p_duration_played: Math.floor(audioRef.current.currentTime),
-        p_completed: true,
+        // Ignored by log_stream now, which always inserts false and lets
+        // finalise_stream write the real value. Passed only because the
+        // function signature still takes it.
+        p_completed: false,
         p_platform: 'web',
         p_device_type: /Mobi|Android/i.test(navigator.userAgent) ? 'mobile' : 'desktop',
         p_source: window.__feelz_play_source || 'unknown',
       });
 
-      if (logError || !logResult?.logged) return; // self-stream or track not found — bail like before
+      if (logError || !logResult?.logged) return; // self-stream or track not found, bail like before
+
+      // Remember which row this play wrote, so finalise_stream can correct
+      // it with the real duration and completion when the play ends.
+      currentStreamIdRef.current = logResult.stream_id || null;
 
       const art = { user_id: logResult.owner_user_id };
 
@@ -448,7 +486,7 @@ export function PlayerProvider({ children }) {
         const topTitle    = topTrack?.title || fullTrack?.title;
         const digestTitle = streamCount === 1
           ? `First stream today on ${topTitle}`
-          : `${streamCount} stream${streamCount > 1 ? 's' : ''} today — ${topTitle} leading`;
+          : `${streamCount} stream${streamCount > 1 ? 's' : ''} today, ${topTitle} leading`;
 
         // Check if we already have a today digest for this artist
         const { data: existingDigest } = await supabase
@@ -496,7 +534,7 @@ export function PlayerProvider({ children }) {
             },
           });
         }
-      } catch { /* non-critical — never break playback */ }
+      } catch { /* non-critical, never break playback */ }
 
       // 5b. Fan milestone — celebrate the LISTENER's loyalty to this artist.
       //     "You've played [Artist] 100 times" — fires at 10, 50, 100, 250, 500, 1000.
@@ -520,7 +558,7 @@ export function PlayerProvider({ children }) {
           const milestoneMessages = {
             10:   { title: `10 plays with ${name}`, message: `You keep coming back. That's what being a real fan looks like.` },
             50:   { title: `50 plays with ${name}`, message: `Fifty plays in. You clearly know something others don't.` },
-            100:  { title: `100 plays with ${name} 🎯`, message: `One hundred plays. You're not just a listener — you're a supporter.` },
+            100:  { title: `100 plays with ${name} 🎯`, message: `One hundred plays. You're not just a listener, you're a supporter.` },
             250:  { title: `250 plays with ${name}`, message: `250 plays deep. The artist notices fans like you.` },
             500:  { title: `500 plays with ${name} 🔥`, message: `500 plays. That's dedication. Top fan energy.` },
             1000: { title: `1000 plays with ${name} 🏆`, message: `A thousand plays. Legendary listener status. This artist owes you one.` },
