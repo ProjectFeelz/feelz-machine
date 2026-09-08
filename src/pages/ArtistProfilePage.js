@@ -1306,7 +1306,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
         {/* Bigger on desktop and deliberately bleeding past the bottom of the
             banner, so the image breaks the green edge instead of floating
             inside it. */}
-        <div className="absolute -bottom-16 left-1/2 -translate-x-1/2 lg:left-8 lg:translate-x-0 lg:-bottom-10 z-10">
+        <div className="absolute -bottom-16 left-1/2 -translate-x-1/2 lg:left-8 lg:translate-x-0 lg:-bottom-2 z-10">
           {/* Story ring — clickable if artist has active stories */}
           <div
             className="relative"
@@ -1354,7 +1354,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
       {/* Shifted right to clear the larger image, and up a step so the social
           icons have clearance above the bottom of the green banner rather
           than sitting on its edge. */}
-      <div className="px-6 pt-24 flex flex-col items-center text-center lg:pt-0 lg:-mt-52 lg:pl-80 lg:items-start lg:text-left lg:relative lg:z-20">
+      <div className="px-6 pt-24 flex flex-col items-center text-center lg:pt-0 lg:-mt-52 lg:pl-80 lg:pb-6 lg:items-start lg:text-left lg:relative lg:z-20">
         <div className="flex flex-col items-center lg:items-start mb-1">
           <div className="flex items-center space-x-2">
             <h1 className="text-3xl font-bold" style={{ fontFamily: `"${headingFont}", sans-serif`, color: textColor }}>{artist.artist_name}</h1>
@@ -1536,7 +1536,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
             outlined, so they read as links off the platform instead of another
             row of actions. */}
         {socialEntries.length > 0 && (
-          <div className="flex items-center gap-2 mb-6 lg:mb-4">
+          <div className="flex items-center gap-1.5 mb-6 lg:mb-3">
             {socialEntries.map(([platform, value]) => {
               const Icon = SOCIAL_ICONS[platform] || Globe;
               const prefix = SOCIAL_URLS[platform] || '';
@@ -1766,18 +1766,49 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
                 </div>
               )}
             </div>
-            {/* Desktop: the newest track is a large card and the rest scroll
-                past it in the same row, the treatment mobile already has.
-                A rail of eight identical squares said nothing about which
-                one just dropped. */}
-            <div className="hidden md:flex space-x-3 overflow-x-auto scrollbar-hide px-4 pt-3 pb-3" style={{ overflowY: 'visible' }}>
-              {recent.map((track, i) => {
-                const isNewest = i === 0;
+            {/* Desktop: the newest track is pinned and does NOT move. The rest
+                scroll past it on their own track.
+
+                The previous attempt just made the first card wider inside the
+                same scrolling row, so it slid away with everything else,
+                which is not what was asked for and looked worse than the
+                plain rail. The fix is structural: the hero sits outside the
+                scroller entirely. */}
+            <div className="hidden md:flex items-start gap-4 px-4 pt-3 pb-3">
+              {recent[0] && (() => {
+                const track = recent[0];
                 const withinWeek = (Date.now() - new Date(track.created_at).getTime()) < 7 * 24 * 60 * 60 * 1000;
-                const showGlow = isNewest && withinWeek;
+                return (
+                  <div className="flex-shrink-0 w-52 cursor-pointer group" onClick={() => handlePlayTrack(track)}>
+                    <div className="aspect-square rounded-xl overflow-hidden mb-2 relative"
+                      style={{ backgroundColor: `${textColor}08`, boxShadow: withinWeek ? `0 0 0 2px ${secondaryColor}, 0 0 24px ${secondaryColor}55` : 'none' }}>
+                      {track.cover_artwork_url
+                        ? <img src={track.cover_artwork_url} alt={track.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                        : <div className="w-full h-full flex items-center justify-center" style={{ background: `linear-gradient(135deg, ${secondaryColor}30, ${accentColor}15)` }}><Music className="w-8 h-8" style={{ color: `${textColor}20` }} /></div>}
+                      {/* The NEW badge lived on the first card in the old rail.
+                          Moved here with it, otherwise it would have vanished
+                          silently when the hero was pulled out of the list. */}
+                      {withinWeek && (
+                        <div className="absolute top-2 right-2 px-2 py-0.5 rounded-full text-[10px] font-bold" style={{ background: secondaryColor, color: '#fff' }}>NEW</div>
+                      )}
+                    </div>
+                    <p className="text-sm font-semibold truncate" style={{ color: textColor }}>{track.title}</p>
+                    <p className="text-xs truncate" style={{ color: `${textColor}50` }}>{track.albums?.title || 'Single'}</p>
+                  </div>
+                );
+              })()}
+
+              {/* Everything after the newest, scrolling on its own. */}
+              <div className="flex space-x-3 overflow-x-auto scrollbar-hide flex-1 min-w-0" style={{ overflowY: 'visible' }}>
+              {/* The newest track is rendered above and pinned, so nothing in
+                  this list is ever the newest. The isNewest flag and its NEW
+                  badge belong to the hero now, and leaving a constant false
+                  here would just be dead branches for the next reader. */}
+              {recent.slice(1).map(track => {
+                const showGlow = false;
                 return (
                   <div key={track.id}
-                    className={`flex-shrink-0 cursor-pointer group ${isNewest ? 'w-64' : 'w-32'}`}
+                    className="flex-shrink-0 w-32 cursor-pointer group"
                     onClick={() => handlePlayTrack(track)}>
                     <div className="aspect-square rounded-xl overflow-hidden mb-1.5 relative"
                       style={{ backgroundColor: `${textColor}08`, boxShadow: showGlow ? `0 0 0 2px ${secondaryColor}, 0 0 20px ${secondaryColor}60, 0 0 40px ${secondaryColor}30` : 'none' }}>
@@ -1793,6 +1824,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
                   </div>
                 );
               })}
+              </div>
             </div>
           </div>
         );
