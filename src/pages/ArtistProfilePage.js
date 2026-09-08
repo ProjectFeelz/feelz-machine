@@ -1303,7 +1303,10 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
         {/* Centred on mobile as before. On desktop it moves hard left and
             grows, so the name and controls sit beside it rather than under
             it, matching the large-image-left layout used in Library. */}
-        <div className="absolute -bottom-16 left-1/2 -translate-x-1/2 lg:left-8 lg:translate-x-0 lg:bottom-6 z-10">
+        {/* Bigger on desktop and deliberately bleeding past the bottom of the
+            banner, so the image breaks the green edge instead of floating
+            inside it. */}
+        <div className="absolute -bottom-16 left-1/2 -translate-x-1/2 lg:left-8 lg:translate-x-0 lg:-bottom-10 z-10">
           {/* Story ring — clickable if artist has active stories */}
           <div
             className="relative"
@@ -1316,7 +1319,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
                 <div className="w-full h-full rounded-2xl" style={{ backgroundColor: bgColor }} />
               </div>
             )}
-            <div className="relative w-32 h-32 lg:w-44 lg:h-44 rounded-2xl overflow-hidden border-4 shadow-2xl"
+            <div className="relative w-32 h-32 lg:w-60 lg:h-60 rounded-2xl overflow-hidden border-4 shadow-2xl"
               style={{ borderColor: stories.length > 0 ? 'transparent' : bgColor, backgroundColor: `${secondaryColor}30` }}>
               {artist.profile_image_url ? (
                 <img src={artist.profile_image_url} alt={artist.artist_name} className="w-full h-full object-cover" />
@@ -1348,7 +1351,10 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
           the whole block shifts right of the avatar and left-aligns, which
           is what puts the name, stats and buttons beside the image instead
           of stacked under it. */}
-      <div className="px-6 pt-24 flex flex-col items-center text-center lg:pt-0 lg:-mt-40 lg:pl-64 lg:items-start lg:text-left lg:relative lg:z-20">
+      {/* Shifted right to clear the larger image, and up a step so the social
+          icons have clearance above the bottom of the green banner rather
+          than sitting on its edge. */}
+      <div className="px-6 pt-24 flex flex-col items-center text-center lg:pt-0 lg:-mt-52 lg:pl-80 lg:items-start lg:text-left lg:relative lg:z-20">
         <div className="flex flex-col items-center lg:items-start mb-1">
           <div className="flex items-center space-x-2">
             <h1 className="text-3xl font-bold" style={{ fontFamily: `"${headingFont}", sans-serif`, color: textColor }}>{artist.artist_name}</h1>
@@ -1760,14 +1766,19 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
                 </div>
               )}
             </div>
-            {/* Desktop: normal spread row */}
+            {/* Desktop: the newest track is a large card and the rest scroll
+                past it in the same row, the treatment mobile already has.
+                A rail of eight identical squares said nothing about which
+                one just dropped. */}
             <div className="hidden md:flex space-x-3 overflow-x-auto scrollbar-hide px-4 pt-3 pb-3" style={{ overflowY: 'visible' }}>
               {recent.map((track, i) => {
                 const isNewest = i === 0;
                 const withinWeek = (Date.now() - new Date(track.created_at).getTime()) < 7 * 24 * 60 * 60 * 1000;
                 const showGlow = isNewest && withinWeek;
                 return (
-                  <div key={track.id} className="flex-shrink-0 w-32 cursor-pointer group" onClick={() => handlePlayTrack(track)}>
+                  <div key={track.id}
+                    className={`flex-shrink-0 cursor-pointer group ${isNewest ? 'w-64' : 'w-32'}`}
+                    onClick={() => handlePlayTrack(track)}>
                     <div className="aspect-square rounded-xl overflow-hidden mb-1.5 relative"
                       style={{ backgroundColor: `${textColor}08`, boxShadow: showGlow ? `0 0 0 2px ${secondaryColor}, 0 0 20px ${secondaryColor}60, 0 0 40px ${secondaryColor}30` : 'none' }}>
                       {track.cover_artwork_url
