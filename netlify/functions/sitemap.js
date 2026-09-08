@@ -7,7 +7,40 @@ const { createClient } = require('@supabase/supabase-js');
 
 const BASE_URL = 'https://www.feelzmachine.com';
 
+// Google reported "Sitemap is HTML". That happens when this function throws:
+// Netlify then serves its own error page, and Google sees HTML where XML
+// should be.
+//
+// Two reasons it could throw. Every query here destructured only `data` and
+// ignored `error`, so a failed query produced undefined and the .map below
+// threw a TypeError. And createClient itself throws if SUPABASE_URL or
+// SUPABASE_SERVICE_ROLE_KEY are missing at runtime.
+//
+// Now: every array is guarded, errors are logged, and the whole thing is
+// wrapped so that a failure still returns valid XML containing the static
+// pages. A sitemap missing the artist URLs is a bad day. A sitemap that is
+// actually an HTML error page is rejected outright, which is what happened.
 exports.handler = async () => {
+  try {
+    return await buildSitemap();
+  } catch (err) {
+    console.error('[sitemap] failed, serving static-only sitemap:', err);
+    return {
+      statusCode: 200,
+      headers: { 'Content-Type': 'application/xml', 'Cache-Control': 'public, max-age=300' },
+      body: `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>${BASE_URL}/</loc><priority>1.0</priority></url>
+  <url><loc>${BASE_URL}/browse</loc><priority>0.9</priority></url>
+  <url><loc>${BASE_URL}/schoolsessions</loc><priority>0.8</priority></url>
+  <url><loc>${BASE_URL}/retail</loc><priority>0.8</priority></url>
+  <url><loc>${BASE_URL}/about</loc><priority>0.6</priority></url>
+</urlset>`,
+    };
+  }
+};
+
+async function buildSitemap() {
   const supabase = createClient(
     process.env.SUPABASE_URL,
     process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -32,14 +65,14 @@ exports.handler = async () => {
   ];
 
   // Fetch all published artists
-  const { data: artists } = await supabase
+  const { data: artists, error: artistsError } = await supabase
     .from('artists')
     .select('slug, updated_at')
     .not('slug', 'is', null)
     .limit(5000);
 
   // Fetch all published albums
-  const { data: albums } = await supabase
+  const { data: albums, error: albumsError } = await supabase
     .from('albums')
     .select('slug, updated_at, artists(slug)')
     .eq('is_published', true)
@@ -50,7 +83,7 @@ exports.handler = async () => {
   // Sitemap protocol caps at 50,000 URLs per file; if track count ever
   // approaches that, this needs to split into a sitemap index instead of
   // one flat file. Not a concern at current scale.
-  const { data: tracks } = await supabase
+  const { data: tracks, error: tracksError } = await supabase
     .from('tracks')
     .select('slug, updated_at')
     .eq('is_published', true)
@@ -60,7 +93,7 @@ exports.handler = async () => {
 
   // Beats live at /beat/:slug, not /track/:slug — kept separate so each
   // only appears once in the sitemap, at its actual canonical URL.
-  const { data: beats } = await supabase
+  const { data: beats, error: beatsError } = await supabase
     .from('tracks')
     .select('slug, updated_at')
     .eq('is_published', true)
@@ -71,10 +104,17 @@ exports.handler = async () => {
   // Newsletter posts — genuinely public content regardless of which
   // audience they were originally sent to, so both audiences' posts are
   // included here.
-  const { data: newsletterPosts } = await supabase
+  const { data: newsletterPosts, error: newsletterError } = await supabase
     .from('newsletter_posts')
     .select('slug, created_at')
     .limit(5000);
+
+  // Logged rather than swallowed. A missing section is survivable; not
+  // knowing which one failed is not.
+  [['artists', artistsError], ['albums', albumsError], ['tracks', tracksError],
+   ['beats', beatsError], ['newsletter', newsletterError]]
+    .filter(([, e]) => e)
+    .forEach(([name, e]) => console.error(`[sitemap] ${name} query failed:`, e.message));
 
   const now = new Date().toISOString().split('T')[0];
 

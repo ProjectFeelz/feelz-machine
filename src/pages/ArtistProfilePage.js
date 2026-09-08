@@ -2,19 +2,20 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { downloadTrack } from '../utils/downloadTrack';
 import TrackActionSheet from '../components/TrackActionSheet';
-import TrackVersions from '../components/TrackVersions';
+// TrackVersions is not imported here any more: versions moved to the track
+// page when Popular became a card rail with nowhere to expand into.
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import { useTier } from '../contexts/useTier';
 import { usePlayer } from '../contexts/PlayerContext';
 import {
-  ArrowLeft, Calendar, Play, Pause, Share2,
+  ArrowLeft, Calendar, Play, Share2,
   UserPlus, UserCheck, Instagram, Twitter, Youtube,
-  Globe, Music, Loader, Verified, Download,
-  Heart, Check, MoreHorizontal, DollarSign, MessageCircle,
+  Globe, Music, Loader, Verified,
+  Heart, Check, DollarSign, MessageCircle,
   ChevronDown, ChevronUp, Send, Trash2, Shuffle, Users, Plus, ShoppingBag,
-  Radio, X, Search, Info, Bell, BellOff
+  Radio, X, Search, Info, Bell, BellOff, ChevronRight,
 } from 'lucide-react';
 import { ArtistProfileSkeleton } from '../components/SkeletonLoader';
 import ShareCard from '../components/ShareCard';
@@ -24,7 +25,7 @@ import { VoiceMemoCard, VoiceMemoUpload } from '../components/VoiceMemo';
 import TipButton from '../components/TipButton';
 import TipGoal from '../components/TipGoal';
 import { ArtistStoryView, StoryUpload } from '../components/ArtistStories';
-import PreSaveButton from '../components/PreSaveButton';
+// PreSaveButton moved to the track page with versions, for the same reason.
 import ArtistGuestbook from '../components/ArtistGuestbook';
 import MerchConnectSheet from '../components/MerchConnectSheet';
 import ChallengeXPModal from '../components/ChallengeXPModal';
@@ -386,13 +387,13 @@ export default function ArtistProfilePage() {
   const [playlists, setPlaylists] = useState([]);
   const [addingTo, setAddingTo] = useState(null);
   const [addedTo, setAddedTo] = useState({});
-  const [recommendedTracks, setRecommendedTracks] = useState([]);
   const [similarArtists, setSimilarArtists] = useState([]);
   const [artistPlaylists, setArtistPlaylists] = useState([]);
   const [thoughts, setThoughts] = useState([]);
   const [highlightedTrackId, setHighlightedTrackId] = useState(null);
   const [voiceMemos, setVoiceMemos] = useState([]);
   const [stories, setStories]         = useState([]);
+  const [bioOpen, setBioOpen] = useState(false);
   const [viewingStory, setViewingStory]   = useState(false);
   const [showCommunity, setShowCommunity]     = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -412,7 +413,6 @@ export default function ArtistProfilePage() {
   const [trackResults, setTrackResults]         = useState([]);
   const [searchingTracks, setSearchingTracks]   = useState(false);
   const [startingSession, setStartingSession]   = useState(false);
-  const [deepCuts, setDeepCuts] = useState([]);
   const [weeklyDiscoveries, setWeeklyDiscoveries] = useState(0);
   const [purchasedTracks, setPurchasedTracks] = useState({});
   const [liveSession, setLiveSession] = useState(null);
@@ -542,15 +542,7 @@ export default function ArtistProfilePage() {
       .then(({ data }) => setVoiceMemos(data || []));
   }, [artist?.id]);
 
-  // ── Deep cuts (least-streamed published tracks) ───────────────────────────
-  useEffect(() => {
-    if (!artist?.id || tracks.length === 0) return;
-    const sorted = [...tracks]
-      .filter(t => t.is_published)
-      .sort((a, b) => (a.stream_count || 0) - (b.stream_count || 0))
-      .slice(0, 5);
-    setDeepCuts(sorted);
-  }, [artist?.id, tracks]);
+  // Deep cuts removed with its row. Nothing rendered it.
 
   // ── Weekly discovery count (how many new listeners this week) ────────────
   useEffect(() => {
@@ -694,23 +686,9 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
             if (g) tagCounts[g] = (tagCounts[g] || 0) + 1;
             if (m) tagCounts[m] = (tagCounts[m] || 0) + 1;
           });
-          const listenedIds = streamData.map(s => s.track_id).filter(Boolean);
-          const topTags = Object.entries(tagCounts).sort((a, b) => b[1] - a[1]).slice(0, 3).map(e => e[0]);
-          if (topTags.length > 0) {
-            const { data: recData } = await supabase
-              .from('tracks').select('*, albums(title, cover_artwork_url, price)')
-              .eq('artist_id', artistData.id).eq('is_published', true)
-              .or(topTags.map(t => `genre.eq.${t},mood.eq.${t}`).join(','))
-              .not('id', 'in', `(${listenedIds.join(',')})`)
-              .order('engagement_score', { ascending: false }).limit(5);
-            setRecommendedTracks(recData || []);
-          }
-        } else {
-          const { data: topData } = await supabase
-            .from('tracks').select('*, albums(title, cover_artwork_url, price)')
-            .eq('artist_id', artistData.id).eq('is_published', true)
-            .order('engagement_score', { ascending: false }).limit(5);
-          setRecommendedTracks(topData || []);
+          // The Recommended For You block that lived here is gone with its
+          // row. It ran two extra queries on every profile load to build
+          // something nothing renders.
         }
       }
       const { data: artistGenres } = await supabase
@@ -1301,13 +1279,9 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
             style={{ backgroundColor: `${bgColor}80` }}>
             <ArrowLeft className="w-5 h-5" style={{ color: textColor }} />
           </button>
-          <button onClick={handleShare}
-            className="w-10 h-10 flex items-center justify-center rounded-full backdrop-blur-md"
-            style={{ backgroundColor: `${bgColor}80` }}>
-            {copied
-              ? <span className="text-xs" style={{ color: primaryColor }}>Copied!</span>
-              : <Share2 className="w-4 h-4" style={{ color: textColor }} />}
-          </button>
+          {/* The corner share button is gone. There is already a Share pill
+              in the action row, and two share buttons on one screen is a
+              question rather than a convenience. */}
         </div>
         {/* Centred on mobile as before. On desktop it moves hard left and
             grows, so the name and controls sit beside it rather than under
@@ -1531,30 +1505,29 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
         {/* max-w-sm was forcing the bio into a narrow column in the middle of
             a wide banner, which is the clumping Steve flagged. Wide on
             desktop, still readable rather than edge to edge. */}
-        {artist.bio && (
-          <p className="text-sm leading-relaxed mb-6 max-w-sm lg:max-w-3xl" style={{ color: `${textColor}90`, fontFamily: `"${bodyFont}", sans-serif` }}>
-            {artist.bio}
-          </p>
-        )}
-        {/* On desktop these sit in the empty top right of the banner, which is
-            where Steve drew them and is otherwise dead space. Below lg they
-            stay in the normal flow, since the banner has no room. */}
+        {/* The bio has moved to a collapsible card at the foot of the page.
+            In the header a long bio pushed the pills down and broke the
+            layout, which is exactly what Steve's Big Feelz screenshot shows. */}
+
+        {/* In line with the pills rather than floating above them. Smaller and
+            outlined, so they read as links off the platform instead of another
+            row of actions. */}
         {socialEntries.length > 0 && (
-          <div className="flex items-center space-x-3 mb-8 lg:absolute lg:right-8 lg:top-8 lg:mb-0 lg:z-30">
+          <div className="flex items-center gap-2 mb-6 lg:mb-4">
             {socialEntries.map(([platform, value]) => {
               const Icon = SOCIAL_ICONS[platform] || Globe;
               const prefix = SOCIAL_URLS[platform] || '';
               const href = value.startsWith('http') ? value : (prefix ? `${prefix}${value}` : value);
               return href.startsWith('http') ? (
                 <a key={platform} href={href} target="_blank" rel="noopener noreferrer"
-                  className="w-10 h-10 rounded-full flex items-center justify-center transition-all hover:scale-110 active:scale-95"
-                  style={{ backgroundColor: `${textColor}10` }}>
-                  <Icon className="w-4 h-4" style={{ color: `${textColor}70` }} />
+                  className="w-8 h-8 rounded-lg flex items-center justify-center transition-all hover:scale-110 active:scale-95"
+                  style={{ border: `1px solid ${textColor}25`, backgroundColor: 'transparent' }}>
+                  <Icon className="w-3.5 h-3.5" style={{ color: `${textColor}60` }} />
                 </a>
               ) : (
-                <div key={platform} className="w-10 h-10 rounded-full flex items-center justify-center"
-                  style={{ backgroundColor: `${textColor}10` }} title={value}>
-                  <Icon className="w-4 h-4" style={{ color: `${textColor}70` }} />
+                <div key={platform} className="w-8 h-8 rounded-lg flex items-center justify-center"
+                  style={{ border: `1px solid ${textColor}25` }} title={value}>
+                  <Icon className="w-3.5 h-3.5" style={{ color: `${textColor}60` }} />
                 </div>
               );
             })}
@@ -1682,24 +1655,9 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
         </div>
       )}
 
-      {recommendedTracks.length > 0 && (
-        <div className="mb-8 py-5" style={{ background: `linear-gradient(135deg, rgba(120,53,15,0.18) 0%, rgba(30,20,10,0.4) 60%, transparent 100%)`, borderTop: `1px solid rgba(245,158,11,0.12)`, borderBottom: `1px solid rgba(245,158,11,0.08)` }}>
-          <h2 className="text-lg font-bold px-6 mb-3" style={{ fontFamily: `"${headingFont}", sans-serif` }}>Recommended For You</h2>
-          <div className="flex space-x-3 overflow-x-auto px-6 scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
-            {recommendedTracks.map(track => (
-              <div key={track.id} className="flex-shrink-0 w-36 cursor-pointer group" onClick={() => handlePlayTrack(track)}>
-                <div className="aspect-square rounded-xl overflow-hidden mb-2" style={{ backgroundColor: `${textColor}08` }}>
-                  {track.cover_artwork_url
-                    ? <img src={track.cover_artwork_url} alt={track.title} className="w-full h-full object-cover" />
-                    : <div className="w-full h-full flex items-center justify-center"><Music className="w-8 h-8" style={{ color: `${textColor}20` }} /></div>}
-                </div>
-                <p className="text-sm font-medium truncate" style={{ color: textColor }}>{track.title}</p>
-                <p className="text-xs truncate" style={{ color: `${textColor}50` }}>{track.albums?.title || 'Single'}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      {/* Recommended For You removed. The For You page already does this, and
+          on an artist's own profile a row of other people's music is the
+          platform talking over the artist. */}
 
       {/* ── New Music row — artist's latest drops ── */}
       {tracks.length > 0 && (() => {
@@ -2092,54 +2050,12 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
         </div>
       )}
 
-      {/* Deep Cuts — least-played tracks, frames obscurity as a feature */}
-      {deepCuts.length > 1 && !isBeatmakerProfile && (
-        <div className="mb-8 py-5" style={{ background: `linear-gradient(135deg, ${accentColor}08 0%, transparent 100%)`, borderTop: `1px solid ${accentColor}12`, borderBottom: `1px solid ${accentColor}08` }}>
-        <div className="px-6">
-          <div className="flex items-center space-x-2 mb-3">
-            <h2 className="text-lg font-bold" style={{ fontFamily: `"${headingFont}", sans-serif` }}>Deep Cuts</h2>
-            <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold uppercase tracking-wider" style={{ background: `${accentColor}20`, color: accentColor }}>
-              Hidden gems
-            </span>
-          </div>
-          <div className="flex space-x-3 overflow-x-auto scrollbar-hide -mx-6 px-6">
-            {deepCuts.map((track, i) => {
-              const isActive = currentTrack?.id === track.id;
-              return (
-                <button
-                  key={track.id}
-                  onClick={() => handlePlayTrack(track)}
-                  className="flex-shrink-0 w-28 flex flex-col items-center text-center transition active:scale-95 group"
-                >
-                  <div className="w-28 h-28 rounded-xl overflow-hidden mb-2 flex-shrink-0 relative" style={{ backgroundColor: `${textColor}08` }}>
-                    {track.cover_artwork_url
-                      ? <img src={track.cover_artwork_url} alt={track.title} className="w-full h-full object-cover" />
-                      : <div className="w-full h-full flex items-center justify-center" style={{ background: `linear-gradient(135deg, ${accentColor}30, ${accentColor}10)` }}><Music className="w-8 h-8" style={{ color: `${textColor}20` }} /></div>}
-                    {isActive && (
-                      <div className="absolute inset-0 flex items-center justify-center rounded-xl" style={{ backgroundColor: `${accentColor}30` }}>
-                        <div className="flex items-end space-x-0.5 h-4">
-                          <div className="w-0.5 rounded-full animate-pulse" style={{ height: '100%', backgroundColor: accentColor }} />
-                          <div className="w-0.5 rounded-full animate-pulse" style={{ height: '60%', backgroundColor: accentColor, animationDelay: '0.15s' }} />
-                          <div className="w-0.5 rounded-full animate-pulse" style={{ height: '80%', backgroundColor: accentColor, animationDelay: '0.3s' }} />
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                  <p className="text-xs font-medium truncate w-full" style={{ color: isActive ? accentColor : textColor }}>{track.title}</p>
-                  <p className="text-[10px] truncate w-full mt-0.5" style={{ color: `${textColor}40` }}>
-                    {track.stream_count > 0 ? `${formatNumber(track.stream_count)} plays` : 'Unheard'}
-                  </p>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-        </div>
-      )}
+      {/* Deep Cuts removed: it sat below everything else and Steve noted
+          nobody scrolls that far, so it was shelf space rather than a feature. */}
 
       {similarArtists.length > 0 && (
         <div className="mb-8 py-5" style={{ background: `linear-gradient(135deg, rgba(136,19,55,0.18) 0%, rgba(30,10,20,0.4) 60%, transparent 100%)`, borderTop: `1px solid rgba(244,63,94,0.15)`, borderBottom: `1px solid rgba(244,63,94,0.08)` }}>
-          <h2 className="text-lg font-bold mb-3 px-6" style={{ fontFamily: `"${headingFont}", sans-serif` }}>Artists Like This</h2>
+          <h2 className="text-lg font-bold mb-3 px-6" style={{ fontFamily: `"${headingFont}", sans-serif` }}>Similar Artists</h2>
           <div className="flex space-x-4 overflow-x-auto scrollbar-hide px-6">
             {similarArtists.map(a => (
               <div key={a.id} className="flex-shrink-0 w-24 cursor-pointer group" onClick={() => navigate(`/artist/${a.slug}`)}>
@@ -2157,6 +2073,41 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
 
 
 
+
+      {/* About, at the foot of the page in its own collapsible card, the way
+          Spedify and Spotify do it. In the header a long bio pushed the
+          action pills down the page and broke the layout. Collapsed by
+          default past a few lines, so the length of someone's bio can never
+          decide how the page looks. */}
+      {artist.bio && (
+        <div className="px-6 mb-10">
+          <div className="rounded-2xl p-5"
+            style={{ backgroundColor: `${textColor}06`, border: `1px solid ${textColor}12` }}>
+            <button
+              onClick={() => setBioOpen(o => !o)}
+              className="w-full flex items-center justify-between gap-3 text-left">
+              <h2 className="text-lg font-bold" style={{ fontFamily: `"${headingFont}", sans-serif`, color: textColor }}>
+                About
+              </h2>
+              <ChevronRight
+                className={`w-4 h-4 flex-shrink-0 transition-transform ${bioOpen ? 'rotate-90' : ''}`}
+                style={{ color: `${textColor}50` }} />
+            </button>
+            <p
+              className={`text-sm leading-relaxed mt-3 max-w-3xl ${bioOpen ? '' : 'line-clamp-3'}`}
+              style={{ color: `${textColor}90`, fontFamily: `"${bodyFont}", sans-serif` }}>
+              {artist.bio}
+            </p>
+            {artist.bio.length > 180 && (
+              <button onClick={() => setBioOpen(o => !o)}
+                className="text-xs font-semibold mt-2"
+                style={{ color: primaryColor }}>
+                {bioOpen ? 'Show less' : 'Read more'}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       {viewingStory && stories.length > 0 && (
         <ArtistStoryView
