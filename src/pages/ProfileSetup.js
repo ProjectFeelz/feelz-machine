@@ -27,7 +27,7 @@ import { useStreakContext } from '../contexts/StreakContext';
 import {
   SOCIALS, GENRES_LIST, MOODS_LIST, ARTIST_TABS,
   PROFILE_IMAGE_BUCKET, MAX_DAILY_THOUGHTS, THOUGHT_TTL_MS, BIO_MAX,
-} from './profile/profileShared';
+} from './profileShared';
 
 export default function ProfilePage() {
   const nav = useNavigate();
