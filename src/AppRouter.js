@@ -83,6 +83,7 @@ const AdminHomeHero = React.lazy(() => import('./pages/AdminHomeHero'));
 const AdminColdStart = React.lazy(() => import('./pages/AdminColdStart'));
 const HiddenPage = React.lazy(() => import('./pages/HiddenPage'));
 const ContactPreferencesPage = React.lazy(() => import('./pages/ContactPreferencesPage'));
+const ArtistCollectionPage = React.lazy(() => import('./pages/ArtistCollectionPage'));
 // AdminRetailStaff.js is superseded by the Staff tab in RetailAdminPanel.
 // Retail management belongs inside Retail, and keeping two implementations
 // is how ProfilePage and ProfileSetup drifted apart. The old path redirects
@@ -340,6 +341,11 @@ export default function AppRouter() {
                 <Route path="/artist/:slug/merch/checkout" element={<MerchCheckoutPage />} />
                 <Route path="/artist/:slug/merch/orders" element={<MerchOrdersPage />} />
                 <Route path="/artist/:slug/fans" element={<FanLeaderboardPage />} />
+                {/* The full lists behind "See all" on the profile's Albums and
+                    Singles cards. Declared before nothing else that could
+                    shadow them, since /artist/:slug/* is a shared prefix. */}
+                <Route path="/artist/:slug/albums" element={<ArtistCollectionPage kind="albums" />} />
+                <Route path="/artist/:slug/singles" element={<ArtistCollectionPage kind="singles" />} />
 
                 <Route path="/track/:slug" element={<TrackPage />} />
                 <Route path="/dashboard" element={<ArtistDashboard />} />

@@ -149,12 +149,43 @@ export default function ProfilePage() {
     setFreezing(false);
   };
   const [activeTab, setActiveTab]             = useState('profile');
+  // My Top Pick
+  const [myTracks, setMyTracks]     = useState([]);
+  const [topPickId, setTopPickId]   = useState(null);
+  const [topPickNote, setTopPickNote] = useState('');
   const [editing, setEditing]                 = useState(false);
   const [saving, setSaving]                   = useState(false);
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [msg, setMsg]                         = useState('');
   const [profileImgFile, setProfileImgFile]   = useState(null);
   const [previewUrl, setPreviewUrl]           = useState(null);
+  useEffect(() => {
+    if (!artist?.id) return;
+    setTopPickId(artist.top_pick_track_id || null);
+    setTopPickNote(artist.top_pick_note || '');
+    supabase
+      .from('tracks')
+      .select('id, title')
+      .eq('artist_id', artist.id)
+      .eq('is_published', true)
+      .order('created_at', { ascending: false })
+      .then(({ data }) => setMyTracks(data || []));
+  }, [artist?.id, artist?.top_pick_track_id, artist?.top_pick_note]);
+
+  // Goes through set_my_top_pick so ownership of the track is checked in the
+  // database, not trusted from here.
+  const saveTopPick = async (trackId, note = null) => {
+    setTopPickId(trackId);
+    const { error } = await supabase.rpc('set_my_top_pick', {
+      p_track_id: trackId,
+      p_note: note ?? (trackId ? topPickNote : null),
+    });
+    if (error) { setMsg('Could not save your top pick: ' + error.message); return; }
+    if (!trackId) setTopPickNote('');
+    setMsg(trackId ? 'Top pick saved' : 'Top pick cleared');
+    setTimeout(() => setMsg(''), 2500);
+  };
+
   const [form, setForm] = useState({
     artist_name: '', bio: '', genre: '', mood: '',
     instagram: '', twitter: '', youtube: '',
@@ -582,6 +613,49 @@ export default function ProfilePage() {
           {/* ── Profile tab ── */}
           {activeTab === 'profile' && (
             <>
+              {/* My Top Pick. Without a control here the column and the
+                  profile row exist with no way for an artist to use them,
+                  which is the pattern that produced save_count and
+                  playlist_add_count: a signal designed and never wired. */}
+              {artist && (
+                <div className="rounded-2xl border border-white/[0.06] overflow-hidden mb-4"
+                  style={{ background: 'rgba(255,255,255,0.02)' }}>
+                  <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.05]">
+                    <p className="text-sm font-semibold text-white">My Top Pick</p>
+                    {topPickId && (
+                      <button onClick={() => saveTopPick(null)}
+                        className="text-xs text-white/40 hover:text-red-300 transition px-2 py-1 rounded-lg hover:bg-white/[0.04]">
+                        Clear
+                      </button>
+                    )}
+                  </div>
+                  <div className="p-4 space-y-3">
+                    <p className="text-xs text-white/35 leading-relaxed">
+                      One track pinned to the top of your profile. Pick the one you
+                      want people to hear first, not necessarily the most played.
+                    </p>
+                    <select
+                      value={topPickId || ''}
+                      onChange={(e) => saveTopPick(e.target.value || null)}
+                      className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none">
+                      <option value="">No pick</option>
+                      {myTracks.map(t => (
+                        <option key={t.id} value={t.id}>{t.title}</option>
+                      ))}
+                    </select>
+                    {topPickId && (
+                      <input
+                        value={topPickNote}
+                        onChange={(e) => setTopPickNote(e.target.value)}
+                        onBlur={() => saveTopPick(topPickId, topPickNote)}
+                        placeholder="Why this one? (optional, shows under the title)"
+                        maxLength={140}
+                        className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none" />
+                    )}
+                  </div>
+                </div>
+              )}
+
               {/* Artist Info card — includes genre + mood */}
               <div className="rounded-2xl border border-white/[0.06] overflow-hidden mb-4"
                 style={{ background: 'rgba(255,255,255,0.02)' }}>
@@ -596,7 +670,7 @@ export default function ProfilePage() {
                   <div className="space-y-3">
                     {form.bio
                       ? <p className="text-sm text-white/60 leading-relaxed">{form.bio}</p>
-                      : <p className="text-xs text-white/20 italic">No bio yet — tap Edit to add one</p>}
+                      : <p className="text-xs text-white/20 italic">No bio yet, tap Edit to add one</p>}
                     {(form.genre || form.mood) && (
                       <div className="flex flex-wrap gap-1.5 pt-1">
                         {form.genre && (
@@ -612,7 +686,7 @@ export default function ProfilePage() {
                       </div>
                     )}
                     {!form.genre && !form.mood && (
-                      <p className="text-xs text-white/20 italic">No genre or mood set — tap Edit →</p>
+                      <p className="text-xs text-white/20 italic">No genre or mood set, tap Edit →</p>
                     )}
                   </div>
                 </div>
@@ -629,7 +703,7 @@ export default function ProfilePage() {
                     }`}>{remainingToday}/{MAX_DAILY_THOUGHTS} left today</span>
                   </div>
                   <div className="p-4 space-y-3">
-                    <p className="text-xs text-white/30">Share what's on your mind — appears on your profile for 24 hours</p>
+                    <p className="text-xs text-white/30">Share what's on your mind, appears on your profile for 24 hours</p>
                     <textarea rows={3} maxLength={280} value={thoughtInput}
                       onChange={e => setThoughtInput(e.target.value)}
                       placeholder="What's on your mind today?"
@@ -837,7 +911,7 @@ export default function ProfilePage() {
                       <p className="text-xs font-semibold text-white">Listen as Fan</p>
                       <p className="text-[10px] text-white/30 mt-0.5">
                         {viewAs === 'listener'
-                          ? 'Active — you are browsing as a listener'
+                          ? 'Active, you are browsing as a listener'
                           : 'Temporarily hide creator tools and browse as a fan'}
                       </p>
                     </div>
@@ -928,7 +1002,7 @@ export default function ProfilePage() {
                 <p className="text-[11px] text-white/20 text-center py-1">
                   {streakRow.freeze_used_month === new Date().toISOString().slice(0, 7)
                     ? '🧊 Streak freeze used this month'
-                    : 'Keep your streak going — freeze available next month'}
+                    : 'Keep your streak going, freeze available next month'}
                 </p>
               )}
               {freezeMsg && <p className="text-xs text-center mt-2 text-blue-400/70">{freezeMsg}</p>}
@@ -960,7 +1034,7 @@ export default function ProfilePage() {
                   <Palette className="w-4 h-4 text-purple-400 flex-shrink-0" />
                   <div>
                     <p className="text-sm text-white font-medium">Unlock App Themes</p>
-                    <p className="text-xs text-white/30 mt-0.5">{LISTENER_THEME_PRESETS.length} colour schemes — upgrade to Fan Pro</p>
+                    <p className="text-xs text-white/30 mt-0.5">{LISTENER_THEME_PRESETS.length} colour schemes, upgrade to Fan Pro</p>
                   </div>
                 </button>
               ) : (

@@ -394,6 +394,7 @@ export default function ArtistProfilePage() {
   const [voiceMemos, setVoiceMemos] = useState([]);
   const [stories, setStories]         = useState([]);
   const [bioOpen, setBioOpen] = useState(false);
+  const [topPick, setTopPick] = useState(null);
   const [viewingStory, setViewingStory]   = useState(false);
   const [showCommunity, setShowCommunity]     = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -585,6 +586,22 @@ export default function ArtistProfilePage() {
         return;
       }
       setArtist(artistData);
+
+      // My Top Pick: one track the artist chose to lead with. Fetched
+      // separately rather than joined, so a pick pointing at a track that
+      // has since been unpublished simply shows nothing instead of
+      // breaking the profile query.
+      if (artistData?.top_pick_track_id) {
+        supabase
+          .from('tracks')
+          .select('*, albums(title, cover_artwork_url, price)')
+          .eq('id', artistData.top_pick_track_id)
+          .eq('is_published', true)
+          .maybeSingle()
+          .then(({ data }) => setTopPick(data || null));
+      } else {
+        setTopPick(null);
+      }
       // Live follower count — avoids stale cached column
 supabase.from('follows').select('*', { count: 'exact', head: true })
   .eq('artist_id', artistData.id)
@@ -1607,6 +1624,35 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
 
 
 
+      {/* My Top Pick. One track the artist chose to lead with, so the first
+          thing on the page is their decision rather than a play count.
+          Deliberately a single wide card, not a rail: the whole point is
+          that it is one track. */}
+      {topPick && (
+        <div className="px-6 mb-8">
+          <p className="text-[10px] uppercase tracking-[0.2em] font-bold mb-2" style={{ color: primaryColor }}>
+            My Top Pick
+          </p>
+          <div
+            onClick={() => handlePlayTrack(topPick)}
+            className="flex items-center gap-4 p-4 rounded-2xl cursor-pointer transition hover:opacity-90 active:opacity-75"
+            style={{ backgroundColor: `${textColor}06`, border: `1px solid ${primaryColor}30` }}>
+            <div className="w-20 h-20 lg:w-24 lg:h-24 rounded-xl overflow-hidden flex-shrink-0" style={{ backgroundColor: `${textColor}08` }}>
+              {topPick.cover_artwork_url
+                ? <img src={topPick.cover_artwork_url} alt={topPick.title} className="w-full h-full object-cover" />
+                : <div className="w-full h-full flex items-center justify-center"><Music className="w-8 h-8" style={{ color: `${textColor}20` }} /></div>}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-lg font-bold truncate" style={{ color: textColor }}>{topPick.title}</p>
+              {artist.top_pick_note
+                ? <p className="text-sm mt-1 max-w-2xl" style={{ color: `${textColor}70` }}>{artist.top_pick_note}</p>
+                : <p className="text-sm mt-1" style={{ color: `${textColor}45` }}>Chosen by {artist.artist_name}</p>}
+            </div>
+            <Play className="w-5 h-5 flex-shrink-0" style={{ color: primaryColor }} />
+          </div>
+        </div>
+      )}
+
       {tracks.length > 0 && (
         <div className="mb-8">
           <h2 className="text-lg font-bold mb-3 px-6 text-white" style={{ fontFamily: `"${headingFont}", sans-serif`, opacity: 1 }}>{isBeatmakerProfile ? "Beats" : "Popular"}</h2>
@@ -1741,41 +1787,77 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
         );
       })()}
 
-      {albums.length > 0 && (
-        <div className="mb-8 py-5" style={{ background: `linear-gradient(135deg, rgba(88,28,135,0.18) 0%, rgba(30,27,75,0.35) 60%, transparent 100%)`, borderTop: `1px solid rgba(139,92,246,0.15)`, borderBottom: `1px solid rgba(139,92,246,0.08)` }}>
-          <h2 className="text-lg font-bold px-6 mb-3" style={{ fontFamily: `"${headingFont}", sans-serif` }}>Albums</h2>
-          <div className="flex space-x-3 overflow-x-auto px-6 scrollbar-hide">
-            {albums.map(album => (
-              <div key={album.id} className="flex-shrink-0 w-36 cursor-pointer group" onClick={() => navigate(`/album/${album.slug || album.id}`)}>
-                <div className="aspect-square rounded-xl overflow-hidden mb-2" style={{ backgroundColor: `${textColor}08` }}>
-                  {album.cover_artwork_url
-                    ? <img src={album.cover_artwork_url} alt={album.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
-                    : <div className="w-full h-full flex items-center justify-center" style={{ background: `linear-gradient(135deg, ${secondaryColor}40, ${accentColor}20)` }}><Music className="w-8 h-8" style={{ color: `${textColor}20` }} /></div>}
-                </div>
-                <p className="text-sm font-medium truncate" style={{ color: textColor }}>{album.title}</p>
-                <p className="text-xs truncate" style={{ color: `${textColor}50` }}>{album.release_type?.toUpperCase()} {album.release_date ? new Date(album.release_date).getFullYear() : ''}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      {/* Singles and Albums, side by side rather than two stacked rows.
+          Steve: these two should read as collections, not as another
+          horizontal rail like everything else. Each card opens its own page,
+          the way a Spotify discography entry does. On mobile they stack,
+          which is the same as before. */}
+      {(albums.length > 0 || tracks.filter(t => !t.album_id).length > 0) && (
+        <div className="px-6 mb-10 grid grid-cols-1 lg:grid-cols-2 gap-6">
 
-      {tracks.filter(t => !t.album_id).length > 0 && (
-        <div className="mb-8 py-5" style={{ background: `linear-gradient(135deg, rgba(13,148,136,0.15) 0%, rgba(10,30,30,0.4) 60%, transparent 100%)`, borderTop: `1px solid rgba(20,184,166,0.15)`, borderBottom: `1px solid rgba(20,184,166,0.08)` }}>
-          <h2 className="text-lg font-bold px-6 mb-3" style={{ fontFamily: `"${headingFont}", sans-serif` }}>{isBeatmakerProfile ? "Beat Catalogue" : "Singles"}</h2>
-          <div className="flex space-x-3 overflow-x-auto px-6 scrollbar-hide">
-            {tracks.filter(t => !t.album_id).map(track => (
-              <div key={track.id} className="flex-shrink-0 w-36 cursor-pointer group" onClick={() => handlePlayTrack(track)}>
-                <div className="aspect-square rounded-xl overflow-hidden mb-2" style={{ backgroundColor: `${textColor}08` }}>
-                  {track.cover_artwork_url
-                    ? <img src={track.cover_artwork_url} alt={track.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
-                    : <div className="w-full h-full flex items-center justify-center" style={{ background: `linear-gradient(135deg, ${secondaryColor}40, ${accentColor}20)` }}><Music className="w-8 h-8" style={{ color: `${textColor}20` }} /></div>}
-                </div>
-                <p className="text-sm font-medium truncate" style={{ color: textColor }}>{track.title}</p>
-                <p className="text-xs truncate" style={{ color: `${textColor}50` }}>Single</p>
+          {albums.length > 0 && (
+            <div className="rounded-2xl p-5"
+              style={{ background: `linear-gradient(135deg, rgba(88,28,135,0.18) 0%, rgba(30,27,75,0.35) 100%)`, border: `1px solid rgba(139,92,246,0.15)` }}>
+              <div className="flex items-baseline justify-between mb-3">
+                <h2 className="text-lg font-bold" style={{ fontFamily: `"${headingFont}", sans-serif` }}>Albums</h2>
+                <span className="text-xs" style={{ color: `${textColor}40` }}>{albums.length}</span>
               </div>
-            ))}
-          </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                {albums.slice(0, 6).map(album => (
+                  <div key={album.id} className="cursor-pointer group"
+                    onClick={() => navigate(`/album/${artist.slug}/${album.slug}`)}>
+                    <div className="aspect-square rounded-xl overflow-hidden mb-2" style={{ backgroundColor: `${textColor}08` }}>
+                      {album.cover_artwork_url
+                        ? <img src={album.cover_artwork_url} alt={album.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                        : <div className="w-full h-full flex items-center justify-center"><Music className="w-8 h-8" style={{ color: `${textColor}20` }} /></div>}
+                    </div>
+                    <p className="text-sm font-medium truncate" style={{ color: textColor }}>{album.title}</p>
+                    <p className="text-xs truncate" style={{ color: `${textColor}50` }}>
+                      {album.release_type?.toUpperCase()} {album.release_date ? new Date(album.release_date).getFullYear() : ''}
+                    </p>
+                  </div>
+                ))}
+              </div>
+              {albums.length > 6 && (
+                <button onClick={() => navigate(`/artist/${artist.slug}/albums`)}
+                  className="text-xs font-semibold mt-3" style={{ color: primaryColor }}>
+                  See all {albums.length} albums
+                </button>
+              )}
+            </div>
+          )}
+
+          {tracks.filter(t => !t.album_id).length > 0 && (
+            <div className="rounded-2xl p-5"
+              style={{ background: `linear-gradient(135deg, rgba(13,148,136,0.15) 0%, rgba(10,30,30,0.4) 100%)`, border: `1px solid rgba(20,184,166,0.15)` }}>
+              <div className="flex items-baseline justify-between mb-3">
+                <h2 className="text-lg font-bold" style={{ fontFamily: `"${headingFont}", sans-serif` }}>
+                  {isBeatmakerProfile ? 'Beat Catalogue' : 'Singles'}
+                </h2>
+                <span className="text-xs" style={{ color: `${textColor}40` }}>{tracks.filter(t => !t.album_id).length}</span>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                {tracks.filter(t => !t.album_id).slice(0, 6).map(track => (
+                  <div key={track.id} className="cursor-pointer group" onClick={() => handlePlayTrack(track)}>
+                    <div className="aspect-square rounded-xl overflow-hidden mb-2" style={{ backgroundColor: `${textColor}08` }}>
+                      {track.cover_artwork_url
+                        ? <img src={track.cover_artwork_url} alt={track.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                        : <div className="w-full h-full flex items-center justify-center"><Music className="w-8 h-8" style={{ color: `${textColor}20` }} /></div>}
+                    </div>
+                    <p className="text-sm font-medium truncate" style={{ color: textColor }}>{track.title}</p>
+                    <p className="text-xs truncate" style={{ color: `${textColor}50` }}>Single</p>
+                  </div>
+                ))}
+              </div>
+              {tracks.filter(t => !t.album_id).length > 6 && (
+                <button onClick={() => navigate(`/artist/${artist.slug}/singles`)}
+                  className="text-xs font-semibold mt-3" style={{ color: primaryColor }}>
+                  See all {tracks.filter(t => !t.album_id).length} singles
+                </button>
+              )}
+            </div>
+          )}
+
         </div>
       )}
 
