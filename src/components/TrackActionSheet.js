@@ -6,7 +6,7 @@ import { usePlayer } from '../contexts/PlayerContext';
 import { downloadTrack } from '../utils/downloadTrack';
 import {
     X, Share2, ListMusic, Download, Heart, Play, Music, Loader, Check,
-    ChevronLeft, ShoppingCart, Lock, PlusCircle, DollarSign, Clock,
+    ChevronLeft, ShoppingCart, Lock, PlusCircle, DollarSign, Clock, Info,
 } from 'lucide-react';
 import ShareCard from './ShareCard';
 
@@ -383,7 +383,7 @@ export default function TrackActionSheet({ track, artist, onClose }) {
                                 </button>
                             )}
                             {playlists.length === 0 && !showNewPlaylist && (
-                                <p className="text-xs text-white/30 px-5 py-3">No playlists yet — create one above</p>
+                                <p className="text-xs text-white/30 px-5 py-3">No playlists yet, create one above</p>
                             )}
                             {playlists.map(pl => {
                                 const covers = (pl.playlist_tracks || [])
@@ -447,7 +447,7 @@ export default function TrackActionSheet({ track, artist, onClose }) {
                                             <Clock className="w-4 h-4 text-yellow-300 flex-shrink-0" />
                                             <div>
                                                 <p className="text-sm font-semibold text-yellow-200">Pre-order</p>
-                                                <p className="text-xs text-yellow-300/70">Releases {formatReleaseDate(releaseDate)} — pay now, download on release day</p>
+                                                <p className="text-xs text-yellow-300/70">Releases {formatReleaseDate(releaseDate)}, pay now, download on release day</p>
                                             </div>
                                         </div>
                                     )}
@@ -602,6 +602,19 @@ export default function TrackActionSheet({ track, artist, onClose }) {
                                     )}
                                     {downloadError && <p className="text-xs text-red-400 px-5 pb-2">{downloadError}</p>}
                                 </>
+                            )}
+                            {/* There was no way to reach a track's own page from
+                                anywhere in the app: not the player, not the
+                                artist profile, not this sheet. The page exists
+                                at /track/:slug and /beat/:slug, has its own
+                                crawler meta and is what Share copies, so it was
+                                reachable by link but not by navigation. */}
+                            {track?.slug && (
+                                <button onClick={() => { navigate(`${track.is_beat ? '/beat' : '/track'}/${track.slug}`); onClose(); }}
+                                    className="w-full flex items-center space-x-4 px-5 py-3.5 active:bg-white/[0.04] transition">
+                                    <Info className="w-5 h-5 text-white/40" />
+                                    <span className="text-sm text-white/70">Go to track page</span>
+                                </button>
                             )}
                             <button onClick={() => { const slug = artist?.slug || track?.artist_slug; if (slug) { navigate(`/artist/${slug}`); onClose(); } }}
                                 className="w-full flex items-center space-x-4 px-5 py-3.5 active:bg-white/[0.04] transition">

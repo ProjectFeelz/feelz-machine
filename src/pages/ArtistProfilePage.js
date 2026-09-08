@@ -1277,10 +1277,17 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
         <script type="application/ld+json">{JSON.stringify(musicGroupSchema)}</script>
       </Helmet>
 
-      {/* BANNER
-          Shorter on desktop. At 220px the banner plus the centred avatar
-          pushed the music below the fold on every laptop. */}
-      <div className="relative w-full h-[220px] lg:h-[260px]">
+      {/* HEADER
+          On desktop this is one flex row: image on the left, everything else
+          to its right, ending together at the bottom of the green. The avatar
+          and info block already carried lg:flex-shrink-0 and lg:flex-1, but
+          nothing made them a row, so those classes did nothing and the
+          spacing was whatever the two blocks happened to produce. That is why
+          the green ran on past the socials and Popular kept getting covered.
+          Mobile is untouched: the banner keeps its fixed height and the
+          avatar stays absolutely positioned and centred. */}
+      <div className="lg:flex lg:items-end lg:gap-7 lg:px-8 lg:pb-5 lg:relative">
+      <div className="relative w-full h-[220px] lg:h-auto lg:min-h-0 lg:w-auto">
         {artist.banner_image_url || theme?.banner_image_url ? (
           <img src={artist.banner_image_url || theme?.banner_image_url} alt="" className="absolute inset-0 w-full h-full object-cover" />
         ) : (
@@ -1306,7 +1313,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
         {/* Bigger on desktop and deliberately bleeding past the bottom of the
             banner, so the image breaks the green edge instead of floating
             inside it. */}
-        <div className="absolute -bottom-16 left-1/2 -translate-x-1/2 lg:left-8 lg:translate-x-0 lg:-bottom-2 z-10">
+        <div className="absolute -bottom-16 left-1/2 -translate-x-1/2 z-10 lg:static lg:translate-x-0 lg:flex-shrink-0">
           {/* Story ring — clickable if artist has active stories */}
           <div
             className="relative"
@@ -1319,7 +1326,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
                 <div className="w-full h-full rounded-2xl" style={{ backgroundColor: bgColor }} />
               </div>
             )}
-            <div className="relative w-32 h-32 lg:w-60 lg:h-60 rounded-2xl overflow-hidden border-4 shadow-2xl"
+            <div className="relative w-32 h-32 lg:w-48 lg:h-48 rounded-2xl overflow-hidden border-4 shadow-2xl"
               style={{ borderColor: stories.length > 0 ? 'transparent' : bgColor, backgroundColor: `${secondaryColor}30` }}>
               {artist.profile_image_url ? (
                 <img src={artist.profile_image_url} alt={artist.artist_name} className="w-full h-full object-cover" />
@@ -1354,7 +1361,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
       {/* Shifted right to clear the larger image, and up a step so the social
           icons have clearance above the bottom of the green banner rather
           than sitting on its edge. */}
-      <div className="px-6 pt-24 flex flex-col items-center text-center lg:pt-0 lg:-mt-52 lg:pl-80 lg:pb-6 lg:items-start lg:text-left lg:relative lg:z-20">
+      <div className="px-6 pt-24 flex flex-col items-center text-center lg:pt-0 lg:items-start lg:text-left lg:flex-1 lg:min-w-0">
         <div className="flex flex-col items-center lg:items-start mb-1">
           <div className="flex items-center space-x-2">
             <h1 className="text-3xl font-bold" style={{ fontFamily: `"${headingFont}", sans-serif`, color: textColor }}>{artist.artist_name}</h1>
@@ -1536,7 +1543,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
             outlined, so they read as links off the platform instead of another
             row of actions. */}
         {socialEntries.length > 0 && (
-          <div className="flex items-center gap-1.5 mb-6 lg:mb-3">
+          <div className="flex items-center gap-1.5 mb-6 lg:mb-0">
             {socialEntries.map(([platform, value]) => {
               const Icon = SOCIAL_ICONS[platform] || Globe;
               const prefix = SOCIAL_URLS[platform] || '';
@@ -1628,6 +1635,8 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
         </div>
       )}
 
+
+      </div>
 
 
       {/* My Top Pick. One track the artist chose to lead with, so the first
@@ -1798,8 +1807,16 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
                 );
               })()}
 
-              {/* Everything after the newest, scrolling on its own. */}
-              <div className="flex space-x-3 overflow-x-auto scrollbar-hide flex-1 min-w-0" style={{ overflowY: 'visible' }}>
+              {/* Everything after the newest, in its own recessed panel so the
+                  pinned hero reads as being in front of the rest rather than
+                  merely the first and largest item. Darker background and a
+                  border, which is the distinction Steve asked for. */}
+              <div className="flex space-x-3 overflow-x-auto scrollbar-hide flex-1 min-w-0 rounded-xl px-3 py-3"
+                style={{
+                  overflowY: 'visible',
+                  background: 'rgba(0,0,0,0.28)',
+                  border: `1px solid ${textColor}0F`,
+                }}>
               {/* The newest track is rendered above and pinned, so nothing in
                   this list is ever the newest. The isNewest flag and its NEW
                   badge belong to the hero now, and leaving a constant false
@@ -1808,7 +1825,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
                 const showGlow = false;
                 return (
                   <div key={track.id}
-                    className="flex-shrink-0 w-32 cursor-pointer group"
+                    className="flex-shrink-0 w-32 cursor-pointer group opacity-80 hover:opacity-100 transition-opacity"
                     onClick={() => handlePlayTrack(track)}>
                     <div className="aspect-square rounded-xl overflow-hidden mb-1.5 relative"
                       style={{ backgroundColor: `${textColor}08`, boxShadow: showGlow ? `0 0 0 2px ${secondaryColor}, 0 0 20px ${secondaryColor}60, 0 0 40px ${secondaryColor}30` : 'none' }}>

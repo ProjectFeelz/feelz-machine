@@ -126,7 +126,29 @@ function PageTitle({ title, children }) {
 // run last, sidesteps the limitation entirely instead of fighting it.
 function NotFoundRedirect() {
   const location = useLocation();
-  const atMatch = location.pathname.match(/^\/@(.+)$/);
+  // Vanity URLs under a handle:
+  //   /@stevecsa                      -> /artist/stevecsa
+  //   /@stevecsa/single/<trackSlug>   -> /track/<trackSlug>
+  //   /@stevecsa/album/<albumSlug>    -> /album/stevecsa/<albumSlug>
+  //
+  // Redirects rather than routes that render in place, deliberately. Two
+  // URLs serving the same page splits its search ranking and gives the
+  // crawler two things to index, so the shareable handle form points at the
+  // one canonical page instead of competing with it.
+  const vanityTrack = location.pathname.match(/^\/@([^/]+)\/(?:single|track)\/(.+)$/);
+  if (vanityTrack) {
+    return <Navigate to={`/track/${vanityTrack[2]}`} replace />;
+  }
+  const vanityAlbum = location.pathname.match(/^\/@([^/]+)\/album\/(.+)$/);
+  if (vanityAlbum) {
+    return <Navigate to={`/album/${vanityAlbum[1]}/${vanityAlbum[2]}`} replace />;
+  }
+  const vanityBeat = location.pathname.match(/^\/@([^/]+)\/beat\/(.+)$/);
+  if (vanityBeat) {
+    return <Navigate to={`/beat/${vanityBeat[2]}`} replace />;
+  }
+
+  const atMatch = location.pathname.match(/^\/@([^/]+)$/);
   if (atMatch) {
     return <Navigate to={`/artist/${atMatch[1]}`} replace />;
   }
@@ -253,7 +275,6 @@ export default function AppRouter() {
               <Route path="/terms" element={<Navigate to="/terms-of-use" replace />} />
 
               <Route path="/login" element={<LoginPage />} />
-              <Route path="/setup" element={<ProfileSetup />} />
               <Route path="/chat/:roomId" element={<ChatRoomView />} />
               <Route path="/competition/:competitionId" element={<CompetitionRoomPage />} />
               <Route path="/session/:sessionId" element={<ListeningSessionPage />} />
@@ -319,6 +340,11 @@ export default function AppRouter() {
                 <Route path="/community" element={<ChatRoomsPage />} />
                 <Route path="/feed" element={<FeedPage />} />
                 <Route path="/chat" element={<Navigate to="/community" replace />} />
+                {/* Inside AppLayout. It used to render outside it, so anyone
+                    who signed in and landed on setup had no side nav and no
+                    way back into the app. ProfileSetup has no shell of its
+                    own, so it needed the route moved, nothing else. */}
+                <Route path="/setup" element={<ProfileSetup />} />
                 <Route path="/profile" element={<ProfilePage />} />
                 <Route path="/profile/edit" element={<UserProfilePage />} />
                 <Route path="/notifications" element={<NotificationsPage />} />

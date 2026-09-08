@@ -2,6 +2,8 @@ import { Helmet } from 'react-helmet-async';
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
+import TrackVersions from '../components/TrackVersions';
+import PreSaveButton from '../components/PreSaveButton';
 import { useAuth } from '../contexts/AuthContext';
 import { usePlayer } from '../contexts/PlayerContext';
 import { downloadTrack } from '../utils/downloadTrack';
@@ -33,6 +35,10 @@ export default function TrackPage() {
   const { playTrack, currentTrack, isPlaying, togglePlay } = usePlayer();
 
   const [track, setTrack]           = useState(null);
+  // Who else is credited on this track. The artist profile has shown
+  // collaborations for a while; the track's own page did not, which is the
+  // one place a listener asks "who is that featured".
+  const [credits, setCredits]       = useState([]);
   const [artist, setArtist]         = useState(null);
   const [album, setAlbum]           = useState(null);
   const [discography, setDiscography] = useState([]);
@@ -83,6 +89,16 @@ export default function TrackPage() {
       if (error || !trackData) { setLoading(false); return; }
 
       setTrack(trackData);
+
+      // Accepted collaborations only. A pending invitation is not a credit,
+      // and showing one would announce a feature the other artist has not
+      // agreed to.
+      supabase
+        .from('collaborations')
+        .select('id, role, artist_id, artists(artist_name, slug, profile_image_url)')
+        .eq('track_id', trackData.id)
+        .eq('status', 'accepted')
+        .then(({ data }) => setCredits((data || []).filter(cr => cr.artists)));
       setArtist(trackData.artists);
       setAlbum(trackData.albums || null);
 
@@ -226,7 +242,7 @@ export default function TrackPage() {
   const coverArt  = track.cover_artwork_url || album?.cover_artwork_url;
   const pageUrl   = `${BASE_URL}/track/${slug}`;
   const pageTitle = `${track.title} by ${artist?.artist_name} · Feelz Machine`;
-  const pageDesc  = `Stream ${track.title} by ${artist?.artist_name} on Feelz Machine — independent music platform.`;
+  const pageDesc  = `Stream ${track.title} by ${artist?.artist_name} on Feelz Machine, independent music platform.`;
   const ogImage   = coverArt || `${BASE_URL}/og-default.png`;
 
   const musicRecordingSchema = {
@@ -415,6 +431,62 @@ export default function TrackPage() {
           <span>Artist</span>
         </button>
       </div>
+
+      {/* Pre-save. This went the same way as versions: it was rendered inside
+          the artist profile's track rows, and when Popular became a card rail
+          the component was left imported and never used, so pre-save was
+          unreachable anywhere in the app. It belongs on the track page for the
+          same reason versions do, a pre-save is a fact about this track. */}
+      {track.is_preorder && track.release_date && new Date(track.release_date) > new Date() && (
+        <div className="px-5 mb-6">
+          <PreSaveButton track={track} />
+        </div>
+      )}
+
+      {/* Versions live here now. They used to hang off the Popular list on
+          the artist profile, which became a rail of ten cards with nowhere to
+          expand into, so they were imported and never rendered. The track
+          page is the right home anyway: a remix or instrumental is a fact
+          about this track, not about the artist's top ten. */}
+      {/* Credits. A listener hearing a feature has nowhere else to find out
+          who it is: the profile shows collaborations, the track page did
+          not. Each name links to that artist, which is the point. */}
+      {credits.length > 0 && (
+        <div className="px-5 mt-2 mb-6">
+          <h2 className="text-sm font-semibold text-white/50 uppercase tracking-wider mb-3">
+            Featuring
+          </h2>
+          <div className="flex flex-wrap gap-2">
+            {credits.map(cr => (
+              <button key={cr.id}
+                onClick={() => navigate(`/artist/${cr.artists.slug}`)}
+                className="flex items-center gap-2 pl-1 pr-3 py-1 rounded-full bg-white/[0.05] border border-white/[0.08] hover:bg-white/[0.1] transition">
+                {cr.artists.profile_image_url
+                  ? <img src={cr.artists.profile_image_url} alt="" className="w-7 h-7 rounded-full object-cover" />
+                  : <span className="w-7 h-7 rounded-full bg-white/10 flex items-center justify-center text-[11px] font-bold text-white/60">
+                      {(cr.artists.artist_name || '?')[0].toUpperCase()}
+                    </span>}
+                <span className="text-sm text-white">{cr.artists.artist_name}</span>
+                {cr.role && <span className="text-[11px] text-white/35">{cr.role}</span>}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {track.has_versions && (
+        <div className="px-5 mt-2 mb-6">
+          <h2 className="text-sm font-semibold text-white/50 uppercase tracking-wider mb-3">
+            Other versions
+          </h2>
+          <TrackVersions
+            track={track}
+            albumPrice={track.albums?.price || 0}
+            onPlayVersion={(version) => playTrack(version, [version])}
+            onPurchaseRequired={() => navigate(`/track/${track.slug || track.id}`)}
+          />
+        </div>
+      )}
 
       {/* More from this artist */}
       {discography.filter(t => t.id !== track.id).length > 0 && (

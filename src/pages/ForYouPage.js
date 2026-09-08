@@ -25,7 +25,7 @@ import { askNotificationPermission } from '../utils/askNotificationPermission';
 import {
   Heart, MessageCircle, ListMusic, UserCheck,
   Share2, Loader, X, Send, ChevronUp,
-  Sparkles, Volume2, VolumeX, Info, EyeOff, ChevronRight,
+  Sparkles, Volume2, VolumeX, Info, EyeOff,
 } from 'lucide-react';
 
 const SWIPE_THRESHOLD = 60;
@@ -802,29 +802,14 @@ function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare, onN
 
       {/* Bottom info */}
       <div className="absolute bottom-24 left-4 right-16 z-20" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-          {/* The artist is the only thing on this screen that leads anywhere,
-              and it was the smallest element on it: a faint 13px handle that
-              did not read as tappable, worst on mobile. Now a pill with the
-              artist's actual name, their avatar when there is one, and a
-              chevron, so it looks like the link it is. The handle moves
-              underneath, where it identifies without competing. */}
+        <div className="flex items-center space-x-3 mb-1">
           <button onClick={goToArtist}
-            className="flex items-center gap-2 pl-1 pr-3 py-1 rounded-full text-left transition active:scale-95 max-w-full"
-            style={{ background: 'rgba(255,255,255,0.10)', border: '1px solid rgba(255,255,255,0.16)' }}>
-            {track.artist_image
-              ? <img src={track.artist_image} alt="" className="w-7 h-7 rounded-full object-cover flex-shrink-0" />
-              : <span className="w-7 h-7 rounded-full bg-white/15 flex items-center justify-center flex-shrink-0 text-[11px] font-bold text-white/70">
-                  {(track.artist_name || '?')[0]?.toUpperCase()}
-                </span>}
-            <span className="text-[15px] font-bold text-white truncate">
-              {track.artist_name || track.artist_slug}
-            </span>
-            <ChevronRight className="w-3.5 h-3.5 text-white/40 flex-shrink-0" />
+            className="text-[13px] font-bold text-white/60 text-left hover:text-white transition">
+            @{track.artist_slug || track.artist_name}
           </button>
           {user && !isOwnTrack && following === false && (
             <button onClick={e => { e.stopPropagation(); handleFollow(); }}
-              className="flex items-center space-x-1 px-3 py-1.5 rounded-full text-xs font-bold text-white transition active:scale-95 flex-shrink-0"
+              className="flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-bold text-white transition active:scale-95"
               style={{ background: 'rgba(239,68,68,0.25)', border: '1px solid rgba(239,68,68,0.4)' }}>
               <span>+ Follow</span>
             </button>
@@ -1046,6 +1031,7 @@ export default function ForYouPage() {
   const velocityRef  = useRef(0);       // px/ms at release
   const preloadedRef = useRef(new Set()); // track IDs already preloaded
   const [dragOffset, setDragOffset]   = useState(0);
+  const [loadError, setLoadError]     = useState('');
 
   // Persistent hidden IDs ref — survives across loadTracks calls and page re-renders
   const hiddenIdsRef = React.useRef(new Set());
@@ -1291,13 +1277,44 @@ export default function ForYouPage() {
       if (offset === 0) setTracks(fetched);
       else setTracks(prev => [...prev, ...fetched]);
     } catch (err) {
-      console.error('ForYou load error:', err);
+      // This catch used to swallow everything and leave the feed empty, so a
+      // thrown query looked exactly like "no music available". Every other
+      // page worked, which made it look like a data problem when it was not.
+      console.error('ForYou load error:', err, err?.message, err?.details, err?.hint);
+      if (offset === 0) setLoadError(err?.message || 'Could not load your feed.');
     }
     setLoading(false);
     setLoadingMore(false);
   }, [user]);
 
   useEffect(() => { loadTracks(0); }, [loadTracks]);
+
+  // If the whole chain failed and the feed is empty, fall back to plain
+  // published tracks. Recommendations, ranking and cold start are all
+  // improvements on top of "show the music"; none of them should be able to
+  // take the music away.
+  useEffect(() => {
+    if (loading || tracks.length > 0 || !loadError) return;
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from('tracks')
+        .select('id, title, slug, genre, mood, cover_artwork_url, file_url, youtube_url, duration, lyrics, artist_id, is_beat, stream_count, like_count, bpm, beat_key, beat_scale, download_price, engagement_score, artists(artist_name, slug, profile_image_url)')
+        .eq('is_published', true)
+        .order('created_at', { ascending: false })
+        .limit(30);
+      if (cancelled || !data?.length) return;
+      setTracks(data.map(t => ({
+        ...t,
+        artist_name:  t.artists?.artist_name || 'Unknown',
+        artist_slug:  t.artists?.slug || null,
+        artist_image: t.artists?.profile_image_url || null,
+        reason_label: 'New',
+      })));
+      setLoadError('');
+    })();
+    return () => { cancelled = true; };
+  }, [loading, tracks.length, loadError]);
 
   useEffect(() => {
     if (idx >= tracks.length - 3 && !loadingMore && tracks.length > 0) loadTracks(tracks.length);
@@ -1447,7 +1464,7 @@ export default function ForYouPage() {
   const onTouchEnd = useCallback(() => {
     if (!dragging.current) return;
     const dy  = dragYRef.current;
-    const vel = velocityRef.current; // px/ms — negative = moving up (next)
+    const vel = velocityRef.current; // px/ms, negative = moving up (next)
     // Fast flick (>0.3px/ms) only needs 20px. Slow drag needs full threshold.
     const speed     = Math.abs(vel);
     const threshold = speed > 0.3 ? 20 : SWIPE_THRESHOLD;
