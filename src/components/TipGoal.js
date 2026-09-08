@@ -1,18 +1,30 @@
 /**
  * TipGoal.js
  *
- * Shows a fundraising progress bar on the artist's profile page.
+ * An artist's fundraising goal, shown on their profile page.
  * Artists create/manage goals from their dashboard (ArtistDashboard).
  * Listeners see the goal and current progress when they visit.
  * Progress updates automatically when a tip comes in (via TipButton).
  *
+ * PRESENTATION
+ *
+ * This used to render a full-width card (`mx-4 my-3 p-4 rounded-2xl border`)
+ * inline in the profile header's action row. A card in a row of pills does
+ * not belong there: it broke the line of controls, took a block of the hero
+ * to say "$0 raised", and pushed everything below it around.
+ *
+ * It is now a pill the same size and shape as Follow / Play / Shuffle, showing
+ * only the numbers. The title, description and progress bar live in a floating
+ * card that appears on hover (desktop) or on tap (touch, where hover does not
+ * exist). Same information, none of the hero real estate.
+ *
  * Props:
  *   artistId   - the artist's ID
- *   primaryColor / textColor / bgColor - theme colours from ArtistProfilePage
+ *   primaryColor / textColor - theme colours from ArtistProfilePage
  *   isOwner    - if true, show edit/create controls
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../supabaseClient';
 import { useHaptics } from '../hooks/useHaptics';
 import { Target, X, Loader, Check, Edit2 } from 'lucide-react';
@@ -108,6 +120,9 @@ export default function TipGoal({ artistId, primaryColor = '#8B5CF6', textColor 
   const [goal, setGoal]           = useState(null);
   const [loading, setLoading]     = useState(true);
   const [showEdit, setShowEdit]   = useState(false);
+  const [open, setOpen]           = useState(false);   // floating card visible
+  const wrapRef                   = useRef(null);
+  const hoverRef                  = useRef(false);
 
   const fetchGoal = useCallback(async () => {
     try {
@@ -134,65 +149,140 @@ export default function TipGoal({ artistId, primaryColor = '#8B5CF6', textColor 
     return () => supabase.removeChannel(channel);
   }, [goal?.id]);
 
+  // Tap outside closes the card. Only bound while it is open, and it ignores
+  // taps inside the pill or the card itself so the toggle still works.
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false);
+    };
+    const onKey = (e) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('touchstart', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('touchstart', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
   if (loading) return null;
 
-  // Owner with no goal — show create prompt
+  // ── Owner with no goal ──────────────────────────────────────────────────
+  // A pill, not a dashed full-width bar. It used to sit on its own line and
+  // leave "Set a tip goal" floating alone under the name.
   if (!goal && isOwner) {
     return (
-      <div className="mx-4 my-3">
+      <>
         <button onClick={() => { tap(); setShowEdit(true); }}
-          className="w-full flex items-center justify-center space-x-2 py-2.5 rounded-xl border border-dashed border-white/20 text-xs text-white/30 hover:text-white/50 hover:border-white/30 transition">
+          className="flex items-center space-x-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all active:scale-95"
+          style={{ backgroundColor: 'transparent', color: `${textColor}55`, border: `1px dashed ${textColor}30` }}>
           <Target className="w-3.5 h-3.5" />
-          <span>Set a tip goal</span>
+          <span>Tip goal</span>
         </button>
         {showEdit && <GoalEditModal goal={null} artistId={artistId} onClose={() => setShowEdit(false)} onSaved={fetchGoal} />}
-      </div>
+      </>
     );
   }
 
   if (!goal) return null;
 
-  const progress    = Math.min(100, Math.round((goal.current_usd / goal.target_usd) * 100));
-  const achieved    = progress >= 100;
-  const remaining   = Math.max(0, goal.target_usd - goal.current_usd);
+  const progress  = Math.min(100, Math.round((goal.current_usd / goal.target_usd) * 100));
+  const achieved  = progress >= 100;
+  const remaining = Math.max(0, goal.target_usd - goal.current_usd);
 
   const formatUSD = (n) => n >= 1000 ? `$${(n / 1000).toFixed(1)}k` : `$${Math.round(n)}`;
 
   return (
-    <div className="mx-4 my-3 p-4 rounded-2xl border"
-      style={{ borderColor: `${primaryColor}25`, background: `${primaryColor}0a` }}>
-      <div className="flex items-start justify-between mb-2">
-        <div className="flex items-center space-x-2">
-          <Target className="w-4 h-4 flex-shrink-0" style={{ color: primaryColor }} />
-          <p className="text-sm font-semibold" style={{ color: textColor }}>{goal.title}</p>
-        </div>
-        {isOwner && (
-          <button onClick={() => { tap(); setShowEdit(true); }}
-            className="p-1 rounded-lg hover:bg-white/10 transition flex-shrink-0 ml-2">
-            <Edit2 className="w-3 h-3" style={{ color: `${textColor}40` }} />
-          </button>
-        )}
-      </div>
+    <div
+      ref={wrapRef}
+      className="relative inline-flex"
+      // Hover opens on desktop. `hoverRef` stops the pointer-leave handler
+      // from closing a card the user opened by tapping.
+      onMouseEnter={() => { hoverRef.current = true; setOpen(true); }}
+      onMouseLeave={() => { hoverRef.current = false; setOpen(false); }}
+    >
+      {/* THE PILL — same geometry as the other controls in the row */}
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-label={`Tip goal: ${goal.title}`}
+        onClick={() => { tap(); setOpen(o => !o); }}
+        className="flex items-center space-x-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all active:scale-95"
+        style={{
+          backgroundColor: achieved ? 'rgba(34,197,94,0.15)' : `${primaryColor}1f`,
+          color: achieved ? '#22c55e' : primaryColor,
+          border: `1px solid ${achieved ? 'rgba(34,197,94,0.4)' : `${primaryColor}45`}`,
+        }}
+      >
+        <Target className="w-3.5 h-3.5" />
+        <span>
+          {achieved
+            ? 'Goal reached'
+            : `${formatUSD(goal.current_usd)} / ${formatUSD(goal.target_usd)}`}
+        </span>
+      </button>
 
-      {goal.description && (
-        <p className="text-xs mb-3 leading-relaxed" style={{ color: `${textColor}50` }}>{goal.description}</p>
+      {/* THE FLOATING CARD
+          Absolutely positioned so it overlays whatever is below instead of
+          displacing it — which is the whole reason the old card could not
+          stay in the header. Centred on the pill and clamped to the viewport
+          so it cannot push the page sideways on a narrow screen. */}
+      {open && (
+        <div
+          role="dialog"
+          className="absolute top-full left-1/2 -translate-x-1/2 mt-2 z-[80] w-72 max-w-[calc(100vw-2.5rem)] p-4 rounded-2xl text-left"
+          style={{
+            backgroundColor: '#0f0f0f',
+            border: '1px solid rgba(255,255,255,0.09)',
+            boxShadow: '0 20px 48px rgba(0,0,0,0.6)',
+          }}
+          onClick={e => e.stopPropagation()}
+        >
+          {/* Little pointer up at the pill */}
+          <div
+            className="absolute -top-[5px] left-1/2 -translate-x-1/2 w-2.5 h-2.5 rotate-45"
+            style={{
+              backgroundColor: '#0f0f0f',
+              borderLeft: '1px solid rgba(255,255,255,0.09)',
+              borderTop: '1px solid rgba(255,255,255,0.09)',
+            }}
+          />
+
+          <div className="flex items-start justify-between mb-2">
+            <div className="flex items-center space-x-2 min-w-0">
+              <Target className="w-4 h-4 flex-shrink-0" style={{ color: primaryColor }} />
+              <p className="text-sm font-semibold truncate" style={{ color: textColor }}>{goal.title}</p>
+            </div>
+            {isOwner && (
+              <button onClick={() => { tap(); setOpen(false); setShowEdit(true); }}
+                className="p-1 rounded-lg hover:bg-white/10 transition flex-shrink-0 ml-2">
+                <Edit2 className="w-3 h-3" style={{ color: `${textColor}40` }} />
+              </button>
+            )}
+          </div>
+
+          {goal.description && (
+            <p className="text-xs mb-3 leading-relaxed" style={{ color: `${textColor}55` }}>{goal.description}</p>
+          )}
+
+          <div className="space-y-1.5">
+            <div className="h-2 rounded-full overflow-hidden" style={{ background: `${primaryColor}20` }}>
+              <div className="h-full rounded-full transition-all duration-700"
+                style={{ width: `${progress}%`, background: achieved ? '#22c55e' : primaryColor }} />
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold" style={{ color: achieved ? '#22c55e' : primaryColor }}>
+                {achieved ? '🎉 Goal reached!' : `${formatUSD(goal.current_usd)} raised`}
+              </span>
+              <span className="text-[11px]" style={{ color: `${textColor}40` }}>
+                {achieved ? formatUSD(goal.target_usd) : `${formatUSD(remaining)} to go · ${formatUSD(goal.target_usd)} goal`}
+              </span>
+            </div>
+          </div>
+        </div>
       )}
-
-      {/* Progress bar */}
-      <div className="space-y-1.5">
-        <div className="h-2 rounded-full overflow-hidden" style={{ background: `${primaryColor}20` }}>
-          <div className="h-full rounded-full transition-all duration-700"
-            style={{ width: `${progress}%`, background: achieved ? '#22c55e' : primaryColor }} />
-        </div>
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-semibold" style={{ color: achieved ? '#22c55e' : primaryColor }}>
-            {achieved ? '🎉 Goal reached!' : `${formatUSD(goal.current_usd)} raised`}
-          </span>
-          <span className="text-[11px]" style={{ color: `${textColor}40` }}>
-            {achieved ? formatUSD(goal.target_usd) : `${formatUSD(remaining)} to go · ${formatUSD(goal.target_usd)} goal`}
-          </span>
-        </div>
-      </div>
 
       {showEdit && <GoalEditModal goal={goal} artistId={artistId} onClose={() => setShowEdit(false)} onSaved={fetchGoal} />}
     </div>

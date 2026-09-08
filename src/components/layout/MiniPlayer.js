@@ -49,7 +49,11 @@ export default function MiniPlayer() {
         const playedIds = queue.map(t => t.id).join(',');
         let query = supabase
           .from('tracks')
-          .select('id, title, cover_artwork_url, artist_name, artist_slug, file_url, genre, mood, artists(artist_name, slug)')
+          // artist_name / artist_slug are NOT columns on tracks. Asking for
+          // them made this query fail with 42703 (undefined column) every
+          // single time, so the end-of-queue suggestions were always empty.
+          // Both values come from the embed below and are mapped in `norm`.
+          .select('id, title, cover_artwork_url, file_url, genre, mood, artists!tracks_artist_id_fkey(artist_name, slug)')
           .eq('is_published', true)
           .not('id', 'in', `(${playedIds})`)
           .order('engagement_score', { ascending: false })

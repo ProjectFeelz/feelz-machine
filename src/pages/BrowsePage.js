@@ -173,20 +173,20 @@ export default function BrowsePage() {
   const fetchAll = async () => {
     try {
       const [
-        { data: trendingRaw },
-        { data: featuredRaw },
-        { data: tracksRaw },
-        { data: albumsRaw },
-        { data: artistsData },
+        { data: trendingRaw, error: trendingErr },
+        { data: featuredRaw, error: featuredErr },
+        { data: tracksRaw,   error: tracksErr },
+        { data: albumsRaw,   error: albumsErr },
+        { data: artistsData, error: artistsErr },
       ] = await Promise.all([
         supabase.from('tracks')
-          .select('*, albums(title, cover_artwork_url, price), artists(id, artist_name, slug, profile_image_url, is_verified, tier)')
+          .select('*, albums(title, cover_artwork_url, price), artists!tracks_artist_id_fkey(id, artist_name, slug, profile_image_url, is_verified, tier)')
           .eq('is_published', true).order('engagement_score', { ascending: false }).limit(50),
         supabase.from('tracks')
-          .select('*, albums(title, cover_artwork_url, price), artists(id, artist_name, slug, profile_image_url, is_verified)')
+          .select('*, albums(title, cover_artwork_url, price), artists!tracks_artist_id_fkey(id, artist_name, slug, profile_image_url, is_verified)')
           .eq('is_published', true).eq('featured', true).order('created_at', { ascending: false }).limit(200),
         supabase.from('tracks')
-          .select('*, albums(title, cover_artwork_url, price), artists(id, artist_name, slug, profile_image_url, is_verified)')
+          .select('*, albums(title, cover_artwork_url, price), artists!tracks_artist_id_fkey(id, artist_name, slug, profile_image_url, is_verified)')
           .eq('is_published', true).order('created_at', { ascending: false }).limit(50),
         supabase.from('albums')
           .select('*, artists(artist_name, slug)')
@@ -195,6 +195,17 @@ export default function BrowsePage() {
           .select('id, artist_name, slug, profile_image_url, is_verified, follower_count, total_streams, tier')
           .order('total_streams', { ascending: false }).limit(50),
       ]);
+
+      // Surface query failures. Destructuring only `data` and dropping
+      // `error` turned a hard HTTP 300 (PGRST201, ambiguous artists embed)
+      // into a silent empty array: the page rendered "no tracks" with a
+      // completely clean console. That cost a day of looking in the wrong
+      // place. If these queries ever fail again, we will know immediately.
+      [['trending', trendingErr], ['featured', featuredErr], ['tracks', tracksErr],
+       ['albums', albumsErr], ['artists', artistsErr]]
+        .forEach(([label, err]) => {
+          if (err) console.error(`[Browse] ${label} query failed:`, err.code, err.message, err.hint || '');
+        });
 
       const norm = (list) => (list || []).map(t => ({
         ...t, artist_name: t.artists?.artist_name || 'Unknown',

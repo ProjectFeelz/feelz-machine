@@ -719,7 +719,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
           const orFilter = allTags.map(t => `genre.eq.${t},mood.eq.${t}`).join(',');
           const { data: simTrackData } = await supabase
             .from('tracks')
-            .select('artist_id, artists(id, artist_name, slug, profile_image_url, is_verified, total_streams)')
+            .select('artist_id, artists!tracks_artist_id_fkey(id, artist_name, slug, profile_image_url, is_verified, total_streams)')
             .neq('artist_id', artistData.id).eq('is_published', true).or(orFilter).limit(50);
           if (simTrackData) {
             const artistMap = {};
@@ -941,7 +941,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
           const simIds = similar.map(a => a.id);
           const { data: simTracks } = await supabase
             .from('tracks')
-            .select('*, artists(artist_name, slug)')
+            .select('*, artists!tracks_artist_id_fkey(artist_name, slug)')
             .in('artist_id', simIds)
             .eq('is_published', true)
             .order('stream_count', { ascending: false })
@@ -1286,7 +1286,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
           the green ran on past the socials and Popular kept getting covered.
           Mobile is untouched: the banner keeps its fixed height and the
           avatar stays absolutely positioned and centred. */}
-      <div className="lg:flex lg:items-end lg:gap-7 lg:px-8 lg:pb-5 lg:relative">
+      <div className="lg:flex lg:items-end lg:gap-7 lg:px-8 pb-4 lg:pb-5 lg:relative">
       <div className="relative w-full h-[220px] lg:h-auto lg:min-h-0 lg:w-auto">
         {artist.banner_image_url || theme?.banner_image_url ? (
           <img src={artist.banner_image_url || theme?.banner_image_url} alt="" className="absolute inset-0 w-full h-full object-cover" />
@@ -1398,7 +1398,9 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
         </div>
 
 
-        <div className="flex items-center justify-center lg:justify-start flex-wrap gap-2 mb-4 px-4 lg:px-0">
+        {/* mb-2.5, not mb-4: the socials sit directly under the pills and a
+            full step of space between them read as two unrelated blocks. */}
+        <div className="flex items-center justify-center lg:justify-start flex-wrap gap-2 mb-2.5 px-4 lg:px-0">
           <button onClick={handleFollow}
             className="flex items-center space-x-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all active:scale-95"
             style={{
@@ -1543,7 +1545,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
             outlined, so they read as links off the platform instead of another
             row of actions. */}
         {socialEntries.length > 0 && (
-          <div className="flex items-center gap-1.5 mb-6 lg:mb-0">
+          <div className="flex items-center gap-1.5 mb-0">
             {socialEntries.map(([platform, value]) => {
               const Icon = SOCIAL_ICONS[platform] || Globe;
               const prefix = SOCIAL_URLS[platform] || '';
@@ -1638,6 +1640,10 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
 
       </div>
 
+      {/* Clearance between the bottom of the hero and whatever comes first
+          below it. Popular (or Top Pick) used to start hard against the
+          header edge with nothing separating them. */}
+      <div className="h-6 lg:h-7" aria-hidden="true" />
 
       {/* My Top Pick. One track the artist chose to lead with, so the first
           thing on the page is their decision rather than a play count.

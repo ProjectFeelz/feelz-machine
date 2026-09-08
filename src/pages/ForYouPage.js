@@ -994,7 +994,7 @@ export default function ForYouPage() {
     const trackSlug = params.get('openCommentsSlug');
     if (!trackId && !trackSlug) return;
     (async () => {
-      let query = supabase.from('tracks').select('id, title, slug, cover_artwork_url, artists(artist_name)');
+      let query = supabase.from('tracks').select('id, title, slug, cover_artwork_url, artists!tracks_artist_id_fkey(artist_name)');
       query = trackId ? query.eq('id', trackId) : query.eq('slug', trackSlug);
       const { data } = await query.maybeSingle();
       if (data) {
@@ -1077,10 +1077,12 @@ export default function ForYouPage() {
 
         if (rankedIds) {
           const idList = rankedIds.map(r => r.id);
-          const { data: rankedTracks } = await supabase
+          const { data: rankedTracks, error: rankedErr } = await supabase
             .from('tracks')
-            .select('id, title, slug, genre, mood, cover_artwork_url, file_url, youtube_url, duration, lyrics, artist_id, is_beat, stream_count, like_count, bpm, beat_key, beat_scale, download_price, engagement_score, artists(artist_name, slug, profile_image_url)')
+            .select('id, title, slug, genre, mood, cover_artwork_url, file_url, youtube_url, duration, lyrics, artist_id, is_beat, stream_count, like_count, bpm, beat_key, beat_scale, download_price, engagement_score, artists!tracks_artist_id_fkey(artist_name, slug, profile_image_url)')
             .in('id', idList);
+
+          if (rankedErr) console.error('[ForYou] ranked tracks query failed:', rankedErr.code, rankedErr.message, rankedErr.hint || '');
 
           if (rankedTracks?.length > 0) {
             // Restore the order the RPC returned. The `in` filter does not
@@ -1114,7 +1116,7 @@ export default function ForYouPage() {
 
         let recQuery = supabase
           .from('listener_recommendations')
-          .select('score, reason, tracks(id, title, slug, genre, mood, cover_artwork_url, file_url, youtube_url, duration, lyrics, artist_id, is_beat, stream_count, like_count, bpm, beat_key, beat_scale, download_price, engagement_score, artists(artist_name, slug, profile_image_url))')
+          .select('score, reason, tracks(id, title, slug, genre, mood, cover_artwork_url, file_url, youtube_url, duration, lyrics, artist_id, is_beat, stream_count, like_count, bpm, beat_key, beat_scale, download_price, engagement_score, artists!tracks_artist_id_fkey(artist_name, slug, profile_image_url))')
           .eq('user_id', user.id)
           .order('score', { ascending: false })
           .range(offset, offset + PAGE_SIZE - 1);
@@ -1154,11 +1156,13 @@ export default function ForYouPage() {
       // nothing, so an established listener who simply reached the end of
       // their list never sees these.
       if (offset === 0 && fetched.length === 0) {
-        const { data: picks } = await supabase
+        const { data: picks, error: picksErr } = await supabase
           .from('cold_start_picks')
-          .select('position, tracks(id, title, slug, genre, mood, cover_artwork_url, file_url, youtube_url, duration, lyrics, artist_id, is_beat, stream_count, like_count, bpm, beat_key, beat_scale, download_price, engagement_score, artists(artist_name, slug, profile_image_url))')
+          .select('position, tracks(id, title, slug, genre, mood, cover_artwork_url, file_url, youtube_url, duration, lyrics, artist_id, is_beat, stream_count, like_count, bpm, beat_key, beat_scale, download_price, engagement_score, artists!tracks_artist_id_fkey(artist_name, slug, profile_image_url))')
           .eq('is_active', true)
           .order('position');
+
+        if (picksErr) console.error('[ForYou] cold start picks query failed:', picksErr.code, picksErr.message, picksErr.hint || '');
 
         const pickTracks = (picks || [])
           .map(p => p.tracks)
@@ -1185,7 +1189,7 @@ export default function ForYouPage() {
         const existingIdsStr = allExcludeIds.length > 0 ? `(${allExcludeIds.join(',')})` : null;
 
         let recentQuery = supabase.from('tracks')
-          .select('id, title, slug, genre, mood, cover_artwork_url, file_url, youtube_url, duration, lyrics, artist_id, is_beat, stream_count, like_count, bpm, beat_key, beat_scale, download_price, engagement_score, artists(artist_name, slug, profile_image_url)')
+          .select('id, title, slug, genre, mood, cover_artwork_url, file_url, youtube_url, duration, lyrics, artist_id, is_beat, stream_count, like_count, bpm, beat_key, beat_scale, download_price, engagement_score, artists!tracks_artist_id_fkey(artist_name, slug, profile_image_url)')
           .eq('is_published', true)
           .order('created_at', { ascending: false })
           .limit(halfPage);
@@ -1199,13 +1203,20 @@ export default function ForYouPage() {
         // longer, stream_count ignores likes, comments and downloads entirely.
         // stream_count stays as the tiebreak for tracks not yet scored.
         let topQuery = supabase.from('tracks')
-          .select('id, title, slug, genre, mood, cover_artwork_url, file_url, youtube_url, duration, lyrics, artist_id, is_beat, stream_count, like_count, bpm, beat_key, beat_scale, download_price, engagement_score, artists(artist_name, slug, profile_image_url)')
+          .select('id, title, slug, genre, mood, cover_artwork_url, file_url, youtube_url, duration, lyrics, artist_id, is_beat, stream_count, like_count, bpm, beat_key, beat_scale, download_price, engagement_score, artists!tracks_artist_id_fkey(artist_name, slug, profile_image_url)')
           .eq('is_published', true)
           .order('engagement_score', { ascending: false, nullsFirst: false })
           .order('stream_count', { ascending: false })
           .limit(PAGE_SIZE - fetched.length);
 
-        const [{ data: recentTracks }, { data: topTracks }] = await Promise.all([recentQuery, topQuery]);
+        const [{ data: recentTracks, error: recentErr }, { data: topTracks, error: topErr }] =
+          await Promise.all([recentQuery, topQuery]);
+
+        // This fallback is the last line of defence for this page. When it
+        // failed silently the feed was empty with a clean console, which is
+        // exactly how the ambiguous artists embed hid for so long.
+        if (recentErr) console.error('[ForYou] recent fallback query failed:', recentErr.code, recentErr.message, recentErr.hint || '');
+        if (topErr)    console.error('[ForYou] top fallback query failed:', topErr.code, topErr.message, topErr.hint || '');
 
         // Merge deduped
         const seen = new Set(existingIds);
@@ -1299,7 +1310,7 @@ export default function ForYouPage() {
     (async () => {
       const { data } = await supabase
         .from('tracks')
-        .select('id, title, slug, genre, mood, cover_artwork_url, file_url, youtube_url, duration, lyrics, artist_id, is_beat, stream_count, like_count, bpm, beat_key, beat_scale, download_price, engagement_score, artists(artist_name, slug, profile_image_url)')
+        .select('id, title, slug, genre, mood, cover_artwork_url, file_url, youtube_url, duration, lyrics, artist_id, is_beat, stream_count, like_count, bpm, beat_key, beat_scale, download_price, engagement_score, artists!tracks_artist_id_fkey(artist_name, slug, profile_image_url)')
         .eq('is_published', true)
         .order('created_at', { ascending: false })
         .limit(30);
