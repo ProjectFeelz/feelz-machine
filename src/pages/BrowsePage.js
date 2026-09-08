@@ -567,36 +567,41 @@ export default function BrowsePage() {
             {/* Genre and mood as the entry point, not a filter strip buried
                 under content. Browse is the "help me find X" surface, so the
                 way in is picking a genre or a mood. */}
-            <p className="section-label mb-3">Genres</p>
-            <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-2.5 mb-6">
+            {/* Pills, not tiles. These were `aspect-[4/3]` cards in a
+                six-column grid, so on a wide screen fourteen genres and
+                thirteen moods took two full screens of empty boxes and pushed
+                the actual music off the bottom of the page. A filter is a
+                control, not content: it should cost one line, not a grid. */}
+            <p className="section-label mb-2">Genres</p>
+            <div className="flex flex-wrap gap-2 mb-5">
               {GENRE_TAGS.map(genre => {
                 const active = selectedGenre === genre;
                 return (
                   <button key={genre} onClick={() => setSelectedGenre(genre)}
-                    className={`aspect-[4/3] rounded-xl px-3 flex items-end pb-3 text-left transition border ${
+                    className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition border active:scale-95 ${
                       active
-                        ? 'bg-white text-black border-white font-bold'
-                        : 'bg-white/[0.04] text-white/70 border-white/[0.06] hover:bg-white/[0.08] hover:text-white'
+                        ? 'bg-white text-black border-white'
+                        : 'bg-white/[0.04] text-white/60 border-white/[0.07] hover:bg-white/[0.08] hover:text-white'
                     }`}>
-                    <span className="text-sm font-semibold leading-tight">{genre}</span>
+                    {genre}
                   </button>
                 );
               })}
             </div>
 
-            <p className="section-label mb-3">Moods</p>
-            <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-2.5 mb-6">
+            <p className="section-label mb-2">Moods</p>
+            <div className="flex flex-wrap gap-2 mb-5">
               {MOOD_TAGS.map(({ label, value, emoji }) => {
                 const active = selectedMood === value;
                 return (
                   <button key={label} onClick={() => setSelectedMood(active ? null : value)}
-                    className={`aspect-[4/3] rounded-xl px-3 flex flex-col items-start justify-end pb-3 text-left transition border ${
+                    className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold transition border active:scale-95 ${
                       active
-                        ? 'bg-white text-black border-white font-bold'
-                        : 'bg-white/[0.04] text-white/70 border-white/[0.06] hover:bg-white/[0.08] hover:text-white'
+                        ? 'bg-white text-black border-white'
+                        : 'bg-white/[0.04] text-white/60 border-white/[0.07] hover:bg-white/[0.08] hover:text-white'
                     }`}>
-                    <span className="text-lg mb-1">{emoji}</span>
-                    <span className="text-sm font-semibold leading-tight">{label}</span>
+                    <span className="text-sm leading-none">{emoji}</span>
+                    <span>{label}</span>
                   </button>
                 );
               })}

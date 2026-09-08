@@ -304,7 +304,7 @@ export default function RetailPlayerPage() {
     setLoadingTracks(true);
     setCurrentIndex(0);
     const { data } = await supabase.from('retail_playlist_tracks')
-      .select('position, track:tracks(id, title, file_url, cover_artwork_url, artist:artists(artist_name))')
+      .select('position, track:tracks(id, title, file_url, cover_artwork_url, artist:artists!tracks_artist_id_fkey(artist_name))')
       .eq('playlist_id', playlist.id)
       .order('position');
     const loaded = (data || []).map(d => d.track).filter(Boolean);
@@ -777,8 +777,10 @@ export default function RetailPlayerPage() {
             <button onClick={() => setSelectedPlaylist(null)}
               className="text-xs text-white/40 mb-4 hover:text-white/70 transition">&larr; All playlists</button>
 
-            {/* Album-style header: cover, mood, description, featured artists */}
-            <div className="flex flex-col sm:flex-row sm:items-end gap-5 mb-6">
+            {/* Album-style header: cover, mood, description, featured artists.
+                `relative` so the half-vinyl below can be anchored to the
+                header's bottom edge, which is what does the cutting off. */}
+            <div className="relative flex flex-col sm:flex-row sm:items-end gap-5 mb-6">
               {/* Artwork with half a record sliding out from behind it while
                   this playlist is playing. Same VinylRecord component the
                   mini player and For You use, not a copy: it already handles
@@ -789,7 +791,7 @@ export default function RetailPlayerPage() {
                   Clipped to its left half by the overflow-hidden wrapper, so
                   it reads as a record sitting in a sleeve. Hidden on small
                   screens, where there is no room beside the cover. */}
-              <div className="relative flex-shrink-0 flex items-center pr-24">
+              <div className="relative flex-shrink-0 flex items-center">
                 <div className="w-56 h-56 rounded-xl overflow-hidden flex items-center justify-center relative z-10"
                   style={{
                     background: 'linear-gradient(135deg, rgba(167,139,250,0.16) 0%, rgba(30,20,55,0.9) 100%)',
@@ -801,26 +803,12 @@ export default function RetailPlayerPage() {
                     : <Music className="w-14 h-14 text-purple-300/25" />}
                 </div>
 
-                {/* The record peeks out from BEHIND the cover, not beside it.
-                    The first attempt sat absolutely at left-full, outside the
-                    layout, so it overlapped the title and description. Now it
-                    is clipped to its right half and pushed under the artwork
-                    with a negative margin, so the sleeve hides the rest and
-                    nothing downstream moves. */}
-                {currentTrack && (
-                  <div className="hidden sm:block h-56 w-24 overflow-hidden pointer-events-none -ml-24 relative z-0">
-                    <div className="absolute right-0 top-0">
-                      <VinylRecord
-                        coverUrl={currentTrack.cover_artwork_url}
-                        isPlaying={isPlaying}
-                        size={224}
-                      />
-                    </div>
-                  </div>
-                )}
               </div>
 
-              <div className="min-w-0 flex-1">
+              {/* Right padding on lg reserves the space the half-vinyl
+                  occupies, so a long title or description runs out of room
+                  rather than running underneath it. */}
+              <div className="min-w-0 flex-1 lg:pr-[380px]">
                 <p className="text-[10px] uppercase tracking-[0.2em] text-purple-400 font-bold mb-1.5">Playlist</p>
                 <h2 className="text-3xl font-black text-white leading-tight mb-2">{selectedPlaylist.title}</h2>
                 {selectedPlaylist.description && (
@@ -861,6 +849,38 @@ export default function RetailPlayerPage() {
                   </button>
                 </div>
               </div>
+
+              {/* HALF-VINYL IN THE HEADER
+                  Steve's brief: move the record here, much bigger, still
+                  spinning with the artwork spinning on it, and let the bottom
+                  half be cut off so it reads as half a record rising out of
+                  the header.
+
+                  How the cut works: this box is anchored to the header's
+                  bottom edge and is exactly half the record's diameter tall,
+                  with `overflow-hidden`. The record is placed at its top, so
+                  the box shows the top half and clips the rest. Nothing is
+                  drawn over it and nothing has to move to accommodate it —
+                  the previous two attempts both failed by pushing layout
+                  around or sitting outside it.
+
+                  `items-end` on the parent means the header's bottom edge is
+                  where the artwork and the text block end, so the cut line
+                  sits exactly there.
+
+                  lg and up only. Below that the header is a single column and
+                  there is no empty space to put a 360px record into. */}
+              {currentTrack && (
+                <div className="hidden lg:block absolute right-4 bottom-0 w-[360px] h-[180px] overflow-hidden pointer-events-none select-none z-0">
+                  <div className="absolute top-0 left-0">
+                    <VinylRecord
+                      coverUrl={currentTrack.cover_artwork_url}
+                      isPlaying={isPlaying}
+                      size={360}
+                    />
+                  </div>
+                </div>
+              )}
             </div>
             {loadingTracks ? (
               <div className="flex justify-center py-12"><Loader className="w-5 h-5 text-white/30 animate-spin" /></div>

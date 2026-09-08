@@ -1789,35 +1789,63 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
                 which is not what was asked for and looked worse than the
                 plain rail. The fix is structural: the hero sits outside the
                 scroller entirely. */}
-            <div className="hidden md:flex items-start gap-4 px-4 pt-3 pb-3">
+            {/* Desktop: the newest track is its own card ABOVE the row, not
+                the first item in it.
+
+                Two previous attempts both kept it inside the horizontal flow
+                — first as a wider card in the same scroller, then pinned
+                beside it. Side by side it still read as "the big one in the
+                row", and being a flex sibling of the scroller is what let it
+                collide with the section heading. Stacking it is the only
+                arrangement that actually separates the two, and it matches
+                what mobile has always done.
+
+                Landscape rather than square, so promoting it costs a strip of
+                height instead of a third of the panel. */}
+            <div className="hidden md:block px-4 pt-1 pb-3">
               {recent[0] && (() => {
                 const track = recent[0];
                 const withinWeek = (Date.now() - new Date(track.created_at).getTime()) < 7 * 24 * 60 * 60 * 1000;
                 return (
-                  <div className="flex-shrink-0 w-52 cursor-pointer group" onClick={() => handlePlayTrack(track)}>
-                    <div className="aspect-square rounded-xl overflow-hidden mb-2 relative"
-                      style={{ backgroundColor: `${textColor}08`, boxShadow: withinWeek ? `0 0 0 2px ${secondaryColor}, 0 0 24px ${secondaryColor}55` : 'none' }}>
+                  <div
+                    onClick={() => handlePlayTrack(track)}
+                    className="flex items-center gap-4 p-3 rounded-2xl cursor-pointer group transition hover:opacity-95"
+                    style={{
+                      background: `${textColor}08`,
+                      border: `1px solid ${withinWeek ? `${secondaryColor}55` : `${textColor}12`}`,
+                      boxShadow: withinWeek ? `0 0 24px ${secondaryColor}22` : 'none',
+                    }}>
+                    <div className="w-28 h-28 rounded-xl overflow-hidden flex-shrink-0 relative"
+                      style={{ backgroundColor: `${textColor}08` }}>
                       {track.cover_artwork_url
                         ? <img src={track.cover_artwork_url} alt={track.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
                         : <div className="w-full h-full flex items-center justify-center" style={{ background: `linear-gradient(135deg, ${secondaryColor}30, ${accentColor}15)` }}><Music className="w-8 h-8" style={{ color: `${textColor}20` }} /></div>}
-                      {/* The NEW badge lived on the first card in the old rail.
-                          Moved here with it, otherwise it would have vanished
-                          silently when the hero was pulled out of the list. */}
-                      {withinWeek && (
-                        <div className="absolute top-2 right-2 px-2 py-0.5 rounded-full text-[10px] font-bold" style={{ background: secondaryColor, color: '#fff' }}>NEW</div>
-                      )}
                     </div>
-                    <p className="text-sm font-semibold truncate" style={{ color: textColor }}>{track.title}</p>
-                    <p className="text-xs truncate" style={{ color: `${textColor}50` }}>{track.albums?.title || 'Single'}</p>
+                    <div className="min-w-0 flex-1">
+                      {/* The NEW badge lived on the first card of the old rail.
+                          It travels with the hero, otherwise it would vanish
+                          silently now that the hero is out of the list. */}
+                      {withinWeek && (
+                        <span className="inline-block mb-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold"
+                          style={{ background: secondaryColor, color: '#fff' }}>NEW</span>
+                      )}
+                      <p className="text-xl font-bold truncate" style={{ color: textColor }}>{track.title}</p>
+                      <p className="text-sm truncate" style={{ color: `${textColor}55` }}>{track.albums?.title || 'Single'}</p>
+                    </div>
+                    <Play className="w-6 h-6 flex-shrink-0 mr-2" style={{ color: secondaryColor }} fill={secondaryColor} />
                   </div>
                 );
               })()}
+            </div>
+
+            {/* The rest, in their own recessed row beneath the hero. */}
+            <div className="hidden md:block px-4 pb-3">
 
               {/* Everything after the newest, in its own recessed panel so the
                   pinned hero reads as being in front of the rest rather than
                   merely the first and largest item. Darker background and a
                   border, which is the distinction Steve asked for. */}
-              <div className="flex space-x-3 overflow-x-auto scrollbar-hide flex-1 min-w-0 rounded-xl px-3 py-3"
+              <div className="flex space-x-3 overflow-x-auto scrollbar-hide rounded-xl px-3 py-3"
                 style={{
                   overflowY: 'visible',
                   background: 'rgba(0,0,0,0.28)',

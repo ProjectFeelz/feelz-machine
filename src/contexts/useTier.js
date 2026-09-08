@@ -289,12 +289,26 @@ function useTierInternal() {
     setLoading(false);
   };
 
+  // Both counts below drive the tier limits (canUpload, uploadsRemaining,
+  // downloadSalesRemaining). They read only `count`, so a failed request
+  // arrived as null and `count || 0` recorded it as "this artist has zero
+  // tracks" — which reads as a full, empty quota. These were the two requests
+  // returning 503 in the network log, and the reason nobody saw them.
+  //
+  // Left failing open on purpose: blocking uploads on a transient count error
+  // would be worse than briefly over-granting. But it now says so in the
+  // console, and a failure no longer overwrites a count we already had.
   const fetchTrackCount = async (artistId) => {
     if (!artistId) return;
-    const { count } = await supabase
+    const { count, error } = await supabase
       .from('tracks')
       .select('*', { count: 'exact', head: true })
       .eq('artist_id', artistId);
+    if (error) {
+      console.warn('[useTier] track count failed, upload limits may not be enforced:',
+        error.code, error.message, error.hint || '');
+      return; // keep the last known count rather than resetting it to zero
+    }
     setTrackCount(count || 0);
   };
 
@@ -303,12 +317,17 @@ function useTierInternal() {
     const startOfMonth = new Date();
     startOfMonth.setDate(1);
     startOfMonth.setHours(0, 0, 0, 0);
-    const { count } = await supabase
+    const { count, error } = await supabase
       .from('tracks')
       .select('*', { count: 'exact', head: true })
       .eq('artist_id', artistId)
       .gt('download_price', 0)
       .gte('created_at', startOfMonth.toISOString());
+    if (error) {
+      console.warn('[useTier] monthly download sales count failed, sales limits may not be enforced:',
+        error.code, error.message, error.hint || '');
+      return;
+    }
     setMonthlyDownloadSalesCount(count || 0);
   };
 

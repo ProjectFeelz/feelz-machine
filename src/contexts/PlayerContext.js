@@ -102,6 +102,24 @@ export function PlayerProvider({ children }) {
     if (lastFlushedRef.current === flushKey) return;
     lastFlushedRef.current = flushKey;
 
+    // Take the stream id NOW, while we are still synchronous.
+    //
+    // This function is called without await, and everything below the first
+    // `await` runs after control has returned to the caller. The track-change
+    // path clears currentStreamIdRef on the line immediately after calling
+    // us, so by the time the old code read the ref (after two awaits) it was
+    // always null — and finalise_stream never ran on a track change.
+    //
+    // That is the most common way a play ends: a skip. So the stream row kept
+    // the placeholder `completed = false` and the 30-second duration that
+    // migration 79 exists to replace, for every listen except a track played
+    // to the end or interrupted by a page hide.
+    //
+    // Reading and clearing it here closes the race and makes the caller's
+    // defensive clear redundant rather than harmful.
+    const streamId = currentStreamIdRef.current;
+    currentStreamIdRef.current = null;
+
     const trackSeconds = Math.floor(audio.duration || track.duration || 0) || null;
     const pct = trackSeconds ? Math.min(100, Math.round((listened / trackSeconds) * 1000) / 10) : null;
     const geo = await resolveGeo();
@@ -140,9 +158,9 @@ export function PlayerProvider({ children }) {
       // 'ended' is the only end reason that means finished. A page hide or
       // a track change at 95% is still not a completed listen, and
       // completion_pct on listening_events already records how far they got.
-      const streamId = currentStreamIdRef.current;
+      // streamId was captured at the top, before any await. Re-reading the
+      // ref here is what the race defeated.
       if (streamId) {
-        currentStreamIdRef.current = null;
         const { error: finaliseError } = await supabase.rpc('finalise_stream', {
           p_stream_id: streamId,
           p_duration_played: listened,
@@ -182,7 +200,7 @@ export function PlayerProvider({ children }) {
 
       let query = supabase
         .from('tracks')
-        .select('*, artists(artist_name, slug, profile_image_url)')
+        .select('*, artists!tracks_artist_id_fkey(artist_name, slug, profile_image_url)')
         .eq('is_published', true)
         .not('id', 'in', `(${existingIds.join(',')})`)
         .order('engagement_score', { ascending: false })
@@ -235,9 +253,10 @@ export function PlayerProvider({ children }) {
       // Before the crossfade overwrites the playhead, capture how far the
       // outgoing track actually got.
       flushListeningEvent('track_change');
-      // flushListeningEvent clears this itself, but clear it here too: if the
-      // flush bailed early (under three seconds, or a duplicate guard) the id
-      // would otherwise survive into the next track and finalise the wrong row.
+      // flushListeningEvent now takes and clears this synchronously, so this
+      // line is belt and braces for the case where the flush bailed before
+      // reaching it (under three seconds, or the duplicate guard) and the id
+      // would otherwise survive into the next track.
       currentStreamIdRef.current = null;
       streamLoggedRef.current = false;
 
@@ -708,6 +727,50 @@ export function PlayerProvider({ children }) {
     });
   }, []);
   const clearQueue    = useCallback(() => { setQueue([]); setQueueIndex(-1); }, []);
+
+  // Dismiss the player entirely.
+  //
+  // Nothing in the app set currentTrack back to null, and MiniPlayer /
+  // DesktopPlayer only return null when it is null — so once you played
+  // anything, the bar was permanent for the rest of the session with no
+  // control to get rid of it.
+  //
+  // Closing stops the music rather than just hiding the bar: a hidden player
+  // still playing, with no way to reach the pause button, is worse than no
+  // close button at all.
+  //
+  // The real listen is flushed first so the stream row is finalised honestly
+  // (migration 79), and the stream id is cleared so this play can never be
+  // written onto the next track's row.
+  const closePlayer = useCallback(() => {
+    // 'track_change' rather than a new 'closed' value: end_reason may carry a
+    // CHECK constraint in the database, and a rejected insert would be
+    // swallowed by the try/catch in flushListeningEvent AND skip
+    // finalise_stream with it. Abandoning a play is what a close is, and
+    // completed stays false either way. Worth a distinct reason later, once
+    // the constraint on listening_events.end_reason has been checked.
+    flushListeningEvent('track_change');
+
+    [audioRef.current, audioRefB.current].forEach(a => {
+      if (!a) return;
+      try {
+        a.pause();
+        a.removeAttribute('src');   // stop the download, not just the sound
+        a.load();
+      } catch { /* an already-torn-down element is not worth failing over */ }
+    });
+
+    setIsPlaying(false);
+    setCurrentTime(0);
+    setDuration(0);
+    setQueue([]);
+    setQueueIndex(-1);
+    queueRef.current = [];
+    queueIndexRef.current = -1;
+    setIsMinimized(true);
+    setCurrentTrack(null);
+    currentTrackRef.current = null;
+  }, [flushListeningEvent]);
   const toggleShuffle = useCallback(() => setShuffle(prev => !prev), []);
   const toggleRepeat  = useCallback(() => {
     setRepeat(prev => {
@@ -764,7 +827,7 @@ export function PlayerProvider({ children }) {
     currentTrack, isPlaying, duration, currentTime, volume, queue, queueIndex,
     shuffle, repeat, isMinimized, setIsMinimized, desktopPanelView, setDesktopPanelView, playTrack, togglePlay, seek,
     setVolume: setVolumeLevel, setVolumeLevel, playNext, playPrev, addToQueue,
-    removeFromQueue, moveInQueue, playNextInQueue, clearQueue, toggleShuffle, toggleRepeat,
+    removeFromQueue, moveInQueue, playNextInQueue, clearQueue, closePlayer, toggleShuffle, toggleRepeat,
     replaceQueue, jumpToIndex,
   };
 

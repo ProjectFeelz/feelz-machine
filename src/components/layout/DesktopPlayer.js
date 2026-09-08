@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
     Play, Pause, SkipForward, SkipBack, Shuffle, Repeat, Repeat1,
-    Volume2, VolumeX, Heart, ListMusic, Maximize2, MoreHorizontal,
+    Volume2, VolumeX, Heart, ListMusic, Maximize2, MoreHorizontal, X,
 } from 'lucide-react';
 import { usePlayer } from '../../contexts/PlayerContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -16,7 +16,7 @@ export default function DesktopPlayer() {
           currentTrack, isPlaying, togglePlay, playNext, playPrev,
           duration, currentTime, seek, volume, setVolume,
           shuffle, toggleShuffle, repeat, toggleRepeat,
-          setIsMinimized, desktopPanelView, setDesktopPanelView,
+          setIsMinimized, desktopPanelView, setDesktopPanelView, closePlayer,
     } = usePlayer();
 
   const [liked, setLiked] = useState(false);
@@ -171,6 +171,19 @@ export default function DesktopPlayer() {
               onClick={() => { setDesktopPanelView('player'); setIsMinimized(false); }}
               className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/10 transition text-white/40 hover:text-white/70">
                               <Maximize2 className="w-4 h-4" />
+                </button>
+
+{/* Close the player. There was no way to dismiss this bar at all: nothing
+    in the app ever set currentTrack back to null, so once you played
+    something it stayed for the rest of the session. Stops playback rather
+    than just hiding, since a hidden player still playing with no reachable
+    pause button is worse than no close button. */}
+            <button
+              onClick={closePlayer}
+              title="Close player"
+              aria-label="Close player"
+              className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/10 transition text-white/40 hover:text-white/70">
+                              <X className="w-4 h-4" />
                 </button>
                 </div>
                 </div>

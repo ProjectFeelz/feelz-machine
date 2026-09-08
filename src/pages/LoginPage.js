@@ -10,18 +10,32 @@ import {
 const BASE_USD = {
   pro:     { monthly: 2.00,  annual: 17.00  },
   premium: { monthly: 5.00,  annual: 42.00  },
+  // fan_pro was missing entirely while LISTENER_TIERS already offered it, so
+  // getPrice did BASE_USD['fan_pro'][billingCycle] on undefined and threw.
+  // Choosing Listener — the role deliberately listed first — crashed the
+  // pricing block outright.
+  //
+  // $2.99/mo and $1.99/mo-billed-annually, mirroring ListenerUpgradePage.
+  // `annual` here is the yearly TOTAL (as it is for pro and premium), so
+  // 1.99 x 12 = 23.88, which savingPct reports as the same 33% that page
+  // advertises.
+  fan_pro: { monthly: 2.99,  annual: 23.88  },
 };
 
+// Returns null for a genuinely free tier and undefined when the tier has no
+// price on file. The two are different and the caller must not conflate them:
+// rendering an unpriced paid tier as "Free" is worse than showing nothing.
 function getPrice(tierKey, billingCycle, rate) {
   if (tierKey === 'free') return null;
-  const usd = BASE_USD[tierKey][billingCycle];
-  return Math.round(usd * rate);
+  const row = BASE_USD[tierKey];
+  if (!row) return undefined;
+  return Math.round(row[billingCycle] * rate);
 }
 
 function savingPct(tierKey) {
-  const monthly = BASE_USD[tierKey].monthly * 12;
-  const annual  = BASE_USD[tierKey].annual;
-  return Math.round((1 - annual / monthly) * 100);
+  const row = BASE_USD[tierKey];
+  if (!row) return null;
+  return Math.round((1 - row.annual / (row.monthly * 12)) * 100);
 }
 
 const CURRENCY_MAP = {
@@ -193,18 +207,22 @@ function TierCard({ tier, symbol, rate, billingCycle = 'monthly' }) {
           <span className="font-bold text-white text-sm">{tier.name}</span>
         </div>
         <div className="text-right">
-          {localPrice ? (
+          {/* Keyed off the tier itself. Testing `localPrice` for truthiness
+              meant any tier missing from BASE_USD advertised itself as free. */}
+          {tier.key === 'free' ? (
+            <span className="text-lg font-bold text-white">Free</span>
+          ) : localPrice != null ? (
             <div className="flex flex-col items-end">
               <div className="flex items-baseline space-x-0.5">
                 <span className="text-lg font-bold text-white">{symbol}{localPrice}</span>
                 <span className="text-xs text-white/30">/{billingCycle === 'monthly' ? 'mo' : 'yr'}</span>
               </div>
-              {billingCycle === 'annual' && tier.key !== 'free' && (
+              {billingCycle === 'annual' && savingPct(tier.key) != null && (
                 <span className="text-[9px] font-bold text-green-400">SAVE {savingPct(tier.key)}%</span>
               )}
             </div>
           ) : (
-            <span className="text-lg font-bold text-white">Free</span>
+            <span className="text-sm font-semibold text-white/40">—</span>
           )}
         </div>
       </div>
@@ -500,11 +518,15 @@ export default function LoginPage() {
         <div className="mt-10">
           <div className="flex items-center space-x-3 mb-2">
             <div className="flex-1 h-px bg-white/[0.07]" />
-            <span className="text-xs text-white/25">Artist & Beat Maker Plans</span>
+            {/* Was "Artist & Beat Maker Plans", which labelled the section
+                artists-only immediately above a role picker that leads with
+                Listener. That contradiction is the thing that made the page
+                read as not-for-listeners. */}
+            <span className="text-xs text-white/25">Plans</span>
             <div className="flex-1 h-px bg-white/[0.07]" />
           </div>
           <p className="text-center text-xs text-white/40 mb-4">
-            Just here to listen? You're already set, no plan needed.
+            Listening is free. Pick who you are to see what the paid tiers add.
           </p>
 
           {/* Role choice, listener included and listed first, because that is
@@ -532,7 +554,12 @@ export default function LoginPage() {
             </p>
           )}
 
-          {/* Billing toggle */}
+          {/* Billing toggle. Gated on the role: it used to render
+              unconditionally, so the first thing a new visitor saw was a
+              Monthly/Annual choice for a plan they had not been offered yet,
+              which is half of the complaint about the page leading with
+              pricing. */}
+          {pricingRole && (
           <div className="flex bg-white/[0.05] rounded-xl p-1 mb-5">
             {['monthly', 'annual'].map(cycle => (
               <button key={cycle}
@@ -549,6 +576,7 @@ export default function LoginPage() {
               </button>
             ))}
           </div>
+          )}
 
           <div className="space-y-3">
             {pricingRole && (

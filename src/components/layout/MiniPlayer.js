@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Play, Pause, SkipForward, ChevronUp, Sparkles } from 'lucide-react';
+import { Play, Pause, SkipForward, ChevronUp, Sparkles, X } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import TrackActionSheet from '../TrackActionSheet';
@@ -11,7 +11,7 @@ export default function MiniPlayer() {
   const {
     currentTrack, isPlaying, togglePlay, playNext, playTrack,
     duration, currentTime, seek, setIsMinimized,
-    queue, queueIndex,
+    queue, queueIndex, closePlayer,
   } = usePlayer();
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -242,6 +242,18 @@ export default function MiniPlayer() {
               onClick={() => { heavy(); playNext(); }}
               className="w-11 h-11 flex items-center justify-center rounded-full hover:bg-white/10 transition active:scale-90">
               <SkipForward className="w-4 h-4 text-white" fill="white" />
+            </button>
+            {/* Close. The bar had no dismiss control and nothing in the app
+                ever cleared currentTrack, so once you played anything the
+                mini player was permanent. Stops the music too — hiding a
+                still-playing player would leave no way to reach pause.
+                Deliberately the smallest target in the row so it is not
+                fat-thumbed instead of skip. */}
+            <button
+              onClick={() => { heavy(); closePlayer(); }}
+              aria-label="Close player"
+              className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-white/10 transition active:scale-90">
+              <X className="w-4 h-4 text-white/45" />
             </button>
           </div>
         </div>

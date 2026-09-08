@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
-import { Save, Loader, Eye, X, Play, Shuffle, UserPlus, Music } from 'lucide-react';
+import { Save, Loader, Eye, X, Play, Shuffle, UserPlus, Music, Radio, Share2, Verified, Target, Globe } from 'lucide-react';
 
 const PRESETS = [
   { name: 'Default',   slug: 'default',       primary: '#FFFFFF', secondary: '#8B5CF6', accent: '#3B82F6', bg: '#000000', text: '#FFFFFF' },
@@ -23,102 +23,171 @@ const FONTS = [
   'Bebas Neue', 'Oswald', 'Montserrat', 'Urbanist',
 ];
 
-// ── Accurate preview — matches ArtistProfilePage layout exactly ──────────────
+// ── Preview of the artist profile ───────────────────────────────────────────
+//
+// This has to track ArtistProfilePage's header, and it had fallen a long way
+// behind it: a centred avatar overlapping the banner, a centred name, three
+// pills, the bio, and Popular as a vertical list of skeleton rows. The real
+// page is now a left-aligned row — large square avatar, name and stats and a
+// six-pill control row beside it, social squares beneath, and Popular as a
+// horizontal rail of artwork cards.
+//
+// A theme editor whose preview shows a layout that no longer exists is worse
+// than no preview: every colour decision is made against the wrong picture.
+//
+// Anything structural that changes on ArtistProfilePage has to change here
+// too. The colour variables are read exactly as that page reads them
+// (theme.primary_color -> primaryColor and so on) so the mapping cannot drift.
 function ProfilePreview({ theme, artist }) {
   const {
-    primary_color:   primary,
-    secondary_color: secondary,
-    accent_color:    accent,
+    primary_color:    primary,
+    secondary_color:  secondary,
+    accent_color:     accent,
     background_color: bg,
-    text_color:      text,
-    heading_font:    headingFont = 'Inter',
-    body_font:       bodyFont    = 'Inter',
+    text_color:       text,
+    heading_font:     headingFont = 'Inter',
+    body_font:        bodyFont    = 'Inter',
   } = theme;
+
+  const heading = { fontFamily: `"${headingFont}", sans-serif` };
+
+  // Same order and styling as the real pill row.
+  const pills = [
+    { label: 'Follow',  Icon: UserPlus, style: { backgroundColor: primary, color: bg, border: `2px solid ${primary}` } },
+    { label: 'Play',    Icon: Play,     style: { backgroundColor: secondary, color: text } },
+    { label: 'Shuffle', Icon: Shuffle,  style: { backgroundColor: `${secondary}30`, color: text, border: `1px solid ${secondary}40` } },
+    { label: 'Radio',   Icon: Radio,    style: { backgroundColor: `${secondary}30`, color: text, border: `1px solid ${secondary}40` } },
+    { label: 'Share',   Icon: Share2,   style: { backgroundColor: `${text}10`, color: `${text}70`, border: `1px solid ${text}20` } },
+    { label: 'Tip goal', Icon: Target,  style: { backgroundColor: 'transparent', color: `${text}55`, border: `1px dashed ${text}30` } },
+  ];
 
   return (
     <div className="rounded-xl overflow-hidden border border-white/[0.06] shadow-2xl"
       style={{ backgroundColor: bg, color: text, fontFamily: `"${bodyFont}", sans-serif` }}>
 
-      {/* Banner */}
-      <div className="relative w-full" style={{ height: 90 }}>
-        <div className="absolute inset-0"
+      {/* Header. One row, avatar left, everything else beside it — the
+          arrangement the live page uses above lg. */}
+      <div className="relative">
+        <div className="absolute inset-x-0 top-0 h-24"
           style={{ background: `linear-gradient(135deg, ${secondary}50, ${accent}30, ${bg})` }} />
-        <div className="absolute inset-0"
+        <div className="absolute inset-x-0 top-0 h-24"
           style={{ background: `linear-gradient(to bottom, transparent 20%, ${bg} 100%)` }} />
-        {/* Avatar */}
-        <div className="absolute -bottom-8 left-1/2 -translate-x-1/2">
-          <div className="w-16 h-16 rounded-xl overflow-hidden border-2 shadow-xl"
+
+        <div className="relative flex items-end gap-4 px-5 pt-5 pb-4">
+          {/* Avatar: large, square, and it ends level with the text block */}
+          <div className="w-24 h-24 rounded-2xl overflow-hidden border-2 shadow-xl flex-shrink-0"
             style={{ borderColor: bg, backgroundColor: `${secondary}30` }}>
             {artist.profile_image_url
               ? <img src={artist.profile_image_url} alt="" className="w-full h-full object-cover" />
               : <div className="w-full h-full flex items-center justify-center"
                   style={{ background: `linear-gradient(135deg, ${secondary}, ${accent})` }}>
-                  <span className="text-xl font-bold" style={{ color: text }}>
+                  <span className="text-2xl font-bold" style={{ color: text }}>
                     {artist.artist_name?.[0]?.toUpperCase()}
                   </span>
                 </div>}
           </div>
+
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-1.5 mb-0.5">
+              <p className="text-lg font-bold truncate" style={{ ...heading, color: text }}>
+                {artist.artist_name}
+              </p>
+              {artist.is_verified && (
+                <span className="w-3.5 h-3.5 rounded-full flex items-center justify-center flex-shrink-0"
+                  style={{ backgroundColor: accent }}>
+                  <Verified style={{ width: 8, height: 8, color: bg }} />
+                </span>
+              )}
+            </div>
+
+            <p className="text-[10px] mb-2.5" style={{ color: `${text}80` }}>
+              {artist.follower_count ?? 0} followers &nbsp;·&nbsp; {artist.track_count ?? 0} tracks &nbsp;·&nbsp; {artist.total_streams ?? 0} streams
+            </p>
+
+            <div className="flex items-center flex-wrap gap-1.5 mb-2">
+              {pills.map(({ label, Icon, style }) => (
+                <span key={label}
+                  className="flex items-center gap-1 px-2.5 py-1 rounded-full text-[9px] font-semibold"
+                  style={style}>
+                  <Icon style={{ width: 9, height: 9 }} />
+                  <span>{label}</span>
+                </span>
+              ))}
+            </div>
+
+            {/* Social squares, in line under the pills as on the live page */}
+            <div className="flex items-center gap-1.5">
+              {[0, 1, 2, 3].map(i => (
+                <span key={i} className="w-6 h-6 rounded-lg flex items-center justify-center"
+                  style={{ border: `1px solid ${text}25` }}>
+                  <Globe style={{ width: 9, height: 9, color: `${text}60` }} />
+                </span>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Info */}
-      <div className="pt-10 pb-3 px-4 flex flex-col items-center text-center">
-        <p className="text-sm font-bold mb-0.5"
-          style={{ color: text, fontFamily: `"${headingFont}", sans-serif` }}>
-          {artist.artist_name}
-        </p>
-        <p className="text-[10px] mb-3" style={{ color: `${text}60` }}>
-          {artist.follower_count ?? 0} followers · {artist.track_count ?? 0} tracks · {artist.total_streams ?? 0} streams
-        </p>
-
-        {/* Action buttons — Follow, Play, Shuffle */}
-        <div className="flex items-center justify-center space-x-2 mb-3">
-          <div className="flex items-center space-x-1 px-3 py-1.5 rounded-full text-[10px] font-semibold border-2"
-            style={{ borderColor: `${text}30`, color: text }}>
-            <UserPlus style={{ width: 10, height: 10 }} />
-            <span>Follow</span>
-          </div>
-          <div className="flex items-center space-x-1 px-3 py-1.5 rounded-full text-[10px] font-semibold"
-            style={{ backgroundColor: secondary, color: text }}>
-            <Play style={{ width: 10, height: 10 }} fill={text} />
-            <span>Play</span>
-          </div>
-          <div className="flex items-center space-x-1 px-3 py-1.5 rounded-full text-[10px] font-semibold"
-            style={{ backgroundColor: `${secondary}30`, color: text, border: `1px solid ${secondary}40` }}>
-            <Shuffle style={{ width: 10, height: 10 }} />
-            <span>Shuffle</span>
-          </div>
-        </div>
-
-        {artist.bio && (
-          <p className="text-[10px] leading-relaxed mb-3 max-w-xs" style={{ color: `${text}70` }}>
-            {artist.bio.slice(0, 80)}{artist.bio.length > 80 ? '...' : ''}
-          </p>
-        )}
-      </div>
-
-      {/* Track list preview */}
-      <div className="px-4 pb-3">
-        <p className="text-[10px] font-bold mb-2" style={{ color: text, fontFamily: `"${headingFont}", sans-serif` }}>Popular</p>
-        {[1, 2, 3].map(i => (
-          <div key={i} className="flex items-center space-x-2 py-1.5 rounded-lg px-1"
-            style={{ backgroundColor: i === 1 ? `${secondary}15` : 'transparent' }}>
-            <span className="text-[9px] w-4 text-center" style={{ color: `${text}30` }}>{i}</span>
-            <div className="w-7 h-7 rounded-md flex-shrink-0"
-              style={{ backgroundColor: `${secondary}25`, background: `linear-gradient(135deg, ${secondary}40, ${accent}20)` }}>
-              <div className="w-full h-full flex items-center justify-center">
-                <Music style={{ width: 10, height: 10, color: `${text}30` }} />
+      {/* Popular — a horizontal rail of artwork cards with rank badges, not a
+          list. This is the single biggest thing the old preview got wrong. */}
+      <div className="px-5 pt-1 pb-4">
+        <p className="text-xs font-bold mb-2" style={{ ...heading, color: text }}>Popular</p>
+        <div className="flex gap-2 overflow-hidden">
+          {[1, 2, 3, 4, 5, 6].map(i => (
+            <div key={i} className="flex-shrink-0" style={{ width: 68 }}>
+              <div className="w-full aspect-square rounded-lg relative mb-1"
+                style={{ background: `linear-gradient(135deg, ${secondary}40, ${accent}20)` }}>
+                <span className="absolute top-1 left-1 w-3.5 h-3.5 rounded-full flex items-center justify-center text-[7px] font-bold"
+                  style={{ backgroundColor: `${bg}CC`, color: text }}>{i}</span>
+                <div className="w-full h-full flex items-center justify-center">
+                  <Music style={{ width: 12, height: 12, color: `${text}25` }} />
+                </div>
               </div>
+              <div className="h-1.5 rounded-full mb-1" style={{ width: `${85 - i * 6}%`, backgroundColor: `${text}25` }} />
+              <div className="h-1 rounded-full" style={{ width: `${50 - i * 4}%`, backgroundColor: `${text}12` }} />
             </div>
-            <div className="flex-1 min-w-0">
-              <div className="h-2 rounded-full mb-1" style={{ width: `${70 - i * 10}%`, backgroundColor: `${text}25` }} />
-              <div className="h-1.5 rounded-full" style={{ width: `${45 - i * 5}%`, backgroundColor: `${text}12` }} />
-            </div>
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
 
-      <div className="px-4 pb-3 text-center">
+      {/* New Music panel. Included because it leans on the secondary colour
+          harder than anything else on the page, so it is where a bad
+          secondary shows up first. Hero card above the row, as on the live
+          page. */}
+      <div className="mx-5 mb-4 rounded-xl p-2.5"
+        style={{ background: `${secondary}12`, border: `1px solid ${secondary}25` }}>
+        <div className="flex items-center gap-1.5 mb-2">
+          <p className="text-[10px] font-bold" style={{ ...heading, color: text }}>New Music</p>
+          <span className="text-[7px] font-semibold px-1.5 py-0.5 rounded-full"
+            style={{ background: `${secondary}25`, color: secondary, border: `1px solid ${secondary}35` }}>
+            Just dropped
+          </span>
+        </div>
+        <div className="flex items-center gap-2 p-1.5 rounded-lg mb-2"
+          style={{ background: `${text}08`, border: `1px solid ${secondary}55` }}>
+          <div className="w-9 h-9 rounded-md flex-shrink-0 flex items-center justify-center"
+            style={{ background: `linear-gradient(135deg, ${secondary}40, ${accent}20)` }}>
+            <Music style={{ width: 11, height: 11, color: `${text}30` }} />
+          </div>
+          <div className="min-w-0 flex-1">
+            <span className="inline-block px-1.5 py-0.5 rounded-full text-[7px] font-bold mb-0.5"
+              style={{ background: secondary, color: '#fff' }}>NEW</span>
+            <div className="h-1.5 rounded-full" style={{ width: '55%', backgroundColor: `${text}25` }} />
+          </div>
+          <Play style={{ width: 11, height: 11, color: secondary }} fill={secondary} />
+        </div>
+        <div className="flex gap-1.5 overflow-hidden rounded-lg p-1.5"
+          style={{ background: 'rgba(0,0,0,0.28)', border: `1px solid ${text}0F` }}>
+          {[1, 2, 3, 4, 5].map(i => (
+            <div key={i} className="flex-shrink-0 rounded-md" style={{
+              width: 34, height: 34,
+              background: `linear-gradient(135deg, ${secondary}35, ${accent}18)`,
+            }} />
+          ))}
+        </div>
+      </div>
+
+      <div className="px-5 pb-3 text-center">
         <p className="text-[9px]" style={{ color: `${text}20` }}>
           Powered by <span style={{ color: `${text}35` }}>Feelz Machine</span>
         </p>
