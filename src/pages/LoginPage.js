@@ -87,6 +87,34 @@ const TIERS = [
   },
 ];
 
+// Mirrors the tiers in ListenerUpgradePage. Kept in the same shape as the
+// artist tiers so TierCard renders all three roles without special cases.
+const LISTENER_TIERS = [
+  {
+    key: 'free', name: 'Free', icon: Star, color: '#737373', price: null,
+    tagline: 'Listening is free, and stays free',
+    features: [
+      { text: 'Full music streaming',        included: true },
+      { text: 'Follow artists',              included: true },
+      { text: 'Playlists and liked songs',   included: true },
+      { text: 'Chat rooms and competitions', included: true },
+      { text: 'Listening stats',             included: true },
+      { text: 'Custom app themes',           included: false },
+      { text: 'Fan badge on tips and comments', included: false },
+    ],
+  },
+  {
+    key: 'fan_pro', name: 'Fan Pro', icon: Zap, color: '#8B5CF6', popular: true,
+    tagline: 'For people who back the artists they love',
+    features: [
+      { text: 'Everything in Free',          included: true },
+      { text: '10 custom app themes',        included: true },
+      { text: 'Fan badge on tips and comments', included: true },
+      { text: 'Early access to new features', included: true },
+    ],
+  },
+];
+
 const BEATMAKER_TIERS = [
   {
     key: 'free', name: 'Free', icon: Star, color: '#737373', price: null,
@@ -227,7 +255,11 @@ export default function LoginPage() {
   const [symbol,       setSymbol]       = useState('$');
   const [rate,         setRate]         = useState(1);
   const [billingCycle, setBillingCycle] = useState('monthly');
-  const [pricingRole, setPricingRole]   = useState('artist'); // 'artist' | 'beatmaker'
+  // Starts unset on purpose. The page used to open straight onto artist
+  // pricing, and more than one person told Steve they did not sign up
+  // because it looked like the platform was for artists only. The choice
+  // comes first, the pricing follows from it.
+  const [pricingRole, setPricingRole]   = useState(null); // null | 'listener' | 'artist' | 'beatmaker'
 
   useEffect(() => {
     if (user) navigate(redirectTo || '/', { replace: true });
@@ -295,7 +327,11 @@ export default function LoginPage() {
       // this point — it's created by a trigger after auth completes.
       // Stash the selection so it can be applied once that row actually
       // exists, instead of silently discarding it (the original bug).
-      localStorage.setItem('pending_creator_role', pricingRole);
+      if (pricingRole === 'artist' || pricingRole === 'beatmaker') {
+        localStorage.setItem('pending_creator_role', pricingRole);
+      } else {
+        localStorage.removeItem('pending_creator_role');
+      }
       await signInWithGoogle();
     } catch (err) { setError(err.message); setLoading(false); }
   };
@@ -310,7 +346,11 @@ export default function LoginPage() {
       // tab entirely to click the emailed link, so this has to survive
       // that gap. localStorage (not sessionStorage) since the link may
       // be opened in a different tab or even a different device.
-      localStorage.setItem('pending_creator_role', pricingRole);
+      if (pricingRole === 'artist' || pricingRole === 'beatmaker') {
+        localStorage.setItem('pending_creator_role', pricingRole);
+      } else {
+        localStorage.removeItem('pending_creator_role');
+      }
       await signInWithMagicLink(email.trim());
       setMagicSent(true);
     } catch (err) {
@@ -347,7 +387,7 @@ export default function LoginPage() {
                 ✓ Connected from Plugin Gallery
               </p>
               <p className="text-xs text-white/60 leading-relaxed">
-                Almost there — <strong className="text-white/80">1)</strong> tick "I confirm I am 13 or older" below,
+                Almost there, <strong className="text-white/80">1)</strong> tick "I confirm I am 13 or older" below,
                 then <strong className="text-white/80">2)</strong> tap "Send Magic Link".
               </p>
             </div>
@@ -368,7 +408,7 @@ export default function LoginPage() {
               <h3 className="text-base font-bold text-white">Check your email</h3>
               <p className="text-sm text-white/50 leading-relaxed">
                 We sent a magic link to <span className="text-white/80 font-medium">{email}</span>.
-                Tap the link in the email to sign in — no password needed.
+                Tap the link in the email to sign in, no password needed.
               </p>
               <p className="text-xs text-amber-400/90 font-medium">
                 Not in your inbox? Check your spam or junk folder.
@@ -387,7 +427,7 @@ export default function LoginPage() {
               <form onSubmit={handleMagicLink} className="space-y-3 mb-4">
                 <div>
                   <p className="text-sm font-semibold text-white mb-1">Sign in or create account</p>
-                  <p className="text-xs text-white/35 mb-3">Enter your email — we'll send you a magic link. No password needed.</p>
+                  <p className="text-xs text-white/35 mb-3">Enter your email, we'll send you a magic link. No password needed.</p>
                 </div>
                 <div className="relative">
                   <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/25" />
@@ -464,23 +504,33 @@ export default function LoginPage() {
             <div className="flex-1 h-px bg-white/[0.07]" />
           </div>
           <p className="text-center text-xs text-white/40 mb-4">
-            Just here to listen? You're already set — no plan needed.
+            Just here to listen? You're already set, no plan needed.
           </p>
 
-          {/* Role toggle */}
-          <div className="flex bg-white/[0.05] rounded-xl p-1 mb-4">
+          {/* Role choice, listener included and listed first, because that is
+              what most people signing up actually are. */}
+          <p className="text-sm font-semibold text-white/70 mb-2">What brings you here?</p>
+          <div className="grid grid-cols-3 gap-1 bg-white/[0.05] rounded-xl p-1 mb-4">
             {[
+              { key: 'listener',  label: '🎧 Listener'  },
               { key: 'artist',    label: '🎤 Artist'    },
               { key: 'beatmaker', label: '🎛️ Beat Maker' },
             ].map(r => (
               <button key={r.key} onClick={() => setPricingRole(r.key)}
-                className={`flex-1 py-2 rounded-lg text-xs font-semibold transition ${
+                className={`py-2 rounded-lg text-xs font-semibold transition ${
                   pricingRole === r.key ? 'bg-white text-black' : 'text-white/40 hover:text-white/60'
                 }`}>
                 {r.label}
               </button>
             ))}
           </div>
+
+          {/* Nothing about money until they have said who they are. */}
+          {!pricingRole && (
+            <p className="text-center text-xs text-white/35 py-4">
+              Pick one and we will show you what it costs. Listening is free.
+            </p>
+          )}
 
           {/* Billing toggle */}
           <div className="flex bg-white/[0.05] rounded-xl p-1 mb-5">
@@ -501,13 +551,21 @@ export default function LoginPage() {
           </div>
 
           <div className="space-y-3">
-            {(pricingRole === 'beatmaker' ? BEATMAKER_TIERS : TIERS).map(tier => (
+            {pricingRole && (
+              pricingRole === 'listener'  ? LISTENER_TIERS
+              : pricingRole === 'beatmaker' ? BEATMAKER_TIERS
+              : TIERS
+            )?.map(tier => (
               <TierCard key={tier.key} tier={tier} symbol={symbol} rate={rate} billingCycle={billingCycle} />
             ))}
           </div>
-          <p className="text-center text-xs text-white/35 mt-4">
-            Listeners always sign up free · Choose your plan after joining
-          </p>
+          {pricingRole && (
+            <p className="text-center text-xs text-white/35 mt-4">
+              {pricingRole === 'listener'
+                ? 'Signing up is free. Fan Pro is optional and you can add it any time.'
+                : 'Start free, upgrade whenever. You can change plan after joining.'}
+            </p>
+          )}
         </div>
 
         {/* Terms */}
