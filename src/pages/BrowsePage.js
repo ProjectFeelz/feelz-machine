@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import TrackActionSheet from '../components/TrackActionSheet';
+import PreorderTag from '../components/PreorderTag';
 import { usePlayer } from '../contexts/PlayerContext';
 import { useAuth } from '../contexts/AuthContext';
 import {
@@ -548,7 +549,8 @@ export default function BrowsePage() {
                   {recommended.map(track => (
                     <div key={track.id} className="flex-shrink-0 w-32 cursor-pointer group"
                       onClick={() => handlePlayTrack(track, recommended)}>
-                      <div className="aspect-square rounded-xl overflow-hidden mb-1.5 bg-white/[0.06]">
+                      <div className="relative aspect-square rounded-xl overflow-hidden mb-1.5 bg-white/[0.06]">
+                        <PreorderTag track={track} />
                         {track.cover_artwork_url
                           ? <img src={track.cover_artwork_url} alt="" loading="lazy"
                               className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
@@ -656,7 +658,8 @@ export default function BrowsePage() {
                 {artists.map(a => (
                   <button key={a.id} onClick={() => navigate(`/artist/${a.slug}`)}
                     className="text-center group">
-                    <div className="w-full aspect-square rounded-2xl overflow-hidden bg-white/[0.06] mb-2">
+                    <div className="relative w-full aspect-square rounded-2xl overflow-hidden bg-white/[0.06] mb-2">
+                      <PreorderTag track={track} />
                       {a.profile_image_url
                         ? <img src={a.profile_image_url} alt="" loading="lazy"
                             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
@@ -850,7 +853,8 @@ function TrackRow({ track, index, currentTrack, isPlaying, onPlay, onMore, onArt
 function AlbumTile({ album, navigate }) {
   return (
     <button onClick={() => navigate(`/album/${album.slug || album.id}`)} className="text-left group">
-      <div className="aspect-square rounded-xl overflow-hidden bg-white/[0.06] mb-2">
+      <div className="relative aspect-square rounded-xl overflow-hidden bg-white/[0.06] mb-2">
+        <PreorderTag track={track} />
         {album.cover_artwork_url
           ? <img src={album.cover_artwork_url} alt="" loading="lazy"
               className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />

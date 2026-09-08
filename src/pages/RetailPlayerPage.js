@@ -808,7 +808,7 @@ export default function RetailPlayerPage() {
               {/* Right padding on lg reserves the space the half-vinyl
                   occupies, so a long title or description runs out of room
                   rather than running underneath it. */}
-              <div className="min-w-0 flex-1 lg:pr-[380px]">
+              <div className="min-w-0 flex-1 lg:pr-[500px]">
                 <p className="text-[10px] uppercase tracking-[0.2em] text-purple-400 font-bold mb-1.5">Playlist</p>
                 <h2 className="text-3xl font-black text-white leading-tight mb-2">{selectedPlaylist.title}</h2>
                 {selectedPlaylist.description && (
@@ -871,12 +871,29 @@ export default function RetailPlayerPage() {
                   lg and up only. Below that the header is a single column and
                   there is no empty space to put a 360px record into. */}
               {currentTrack && (
-                <div className="hidden lg:block absolute right-4 bottom-0 w-[360px] h-[180px] overflow-hidden pointer-events-none select-none z-0">
+                <div
+                  className="hidden lg:block absolute right-32 bottom-0 w-[360px] h-[180px] overflow-hidden pointer-events-none select-none z-0"
+                  style={{
+                    // The dark rectangle behind the record was the record's own
+                    // drop-shadow being clipped by this box: a big soft blur cut
+                    // off square at the edges. Killed at the source with
+                    // shadow={false} below.
+                    //
+                    // This mask then softens what remains. The bottom stays a
+                    // hard cut, because a clean cut at the header's edge is the
+                    // point — the grooves fade towards the outer rim instead, so
+                    // the record dissolves into the page rather than ending on a
+                    // visible boundary.
+                    maskImage: 'radial-gradient(circle at 50% 100%, black 55%, rgba(0,0,0,0.55) 80%, transparent 100%)',
+                    WebkitMaskImage: 'radial-gradient(circle at 50% 100%, black 55%, rgba(0,0,0,0.55) 80%, transparent 100%)',
+                  }}
+                >
                   <div className="absolute top-0 left-0">
                     <VinylRecord
                       coverUrl={currentTrack.cover_artwork_url}
                       isPlaying={isPlaying}
                       size={360}
+                      shadow={false}
                     />
                   </div>
                 </div>

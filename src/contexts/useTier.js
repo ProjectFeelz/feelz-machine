@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, createContext, useContext } from 'react';
 import { supabase } from '../supabaseClient';
+import { setViewerEntitlement } from '../utils/trackAccess';
 import { useAuth } from './AuthContext';
 
 const TierContext = createContext(null);
@@ -386,6 +387,27 @@ function useTierInternal() {
     : Math.max(0, downloadSalesLimit - monthlyDownloadSalesCount);
 
   const isListenerPro = listenerTierSlug === 'pro' || listenerTierSlug === 'premium' || listenerTierSlug === 'fan_pro';
+
+  // Publish what the playback gate needs.
+  //
+  // PlayerProvider wraps TierProvider in AppRouter, so PlayerContext cannot
+  // read this context — it is the outer provider. Reordering them to fix that
+  // would risk far more than it buys, so the three facts the gate needs are
+  // pushed into a module it can read synchronously instead. See
+  // utils/trackAccess.js.
+  //
+  // Fan Pro early access to pre-orders is a paid feature, so getting this
+  // wrong in the "off" direction would take a benefit away from paying
+  // listeners, and in the "on" direction would leak unreleased music. Both
+  // matter, which is why it is derived here from the same value the rest of
+  // the app gates on rather than recomputed anywhere.
+  useEffect(() => {
+    setViewerEntitlement({
+      isListenerPro,
+      artistId: artist?.id || null,
+      isAdmin:  !!isAdmin,
+    });
+  }, [isListenerPro, artist?.id, isAdmin]);
 
   return {
     tierSlug,

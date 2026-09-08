@@ -4,6 +4,7 @@ import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import { useStreakContext } from '../contexts/StreakContext';
 import { usePlayer } from '../contexts/PlayerContext';
+import PreorderTag from '../components/PreorderTag';
 import { Flame, Play, Pause, Music, Verified, MoreHorizontal, Disc, Sparkles, Users, Trophy, Compass, Headphones, Radio, Zap, ListMusic } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import TrackActionSheet from '../components/TrackActionSheet';
@@ -95,6 +96,9 @@ function SquareCard({ item, itemList = [], isAlbum = false, showNew = false, onP
         className="aspect-square rounded-xl overflow-hidden bg-white/[0.06] mb-2 relative"
         onClick={() => isAlbum ? navigate(`/album/${item.slug || item.id}`) : onPlay(item, itemList)}
       >
+        {/* One placement covers every rail on this page — Featured, New,
+            Trending and the rest all render through this card. */}
+        {!isAlbum && <PreorderTag track={item} />}
         {item.cover_artwork_url ? (
           <>
             {!imgLoaded && (
@@ -203,17 +207,17 @@ export default function HomePage() {
         { data: artists },
       ] = await Promise.all([
         supabase.from('tracks')
-          .select('*, albums(title, cover_artwork_url, price), artists(artist_name, slug, profile_image_url, tier)')
+          .select('*, albums(title, cover_artwork_url, price), artists!tracks_artist_id_fkey(artist_name, slug, profile_image_url, tier)')
           .eq('is_published', true).eq('featured', true)
           .order('created_at', { ascending: false }).limit(10),
         supabase.from('tracks')
-          .select('*, albums(title, cover_artwork_url, price), artists(artist_name, slug, profile_image_url)')
+          .select('*, albums(title, cover_artwork_url, price), artists!tracks_artist_id_fkey(artist_name, slug, profile_image_url)')
           .eq('is_published', true).order('created_at', { ascending: false }).limit(8),
         supabase.from('albums')
           .select('*, artists(artist_name, slug, profile_image_url)')
           .eq('is_published', true).order('created_at', { ascending: false }).limit(10),
         supabase.from('tracks')
-          .select('*, albums(title, cover_artwork_url, price), artists(artist_name, slug, profile_image_url, is_verified, tier)')
+          .select('*, albums(title, cover_artwork_url, price), artists!tracks_artist_id_fkey(artist_name, slug, profile_image_url, is_verified, tier)')
           .eq('is_published', true).order('engagement_score', { ascending: false }).limit(20),
         supabase.from('artists')
           .select('id, artist_name, slug, profile_image_url, is_verified, follower_count, total_streams, tier')
@@ -345,7 +349,7 @@ export default function HomePage() {
       // Get recent tracks from those artists
       const { data: tracks } = await supabase
         .from('tracks')
-        .select('*, artists(artist_name, slug, profile_image_url)')
+        .select('*, artists!tracks_artist_id_fkey(artist_name, slug, profile_image_url)')
         .eq('is_published', true)
         .in('artist_id', artistIds)
         .order('created_at', { ascending: false })
@@ -383,7 +387,7 @@ export default function HomePage() {
       if (genreTags.length === 0) return;
       const orFilter = genreTags.map(t => `genre.eq.${t},mood.eq.${t}`).join(',');
       let query = supabase.from('tracks')
-        .select('*, artists(artist_name, slug, profile_image_url)')
+        .select('*, artists!tracks_artist_id_fkey(artist_name, slug, profile_image_url)')
         .eq('is_published', true).or(orFilter)
         .order('engagement_score', { ascending: false }).limit(10);
       if (listenedIds.length > 0) query = query.not('id', 'in', `(${listenedIds.join(',')})`);
@@ -432,7 +436,7 @@ export default function HomePage() {
       // Get the user's top-played artists
       const { data: streamData } = await supabase
         .from('streams')
-        .select('track_id, tracks(artist_id, genre, artists(id, artist_name, slug))')
+        .select('track_id, tracks(artist_id, genre, artists!tracks_artist_id_fkey(id, artist_name, slug))')
         .eq('user_id', user.id)
         .limit(100);
       if (!streamData?.length) return;
@@ -504,7 +508,7 @@ export default function HomePage() {
 
         let query = supabase
           .from('tracks')
-          .select('*, artists(artist_name, slug, profile_image_url)')
+          .select('*, artists!tracks_artist_id_fkey(artist_name, slug, profile_image_url)')
           .eq('is_published', true)
           .order('engagement_score', { ascending: false })
           .limit(heardIds.length > 0 ? 20 : 10);
@@ -538,7 +542,7 @@ export default function HomePage() {
       if (filters.length === 0) {
         const { data } = await supabase
           .from('tracks')
-          .select('*, artists(artist_name, slug, profile_image_url)')
+          .select('*, artists!tracks_artist_id_fkey(artist_name, slug, profile_image_url)')
           .eq('is_published', true)
           .neq('id', track.id)
           .order('engagement_score', { ascending: false })
@@ -548,7 +552,7 @@ export default function HomePage() {
 
       const { data } = await supabase
         .from('tracks')
-        .select('*, artists(artist_name, slug, profile_image_url)')
+        .select('*, artists!tracks_artist_id_fkey(artist_name, slug, profile_image_url)')
         .eq('is_published', true)
         .neq('id', track.id)
         .or(filters.join(','))
@@ -560,7 +564,7 @@ export default function HomePage() {
         const existingIds = (data || []).map(t => t.id).concat(track.id);
         const { data: padData } = await supabase
           .from('tracks')
-          .select('*, artists(artist_name, slug, profile_image_url)')
+          .select('*, artists!tracks_artist_id_fkey(artist_name, slug, profile_image_url)')
           .eq('is_published', true)
           .not('id', 'in', `(${existingIds.join(',')})`)
           .order('engagement_score', { ascending: false })

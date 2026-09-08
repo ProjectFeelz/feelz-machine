@@ -7,7 +7,7 @@ import { generateSlug, getUniqueSlug } from '../utils/artistSlug';
 import { useAuth } from '../contexts/AuthContext';
 import {
   LogOut, ChevronRight, User, Music, Globe, Shield, Trophy,
-  Instagram, Twitter, Youtube, MessageCircle, Loader,
+  Loader,
   Save, Palette, ExternalLink, DollarSign, Camera, Check,
   Link, Zap, Crown, Star, Trash2, AlertTriangle, Plus, Mic
 } from 'lucide-react';
@@ -21,91 +21,13 @@ import { getListenerFeature } from '../contexts/useTier';
 import ProfileCompletionBanner from '../components/ProfileCompletionBanner';
 import { useStreakContext } from '../contexts/StreakContext';
 
-const TikTokIcon = ({ className }) => (
-  <svg className={className} viewBox="0 0 24 24" fill="currentColor">
-    <path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.89-2.89 2.89 2.89 0 012.89-2.89c.28 0 .54.04.79.1V9.01a6.33 6.33 0 00-.79-.05 6.34 6.34 0 00-6.34 6.34 6.34 6.34 0 006.34 6.34 6.34 6.34 0 006.33-6.34V8.75a8.16 8.16 0 004.77 1.52V6.82a4.85 4.85 0 01-1-.13z"/>
-  </svg>
-);
-
-const SOCIALS = [
-  { key: 'instagram', label: 'Instagram',   icon: Instagram,     ph: 'https://instagram.com/yourname' },
-  { key: 'twitter',   label: 'X (Twitter)', icon: Twitter,       ph: 'https://x.com/yourname' },
-  { key: 'youtube',   label: 'YouTube',     icon: Youtube,       ph: 'https://youtube.com/yourchannel' },
-  { key: 'tiktok',    label: 'TikTok',      icon: TikTokIcon,    ph: 'https://tiktok.com/@yourname' },
-  { key: 'facebook',  label: 'Facebook',    icon: Globe,         ph: 'https://facebook.com/yourpage' },
-  { key: 'discord',   label: 'Discord',     icon: MessageCircle, ph: 'Discord invite link' },
-  { key: 'website',   label: 'Website',     icon: Globe,         ph: 'https://yourwebsite.com' },
-];
-
-const GENRES = [
-  'Hip Hop','Trap','Drill','Boom Bap','Lo-Fi','R&B','Neo Soul','Pop',
-  'Electronic','House','Deep House','Tech House','Techno','Dubstep',
-  'Drum & Bass','Ambient','Downtempo','Future Bass','Jersey Club',
-  'Jazz','Funk','Soul','Rock','Metal','Indie','Alternative',
-  'Afrobeat','Amapiano','Reggae','Dancehall','Latin','Reggaeton',
-  'Country','EDM','Trance','Hardstyle','UK Garage','Grime',
-  'Experimental','Vaporwave','Synthwave','Other',
-];
-
-const MOODS = [
-  'Dark','Happy','Sad','Aggressive','Chill','Energetic','Melancholic',
-  'Uplifting','Mysterious','Peaceful','Intense','Dreamy','Romantic',
-  'Angry','Hopeful','Nostalgic','Epic','Smooth','Bouncy','Atmospheric',
-  'Moody','Vibey','Hard','Soft','Ethereal','Groovy','Other',
-];
-
-const PROFILE_IMAGE_BUCKET = 'artist-images';
-
-// ── Slug generation ───────────────────────────────────────────────────────────
-
-const MAX_DAILY_THOUGHTS   = 3;
-const THOUGHT_TTL_MS       = 24 * 60 * 60 * 1000;
-const BIO_MAX              = 300;
-
-const ARTIST_TABS = [
-  { key: 'profile',  label: 'Profile',  icon: User },
-  { key: 'edit',     label: 'Edit',     icon: Camera },
-  { key: 'theme',    label: 'Theme',    icon: Palette },
-  { key: 'payments', label: 'Payments', icon: DollarSign },
-];
-
-const GENRES_LIST = [
-  'Hip Hop','Trap','Drill','Boom Bap','Lo-Fi','R&B','Neo Soul','Pop',
-  'Electronic','House','Deep House','Tech House','Techno','Dubstep',
-  'Drum & Bass','Ambient','Downtempo','Future Bass','Jersey Club',
-  'Jazz','Funk','Soul','Rock','Metal','Indie','Alternative',
-  'Afrobeat','Amapiano','Reggae','Dancehall','Latin','Reggaeton',
-  'Country','EDM','Trance','Hardstyle','UK Garage','Grime',
-  'Experimental','Vaporwave','Synthwave','Other',
-];
-
-const MOODS_LIST = [
-  'Dark','Happy','Sad','Aggressive','Chill','Energetic','Melancholic',
-  'Uplifting','Mysterious','Peaceful','Intense','Dreamy','Romantic',
-  'Angry','Hopeful','Nostalgic','Epic','Smooth','Bouncy','Atmospheric',
-  'Moody','Vibey','Hard','Soft','Ethereal','Groovy','Other',
-];
-
-function PillSelect({ options, selected, onToggle, multi = false }) {
-  return (
-    <div className="flex flex-wrap gap-1.5">
-      {options.map(opt => {
-        const isSelected = multi ? selected.includes(opt) : selected === opt;
-        return (
-          <button key={opt} type="button" onClick={() => onToggle(opt)}
-            className={`flex items-center space-x-1 px-2.5 py-1 rounded-full text-xs font-medium transition active:scale-95 ${
-              isSelected
-                ? 'bg-white text-black'
-                : 'bg-white/[0.06] text-white/40 hover:bg-white/[0.1] hover:text-white/60'
-            }`}>
-            {isSelected && <Check className="w-2.5 h-2.5" strokeWidth={3} />}
-            <span>{opt}</span>
-          </button>
-        );
-      })}
-    </div>
-  );
-}
+// Extracted from both this file and its twin — the block was byte-identical in
+// the two (bar one stray comment). PillSelect and TikTokIcon are deliberately
+// not imported: both were defined in both files and rendered in neither.
+import {
+  SOCIALS, GENRES_LIST, MOODS_LIST, ARTIST_TABS,
+  PROFILE_IMAGE_BUCKET, MAX_DAILY_THOUGHTS, THOUGHT_TTL_MS, BIO_MAX,
+} from './profile/profileShared';
 
 export default function ProfilePage() {
   const nav = useNavigate();
@@ -808,9 +730,9 @@ export default function ProfilePage() {
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
                     <label className="text-xs text-white/40 font-semibold uppercase tracking-wider">Bio</label>
-                    <span className={`text-xs ${editBio.length > 270 ? 'text-yellow-400' : 'text-white/20'}`}>{editBio.length}/300</span>
+                    <span className={`text-xs ${editBio.length > BIO_MAX - 30 ? 'text-yellow-400' : 'text-white/20'}`}>{editBio.length}/{BIO_MAX}</span>
                   </div>
-                  <textarea rows={3} value={editBio} onChange={e => setEditBio(e.target.value)} maxLength={300}
+                  <textarea rows={3} value={editBio} onChange={e => setEditBio(e.target.value)} maxLength={BIO_MAX}
                     placeholder="Tell fans about yourself..."
                     className="w-full px-3 py-2.5 bg-white/[0.06] rounded-xl text-white text-sm outline-none resize-none border border-white/[0.06] focus:border-white/20 transition placeholder-white/20" />
                 </div>

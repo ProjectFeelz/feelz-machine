@@ -1,3 +1,41 @@
+/**
+ * downloadErrorMessage
+ *
+ * Turns the codes thrown below into something a person can act on.
+ *
+ * The backend already does this job well: get-download-url returns a specific
+ * 403 with a code AND a human message for each rule it enforces. The codes
+ * then reached five call sites that did `catch (err) { console.error(err) }`
+ * and showed the user nothing at all — the download button simply stopped
+ * spinning. A deliberate, correctly-implemented business rule was
+ * indistinguishable from a broken button.
+ *
+ * That is the sixth instance of the swallowed-error pattern in this codebase
+ * (retail recommendations, album upload, For You, useTier counts, the Browse
+ * embed, and now this). The map lives here so the five callers cannot each
+ * invent their own wording, or forget a case the backend adds later.
+ */
+export function downloadErrorMessage(err) {
+  switch (err?.message) {
+    case 'artists_cannot_download':
+      // The most confusing one: it fires on your OWN track, which is exactly
+      // when you are most likely to be testing and least likely to guess why.
+      return "You can't download your own track — it would inflate your download count.";
+    case 'not_released_yet':
+      return "This track hasn't been released yet. You'll be able to download it on the release date.";
+    case 'fan_pro_required':
+      return 'Free downloads are a Fan Pro feature. Upgrade to download this one.';
+    case 'monthly_quota_exceeded':
+      return "You've used your 3 free downloads this month. They reset on the 1st.";
+    case 'purchase_required':
+      return 'This track needs to be bought before you can download it.';
+    case 'Not authenticated':
+      return 'Sign in to download.';
+    default:
+      return 'Download failed. Please try again.';
+  }
+}
+
 // Downloads a track via the secure get-download-url netlify function.
 // Backend verifies auth + purchase and returns a signed URL with proper
 // Content-Disposition headers. We then fetch the file client-side as a

@@ -307,6 +307,9 @@ export default function NotificationsPage() {
   const [filter,      setFilter]      = useState('all');
   const [expandedIds, setExpandedIds] = useState([]);
   const [replyingTo,  setReplyingTo]  = useState(null);   // notif.id with open reply box
+  // Track id whose pill was tapped but is no longer available, so the pill can
+  // say so instead of swallowing the tap.
+  const [unavailableTrackId, setUnavailableTrackId] = useState(null);
   const [allNotifs,   setAllNotifs]   = useState([]);
   const [pageLoading, setPageLoading] = useState(true);
   const [page,        setPage]        = useState(0);
@@ -397,6 +400,52 @@ export default function NotificationsPage() {
     'bug_report',
   ]);
 
+  // Play the track a notification points at, by resolving the LIVE row first.
+  //
+  // This pill used to play straight from notification metadata:
+  //
+  //   playTrack({ id: meta.track_id, file_url: meta.file_url, ... })
+  //
+  // metadata is a snapshot taken when the notification was created. file_url
+  // is copied into it, so once a notification existed the track played from
+  // that URL forever — including after the artist unpublished it to hide it
+  // from fans. The database was never consulted, so RLS never got a say.
+  //
+  // Going through the tracks table fixes it properly rather than adding a
+  // second rule to keep in step: the SELECT policy is is_published = true, so
+  // an unpublished track simply is not there for a listener, and the artist
+  // still sees their own. The playback gate in PlayerContext then handles the
+  // unreleased pre-order case, which it can, because a real row carries
+  // is_preorder and release_date and metadata does not.
+  //
+  // handleClick already did this for 'new_track'. The pill is the path that
+  // was missed.
+  const playPillTrack = async (meta) => {
+    const { data: live, error } = await supabase
+      .from('tracks')
+      .select('id, title, slug, file_url, cover_artwork_url, duration, artist_id, is_published, is_preorder, release_date, artists!tracks_artist_id_fkey(artist_name, slug)')
+      .eq('id', meta.track_id)
+      .maybeSingle();
+
+    if (error) {
+      console.warn('[notifications] could not resolve track for playback:', error.code, error.message);
+      return;
+    }
+    // Gone, or no longer visible to this listener. Say so rather than doing
+    // nothing: a pill that silently ignores a tap reads as a broken app.
+    if (!live?.file_url) {
+      setUnavailableTrackId(meta.track_id);
+      setTimeout(() => setUnavailableTrackId(null), 4000);
+      return;
+    }
+
+    playTrack({
+      ...live,
+      artist_name: live.artists?.artist_name || meta.artist_name || '',
+      artist_slug: live.artists?.slug || meta.artist_slug || '',
+    }, []);
+  };
+
   const handleClick = async (notif) => {
     markAsRead(notif.id);
     if (INLINE_ACTION_TYPES.has(notif.type)) return;
@@ -471,7 +520,7 @@ export default function NotificationsPage() {
         // Verify track still exists and is published before playing
         const { data: liveTrack } = await supabase
           .from('tracks')
-          .select('id, title, file_url, cover_artwork_url, slug, artist_id, is_published, artists(artist_name, slug)')
+          .select('id, title, file_url, cover_artwork_url, slug, artist_id, is_published, artists!tracks_artist_id_fkey(artist_name, slug)')
           .eq('id', trackId)
           .eq('is_published', true)
           .maybeSingle();
@@ -496,7 +545,7 @@ export default function NotificationsPage() {
             if (!trackRow?.artist_id) return;
             const { data: artistTracks } = await supabase
               .from('tracks')
-              .select('id, title, file_url, cover_artwork_url, slug, artist_id, artists(artist_name, slug)')
+              .select('id, title, file_url, cover_artwork_url, slug, artist_id, artists!tracks_artist_id_fkey(artist_name, slug)')
               .eq('artist_id', trackRow.artist_id)
               .eq('is_published', true)
               .order('engagement_score', { ascending: false })
@@ -782,16 +831,7 @@ export default function NotificationsPage() {
                             className="flex items-center space-x-2 mt-2 p-2.5 bg-white/[0.04] rounded-xl border border-white/[0.06] cursor-pointer hover:bg-white/[0.07] transition active:scale-[0.98]"
                             onClick={e => {
                               e.stopPropagation();
-                              if (meta.track_id) {
-                                playTrack({
-                                  id:                meta.track_id,
-                                  title:             meta.track_title,
-                                  file_url:          meta.file_url || null,
-                                  cover_artwork_url: meta.track_artwork || null,
-                                  artist_name:       meta.artist_name || '',
-                                  artist_slug:       meta.artist_slug || '',
-                                }, []);
-                              }
+                              if (meta.track_id) playPillTrack(meta);
                             }}
                           >
                             {meta.track_artwork
@@ -801,7 +841,9 @@ export default function NotificationsPage() {
                                 </div>}
                             <div className="flex-1 min-w-0">
                               <p className="text-xs text-white/80 font-semibold truncate">{meta.track_title}</p>
-                              {meta.artist_name && <p className="text-[11px] text-white/30 truncate">{meta.artist_name}</p>}
+                              {unavailableTrackId === meta.track_id
+                                ? <p className="text-[11px] text-amber-400/80 truncate">No longer available</p>
+                                : meta.artist_name && <p className="text-[11px] text-white/30 truncate">{meta.artist_name}</p>}
                             </div>
                             <div className="w-7 h-7 rounded-full bg-white/10 flex items-center justify-center flex-shrink-0">
                               <Play className="w-3.5 h-3.5 text-white/60 ml-0.5" />

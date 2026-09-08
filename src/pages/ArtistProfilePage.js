@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Helmet } from 'react-helmet-async';
-import { downloadTrack } from '../utils/downloadTrack';
+import { downloadTrack, downloadErrorMessage } from '../utils/downloadTrack';
 import TrackActionSheet from '../components/TrackActionSheet';
 // TrackVersions is not imported here any more: versions moved to the track
 // page when Popular became a card rail with nowhere to expand into.
@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { ArtistProfileSkeleton } from '../components/SkeletonLoader';
 import ShareCard from '../components/ShareCard';
+import PreorderTag from '../components/PreorderTag';
 import { usePullToRefresh } from '../hooks/usePullToRefresh';
 import PullToRefreshIndicator from '../components/PullToRefreshIndicator';
 import { VoiceMemoCard, VoiceMemoUpload } from '../components/VoiceMemo';
@@ -357,7 +358,7 @@ export default function ArtistProfilePage() {
   const location = useLocation();
   const { user, artist: myArtist } = useAuth();
   const { isPremium, isListenerPro } = useTier();
-  const { playTrack, addToQueue, currentTrack, isPlaying, togglePlay } = usePlayer();
+  const { playTrack, addToQueue, currentTrack, isPlaying, togglePlay, showNotice } = usePlayer();
 
   const [artist, setArtist] = useState(null);
   const [theme, setTheme] = useState(null);
@@ -615,12 +616,19 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
         .eq('artist_id', artistData.id)
         .eq('is_published', true)
         .order('engagement_score', { ascending: false });
-      // Fan Pro gets early access to pre-order tracks not yet released
-      if (!isListenerPro) {
-        trackQuery = trackQuery.or(
-          `is_preorder.eq.false,release_date.lte.${new Date().toISOString()},release_date.is.null`
-        );
-      }
+      // Unreleased pre-orders stay in the list for everyone now.
+      //
+      // This page used to be the only surface that filtered them out for
+      // non-Pro listeners, while Home, Browse and For You listed them and
+      // played them. So the same track was hidden here and audible there,
+      // which is the worst of both.
+      //
+      // Steve's decision is listed-but-not-playable: an upcoming release
+      // should be discoverable, with its date on the card, because that is
+      // what a pre-order is for. Enforcement moved to the playback gate in
+      // PlayerContext, which is the only place that can cover all 39 play
+      // paths, and PreorderTag puts the date on the card. Fan Pro's early
+      // access is honoured by the gate rather than by hiding rows here.
       const { data: trackData } = await trackQuery;
       setTracks(trackData || []);
       if (user) {
@@ -1051,7 +1059,10 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
       } catch {}
       const { data: { session } } = await supabase.auth.getSession();
       await downloadTrack(track.id, track.title, session?.access_token);
-    } catch (err) { console.error('Download error:', err); }
+    } catch (err) {
+      console.error('Download error:', err);
+      showNotice(downloadErrorMessage(err));
+    }
     setDownloading(null);
   };
 
@@ -1287,7 +1298,14 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
           Mobile is untouched: the banner keeps its fixed height and the
           avatar stays absolutely positioned and centred. */}
       <div className="lg:flex lg:items-end lg:gap-7 lg:px-8 pb-4 lg:pb-5 lg:relative">
-      <div className="relative w-full h-[220px] lg:h-auto lg:min-h-0 lg:w-auto">
+      {/* MOBILE BANNER HEIGHT
+          220px put roughly 155px of empty green above the avatar and pushed
+          Popular below the fold — on a phone you landed on a wall of colour
+          and had to scroll before seeing a single track. 132px keeps enough
+          banner for the gradient to read while lifting everything under it by
+          88px, which is what brings the Popular rail into the first screen.
+          Desktop is untouched: there the banner is sized by the flex row. */}
+      <div className="relative w-full h-[132px] lg:h-auto lg:min-h-0 lg:w-auto">
         {artist.banner_image_url || theme?.banner_image_url ? (
           <img src={artist.banner_image_url || theme?.banner_image_url} alt="" className="absolute inset-0 w-full h-full object-cover" />
         ) : (
@@ -1313,7 +1331,10 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
         {/* Bigger on desktop and deliberately bleeding past the bottom of the
             banner, so the image breaks the green edge instead of floating
             inside it. */}
-        <div className="absolute -bottom-16 left-1/2 -translate-x-1/2 z-10 lg:static lg:translate-x-0 lg:flex-shrink-0">
+        {/* -bottom-20 rather than -bottom-16: the image is larger on mobile
+            now (160px, was 128px), so it needs to hang further past the banner
+            to keep breaking the edge rather than sitting inside it. */}
+        <div className="absolute -bottom-20 left-1/2 -translate-x-1/2 z-10 lg:static lg:translate-x-0 lg:flex-shrink-0">
           {/* Story ring — clickable if artist has active stories */}
           <div
             className="relative"
@@ -1326,7 +1347,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
                 <div className="w-full h-full rounded-2xl" style={{ backgroundColor: bgColor }} />
               </div>
             )}
-            <div className="relative w-32 h-32 lg:w-48 lg:h-48 rounded-2xl overflow-hidden border-4 shadow-2xl"
+            <div className="relative w-40 h-40 lg:w-48 lg:h-48 rounded-2xl overflow-hidden border-4 shadow-2xl"
               style={{ borderColor: stories.length > 0 ? 'transparent' : bgColor, backgroundColor: `${secondaryColor}30` }}>
               {artist.profile_image_url ? (
                 <img src={artist.profile_image_url} alt={artist.artist_name} className="w-full h-full object-cover" />
@@ -1699,6 +1720,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
                   {track.cover_artwork_url
                     ? <img src={track.cover_artwork_url} alt={track.title} className="w-full h-full object-cover" />
                     : <div className="w-full h-full flex items-center justify-center"><Music className="w-8 h-8" style={{ color: `${textColor}20` }} /></div>}
+                  <PreorderTag track={track} />
                   <span
                     className="absolute top-1.5 left-1.5 w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-black"
                     style={{ background: 'rgba(0,0,0,0.6)', color: textColor, backdropFilter: 'blur(4px)' }}
@@ -1830,7 +1852,10 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
                           style={{ background: secondaryColor, color: '#fff' }}>NEW</span>
                       )}
                       <p className="text-xl font-bold truncate" style={{ color: textColor }}>{track.title}</p>
-                      <p className="text-sm truncate" style={{ color: `${textColor}55` }}>{track.albums?.title || 'Single'}</p>
+                      <div className="flex items-center gap-2 min-w-0">
+                        <p className="text-sm truncate" style={{ color: `${textColor}55` }}>{track.albums?.title || 'Single'}</p>
+                        <PreorderTag track={track} variant="inline" />
+                      </div>
                     </div>
                     <Play className="w-6 h-6 flex-shrink-0 mr-2" style={{ color: secondaryColor }} fill={secondaryColor} />
                   </div>

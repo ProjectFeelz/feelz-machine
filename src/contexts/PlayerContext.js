@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useRef, useCallback, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
+import { getTrackAvailability } from '../utils/trackAccess';
 import { useMediaSession } from '../hooks/useMediaSession';
 
 // Preload a track's cover art into the browser cache so VinylRecord/Cassette show instantly
@@ -28,6 +29,10 @@ export function PlayerProvider({ children }) {
   const [shuffle, setShuffle]           = useState(false);
   const [repeat, setRepeat]             = useState('none');
   const [isMinimized, setIsMinimized]   = useState(false);
+  // Why a blocked tap did nothing. Rendered by this provider itself (see the
+  // bottom of the file) rather than wired into a page, so every one of the 39
+  // playTrack call sites gets the explanation for free.
+  const [playbackNotice, setPlaybackNotice] = useState(null);
   // Which tab the desktop docked player panel opens on when triggered,
   // shared so DesktopPlayer's Queue button and FullPlayer's own tabs
   // drive the same single panel instead of two competing ones.
@@ -604,6 +609,21 @@ export function PlayerProvider({ children }) {
 
   const playTrack = useCallback((track, trackList = []) => {
     if (!track?.file_url) return;
+
+    // THE GATE. Every path into playback comes through here — feeds, rails,
+    // queues, action sheets, notifications, radio — so this is the only place
+    // the rule has to be written, and no new call site can forget it.
+    //
+    // It blocks only on positive evidence (see trackAccess.js): an explicit
+    // is_published === false, or a pre-order with a future release_date and no
+    // entitlement. A missing field is unknown, and unknown plays.
+    const availability = getTrackAvailability(track);
+    if (!availability.playable) {
+      console.warn(`[player] blocked playback of "${track.title}" (${track.id}):`, availability.reason);
+      setPlaybackNotice({ id: `${track.id}:${Date.now()}`, message: availability.message });
+      return;
+    }
+
     const audio = audioRef.current;
     if (currentTrack?.id === track.id) {
       if (isPlaying) { audio.pause(); } else { audio.play().catch(console.error); }
@@ -655,6 +675,32 @@ export function PlayerProvider({ children }) {
       if (nextIdx < trackList.length) preloadCover(trackList[nextIdx]);
     }
   }, [currentTrack, isPlaying, flushListeningEvent]);
+
+  // A one-line notice anyone can raise.
+  //
+  // Built for blocked playback, but it is the only app-wide notice renderer
+  // that exists, and `window.showToast` was referenced in
+  // utils/downloadTrack.js while being defined absolutely nowhere — so the
+  // iOS "Tap Share to save" hint has never appeared. Publishing showNotice
+  // there makes that dead reference work and gives plain utils, which have no
+  // access to React context, a way to say something.
+  const showNotice = useCallback((message) => {
+    if (!message) return;
+    setPlaybackNotice({ id: `notice:${Date.now()}`, message });
+  }, []);
+
+  useEffect(() => {
+    window.showToast = showNotice;
+    return () => { if (window.showToast === showNotice) window.showToast = null; };
+  }, [showNotice]);
+
+  // The notice clears itself. Tying it to a dismiss button would mean every
+  // page that can play a track also has to render one.
+  useEffect(() => {
+    if (!playbackNotice) return;
+    const t = setTimeout(() => setPlaybackNotice(null), 4000);
+    return () => clearTimeout(t);
+  }, [playbackNotice]);
 
   const togglePlay = useCallback(() => {
     const audio = audioRef.current;
@@ -829,6 +875,7 @@ export function PlayerProvider({ children }) {
     setVolume: setVolumeLevel, setVolumeLevel, playNext, playPrev, addToQueue,
     removeFromQueue, moveInQueue, playNextInQueue, clearQueue, closePlayer, toggleShuffle, toggleRepeat,
     replaceQueue, jumpToIndex,
+    playbackNotice, showNotice, dismissPlaybackNotice: () => setPlaybackNotice(null),
   };
 
   return (
@@ -844,6 +891,28 @@ export function PlayerProvider({ children }) {
       duration={duration}
     >
       {children}
+      {/* The blocked-playback notice, rendered by the provider so it exists
+          wherever the player does. Above the mini player and the mobile nav,
+          below modals. */}
+      {playbackNotice?.message && (
+        <div
+          className="fixed left-1/2 -translate-x-1/2 z-[420] px-4 w-full max-w-sm pointer-events-none"
+          style={{ bottom: 'calc(112px + var(--safe-area-bottom, 0px))' }}
+        >
+          <div
+            className="flex items-center gap-2.5 px-4 py-2.5 rounded-2xl shadow-2xl pointer-events-auto"
+            style={{
+              backgroundColor: 'rgba(20,20,28,0.96)',
+              border: '1px solid rgba(251,191,36,0.28)',
+              backdropFilter: 'blur(12px)',
+            }}
+            onClick={() => setPlaybackNotice(null)}
+          >
+            <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: '#fbbf24' }} />
+            <p className="text-xs text-white/80">{playbackNotice.message}</p>
+          </div>
+        </div>
+      )}
     </PlayerProviderInner>
   );
 }

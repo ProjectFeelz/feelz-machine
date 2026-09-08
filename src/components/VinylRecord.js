@@ -10,8 +10,15 @@ import React from 'react';
  *   coverUrl    - track cover artwork URL
  *   isPlaying   - controls spin
  *   size        - diameter px (default 300)
+ *   shadow      - drop shadow under the record (default true)
+ *
+ * On `shadow`: the shadow is a big soft dark blur, which looks right when the
+ * record floats on a page. Inside a container that clips it — the half-record
+ * in the retail playlist header — the blur is cut off at the container's edges
+ * and reads as a dark rectangle sitting behind the record. Hence the opt-out
+ * rather than a change to the default, which every other use still wants.
  */
-export default function VinylRecord({ coverUrl, isPlaying, size = 300 }) {
+export default function VinylRecord({ coverUrl, isPlaying, size = 300, shadow = true }) {
   const r         = size / 2;
   const labelR    = r * 0.30;   // centre label radius
   const innerRing = labelR + 6; // accent ring just outside label
@@ -37,7 +44,9 @@ export default function VinylRecord({ coverUrl, isPlaying, size = 300 }) {
       style={{
         width: size,
         height: size,
-        filter: 'drop-shadow(0 32px 64px rgba(0,0,0,0.8)) drop-shadow(0 8px 16px rgba(0,0,0,0.6))',
+        filter: shadow
+          ? 'drop-shadow(0 32px 64px rgba(0,0,0,0.8)) drop-shadow(0 8px 16px rgba(0,0,0,0.6))'
+          : 'none',
         flexShrink: 0,
       }}
     >

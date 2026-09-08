@@ -4,7 +4,7 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import { usePlayer } from '../contexts/PlayerContext';
-import { downloadTrack } from '../utils/downloadTrack';
+import { downloadTrack, downloadErrorMessage } from '../utils/downloadTrack';
 import ShareCard from '../components/ShareCard';
 import TrackCommentSheet from '../components/TrackCommentSheet';
 import {
@@ -32,7 +32,7 @@ export default function BeatDetailPage() {
   const { slug }  = useParams();
   const navigate  = useNavigate();
   const { user, artist: myArtist } = useAuth();
-  const { playTrack, currentTrack, isPlaying, togglePlay } = usePlayer();
+  const { playTrack, currentTrack, isPlaying, togglePlay, showNotice } = usePlayer();
 
   const [track, setTrack]         = useState(null);
   const [artist, setArtist]       = useState(null);
@@ -67,14 +67,14 @@ export default function BeatDetailPage() {
       setLoading(true);
       let { data: t } = await supabase
         .from('tracks')
-        .select('*, artists(id, artist_name, slug, profile_image_url, is_verified, total_streams, user_id)')
+        .select('*, artists!tracks_artist_id_fkey(id, artist_name, slug, profile_image_url, is_verified, total_streams, user_id)')
         .eq('slug', slug)
         .eq('is_beat', true)
         .maybeSingle();
       if (!t) {
         const { data: t2 } = await supabase
           .from('tracks')
-          .select('*, artists(id, artist_name, slug, profile_image_url, is_verified, total_streams, user_id)')
+          .select('*, artists!tracks_artist_id_fkey(id, artist_name, slug, profile_image_url, is_verified, total_streams, user_id)')
           .eq('id', slug)
           .eq('is_beat', true)
           .maybeSingle();
@@ -164,7 +164,10 @@ export default function BeatDetailPage() {
       try { await supabase.from('downloads').upsert({ user_id: user.id, track_id: track.id }, { onConflict: 'user_id,track_id', ignoreDuplicates: true }); } catch {}
       const { data: { session } } = await supabase.auth.getSession();
       await downloadTrack(track.id, track.title, session?.access_token);
-    } catch (err) { console.error('Download error:', err); }
+    } catch (err) {
+      console.error('Download error:', err);
+      showNotice(downloadErrorMessage(err));
+    }
     setDownloading(false);
   };
 

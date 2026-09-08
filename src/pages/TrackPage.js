@@ -6,7 +6,7 @@ import TrackVersions from '../components/TrackVersions';
 import PreSaveButton from '../components/PreSaveButton';
 import { useAuth } from '../contexts/AuthContext';
 import { usePlayer } from '../contexts/PlayerContext';
-import { downloadTrack } from '../utils/downloadTrack';
+import { downloadTrack, downloadErrorMessage } from '../utils/downloadTrack';
 import TrackActionSheet from '../components/TrackActionSheet';
 import {
   ArrowLeft, Play, Pause, Music, Loader, Download,
@@ -32,13 +32,14 @@ export default function TrackPage() {
   const { slug } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { playTrack, currentTrack, isPlaying, togglePlay } = usePlayer();
+  const { playTrack, currentTrack, isPlaying, togglePlay, showNotice } = usePlayer();
 
   const [track, setTrack]           = useState(null);
   // Who else is credited on this track. The artist profile has shown
   // collaborations for a while; the track's own page did not, which is the
   // one place a listener asks "who is that featured".
   const [credits, setCredits]       = useState([]);
+  const [lyricsOpen, setLyricsOpen] = useState(false);
   const [artist, setArtist]         = useState(null);
   const [album, setAlbum]           = useState(null);
   const [discography, setDiscography] = useState([]);
@@ -81,7 +82,7 @@ export default function TrackPage() {
       // Fetch track by slug
       const { data: trackData, error } = await supabase
         .from('tracks')
-        .select('*, artists(*), albums(id, title, slug, cover_artwork_url, price, release_type, release_date)')
+        .select('*, artists!tracks_artist_id_fkey(*), albums(id, title, slug, cover_artwork_url, price, release_type, release_date)')
         .eq('slug', slug)
         .eq('is_published', true)
         .maybeSingle();
@@ -204,7 +205,10 @@ export default function TrackPage() {
         }).catch(() => {});
       }
     } catch (err) {
+      // The backend's 403s are deliberate rules with real messages. Logging
+      // them and showing nothing made a working rule look like a dead button.
       console.error('Download error:', err);
+      showNotice(downloadErrorMessage(err));
     }
     setDownloading(false);
   };
@@ -364,11 +368,26 @@ export default function TrackPage() {
         </div>
       </div>
 
-      {/* Stats row */}
-      <div className="flex items-center space-x-4 px-5 py-3 border-b border-white/[0.06]">
+      {/* Details row. The track is fetched with select('*'), so mood, BPM,
+          key and the like counts were all sitting in memory unrendered while
+          the row showed three of them. Beat metadata only appears on beats,
+          where it is the part a buyer actually needs. */}
+      <div className="flex items-center flex-wrap gap-x-4 gap-y-1 px-5 py-3 border-b border-white/[0.06]">
         <span className="text-xs text-white/30">{formatNumber(track.stream_count || 0)} plays</span>
+        {track.like_count > 0 && (
+          <span className="text-xs text-white/30">{formatNumber(track.like_count)} likes</span>
+        )}
         {track.duration && <span className="text-xs text-white/30">{formatDuration(track.duration)}</span>}
         {track.genre && <span className="text-xs text-white/30">{track.genre}</span>}
+        {track.mood && <span className="text-xs text-white/30">{track.mood}</span>}
+        {track.is_beat && track.bpm && (
+          <span className="text-xs text-white/30">{track.bpm} BPM</span>
+        )}
+        {track.is_beat && track.beat_key && (
+          <span className="text-xs text-white/30">
+            {track.beat_key}{track.beat_scale ? ` ${track.beat_scale}` : ''}
+          </span>
+        )}
       </div>
 
       {/* Action bar */}
@@ -485,6 +504,50 @@ export default function TrackPage() {
             onPlayVersion={(version) => playTrack(version, [version])}
             onPurchaseRequired={() => navigate(`/track/${track.slug || track.id}`)}
           />
+        </div>
+      )}
+
+      {/* LYRICS
+          Fetched by select('*') since this page was written and never
+          rendered, so a track's lyrics were only ever visible inside the
+          expanded player — you had to be playing the track to read them, and
+          they were invisible to search engines on a page that has its own
+          crawler meta.
+
+          Timestamps are stripped rather than synced. FullPlayer parses LRC
+          against the playhead, which is right there; here there is no playhead,
+          so [00:12.34] markers would just be noise in the text.
+
+          Collapsed past ten lines: a full lyric sheet would otherwise push
+          Credits and the discography off the bottom of the page. */}
+      {track.lyrics?.trim() && (
+        <div className="px-5 mt-2 mb-6">
+          <h2 className="text-sm font-semibold text-white/50 uppercase tracking-wider mb-3">
+            Lyrics
+          </h2>
+          {(() => {
+            const lines = track.lyrics
+              .replace(/\[\d{1,2}:\d{2}(?:[.:]\d{1,3})?\]/g, '')  // LRC timestamps
+              .split('\n')
+              .map(l => l.trimEnd());
+            const long    = lines.length > 10;
+            const visible = long && !lyricsOpen ? lines.slice(0, 10) : lines;
+            return (
+              <div className="rounded-2xl bg-white/[0.03] border border-white/[0.06] p-4">
+                <p className="text-sm text-white/70 leading-relaxed whitespace-pre-line">
+                  {visible.join('\n')}
+                </p>
+                {long && (
+                  <button
+                    onClick={() => setLyricsOpen(o => !o)}
+                    className="mt-3 text-xs font-semibold text-white/40 hover:text-white/70 transition"
+                  >
+                    {lyricsOpen ? 'Show less' : `Show all ${lines.length} lines`}
+                  </button>
+                )}
+              </div>
+            );
+          })()}
         </div>
       )}
 

@@ -19,6 +19,28 @@ import TrackCommentSheet from '../components/TrackCommentSheet';
 import { useAuth } from '../contexts/AuthContext';
 import { usePlayer } from '../contexts/PlayerContext';
 import VinylRecord from '../components/VinylRecord';
+import PreorderTag from '../components/PreorderTag';
+
+// Every listener_feedback write in this file was fire-and-forget: no await, no
+// .then, no error read. So the 400 they have all been returning was invisible,
+// and Hide *looked* like it worked — the card slid away, the row was never
+// written, and the track came back next session. Same for the skip and
+// deep-listen signals the recommender is supposed to be learning from.
+//
+// One reporter rather than four, so a new call site cannot quietly be added
+// without error handling.
+function reportFeedbackWrite(label, promise) {
+  Promise.resolve(promise)
+    .then(({ error }) => {
+      if (error) {
+        console.error(
+          `[ForYou] listener_feedback ${label} failed:`,
+          error.code, error.message, error.details || '', error.hint || ''
+        );
+      }
+    })
+    .catch(err => console.error(`[ForYou] listener_feedback ${label} threw:`, err));
+}
 import { ArtistStoryView } from '../components/ArtistStories';
 import ShareCard from '../components/ShareCard';
 import { askNotificationPermission } from '../utils/askNotificationPermission';
@@ -779,10 +801,10 @@ function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare, onN
             onClick={e => {
               e.stopPropagation();
               clearTimeout(window.__feelz_hide_timer);
-              supabase.from('listener_feedback')
+              reportFeedbackWrite('undo hide', supabase.from('listener_feedback')
                 .delete()
                 .eq('user_id', user.id)
-                .eq('track_id', justHid.id);
+                .eq('track_id', justHid.id));
               setJustHid(null);
             }}
             style={{
@@ -819,14 +841,14 @@ function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare, onN
               onClick={e => {
                 e.stopPropagation();
                 setJustHid({ id: track.id, title: track.title });
-                supabase.from('listener_feedback').upsert({
+                reportFeedbackWrite('hide', supabase.from('listener_feedback').upsert({
                   user_id:    user.id,
                   track_id:   track.id,
                   artist_id:  track.artist_id,
                   signal:     'not_interested',
                   listen_pct: 0,
                   updated_at: new Date().toISOString(),
-                }, { onConflict: 'user_id,track_id' });
+                }, { onConflict: 'user_id,track_id' }));
                 const t = setTimeout(() => {
                   if (onHide) onHide(track.id); else onNext();
                 }, 3000);
@@ -839,7 +861,10 @@ function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare, onN
             </button>
           )}
         </div>
-        <p className="text-lg font-black text-white leading-tight mb-2">{track.title}</p>
+        <div className="flex items-center gap-2 min-w-0 mb-2">
+          <p className="text-lg font-black text-white leading-tight truncate">{track.title}</p>
+          <PreorderTag track={track} variant="inline" />
+        </div>
         <div className="flex items-center flex-wrap gap-1.5">
           {track.is_beat && (
             <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full"
@@ -1079,7 +1104,7 @@ export default function ForYouPage() {
           const idList = rankedIds.map(r => r.id);
           const { data: rankedTracks, error: rankedErr } = await supabase
             .from('tracks')
-            .select('id, title, slug, genre, mood, cover_artwork_url, file_url, youtube_url, duration, lyrics, artist_id, is_beat, stream_count, like_count, bpm, beat_key, beat_scale, download_price, engagement_score, artists!tracks_artist_id_fkey(artist_name, slug, profile_image_url)')
+            .select('id, title, slug, genre, mood, cover_artwork_url, file_url, youtube_url, duration, lyrics, artist_id, is_beat, stream_count, like_count, bpm, beat_key, beat_scale, download_price, engagement_score, is_published, is_preorder, release_date, artists!tracks_artist_id_fkey(artist_name, slug, profile_image_url)')
             .in('id', idList);
 
           if (rankedErr) console.error('[ForYou] ranked tracks query failed:', rankedErr.code, rankedErr.message, rankedErr.hint || '');
@@ -1116,7 +1141,7 @@ export default function ForYouPage() {
 
         let recQuery = supabase
           .from('listener_recommendations')
-          .select('score, reason, tracks(id, title, slug, genre, mood, cover_artwork_url, file_url, youtube_url, duration, lyrics, artist_id, is_beat, stream_count, like_count, bpm, beat_key, beat_scale, download_price, engagement_score, artists!tracks_artist_id_fkey(artist_name, slug, profile_image_url))')
+          .select('score, reason, tracks(id, title, slug, genre, mood, cover_artwork_url, file_url, youtube_url, duration, lyrics, artist_id, is_beat, stream_count, like_count, bpm, beat_key, beat_scale, download_price, engagement_score, is_published, is_preorder, release_date, artists!tracks_artist_id_fkey(artist_name, slug, profile_image_url))')
           .eq('user_id', user.id)
           .order('score', { ascending: false })
           .range(offset, offset + PAGE_SIZE - 1);
@@ -1158,7 +1183,7 @@ export default function ForYouPage() {
       if (offset === 0 && fetched.length === 0) {
         const { data: picks, error: picksErr } = await supabase
           .from('cold_start_picks')
-          .select('position, tracks(id, title, slug, genre, mood, cover_artwork_url, file_url, youtube_url, duration, lyrics, artist_id, is_beat, stream_count, like_count, bpm, beat_key, beat_scale, download_price, engagement_score, artists!tracks_artist_id_fkey(artist_name, slug, profile_image_url))')
+          .select('position, tracks(id, title, slug, genre, mood, cover_artwork_url, file_url, youtube_url, duration, lyrics, artist_id, is_beat, stream_count, like_count, bpm, beat_key, beat_scale, download_price, engagement_score, is_published, is_preorder, release_date, artists!tracks_artist_id_fkey(artist_name, slug, profile_image_url))')
           .eq('is_active', true)
           .order('position');
 
@@ -1189,7 +1214,7 @@ export default function ForYouPage() {
         const existingIdsStr = allExcludeIds.length > 0 ? `(${allExcludeIds.join(',')})` : null;
 
         let recentQuery = supabase.from('tracks')
-          .select('id, title, slug, genre, mood, cover_artwork_url, file_url, youtube_url, duration, lyrics, artist_id, is_beat, stream_count, like_count, bpm, beat_key, beat_scale, download_price, engagement_score, artists!tracks_artist_id_fkey(artist_name, slug, profile_image_url)')
+          .select('id, title, slug, genre, mood, cover_artwork_url, file_url, youtube_url, duration, lyrics, artist_id, is_beat, stream_count, like_count, bpm, beat_key, beat_scale, download_price, engagement_score, is_published, is_preorder, release_date, artists!tracks_artist_id_fkey(artist_name, slug, profile_image_url)')
           .eq('is_published', true)
           .order('created_at', { ascending: false })
           .limit(halfPage);
@@ -1203,7 +1228,7 @@ export default function ForYouPage() {
         // longer, stream_count ignores likes, comments and downloads entirely.
         // stream_count stays as the tiebreak for tracks not yet scored.
         let topQuery = supabase.from('tracks')
-          .select('id, title, slug, genre, mood, cover_artwork_url, file_url, youtube_url, duration, lyrics, artist_id, is_beat, stream_count, like_count, bpm, beat_key, beat_scale, download_price, engagement_score, artists!tracks_artist_id_fkey(artist_name, slug, profile_image_url)')
+          .select('id, title, slug, genre, mood, cover_artwork_url, file_url, youtube_url, duration, lyrics, artist_id, is_beat, stream_count, like_count, bpm, beat_key, beat_scale, download_price, engagement_score, is_published, is_preorder, release_date, artists!tracks_artist_id_fkey(artist_name, slug, profile_image_url)')
           .eq('is_published', true)
           .order('engagement_score', { ascending: false, nullsFirst: false })
           .order('stream_count', { ascending: false })
@@ -1310,7 +1335,7 @@ export default function ForYouPage() {
     (async () => {
       const { data } = await supabase
         .from('tracks')
-        .select('id, title, slug, genre, mood, cover_artwork_url, file_url, youtube_url, duration, lyrics, artist_id, is_beat, stream_count, like_count, bpm, beat_key, beat_scale, download_price, engagement_score, artists!tracks_artist_id_fkey(artist_name, slug, profile_image_url)')
+        .select('id, title, slug, genre, mood, cover_artwork_url, file_url, youtube_url, duration, lyrics, artist_id, is_beat, stream_count, like_count, bpm, beat_key, beat_scale, download_price, engagement_score, is_published, is_preorder, release_date, artists!tracks_artist_id_fkey(artist_name, slug, profile_image_url)')
         .eq('is_published', true)
         .order('created_at', { ascending: false })
         .limit(30);
@@ -1404,24 +1429,24 @@ export default function ForYouPage() {
       // Log as implicit signal: < 10% = skip, > 70% = deep listen
       if (pct < 10 && elapsed < 15) {
         // Quick skip — negative signal, record in listener_feedback
-        supabase.from('listener_feedback').upsert({
+        reportFeedbackWrite('skip', supabase.from('listener_feedback').upsert({
           user_id:    user.id,
           track_id:   currentItem.id,
           artist_id:  currentItem.artist_id,
           signal:     'skip',
           listen_pct: pct,
           updated_at: new Date().toISOString(),
-        }, { onConflict: 'user_id,track_id' });
+        }, { onConflict: 'user_id,track_id' }));
       } else if (pct >= 70) {
         // Deep listen — positive signal
-        supabase.from('listener_feedback').upsert({
+        reportFeedbackWrite('deep listen', supabase.from('listener_feedback').upsert({
           user_id:    user.id,
           track_id:   currentItem.id,
           artist_id:  currentItem.artist_id,
           signal:     'deep_listen',
           listen_pct: pct,
           updated_at: new Date().toISOString(),
-        }, { onConflict: 'user_id,track_id' });
+        }, { onConflict: 'user_id,track_id' }));
       }
     }
     hasUserGestured.current = true;
@@ -1607,14 +1632,33 @@ export default function ForYouPage() {
                     setTracks(prev => prev.filter(t => t.id !== id));
                     setIdx(prev => prev);
                     if (user) {
-                      try {
-                        await supabase.from('listener_feedback').upsert({
-                          user_id:    user.id,
-                          track_id:   id,
-                          signal:     'not_interested',
-                          created_at: new Date().toISOString(),
-                        }, { onConflict: 'user_id,track_id' });
-                      } catch {}
+                      // THIS is the 400 in the console.
+                      //
+                      // It sent `created_at`, and listener_feedback has no such
+                      // column — verified against the live API: every other
+                      // column returns 200, created_at returns
+                      // 42703 "column listener_feedback.created_at does not
+                      // exist". The table's timestamp is updated_at, which is
+                      // what the other three writes in this file use.
+                      //
+                      // It was hidden twice over: an awaited Supabase call
+                      // returns { error } rather than throwing, so the empty
+                      // `catch {}` never even ran — the error was simply
+                      // discarded. Hiding a track from this card therefore
+                      // never persisted, and the track returned next session.
+                      //
+                      // artist_id and listen_pct added to match the other hide
+                      // path, so the recommender sees the same shape whichever
+                      // control the person used.
+                      const hidden = filteredTracks.find(t => t?.id === id);
+                      reportFeedbackWrite('hide (card)', supabase.from('listener_feedback').upsert({
+                        user_id:    user.id,
+                        track_id:   id,
+                        artist_id:  hidden?.artist_id ?? null,
+                        signal:     'not_interested',
+                        listen_pct: 0,
+                        updated_at: new Date().toISOString(),
+                      }, { onConflict: 'user_id,track_id' }));
                     }
                   }} queue={filteredTracks} queueIndex={i} /> : null
               )}

@@ -1,7 +1,7 @@
 import { Helmet } from 'react-helmet-async';
 import React, { useState, useEffect } from 'react';
 import TrackActionSheet from '../components/TrackActionSheet';
-import { downloadTrack } from '../utils/downloadTrack';
+import { downloadTrack, downloadErrorMessage } from '../utils/downloadTrack';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
@@ -35,7 +35,7 @@ export default function AlbumDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { playTrack, currentTrack, isPlaying, togglePlay } = usePlayer();
+  const { playTrack, currentTrack, isPlaying, togglePlay, showNotice } = usePlayer();
   const { checkPlayLimit, recordPlay, resetPlayCount } = usePaidPlayLimit();
   const [limitedTrack, setLimitedTrack] = useState(null);
   const [album, setAlbum] = useState(null);
@@ -238,7 +238,10 @@ export default function AlbumDetailPage() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) throw new Error('Not authenticated');
       await downloadTrack(track.id, track.title, session.access_token);
-    } catch (err) { console.error('Download failed:', err.message); }
+    } catch (err) {
+      console.error('Download failed:', err.message);
+      showNotice(downloadErrorMessage(err));
+    }
     setDownloading(null);
   };
 
