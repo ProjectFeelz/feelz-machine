@@ -21,6 +21,15 @@ import { usePlayer } from '../contexts/PlayerContext';
 import VinylRecord from '../components/VinylRecord';
 import PreorderTag from '../components/PreorderTag';
 
+import { ArtistStoryView } from '../components/ArtistStories';
+import ShareCard from '../components/ShareCard';
+import { askNotificationPermission } from '../utils/askNotificationPermission';
+import {
+  Heart, MessageCircle, ListMusic, UserCheck,
+  Share2, Loader, X, Send, ChevronUp,
+  Sparkles, Volume2, VolumeX, Info, EyeOff,
+} from 'lucide-react';
+
 // Every listener_feedback write in this file was fire-and-forget: no await, no
 // .then, no error read. So the 400 they have all been returning was invisible,
 // and Hide *looked* like it worked — the card slid away, the row was never
@@ -41,14 +50,6 @@ function reportFeedbackWrite(label, promise) {
     })
     .catch(err => console.error(`[ForYou] listener_feedback ${label} threw:`, err));
 }
-import { ArtistStoryView } from '../components/ArtistStories';
-import ShareCard from '../components/ShareCard';
-import { askNotificationPermission } from '../utils/askNotificationPermission';
-import {
-  Heart, MessageCircle, ListMusic, UserCheck,
-  Share2, Loader, X, Send, ChevronUp,
-  Sparkles, Volume2, VolumeX, Info, EyeOff,
-} from 'lucide-react';
 
 const SWIPE_THRESHOLD = 60;
 const PRELOAD_AHEAD   = 2;

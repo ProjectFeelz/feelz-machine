@@ -659,7 +659,6 @@ export default function BrowsePage() {
                   <button key={a.id} onClick={() => navigate(`/artist/${a.slug}`)}
                     className="text-center group">
                     <div className="relative w-full aspect-square rounded-2xl overflow-hidden bg-white/[0.06] mb-2">
-                      <PreorderTag track={track} />
                       {a.profile_image_url
                         ? <img src={a.profile_image_url} alt="" loading="lazy"
                             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
@@ -731,6 +730,7 @@ function TrackCard({ track, rank, currentTrack, isPlaying, onPlay, onMore, onArt
       <div className="flex-1 min-w-0">
         <div className="flex items-center space-x-1">
           <p className={`text-sm font-medium truncate ${isActive ? 'text-purple-400' : 'text-white'}`}>{track.title}</p>
+          <PreorderTag track={track} variant="inline" />
           {(() => {
             const aiEffective = track.ai_content_admin_override || track.ai_content;
             if (!aiEffective || aiEffective === 'human') return null;
@@ -788,7 +788,10 @@ function TrendingRow({ track, rank, currentTrack, isPlaying, onPlay, onMore, onA
         )}
       </div>
       <div className="flex-1 min-w-0">
-        <p className={`text-sm font-medium truncate ${isActive ? 'text-purple-400' : 'text-white'}`}>{track.title}</p>
+        <div className="flex items-center gap-1.5 min-w-0">
+          <p className={`text-sm font-medium truncate ${isActive ? 'text-purple-400' : 'text-white'}`}>{track.title}</p>
+          <PreorderTag track={track} variant="inline" />
+        </div>
         <button onClick={(e) => { e.stopPropagation(); onArtist(); }} className="flex items-center space-x-1">
           <span className="text-xs text-white/40 truncate hover:text-white/60 transition">{track.artist_name}</span>
           {track.artists?.is_verified && <Verified className="w-2.5 h-2.5 text-blue-400 flex-shrink-0" />}
@@ -837,6 +840,7 @@ function TrackRow({ track, index, currentTrack, isPlaying, onPlay, onMore, onArt
       <div className="flex-1 min-w-0">
         <p className={`text-sm font-medium truncate ${isActive ? 'text-purple-400' : 'text-white'}`}>{track.title}</p>
         <div className="flex items-center space-x-1.5">
+          <PreorderTag track={track} variant="inline" />
           {track.is_explicit && <span className="text-[8px] font-bold px-1 py-0.5 bg-white/[0.1] text-white/40 rounded">E</span>}
           <span className="text-xs text-white/30 truncate">{track.artist_name}</span>
           {track.genre && <span className="text-[10px] text-white/15">· {track.genre}</span>}
@@ -854,7 +858,6 @@ function AlbumTile({ album, navigate }) {
   return (
     <button onClick={() => navigate(`/album/${album.slug || album.id}`)} className="text-left group">
       <div className="relative aspect-square rounded-xl overflow-hidden bg-white/[0.06] mb-2">
-        <PreorderTag track={track} />
         {album.cover_artwork_url
           ? <img src={album.cover_artwork_url} alt="" loading="lazy"
               className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
