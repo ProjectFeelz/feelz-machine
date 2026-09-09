@@ -9,7 +9,7 @@
 import React from 'react';
 import { Helmet } from 'react-helmet-async';
 import { useNavigate } from 'react-router-dom';
-import { Loader, Send, Users, Store, Plus, X, ArrowLeft } from 'lucide-react';
+import { Loader, Send, Users, Store, Plus, X, ArrowLeft, Mail, Check, AlertTriangle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../supabaseClient';
 import { WysiwygEditor } from '../components/admin/WysiwygEditor';
@@ -44,10 +44,131 @@ export default function NewsletterComposePage() {
       .then(({ data }) => { setAuthorized(!!data); setChecking(false); });
   }, [user, isAdmin]);
 
-  const loadPosts = React.useCallback(() => {
-    supabase.from('newsletter_posts').select('*').order('created_at', { ascending: false }).limit(20)
-      .then(({ data }) => setPosts(data || []));
+  // Per-post email state, keyed by post id. Separate from `sending`, which
+  // belongs to composing.
+  const [emailing, setEmailing] = React.useState({});
+  // How many emails have already gone out per post, from newsletter_email_sends.
+  const [sendLog, setSendLog] = React.useState({});
+
+  // No showToast in here on purpose: it is recreated every render, so putting
+  // it in this callback's dependency list would give loadPosts a new identity
+  // each render and the effect below would loop. Errors go to the console
+  // instead, which is also where they are useful.
+  const loadPosts = React.useCallback(async () => {
+    const { data, error } = await supabase
+      .from('newsletter_posts').select('*').order('created_at', { ascending: false }).limit(20);
+
+    if (error) {
+      console.error('[newsletter] could not list posts:', error.code, error.message);
+      return;
+    }
+
+    const list = data || [];
+    setPosts(list);
+    if (list.length === 0) { setSendLog({}); return; }
+
+    // Admin-only read; a newsletter_editor gets nothing back, which is fine
+    // because the email controls are admin-only too.
+    const { data: log, error: logErr } = await supabase
+      .from('newsletter_email_sends')
+      .select('post_id, status')
+      .in('post_id', list.map(p => p.id));
+
+    if (logErr) {
+      console.error('[newsletter] send-log read failed:', logErr.code, logErr.message);
+      return;
+    }
+
+    const byPost = {};
+    (log || []).forEach(r => {
+      const bucket = byPost[r.post_id] || (byPost[r.post_id] = { sent: 0, failed: 0 });
+      if (r.status === 'failed') bucket.failed += 1; else bucket.sent += 1;
+    });
+    setSendLog(byPost);
   }, []);
+
+  /**
+   * Emails an already-published post.
+   *
+   * Two stages, deliberately. The first click is a dry run: it resolves the
+   * recipient list, skips anyone already emailed for this post, and reports the
+   * number without sending anything. Only the second click sends. An email
+   * cannot be recalled, so a single-click send of a list of 154 people is not
+   * a control worth building.
+   *
+   * The send itself is paged — the function returns next_offset and this keeps
+   * calling until done, because a list of thousands will not go out in one
+   * invocation.
+   */
+  const emailPost = async (post, dryRun) => {
+    const key = post.id;
+    setEmailing(prev => ({ ...prev, [key]: { phase: dryRun ? 'checking' : 'sending', sent: 0 } }));
+
+    try {
+      const { data: sess } = await supabase.auth.getSession();
+      const token = sess?.session?.access_token;
+      if (!token) {
+        setEmailing(prev => ({ ...prev, [key]: { phase: 'error', message: 'Session expired — sign in again' } }));
+        return;
+      }
+
+      let offset = 0, totalSent = 0, totalFailed = 0, pages = 0;
+
+      for (;;) {
+        if (++pages > 200) throw new Error('Stopped after 200 pages — something is looping');
+
+        const res = await fetch('/.netlify/functions/send-newsletter-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ post_id: post.id, offset, dry_run: dryRun }),
+        });
+
+        const text = await res.text();
+        let json = null;
+        try { json = text ? JSON.parse(text) : null; } catch { /* keep the raw text */ }
+
+        if (!res.ok) {
+          // 501 means get_newsletter_email_recipients is missing and nothing
+          // was sent; the body carries the fix. Show it rather than "failed".
+          const msg = (json && (json.fix || json.error)) || text || `HTTP ${res.status}`;
+          console.error('[newsletter] email send failed:', res.status, msg);
+          setEmailing(prev => ({ ...prev, [key]: { phase: 'error', message: msg } }));
+          return;
+        }
+
+        if (dryRun) {
+          setEmailing(prev => ({
+            ...prev,
+            [key]: {
+              phase: 'confirm',
+              would: json?.would_send ?? 0,
+              already: json?.already_sent_in_page ?? 0,
+            },
+          }));
+          return;
+        }
+
+        totalSent   += json?.sent || 0;
+        totalFailed += json?.failed || 0;
+
+        // Copied into a block-scoped const before the setState closure: a
+        // closure created inside a loop that reads the mutable counter is a
+        // no-loop-func warning, and on a Netlify build that treats warnings as
+        // errors that is a failed deploy.
+        const sentSoFar = totalSent;
+        setEmailing(prev => ({ ...prev, [key]: { phase: 'sending', sent: sentSoFar } }));
+
+        if (json?.done || json?.next_offset == null) break;
+        offset = json.next_offset;
+      }
+
+      setEmailing(prev => ({ ...prev, [key]: { phase: 'done', sent: totalSent, failed: totalFailed } }));
+      loadPosts();
+    } catch (err) {
+      console.error('[newsletter] email send threw:', err);
+      setEmailing(prev => ({ ...prev, [key]: { phase: 'error', message: err.message || String(err) } }));
+    }
+  };
 
   React.useEffect(() => { if (authorized) loadPosts(); }, [authorized, loadPosts]);
 
@@ -201,14 +322,92 @@ export default function NewsletterComposePage() {
           <p className="text-xs font-bold text-white/50 uppercase tracking-wide">Sent</p>
           {posts.length === 0 ? (
             <p className="text-xs text-white/30 py-2">Nothing sent yet.</p>
-          ) : posts.map(p => (
-            <div key={p.id} className="flex items-center justify-between px-3 py-2 rounded-lg bg-white/[0.03] text-sm">
-              <span className="text-white/70 truncate">{p.title}</span>
-              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex-shrink-0 ml-2 ${p.audience === 'retail' ? 'bg-purple-500/15 text-purple-300' : 'bg-cyan-500/15 text-cyan-300'}`}>
-                {p.audience === 'retail' ? 'Retail' : 'Main App'}
-              </span>
-            </div>
-          ))}
+          ) : posts.map(p => {
+            const st  = emailing[p.id];
+            const log = sendLog[p.id];
+            const busy = st && (st.phase === 'checking' || st.phase === 'sending');
+            return (
+              <div key={p.id} className="px-3 py-2 rounded-lg bg-white/[0.03] text-sm space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-white/70 truncate">{p.title}</span>
+                  <div className="flex items-center space-x-2 flex-shrink-0 ml-2">
+                    {log && log.sent > 0 && (
+                      <span className="text-[10px] text-emerald-300/80 flex items-center">
+                        <Check className="w-3 h-3 mr-0.5" />{log.sent} emailed
+                      </span>
+                    )}
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${p.audience === 'retail' ? 'bg-purple-500/15 text-purple-300' : 'bg-cyan-500/15 text-cyan-300'}`}>
+                      {p.audience === 'retail' ? 'Retail' : 'Main App'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Emailing is admin-only. newsletter_editors can publish in-app
+                    but not mail a list — a bigger action than posting. */}
+                {isAdmin && (
+                  <div className="flex items-center flex-wrap gap-2">
+                    {(!st || st.phase === 'error' || st.phase === 'done') && (
+                      <button
+                        onClick={() => emailPost(p, true)}
+                        className="text-[11px] px-2 py-1 rounded-md bg-white/[0.06] text-white/70 hover:bg-white/[0.1] flex items-center transition"
+                      >
+                        <Mail className="w-3 h-3 mr-1" />
+                        {log && log.sent > 0 ? 'Email again' : 'Email this'}
+                      </button>
+                    )}
+
+                    {busy && (
+                      <span className="text-[11px] text-white/50 flex items-center">
+                        <Loader className="w-3 h-3 mr-1 animate-spin" />
+                        {st.phase === 'checking' ? 'Checking recipients…' : `Sending… ${st.sent} so far`}
+                      </span>
+                    )}
+
+                    {st && st.phase === 'confirm' && (
+                      st.would === 0 ? (
+                        <span className="text-[11px] text-white/50">
+                          Nobody left to email{st.already > 0 ? ` — all ${st.already} already received it` : ''}.
+                        </span>
+                      ) : (
+                        <>
+                          <span className="text-[11px] text-amber-300">
+                            Send to {st.would} {st.would === 1 ? 'person' : 'people'}?
+                            {st.already > 0 ? ` (${st.already} already have it)` : ''}
+                          </span>
+                          <button
+                            onClick={() => emailPost(p, false)}
+                            className="text-[11px] px-2 py-1 rounded-md bg-purple-500 text-white hover:bg-purple-400 flex items-center transition"
+                          >
+                            <Send className="w-3 h-3 mr-1" />Send now
+                          </button>
+                          <button
+                            onClick={() => setEmailing(prev => ({ ...prev, [p.id]: undefined }))}
+                            className="text-[11px] px-2 py-1 rounded-md text-white/40 hover:text-white/70 transition"
+                          >
+                            Cancel
+                          </button>
+                        </>
+                      )
+                    )}
+
+                    {st && st.phase === 'done' && (
+                      <span className="text-[11px] text-emerald-300 flex items-center">
+                        <Check className="w-3 h-3 mr-1" />
+                        Sent {st.sent}{st.failed > 0 ? `, ${st.failed} failed` : ''}
+                      </span>
+                    )}
+
+                    {st && st.phase === 'error' && (
+                      <span className="text-[11px] text-red-300 flex items-start">
+                        <AlertTriangle className="w-3 h-3 mr-1 mt-0.5 flex-shrink-0" />
+                        <span className="break-words">{st.message}</span>
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
 
         {isAdmin && (
