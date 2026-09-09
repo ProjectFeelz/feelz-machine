@@ -1,3 +1,4 @@
+import { Helmet } from 'react-helmet-async';
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
@@ -19,6 +20,22 @@ export default function PrivacyPolicy() {
   const navigate = useNavigate();
   return (
     <div className="min-h-screen bg-black text-white">
+
+      {/* Without these, this page inherited index.html's canonical — which points
+          at the homepage — so the sitemap submitted the page for indexing while
+          the page itself told Google it WAS the homepage. Google settles that by
+          dropping the page: "Alternate page with proper canonical tag". */}
+      <Helmet>
+        <title>Privacy Policy · Feelz Machine</title>
+        <meta name="description" content="What Feelz Machine collects, why, and how to get it removed. Contact privacy@feelzmachine.com." />
+        <link rel="canonical" href="https://www.feelzmachine.com/privacy-policy" />
+        <meta property="og:type" content="website" />
+        <meta property="og:url" content="https://www.feelzmachine.com/privacy-policy" />
+        <meta property="og:title" content="Privacy Policy · Feelz Machine" />
+        <meta property="og:description" content="What Feelz Machine collects, why, and how to get it removed. Contact privacy@feelzmachine.com." />
+        <meta name="twitter:title" content="Privacy Policy · Feelz Machine" />
+        <meta name="twitter:description" content="What Feelz Machine collects, why, and how to get it removed. Contact privacy@feelzmachine.com." />
+      </Helmet>
       <div className="sticky top-0 z-10 bg-black/95 backdrop-blur-xl border-b border-white/[0.05] px-4 py-4 flex items-center space-x-3">
         <button onClick={() => navigate(-1)} className="p-1.5 hover:bg-white/[0.06] rounded-lg transition">
           <ArrowLeft className="w-5 h-5 text-white/40" />

@@ -1,3 +1,4 @@
+import { Helmet } from 'react-helmet-async';
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
@@ -83,6 +84,22 @@ export default function AboutPage() {
 
   return (
     <div style={{ minHeight: '100vh', background: '#0a0a0a', color: '#f2f2f2', paddingBottom: 80 }}>
+
+      {/* Without these, this page inherited index.html's canonical — which points
+          at the homepage — so the sitemap submitted the page for indexing while
+          the page itself told Google it WAS the homepage. Google settles that by
+          dropping the page: "Alternate page with proper canonical tag". */}
+      <Helmet>
+        <title>About Feelz Machine — Independent Music, Direct to Fans</title>
+        <meta name="description" content="Why Feelz Machine exists: independent artists keeping their music, their audience and their money. Streaming, downloads and tips with no middlemen." />
+        <link rel="canonical" href="https://www.feelzmachine.com/about" />
+        <meta property="og:type" content="website" />
+        <meta property="og:url" content="https://www.feelzmachine.com/about" />
+        <meta property="og:title" content="About Feelz Machine — Independent Music, Direct to Fans" />
+        <meta property="og:description" content="Why Feelz Machine exists: independent artists keeping their music, their audience and their money. Streaming, downloads and tips with no middlemen." />
+        <meta name="twitter:title" content="About Feelz Machine — Independent Music, Direct to Fans" />
+        <meta name="twitter:description" content="Why Feelz Machine exists: independent artists keeping their music, their audience and their money. Streaming, downloads and tips with no middlemen." />
+      </Helmet>
 
       {/* Header */}
       <div style={{ padding: '48px 24px 32px', maxWidth: 720, margin: '0 auto', textAlign: 'center' }}>

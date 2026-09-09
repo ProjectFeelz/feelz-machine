@@ -40,9 +40,24 @@ export default function RetailLandingPage() {
 
   return (
     <div className="min-h-screen bg-black text-white">
+
+      {/* Without these, this page inherited index.html's canonical — which points
+          at the homepage — so the sitemap submitted the page for indexing while
+          the page itself told Google it WAS the homepage. Google settles that by
+          dropping the page: "Alternate page with proper canonical tag". */}
+      {/* One Helmet, not two. This page already had a title and description —
+          kept, because that wording is better than anything I'd substitute —
+          and what it was missing was the canonical. */}
       <Helmet>
         <title>Feelz Retail, background music for your venue</title>
         <meta name="description" content="Curated background music for stores, cafes and pubs, built entirely from independent South African artists. Half of what you pay goes back to the artists whose music plays." />
+        <link rel="canonical" href="https://www.feelzmachine.com/retail" />
+        <meta property="og:type" content="website" />
+        <meta property="og:url" content="https://www.feelzmachine.com/retail" />
+        <meta property="og:title" content="Feelz Retail, background music for your venue" />
+        <meta property="og:description" content="Curated background music for stores, cafes and pubs, built entirely from independent South African artists. Half of what you pay goes back to the artists whose music plays." />
+        <meta name="twitter:title" content="Feelz Retail, background music for your venue" />
+        <meta name="twitter:description" content="Curated background music for stores, cafes and pubs, built entirely from independent South African artists. Half of what you pay goes back to the artists whose music plays." />
       </Helmet>
 
       <div className="max-w-4xl mx-auto px-6 pt-16 pb-24">

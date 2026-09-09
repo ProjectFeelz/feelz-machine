@@ -10,6 +10,7 @@
  * - How it works explainer
  */
 
+import { Helmet } from 'react-helmet-async';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
@@ -659,6 +660,22 @@ export default function CompetitionsPage() {
 
   return (
     <div className="pb-32 pt-0">
+
+      {/* Without these, this page inherited index.html's canonical — which points
+          at the homepage — so the sitemap submitted the page for indexing while
+          the page itself told Google it WAS the homepage. Google settles that by
+          dropping the page: "Alternate page with proper canonical tag". */}
+      <Helmet>
+        <title>Competitions and Collab Roulette · Feelz Machine</title>
+        <meta name="description" content="Weekly Collab Roulette challenges and open competitions for independent artists. Enter, vote and win verified status on Feelz Machine." />
+        <link rel="canonical" href="https://www.feelzmachine.com/competitions" />
+        <meta property="og:type" content="website" />
+        <meta property="og:url" content="https://www.feelzmachine.com/competitions" />
+        <meta property="og:title" content="Competitions and Collab Roulette · Feelz Machine" />
+        <meta property="og:description" content="Weekly Collab Roulette challenges and open competitions for independent artists. Enter, vote and win verified status on Feelz Machine." />
+        <meta name="twitter:title" content="Competitions and Collab Roulette · Feelz Machine" />
+        <meta name="twitter:description" content="Weekly Collab Roulette challenges and open competitions for independent artists. Enter, vote and win verified status on Feelz Machine." />
+      </Helmet>
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@700&display=swap');`}</style>
 
       {/* Sticky header with tabs */}
