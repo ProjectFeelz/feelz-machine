@@ -1,5 +1,57 @@
 // netlify/functions/export-contacts.js
-// Exports follower contact list for premium artists
+//
+// Hands a Premium/Pro artist a CSV of their followers' names and email
+// addresses.
+//
+//
+// WHAT CHANGED, AND WHY IT HAD TO
+//
+// The previous version checked no consent of any kind. It read every row in
+// `follows` for the artist, looked up each follower's address, and returned the
+// lot. Meanwhile ContactPreferencesPage describes itself to users as the place
+// they control exactly this, `artist_contacts.opted_in` exists for exactly
+// this, and get_my_contact_status() reports it back to them — and nothing on
+// the export path ever read it. A user who opted out was exported anyway.
+//
+// That is the worst kind of consent bug: the mechanism exists, the user is told
+// it works, and it is wired to nothing.
+//
+// Three gates now apply, and a follower must pass all three:
+//
+//   1. artist_contacts.opted_in is not false for THIS artist. This is the
+//      per-artist consent the preferences page edits.
+//   2. email_subscribers.subscribed is not false. Platform-wide withdrawal.
+//      Someone who has told you to stop emailing them should not appear on a
+//      list you are about to email.
+//   3. There is an address to export.
+//
+// Both gates use "is not false" rather than "is true", because both columns
+// default to true and a missing row means nobody ever opted out. That matches
+// get_my_contact_status() exactly, so what a user is shown is what happens.
+//
+//
+// A THING YOU SHOULD DECIDE, NOT ME
+//
+// artist_contacts.opted_in DEFAULTS TO TRUE, and rows are created by the
+// sync_follow_to_contacts trigger the moment somebody follows. So all 514
+// current rows say opted_in = true and not one of them represents a person
+// agreeing to anything — a follow was read as permission to be emailed.
+//
+// This change makes opting out work. It does not make opting IN meaningful,
+// and no code change can: that is a question about what a follow should imply,
+// and it is yours. Flipping the column default to false would zero every
+// artist's list overnight, which is why I have not done it.
+//
+//
+// THE 1,000-USER CEILING IS GONE
+//
+// The old version called /auth/v1/admin/users?per_page=1000 with no paging and
+// built a map of EVERY user on the platform to look up a handful of addresses.
+// Past a thousand accounts it silently dropped followers, and it pulled the
+// entire user table into memory to do it. Addresses now come from
+// artist_contacts.email, falling back to email_subscribers.email keyed on
+// user_id, fetched for the specific followers being exported. No admin API
+// call, no ceiling.
 
 const https = require('https');
 
@@ -43,6 +95,45 @@ async function getVerifiedUserId(authHeader, serviceKey, supabaseUrl) {
   return res.body.id;
 }
 
+// A few hundred uuids in an in.(...) filter makes a URL long enough for
+// PostgREST or an intermediary to reject it, so every id-list read is chunked.
+const CHUNK = 100;
+function chunk(arr, size) {
+  const out = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
+}
+
+/**
+ * Runs one chunked GET per batch of ids and concatenates the rows. Returns
+ * null — not an empty array — if any chunk failed, so the caller can tell
+ * "nobody matched" apart from "the query broke". Exporting a short list
+ * because a request failed silently is how a consent gate becomes decorative.
+ */
+async function fetchChunked(pathFor, ids, serviceKey, supabaseUrl, label) {
+  const rows = [];
+  for (const batch of chunk(ids, CHUNK)) {
+    const res = await supabaseRequest(pathFor(batch), 'GET', null, serviceKey, supabaseUrl);
+    if (res.status < 200 || res.status >= 300 || !Array.isArray(res.body)) {
+      console.error(`[export-contacts] ${label} chunk failed:`, res.status, JSON.stringify(res.body).slice(0, 300));
+      return null;
+    }
+    rows.push(...res.body);
+  }
+  return rows;
+}
+
+// RFC 4180 quoting, plus the spreadsheet-formula guard. A field beginning
+// = + - or @ is executed as a formula by Excel, Sheets and Numbers, so a
+// follower could set their display name to =HYPERLINK(...) and have it run in
+// the artist's spreadsheet. Prefixing with an apostrophe stops that;
+// double-quote doubling is what makes an embedded quote survive at all.
+function csvField(value) {
+  let s = value == null ? '' : String(value);
+  if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
+  return `"${s.replace(/"/g, '""')}"`;
+}
+
 exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') {
     return { statusCode: 405, body: 'Method Not Allowed' };
@@ -71,7 +162,7 @@ exports.handler = async (event) => {
   }
 
   try {
-    // Verify the requesting user owns this artist profile
+    // ── Does the caller own this artist profile? ────────────────────────
     const artistRes = await supabaseRequest(
       `/rest/v1/artists?id=eq.${artist_id}&user_id=eq.${user_id}&select=id,artist_name,tier`,
       'GET', null, serviceKey, supabaseUrl
@@ -83,7 +174,7 @@ exports.handler = async (event) => {
 
     const artist = artists[0];
 
-    // Check tier via artist_tier_subscriptions
+    // ── Tier check ─────────────────────────────────────────────────────
     const subRes = await supabaseRequest(
       `/rest/v1/artist_tier_subscriptions?artist_id=eq.${artist_id}&status=eq.active&select=tier_id`,
       'GET', null, serviceKey, supabaseUrl
@@ -106,66 +197,126 @@ exports.handler = async (event) => {
       return { statusCode: 403, body: JSON.stringify({ error: 'Premium or Pro plan required' }) };
     }
 
-    // Get follower user_ids
-    const followsRes = await supabaseRequest(
-      `/rest/v1/follows?artist_id=eq.${artist_id}&select=follower_id`,
+    // ── GATE 1: per-artist consent ─────────────────────────────────────
+    // The source of truth is artist_contacts, not follows. A follow creates a
+    // contact row; the contact row is what carries the opt-in, and it is what
+    // the preferences page edits. `opted_in=not.is.false` keeps rows where the
+    // column is true or null, matching get_my_contact_status().
+    const contactsRes = await supabaseRequest(
+      `/rest/v1/artist_contacts?artist_id=eq.${artist_id}&opted_in=not.is.false` +
+      `&select=user_id,email,name`,
       'GET', null, serviceKey, supabaseUrl
     );
-    const follows = followsRes.body;
-    if (!Array.isArray(follows) || follows.length === 0) {
-      return { statusCode: 200, body: JSON.stringify({ csv: 'name,email\n', count: 0 }) };
+
+    if (contactsRes.status < 200 || contactsRes.status >= 300 || !Array.isArray(contactsRes.body)) {
+      console.error('[export-contacts] artist_contacts read failed:',
+        contactsRes.status, JSON.stringify(contactsRes.body).slice(0, 300));
+      return {
+        statusCode: 500,
+        body: JSON.stringify({ error: 'Could not read contact permissions — nothing was exported' }),
+      };
     }
 
-    const followerIds = follows.map(f => f.follower_id);
+    const contacts = contactsRes.body.filter(c => c.user_id);
+    if (contacts.length === 0) {
+      return {
+        statusCode: 200,
+        body: JSON.stringify({
+          csv: 'name,email\n',
+          count: 0,
+          note: 'No followers have given permission to be contacted.',
+        }),
+      };
+    }
 
-    // Get emails from auth.users using service role
-    const authRes = await supabaseRequest(
-      `/auth/v1/admin/users?per_page=1000`,
-      'GET', null, serviceKey, supabaseUrl
+    const contactIds = [...new Set(contacts.map(c => c.user_id))];
+
+    // ── GATE 2: platform-wide subscription, and the addresses ──────────
+    // email_subscribers is where a usable address actually lives —
+    // add_email_subscriber_after_profile() populates it at signup with both
+    // user_id and email. artist_contacts.email exists but the follow trigger
+    // never fills it in, so it is a preference, not a source.
+    const subscribers = await fetchChunked(
+      batch => `/rest/v1/email_subscribers?user_id=in.(${batch.join(',')})` +
+               `&subscribed=not.is.false&select=user_id,email,name`,
+      contactIds, serviceKey, supabaseUrl, 'email_subscribers'
     );
 
-    const authUsers = authRes.body?.users || [];
-    const emailMap = {};
-    authUsers.forEach(u => { emailMap[u.id] = u.email; });
+    if (subscribers === null) {
+      return {
+        statusCode: 500,
+        body: JSON.stringify({ error: 'Could not read email subscriptions — nothing was exported' }),
+      };
+    }
 
-    // Get display names from user_profiles
-    const profileIds = followerIds.join(',');
-    const profileRes = await supabaseRequest(
-      `/rest/v1/user_profiles?user_id=in.(${followerIds.join(',')})&select=user_id,name`,
-      'GET', null, serviceKey, supabaseUrl
-    );
-    const profiles = profileRes.body || [];
-    const nameMap = {};
-    profiles.forEach(p => { nameMap[p.user_id] = p.name; });
-
-    // Also check artists table for artist names
-    const artistProfileRes = await supabaseRequest(
-      `/rest/v1/artists?user_id=in.(${followerIds.join(',')})&select=user_id,artist_name`,
-      'GET', null, serviceKey, supabaseUrl
-    );
-    const artistProfiles = artistProfileRes.body || [];
-    artistProfiles.forEach(a => {
-      if (!nameMap[a.user_id]) nameMap[a.user_id] = a.artist_name;
+    const subByUser = new Map();
+    subscribers.forEach(s => {
+      if (s.user_id && s.email && !subByUser.has(s.user_id)) subByUser.set(s.user_id, s);
     });
 
-    // Build CSV
-    const rows = followerIds
-      .map(id => ({
-        name: nameMap[id] || '',
-        email: emailMap[id] || '',
-      }))
-      .filter(r => r.email);
+    // ── Names ──────────────────────────────────────────────────────────
+    const profiles = await fetchChunked(
+      batch => `/rest/v1/user_profiles?user_id=in.(${batch.join(',')})&select=user_id,name`,
+      contactIds, serviceKey, supabaseUrl, 'user_profiles'
+    );
+    const artistNames = await fetchChunked(
+      batch => `/rest/v1/artists?user_id=in.(${batch.join(',')})&select=user_id,artist_name`,
+      contactIds, serviceKey, supabaseUrl, 'artists'
+    );
 
-    const csv = ['name,email', ...rows.map(r => `"${r.name}","${r.email}"`)].join('\n');
+    // A failed name lookup is not worth refusing the export over — the
+    // addresses are the payload and a blank name column is survivable. It is
+    // still logged.
+    const nameMap = new Map();
+    (profiles || []).forEach(p => { if (p.name) nameMap.set(p.user_id, p.name); });
+    (artistNames || []).forEach(a => {
+      if (a.artist_name && !nameMap.has(a.user_id)) nameMap.set(a.user_id, a.artist_name);
+    });
+
+    // ── Build ──────────────────────────────────────────────────────────
+    const seen = new Set();
+    const rows = [];
+
+    for (const c of contacts) {
+      const sub = subByUser.get(c.user_id);
+      const email = (c.email || sub?.email || '').trim();
+      if (!email) continue;                       // gate 3: no address
+      if (!c.email && !sub) continue;             // gate 2: unsubscribed platform-wide
+
+      const key = email.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+
+      rows.push({
+        name: c.name || nameMap.get(c.user_id) || sub?.name || '',
+        email,
+      });
+    }
+
+    rows.sort((a, b) => a.email.localeCompare(b.email));
+
+    const csv = [
+      'name,email',
+      ...rows.map(r => `${csvField(r.name)},${csvField(r.email)}`),
+    ].join('\n') + '\n';
+
+    console.log(
+      `[export-contacts] artist ${artist_id}: ${contacts.length} consented contacts, ` +
+      `${rows.length} exported`
+    );
 
     return {
       statusCode: 200,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ csv, count: rows.length }),
+      body: JSON.stringify({
+        csv,
+        count: rows.length,
+        consented: contacts.length,
+      }),
     };
 
   } catch (err) {
-    console.error('Export contacts error:', err);
+    console.error('[export-contacts] threw:', err);
     return { statusCode: 500, body: JSON.stringify({ error: err.message }) };
   }
 };
