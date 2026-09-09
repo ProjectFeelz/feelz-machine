@@ -11,7 +11,7 @@
 import React from 'react';
 import { Helmet } from 'react-helmet-async';
 import { useNavigate } from 'react-router-dom';
-import { Loader, Play, Pause, SkipForward, Music, MapPin, Megaphone, Heart, Bell, Bookmark, MessageCircle, User, LogOut, FileText, Shield, Menu, ChevronRight , TrendingUp} from 'lucide-react';
+import { Loader, Play, Pause, SkipForward, SkipBack, Shuffle, Repeat, Repeat1, Music, MapPin, Megaphone, Heart, Bell, Bookmark, MessageCircle, User, LogOut, FileText, Shield, Menu, ChevronRight , TrendingUp} from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../supabaseClient';
 import RetailPlaylistComments from '../components/retail/RetailPlaylistComments';
@@ -111,6 +111,20 @@ export default function RetailPlayerPage() {
   const [loadingTracks, setLoadingTracks] = React.useState(false);
   const [currentIndex, setCurrentIndex] = React.useState(0);
   const [isPlaying, setIsPlaying] = React.useState(false);
+
+  // Bumped every time playback is explicitly requested. The source effect
+  // below depends on it, which is what makes "play the track that is already
+  // selected" work at all — see the comment there.
+  const [playToken, setPlayToken] = React.useState(0);
+
+  const [shuffle, setShuffle] = React.useState(false);
+  const [repeat, setRepeat]   = React.useState('none'); // 'none' | 'one' | 'all'
+
+  // Where back came from, and what shuffle has already used. Refs rather than
+  // state: nothing renders from them and they must not trigger re-renders
+  // mid-playback.
+  const historyRef = React.useRef([]);
+  const playedRef  = React.useRef(new Set());
 
   const [ads, setAds] = React.useState([]);
   const [adFrequency, setAdFrequency] = React.useState(4);
@@ -387,20 +401,46 @@ export default function RetailPlayerPage() {
 
   // Drives the actual audio source whenever what should be playing changes,
   // either a new track index or a switch into/out of an ad.
+  //
+  // playToken is in the dependency list and that is the whole fix for "the
+  // first song never plays on open". currentIndex starts at 0, so tapping the
+  // first row called setCurrentIndex(0) — the same value — and setMode('track')
+  // when the mode was already 'track'. React saw no change, this effect never
+  // re-ran, audioRef.src was never assigned, and nothing loaded. Only
+  // setIsPlaying(true) took effect, so the button showed Pause over silence.
+  // Going to track 2 and back changed the index twice, which is why that
+  // worked. An imperative action must not depend on a state value happening
+  // to differ.
   React.useEffect(() => {
     if (!audioRef.current) return;
+
+    const attempt = () => {
+      if (!isPlaying) return;
+      const r = audioRef.current.play();
+      // play() rejects on autoplay policy, a missing file, or a bad URL. The
+      // old code swallowed it and left isPlaying true, so the transport lied
+      // about what was happening.
+      if (r && typeof r.catch === 'function') {
+        r.catch((err) => {
+          console.error('[retail-player] play() rejected:', err?.name, err?.message);
+          setIsPlaying(false);
+        });
+      }
+    };
+
     if (mode === 'ad') {
       if (!currentAd) { setMode('track'); return; }
       audioRef.current.src = currentAd.audio_url;
       logAdPlay(currentAd);
-      if (isPlaying) audioRef.current.play().catch(() => {});
+      attempt();
     } else if (currentTrack) {
       audioRef.current.src = currentTrack.file_url;
       hasLoggedRef.current = false;
-      if (isPlaying) audioRef.current.play().catch(() => {});
+      playedRef.current.add(currentIndex);
+      attempt();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, currentIndex, currentAdIndex]);
+  }, [mode, currentIndex, currentAdIndex, playToken]);
 
   // The 30-second qualifying check, real playback position, not a timer,
   // so pausing partway through never falsely counts.
@@ -412,13 +452,42 @@ export default function RetailPlayerPage() {
     }
   };
 
+  // Which track comes after this one. Shuffle is a real shuffle: it draws from
+  // the tracks it has not used yet and only reshuffles once the playlist is
+  // exhausted, so a shift never hears the same song twice before hearing the
+  // rest. Random-with-replacement would repeat within a few songs, which a
+  // venue notices.
+  const pickNextIndex = () => {
+    if (tracks.length === 0) return -1;
+
+    if (shuffle) {
+      if (playedRef.current.size >= tracks.length) playedRef.current = new Set();
+      const pool = tracks
+        .map((_, i) => i)
+        .filter(i => !playedRef.current.has(i) && i !== currentIndex);
+      const from = pool.length > 0 ? pool : tracks.map((_, i) => i).filter(i => i !== currentIndex);
+      if (from.length === 0) return currentIndex;
+      return from[Math.floor(Math.random() * from.length)];
+    }
+
+    const next = currentIndex + 1;
+    if (next < tracks.length) return next;
+    return repeat === 'all' ? 0 : -1;   // -1 = end of the line
+  };
+
   // Shared by "track ended naturally" and "skip button pressed", keeps ad
   // cadence consistent regardless of how a track stopped.
   const advance = () => {
     if (mode === 'ad') {
-      goToTrack(currentIndex + 1);
+      goToTrack(pickNextIndex());
       return;
     }
+
+    // Repeat-one applies to a track finishing, not to a deliberate skip —
+    // a staff member pressing next wants the next song, not the same one
+    // again. onEnded passes no event argument we can rely on, so this is
+    // handled by handleEnded below instead.
+
     const nextCount = tracksSinceAd + 1;
     if (venue?.ads_enabled && ads.length > 0 && nextCount >= adFrequency) {
       setTracksSinceAd(0);
@@ -426,33 +495,92 @@ export default function RetailPlayerPage() {
       setMode('ad');
     } else {
       setTracksSinceAd(nextCount);
-      goToTrack(currentIndex + 1);
+      goToTrack(pickNextIndex());
     }
   };
 
+  // Natural end of a track. This is where repeat-one lives.
+  const handleEnded = () => {
+    if (mode === 'track' && repeat === 'one') {
+      setPlayToken(t => t + 1);   // same index, so the token is what re-triggers it
+      return;
+    }
+    advance();
+  };
+
   const goToTrack = (index) => {
-    if (index >= tracks.length) { setIsPlaying(false); return; }
+    if (index < 0 || index >= tracks.length) { setIsPlaying(false); return; }
+    if (mode === 'track' && index !== currentIndex) historyRef.current.push(currentIndex);
     setCurrentIndex(index);
     setMode('track');
+  };
+
+  // Back behaves the way every music player does: within the first few
+  // seconds it goes to the previous track, after that it restarts the current
+  // one. Guessing wrong here is annoying, and this is the convention people
+  // already have in their fingers.
+  const goBack = () => {
+    if (mode === 'ad') return;
+    const a = audioRef.current;
+    if (a && a.currentTime > 3) {
+      a.currentTime = 0;
+      return;
+    }
+    const prev = historyRef.current.pop();
+    const target = prev !== undefined ? prev : (currentIndex > 0 ? currentIndex - 1 : 0);
+    setCurrentIndex(target);
+    setMode('track');
+    setIsPlaying(true);
+    setPlayToken(t => t + 1);
   };
 
   // Manual pick from the list, bypasses ad cadence deliberately, since a
   // staff member choosing a specific track shouldn't be interrupted by one.
   const playTrackAt = (index) => {
+    if (mode === 'track' && index !== currentIndex) historyRef.current.push(currentIndex);
     setCurrentIndex(index);
     setMode('track');
     setIsPlaying(true);
+    setPlayToken(t => t + 1);   // required when index is unchanged — see the source effect
   };
 
   const togglePlay = () => {
-    if (!audioRef.current) return;
+    const a = audioRef.current;
+    if (!a) return;
+
     if (isPlaying) {
-      audioRef.current.pause();
+      a.pause();
       setIsPlaying(false);
-    } else {
-      audioRef.current.play().catch(() => {});
-      setIsPlaying(true);
+      return;
     }
+
+    // Nothing loaded yet — which is the state the player opens in. Calling
+    // play() on an element with no src rejects, so ask the source effect to
+    // load it instead of failing silently.
+    if (!a.src && mode === 'track' && currentTrack) {
+      setIsPlaying(true);
+      setPlayToken(t => t + 1);
+      return;
+    }
+
+    const r = a.play();
+    if (r && typeof r.catch === 'function') {
+      r.catch((err) => {
+        console.error('[retail-player] play() rejected:', err?.name, err?.message);
+        setIsPlaying(false);
+      });
+    }
+    setIsPlaying(true);
+  };
+
+  const cycleRepeat = () =>
+    setRepeat(r => (r === 'none' ? 'all' : r === 'all' ? 'one' : 'none'));
+
+  const toggleShuffle = () => {
+    setShuffle(v => {
+      if (!v) playedRef.current = new Set([currentIndex]);
+      return !v;
+    });
   };
 
   if (!user) {
@@ -531,7 +659,7 @@ export default function RetailPlayerPage() {
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <meta name="theme-color" content="#000000" />
       </Helmet>
-      <audio ref={audioRef} onEnded={advance} onTimeUpdate={handleTimeUpdate} />
+      <audio ref={audioRef} onEnded={handleEnded} onTimeUpdate={handleTimeUpdate} />
 
       <div className="sticky top-0 z-10 backdrop-blur-xl px-4 py-4"
         style={{
@@ -1043,12 +1171,45 @@ export default function RetailPlayerPage() {
                 </button>
               </>
             )}
-            <button onClick={togglePlay} className="p-2.5 rounded-full bg-purple-500 hover:bg-purple-400 transition flex-shrink-0">
+            {/* Transport. Shuffle, back and repeat are hidden during an advert:
+                they would be a second way to skip one, and the forward button
+                is already the only exit we intend to offer. */}
+            {mode === 'track' && (
+              <button onClick={toggleShuffle} title="Shuffle" aria-label="Shuffle"
+                aria-pressed={shuffle}
+                className="p-2 rounded-full hover:bg-white/[0.08] transition flex-shrink-0">
+                <Shuffle className={`w-4 h-4 ${shuffle ? 'text-purple-400' : 'text-white/40'}`} />
+              </button>
+            )}
+
+            {mode === 'track' && (
+              <button onClick={goBack} title="Previous" aria-label="Previous track"
+                className="p-2 rounded-full hover:bg-white/[0.08] transition flex-shrink-0">
+                <SkipBack className="w-4 h-4 text-white/50" />
+              </button>
+            )}
+
+            <button onClick={togglePlay}
+              title={isPlaying ? 'Pause' : 'Play'} aria-label={isPlaying ? 'Pause' : 'Play'}
+              className="p-2.5 rounded-full bg-purple-500 hover:bg-purple-400 transition flex-shrink-0">
               {isPlaying ? <Pause className="w-4 h-4 text-white" fill="white" /> : <Play className="w-4 h-4 text-white" fill="white" />}
             </button>
-            <button onClick={advance} className="p-2 rounded-full hover:bg-white/[0.08] transition flex-shrink-0">
+
+            <button onClick={advance} title="Next" aria-label="Next track"
+              className="p-2 rounded-full hover:bg-white/[0.08] transition flex-shrink-0">
               <SkipForward className="w-4 h-4 text-white/50" />
             </button>
+
+            {mode === 'track' && (
+              <button onClick={cycleRepeat}
+                title={repeat === 'one' ? 'Repeating this track' : repeat === 'all' ? 'Repeating the playlist' : 'Repeat off'}
+                aria-label="Repeat mode"
+                className="p-2 rounded-full hover:bg-white/[0.08] transition flex-shrink-0">
+                {repeat === 'one'
+                  ? <Repeat1 className="w-4 h-4 text-purple-400" />
+                  : <Repeat className={`w-4 h-4 ${repeat === 'all' ? 'text-purple-400' : 'text-white/40'}`} />}
+              </button>
+            )}
           </div>
         </div>
       )}

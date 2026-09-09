@@ -9,6 +9,7 @@ import { useNavigate } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 import { ArrowLeft, Loader, Image as ImageIcon, Check, Trash2 } from 'lucide-react';
 import { supabase } from '../supabaseClient';
+import MusicPicker from '../components/admin/MusicPicker';
 import { useAuth } from '../contexts/AuthContext';
 
 const ACCENTS = [
@@ -154,6 +155,27 @@ export default function AdminHomeHero() {
           <input className={inputCls} placeholder="Button link (e.g. /schoolsessions)" value={form.cta_path}
             onChange={e => setForm({ ...form, cta_path: e.target.value })} />
         </div>
+
+        {/* Point the button at a specific track or album without knowing its
+            path. Still free-text above for anything else — /schoolsessions,
+            an external URL, a page that has no picker. The picker only ever
+            writes into that same field, so there is one source of truth for
+            where the button goes. */}
+        <MusicPicker
+          value={form.cta_path}
+          onPick={(path, meta) => {
+            setForm(f => ({
+              ...f,
+              cta_path: path,
+              // Only fill the label and artwork if they are still empty —
+              // overwriting a label the admin already typed would be rude.
+              cta_label: f.cta_label || (meta.kind === 'album' ? 'Play the album' : 'Listen now'),
+              image_url: f.image_url || meta.image || '',
+            }));
+            showToast(`Button set to ${meta.title}`);
+          }}
+          label="Or search a track or album to feature"
+        />
 
         <div className="flex items-center space-x-2">
           <span className="text-[11px] text-white/30 mr-1">Accent</span>

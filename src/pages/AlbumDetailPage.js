@@ -2,7 +2,7 @@ import { Helmet } from 'react-helmet-async';
 import React, { useState, useEffect } from 'react';
 import TrackActionSheet from '../components/TrackActionSheet';
 import { downloadTrack, downloadErrorMessage } from '../utils/downloadTrack';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import { usePlayer } from '../contexts/PlayerContext';
@@ -34,6 +34,7 @@ function formatNumber(n) {
 export default function AlbumDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { user } = useAuth();
   const { playTrack, currentTrack, isPlaying, togglePlay, showNotice } = usePlayer();
   const { checkPlayLimit, recordPlay, resetPlayCount } = usePaidPlayLimit();
@@ -209,6 +210,23 @@ export default function AlbumDetailPage() {
       tracks.map(t => ({ ...t, artist_name: artist?.artist_name }))
     );
   };
+
+  // Autoplay, but only when asked for with ?play=1 — which is what the Home
+  // Hero picker writes when "start playing when opened" is ticked. Deliberately
+  // opt-in: someone browsing to an album page has not asked for audio, and a
+  // page that hijacks the speakers on arrival is the kind of thing people
+  // remember. Fires once per mount, and skips if this album's first track is
+  // already what's loaded, so navigating back does not restart it.
+  const autoPlayedRef = React.useRef(false);
+  React.useEffect(() => {
+    if (autoPlayedRef.current) return;
+    if (searchParams.get('play') !== '1') return;
+    if (!tracks.length) return;                      // wait for the tracks to load
+    autoPlayedRef.current = true;
+    if (currentTrack?.id === tracks[0].id) return;   // already playing it
+    handlePlayAll();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tracks, searchParams]);
 
   const handleLike = async (track, e) => {
     e.stopPropagation();
