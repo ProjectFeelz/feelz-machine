@@ -1,55 +1,52 @@
 // notificationTriggers.js
+//
 // Import and call these functions from your existing components
 // to automatically create notifications when events happen.
+//
+//
+// THE COLLAB HELPERS ARE NOW NO-OPS — READ THIS BEFORE RE-ENABLING THEM
+//
+// notifyCollabRequest / Accepted / Declined each built a notification
+// addressed to the OTHER artist: artist_id = their profile, user_id = null.
+// The only INSERT policy on notifications is
+//
+//   auth.uid() = user_id OR artist_id in (my own artists)
+//
+// so both branches were false and every one of these calls came back
+// 403 (42501). Accepting a few collabs produced a wall of them in the console
+// while the collab itself succeeded — the other artist was credited and never
+// told.
+//
+// Migration 96 moved all three server-side, onto triggers on collab_requests:
+// inserting a request notifies the recipient, and a status change to
+// accepted/declined notifies the sender. Derived from the row rather than
+// supplied by the client, so it cannot be forged and cannot be refused.
+//
+// These are kept as no-ops rather than deleted so the two call sites
+// (TrackUploadPanel, CollabRequests) need no edit and nothing silently loses
+// a step. If you ever remove the trigger, remember the client cannot do this
+// job — widening that RLS policy would let any user write anything into
+// anyone else's notifications.
 
 import { createNotification, checkStreamMilestone } from '../contexts/useNotifications';
 
 /**
  * Call when someone sends a collab request (in TrackUploadPanel saveCollaborations)
  */
-export async function notifyCollabRequest({ fromArtist, toArtistId, trackTitle, trackId, requestId }) {
-  await createNotification({
-    artistId: toArtistId,
-    type: 'collab_request',
-    title: `${fromArtist.artist_name} wants to collab`,
-    message: `Invited you to collaborate on "${trackTitle}"`,
-    fromArtistId: fromArtist.id,
-    trackId,
-    metadata: {
-      request_id: requestId || null,
-      track_title: trackTitle,
-      from_artist_id: fromArtist.id,
-    },
-  });
-}
+// Handled by the collab_requests triggers (migration 96). See the note above.
+export async function notifyCollabRequest() { /* no-op */ }
 
 /**
  * Call when a collab is accepted (in CollabRequests handleAccept)
  */
-export async function notifyCollabAccepted({ fromArtist, toArtistId, trackTitle, trackId }) {
-  await createNotification({
-    artistId: toArtistId,
-    type: 'collab_accepted',
-    title: `${fromArtist.artist_name} accepted your collab`,
-    message: `Now credited on "${trackTitle}"`,
-    fromArtistId: fromArtist.id,
-    trackId,
-  });
-}
+// Handled by the collab_requests triggers (migration 96). See the note above.
+export async function notifyCollabAccepted() { /* no-op */ }
 
 /**
  * Call when a collab is declined (in CollabRequests handleDecline)
  */
-export async function notifyCollabDeclined({ fromArtist, toArtistId, trackTitle, trackId }) {
-  await createNotification({
-    artistId: toArtistId,
-    type: 'collab_declined',
-    title: `${fromArtist.artist_name} declined the collab`,
-    message: `Declined collaboration on "${trackTitle}"`,
-    fromArtistId: fromArtist.id,
-    trackId,
-  });
-}
+// Handled by the collab_requests triggers (migration 96). See the note above.
+export async function notifyCollabDeclined() { /* no-op */ }
 
 /**
  * Call when someone follows an artist

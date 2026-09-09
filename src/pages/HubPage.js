@@ -14,8 +14,8 @@ import {
   ChevronRight, Crown, Zap, Star, LayoutDashboard,
   User, LogOut, DollarSign, Radio, Mic2,
   Loader, X, Youtube, Info, Search,
-  Plus, MessageSquare, Check, Send, Store, Trophy, Sparkles, EyeOff, ListMusic,
-} from 'lucide-react';
+  Plus, MessageSquare, Check, Send, Store, Trophy, Sparkles, EyeOff, } from 'lucide-react';
+import { reportNotify } from '../utils/notify';
 
 function LinkCard({ icon: Icon, label, description, path, color, onClick }) {
   const navigate = useNavigate();
@@ -118,14 +118,14 @@ export default function HubPage() {
     if (!dmUserId || !dmMessage.trim() || dmSending) return;
     setDmSending(true);
     try {
-      await supabase.from('notifications').insert({
+      await reportNotify('admin_message (HubPage)', supabase.from('notifications').insert({
         user_id:   dmUserId,
         artist_id: dmArtistId || null,
         type:      'admin_message',
         title:     'Message from Feelz Machine',
         message:   dmMessage.trim(),
         metadata:  { from_admin: true },
-      });
+      }));
       setDmSent(true);
       setTimeout(() => {
         setDmSent(false); setShowDMModal(false);
@@ -240,12 +240,16 @@ export default function HubPage() {
               <LinkCard icon={Send} label="Newsletter" description="Compose updates for the app or retail venues" path="/newsletter/compose" color="bg-yellow-500/20" />
             </Section>
 
+            {/* Two cards, deliberately. Venue Invites, Retail Playlists and
+                Retail Staff were removed from here because they are tabs
+                INSIDE /retail-admin — Playlists, Venues and Staff in its own
+                tab bar — so they were five doors into two rooms. Nothing was
+                orphaned; the panel still opens on Playlists by default and
+                every ?sub= link it used to point at still works if you have
+                one bookmarked. */}
             <Section title="Retail Admin" icon={Store}>
-              <LinkCard icon={Store} label="Retail Admin" description="Standalone panel · playlists · venues · ads" path="/retail-admin" color="bg-purple-500/20" />
-              <LinkCard icon={Store} label="Venue Invites" description="Add a venue and copy its signup link" path="/retail-admin?sub=venues" color="bg-purple-500/20" />
+              <LinkCard icon={Store} label="Retail Admin" description="Playlists · venues · staff · ads" path="/retail-admin" color="bg-purple-500/20" />
               <LinkCard icon={Radio} label="Retail Player" description="The venue-facing player, admin preview" path="/retail/player" color="bg-purple-500/20" />
-              <LinkCard icon={ListMusic} label="Retail Playlists" description="Create a vibe and fill it with tracks" path="/retail-admin?sub=playlists" color="bg-purple-500/20" />
-              <LinkCard icon={Users} label="Retail Staff" description="Who can manage catalogue, venues and ads" path="/retail-admin?sub=staff" color="bg-purple-500/20" />
             </Section>
 
             <Section title="School Sessions" icon={Trophy}>
