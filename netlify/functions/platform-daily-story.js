@@ -7,8 +7,25 @@
  *
  * No external npm packages — pure Node.js + SVG string generation.
  *
- * Requires env vars:
- *   PLATFORM_ARTIST_ID — artist id for "Feelz Machine" account
+ * Which artist the story is posted as:
+ *
+ *   1. PLATFORM_ARTIST_ID, if set
+ *   2. platform_settings.platform_artist_id, if that row exists
+ *   3. the artists row whose name is "Feelz Machine"
+ *
+ * It used to be env-var-only, PLATFORM_ARTIST_ID was never set in Netlify, and
+ * the function returned 200 with "skipped: no platform artist id" — so it had
+ * never posted a single story, and a 200 meant nothing ever looked wrong.
+ * (It was also absent from netlify.toml's schedule block, so it never ran at
+ * all. Both halves are fixed.)
+ *
+ * The database is the better home for this than an env var: it is one row you
+ * can change without a redeploy, and platform_settings already exists for the
+ * cron run keys.
+ *
+ *   insert into platform_settings (key, value)
+ *   values ('platform_artist_id', 'PASTE-THE-UUID')
+ *   on conflict (key) do update set value = excluded.value;
  */
 
 const { createClient } = require('@supabase/supabase-js');
@@ -18,7 +35,40 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
-const PLATFORM_ARTIST_ID = process.env.PLATFORM_ARTIST_ID;
+// Resolved at call time, not module load, so a value set in the database
+// takes effect on the next run rather than the next deploy.
+async function resolvePlatformArtistId() {
+  if (process.env.PLATFORM_ARTIST_ID) {
+    return { id: process.env.PLATFORM_ARTIST_ID, source: 'PLATFORM_ARTIST_ID env var' };
+  }
+
+  const { data: setting, error: settingErr } = await supabase
+    .from('platform_settings')
+    .select('value')
+    .eq('key', 'platform_artist_id')
+    .maybeSingle();
+  if (settingErr) {
+    console.error('[platform-daily-story] platform_settings read failed:', settingErr.code, settingErr.message);
+  }
+  if (setting && setting.value) {
+    return { id: setting.value, source: 'platform_settings.platform_artist_id' };
+  }
+
+  const { data: byName, error: nameErr } = await supabase
+    .from('artists')
+    .select('id, artist_name, slug')
+    .ilike('artist_name', 'Feelz Machine')
+    .limit(1)
+    .maybeSingle();
+  if (nameErr) {
+    console.error('[platform-daily-story] artist name lookup failed:', nameErr.code, nameErr.message);
+  }
+  if (byName && byName.id) {
+    return { id: byName.id, source: `artists.artist_name = "${byName.artist_name}" (slug ${byName.slug})` };
+  }
+
+  return { id: null, source: null };
+}
 
 const LESSON_TIPS = [
   "Upload stems with your track to attract collaborators.",
@@ -163,10 +213,32 @@ function generateSVG({ totalArtists, newTracksWeek, totalStreams, trendingTrack,
 }
 
 exports.handler = async () => {
+  const { id: PLATFORM_ARTIST_ID, source } = await resolvePlatformArtistId();
+
   if (!PLATFORM_ARTIST_ID) {
-    console.log('[platform-daily-story] PLATFORM_ARTIST_ID not set — skipping');
-    return { statusCode: 200, body: 'skipped: no platform artist id' };
+    // A 400 rather than the old 200. This is a misconfiguration, and a
+    // scheduled function that reports success while doing nothing is how this
+    // went unnoticed in the first place.
+    const { data: candidates } = await supabase
+      .from('artists')
+      .select('id, artist_name, slug')
+      .or('artist_name.ilike.%feelz%,slug.ilike.%feelz%')
+      .limit(10);
+    console.error(
+      '[platform-daily-story] NO PLATFORM ARTIST. Set platform_settings.platform_artist_id. ' +
+      'Closest matches: ' + JSON.stringify(candidates || [])
+    );
+    return {
+      statusCode: 400,
+      body: JSON.stringify({
+        error: 'No platform artist configured',
+        fix: "insert into platform_settings (key, value) values ('platform_artist_id', '<uuid>') on conflict (key) do update set value = excluded.value;",
+        candidates: candidates || [],
+      }),
+    };
   }
+
+  console.log(`[platform-daily-story] posting as artist ${PLATFORM_ARTIST_ID} (from ${source})`);
 
   try {
     const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString();
@@ -188,7 +260,7 @@ exports.handler = async () => {
     // Trending track
     const { data: trending } = await supabase
       .from('tracks')
-      .select('title, artists(artist_name)')
+      .select('title, artists!tracks_artist_id_fkey(artist_name)')
       .eq('is_published', true)
       .order('stream_count', { ascending: false })
       .limit(1)

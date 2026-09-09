@@ -134,6 +134,45 @@ function csvField(value) {
   return `"${s.replace(/"/g, '""')}"`;
 }
 
+function slugify(s) {
+  return String(s || 'artist')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 48) || 'artist';
+}
+
+/**
+ * The branded header block.
+ *
+ * A CSV cannot carry a logo, so "branding" here means the two things that
+ * actually help: the file says where it came from, and it says what the
+ * artist is allowed to do with it. An address list handed over with no
+ * provenance and no stated basis is how people end up emailing someone who
+ * withdrew consent six months ago.
+ *
+ * These are real CSV rows, properly quoted, so Excel, Sheets and Numbers all
+ * render them as a small header table above the data. That does mean a tool
+ * doing a naive header-row import will see the first row instead of
+ * `name,email` — pass { plain: true } to get the bare two-column file for
+ * those.
+ */
+function brandedPreamble({ artistName, count, generatedAt }) {
+  return [
+    [csvField('FEELZ MACHINE'), csvField('Contact export')].join(','),
+    [csvField('Artist'), csvField(artistName)].join(','),
+    [csvField('Exported'), csvField(generatedAt)].join(','),
+    [csvField('Contacts'), csvField(String(count))].join(','),
+    [csvField('Consent basis'), csvField('Followers who have not opted out of contact from this artist')].join(','),
+    [csvField('Your obligations'), csvField(
+      'Every message must identify you and offer a way to unsubscribe. Anyone who asks to be removed must be removed. ' +
+      'Re-export before each send — this file is a snapshot and does not update when someone withdraws.'
+    )].join(','),
+    [csvField('Source'), csvField('feelzmachine.com')].join(','),
+    '',
+  ];
+}
+
 exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') {
     return { statusCode: 405, body: 'Method Not Allowed' };
@@ -150,7 +189,7 @@ exports.handler = async (event) => {
   try { body = JSON.parse(event.body); }
   catch { return { statusCode: 400, body: JSON.stringify({ error: 'Invalid JSON' }) }; }
 
-  const { artist_id } = body;
+  const { artist_id, plain = false } = body;
   if (!artist_id) {
     return { statusCode: 400, body: JSON.stringify({ error: 'artist_id required' }) };
   }
@@ -164,7 +203,7 @@ exports.handler = async (event) => {
   try {
     // ── Does the caller own this artist profile? ────────────────────────
     const artistRes = await supabaseRequest(
-      `/rest/v1/artists?id=eq.${artist_id}&user_id=eq.${user_id}&select=id,artist_name,tier`,
+      `/rest/v1/artists?id=eq.${artist_id}&user_id=eq.${user_id}&select=id,artist_name,slug,tier`,
       'GET', null, serviceKey, supabaseUrl
     );
     const artists = artistRes.body;
@@ -295,10 +334,21 @@ exports.handler = async (event) => {
 
     rows.sort((a, b) => a.email.localeCompare(b.email));
 
-    const csv = [
+    const generatedAt = new Date().toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
+    const dataBlock = [
       'name,email',
       ...rows.map(r => `${csvField(r.name)},${csvField(r.email)}`),
-    ].join('\n') + '\n';
+    ];
+
+    const csv = (
+      plain
+        ? dataBlock
+        : [...brandedPreamble({ artistName: artist.artist_name, count: rows.length, generatedAt }), ...dataBlock]
+    ).join('\n') + '\n';
+
+    const filename =
+      `feelz-machine-contacts-${slugify(artist.slug || artist.artist_name)}-` +
+      `${new Date().toISOString().slice(0, 10)}.csv`;
 
     console.log(
       `[export-contacts] artist ${artist_id}: ${contacts.length} consented contacts, ` +
@@ -310,8 +360,11 @@ exports.handler = async (event) => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         csv,
+        filename,
         count: rows.length,
         consented: contacts.length,
+        branded: !plain,
+        generated_at: generatedAt,
       }),
     };
 

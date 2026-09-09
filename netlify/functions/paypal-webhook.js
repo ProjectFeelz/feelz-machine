@@ -2,6 +2,8 @@
 // Verifies PayPal webhook signature and handles all relevant events.
 const https = require('https');
 const { createClient } = require('@supabase/supabase-js');
+const { reportNotify } = require('../lib/notify');
+const paypalEnv = require('../lib/paypal-env');
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -9,7 +11,7 @@ const supabase = createClient(
 );
 
 async function getPayPalToken() {
-  const base = process.env.PAYPAL_ENV === 'sandbox' ? 'api.sandbox.paypal.com' : 'api.paypal.com';
+  const base = paypalEnv.hostApi;   // see netlify/lib/paypal-env.js
   // Fixed: standardised on PAYPAL_CLIENT_SECRET across all functions
   const creds = Buffer.from(`${process.env.PAYPAL_CLIENT_ID}:${process.env.PAYPAL_CLIENT_SECRET}`).toString('base64');
   return new Promise((resolve, reject) => {
@@ -36,7 +38,7 @@ async function verifyPayPalSignature(headers, rawBody) {
     webhook_id:        process.env.PAYPAL_WEBHOOK_ID,
     webhook_event:     JSON.parse(rawBody),
   };
-  const base = process.env.PAYPAL_ENV === 'sandbox' ? 'api.sandbox.paypal.com' : 'api.paypal.com';
+  const base = paypalEnv.hostApi;   // see netlify/lib/paypal-env.js
   const token = await getPayPalToken();
   return new Promise((resolve) => {
     const body = JSON.stringify(verifyPayload);
@@ -78,14 +80,14 @@ async function cancelArtistSubscription(subscriptionId, reason) {
       : reason === 'payment_failed'
       ? 'Your subscription payment failed. You have been moved to the Free plan.'
       : 'Your subscription has ended. You have been moved to the Free plan.';
-    await supabase.from('notifications').insert({
+    await reportNotify('tier_granted (paypal-webhook)', supabase.from('notifications').insert({
       artist_id: sub.artist_id,
       user_id:   sub.artists?.user_id || null,
       type:      'tier_granted',
       title:     'Subscription ended',
       message:   reasonMsg,
       metadata:  { tier: 'free', reason },
-    }).catch(() => {});
+    }));
   }
 }
 

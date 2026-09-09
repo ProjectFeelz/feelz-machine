@@ -14,11 +14,23 @@ import { ArrowRight, Check, Loader } from 'lucide-react';
 // Supabase (syncs across devices — phone done = PC skips tour too).
 // ─────────────────────────────────────────────────────────────────────────────
 export function useTourState(isArtist, ready) {
-  const { user } = useAuth();
+  const { user, hasProfile } = useAuth();
   const [show, setShow] = useState(false);
 
   useEffect(() => {
     if (!ready || !user?.id) return;
+
+    // An account with neither an artists row nor a listeners row cannot use
+    // the app at all — AppLayout bounces it to /setup from every page, and
+    // ProfileSetup can only edit a profile that already exists. So show the
+    // role picker regardless of what the done flags say.
+    //
+    // This is what un-traps the accounts broken by the old artist branch:
+    // they picked "artist", nothing was created, dismiss() recorded the tour
+    // as done anyway, and the picker never came back. Checking hasProfile
+    // first means it does. Anyone who already has music has an artists row by
+    // definition, so they are never asked again.
+    if (!hasProfile) { setShow(true); return; }
 
     const localKey = `feelz_tour_done_${user.id}`;
 
@@ -51,11 +63,16 @@ export function useTourState(isArtist, ready) {
     };
 
     checkRemote();
-  }, [ready, user?.id]);
+  }, [ready, user?.id, hasProfile]);
 
   const dismiss = useCallback(async () => {
     setShow(false);
     if (!user?.id) return;
+
+    // Never record the tour as done while the account still has no profile.
+    // Writing onboarding_done before a profile exists is exactly what made
+    // the old trap permanent — the flag outlived the failure that caused it.
+    if (!hasProfile) return;
 
     // 1. Instant local write so dismiss feels instant
     localStorage.setItem(`feelz_tour_done_${user.id}`, '1');
@@ -73,7 +90,7 @@ export function useTourState(isArtist, ready) {
     } catch {
       // Non-fatal — localStorage is the fallback for this device
     }
-  }, [user?.id]);
+  }, [user?.id, hasProfile]);
 
   return { show, dismiss };
 }
@@ -152,9 +169,10 @@ function RoleCard({ role, selected, onSelect }) {
 // RoleStep — first screen
 // ─────────────────────────────────────────────────────────────────────────────
 function RoleStep({ onContinue }) {
-  const [selected, setSelected] = useState(null);
-  const [saving,   setSaving]   = useState(false);
-  const { user, artist, listener } = useAuth();
+  const [selected,  setSelected]  = useState(null);
+  const [saving,    setSaving]    = useState(false);
+  const [saveError, setSaveError] = useState('');
+  const { user, artist, listener, refreshProfile } = useAuth();
 
   // Pre-select if profile already exists
   useEffect(() => {
@@ -168,6 +186,8 @@ function RoleStep({ onContinue }) {
   const handleContinue = async () => {
     if (!selected || saving) return;
     setSaving(true);
+    setSaveError('');
+
     try {
       if (selected === 'listener') {
         if (!listener) {
@@ -176,23 +196,51 @@ function RoleStep({ onContinue }) {
             user.user_metadata?.name ||
             user.email?.split('@')[0] ||
             null;
-          await supabase.from('listeners').upsert(
+          const { error } = await supabase.from('listeners').upsert(
             { user_id: user.id, display_name: displayName, updated_at: new Date().toISOString() },
             { onConflict: 'user_id' }
           );
+          if (error) throw error;
         }
+      } else if (artist?.id) {
+        // Has a profile already — just record which kind of creator they are.
+        const { error } = await supabase
+          .from('artists')
+          .update({ role: selected === 'beatmaker' ? 'beatmaker' : 'artist', role_confirmed: true })
+          .eq('id', artist.id);
+        if (error) throw error;
       } else {
-        // artist or beatmaker
-        if (artist?.id) {
-          await supabase
-            .from('artists')
-            .update({ role: selected === 'beatmaker' ? 'beatmaker' : 'artist' })
-            .eq('id', artist.id);
-        }
+        // No profile yet. THIS is the branch that used to do nothing at all:
+        // the old code was `if (artist?.id) { update ... }` with no else, and
+        // since nothing in the app has ever created an artists row, every
+        // account that chose artist or beatmaker ended up with no profile and
+        // was then bounced to /setup forever.
+        //
+        // create_my_artist_profile (migration 97) settles the globally-unique
+        // artist_name and slug server-side, which the client cannot do without
+        // a racy read-then-write.
+        const { error } = await supabase.rpc('create_my_artist_profile', {
+          p_role: selected === 'beatmaker' ? 'beatmaker' : 'artist',
+        });
+        if (error) throw error;
       }
+
+      // Pull the new row into context before advancing, so hasProfile is true
+      // by the time dismiss() decides whether it may record the tour as done.
+      if (refreshProfile) await refreshProfile();
     } catch (err) {
-      console.warn('Tour role save:', err);
+      // Not swallowed. If this fails the account has no profile, and letting
+      // the tour close anyway is what produced accounts nobody could rescue.
+      console.error('[tour] could not save role:', err?.code, err?.message, err?.hint || '');
+      setSaveError(
+        err?.code === 'PGRST202' || err?.code === '42883'
+          ? 'Setup is not finished on our side yet — migration 97 has not run. Nothing was lost; try again shortly.'
+          : 'We could not finish setting up your account. Please try again.'
+      );
+      setSaving(false);
+      return;
     }
+
     setSaving(false);
     onContinue(selected);
   };
@@ -243,6 +291,12 @@ function RoleStep({ onContinue }) {
 
         {/* CTA */}
         <div className="mt-8">
+          {/* A failure here means the account has no profile and cannot use
+              the app, so it has to be visible rather than console-only. */}
+          {saveError && (
+            <p className="text-xs text-red-300 mb-3 text-center px-2">{saveError}</p>
+          )}
+
           <button
             onClick={handleContinue}
             disabled={!selected || saving}

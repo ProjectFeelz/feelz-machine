@@ -3,10 +3,9 @@
 // Requires: PAYPAL_CLIENT_ID, PAYPAL_SECRET, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
 
 const { createClient } = require('@supabase/supabase-js');
+const paypalEnv = require('../lib/paypal-env');
 
-const PAYPAL_BASE = process.env.PAYPAL_SANDBOX === 'true'
-  ? 'https://api-m.sandbox.paypal.com'
-  : 'https://api-m.paypal.com';
+const PAYPAL_BASE = paypalEnv.baseApiM;   // see netlify/lib/paypal-env.js
 
 // ── Verify the caller is a Feelz Machine admin ────────────────
 async function verifyAdmin(authHeader) {

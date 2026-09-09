@@ -31,6 +31,7 @@ import ArtistGuestbook from '../components/ArtistGuestbook';
 import MerchConnectSheet from '../components/MerchConnectSheet';
 import ChallengeXPModal from '../components/ChallengeXPModal';
 import { askNotificationPermission } from '../utils/askNotificationPermission';
+import { reportNotify } from '../utils/notify';
 
 const PAYPAL_CLIENT_ID = process.env.REACT_APP_PAYPAL_CLIENT_ID;
 const EMOJI_REACTIONS = ['🔥', '❤️', '👏', '😮', '😂', '🎵'];
@@ -664,21 +665,28 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
       // Fetch both directions:
       // 1. Collabs where this artist IS the collaborator on someone else's track
       // 2. Collabs on tracks owned by this artist (beatmakers/featured artists credited)
-      const { data: asCollaborator } = await supabase
+      // Errors read, not discarded. The Collaborations section renders nothing
+      // when the list is empty, so a failed query used to look exactly like an
+      // artist who has never collaborated.
+      const { data: asCollaborator, error: asCollabErr } = await supabase
         .from('collaborations')
         .select('*, tracks(id, title, cover_artwork_url, file_url, duration, stream_count, artist_id, is_downloadable, download_price)')
         .eq('artist_id', artistData.id).eq('status', 'accepted');
+      if (asCollabErr) console.error('[profile] collaborations (as collaborator) failed:',
+        asCollabErr.code, asCollabErr.message, asCollabErr.details || '', asCollabErr.hint || '');
 
       // Get track IDs owned by this artist
       const ownTrackIds = (trackData || []).map(t => t.id).filter(Boolean);
       let onOwnTracks = [];
       if (ownTrackIds.length > 0) {
-        const { data: ownTrackCollabs } = await supabase
+        const { data: ownTrackCollabs, error: ownCollabErr } = await supabase
           .from('collaborations')
           .select('*, tracks(id, title, cover_artwork_url, file_url, duration, stream_count, artist_id, is_downloadable, download_price)')
           .in('track_id', ownTrackIds)
           .eq('status', 'accepted')
           .neq('artist_id', artistData.id);
+        if (ownCollabErr) console.error('[profile] collaborations (on own tracks) failed:',
+          ownCollabErr.code, ownCollabErr.message, ownCollabErr.details || '', ownCollabErr.hint || '');
         onOwnTracks = ownTrackCollabs || [];
       }
 
@@ -846,7 +854,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
           followerName  = listenerProfile?.display_name || null;
           followerImage = listenerProfile?.avatar_url || null;
         }
-        await supabase.from('notifications').insert({
+        await reportNotify('new_follower (ArtistProfilePage)', supabase.from('notifications').insert({
           user_id: artist.user_id,
           artist_id: artist.id,
           type: 'new_follower',
@@ -858,7 +866,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
             from_artist_image: followerImage,
             from_artist_slug:  followerSlug,
           },
-        }).catch(() => {});
+        }));
       }
     } catch (err) { console.error('Follow error:', err); }
   };
@@ -1038,7 +1046,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
       try { await supabase.from('downloads').upsert({ user_id: user.id, track_id: track.id }, { onConflict: 'user_id,track_id', ignoreDuplicates: true }); } catch {}
       const { data: myProfile } = await supabase.from('artists').select('id, artist_name, profile_image_url, slug').eq('user_id', user.id).maybeSingle();
       try {
-        await supabase.from('notifications').insert({
+        await reportNotify('download (ArtistProfilePage)', supabase.from('notifications').insert({
           user_id: artist.user_id,
           artist_id: artist.id,
           type: 'download',
@@ -1055,7 +1063,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
             from_artist_name:  myProfile?.artist_name || null,
             from_artist_image: myProfile?.profile_image_url || null,
           },
-        });
+        }));
       } catch {}
       const { data: { session } } = await supabase.auth.getSession();
       await downloadTrack(track.id, track.title, session?.access_token);
@@ -1102,7 +1110,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
     } else {
       await supabase.from('track_likes').insert({ track_id: track.id, user_id: user.id });
       const { data: myProfile } = await supabase.from('artists').select('id, artist_name, profile_image_url, slug').eq('user_id', user.id).maybeSingle();
-      await supabase.from('notifications').insert({
+      await reportNotify('track_liked (ArtistProfilePage)', supabase.from('notifications').insert({
         user_id: artist.user_id,
         artist_id: artist.id,
         type: 'track_liked',
@@ -1118,7 +1126,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
           from_artist_image: myProfile?.profile_image_url || null,
           from_artist_slug:  myProfile?.slug || null,
         },
-      }).catch(() => {});
+      }));
     }
   };
 
@@ -1144,7 +1152,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
       const { data: plData } = await supabase.from('playlists').select('name').eq('id', playlistId).maybeSingle();
       if (trackData?.artist_id && trackData.artist_id !== artist?.id) {
         const myName = artist?.artist_name || 'Someone';
-        await supabase.from('notifications').insert({
+        await reportNotify('playlist_add (ArtistProfilePage)', supabase.from('notifications').insert({
           user_id: artist.user_id,
           artist_id: trackData.artist_id,
           type: 'playlist_add',
@@ -1161,7 +1169,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
             from_artist_image: artist?.profile_image_url || null,
             from_artist_slug:  artist?.slug || null,
           },
-        }).catch(() => {});
+        }));
       }
     }
     setAddedTo(prev => ({ ...prev, [`${playlistId}-${trackId}`]: true }));

@@ -9,14 +9,18 @@
 
 const https = require('https');
 const { createClient } = require('@supabase/supabase-js');
+const paypalEnv = require('../lib/paypal-env');
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
+// PAYPAL_ENV is not set in Netlify; PAYPAL_SANDBOX is. Reading the wrong one
+// meant this function was always on live while payouts followed a different
+// flag. See netlify/lib/paypal-env.js.
 function paypalHost() {
-  return process.env.PAYPAL_ENV === 'sandbox' ? 'api.sandbox.paypal.com' : 'api.paypal.com';
+  return paypalEnv.hostApi;
 }
 
 async function getPayPalAccessToken() {

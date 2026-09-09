@@ -17,27 +17,68 @@ import { VoiceMemoCard, VoiceMemoUpload } from '../components/VoiceMemo';
 function ContactExportButton({ artist }) {
   const [exporting, setExporting] = React.useState(false);
 
+  // This never worked. It read the session purely to put session.user.id in the
+  // request body — which export-contacts ignores, because a user_id in a body
+  // is just a claim from the client. The function authenticates from the
+  // Authorization header, and this request never sent one, so every export
+  // came back 401 "Not signed in" and the alert on the next line showed it.
+  //
+  // Which is the only reason the missing consent check never leaked anything:
+  // the feature was broken in a way that failed closed.
   const handleExport = async () => {
     setExporting(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) { alert('Please sign in again to export your contacts.'); setExporting(false); return; }
+
       const res = await fetch('/.netlify/functions/export-contacts', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ artist_id: artist.id, user_id: session?.user?.id }),
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ artist_id: artist.id }),
       });
-      const data = await res.json();
+
+      // A non-2xx can still carry a JSON body with a usable message, and a
+      // proxy error carries none at all. Handle both rather than letting
+      // res.json() throw into the catch and lose the status.
+      const text = await res.text();
+      let data = null;
+      try { data = text ? JSON.parse(text) : null; } catch { /* keep the raw text */ }
+
+      if (!res.ok || !data) {
+        const msg = (data && data.error) || text || `Export failed (HTTP ${res.status})`;
+        console.error('[export-contacts] failed:', res.status, msg);
+        alert(msg);
+        setExporting(false);
+        return;
+      }
+
       if (data.error) { alert(data.error); setExporting(false); return; }
-      if (data.count === 0) { alert('No follower emails found yet'); setExporting(false); return; }
-      const blob = new Blob([data.csv], { type: 'text/csv' });
+      if (!data.count) {
+        alert(data.note || 'No followers have opted in to be contacted yet.');
+        setExporting(false);
+        return;
+      }
+
+      // utf-8 BOM so Excel opens accented names correctly instead of mojibake.
+      const blob = new Blob(['﻿' + data.csv], { type: 'text/csv;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `${artist.artist_name}_contacts.csv`;
+      a.download = data.filename || `feelz-machine-contacts-${artist.artist_name}.csv`;
+      // Appended to the document before clicking: a detached anchor does not
+      // reliably trigger a download in Firefox. Revoked on the next tick, not
+      // immediately, because revoking synchronously can cancel the download.
+      document.body.appendChild(a);
       a.click();
-      URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch (err) {
-      console.error('Export error:', err);
+      console.error('[export-contacts] threw:', err);
+      alert('Could not export contacts — check your connection and try again.');
     }
     setExporting(false);
   };

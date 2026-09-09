@@ -9,15 +9,18 @@
 
 const https = require('https');
 const { createClient } = require('@supabase/supabase-js');
+const paypalEnv = require('../lib/paypal-env');
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
-const PAYPAL_BASE = process.env.PAYPAL_ENV === 'sandbox'
-  ? 'api-m.sandbox.paypal.com'
-  : 'api-m.paypal.com';
+// One source for sandbox-vs-live across every PayPal function. This used to
+// read PAYPAL_ENV, which is not set in Netlify — so it always resolved to live
+// while paypal-payout.js read PAYPAL_SANDBOX. Setting PAYPAL_SANDBOX=true would
+// have captured real tips and paid out sandbox dollars. See netlify/lib/paypal-env.js.
+const PAYPAL_BASE = paypalEnv.hostApiM;
 
 async function getAccessToken() {
   return new Promise((resolve, reject) => {

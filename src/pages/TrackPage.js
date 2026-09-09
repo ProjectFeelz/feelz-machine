@@ -13,6 +13,8 @@ import {
   Heart, Share2, Check, MoreHorizontal, Verified,
   Disc, ExternalLink
 } from 'lucide-react';
+import { reportNotify } from '../utils/notify';
+import { fetchTrackCredits } from '../components/TrackCredits';
 
 const BASE_URL = 'https://www.feelzmachine.com';
 
@@ -94,12 +96,17 @@ export default function TrackPage() {
       // Accepted collaborations only. A pending invitation is not a credit,
       // and showing one would announce a feature the other artist has not
       // agreed to.
-      supabase
-        .from('collaborations')
-        .select('id, role, artist_id, artists(artist_name, slug, profile_image_url)')
-        .eq('track_id', trackData.id)
-        .eq('status', 'accepted')
-        .then(({ data }) => setCredits((data || []).filter(cr => cr.artists)));
+      //
+      // Reads through fetchTrackCredits rather than a PostgREST embed. The
+      // embed that was here — artists(...) from collaborations — cannot be
+      // resolved if that table carries a second foreign key to artists, and
+      // this call site destructured only `data`, so a failure showed as a
+      // track with no features. See the note at the top of TrackCredits.js.
+      //
+      // `artist` is renamed to `artists` so the JSX below is untouched.
+      fetchTrackCredits(trackData.id, 'role').then(({ credits: rows }) =>
+        setCredits(rows.map(cr => ({ ...cr, artists: cr.artist })))
+      );
       setArtist(trackData.artists);
       setAlbum(trackData.albums || null);
 
@@ -193,7 +200,7 @@ export default function TrackPage() {
       // Notify the artist that someone downloaded their track
       if (artist?.user_id && artist?.id) {
         const { data: myProfile } = await supabase.from('artists').select('id, artist_name').eq('user_id', user.id).maybeSingle();
-        supabase.from('notifications').insert({
+        reportNotify('download (TrackPage)', supabase.from('notifications').insert({
           user_id: artist.user_id,
           artist_id: artist.id,
           type: 'download',
@@ -202,7 +209,7 @@ export default function TrackPage() {
           track_id: track.id,
           from_artist_id: myProfile?.id || null,
           metadata: { download: true, purchase_price: track.download_price || 0 },
-        }).catch(() => {});
+        }));
       }
     } catch (err) {
       // The backend's 403s are deliberate rules with real messages. Logging

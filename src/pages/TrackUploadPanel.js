@@ -1636,10 +1636,38 @@ export default function TrackUploadPanel() {
       has_versions: track.has_versions || false, cover_artwork_url: track.cover_artwork_url || '',
       youtube_url: track.youtube_url || '',
     });
-    const { data } = await supabase.from('collaborations')
-      .select('*, artists(artist_name, profile_image_url)').eq('track_id', track.id);
-    setEditCollaborators((data || []).map(c => ({
-      artist_id: c.artist_id, artist_name: c.artists?.artist_name,
+    // Read collaborations and artists separately rather than as a PostgREST
+    // embed. `collaborations` joins two artists by nature, so if that table
+    // carries more than one foreign key to `artists` the embed cannot be
+    // resolved and answers HTTP 300 — which here would silently open the edit
+    // form with an empty collaborator list. Saving from that state would wipe
+    // the track's splits. See the note at the top of TrackCredits.js.
+    const { data: collabRows, error: collabErr } = await supabase
+      .from('collaborations')
+      .select('artist_id, role, split_percent')
+      .eq('track_id', track.id);
+
+    if (collabErr) {
+      // Do not open the form with a false empty list — the next save would
+      // delete splits that exist.
+      console.error('[upload] could not read collaborations for track', track.id, ':',
+        collabErr.code, collabErr.message);
+      showMessage('error', 'Could not load this track\'s collaborators. Refresh before editing, or the splits could be lost.');
+      setEditCollaborators([]);
+      return;
+    }
+
+    const ids = [...new Set((collabRows || []).map(c => c.artist_id).filter(Boolean))];
+    let nameById = new Map();
+    if (ids.length > 0) {
+      const { data: names, error: nameErr } = await supabase
+        .from('artists').select('id, artist_name').in('id', ids);
+      if (nameErr) console.error('[upload] collaborator name lookup failed:', nameErr.message);
+      nameById = new Map((names || []).map(a => [a.id, a.artist_name]));
+    }
+
+    setEditCollaborators((collabRows || []).map(c => ({
+      artist_id: c.artist_id, artist_name: nameById.get(c.artist_id),
       role: c.role, split_percent: c.split_percent,
     })));
   };

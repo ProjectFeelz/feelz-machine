@@ -3,15 +3,15 @@
 // Calculates royalty splits, logs to payouts table, and fires real PayPal Payouts.
 
 const { createClient } = require('@supabase/supabase-js');
+const { reportNotify } = require('../lib/notify');
+const paypalEnv = require('../lib/paypal-env');
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
-const PAYPAL_BASE = process.env.PAYPAL_SANDBOX === 'true'
-  ? 'https://api-m.sandbox.paypal.com'
-  : 'https://api-m.paypal.com';
+const PAYPAL_BASE = paypalEnv.baseApiM;   // see netlify/lib/paypal-env.js
 
 async function getPayPalAccessToken() {
   const credentials = Buffer.from(
@@ -78,22 +78,64 @@ exports.handler = async (event) => {
 
   try {
     // 1. Fetch the track and its owner
+    //
+    // The `artists(id, artist_name)` embed that used to be on this select was
+    // removed: nothing in this function ever read `track.artists`, and an
+    // embed that is never used is a failure mode with no upside. If `tracks`
+    // ever carries a second foreign key to `artists` again — as it did when
+    // artists.top_pick_track_id was added — PostgREST answers HTTP 300 rather
+    // than rows, and this whole payout would 404 on a track that exists.
     const { data: track, error: trackErr } = await supabase
       .from('tracks')
-      .select('id, title, artist_id, download_price, artists(id, artist_name)')
+      .select('id, title, artist_id, download_price')
       .eq('id', track_id)
       .single();
 
     if (trackErr || !track) {
+      console.error('[split-payout] track lookup failed:', trackErr && trackErr.message);
       return { statusCode: 404, body: JSON.stringify({ error: 'Track not found' }) };
     }
 
     // 2. Fetch accepted collaborations for this track
-    const { data: collabs } = await supabase
+    //
+    // READ THE ERROR. This is the most dangerous unchecked read in the
+    // codebase and it was one line long:
+    //
+    //   const { data: collabs } = await supabase.from('collaborations')...
+    //   const collaborators = collabs || [];
+    //
+    // supabase-js does not throw, so a rejected query left `collabs` null,
+    // `collaborators` empty, `totalCollabPercent` zero and therefore
+    // `ownerPercent` 100. The track owner would be paid the entire sale and
+    // every credited collaborator would be paid nothing — and the function
+    // would return success. No log, no retry, no way to tell it apart from a
+    // solo track afterwards.
+    //
+    // The embed is also gone for the same reason as above: `c.artists` was
+    // never read, and `collaborations` joins two artists by nature, so that
+    // table is the likeliest place for a second FK to `artists` to exist.
+    const { data: collabs, error: collabErr } = await supabase
       .from('collaborations')
-      .select('artist_id, split_percent, role, artists(id, artist_name)')
+      .select('artist_id, split_percent, role')
       .eq('track_id', track_id)
       .eq('status', 'accepted');
+
+    if (collabErr) {
+      // Refuse to pay rather than guess. An unknown split is not a zero split.
+      console.error(
+        '[split-payout] ABORTED — could not read collaborations for track',
+        track_id, ':', collabErr.code, collabErr.message, collabErr.details || ''
+      );
+      return {
+        statusCode: 500,
+        body: JSON.stringify({
+          error: 'Could not determine the payout split — no payout was made',
+          code: collabErr.code || null,
+          track_id,
+          transaction_id,
+        }),
+      };
+    }
 
     const collaborators = collabs || [];
 
@@ -164,7 +206,7 @@ exports.handler = async (event) => {
       // Resolve the artist's user_id so the notification is visible in the bell
       const { data: artistUser } = await supabase
         .from('artists').select('user_id').eq('id', record.artist_id).maybeSingle();
-      await supabase.from('notifications').insert({
+      await reportNotify('payout_pending (process-split-payout)', supabase.from('notifications').insert({
         artist_id: record.artist_id,
         user_id: artistUser?.user_id || null,
         type: 'payout_pending',
@@ -176,7 +218,7 @@ exports.handler = async (event) => {
           amount: record.amount,
           split_percentage: record.split_percentage,
         },
-      }).catch(() => {}); // Non-critical
+      })); // Non-critical
     }
 
     // ── Real PayPal Payouts ──────────────────────────────────────────────────────
@@ -234,14 +276,14 @@ exports.handler = async (event) => {
         try {
           const { data: admins } = await supabase.from('admins').select('user_id');
           for (const admin of (admins || [])) {
-            await supabase.from('notifications').insert({
+            await reportNotify('admin_message (process-split-payout)', supabase.from('notifications').insert({
               user_id:    admin.user_id,
               type:       'admin_message',
               title:      '⚠️ Payout failed — manual action required',
               message:    `Split payout for "${track.title}" (tx: ${transaction_id}) failed: ${payoutErr.message}`,
               admin_only: true,
               metadata:   { transaction_id, track_id, error: payoutErr.message },
-            });
+            }));
           }
         } catch { /* non-fatal */ }
       }

@@ -4,6 +4,7 @@
 
 const https = require('https');
 const { createClient } = require('@supabase/supabase-js');
+const paypalEnv = require('../lib/paypal-env');
 
 async function getPayPalAccessToken() {
   return new Promise((resolve, reject) => {
@@ -12,7 +13,7 @@ async function getPayPalAccessToken() {
     ).toString('base64');
     const payload = 'grant_type=client_credentials';
     const options = {
-      hostname: 'api-m.paypal.com',
+      hostname: paypalEnv.hostApiM,   // was hardcoded live; see netlify/lib/paypal-env.js
       path: '/v1/oauth2/token',
       method: 'POST',
       headers: {
@@ -42,7 +43,7 @@ async function paypalRequest(method, path, body, accessToken) {
   return new Promise((resolve, reject) => {
     const payload = body ? JSON.stringify(body) : null;
     const options = {
-      hostname: 'api-m.paypal.com',
+      hostname: paypalEnv.hostApiM,   // was hardcoded live; see netlify/lib/paypal-env.js
       path,
       method,
       headers: {
