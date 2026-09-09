@@ -79,9 +79,25 @@
 # Daily  00:05 — daily-spotlight
 # Daily  02:00 — cleanup-stories
 # Daily  02:30 — cleanup-empty-albums
+# Daily  03:00 — compute-behavior-profiles
+# Daily  03:30 — score-engagement-outcomes
+# Daily  04:30 — compute-recommendations   (must follow behaviour profiles)
+# Daily  05:00 — prune-listening-events
+# Daily  08:00 — platform-daily-story
 # Daily  09:00 — presave-notify
 # 1st of month 09:00 — monthly-wrapped
 # Sunday 18:00 — weekly-listener-recap
+#
+# ── Correction, 9 Sep ─────────────────────────────────────────────────────────
+#
+# An earlier pass of mine claimed compute-recommendations, prune-listening-events
+# and platform-daily-story were missing from this block and added entries for
+# them. That was wrong — all three were already scheduled below, and the added
+# entries were duplicates. They have been removed.
+#
+# The mistake came from reading an older copy of this file than the one in the
+# repo. Where a function's real schedule differs from the calendar above, the
+# entries below are the authority.
 
 [[scheduled_functions]]
   name = "engagement-drip-background"
@@ -139,10 +155,14 @@
   name = "paid-collab-reminder"
   schedule = "0 9 * * 0"
 
+# Reads listener_behavior_profiles (written at 03:00) and writes
+# listener_recommendations, which is what ForYouPage ranks the feed from. Runs
+# twice a day; the 03:30 pass is the one that follows the behaviour profiles.
 [[scheduled_functions]]
   name = "compute-recommendations"
   schedule = "30 3,15 * * *"
 
+# Calls the prune_listening_events RPC. Nothing else does.
 [[scheduled_functions]]
   name = "prune-listening-events"
   schedule = "0 4 * * *"
