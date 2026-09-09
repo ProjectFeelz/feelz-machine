@@ -349,9 +349,20 @@ function ChallengeUploadSheet({ challenge, user, onClose, onComplete }) {
       // Upload audio
       const audioExt = audioFile.name.split('.').pop();
       const audioPath = `${u.id}/${Date.now()}_challenge.${audioExt}`;
-      const { error: audioErr } = await supabase.storage.from('tracks').upload(audioPath, audioFile, { cacheControl: '31536000' });
+      // Repointed from 'tracks' to 'feelz-samples'. There has never been a
+      // bucket called 'tracks' — the nine that exist are apk-releases,
+      // artist-images, artist-voice-memos, campaign-images,
+      // competition-entries, covers, feelz-samples, stories and track-videos —
+      // so every wheel-challenge submission failed here. It failed loudly
+      // (audioErr is thrown, and the throw happens before the tracks row is
+      // inserted), so an artist saw an error and no track was created.
+      //
+      // feelz-samples is where the rest of the platform's audio lives: 515
+      // objects, most recent yesterday. This was a copy-paste divergence from
+      // the main upload path, not a separate design.
+      const { error: audioErr } = await supabase.storage.from('feelz-samples').upload(audioPath, audioFile, { cacheControl: '31536000' });
       if (audioErr) throw audioErr;
-      const { data: { publicUrl: audioUrl } } = supabase.storage.from('tracks').getPublicUrl(audioPath);
+      const { data: { publicUrl: audioUrl } } = supabase.storage.from('feelz-samples').getPublicUrl(audioPath);
 
       // Upload cover (optional)
       let coverUrl = null;

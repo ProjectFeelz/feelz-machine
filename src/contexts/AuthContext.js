@@ -1,6 +1,9 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 
+// Which user id an artist-profile creation is currently in flight for.
+let creatingArtistFor = null;
+
 const AuthContext = createContext({});
 
 export function AuthProvider({ children }) {
@@ -61,13 +64,31 @@ export function AuthProvider({ children }) {
       // person silently stayed a listener regardless of what they picked.
       const pendingRole = localStorage.getItem('pending_creator_role');
       if (pendingRole && (pendingRole === 'artist' || pendingRole === 'beatmaker')) {
+        // Claim the key BEFORE doing any async work, and hold a module-level
+        // in-flight guard.
+        //
+        // This block used to remove the key only after a successful insert,
+        // which made it a race: two concurrent passes both saw it set, each
+        // generated a DIFFERENT random suffix, and since the names differed
+        // there was no unique-constraint collision to stop the second one.
+        // Five accounts ended up with two or three artist profiles each — one
+        // had three. Clearing first means a second pass finds nothing to do.
+        //
+        // The unique index artists_user_id_unique (migration 99) now makes it
+        // impossible at the database level too. This is the half that stops
+        // the pointless second request being sent at all.
+        localStorage.removeItem('pending_creator_role');
+
+        if (creatingArtistFor === userId) return;
+        creatingArtistFor = userId;
+
         try {
           const { data: { user: authUser } } = await supabase.auth.getUser();
           const base = (authUser?.email?.split('@')[0] || 'artist').toLowerCase().replace(/[^a-z0-9]/g, '');
           const suffix = Math.random().toString(36).slice(2, 8);
           const placeholderName = `${base}-${suffix}`;
 
-          let { data: created, error: insertErr } = await supabase
+          const { data: created, error: insertErr } = await supabase
             .from('artists')
             .insert({
               user_id: userId,
@@ -79,31 +100,60 @@ export function AuthProvider({ children }) {
             .select()
             .maybeSingle();
 
-          // artist_name and slug are both globally unique — on the rare
-          // collision, retry once with a fresh random suffix rather than
-          // silently failing and leaving the user artist-less again.
-          if (insertErr && insertErr.code === '23505') {
-            const retryName = `${base}-${Math.random().toString(36).slice(2, 8)}`;
-            ({ data: created } = await supabase
-              .from('artists')
-              .insert({
-                user_id: userId,
-                artist_name: retryName,
-                slug: retryName,
-                role: pendingRole,
-                role_confirmed: true,
-              })
-              .select()
-              .maybeSingle());
+          if (insertErr) {
+            // 23505 now has two possible causes, and they need opposite
+            // responses:
+            //
+            //   user_id     — a profile already exists. Retrying with another
+            //                 random name would fail again forever. Fetch the
+            //                 row that won instead.
+            //   artist_name — a genuine name clash with somebody else.
+            //
+            // The old code assumed the second and blind-retried, which under
+            // the new index would have looped to a dead end and left the user
+            // looking profile-less.
+            if (insertErr.code === '23505') {
+              const { data: existing } = await supabase
+                .from('artists').select('*').eq('user_id', userId)
+                .order('created_at', { ascending: true }).limit(1).maybeSingle();
+
+              if (existing) { setArtist(existing); return; }
+
+              // Not a user_id clash, so it was the name. One fresh suffix.
+              const retryName = `${base}-${Math.random().toString(36).slice(2, 8)}`;
+              const { data: retried, error: retryErr } = await supabase
+                .from('artists')
+                .insert({
+                  user_id: userId,
+                  artist_name: retryName,
+                  slug: retryName,
+                  role: pendingRole,
+                  role_confirmed: true,
+                })
+                .select()
+                .maybeSingle();
+              if (retryErr) {
+                console.error('[auth] artist profile creation failed:', retryErr.code, retryErr.message);
+                setArtist(null);
+                return;
+              }
+              setArtist(retried || null);
+              return;
+            }
+
+            console.error('[auth] artist profile creation failed:', insertErr.code, insertErr.message);
+            setArtist(null);
+            return;
           }
 
-          localStorage.removeItem('pending_creator_role');
           setArtist(created || null);
           return;
         } catch (err) {
-          console.warn('Artist row creation failed (non-fatal):', err.message);
+          console.error('[auth] artist profile creation threw:', err.message);
           setArtist(null);
           return;
+        } finally {
+          creatingArtistFor = null;
         }
       }
       // Row genuinely doesn't exist — clear any stale state

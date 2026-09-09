@@ -1,4 +1,13 @@
-// src/components/admin/MusicPicker.js
+// src/components/MusicPicker.js
+//
+// Deliberately at src/components/, one level deep, importing
+// '../supabaseClient' like every other component here. It started life in
+// src/components/admin/ with '../../supabaseClient', and that extra level made
+// the file placement-sensitive: dropped anywhere but that exact folder, the
+// two-dot import resolves outside src/ and Create React App rejects the whole
+// build with "Relative imports outside of src/ are not supported" — which is
+// what happened. One level deep cannot escape src/ from anywhere under
+// components/.
 //
 // Type-ahead search over the platform's tracks and albums, for admin screens
 // that need to point at one — the Home Hero button being the first.
@@ -34,7 +43,7 @@
 
 import React from 'react';
 import { Search, Music, Disc3, X, Loader, Check } from 'lucide-react';
-import { supabase } from '../../supabaseClient';
+import { supabase } from '../supabaseClient';
 
 const DEBOUNCE_MS = 250;
 const LIMIT = 8;

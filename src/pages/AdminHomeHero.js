@@ -9,7 +9,7 @@ import { useNavigate } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 import { ArrowLeft, Loader, Image as ImageIcon, Check, Trash2 } from 'lucide-react';
 import { supabase } from '../supabaseClient';
-import MusicPicker from '../components/admin/MusicPicker';
+import MusicPicker from '../components/MusicPicker';
 import { useAuth } from '../contexts/AuthContext';
 
 const ACCENTS = [

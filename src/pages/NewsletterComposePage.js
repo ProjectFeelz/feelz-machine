@@ -50,6 +50,30 @@ export default function NewsletterComposePage() {
   // How many emails have already gone out per post, from newsletter_email_sends.
   const [sendLog, setSendLog] = React.useState({});
 
+  // May this person actually EMAIL a post, as opposed to publish one?
+  // admins can; so can anyone in newsletter_senders (migration 98). Editors
+  // cannot — composing and mailing a list are different-sized actions.
+  const [canEmail, setCanEmail] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!user) { setCanEmail(false); return; }
+    if (isAdmin) { setCanEmail(true); return; }
+    let cancelled = false;
+    supabase.from('newsletter_senders').select('user_id').eq('user_id', user.id).maybeSingle()
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        // A missing table means migration 98 has not run — not a permission
+        // problem, and worth saying so rather than silently hiding the button.
+        if (error && (error.code === '42P01' || error.code === 'PGRST205')) {
+          console.warn('[newsletter] newsletter_senders does not exist yet — run migration 98');
+        } else if (error) {
+          console.error('[newsletter] sender check failed:', error.code, error.message);
+        }
+        setCanEmail(!!data);
+      });
+    return () => { cancelled = true; };
+  }, [user, isAdmin]);
+
   // No showToast in here on purpose: it is recreated every render, so putting
   // it in this callback's dependency list would give loadPosts a new identity
   // each render and the effect below would loop. Errors go to the console
@@ -67,8 +91,10 @@ export default function NewsletterComposePage() {
     setPosts(list);
     if (list.length === 0) { setSendLog({}); return; }
 
-    // Admin-only read; a newsletter_editor gets nothing back, which is fine
-    // because the email controls are admin-only too.
+    // newsletter_email_sends is readable by admins only, so an editor or a
+    // sender gets nothing back here and the "N emailed" badge simply does not
+    // appear for them. Harmless: the dry run still reports how many are left,
+    // and the unique index still makes a double send impossible.
     const { data: log, error: logErr } = await supabase
       .from('newsletter_email_sends')
       .select('post_id, status')
@@ -342,9 +368,10 @@ export default function NewsletterComposePage() {
                   </div>
                 </div>
 
-                {/* Emailing is admin-only. newsletter_editors can publish in-app
-                    but not mail a list — a bigger action than posting. */}
-                {isAdmin && (
+                {/* Emailing needs admins or newsletter_senders.
+                    newsletter_editors can publish in-app but not mail a list —
+                    a bigger action than posting. */}
+                {canEmail && (
                   <div className="flex items-center flex-wrap gap-2">
                     {(!st || st.phase === 'error' || st.phase === 'done') && (
                       <button
