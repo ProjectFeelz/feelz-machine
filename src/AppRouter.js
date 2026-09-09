@@ -1,413 +1,398 @@
-import React, { useEffect, Suspense } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
-import { HelmetProvider, Helmet } from 'react-helmet-async';
-import { AuthProvider, useAuth } from './contexts/AuthContext';
-import { PlayerProvider } from './contexts/PlayerContext';
-import { TierProvider } from './contexts/useTier';
-import { useSessionRefresh } from './useSessionRefresh';
-import { useActivityPing } from './useActivityPing';
-import AppLayout from './components/layout/AppLayout';
-const AboutPage = React.lazy(() => import('./pages/AboutPage'));
-const ComparisonPage = React.lazy(() => import('./pages/ComparisonPage'));
-const HomePage = React.lazy(() => import('./pages/HomePage'));
-const BrowsePage = React.lazy(() => import('./pages/BrowsePage'));
-const LoginPage = React.lazy(() => import('./pages/LoginPage'));
-const LibraryPage = React.lazy(() => import('./pages/LibraryPage'));
-const LikedSongsPage = React.lazy(() => import('./pages/LikedSongsPage'));
-const DownloadsPage = React.lazy(() => import('./pages/DownloadsPage'));
-const FollowingPage = React.lazy(() => import('./pages/FollowingPage'));
-const PlaylistsPage = React.lazy(() => import('./pages/PlaylistsPage'));
-const PlaylistDetailPage = React.lazy(() => import('./pages/PlaylistDetailPage'));
-const PlaylistJoinPage = React.lazy(() => import('./pages/PlaylistJoinPage'));
-const ListeningSessionPage = React.lazy(() => import('./pages/ListeningSessionPage'));
-const ProfilePage = React.lazy(() => import('./pages/ProfilePage'));
-const FeedPage = React.lazy(() => import('./pages/FeedPage'));
-const ArtistDashboard = React.lazy(() => import('./pages/ArtistDashboard'));
-const ArtistProfilePage = React.lazy(() => import('./pages/ArtistProfilePage'));
-const TierUpgradePage = React.lazy(() => import('./pages/TierUpgradePage'));
-const ChatRoomsPage = React.lazy(() => import('./pages/ChatRoomsPage'));
-const ChatRoomView = React.lazy(() => import('./pages/ChatRoomView'));
-const PrivacyPolicy = React.lazy(() => import('./pages/PrivacyPolicy'));
-const TermsOfUse = React.lazy(() => import('./pages/TermsOfUse'));
-const NotificationsPage = React.lazy(() => import('./pages/NotificationsPage'));
-const HubPage = React.lazy(() => import('./pages/HubPage'));
-const ProfileSetup = React.lazy(() => import('./pages/ProfileSetup'));
-const ListenerStatsPage = React.lazy(() => import('./pages/ListenerStatsPage'));
-const ListenerUpgradePage = React.lazy(() => import('./pages/ListenerUpgradePage'));
-const AdminDashboard = React.lazy(() => import('./pages/AdminDashboard'));
-const AdminArtists = React.lazy(() => import('./pages/AdminArtists'));
-const AdminAnalytics = React.lazy(() => import('./pages/AdminAnalytics'));
-const AdminModeration = React.lazy(() => import('./pages/AdminModeration'));
-const AdminBoost = React.lazy(() => import('./pages/AdminBoost'));
-const AdminBroadcast = React.lazy(() => import('./pages/AdminBroadcast'));
-const RecentlyPlayedPage = React.lazy(() => import('./pages/RecentlyPlayedPage'));
-const UserProfilePage = React.lazy(() => import('./pages/UserProfilePage'));
-const AlbumDetailPage = React.lazy(() => import('./pages/AlbumDetailPage'));
-const TrackDetailPage = React.lazy(() => import('./pages/TrackDetailPage'));
-const AffiliatePage = React.lazy(() => import('./pages/AffiliatePage'));
-const AdminAffiliates = React.lazy(() => import('./pages/AdminAffiliates'));
-const AdminPeople = React.lazy(() => import('./pages/AdminPeople'));
-const AdminIntelligence = React.lazy(() => import('./pages/AdminIntelligence'));
-const AdminContent = React.lazy(() => import('./pages/AdminContent'));
-const AdminGrowth = React.lazy(() => import('./pages/AdminGrowth'));
-const BeatDetailPage = React.lazy(() => import('./pages/BeatDetailPage'));
-const AdminUserBehaviorPage = React.lazy(() => import('./pages/AdminUserBehaviorPage'));
-const TrackPage = React.lazy(() => import('./pages/TrackPage'));
-const CollabRadarPage = React.lazy(() => import('./pages/CollabRadarPage'));
-const AdminDuplicates = React.lazy(() => import('./pages/AdminDuplicates'));
-const CompetitionRoomPage = React.lazy(() => import('./pages/CompetitionRoomPage'));
-const WheelRevealPage = React.lazy(() => import('./pages/WheelRevealPage'));
-const ForYouPage = React.lazy(() => import('./pages/ForYouPage'));
-const MerchPage = React.lazy(() => import('./pages/MerchPage'));
-const MerchCheckoutPage = React.lazy(() => import('./pages/MerchCheckoutPage'));
-const MerchOrdersPage = React.lazy(() => import('./pages/MerchOrdersPage'));
-const CompetitionsPage = React.lazy(() => import('./pages/CompetitionsPage'));
-const AdminCompetitions = React.lazy(() => import('./pages/AdminCompetitions'));
-const AdminEngagement = React.lazy(() => import('./pages/AdminEngagement'));
-const FanLeaderboardPage = React.lazy(() => import('./pages/FanLeaderboardPage'));
-const RecentlyDiscoveredPage = React.lazy(() => import('./pages/RecentlyDiscoveredPage'));
-const ListenerProfilePage = React.lazy(() => import('./pages/ListenerProfilePage'));
-const SchoolSessionsPage = React.lazy(() => import('./pages/SchoolSessionsPage'));
-const SchoolSessionsVotePage = React.lazy(() => import('./pages/SchoolSessionsVotePage'));
-const SchoolSessionsTermsPage = React.lazy(() => import('./pages/SchoolSessionsTermsPage'));
-const SchoolSessionsJudgePanel = React.lazy(() => import('./pages/SchoolSessionsJudgePanel'));
-const AdminSchoolSessions = React.lazy(() => import('./pages/AdminSchoolSessions'));
-const AdminRetail = React.lazy(() => import('./pages/AdminRetail'));
-const RetailPlayerPage = React.lazy(() => import('./pages/RetailPlayerPage'));
-const NewsletterComposePage = React.lazy(() => import('./pages/NewsletterComposePage'));
-const NewsletterPostPage = React.lazy(() => import('./pages/NewsletterPostPage'));
-const VipCardPrintPage = React.lazy(() => import('./pages/VipCardPrintPage'));
-const RetailJoinPage = React.lazy(() => import('./pages/RetailJoinPage'));
-const RetailLandingPage = React.lazy(() => import('./pages/RetailLandingPage'));
-const AdminHomeHero = React.lazy(() => import('./pages/AdminHomeHero'));
-const AdminColdStart = React.lazy(() => import('./pages/AdminColdStart'));
-const HiddenPage = React.lazy(() => import('./pages/HiddenPage'));
-const ContactPreferencesPage = React.lazy(() => import('./pages/ContactPreferencesPage'));
-const ArtistCollectionPage = React.lazy(() => import('./pages/ArtistCollectionPage'));
-// AdminRetailStaff.js is superseded by the Staff tab in RetailAdminPanel.
-// Retail management belongs inside Retail, and keeping two implementations
-// is how ProfilePage and ProfileSetup drifted apart. The old path redirects
-// so existing links and bookmarks still work. The page file can be deleted.
-const RetailTermsPage = React.lazy(() => import('./pages/RetailTermsPage'));
-const RetailPrivacyPage = React.lazy(() => import('./pages/RetailPrivacyPage'));
-const RetailAdminPage = React.lazy(() => import('./pages/RetailAdminPage'));
+import React, { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
+import { supabase } from '../supabaseClient';
+import ArtistFollowPrompt from './ArtistFollowPrompt';
+import ArtistWelcomeTour from './ArtistWelcomeTour';
+import ListenerWelcomeTour from './ListenerWelcomeTour';
+import { ArrowRight, Check, Loader } from 'lucide-react';
 
-// ── Session keepalive — refreshes token + listens for activity ───────────────
-function SessionManager() {
-  useSessionRefresh();
-  useActivityPing();
-  return null;
-}
+// ─────────────────────────────────────────────────────────────────────────────
+// useTourState — called by AppLayout
+// Returns { show, dismiss } after auth loads.
+// Persists completion to BOTH localStorage (instant) AND user_profiles in
+// Supabase (syncs across devices — phone done = PC skips tour too).
+// ─────────────────────────────────────────────────────────────────────────────
+export function useTourState(isArtist, ready) {
+  const { user, hasProfile } = useAuth();
+  const [show, setShow] = useState(false);
 
-// ── Wrapper to set page title for standalone pages outside AppLayout ─────────
-function ScrollToTop() {
-  const { pathname } = useLocation();
-  useEffect(() => { window.scrollTo(0, 0); }, [pathname]);
-  return null;
-}
+  useEffect(() => {
+    if (!ready || !user?.id) return;
 
-function PageTitle({ title, children }) {
-  return (
-    <>
-      <Helmet>
-        <title>{title} · Feelz Machine</title>
-      </Helmet>
-      {children}
-    </>
-  );
-}
+    // An account with neither an artists row nor a listeners row cannot use
+    // the app at all — AppLayout bounces it to /setup from every page, and
+    // ProfileSetup can only edit a profile that already exists. So show the
+    // role picker regardless of what the done flags say.
+    //
+    // This is what un-traps the accounts broken by the old artist branch:
+    // they picked "artist", nothing was created, dismiss() recorded the tour
+    // as done anyway, and the picker never came back. Checking hasProfile
+    // first means it does. Anyone who already has music has an artists row by
+    // definition, so they are never asked again.
+    if (!hasProfile) { setShow(true); return; }
 
-// Wildcard fallback for anything no other route matches. Also handles
-// /@username short URLs here specifically — React Router's pattern syntax
-// can't express "@" immediately followed by a splat with no separating
-// slash (confirmed: /@:slug never matches because the colon isn't right
-// after a slash, and /@* isn't allowed because * must always follow a
-// slash). Checking the raw pathname here, in the one place guaranteed to
-// run last, sidesteps the limitation entirely instead of fighting it.
-function NotFoundRedirect() {
-  const location = useLocation();
-  // Vanity URLs under a handle:
-  //   /@stevecsa                      -> /artist/stevecsa
-  //   /@stevecsa/single/<trackSlug>   -> /track/<trackSlug>
-  //   /@stevecsa/album/<albumSlug>    -> /album/stevecsa/<albumSlug>
-  //
-  // Redirects rather than routes that render in place, deliberately. Two
-  // URLs serving the same page splits its search ranking and gives the
-  // crawler two things to index, so the shareable handle form points at the
-  // one canonical page instead of competing with it.
-  const vanityTrack = location.pathname.match(/^\/@([^/]+)\/(?:single|track)\/(.+)$/);
-  if (vanityTrack) {
-    return <Navigate to={`/track/${vanityTrack[2]}`} replace />;
-  }
-  const vanityAlbum = location.pathname.match(/^\/@([^/]+)\/album\/(.+)$/);
-  if (vanityAlbum) {
-    return <Navigate to={`/album/${vanityAlbum[1]}/${vanityAlbum[2]}`} replace />;
-  }
-  const vanityBeat = location.pathname.match(/^\/@([^/]+)\/beat\/(.+)$/);
-  if (vanityBeat) {
-    return <Navigate to={`/beat/${vanityBeat[2]}`} replace />;
-  }
+    const localKey = `feelz_tour_done_${user.id}`;
 
-  const atMatch = location.pathname.match(/^\/@([^/]+)$/);
-  if (atMatch) {
-    return <Navigate to={`/artist/${atMatch[1]}`} replace />;
-  }
-  return <Navigate to="/" replace />;
-}
+    // Fast path: localStorage already set on this device
+    if (localStorage.getItem(localKey)) return;
 
-// Handles Printful OAuth redirect — passes code back to artist profile
-function MerchConnectCallback() {
-  const navigate = useNavigate();
-  React.useEffect(() => {
-    const params  = new URLSearchParams(window.location.search);
-    const code    = params.get('code');
-    const state   = params.get('state'); // artist slug stored in state param
-    if (code && state) {
-      navigate(`/artist/${state}?printful_code=${code}`, { replace: true });
-    } else {
-      navigate('/', { replace: true });
-    }
-  }, []); // eslint-disable-line
-  return null;
-}
+    // Slow path: check Supabase in case they completed on another device
+    const checkRemote = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('user_profiles')
+          .select('onboarding_done')
+          .eq('user_id', user.id)
+          .maybeSingle();
 
-// Captures ?ref= param from URL and logs affiliate click
-function AffiliateTracker() {
-  React.useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const ref = params.get('ref');
-    if (!ref) return;
-    // Store ref for conversion tracking on signup
-    try { sessionStorage.setItem('feelz_ref', ref); } catch {}
-    // Log click
-    fetch('/.netlify/functions/affiliate-track', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'click', refCode: ref, page: window.location.pathname }),
-    }).catch(() => {});
-  }, []);
-  return null;
-}
+        // 400 = column doesn't exist yet (migration pending) — show tour
+        if (error) { setShow(true); return; }
 
-
-// Redirects new users to /setup if they have no artist or listener profile
-function OnboardingGuard({ children }) {
-  const { user, artist, listener, loading } = useAuth();
-  const location = useLocation();
-  const skipPaths = ['/setup', '/login', '/about', '/terms-of-use', '/privacy-policy', '/artist/', '/@', '/schoolsessions'];
-
-  // Public paths always render immediately, regardless of auth loading state.
-  // This matters specifically for the /@slug -> /artist/slug redirect: the URL
-  // changes before auth finishes resolving, and without this check the
-  // /artist/ skip only applied once loading was false — leaving a blank
-  // render in between that looked like the page just wasn't going anywhere.
-  if (skipPaths.some(p => location.pathname.startsWith(p))) return children;
-
-  if (loading) return null;
-  if (!user) return children;
-
-  // New user — has auth but no profile
-  if (user && !artist && !listener) {
-    return <Navigate to="/setup" replace />;
-  }
-  return children;
-}
-
-
-function PaymentSuccess() {
-  const navigate = useNavigate();
-  React.useEffect(() => {
-    // Navigate back to the beat page with payfast_success param so it auto-downloads
-    const t = setTimeout(() => {
-      // Try to go back; if no history, go to hub
-      if (window.history.length > 1) {
-        navigate(-1);
-      } else {
-        navigate('/hub');
+        if (data?.onboarding_done) {
+          // Already done on another device — mirror to localStorage and stay hidden
+          localStorage.setItem(localKey, '1');
+          return;
+        }
+        // Not done anywhere — show tour
+        setShow(true);
+      } catch {
+        // If DB check fails, fall back to showing tour (safe default)
+        setShow(true);
       }
-    }, 2000);
-    return () => clearTimeout(t);
-  }, [navigate]);
+    };
+
+    checkRemote();
+  }, [ready, user?.id, hasProfile]);
+
+  const dismiss = useCallback(async () => {
+    setShow(false);
+    if (!user?.id) return;
+
+    // Never record the tour as done while the account still has no profile.
+    // Writing onboarding_done before a profile exists is exactly what made
+    // the old trap permanent — the flag outlived the failure that caused it.
+    if (!hasProfile) return;
+
+    // 1. Instant local write so dismiss feels instant
+    localStorage.setItem(`feelz_tour_done_${user.id}`, '1');
+
+    // 2. Persist to Supabase so other devices skip the tour
+    // Silently skips if onboarding_done column doesn't exist yet
+    try {
+      const { error } = await supabase
+        .from('user_profiles')
+        .upsert(
+          { user_id: user.id, onboarding_done: true },
+          { onConflict: 'user_id' }
+        );
+      if (error) console.warn('Tour sync skipped (run schema migration):', error.message);
+    } catch {
+      // Non-fatal — localStorage is the fallback for this device
+    }
+  }, [user?.id, hasProfile]);
+
+  return { show, dismiss };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tour steps
+// ─────────────────────────────────────────────────────────────────────────────
+const STEP_ROLE    = 'role';
+const STEP_FOLLOW  = 'follow';
+const STEP_WELCOME = 'welcome';
+
+const ROLES = [
+  {
+    id:    'listener',
+    emoji: '🎧',
+    label: 'Listener',
+    sub:   'Discover music, follow artists & support independents',
+    color: '#a855f7',
+    glow:  'rgba(168,85,247,0.18)',
+  },
+  {
+    id:    'artist',
+    emoji: '🎤',
+    label: 'Artist',
+    sub:   'Release music, build your audience & monetise your art',
+    color: '#22d3ee',
+    glow:  'rgba(34,211,238,0.15)',
+  },
+  {
+    id:    'beatmaker',
+    emoji: '🎛️',
+    label: 'Beat Maker',
+    sub:   'Upload beats, license your productions & collab with vocalists',
+    color: '#f472b6',
+    glow:  'rgba(244,114,182,0.15)',
+  },
+];
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RoleCard
+// ─────────────────────────────────────────────────────────────────────────────
+function RoleCard({ role, selected, onSelect }) {
   return (
-    <div className="min-h-screen bg-black flex flex-col items-center justify-center space-y-4 px-6 text-center">
-      <div className="w-16 h-16 rounded-full bg-green-500/20 flex items-center justify-center">
-        <span className="text-3xl">✓</span>
+    <button
+      onClick={() => onSelect(role.id)}
+      className="w-full text-left flex items-center space-x-4 px-4 py-4 rounded-2xl border transition-all duration-200 active:scale-[0.98]"
+      style={{
+        borderColor:     selected ? role.color + '55' : 'rgba(255,255,255,0.07)',
+        backgroundColor: selected ? role.color + '10' : 'rgba(255,255,255,0.02)',
+      }}
+    >
+      <div
+        className="w-12 h-12 rounded-xl flex items-center justify-center text-2xl flex-shrink-0"
+        style={{ backgroundColor: role.color + (selected ? '22' : '10') }}
+      >
+        {role.emoji}
       </div>
-      <h2 className="text-xl font-bold text-white">Payment Successful!</h2>
-      <p className="text-sm text-white/40">Your download will start shortly. Redirecting you back…</p>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-bold text-white leading-tight">{role.label}</p>
+        <p className="text-xs text-white/40 leading-snug mt-0.5">{role.sub}</p>
+      </div>
+      <div
+        className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 transition-all duration-200"
+        style={{
+          backgroundColor: selected ? role.color : 'rgba(255,255,255,0.06)',
+          transform:        selected ? 'scale(1)' : 'scale(0.85)',
+        }}
+      >
+        {selected && <Check className="w-3.5 h-3.5 text-white" strokeWidth={3} />}
+      </div>
+    </button>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RoleStep — first screen
+// ─────────────────────────────────────────────────────────────────────────────
+function RoleStep({ onContinue }) {
+  const [selected,  setSelected]  = useState(null);
+  const [saving,    setSaving]    = useState(false);
+  const [saveError, setSaveError] = useState('');
+  const { user, artist, listener, refreshProfile } = useAuth();
+
+  // Pre-select if profile already exists
+  useEffect(() => {
+    if (artist?.role === 'beatmaker') { setSelected('beatmaker'); return; }
+    if (artist)   { setSelected('artist');   return; }
+    if (listener) { setSelected('listener'); return; }
+  }, [artist, listener]);
+
+  const selectedRole = ROLES.find(r => r.id === selected);
+
+  const handleContinue = async () => {
+    if (!selected || saving) return;
+    setSaving(true);
+    setSaveError('');
+
+    try {
+      if (selected === 'listener') {
+        if (!listener) {
+          const displayName =
+            user.user_metadata?.full_name ||
+            user.user_metadata?.name ||
+            user.email?.split('@')[0] ||
+            null;
+          const { error } = await supabase.from('listeners').upsert(
+            { user_id: user.id, display_name: displayName, updated_at: new Date().toISOString() },
+            { onConflict: 'user_id' }
+          );
+          if (error) throw error;
+        }
+      } else if (artist?.id) {
+        // Has a profile already — just record which kind of creator they are.
+        const { error } = await supabase
+          .from('artists')
+          .update({ role: selected === 'beatmaker' ? 'beatmaker' : 'artist', role_confirmed: true })
+          .eq('id', artist.id);
+        if (error) throw error;
+      } else {
+        // No profile yet. THIS is the branch that used to do nothing at all:
+        // the old code was `if (artist?.id) { update ... }` with no else, and
+        // since nothing in the app has ever created an artists row, every
+        // account that chose artist or beatmaker ended up with no profile and
+        // was then bounced to /setup forever.
+        //
+        // create_my_artist_profile (migration 97) settles the globally-unique
+        // artist_name and slug server-side, which the client cannot do without
+        // a racy read-then-write.
+        const { error } = await supabase.rpc('create_my_artist_profile', {
+          p_role: selected === 'beatmaker' ? 'beatmaker' : 'artist',
+        });
+        if (error) throw error;
+      }
+
+      // Pull the new row into context before advancing, so hasProfile is true
+      // by the time dismiss() decides whether it may record the tour as done.
+      if (refreshProfile) await refreshProfile();
+    } catch (err) {
+      // Not swallowed. If this fails the account has no profile, and letting
+      // the tour close anyway is what produced accounts nobody could rescue.
+      console.error('[tour] could not save role:', err?.code, err?.message, err?.hint || '');
+      setSaveError(
+        err?.code === 'PGRST202' || err?.code === '42883'
+          ? 'Setup is not finished on our side yet — migration 97 has not run. Nothing was lost; try again shortly.'
+          : 'We could not finish setting up your account. Please try again.'
+      );
+      setSaving(false);
+      return;
+    }
+
+    setSaving(false);
+    onContinue(selected);
+  };
+
+  const glowColor = selectedRole?.glow || 'rgba(168,85,247,0.12)';
+
+  return (
+    <div className="fixed inset-0 z-[500] flex flex-col bg-black overflow-hidden">
+      {/* Ambient glow */}
+      <div
+        className="absolute inset-0 pointer-events-none transition-all duration-700"
+        style={{
+          background: `radial-gradient(ellipse 90% 55% at 50% 0%, ${glowColor}, transparent 65%)`,
+        }}
+      />
+
+      <div className="relative z-10 flex flex-col flex-1 px-6 pt-16 pb-8 max-w-md mx-auto w-full">
+
+        {/* Wordmark */}
+        <div className="flex items-center space-x-2 mb-10">
+          <div className="w-8 h-8 rounded-lg bg-purple-500/20 border border-purple-500/30 flex items-center justify-center text-base">
+            🎵
+          </div>
+          <span className="text-sm font-bold text-white/60 tracking-wide uppercase">Feelz Machine</span>
+        </div>
+
+        {/* Headline */}
+        <div className="mb-8">
+          <h1 className="text-[30px] font-black text-white leading-[1.1] mb-3">
+            How are you<br />here today?
+          </h1>
+          <p className="text-sm text-white/40 leading-relaxed">
+            Pick the role that fits best — you can always change it later in Settings.
+          </p>
+        </div>
+
+        {/* Role cards */}
+        <div className="flex-1 flex flex-col space-y-3">
+          {ROLES.map(role => (
+            <RoleCard
+              key={role.id}
+              role={role}
+              selected={selected === role.id}
+              onSelect={setSelected}
+            />
+          ))}
+        </div>
+
+        {/* CTA */}
+        <div className="mt-8">
+          {/* A failure here means the account has no profile and cannot use
+              the app, so it has to be visible rather than console-only. */}
+          {saveError && (
+            <p className="text-xs text-red-300 mb-3 text-center px-2">{saveError}</p>
+          )}
+
+          <button
+            onClick={handleContinue}
+            disabled={!selected || saving}
+            className="w-full h-14 rounded-2xl font-bold text-base flex items-center justify-center space-x-2 transition-all duration-200 active:scale-[0.98]"
+            style={{
+              backgroundColor: selected ? (selectedRole?.color || '#a855f7') : 'rgba(255,255,255,0.06)',
+              color:           selected ? '#fff' : 'rgba(255,255,255,0.2)',
+              cursor:          selected ? 'pointer' : 'not-allowed',
+            }}
+          >
+            {saving ? (
+              <Loader className="w-5 h-5 animate-spin" />
+            ) : (
+              <>
+                <span>Continue</span>
+                <ArrowRight className="w-4 h-4" />
+              </>
+            )}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
 
-function PaymentCancel() {
+// ─────────────────────────────────────────────────────────────────────────────
+// AppTour — orchestrates the full onboarding flow
+//
+//   All roles:   ROLE → FOLLOW (genre + artists) → WELCOME → onDone
+//
+//   Listener  → ListenerWelcomeTour → lands on ForYou (/)
+//   Artist    → ArtistWelcomeTour  → lands on /hub
+//   Beatmaker → ArtistWelcomeTour  → lands on /hub
+// ─────────────────────────────────────────────────────────────────────────────
+export default function AppTour({ isArtist, isBeatmaker, onDone }) {
+  const [step,       setStep] = useState(STEP_ROLE);
+  const [chosenRole, setRole] = useState(null);
+  const { user, artist, listener } = useAuth();
   const navigate = useNavigate();
-  return (
-    <div className="min-h-screen bg-black flex flex-col items-center justify-center space-y-4 px-6 text-center">
-      <div className="w-16 h-16 rounded-full bg-red-500/20 flex items-center justify-center">
-        <span className="text-3xl">✕</span>
-      </div>
-      <h2 className="text-xl font-bold text-white">Payment Cancelled</h2>
-      <p className="text-sm text-white/40">No charge was made.</p>
-      <button onClick={() => navigate(-1)} className="px-6 py-2.5 bg-white text-black rounded-xl text-sm font-semibold">Go Back</button>
-    </div>
-  );
-}
 
+  // Block ForYouPage's window wheel listener from firing while tour is open.
+  // ForYouPage attaches a non-passive 'wheel' listener to window — we capture
+  // it first and stop it reaching the feed underneath.
+  useEffect(() => {
+    const block = (e) => { e.stopPropagation(); };
+    window.addEventListener('wheel',      block, { capture: true, passive: false });
+    window.addEventListener('touchstart', block, { capture: true, passive: false });
+    window.addEventListener('touchmove',  block, { capture: true, passive: false });
+    window.addEventListener('touchend',   block, { capture: true, passive: false });
+    return () => {
+      window.removeEventListener('wheel',      block, { capture: true });
+      window.removeEventListener('touchstart', block, { capture: true });
+      window.removeEventListener('touchmove',  block, { capture: true });
+      window.removeEventListener('touchend',   block, { capture: true });
+    };
+  }, []);
 
-export default function AppRouter() {
-  return (
-    <HelmetProvider>
-      <BrowserRouter>
-        <ScrollToTop />
-        <SessionManager />
-        <AffiliateTracker />
-        <AuthProvider>
-          <PlayerProvider>
-            <TierProvider>
-            <OnboardingGuard>
-            <Suspense fallback={<div style={{ minHeight: '100vh', background: '#000' }} />}>
-            <Routes>
-              {/* Legacy /player/* redirects */}
-              <Route path="/player" element={<Navigate to="/" replace />} />
-              <Route path="/player/*" element={<Navigate to="/" replace />} />
+  const displayName =
+    artist?.artist_name ||
+    listener?.display_name ||
+    user?.user_metadata?.full_name ||
+    user?.user_metadata?.name ||
+    user?.email?.split('@')[0] ||
+    null;
 
-              {/* Fix: /terms was broken — redirect to correct route */}
-              <Route path="/terms" element={<Navigate to="/terms-of-use" replace />} />
+  const handleRoleDone = (role) => {
+    setRole(role);
+    setStep(STEP_FOLLOW);
+  };
 
-              <Route path="/login" element={<LoginPage />} />
-              <Route path="/chat/:roomId" element={<ChatRoomView />} />
-              <Route path="/competition/:competitionId" element={<CompetitionRoomPage />} />
-              <Route path="/session/:sessionId" element={<ListeningSessionPage />} />
-              <Route path="/merch-connect-callback" element={<MerchConnectCallback />} />
+  const handleFollowDone = () => {
+    setStep(STEP_WELCOME);
+  };
 
-              {/* Legal pages — fixed titles */}
-              <Route path="/privacy-policy" element={
-                <PageTitle title="Privacy Policy">
-                  <PrivacyPolicy />
-                </PageTitle>
-              } />
-              <Route path="/terms-of-use" element={
-                <PageTitle title="Terms of Use">
-                  <TermsOfUse />
-                </PageTitle>
-              } />
-              <Route path="/schoolsessions" element={
-                <PageTitle title="School Sessions">
-                  <SchoolSessionsPage />
-                </PageTitle>
-              } />
-              <Route path="/schoolsessions/vote" element={
-                <PageTitle title="Vote: School Sessions">
-                  <SchoolSessionsVotePage />
-                </PageTitle>
-              } />
-              <Route path="/admin/vip-card-print/:candidateId" element={<VipCardPrintPage />} />
-              {/* Retail renders its own full-screen shell and is a separate
-                  product, so it must stay outside AppLayout or it gets the
-                  Feelz Machine sidebar on top of its own chrome. Same reason
-                  VipCardPrintPage, RetailJoinPage, RetailTermsPage and
-                  RetailPrivacyPage were moved out previously. */}
-              <Route path="/retail" element={<RetailLandingPage />} />
-              <Route path="/retail/player" element={<RetailPlayerPage />} />
-              <Route path="/retail-admin" element={<RetailAdminPage />} />
-              <Route path="/retail/join/:token" element={<RetailJoinPage />} />
-              <Route path="/retail/terms" element={<RetailTermsPage />} />
-              <Route path="/retail/privacy" element={<RetailPrivacyPage />} />
-              <Route path="/schoolsessions/terms" element={
-                <PageTitle title="School Sessions: Terms">
-                  <SchoolSessionsTermsPage />
-                </PageTitle>
-              } />
-              <Route element={<AppLayout />}>
-                <Route path="/" element={<ForYouPage />} />
-                <Route path="/home" element={<HomePage />} />
-                <Route path="/schoolsessions/judge" element={<SchoolSessionsJudgePanel />} />
-                <Route path="/for-you" element={<Navigate to="/" replace />} />
-                <Route path="/browse" element={<BrowsePage />} />
-                <Route path="/wheel" element={<WheelRevealPage />} />
-                <Route path="/competitions" element={<CompetitionsPage />} />
-                <Route path="/library" element={<LibraryPage />} />
-                <Route path="/library/likes" element={<LikedSongsPage />} />
-                <Route path="/library/downloads" element={<DownloadsPage />} />
-                <Route path="/library/recent" element={<RecentlyPlayedPage />} />
-                <Route path="/library/following" element={<FollowingPage />} />
-                <Route path="/listener/stats"   element={<ListenerStatsPage />} />
-                <Route path="/upgrade" element={<TierUpgradePage />} />
-                <Route path="/listener/upgrade" element={<ListenerUpgradePage />} />
-                <Route path="/library/playlists" element={<PlaylistsPage />} />
-                <Route path="/library/playlists/join/:token" element={<PlaylistJoinPage />} />
-                <Route path="/library/playlists/:id" element={<PlaylistDetailPage />} />
-                <Route path="/community" element={<ChatRoomsPage />} />
-                <Route path="/feed" element={<FeedPage />} />
-                <Route path="/chat" element={<Navigate to="/community" replace />} />
-                {/* Inside AppLayout. It used to render outside it, so anyone
-                    who signed in and landed on setup had no side nav and no
-                    way back into the app. ProfileSetup has no shell of its
-                    own, so it needed the route moved, nothing else. */}
-                <Route path="/setup" element={<ProfileSetup />} />
-                <Route path="/profile" element={<ProfilePage />} />
-                <Route path="/profile/edit" element={<UserProfilePage />} />
-                <Route path="/notifications" element={<NotificationsPage />} />
-                <Route path="/hub" element={<HubPage />} />
-                <Route path="/about" element={<AboutPage />} />
-                <Route path="/vs/:platform" element={<ComparisonPage />} />
-                <Route path="/album/:id" element={<AlbumDetailPage />} />
-                {/* TrackDetailPage consolidated into TrackPage below */}
-                <Route path="/affiliates" element={<AffiliatePage />} />
-                <Route path="/payment/success" element={<PaymentSuccess />} />
-                <Route path="/payment/cancel" element={<PaymentCancel />} />
-                <Route path="/admin/affiliates"   element={<AdminAffiliates />} />
-                <Route path="/admin/people"       element={<AdminPeople />} />
-                <Route path="/admin/intelligence" element={<AdminIntelligence />} />
-                <Route path="/admin/content"      element={<AdminContent />} />
-                <Route path="/admin/growth"       element={<AdminGrowth />} />
-                <Route path="/beat/:slug" element={<BeatDetailPage />} />
-                <Route path="/artist/:slug" element={<ArtistProfilePage />} />
-                <Route path="/artist/:slug/merch" element={<MerchPage />} />
-                <Route path="/artist/:slug/merch/checkout" element={<MerchCheckoutPage />} />
-                <Route path="/artist/:slug/merch/orders" element={<MerchOrdersPage />} />
-                <Route path="/artist/:slug/fans" element={<FanLeaderboardPage />} />
-                {/* The full lists behind "See all" on the profile's Albums and
-                    Singles cards. Declared before nothing else that could
-                    shadow them, since /artist/:slug/* is a shared prefix. */}
-                <Route path="/artist/:slug/albums" element={<ArtistCollectionPage kind="albums" />} />
-                <Route path="/artist/:slug/singles" element={<ArtistCollectionPage kind="singles" />} />
+  const handleWelcomeDone = () => {
+    onDone();
+    if (chosenRole !== 'listener') {
+      navigate('/hub');
+    }
+    // Listeners stay on / (ForYouPage)
+  };
 
-                <Route path="/track/:slug" element={<TrackPage />} />
-                <Route path="/dashboard" element={<ArtistDashboard />} />
-                <Route path="/collab-radar" element={<CollabRadarPage />} />
-                <Route path="/admin" element={<AdminDashboard />} />
-                <Route path="/admin/artists" element={<AdminArtists />} />
-                <Route path="/admin/analytics" element={<AdminAnalytics />} />
-                <Route path="/admin/moderation" element={<AdminModeration />} />
-                <Route path="/admin/boost" element={<AdminBoost />} />
-                <Route path="/admin/broadcast" element={<AdminBroadcast />} />
-                <Route path="/admin/behavior" element={<AdminUserBehaviorPage />} />
-                <Route path="/admin/duplicates" element={<AdminDuplicates />} />
-                <Route path="/admin/competitions" element={<AdminCompetitions />} />
-                <Route path="/admin/school-sessions" element={<AdminSchoolSessions />} />
-                <Route path="/admin/retail" element={<AdminRetail />} />
-                <Route path="/newsletter/compose" element={<NewsletterComposePage />} />
-                <Route path="/newsletter/:slug" element={<NewsletterPostPage />} />
-                <Route path="/admin/home-hero" element={<AdminHomeHero />} />
-                <Route path="/admin/cold-start" element={<AdminColdStart />} />
-                <Route path="/hidden" element={<HiddenPage />} />
-                <Route path="/contact-preferences" element={<ContactPreferencesPage />} />
-                <Route path="/admin/retail-staff" element={<Navigate to="/retail-admin?sub=staff" replace />} />
-                <Route path="/admin/engagement" element={<AdminEngagement />} />
-                <Route path="/library/discovered" element={<RecentlyDiscoveredPage />} />
-                <Route path="/listener/:userId" element={<ListenerProfilePage />} />
+  if (step === STEP_ROLE) {
+    return <RoleStep onContinue={handleRoleDone} />;
+  }
 
-                {/* Catch-all: unknown routes redirect home */}
-                <Route path="*" element={<NotFoundRedirect />} />
-              </Route>
-            </Routes>
-            </Suspense>
-            </OnboardingGuard>
-            </TierProvider>
-          </PlayerProvider>
-        </AuthProvider>
-      </BrowserRouter>
-    </HelmetProvider>
-  );
+  if (step === STEP_FOLLOW) {
+    return <ArtistFollowPrompt onDone={handleFollowDone} />;
+  }
+
+  if (step === STEP_WELCOME) {
+    if (chosenRole === 'listener') {
+      return <ListenerWelcomeTour displayName={displayName} onDone={handleWelcomeDone} />;
+    }
+    return <ArtistWelcomeTour artistName={displayName} onDone={handleWelcomeDone} />;
+  }
+
+  return null;
 }
