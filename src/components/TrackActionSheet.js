@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import OfflineSaveButton from './OfflineSaveButton';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import { usePlayer } from '../contexts/PlayerContext';
@@ -566,6 +567,16 @@ export default function TrackActionSheet({ track, artist, onClose }) {
                                 <Share2 className="w-5 h-5 text-white/40" />
                                 <span className="text-sm text-white/70">Share</span>
                             </button>
+
+                            {/* Save for offline.
+                                Above Download and not merged with it, because they are
+                                different things and the wording has to make that obvious:
+                                Download hands your phone an .mp3 outside the app, Offline
+                                keeps the track inside Feelz Machine so it plays with no
+                                signal. It also shows for tracks that are NOT downloadable —
+                                an artist withholding the file is not the same as
+                                withholding offline listening. */}
+                            <OfflineSaveButton track={track} variant="row" onNavigate={onClose} />
                             {track.is_downloadable && track.id && (
                                 <>
                                     {isPreorder && isNotYetReleased && alreadyPreordered ? (

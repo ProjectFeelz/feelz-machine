@@ -420,7 +420,6 @@ export default function ArtistProfilePage() {
   const [purchasedTracks, setPurchasedTracks] = useState({});
   const [liveSession, setLiveSession] = useState(null);
   const [radioLoading, setRadioLoading] = useState(false);
-  const [showAllCollabs, setShowAllCollabs] = useState(false);
   const [notifEnabled, setNotifEnabled] = useState(false);
   const [notifLoading, setNotifLoading] = useState(false);
   const [showDMModal, setShowDMModal] = useState(false);
@@ -670,7 +669,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
       // artist who has never collaborated.
       const { data: asCollaborator, error: asCollabErr } = await supabase
         .from('collaborations')
-        .select('*, tracks(id, title, cover_artwork_url, file_url, duration, stream_count, artist_id, is_downloadable, download_price)')
+        .select('*, tracks(id, title, slug, cover_artwork_url, file_url, duration, stream_count, artist_id, is_downloadable, download_price, is_published)')
         .eq('artist_id', artistData.id).eq('status', 'accepted');
       if (asCollabErr) console.error('[profile] collaborations (as collaborator) failed:',
         asCollabErr.code, asCollabErr.message, asCollabErr.details || '', asCollabErr.hint || '');
@@ -681,7 +680,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
       if (ownTrackIds.length > 0) {
         const { data: ownTrackCollabs, error: ownCollabErr } = await supabase
           .from('collaborations')
-          .select('*, tracks(id, title, cover_artwork_url, file_url, duration, stream_count, artist_id, is_downloadable, download_price)')
+          .select('*, tracks(id, title, slug, cover_artwork_url, file_url, duration, stream_count, artist_id, is_downloadable, download_price, is_published)')
           .in('track_id', ownTrackIds)
           .eq('status', 'accepted')
           .neq('artist_id', artistData.id);
@@ -697,7 +696,21 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
         if (seenCollabs.has(col.id)) return false;
         seenCollabs.add(col.id);
         return true;
-      });
+      })
+      // Only collaborations on tracks that have actually launched.
+      //
+      // This is what produced the row of "Untitled" cards. A collaboration
+      // row survives its track being unpublished, and two different things
+      // then make the track unusable here: an unpublished track is hidden by
+      // RLS, so the embed comes back as tracks: null, and a draft that was
+      // never named has no title. Either way the card fell through to
+      // 'Untitled', with no artwork, and tapping it did nothing because
+      // handlePlayTrack needs a file_url.
+      //
+      // So a collaboration is only shown when its track exists AND is
+      // published. Dropping the null case also means a track hidden from this
+      // viewer by RLS cannot leak its existence through a credit.
+      .filter(col => col.tracks && col.tracks.is_published);
       setCollabs(uniqueCollabs);
       const cutoff = new Date(Date.now() - THOUGHT_TTL_MS).toISOString();
       const { data: thoughtsData } = await supabase
@@ -1988,39 +2001,75 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
         </div>
       )}
 
+      {/* Collaborations — a sideways rail of square cards, like Popular but
+          deliberately not the same card.
+
+          Popular is a ranked top ten: numbered badge, play counts, the
+          artwork doing the work. A collaboration is not ranked and its play
+          count is not this artist's achievement, so copying that card would
+          say the wrong thing. What matters here is WHO and IN WHAT ROLE.
+
+          So: same square artwork and the same rail mechanics for
+          consistency, then three differences — a heavier rounded-2xl frame
+          with a hairline in the collab accent, the role sitting ON the
+          artwork as a chip rather than a rank badge, and the role as the
+          secondary line instead of plays.
+
+          The See-more button is gone. A rail scrolls, so paging it was
+          pointless; the count line below matches Popular's "Top 10 of N"
+          instead. */}
       {collabs.length > 0 && (
-        <div className="px-6 mb-8">
-          <h2 className="text-lg font-bold mb-3" style={{ fontFamily: `"${headingFont}", sans-serif` }}>Collaborations</h2>
-          <div className="space-y-2">
-            {collabs.slice(0, showAllCollabs ? collabs.length : 5).map(collab => (
-              <div key={collab.id}
-                className="flex items-center space-x-3 p-3 rounded-xl cursor-pointer transition-opacity hover:opacity-80 active:opacity-60"
-                style={{ backgroundColor: `${textColor}05`, border: `1px solid ${textColor}08` }}
-                onClick={() => collab.tracks && handlePlayTrack(collab.tracks)}>
-                <div className="w-10 h-10 rounded-lg overflow-hidden flex-shrink-0 relative group" style={{ backgroundColor: `${secondaryColor}20` }}>
+        <div className="mb-8">
+          <h2 className="text-lg font-bold mb-3 px-6" style={{ fontFamily: `"${headingFont}", sans-serif` }}>Collaborations</h2>
+
+          <div className="flex space-x-3 overflow-x-auto px-6 scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
+            {collabs.map(collab => (
+              <button
+                key={collab.id}
+                onClick={() => handlePlayTrack(collab.tracks)}
+                className="flex-shrink-0 w-36 text-left cursor-pointer group"
+              >
+                <div
+                  className="relative aspect-square rounded-2xl overflow-hidden mb-2"
+                  style={{
+                    backgroundColor: `${secondaryColor}12`,
+                    boxShadow: `inset 0 0 0 1px ${secondaryColor}33`,
+                  }}
+                >
                   {collab.tracks?.cover_artwork_url
-                    ? <img src={collab.tracks.cover_artwork_url} alt="" className="w-full h-full object-cover" />
-                    : <div className="w-full h-full flex items-center justify-center"><Music className="w-4 h-4" style={{ color: `${textColor}20` }} /></div>}
-                  <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg">
-                    <Play className="w-4 h-4 text-white" fill="white" />
+                    ? <img src={collab.tracks.cover_artwork_url} alt={collab.tracks?.title || ''} className="w-full h-full object-cover" />
+                    : <div className="w-full h-full flex items-center justify-center"><Music className="w-8 h-8" style={{ color: `${textColor}20` }} /></div>}
+
+                  {/* Role on the artwork, where Popular puts its rank. */}
+                  {collab.role && (
+                    <span
+                      className="absolute bottom-1.5 left-1.5 max-w-[calc(100%-12px)] truncate px-2 py-0.5 rounded-full text-[10px] font-semibold"
+                      style={{ background: 'rgba(0,0,0,0.55)', color: '#fff', backdropFilter: 'blur(4px)' }}
+                    >
+                      {collab.role}
+                    </span>
+                  )}
+
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/35 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <Play className="w-7 h-7 text-white" fill="white" />
                   </div>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate" style={{ color: textColor }}>{collab.tracks?.title || 'Untitled'}</p>
-                  <p className="text-xs" style={{ color: `${textColor}40` }}>{collab.role}</p>
-                </div>
-                <span className="text-[10px] px-2 py-0.5 rounded-full font-medium" style={{ backgroundColor: `${secondaryColor}20`, color: secondaryColor }}>Collab</span>
-              </div>
-            ))}
-            {collabs.length > 5 && (
-              <button
-                onClick={() => setShowAllCollabs(p => !p)}
-                className="w-full py-2.5 text-xs font-medium rounded-xl transition-opacity hover:opacity-70 active:opacity-50 mt-1"
-                style={{ color: secondaryColor, backgroundColor: `${secondaryColor}10`, border: `1px solid ${secondaryColor}20` }}>
-                {showAllCollabs ? 'Show less' : `See ${collabs.length - 5} more`}
+
+                <p className="text-sm font-medium truncate" style={{ color: textColor }}>
+                  {collab.tracks?.title}
+                </p>
+                <p className="text-xs truncate" style={{ color: secondaryColor }}>
+                  Collab
+                </p>
               </button>
-            )}
+            ))}
           </div>
+
+          {collabs.length > 6 && (
+            <p className="mt-3 px-6 text-sm" style={{ color: `${textColor}40` }}>
+              {collabs.length} collaborations — scroll for more
+            </p>
+          )}
         </div>
       )}
 

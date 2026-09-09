@@ -4,9 +4,16 @@ import { HelmetProvider, Helmet } from 'react-helmet-async';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { PlayerProvider } from './contexts/PlayerContext';
 import { TierProvider } from './contexts/useTier';
+import { OfflineProvider } from './contexts/OfflineContext';
 import { useSessionRefresh } from './useSessionRefresh';
 import { useActivityPing } from './useActivityPing';
 import AppLayout from './components/layout/AppLayout';
+// The offline library. A static import, not React.lazy, on purpose: it is the
+// one page that has to render with no network, and a lazy chunk that was never
+// fetched cannot be loaded offline — the person would tap Offline and sit on
+// the Suspense fallback forever. A few KB in the main bundle is the difference
+// between the feature working on a plane and not.
+import OfflinePage from './pages/OfflinePage';
 const AboutPage = React.lazy(() => import('./pages/AboutPage'));
 const ComparisonPage = React.lazy(() => import('./pages/ComparisonPage'));
 const HomePage = React.lazy(() => import('./pages/HomePage'));
@@ -265,6 +272,7 @@ export default function AppRouter() {
         <AuthProvider>
           <PlayerProvider>
             <TierProvider>
+            <OfflineProvider>
             <OnboardingGuard>
             <Suspense fallback={<div style={{ minHeight: '100vh', background: '#000' }} />}>
             <Routes>
@@ -330,6 +338,7 @@ export default function AppRouter() {
                 <Route path="/library" element={<LibraryPage />} />
                 <Route path="/library/likes" element={<LikedSongsPage />} />
                 <Route path="/library/downloads" element={<DownloadsPage />} />
+                <Route path="/library/offline" element={<OfflinePage />} />
                 <Route path="/library/recent" element={<RecentlyPlayedPage />} />
                 <Route path="/library/following" element={<FollowingPage />} />
                 <Route path="/listener/stats"   element={<ListenerStatsPage />} />
@@ -405,6 +414,7 @@ export default function AppRouter() {
             </Routes>
             </Suspense>
             </OnboardingGuard>
+            </OfflineProvider>
             </TierProvider>
           </PlayerProvider>
         </AuthProvider>

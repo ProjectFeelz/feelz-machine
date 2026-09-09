@@ -5,8 +5,9 @@ import { useTier } from '../contexts/useTier';
 import { getListenerFeature } from '../contexts/useTier';
 import { supabase } from '../supabaseClient';
 import { usePlayer } from '../contexts/PlayerContext';
+import { useOfflineLibrary } from '../contexts/OfflineContext';
 import {
-  Heart, Download, ListMusic, Users, Clock, ChevronRight, TrendingUp,
+  Heart, Download, ListMusic, Users, Clock, ChevronRight, TrendingUp, ArrowDownToLine,
   Music, BarChart3, Zap, Crown, Palette,
   Shield, ChevronDown, Check, BarChart2, Play,
 } from 'lucide-react';
@@ -39,6 +40,7 @@ function applyTheme(themeKey) {
 export default function LibraryPage() {
   const { user, isArtist } = useAuth();
   const { listenerTierSlug } = useTier();
+  const offline = useOfflineLibrary();
   const navigate = useNavigate();
   const { playTrack } = usePlayer();
   const [stats, setStats] = useState({
@@ -194,6 +196,12 @@ export default function LibraryPage() {
     { icon: Heart,     label: 'Liked Songs',          path: '/library/likes',       iconColor: 'text-red-400/70',    count: stats.likes,     accent: 'bg-red-500/10' },
     { icon: Clock,     label: 'Recently Played',      path: '/library/recent',      iconColor: 'text-cyan-400/70',   count: null,            accent: 'bg-cyan-500/10', sub: stats.recentTrack?.title },
     { icon: Download,  label: 'Downloads',            path: '/library/downloads',   iconColor: 'text-green-400/70',  count: stats.downloads, accent: 'bg-green-500/10' },
+    // Offline is not Downloads and the two are next to each other on purpose,
+    // because people will confuse them otherwise. Downloads gives you an .mp3
+    // in your phone's file system, outside the app. Offline keeps the track
+    // inside Feelz Machine so it plays with no connection. The sub-line says so
+    // rather than leaving somebody to work it out.
+    { icon: ArrowDownToLine, label: 'Offline',        path: '/library/offline',     iconColor: 'text-emerald-400/70', count: offline.items.length, accent: 'bg-emerald-500/10', sub: offline.items.length ? 'Plays with no connection' : 'Save music for no signal' },
     { icon: ListMusic, label: 'Playlists',            path: '/library/playlists',   iconColor: 'text-purple-400/70', count: stats.playlists, accent: 'bg-purple-500/10' },
     { icon: Users,     label: 'Following',            path: '/library/following',   iconColor: 'text-blue-400/70',   count: stats.following, accent: 'bg-blue-500/10' },
     { icon: TrendingUp,label: 'Recently Discovered',  path: '/library/discovered',  iconColor: 'text-orange-400/70', count: null,            accent: 'bg-orange-500/10' },

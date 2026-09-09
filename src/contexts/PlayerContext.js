@@ -2,6 +2,8 @@ import React, { createContext, useContext, useState, useRef, useCallback, useEff
 import { supabase } from '../supabaseClient';
 import { getTrackAvailability } from '../utils/trackAccess';
 import { useMediaSession } from '../hooks/useMediaSession';
+import { playbackSrc, isSavedOfflineSync, offlineSrcFor } from '../utils/offlineStore';
+import { buildOfflinePlayRow, queueOfflinePlay, flushOfflinePlays } from '../utils/offlinePlayQueue';
 
 // Preload a track's cover art into the browser cache so VinylRecord/Cassette show instantly
 function preloadCover(track) {
@@ -9,6 +11,44 @@ function preloadCover(track) {
   const img = new window.Image();
   img.crossOrigin = 'anonymous';
   img.src = track.cover_artwork_url;
+}
+
+// ── Offline playback ─────────────────────────────────────────────────────────
+//
+// Every place that assigns audio.src now goes through playbackSrc, which
+// returns the copy stored on this device when there is one and the streaming
+// URL otherwise. It is deliberately synchronous — see the comment on it in
+// utils/offlineStore.js — so an online listener never waits on a storage read
+// to discover they have nothing saved.
+//
+// resolveLocalLater is the safety net for the one case playbackSrc cannot
+// answer synchronously: a saved track on a page with no service worker
+// controlling it, where the local copy has to be handed over as a blob URL.
+// It matters when that coincides with actually being offline, which is exactly
+// when getting it wrong is least forgivable.
+function resolveLocalLater(audio, track, { onSwap } = {}) {
+  if (!track?.id) return;
+  if (!isSavedOfflineSync(track.id)) return;
+  if (audio.src && audio.src.includes('/offline-audio/')) return;  // already local
+
+  offlineSrcFor(track.id).then(localSrc => {
+    if (!localSrc) return;
+    // The listener may have moved on while we were reading. Only swap if this
+    // element is still pointed at the track we resolved for.
+    if (audio.dataset.feelzTrackId !== String(track.id)) return;
+    if (audio.src === localSrc) return;
+    const at = audio.currentTime;
+    audio.src = localSrc;
+    audio.load();
+    if (at > 0) {
+      const restore = () => {
+        try { audio.currentTime = at; } catch {}
+        audio.removeEventListener('loadedmetadata', restore);
+      };
+      audio.addEventListener('loadedmetadata', restore);
+    }
+    onSwap?.(localSrc);
+  }).catch(() => { /* streaming URL stays; never break playback over this */ });
 }
 
 const PlayerContext = createContext({});
@@ -291,9 +331,14 @@ export function PlayerProvider({ children }) {
       } catch {}
 
       // Now switch primary to the NEW track (silent, fades in)
-      primaryAudio.src    = nextTrack.file_url;
+      primaryAudio.dataset.feelzTrackId = String(nextTrack.id);
+      primaryAudio.src    = playbackSrc(nextTrack);
       primaryAudio.volume = 0;
       primaryAudio.load();
+      // Not resolveLocalLater here on purpose: swapping src mid-crossfade
+      // would restart the incoming track under the fade. A saved track is
+      // served through the worker synchronously anyway; the blob fallback
+      // just streams for this one transition.
       const startFadeIn = () => {
         primaryAudio.play().catch(() => {});
         primaryAudio.removeEventListener('canplay', startFadeIn);
@@ -384,11 +429,64 @@ export function PlayerProvider({ children }) {
     }
   }, [currentTime, currentTrack?.id]);
 
+  // Send up whatever was played offline. Once on mount, and every time the
+  // connection comes back.
+  //
+  // The flush is safe to run as often as it likes: each queued play carries
+  // the id the server keys its receipt on, so a play already counted is
+  // recognised and dropped rather than counted again.
+  useEffect(() => {
+    let cancelled = false;
+    const flush = () => {
+      if (!navigator.onLine) return;
+      flushOfflinePlays(supabase)
+        .then(({ flushed, counted }) => {
+          if (cancelled || !flushed) return;
+          console.info(`[offline] sent ${flushed} queued play(s), ${counted} counted`);
+        })
+        .catch(() => { /* the next reconnect tries again */ });
+    };
+    // A moment after load, so it never competes with getting audio playing.
+    const t = setTimeout(flush, 4000);
+    window.addEventListener('online', flush);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+      window.removeEventListener('online', flush);
+    };
+  }, []);
+
   const logStream = async (trackId) => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const userId = session?.user?.id || null;
       if (!userId) return;
+
+      // ── Offline plays ─────────────────────────────────────────────────────
+      // With no connection every call below fails and this function returns
+      // early, which is how offline listening would silently stop counting
+      // plays: eight listens on a flight, zero streams, and an artist not
+      // paid for music that was actually played.
+      //
+      // So the play is written to a durable queue with an id generated here,
+      // and flushed when there is a network again. log_offline_stream
+      // (migration 104) keys on that id, so a retry cannot count the same
+      // play twice.
+      //
+      // Queued ONLY when the browser says it is offline, which is the one
+      // case where we know for certain the request never left the device. A
+      // "failed to fetch" while apparently online is ambiguous — it may have
+      // landed and lost its response — and queueing that would risk
+      // double-counting, which is worse than losing it. That case keeps
+      // today's behaviour until log_stream itself takes a client id.
+      if (!navigator.onLine) {
+        queueOfflinePlay(buildOfflinePlayRow({
+          trackId,
+          durationPlayed: Math.floor(audioRef.current.currentTime),
+          source: window.__feelz_play_source || 'offline',
+        }));
+        return;
+      }
 
       // 1. Fetch track title up front (still needed for notification copy below)
       const { data: track } = await supabase
@@ -635,9 +733,11 @@ export function PlayerProvider({ children }) {
     flushListeningEvent('track_change');
     streamLoggedRef.current = false;
     audio.pause();
-    audio.src = track.file_url;
+    audio.dataset.feelzTrackId = String(track.id);
+    audio.src = playbackSrc(track);
     audio.volume = 0;
     audio.load();
+    resolveLocalLater(audio, track);
     const playWhenReady = () => {
       audio.play().catch(() => {});
       // Fade in from silence to half the person's set volume. Never
@@ -738,9 +838,11 @@ export function PlayerProvider({ children }) {
     if (prevTrack?.file_url) {
       streamLoggedRef.current = false;
       audioRef.current.pause();
-      audioRef.current.src = prevTrack.file_url;
+      audioRef.current.dataset.feelzTrackId = String(prevTrack.id);
+      audioRef.current.src = playbackSrc(prevTrack);
       audioRef.current.volume = volumeRef.current;
       audioRef.current.load();
+      resolveLocalLater(audioRef.current, prevTrack);
       const playPrevWhenReady = () => {
         audioRef.current.play().catch(() => {});
         audioRef.current.removeEventListener('canplay', playPrevWhenReady);
@@ -843,8 +945,10 @@ export function PlayerProvider({ children }) {
     if (!track) return;
     const audio = audioRef.current;
     audio.pause();
-    audio.src = track.file_url;
+    audio.dataset.feelzTrackId = String(track.id);
+    audio.src = playbackSrc(track);
     audio.volume = volumeRef.current;
+    resolveLocalLater(audio, track);
     audio.play().catch(() => {
       audio.load();
       const onReady = () => { audio.play().catch(() => {}); audio.removeEventListener('canplay', onReady); };

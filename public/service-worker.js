@@ -21,6 +21,133 @@ const NEVER_CACHE_ORIGINS = [
 
 const NEVER_CACHE_PATHS = ['/.netlify/functions/', '/auth/'];
 
+// ── Offline listening ────────────────────────────────────────────────────────
+// Saved music lives in IndexedDB (see src/utils/offlineStore.js for why it is
+// not in a Cache bucket: the build rewrites CACHE_VERSION on every deploy and
+// activate deletes every other cache, so cached audio would be destroyed by
+// an unrelated CSS fix).
+//
+// This worker's job is to hand that stored blob back as a normal HTTP
+// response. The audio element then gets Accept-Ranges and a real
+// Content-Length, so seeking, scrubbing and duration behave exactly as they do
+// when streaming. Handing the element a blob: URL instead works for straight
+// playback but seeking in one is unreliable on older iOS.
+const OFFLINE_DB     = 'feelz-offline';
+const OFFLINE_PREFIX = '/offline-audio/';
+
+function offlineDb() {
+  return new Promise((resolve, reject) => {
+    // Opened WITHOUT a version on purpose. The app owns the schema; the worker
+    // only reads. Passing a version here could trigger an upgrade from the
+    // worker and race the page.
+    let req;
+    try { req = indexedDB.open(OFFLINE_DB); } catch (e) { reject(e); return; }
+    req.onsuccess = () => resolve(req.result);
+    req.onerror   = () => reject(req.error);
+    req.onblocked = () => reject(new Error('blocked'));
+  });
+}
+
+function offlineGet(db, store, key) {
+  return new Promise((resolve, reject) => {
+    if (!db.objectStoreNames.contains(store)) { resolve(null); return; }
+    let r;
+    try { r = db.transaction([store], 'readonly').objectStore(store).get(key); }
+    catch (e) { reject(e); return; }
+    r.onsuccess = () => resolve(r.result || null);
+    r.onerror   = () => reject(r.error);
+  });
+}
+
+// Range: bytes=0-1023 | bytes=1024- | bytes=-512
+function parseRange(header, size) {
+  const m = /^bytes=(\d*)-(\d*)$/.exec((header || '').trim());
+  if (!m) return null;
+  const [, rawStart, rawEnd] = m;
+  let start, end;
+  if (rawStart === '') {
+    if (rawEnd === '') return null;
+    const suffix = parseInt(rawEnd, 10);
+    if (!suffix) return null;
+    start = Math.max(0, size - suffix);
+    end   = size - 1;
+  } else {
+    start = parseInt(rawStart, 10);
+    end   = rawEnd === '' ? size - 1 : parseInt(rawEnd, 10);
+  }
+  if (!Number.isFinite(start) || !Number.isFinite(end)) return null;
+  if (start > end || start >= size) return null;
+  return { start, end: Math.min(end, size - 1) };
+}
+
+async function serveOfflineAudio(req, trackId) {
+  let db;
+  try { db = await offlineDb(); } catch {
+    return new Response('Offline store unavailable', { status: 503 });
+  }
+
+  let meta, audio;
+  try {
+    meta  = await offlineGet(db, 'meta', trackId);
+    audio = await offlineGet(db, 'audio', trackId);
+  } catch {
+    return new Response('Offline store read failed', { status: 503 });
+  }
+
+  if (!audio || !audio.blob) {
+    // Not saved on this device. 404 rather than a synthesised silence so the
+    // player's error handler can fall back to streaming.
+    return new Response('Not saved offline', { status: 404 });
+  }
+
+  // The lease. Entitlement cannot be re-checked with no network, so the answer
+  // the server gave at save time is honoured until it expires. 410 is
+  // deliberately distinct from 404: the app can tell "you never saved this"
+  // from "reconnect to keep this".
+  if (meta && meta.expiresAt) {
+    const ms = Date.parse(meta.expiresAt);
+    if (Number.isFinite(ms) && ms <= Date.now()) {
+      return new Response('Offline lease expired', { status: 410 });
+    }
+  }
+
+  const blob = audio.blob;
+  const size = blob.size;
+  const type = (meta && meta.mimeType) || blob.type || 'audio/mpeg';
+
+  const rangeHeader = req.headers.get('range');
+  if (rangeHeader) {
+    const range = parseRange(rangeHeader, size);
+    if (!range) {
+      return new Response(null, {
+        status: 416,
+        headers: { 'Content-Range': `bytes */${size}`, 'Accept-Ranges': 'bytes' },
+      });
+    }
+    const chunk = blob.slice(range.start, range.end + 1);
+    return new Response(chunk, {
+      status: 206,
+      headers: {
+        'Content-Type':   type,
+        'Content-Length': String(range.end - range.start + 1),
+        'Content-Range':  `bytes ${range.start}-${range.end}/${size}`,
+        'Accept-Ranges':  'bytes',
+        'Cache-Control':  'no-store',
+      },
+    });
+  }
+
+  return new Response(blob, {
+    status: 200,
+    headers: {
+      'Content-Type':   type,
+      'Content-Length': String(size),
+      'Accept-Ranges':  'bytes',
+      'Cache-Control':  'no-store',
+    },
+  });
+}
+
 function shouldNeverCache(url) {
   if (NEVER_CACHE_ORIGINS.some(o => url.hostname.includes(o))) return true;
   if (url.origin === self.location.origin && NEVER_CACHE_PATHS.some(p => url.pathname.startsWith(p))) return true;
@@ -60,6 +187,17 @@ self.addEventListener('fetch', e => {
   if (req.method !== 'GET') return;
   let url;
   try { url = new URL(req.url); } catch { return; }
+
+  // Saved music, before anything else. This must come ahead of the
+  // same-origin stale-while-revalidate branch below, which would otherwise
+  // try to fetch /offline-audio/<id> from the network — a path that exists on
+  // no server — and hand back the SPA's index.html as an audio file.
+  if (url.origin === self.location.origin && url.pathname.startsWith(OFFLINE_PREFIX)) {
+    const trackId = decodeURIComponent(url.pathname.slice(OFFLINE_PREFIX.length));
+    e.respondWith(serveOfflineAudio(req, trackId));
+    return;
+  }
+
   if (shouldNeverCache(url)) return;
 
   // Navigation: network-first
