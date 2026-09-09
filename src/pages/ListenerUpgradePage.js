@@ -30,6 +30,8 @@ const TIERS = [
       { text: 'Playlists & liked songs',       included: true },
       { text: 'Chat rooms & competitions',     included: true },
       { text: 'Listening stats',               included: true },
+      { text: 'Offline listening',             included: false },
+      { text: 'Free downloads',                included: false },
       { text: 'Custom app theme',              included: false },
       { text: 'Tip artists (special badge)',   included: false },
       { text: 'Early access to new features',  included: false },
@@ -49,6 +51,11 @@ const TIERS = [
       { text: 'Playlists & liked songs',       included: true },
       { text: 'Chat rooms & competitions',     included: true },
       { text: 'Listening stats',               included: true },
+      // The headline benefit, so it sits at the top of what Pro adds.
+      { text: 'Offline listening — play with no signal', included: true },
+      // This was already true (get-download-url grants Pro listeners three a
+      // month) and the page never said so.
+      { text: '3 free downloads a month',      included: true },
       { text: '10 custom app themes',          included: true },
       { text: 'Fan badge on tips & comments',  included: true },
       { text: 'Early access to new features',  included: true },
@@ -189,7 +196,7 @@ export default function ListenerUpgradePage() {
         </button>
         <div>
           <h1 className="text-xl font-bold text-white">Fan Pro</h1>
-          <p className="text-xs text-white/30">Support the platform, unlock your vibe</p>
+          <p className="text-xs text-white/30">Offline listening, free downloads, your own look</p>
         </div>
       </div>
 

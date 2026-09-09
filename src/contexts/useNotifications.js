@@ -1,25 +1,34 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../supabaseClient';
+import { sendNotification } from '../utils/notify';
 import { useAuth } from './AuthContext';
 
-// Helper to create a notification from anywhere in the app
+// Helper to create a notification from anywhere in the app.
+//
+// Routed through send_notification (migration 106) rather than inserting
+// directly. The INSERT policy on notifications permits only self-addressed
+// rows, and every caller of this helper is telling somebody ELSE about
+// something — so the direct insert it used to do returned 403 every time,
+// logged the error, and moved on.
+//
+// collaboration_id and from_artist_id are not columns the RPC writes, so they
+// travel in metadata, which is where the notification renderers already look
+// for from_artist_id.
 export async function createNotification({ artistId, userId, type, title, message, fromArtistId, trackId, collaborationId, metadata }) {
-  try {
-    const { error } = await supabase.from('notifications').insert([{
-      artist_id:        artistId || null,
-      user_id:          userId || null,
-      type,
-      title,
-      message:          message || null,
-      from_artist_id:   fromArtistId || null,
-      track_id:         trackId || null,
-      collaboration_id: collaborationId || null,
-      metadata:         metadata || {},
-    }]);
-    if (error) console.error('Create notification error:', error);
-  } catch (err) {
-    console.error('Notification error:', err);
-  }
+  const { error } = await sendNotification(supabase, `${type} (createNotification)`, {
+    type,
+    artistId:        artistId || null,
+    recipientUserId: userId || null,
+    title:           title || null,
+    message:         message || null,
+    trackId:         trackId || null,
+    metadata: {
+      ...(metadata || {}),
+      ...(fromArtistId    ? { from_artist_id: fromArtistId }       : {}),
+      ...(collaborationId ? { collaboration_id: collaborationId }  : {}),
+    },
+  });
+  if (error) console.error('Create notification error:', error);
 }
 
 // Milestone thresholds — NOTE: stream milestones are now handled by SQL triggers.

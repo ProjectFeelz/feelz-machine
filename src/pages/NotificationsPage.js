@@ -192,17 +192,10 @@ function CollabActions({ notif, onActioned }) {
       }
 
       // Notify the requester
-      if (artist && meta.from_artist_id) {
-        await supabase.from('notifications').insert({
-          artist_id: meta.from_artist_id,
-          type:      action === 'accept' ? 'collab_accepted' : 'collab_declined',
-          title:     action === 'accept'
-            ? `${artist.artist_name} accepted your collab`
-            : `${artist.artist_name} declined your collab`,
-          message:   meta.track_title ? `Track: "${meta.track_title}"` : '',
-          metadata:  { from_artist_id: artist.id, from_artist_slug: artist.slug, track_title: meta.track_title },
-        });
-      }
+      // Nothing here on purpose. The status change written above fires
+      // notify_collab_event (migration 96), which sends this from inside the
+      // database. This insert was a duplicate and a 403 — it is addressed to
+      // the requesting artist, which the INSERT policy does not permit.
       setDone(action);
       // Update the notification type so it no longer shows action buttons after refetch
       await supabase.from('notifications')

@@ -180,23 +180,48 @@ export default function AffiliatePage() {
     } else handleCopy();
   };
 
+  // Which currency this affiliate is actually owed in.
+  //
+  // This whole section used to be hardcoded to ZAR with an R200 minimum, which
+  // meant the money could never be withdrawn: every subscription plan on the
+  // platform bills in USD (see PAYPAL-SETUP.md), so commission lands in
+  // pending_usd and the payout form was reading pending_zar — a balance that
+  // will now always be zero for anyone earning through subscriptions.
+  //
+  // USD wins when there is a USD balance; ZAR is kept for any legacy balance
+  // so nothing already owed becomes unreachable.
+  const usdPending = Number(affiliate?.pending_usd || 0);
+  const zarPending = Number(affiliate?.pending_zar || 0);
+  const payoutCcy  = usdPending > 0 || zarPending === 0 ? 'USD' : 'ZAR';
+  const pending    = payoutCcy === 'USD' ? usdPending : zarPending;
+  const lifetime   = payoutCcy === 'USD'
+    ? Number(affiliate?.total_earned_usd || 0)
+    : Number(affiliate?.total_earned_zar || 0);
+  const minPayout  = payoutCcy === 'USD' ? 10 : 200;
+  const sym        = payoutCcy === 'USD' ? '$' : 'R';
+  const money      = n => `${sym}${Number(n || 0).toFixed(2)}`;
+
   const handlePayoutRequest = async () => {
     if (!affiliate || !payoutAmount) return;
     const amount = parseFloat(payoutAmount);
-    if (amount < 200) { alert('Minimum payout is R200'); return; }
-    if (amount > affiliate.pending_zar) { alert('Amount exceeds your pending balance'); return; }
+    if (!Number.isFinite(amount) || amount <= 0) { alert('Enter an amount.'); return; }
+    if (amount < minPayout) { alert(`Minimum payout is ${money(minPayout)}`); return; }
+    if (amount > pending) { alert('Amount exceeds your pending balance'); return; }
     setRequestingPayout(true);
     try {
       await supabase.from('affiliate_payouts').insert({
         affiliate_id: affiliate.id,
-        amount_zar:   amount,
+        amount_zar:   payoutCcy === 'ZAR' ? amount : 0,
+        amount_usd:   payoutCcy === 'USD' ? amount : 0,
         method:       payoutMethod,
         status:       'requested',
       });
-      // Deduct from pending
-      await supabase.from('affiliates').update({
-        pending_zar: affiliate.pending_zar - amount,
-      }).eq('id', affiliate.id);
+      // Deduct from the balance it actually came out of.
+      await supabase.from('affiliates').update(
+        payoutCcy === 'USD'
+          ? { pending_usd: usdPending - amount }
+          : { pending_zar: zarPending - amount }
+      ).eq('id', affiliate.id);
       setPayoutAmount('');
       fetchData();
       alert('Payout requested! We\'ll process it within 3-5 business days.');
@@ -265,7 +290,7 @@ export default function AffiliatePage() {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <StatCard icon={Users} label="Signups" value={affiliate.total_signups || 0} />
-                <StatCard icon={DollarSign} label="Earned" value={`R${(affiliate.total_earned_zar || 0).toFixed(2)}`} color="text-green-400" />
+                <StatCard icon={DollarSign} label="Earned" value={money(lifetime)} color="text-green-400" />
               </div>
             </>
           )}
@@ -317,8 +342,10 @@ export default function AffiliatePage() {
             </div>
             <h2 className="text-xl font-black text-white">Join the Programme</h2>
             <p className="text-sm text-white/50 leading-relaxed">
-              Share your unique link. Earn 20% commission on every purchase made through it.
-              {isListener ? ' Listeners earn Feelz Credits.' : ' Artists earn real cash.'}
+              Share your unique link. Earn 20% of every subscription payment made by
+              someone who joined through it — every month they stay, for as long as
+              they stay. Same 20% whether you're an artist or a listener.
+              {isListener ? ' Listeners earn Feelz Credits on top.' : ''}
             </p>
 
             {/* Requirements */}
@@ -378,7 +405,10 @@ export default function AffiliatePage() {
               { n: '01', title: 'Get your link', desc: 'A unique ref link is generated for you' },
               { n: '02', title: 'Share it', desc: 'Post it on socials, WhatsApp, anywhere' },
               { n: '03', title: 'Someone signs up or buys', desc: 'We track it automatically' },
-              { n: '04', title: 'You earn', desc: isListener ? '50 credits per signup, more on purchases' : '20% of the service fee on every purchase' },
+              { n: '03b', title: 'They subscribe', desc: 'Artist Pro, Artist Premium or Fan Pro' },
+              { n: '04', title: 'You earn, every month', desc: isListener
+                  ? '20% of what they pay, plus 50 credits for the signup'
+                  : '20% of what they pay, for as long as they keep paying' },
             ].map(s => (
               <div key={s.n} className="flex items-start space-x-3 p-3 rounded-xl bg-white/[0.02] border border-white/[0.04]">
                 <span className="text-xs font-black text-white/20 w-6 flex-shrink-0">{s.n}</span>
@@ -430,15 +460,17 @@ export default function AffiliatePage() {
             {activeTab === 'overview' && (
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-3">
-                  {isListener ? (
+                  {/* Cash for everybody now. Listeners used to see credits only,
+                      because credits were the only thing they could earn; they
+                      now earn the same 20% commission an artist does, so hiding
+                      the balance from them would hide their own money. Credits
+                      are shown alongside rather than instead. */}
+                  <StatCard icon={DollarSign} label="Pending Payout" value={money(pending)} color="text-green-400" />
+                  <StatCard icon={TrendingUp} label="Total Earned" value={money(lifetime)} color="text-purple-400" />
+                  {isListener && (
                     <>
                       <StatCard icon={Star} label="Credits Balance" value={affiliate.credits_balance?.toLocaleString() || 0} color="text-yellow-400" />
                       <StatCard icon={TrendingUp} label="Lifetime Credits" value={affiliate.credits_lifetime?.toLocaleString() || 0} color="text-purple-400" />
-                    </>
-                  ) : (
-                    <>
-                      <StatCard icon={DollarSign} label="Pending Payout" value={`R${(affiliate.pending_zar || 0).toFixed(2)}`} color="text-green-400" />
-                      <StatCard icon={TrendingUp} label="Total Earned" value={`R${(affiliate.total_earned_zar || 0).toFixed(2)}`} color="text-purple-400" />
                     </>
                   )}
                   <StatCard icon={Users} label="Signups" value={affiliate.total_signups || 0} color="text-blue-400" />
@@ -527,7 +559,7 @@ export default function AffiliatePage() {
                     <div className="text-right">
                       {isListener
                         ? <p className="text-sm font-bold text-yellow-400">+{c.credits_earned} credits</p>
-                        : <p className="text-sm font-bold text-green-400">+R{(c.commission_zar || 0).toFixed(2)}</p>}
+                        : <p className="text-sm font-bold text-green-400">+{money(Number(c.commission_usd) || Number(c.commission_zar) || 0)}</p>}
                       <p className={`text-[10px] capitalize ${c.status === 'confirmed' ? 'text-green-400/60' : 'text-white/20'}`}>{c.status}</p>
                     </div>
                   </div>
@@ -578,22 +610,22 @@ export default function AffiliatePage() {
                   <>
                     <div className="grid grid-cols-2 gap-3">
                       <div className="bg-white/[0.03] rounded-2xl p-4 border border-white/[0.06] text-center">
-                        <p className="text-2xl font-black text-green-400">R{(affiliate.pending_zar || 0).toFixed(2)}</p>
+                        <p className="text-2xl font-black text-green-400">{money(pending)}</p>
                         <p className="text-xs text-white/30 mt-1">Available</p>
                       </div>
                       <div className="bg-white/[0.03] rounded-2xl p-4 border border-white/[0.06] text-center">
-                        <p className="text-2xl font-black text-white">R{(affiliate.paid_out_zar || 0).toFixed(2)}</p>
+                        <p className="text-2xl font-black text-white">{money(affiliate.paid_out_zar || 0)}</p>
                         <p className="text-xs text-white/30 mt-1">Paid Out</p>
                       </div>
                     </div>
 
-                    {affiliate.pending_zar >= 200 && (
+                    {pending >= minPayout && (
                       <div className="bg-white/[0.03] rounded-2xl p-4 border border-white/[0.06] space-y-3">
                         <p className="text-sm font-semibold text-white">Request Payout</p>
                         <input type="number" value={payoutAmount}
                           onChange={e => setPayoutAmount(e.target.value)}
-                          placeholder={`Amount (min R200, max R${affiliate.pending_zar.toFixed(2)})`}
-                          max={affiliate.pending_zar}
+                          placeholder={`Amount (min ${money(minPayout)}, max ${money(pending)})`}
+                          max={pending}
                           className="w-full px-3 py-2.5 bg-white/[0.06] rounded-xl text-sm text-white placeholder-white/20 outline-none border border-white/[0.08] focus:border-white/20" />
                         <div className="flex items-center space-x-2 px-3 py-2 bg-white/[0.04] rounded-xl border border-white/[0.06]">
                           <span className="text-xs text-white/40">Payout via</span>
@@ -608,11 +640,11 @@ export default function AffiliatePage() {
                       </div>
                     )}
 
-                    {affiliate.pending_zar < 200 && (
+                    {pending < minPayout && (
                       <div className="flex items-center space-x-2 p-3 rounded-xl bg-yellow-500/10 border border-yellow-500/20">
                         <Clock className="w-4 h-4 text-yellow-400 flex-shrink-0" />
                         <p className="text-xs text-yellow-400">
-                          Minimum payout is R200. You need R{(200 - affiliate.pending_zar).toFixed(2)} more.
+                          Minimum payout is {money(minPayout)}. You need {money(minPayout - pending)} more.
                         </p>
                       </div>
                     )}

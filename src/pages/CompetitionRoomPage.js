@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
+import { sendNotification } from '../utils/notify';
 import { useAuth } from '../contexts/AuthContext';
 import { useTier } from '../contexts/useTier';
 import {
@@ -614,14 +615,17 @@ export default function CompetitionRoomPage() {
         const tierRewardMsg = competition?.wheel_challenge
           ? ' Your tier reward has been applied automatically — check your profile.'
           : '';
-        await supabase.from('notifications').insert({
-          artist_id: winnerEntry.artist_id,
-          user_id: winnerEntry.artists?.user_id,
-          type: 'competition_winner',
-          title: '🏆 You won the competition!',
-          message: `You've been crowned winner of "${competition?.title}". You're now Verified on Feelz Machine!${tierRewardMsg}`,
+        // Migration 106. The .catch() here never fired — supabase-js resolves
+        // { data, error } rather than throwing — so the winner has never
+        // actually been told they won.
+        await sendNotification(supabase, 'competition_winner (room)', {
+          type:            'competition_winner',
+          artistId:        winnerEntry.artist_id,
+          recipientUserId: winnerEntry.artists?.user_id,
+          title:           '🏆 You won the competition!',
+          message:         `You've been crowned winner of "${competition?.title}". You're now Verified on Feelz Machine!${tierRewardMsg}`,
           metadata: { competition_id: competitionId, competition_title: competition?.title, wheel_challenge: !!competition?.wheel_challenge },
-        }).catch(() => {});
+        });
       }
 
       showToast(competition?.wheel_challenge ? '🏆 Winner crowned! Verified + tier reward granted.' : '🏆 Winner crowned! Verified status granted.');

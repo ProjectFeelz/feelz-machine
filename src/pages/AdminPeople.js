@@ -6,6 +6,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
+import { sendNotification } from '../utils/notify';
 import { useAuth } from '../contexts/AuthContext';
 import {
   ArrowLeft, Loader, Search, Music, Users, Check, AlertCircle,
@@ -175,7 +176,15 @@ function ArtistsTab() {
         });
       }
       await supabase.from('artists').update({ tier: tierSlug, current_tier_id: tierSlug !== 'free' ? tier.id : null }).eq('id', artistId);
-      await supabase.from('notifications').insert({ artist_id: artistId, type: 'tier_granted', title: `${tierSlug.charAt(0).toUpperCase() + tierSlug.slice(1)} granted`, message: `An admin granted you ${tierSlug} tier access.`, metadata: { tier_slug: tierSlug } }).then(() => {});
+      // Migration 106 — admin-only type, and the .then(() => {}) it replaces
+      // read no error, so nobody was ever told.
+      await sendNotification(supabase, 'tier_granted (admin people)', {
+        type:     'tier_granted',
+        artistId: artistId,
+        title:    `${tierSlug.charAt(0).toUpperCase() + tierSlug.slice(1)} granted`,
+        message:  `An admin granted you ${tierSlug} tier access.`,
+        metadata: { tier_slug: tierSlug },
+      });
       setArtists(prev => prev.map(a => a.id === artistId ? { ...a, tier: tierSlug } : a));
       showToast(`${artistName} → ${tierSlug.toUpperCase()} ✓`);
     } catch (err) { showToast(`Failed: ${err.message}`, 'error'); }
@@ -447,10 +456,12 @@ function BugReportsTab() {
     const text = (replyText[report.id] || '').trim();
     if (!text || !artist) return;
     setReplying(report.id);
-    await supabase.from('notifications').insert({
-      artist_id: report.artist_id, type: 'admin_message',
-      title: 'Response to your bug report',
-      message: text,
+    // Migration 106.
+    await sendNotification(supabase, 'bug reply (admin people)', {
+      type:     'admin_message',
+      artistId: report.artist_id,
+      title:    'Response to your bug report',
+      message:  text,
       metadata: { bug_report_id: report.id, admin_reply: true },
     });
     await supabase.from('bug_reports').update({ status: 'in_progress', admin_reply: text, updated_at: new Date().toISOString() }).eq('id', report.id);

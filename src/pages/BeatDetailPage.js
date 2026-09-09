@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
+import { sendNotification } from '../utils/notify';
 import { useAuth } from '../contexts/AuthContext';
 import { usePlayer } from '../contexts/PlayerContext';
 import { downloadTrack, downloadErrorMessage } from '../utils/downloadTrack';
@@ -274,11 +275,14 @@ export default function BeatDetailPage() {
           // Notify producer
           if (artist?.user_id) {
             try {
-              await supabase.from('notifications').insert({
-                user_id: artist.user_id, artist_id: artist.id,
-                type: 'download', title: `Someone purchased "${track.title}"`,
-                message: `${lic.label} lease — $${lic.price}`,
-                track_id: track.id,
+              // Migration 106. A beat sale notification is addressed to the
+              // producer by the buyer, so the direct insert was refused.
+              await sendNotification(supabase, 'beat purchase (beat detail)', {
+                type:     'download',
+                artistId: artist.id,
+                title:    `Someone purchased "${track.title}"`,
+                message:  `${lic.label} lease — $${lic.price}`,
+                trackId:  track.id,
                 metadata: { track_id: track.id, track_title: track.title, licence: lic.id, amount: lic.price },
               });
             } catch {}

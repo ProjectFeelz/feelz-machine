@@ -270,14 +270,18 @@ export default function CollabThread() {
       const req = requests.find(r => r.id === requestId);
       if (req && status === 'accepted') {
         success();
-        await supabase.from('notifications').insert({
-          artist_id:      req.from_artist_id,
-          type:           'collab_accepted',
-          title:          'Collab Request Accepted!',
-          message:        `${artist.artist_name} accepted your ${req.collab_type} request`,
-          from_artist_id: artist.id,
-          metadata:       { request_id: requestId },
-        });
+        // Deliberately nothing here.
+        //
+        // notify_collab_event (migration 96) is a trigger on
+        // collab_requests: the status update above is what sends this
+        // notification, from inside the database, with definer rights. This
+        // client insert was both a duplicate of that AND rejected by the
+        // notifications INSERT policy — it is addressed to the OTHER artist,
+        // which the policy does not permit — so it has only ever produced a
+        // 403 in the console.
+        //
+        // If the notification stops arriving, the trigger is the thing to
+        // check, not this file.
       }
       setRequests(prev => prev.map(r => r.id === requestId ? { ...r, status } : r));
     } catch (err) { console.error(err); }

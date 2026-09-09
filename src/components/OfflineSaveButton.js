@@ -33,8 +33,8 @@ export default function OfflineSaveButton({
   className = '',
 }) {
   const navigate = useNavigate();
-  const { user, artist } = useAuth();
-  const { isListenerPro } = useTier();
+  const { user } = useAuth();
+  const { isListenerPro, isPro, isPremium } = useTier();
   const {
     supported, isSaved, savingProgress, save, cancelSave, remove,
     items, leaseState: stateOf, daysLeft: daysOf, error, clearError,
@@ -71,13 +71,15 @@ export default function OfflineSaveButton({
   // track object (a track priced through its album has no download_price of
   // its own) and guessing here would lock the wrong tracks.
   //
-  // Fan Pro is the one worth showing up front: it is the common case and the
-  // answer is an upgrade rather than a retry. It is deliberately not shown for
-  // a paid track, where the gate is the purchase, or to anyone with an artist
-  // profile, who the server lets through the same way it lets them past the
-  // download quota.
+  // The paywall is the one worth showing up front: it is the common case and
+  // the answer is an upgrade rather than a retry. It mirrors the server —
+  // ANY paid tier unlocks offline, so Fan Pro, Artist Pro and Artist Premium
+  // all pass. A free artist account does not: having uploaded a track is not
+  // a payment. It is also not shown for a paid track, where the gate is the
+  // purchase and the message would be wrong.
   const isPaidTrack = Number(track.download_price) > 0;
-  const locked      = !!user && !isListenerPro && !artist && !isPaidTrack;
+  const onPaidTier  = isListenerPro || isPro || isPremium;
+  const locked      = !!user && !onPaidTier && !isPaidTrack;
 
   const handleClick = async () => {
     clearError();
@@ -103,7 +105,7 @@ export default function OfflineSaveButton({
   if (variant === 'icon') {
     const title = busy   ? 'Saving — tap to cancel'
                 : saved  ? (lease === 'expired' ? 'Reconnect to renew' : 'Saved offline — tap to remove')
-                : locked ? 'Fan Pro feature'
+                : locked ? 'Offline listening is a paid feature'
                 : 'Save for offline';
 
     return (
@@ -140,7 +142,7 @@ export default function OfflineSaveButton({
     : saved && lease === 'expired'         ? 'Offline copy expired'
     : saved && lease === 'expiring'        ? `Saved offline · ${days} day${days === 1 ? '' : 's'} left`
     : saved                                ? 'Saved on this device'
-    : locked                               ? 'Save for offline · Fan Pro'
+    : locked                               ? 'Save for offline · paid feature'
     :                                        'Save for offline';
 
   const sub =
@@ -148,7 +150,7 @@ export default function OfflineSaveButton({
     : confirmRemove                 ? 'Tap again to remove. The track still streams.'
     : saved && lease === 'expired'  ? 'Go online once to renew it'
     : saved                         ? `Plays with no connection${meta?.bytes ? ` · ${formatMb(meta.bytes)}` : ''}`
-    : locked                        ? 'Upgrade to keep music on your device'
+    : locked                        ? 'Fan Pro, Artist Pro or Premium'
     :                                 'Plays with no connection';
 
   return (

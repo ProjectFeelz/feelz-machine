@@ -214,13 +214,60 @@ exports.handler = async (event) => {
     await cancelRetailSubscription(subscriptionId, 'expired');
   }
 
-  // ── Subscription payment completed (renewal) ─────────────────────────────
+  // ── Subscription payment completed (first payment AND every renewal) ─────
   if (eventType === 'PAYMENT.SALE.COMPLETED') {
     const subscriptionId = resource?.billing_agreement_id;
     if (subscriptionId) {
       // Ensure status is active in case it was briefly suspended
       await activateArtistSubscription(subscriptionId);
       await activateRetailSubscription(subscriptionId);
+
+      // ── Affiliate commission ──────────────────────────────────────────────
+      // This is the only place on the platform where affiliate money is
+      // earned, and this event is the right one: it is money that has actually
+      // arrived, and it fires on the first payment and on every renewal, so a
+      // referrer keeps earning for as long as the person they referred keeps
+      // paying.
+      //
+      // 20% of the payment, identical for artist, beatmaker and listener
+      // affiliates — see migration 105 for why that rate and not a flat
+      // per-signup bounty.
+      //
+      // PayPal retries webhooks, and a double-paid commission leaves your
+      // account rather than just inflating a number. So the sale id goes down
+      // with the commission under a unique index and the RPC refuses a repeat.
+      // Do not remove that id from this call.
+      const saleId   = resource?.id;
+      const amount   = parseFloat(resource?.amount?.total);
+      const currency = resource?.amount?.currency;
+
+      if (saleId && Number.isFinite(amount) && amount > 0) {
+        try {
+          const { data: commission, error: commissionError } = await supabase
+            .rpc('award_affiliate_commission', {
+              p_paypal_subscription_id: subscriptionId,
+              p_amount:                 amount,
+              p_currency:               currency || 'USD',
+              p_external_ref:           saleId,
+            });
+
+          // Logged either way. An unread error here is an affiliate quietly
+          // not being paid, which is the single worst way for this to fail —
+          // nobody notices until somebody asks why their balance is zero.
+          if (commissionError) {
+            console.error('[paypal-webhook] commission RPC failed:', commissionError.message, { subscriptionId, saleId });
+          } else if (commission?.paid) {
+            console.log(`[paypal-webhook] affiliate commission ${commission.currency} ${commission.commission} to ${commission.affiliate_role} affiliate ${commission.affiliate_id} on a ${commission.payer_kind} payment of ${commission.sale}`);
+          } else {
+            // no_referrer is the normal case and not a problem.
+            console.log(`[paypal-webhook] no commission: ${commission?.reason}`, { subscriptionId, saleId });
+          }
+        } catch (err) {
+          console.error('[paypal-webhook] commission threw:', err?.message, { subscriptionId, saleId });
+        }
+      } else {
+        console.warn('[paypal-webhook] PAYMENT.SALE.COMPLETED with no usable amount/sale id — no commission awarded', { subscriptionId, saleId, amount, currency });
+      }
     }
   }
 

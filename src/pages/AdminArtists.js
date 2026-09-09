@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
+import { sendNotification } from '../utils/notify';
 import { useAuth } from '../contexts/AuthContext';
 import {
   Mic2, ChevronLeft, Loader, Search, Music,
@@ -92,15 +93,18 @@ export default function AdminArtists() {
         .eq('id', artistId);
       if (updateErr) throw new Error(`Artist update: ${updateErr.message}`);
 
-      await supabase.from('notifications').insert({
-        artist_id: artistId,
-        type: 'tier_granted',
-        title: tierSlug === 'free' ? 'Plan updated' : `${tierSlug.charAt(0).toUpperCase() + tierSlug.slice(1)} granted`,
-        message: tierSlug === 'free'
+      // Migration 106 — tier_granted is admin-only there. The .then(() => {})
+      // this replaces read no error at all, so the artist was never told their
+      // tier had changed.
+      await sendNotification(supabase, 'tier_granted (admin artists)', {
+        type:     'tier_granted',
+        artistId: artistId,
+        title:    tierSlug === 'free' ? 'Plan updated' : `${tierSlug.charAt(0).toUpperCase() + tierSlug.slice(1)} granted`,
+        message:  tierSlug === 'free'
           ? 'Your plan has been updated to Free.'
           : `An admin has granted you ${tierSlug.charAt(0).toUpperCase() + tierSlug.slice(1)} tier access. Enjoy your features!`,
         metadata: { tier_slug: tierSlug },
-      }).then(() => {}); // non-critical
+      });
 
       setArtists(prev => prev.map(a => a.id === artistId ? { ...a, tier: tierSlug } : a));
       showToast(`${artistName} → ${tierSlug.toUpperCase()} ✓`, 'success');

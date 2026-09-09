@@ -4,6 +4,7 @@ import { getTrackAvailability } from '../utils/trackAccess';
 import { useMediaSession } from '../hooks/useMediaSession';
 import { playbackSrc, isSavedOfflineSync, offlineSrcFor } from '../utils/offlineStore';
 import { buildOfflinePlayRow, queueOfflinePlay, flushOfflinePlays } from '../utils/offlinePlayQueue';
+import { sendNotification, sendStreamDigest } from '../utils/notify';
 
 // Preload a track's cover art into the browser cache so VinylRecord/Cassette show instantly
 function preloadCover(track) {
@@ -519,7 +520,10 @@ export function PlayerProvider({ children }) {
       // it with the real duration and completion when the play ends.
       currentStreamIdRef.current = logResult.stream_id || null;
 
-      const art = { user_id: logResult.owner_user_id };
+      // The recipient used to be resolved here from logResult.owner_user_id and
+      // passed as user_id on a direct insert. Both notifications below now go
+      // through an RPC that resolves the artist's user itself, so there is
+      // nothing left for the client to look up.
 
       // 4b. first_listener — fire once when stream_count goes from 0 to 1
       // prior_stream_count is the BEFORE value, computed server-side inside the same transaction
@@ -537,14 +541,19 @@ export function PlayerProvider({ children }) {
             .eq('user_id', userId)
             .maybeSingle();
           const listenerName = listenerArtist?.artist_name || 'Someone';
-          await supabase.from('notifications').insert({
-            user_id:        art.user_id,
-            artist_id:      track.artist_id,
-            type:           'first_listener',
-            title:          `🎯 First ever stream on ${fullFirst?.title || track.title}`,
-            message:        `${listenerName} was your very first listener.`,
-            from_artist_id: listenerArtist?.id || null,
+          // Through send_notification, not a direct insert. The INSERT policy on
+          // notifications permits only self-addressed rows, and this one is
+          // addressed to the ARTIST by a listener — which is why it has been
+          // returning 403 on every first stream since it was written. See
+          // migration 106.
+          await sendNotification(supabase, 'first_listener (player)', {
+            type:      'first_listener',
+            artistId:  track.artist_id,
+            title:     `🎯 First ever stream on ${fullFirst?.title || track.title}`,
+            message:   `${listenerName} was your very first listener.`,
+            trackId:   trackId,
             metadata: {
+              from_artist_id:    listenerArtist?.id || null,
               track_id:          trackId,
               track_title:       fullFirst?.title || track.title,
               track_slug:        fullFirst?.slug || null,
@@ -610,52 +619,32 @@ export function PlayerProvider({ children }) {
           ? `First stream today on ${topTitle}`
           : `${streamCount} stream${streamCount > 1 ? 's' : ''} today, ${topTitle} leading`;
 
-        // Check if we already have a today digest for this artist
-        const { data: existingDigest } = await supabase
-          .from('notifications')
-          .select('id')
-          .eq('type', 'new_stream')
-          .eq('artist_id', track.artist_id)
-          .gte('created_at', todayStartISO)
-          .limit(1)
-          .maybeSingle();
-
-        if (existingDigest) {
-          // Update the existing digest with fresh count and top track
-          await supabase.from('notifications').update({
-            title:   digestTitle,
-            message: `${streamCount} stream${streamCount !== 1 ? 's' : ''} across your catalogue today`,
-            metadata: {
-              track_id:      topTrackId || trackId,
-              track_slug:    topTrack?.slug || fullTrack?.slug || null,
-              track_title:   topTitle,
-              track_artwork: topTrack?.cover_artwork_url || notifArtwork,
-              file_url:      topTrack?.file_url || fullTrack?.file_url,
-              artist_id:     track.artist_id,
-              stream_count:  streamCount,
-              is_digest:     true,
-            },
-          }).eq('id', existingDigest.id);
-        } else {
-          // Insert first digest of the day
-          await supabase.from('notifications').insert({
-            user_id:   art.user_id,
-            artist_id: track.artist_id,
-            type:      'new_stream',
-            title:     digestTitle,
-            message:   `${streamCount} stream${streamCount !== 1 ? 's' : ''} across your catalogue today`,
-            metadata: {
-              track_id:      topTrackId || trackId,
-              track_slug:    topTrack?.slug || fullTrack?.slug || null,
-              track_title:   topTitle,
-              track_artwork: topTrack?.cover_artwork_url || notifArtwork,
-              file_url:      topTrack?.file_url || fullTrack?.file_url,
-              artist_id:     track.artist_id,
-              stream_count:  streamCount,
-              is_digest:     true,
-            },
-          });
-        }
+        // One call, and the server decides create-or-update.
+        //
+        // This used to be a read, a decision and a write from the client, and
+        // BOTH branches failed silently: the insert on the INSERT policy and
+        // the update on the UPDATE policy, because the row belongs to the
+        // artist while the person streaming is a listener. Every error sat
+        // inside a catch that never read it, so an artist's stream
+        // notifications simply never arrived.
+        //
+        // Doing it server-side also closes the race: two listeners streaming
+        // in the same second could each find no digest and each create one.
+        await sendStreamDigest(supabase, 'stream digest (player)', {
+          artistId: track.artist_id,
+          title:    digestTitle,
+          message:  `${streamCount} stream${streamCount !== 1 ? 's' : ''} across your catalogue today`,
+          trackId:  topTrackId || trackId,
+          metadata: {
+            track_id:      topTrackId || trackId,
+            track_slug:    topTrack?.slug || fullTrack?.slug || null,
+            track_title:   topTitle,
+            track_artwork: topTrack?.cover_artwork_url || notifArtwork,
+            file_url:      topTrack?.file_url || fullTrack?.file_url,
+            artist_id:     track.artist_id,
+            stream_count:  streamCount,
+          },
+        });
       } catch { /* non-critical, never break playback */ }
 
       // 5b. Fan milestone — celebrate the LISTENER's loyalty to this artist.

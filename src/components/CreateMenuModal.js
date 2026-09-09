@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
+import { sendArtistBroadcast } from '../utils/notify';
 import { useTier } from '../contexts/useTier';
 import {
   X, ChevronDown, Loader, Check, Send, Music, Youtube, Search, Radio, Plus,
@@ -121,16 +122,20 @@ export default function CreateMenuModal({ artist, user, onClose, primaryColor = 
       const followerIds = follows.map(f => f.follower_id).filter(id => id !== user.id);
       for (let i = 0; i < followerIds.length; i += 50) {
         const batch = followerIds.slice(i, i + 50);
-        await supabase.from('notifications').insert(
-          batch.map(uid => ({
-            user_id: uid,
-            artist_id: null,
-            type: 'admin_message',
-            title: `Message from ${artist.artist_name}`,
-            message: dmMessage.trim(),
-            metadata: { from_artist_id: artist.id, artist_name: artist.artist_name },
-          }))
-        );
+        // One call per batch instead of a direct insert. The rows are
+        // addressed to fans, which the notifications INSERT policy refuses,
+        // so this DM has never been delivered — it 403'd every time.
+        //
+        // send_artist_broadcast intersects the list with this artist's real
+        // followers, so it can only ever reach people who chose to follow.
+        // See migration 108.
+        await sendArtistBroadcast(supabase, 'artist DM (create menu)', {
+          type:       'admin_message',
+          title:      `Message from ${artist.artist_name}`,
+          message:    dmMessage.trim(),
+          metadata:   { from_artist_id: artist.id, artist_name: artist.artist_name },
+          recipients: batch,
+        });
       }
       try {
         const { data: { session: authSession } } = await supabase.auth.getSession();

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
+import { sendNotification } from '../utils/notify';
 import { useAuth } from '../contexts/AuthContext';
 import {
   ChevronLeft, Bug, Clock, CheckCircle, Loader, Search,
@@ -89,14 +90,18 @@ export default function AdminBugReports() {
       const { data: userArtist } = await supabase
         .from('artists').select('id').eq('user_id', report.user_id).maybeSingle();
 
-      await supabase.from('notifications').insert({
-        user_id:        report.user_id,
-        artist_id:      userArtist?.id || null,
-        type:           'bug_reply',
-        title:          'Response to your bug report',
-        message:        text,
-        from_artist_id: artist?.id || null,
-        metadata:       { reply_to_feedback_id: report.id, original_message: report.feedback },
+      // Migration 106 — bug_reply is admin-only there.
+      await sendNotification(supabase, 'bug_reply (admin bug reports)', {
+        type:            'bug_reply',
+        recipientUserId: report.user_id,
+        artistId:        userArtist?.id || null,
+        title:           'Response to your bug report',
+        message:         text,
+        metadata: {
+          reply_to_feedback_id: report.id,
+          original_message:     report.feedback,
+          from_artist_id:       artist?.id || null,
+        },
       });
 
       setReports(prev => prev.map(r =>

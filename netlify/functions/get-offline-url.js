@@ -143,21 +143,33 @@ exports.handler = async (event) => {
     }
   }
 
-  // ── Fan Pro ─────────────────────────────────────────────────────────────────
-  // Both sources are checked, in the same order useTier checks them on the
-  // client: listeners.tier is the column the PayPal webhook writes and the one
-  // an admin grant sets, and listener_tier_subscriptions is the older path.
+  // ── Paying accounts only ────────────────────────────────────────────────────
   //
-  // Worth flagging: get-download-url reads ONLY the subscriptions table, so a
-  // listener whose Pro comes from listeners.tier is told to upgrade when they
-  // try to download. Same bug class, different endpoint.
+  // Offline listening is a paid feature. Any PAID tier unlocks it — Fan Pro,
+  // Artist Pro, Artist Premium — because they are all paying accounts and
+  // charging an artist who already pays $5 a month a second subscription to
+  // save a song reads as nickel-and-diming. A free artist account does NOT
+  // unlock it; having uploaded a track is not a payment.
+  //
+  // Every source is checked, in the order they are authoritative:
+  //
+  //   listeners.tier              — what the PayPal webhook writes and what an
+  //                                 admin grant sets. useTier reads this first,
+  //                                 so this endpoint must too. get-download-url
+  //                                 does NOT, which is why a listener whose Pro
+  //                                 came from here is told to upgrade when they
+  //                                 try to download. Same bug, different file.
+  //   listener_tier_subscriptions — the older listener path.
+  //   artist_tier_subscriptions   — Artist Pro / Premium.
+  //
+  // "Paid" is decided by the tier's slug not being 'free' rather than by
+  // matching a list of slug names, because platform_tiers is shared between
+  // artist and listener tiers and the naming is inconsistent across them
+  // ('pro' and 'fan_pro' are both in use for the same tier id). Asking what
+  // it is NOT is the version that does not break when a tier is renamed.
   if (!isOwnTrack) {
-    const { data: artistRow } = await admin
-      .from('artists').select('id').eq('user_id', user.id).maybeSingle();
-
-    if (!artistRow) {
-      let isPro = false;
-
+    const paidReason = await (async () => {
+      // 1. listeners.tier
       const { data: listenerRow } = await admin
         .from('listeners')
         .select('tier, tier_expires_at')
@@ -165,35 +177,65 @@ exports.handler = async (event) => {
         .maybeSingle();
 
       if (listenerRow?.tier && listenerRow.tier !== 'free') {
-        const notExpired = !listenerRow.tier_expires_at
+        const live = !listenerRow.tier_expires_at
           || new Date(listenerRow.tier_expires_at) > new Date();
-        if (notExpired) isPro = true;
+        if (live) return `listeners.tier=${listenerRow.tier}`;
       }
 
-      if (!isPro) {
-        const { data: proTier } = await admin
-          .from('platform_tiers').select('id').eq('slug', 'fan_pro').maybeSingle();
-        const { data: sub } = await admin
-          .from('listener_tier_subscriptions')
+      // Which tier ids are not the free one. One query, reused below.
+      const { data: tiers } = await admin
+        .from('platform_tiers')
+        .select('id, slug');
+      const paidTierIds = new Set(
+        (tiers || []).filter(t => t.slug && t.slug !== 'free').map(t => t.id)
+      );
+
+      // 2. listener_tier_subscriptions
+      const { data: listenerSubs } = await admin
+        .from('listener_tier_subscriptions')
+        .select('tier_id, expires_at')
+        .eq('user_id', user.id)
+        .eq('status', 'active');
+
+      for (const sub of listenerSubs || []) {
+        if (!paidTierIds.has(sub.tier_id)) continue;
+        if (sub.expires_at && new Date(sub.expires_at) <= new Date()) continue;
+        return 'listener_tier_subscription';
+      }
+
+      // 3. artist_tier_subscriptions — Artist Pro / Premium
+      const { data: artistRows } = await admin
+        .from('artists')
+        .select('id')
+        .eq('user_id', user.id);
+
+      const artistIds = (artistRows || []).map(a => a.id);
+      if (artistIds.length > 0) {
+        const { data: artistSubs } = await admin
+          .from('artist_tier_subscriptions')
           .select('tier_id, expires_at')
-          .eq('user_id', user.id)
-          .eq('status', 'active')
-          .maybeSingle();
-        if (proTier?.id && sub?.tier_id === proTier.id) {
-          const notExpired = !sub.expires_at || new Date(sub.expires_at) > new Date();
-          if (notExpired) isPro = true;
+          .in('artist_id', artistIds)
+          .eq('status', 'active');
+
+        for (const sub of artistSubs || []) {
+          if (!paidTierIds.has(sub.tier_id)) continue;
+          if (sub.expires_at && new Date(sub.expires_at) <= new Date()) continue;
+          return 'artist_tier_subscription';
         }
       }
 
-      // A track already saved keeps renewing while Pro is live, and stops
-      // renewing when it lapses — it is not deleted here, it simply runs out
-      // its remaining lease.
-      if (!isPro) {
-        return json(403, {
-          error: 'fan_pro_required',
-          message: 'Offline listening is a Fan Pro feature.',
-        });
-      }
+      return null;
+    })();
+
+    if (!paidReason) {
+      // A track already saved is NOT deleted when a subscription lapses — the
+      // renew path returns this same 403 and the client leaves the existing
+      // lease to run out. Somebody whose card is declined mid-holiday keeps
+      // their music until the lease expires, with a visible countdown.
+      return json(403, {
+        error: 'paid_tier_required',
+        message: 'Offline listening is included with Fan Pro, Artist Pro and Artist Premium.',
+      });
     }
   }
 

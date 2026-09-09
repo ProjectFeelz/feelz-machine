@@ -2,6 +2,7 @@ import { Helmet } from 'react-helmet-async';
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
+import { sendArtistBroadcast } from '../utils/notify';
 // Shared with ProfilePage, which was missing this behaviour entirely.
 import { generateSlug, getUniqueSlug } from '../utils/artistSlug';
 import { useAuth } from '../contexts/AuthContext';
@@ -163,6 +164,10 @@ export default function ProfilePage() {
 
   const postThought = async () => {
     if (!thoughtInput.trim() || !artist) return;
+    // Captured before setThoughtInput('') below clears it. The follower
+    // notification is sent after that line, so reading the state there gave
+    // an empty message.
+    const thoughtText = thoughtInput.trim();
     if (remainingToday <= 0) {
       setThoughtMsg('Daily limit reached (3/3). Come back tomorrow!');
       setTimeout(() => setThoughtMsg(''), 3000); return;
@@ -177,24 +182,17 @@ export default function ProfilePage() {
     if (error) { setThoughtMsg('Failed to post'); }
     else {
       setThoughtInput(''); setThoughtMsg('Posted!'); fetchThoughts();
-      // Notify followers
-      try {
-        const { data: followers } = await supabase
-          .from('follows').select('follower_id').eq('artist_id', artist.id);
-        if (followers?.length > 0) {
-          await supabase.from('notifications').insert(
-            followers.map(f => ({
-              user_id:    f.follower_id,
-              artist_id:  artist.id,
-              type:       'artist_thought',
-              title:      `${artist.artist_name} posted a thought`,
-              message:    thoughtInput.trim().slice(0, 100),
-              from_artist_id: artist.id,
-              metadata:   { thought: true },
-            }))
-          );
-        }
-      } catch {}
+      // Notify followers. One call, and the follower list is resolved
+      // server-side — the client no longer reads every follower id just to
+      // write it back. See migration 108: the batch insert this replaces was
+      // refused by the notifications INSERT policy, so no follower has ever
+      // been told about a thought.
+      await sendArtistBroadcast(supabase, 'artist_thought (profile setup)', {
+        type:    'artist_thought',
+        title:   `${artist.artist_name} shared a thought`,
+        message: thoughtText.slice(0, 140),
+        metadata: { artist_id: artist.id, artist_name: artist.artist_name },
+      });
     }
     setTimeout(() => setThoughtMsg(''), 2500);
   };

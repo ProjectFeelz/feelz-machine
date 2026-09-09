@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
+import { sendAdminBroadcast, sendNotification } from '../utils/notify';
 import { useAuth } from '../contexts/AuthContext';
 import {
     ChevronLeft, Send, Loader, Check, AlertCircle,
@@ -118,13 +119,14 @@ export default function AdminBroadcast({ embedded = false }) {
         setDmSending(true);
         setDmError('');
         try {
-            await supabase.from('notifications').insert({
-                user_id:  dmTarget.user_id,
-                artist_id: dmTarget.id,
-                type:     'admin_message',
-                title:    dmTitle.trim(),
-                message:  dmMessage.trim(),
-                metadata: { from_admin: true },
+            // Migration 106 — admin-only type, admin verified server-side.
+            await sendNotification(supabase, 'admin DM (broadcast)', {
+                type:            'admin_message',
+                recipientUserId: dmTarget.user_id,
+                artistId:        dmTarget.id,
+                title:           dmTitle.trim(),
+                message:         dmMessage.trim(),
+                metadata:        { from_admin: true },
             });
             setDmSent(true);
             setTimeout(() => {
@@ -238,24 +240,26 @@ export default function AdminBroadcast({ embedded = false }) {
             const { data: artists, error: fetchErr } = await supabase.from('artists').select('id');
             if (fetchErr) throw fetchErr;
             const youtubeData = youtubeUrl ? extractYouTubeId(youtubeUrl) : null;
-            const batchSize = 100;
-            for (let i = 0; i < artists.length; i += batchSize) {
-                const batch = artists.slice(i, i + batchSize).map(a => ({
-                    artist_id: a.id,
-                    type: 'announcement',
-                    title: title.trim(),
-                    message: message.trim(),
-                    metadata: {
-                        youtube_id: youtubeData?.id || null,
-                        is_short: youtubeData?.isShort || false,
-                        youtube_url: youtubeUrl || null,
-                        link_url: linkButtonUrl.trim() || null,
-                        link_label: linkButtonLabel.trim() || null,
-                    },
-                }));
-                const { error: insertErr } = await supabase.from('notifications').insert(batch);
-                if (insertErr) throw insertErr;
-            }
+            // One call. This used to build 100-row batches and insert them
+            // directly, which the notifications INSERT policy refuses — the
+            // rows are addressed to every artist on the platform. So no
+            // announcement has ever been delivered. send_admin_broadcast
+            // (migration 108) checks the admins table and writes them all in
+            // a single statement.
+            const { sent, error: bcErr } = await sendAdminBroadcast(supabase, 'platform announcement', {
+                type:    'announcement',
+                title:   title.trim(),
+                message: message.trim(),
+                metadata: {
+                    youtube_id:  youtubeData?.id || null,
+                    is_short:    youtubeData?.isShort || false,
+                    youtube_url: youtubeUrl || null,
+                    link_url:    linkButtonUrl.trim() || null,
+                    link_label:  linkButtonLabel.trim() || null,
+                },
+            });
+            if (bcErr) throw bcErr;
+            if (!sent) throw new Error('The announcement reached nobody — check you are signed in as an admin.');
             setSent(true);
             setTitle(''); setMessage(''); setYoutubeUrl(''); setPreview(null);
             setLinkButtonUrl(''); setLinkButtonLabel('');

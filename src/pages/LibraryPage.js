@@ -375,7 +375,7 @@ export default function LibraryPage() {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-semibold text-white">Get Fan Pro</p>
-                <p className="text-[10px] text-white/35 mt-0.5">Themes, stats, 3 free downloads & fan badge</p>
+                <p className="text-[10px] text-white/35 mt-0.5">Offline listening, themes, stats, 3 free downloads &amp; fan badge</p>
               </div>
               <span className="text-[10px] font-bold text-purple-400 bg-purple-500/10 px-2 py-1 rounded-lg flex-shrink-0">$2.99/mo</span>
             </button>

@@ -15,6 +15,7 @@ import { useNavigate } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 import ReactPlayer from 'react-player';
 import { supabase } from '../supabaseClient';
+import { sendNotification } from '../utils/notify';
 import TrackCommentSheet from '../components/TrackCommentSheet';
 import { useAuth } from '../contexts/AuthContext';
 import { usePlayer } from '../contexts/PlayerContext';
@@ -560,21 +561,19 @@ function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare, onN
                 updated_at: new Date().toISOString(),
               }).eq('id', recent.id);
             } else {
-              await supabase.from('notifications').insert({
-                user_id:        artistRow.user_id,
-                artist_id:      track.artist_id,
-                type:           'track_liked',
-                title:          `${likerName} liked "${track.title}"`,
-                message:        '',
-                track_id:       track.id,
-                from_artist_id: liker?.id || null,
-                read:           false,
+              // Migration 106 — see TrackDetailPage for the same conversion.
+              await sendNotification(supabase, 'track_liked (for you)', {
+                type:     'track_liked',
+                artistId: track.artist_id,
+                title:    `${likerName} liked "${track.title}"`,
+                trackId:  track.id,
                 metadata: {
                   track_id:          track.id,
                   track_title:       track.title,
                   track_slug:        track.slug || null,
                   like_count:        1,
                   first_liker_name:  likerName,
+                  from_artist_id:    liker?.id || null,
                   from_artist_name:  likerName,
                   from_artist_image: liker?.profile_image_url || null,
                   from_artist_slug:  liker?.slug || null,

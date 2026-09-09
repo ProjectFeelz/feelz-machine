@@ -31,7 +31,7 @@ import ArtistGuestbook from '../components/ArtistGuestbook';
 import MerchConnectSheet from '../components/MerchConnectSheet';
 import ChallengeXPModal from '../components/ChallengeXPModal';
 import { askNotificationPermission } from '../utils/askNotificationPermission';
-import { reportNotify } from '../utils/notify';
+import { sendArtistBroadcast, sendNotification } from '../utils/notify';
 
 const PAYPAL_CLIENT_ID = process.env.REACT_APP_PAYPAL_CLIENT_ID;
 const EMOJI_REACTIONS = ['🔥', '❤️', '👏', '😮', '😂', '🎵'];
@@ -867,19 +867,13 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
           followerName  = listenerProfile?.display_name || null;
           followerImage = listenerProfile?.avatar_url || null;
         }
-        await reportNotify('new_follower (ArtistProfilePage)', supabase.from('notifications').insert({
-          user_id: artist.user_id,
-          artist_id: artist.id,
-          type: 'new_follower',
-          title: `${followerName || 'Someone'} followed you`,
-          message: '',
-          from_artist_id: myProfile?.id || null,
-          metadata: {
-            from_artist_name:  followerName,
-            from_artist_image: followerImage,
-            from_artist_slug:  followerSlug,
-          },
-        }));
+        // Deliberately nothing here.
+        //
+        // notify_artist_new_follower (migration 92) is a trigger on `follows`:
+        // the insert above is what sends this, from inside the database. This
+        // client insert was a duplicate of it AND rejected by the
+        // notifications INSERT policy, since it is addressed to the artist
+        // being followed. reportNotify has been logging that 403 faithfully.
       }
     } catch (err) { console.error('Follow error:', err); }
   };
@@ -1015,16 +1009,16 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
       // Batch insert notifications (50 at a time)
       for (let i = 0; i < followerIds.length; i += 50) {
         const batch = followerIds.slice(i, i + 50);
-        await supabase.from('notifications').insert(
-          batch.map(uid => ({
-            user_id:   uid,
-            artist_id: null,  // null so artist doesn't see their own broadcast
-            type:      'admin_message',
-            title:     `Message from ${artist.artist_name}`,
-            message:   dmMessage.trim(),
-            metadata:  { from_artist_id: artist.id, artist_name: artist.artist_name },
-          }))
-        );
+        // See migration 108. A batch insert addressed to fans is refused by
+        // the notifications INSERT policy, so this DM has never arrived.
+        // The RPC intersects the list with this artist's real followers.
+        await sendArtistBroadcast(supabase, 'artist DM (profile)', {
+          type:       'admin_message',
+          title:      `Message from ${artist.artist_name}`,
+          message:    dmMessage.trim(),
+          metadata:   { from_artist_id: artist.id, artist_name: artist.artist_name },
+          recipients: batch,
+        });
       }
       // Send push notification to all followers
       try {
@@ -1059,24 +1053,23 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
       try { await supabase.from('downloads').upsert({ user_id: user.id, track_id: track.id }, { onConflict: 'user_id,track_id', ignoreDuplicates: true }); } catch {}
       const { data: myProfile } = await supabase.from('artists').select('id, artist_name, profile_image_url, slug').eq('user_id', user.id).maybeSingle();
       try {
-        await reportNotify('download (ArtistProfilePage)', supabase.from('notifications').insert({
-          user_id: artist.user_id,
-          artist_id: artist.id,
-          type: 'download',
-          title: `${myProfile?.artist_name || 'Someone'} downloaded ${track.title}`,
-          message: '',
-          track_id: track.id,
-          from_artist_id: myProfile?.id || null,
+        await sendNotification(supabase, 'download (ArtistProfilePage)', {
+          type:     'download',
+          artistId: artist.id,
+          title:    `${myProfile?.artist_name || 'Someone'} downloaded ${track.title}`,
+          message:  '',
+          trackId:  track.id,
           metadata: {
+            from_artist_id: myProfile?.id || null,
             download: true,
             purchase_price:    track.download_price || 0,
             track_id:          track.id,
             track_title:       track.title,
             track_slug:        track.slug || null,
             from_artist_name:  myProfile?.artist_name || null,
-            from_artist_image: myProfile?.profile_image_url || null,
+            from_artist_image: myProfile?.profile_image_url || null
           },
-        }));
+        });
       } catch {}
       const { data: { session } } = await supabase.auth.getSession();
       await downloadTrack(track.id, track.title, session?.access_token);
@@ -1123,23 +1116,22 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
     } else {
       await supabase.from('track_likes').insert({ track_id: track.id, user_id: user.id });
       const { data: myProfile } = await supabase.from('artists').select('id, artist_name, profile_image_url, slug').eq('user_id', user.id).maybeSingle();
-      await reportNotify('track_liked (ArtistProfilePage)', supabase.from('notifications').insert({
-        user_id: artist.user_id,
-        artist_id: artist.id,
-        type: 'track_liked',
-        title: `${myProfile?.artist_name || 'Someone'} liked ${track.title}`,
-        message: '',
-        track_id: track.id,
-        from_artist_id: myProfile?.id || null,
+      await sendNotification(supabase, 'track_liked (ArtistProfilePage)', {
+        type:     'track_liked',
+        artistId: artist.id,
+        title:    `${myProfile?.artist_name || 'Someone'} liked ${track.title}`,
+        message:  '',
+        trackId:  track.id,
         metadata: {
+          from_artist_id: myProfile?.id || null,
           track_id:          track.id,
           track_title:       track.title,
           track_slug:        track.slug || null,
           from_artist_name:  myProfile?.artist_name || null,
           from_artist_image: myProfile?.profile_image_url || null,
-          from_artist_slug:  myProfile?.slug || null,
+          from_artist_slug:  myProfile?.slug || null
         },
-      }));
+      });
     }
   };
 
@@ -1165,24 +1157,23 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
       const { data: plData } = await supabase.from('playlists').select('name').eq('id', playlistId).maybeSingle();
       if (trackData?.artist_id && trackData.artist_id !== artist?.id) {
         const myName = artist?.artist_name || 'Someone';
-        await reportNotify('playlist_add (ArtistProfilePage)', supabase.from('notifications').insert({
-          user_id: artist.user_id,
-          artist_id: trackData.artist_id,
-          type: 'playlist_add',
-          title: `${myName} added ${trackData.title} to ${plData?.name || 'a playlist'}`,
-          message: '',
-          track_id: trackId,
-          from_artist_id: artist?.id,
+        await sendNotification(supabase, 'playlist_add (ArtistProfilePage)', {
+          type:     'playlist_add',
+          artistId: trackData.artist_id,
+          title:    `${myName} added ${trackData.title} to ${plData?.name || 'a playlist'}`,
+          message:  '',
+          trackId:  trackId,
           metadata: {
+            from_artist_id: artist?.id,
             playlist_add:      true,
             playlist_id:       playlistId,
             track_id:          trackId,
             track_title:       trackData.title,
             from_artist_name:  myName,
             from_artist_image: artist?.profile_image_url || null,
-            from_artist_slug:  artist?.slug || null,
+            from_artist_slug:  artist?.slug || null
           },
-        }));
+        });
       }
     }
     setAddedTo(prev => ({ ...prev, [`${playlistId}-${trackId}`]: true }));

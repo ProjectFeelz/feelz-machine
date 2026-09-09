@@ -15,6 +15,10 @@
 
 [functions."engagement-drip-background"]
   timeout = 860
+  # Merged into the existing table rather than added as a second
+  # [functions."engagement-drip-background"] block — TOML forbids defining the
+  # same table twice, and the whole file would fail to parse.
+  schedule = "0 8 * * 1,4"
 
 # ── Edge functions ────────────────────────────────────────────────────────────
 
@@ -68,117 +72,120 @@
     Cache-Control = "public, max-age=604800, stale-while-revalidate=86400"
 
 # ── Scheduled functions ───────────────────────────────────────────────────────
-# Full Sunday calendar:
-#   09:00 — weekly-wheel-spin (every Sunday — new challenge)
-#   09:00 — paid-collab-reminder (3rd Sunday only — internal check)
-#   17:00 — voting opens (handled by status transition in close function)
-#   23:59 — close-wheel-competition (crowns winner, pays out, notifies)
 #
-# Monday 08:00 — weekly-artist-report
-# Monday 08:00 — engagement-drip-cron (also Thursday)
-# Daily  00:05 — daily-spotlight
-# Daily  02:00 — cleanup-stories
-# Daily  02:30 — cleanup-empty-albums
-# Daily  03:00 — compute-behavior-profiles
-# Daily  03:30 — score-engagement-outcomes
-# Daily  04:30 — compute-recommendations   (must follow behaviour profiles)
-# Daily  05:00 — prune-listening-events
-# Daily  08:00 — platform-daily-story
-# Daily  09:00 — presave-notify
-# 1st of month 09:00 — monthly-wrapped
-# Sunday 18:00 — weekly-listener-recap
+# READ THIS BEFORE EDITING. Every one of these used to be declared as:
 #
-# ── Correction, 9 Sep ─────────────────────────────────────────────────────────
+#     [[scheduled_functions]]
+#       name = "daily-spotlight"
+#       schedule = "5 0 * * *"
 #
-# An earlier pass of mine claimed compute-recommendations, prune-listening-events
-# and platform-daily-story were missing from this block and added entries for
-# them. That was wrong — all three were already scheduled below, and the added
-# entries were duplicates. They have been removed.
+# `scheduled_functions` is not a key Netlify reads. A function is put on a
+# schedule in netlify.toml through its own table:
 #
-# The mistake came from reading an older copy of this file than the one in the
-# repo. Where a function's real schedule differs from the calendar above, the
-# entries below are the authority.
+#     [functions."daily-spotlight"]
+#       schedule = "5 0 * * *"
+#
+# Netlify ignores configuration keys it does not recognise rather than failing
+# the build. So nineteen declarations sat in this file looking entirely
+# correct, every build went green, and not one function was ever registered as
+# scheduled. That is why all of them show no output — the engagement drip since
+# 3 July, and recs_last_run and prune_events_last_run never written at all.
+#
+# The only other way to schedule one is in the function's own code:
+#
+#     const { schedule } = require('@netlify/functions');
+#     exports.handler = schedule('@daily', myHandler);
+#
+# Nothing here does that either: @netlify/functions is not a dependency, and
+# all nineteen are plain `exports.handler`. netlify.toml was the only thing
+# that could have scheduled them, and it wasn't.
+#
+# HOW TO CONFIRM, after deploying this:
+#   Netlify → Functions. A scheduled function is labelled Scheduled and shows
+#   its next run time. If none of them carry that label, the schedule is still
+#   not being read — tell me rather than waiting a day to see.
+#
+# All nineteen names were checked against netlify/functions/: every one
+# resolves to a real file, so nothing here points at a function that is gone.
+#
+# engagement-drip-background is scheduled in its [functions."..."] table above,
+# merged with its 860s timeout — Mon and Thu 08:00.
 
-[[scheduled_functions]]
-  name = "engagement-drip-background"
-  schedule = "0 8 * * 1,4"
-
-[[scheduled_functions]]
-  name = "update-engagement-scores"
+# daily 02:00
+[functions."update-engagement-scores"]
   schedule = "0 2 * * *"
 
-[[scheduled_functions]]
-  name = "compute-behavior-profiles"
+# daily 03:00 — writes listener_behavior_profiles
+[functions."compute-behavior-profiles"]
   schedule = "0 3 * * *"
 
-[[scheduled_functions]]
-  name = "score-engagement-outcomes"
+# daily 03:30
+[functions."score-engagement-outcomes"]
   schedule = "30 3 * * *"
 
-[[scheduled_functions]]
-  name = "monthly-wrapped"
-  schedule = "0 9 1 * *"
-
-[[scheduled_functions]]
-  name = "daily-spotlight"
-  schedule = "5 0 * * *"
-
-[[scheduled_functions]]
-  name = "weekly-artist-report"
-  schedule = "0 8 * * 1"
-
-[[scheduled_functions]]
-  name = "weekly-listener-recap"
-  schedule = "0 18 * * 0"
-
-[[scheduled_functions]]
-  name = "presave-notify"
-  schedule = "0 9 * * *"
-
-[[scheduled_functions]]
-  name = "cleanup-stories"
-  schedule = "0 2 * * *"
-
-[[scheduled_functions]]
-  name = "cleanup-empty-albums"
-  schedule = "30 2 * * *"
-
-[[scheduled_functions]]
-  name = "weekly-wheel-spin"
-  schedule = "0 9 * * 0"
-
-[[scheduled_functions]]
-  name = "close-wheel-competition"
-  schedule = "59 23 * * 0"
-
-[[scheduled_functions]]
-  name = "paid-collab-reminder"
-  schedule = "0 9 * * 0"
-
-# Reads listener_behavior_profiles (written at 03:00) and writes
-# listener_recommendations, which is what ForYouPage ranks the feed from. Runs
-# twice a day; the 03:30 pass is the one that follows the behaviour profiles.
-[[scheduled_functions]]
-  name = "compute-recommendations"
+# twice daily — must follow the behaviour profiles above; feeds ForYouPage
+[functions."compute-recommendations"]
   schedule = "30 3,15 * * *"
 
-# Calls the prune_listening_events RPC. Nothing else does.
-[[scheduled_functions]]
-  name = "prune-listening-events"
+# daily 04:00 — calls prune_listening_events(); nothing else does
+[functions."prune-listening-events"]
   schedule = "0 4 * * *"
 
-[[scheduled_functions]]
-  name = "platform-daily-story"
+# daily 04:00
+[functions."cleanup-mp4-conversions"]
+  schedule = "0 4 * * *"
+
+# daily 00:05
+[functions."daily-spotlight"]
+  schedule = "5 0 * * *"
+
+# daily 02:00
+[functions."cleanup-stories"]
+  schedule = "0 2 * * *"
+
+# daily 02:30
+[functions."cleanup-empty-albums"]
+  schedule = "30 2 * * *"
+
+# daily 08:00
+[functions."platform-daily-story"]
   schedule = "0 8 * * *"
 
-[[scheduled_functions]]
-  name = "cleanup-mp4-conversions"
-  schedule = "0 4 * * *"
+# daily 09:00
+[functions."presave-notify"]
+  schedule = "0 9 * * *"
 
-[[scheduled_functions]]
-  name = "feature-education-drip"
-  # schedule = "0 10 * * 3"  # disabled — platform tips not landing
+# Mon 08:00
+[functions."weekly-artist-report"]
+  schedule = "0 8 * * 1"
 
+# Sun 09:00 — new challenge
+[functions."weekly-wheel-spin"]
+  schedule = "0 9 * * 0"
+
+# Sun 09:00 — internal check
+[functions."paid-collab-reminder"]
+  schedule = "0 9 * * 0"
+
+# Sun 18:00
+[functions."weekly-listener-recap"]
+  schedule = "0 18 * * 0"
+
+# Sun 23:59 — crowns the winner, pays out, notifies
+[functions."close-wheel-competition"]
+  schedule = "59 23 * * 0"
+
+# 1st of the month 09:00
+[functions."monthly-wrapped"]
+  schedule = "0 9 1 * *"
+
+# feature-education-drip is deliberately NOT scheduled. Its schedule was
+# already commented out here — "platform tips not landing" — and switching it
+# on as a side effect of a syntax fix would start sending something that was
+# turned off on purpose. Uncomment when you want it back:
+#
+# [functions."feature-education-drip"]
+#   schedule = "0 10 * * 3"
 
 # ── Redirects ─────────────────────────────────────────────────────────────────
 

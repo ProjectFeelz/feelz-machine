@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
+import { sendNotification, sendArtistBroadcast } from '../utils/notify';
 import { useAuth } from '../contexts/AuthContext';
 import { Send, Loader, X, Music, Search, Plus, Calendar } from 'lucide-react';
 import { usePlayer } from '../contexts/PlayerContext';
@@ -189,40 +190,34 @@ export default function PostComposer({ onPostCreated }) {
 
       if (postError) throw postError;
 
-      // Notify followers
-      const { data: followers } = await supabase
-        .from('follows')
-        .select('follower_id')
-        .eq('artist_id', artist.id);
+      // Notify followers.
+      //
+      // One call. The follower list is resolved server-side, so the client no
+      // longer reads every follower id just to write it back — and the write
+      // now actually lands. The old version fetched follows, built a batch and
+      // inserted it directly, which the notifications INSERT policy refuses
+      // because the rows are addressed to other people. Its own catch guessed
+      // at the cause — "table may not exist yet" — and, because supabase-js
+      // resolves rather than throwing, that catch never even ran. No follower
+      // has ever been told about a post. See migration 108.
+      await sendArtistBroadcast(supabase, 'new_post (composer)', {
+        type:    'new_post',
+        title:   `${artist.artist_name} posted something new`,
+        message: content.substring(0, 100),
+        metadata: { post_id: data.id, artist_id: artist.id, artist_name: artist.artist_name },
+      });
 
-      if (followers?.length > 0) {
-        const notifs = followers.map(f => ({
-          user_id: f.follower_id,
-          artist_id: null,
-          type: 'new_post',
-          title: `${artist.artist_name} posted something new`,
-          message: content.substring(0, 100),
-          // FIX: store post_id in metadata so notifications can deep-link
-          metadata: { post_id: data.id, artist_id: artist.id, artist_name: artist.artist_name },
-        }));
-        try { await supabase.from('notifications').insert(notifs); } catch (e) {
-          console.warn('Notifications insert failed (table may not exist yet):', e.message);
-        }
-      }
-
-      // Mention notifications
+      // Mention notifications — one per tagged artist, which is the right
+      // shape for send_notification: a handful of named people, not a
+      // broadcast.
       for (const ta of taggedArtists) {
-        try {
-          await supabase.from('notifications').insert({
-            artist_id: ta.id,
-            type: 'mention',
-            title: `${artist.artist_name} mentioned you in a post`,
-            message: content.substring(0, 100),
-            metadata: { post_id: data.id, tagger_artist_id: artist.id },
-          });
-        } catch (e) {
-          console.warn('Mention notification failed:', e.message);
-        }
+        await sendNotification(supabase, `mention (composer -> ${ta.id})`, {
+          type:     'mention',
+          artistId: ta.id,
+          title:    `${artist.artist_name} mentioned you in a post`,
+          message:  content.substring(0, 100),
+          metadata: { post_id: data.id, tagger_artist_id: artist.id },
+        });
       }
 
       setContent('');

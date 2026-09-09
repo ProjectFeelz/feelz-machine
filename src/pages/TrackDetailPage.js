@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useSearchParams } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
+import { sendNotification } from '../utils/notify';
 import { downloadTrack, downloadErrorMessage } from '../utils/downloadTrack';
 import { useAuth } from '../contexts/AuthContext';
 import { usePlayer } from '../contexts/PlayerContext';
@@ -139,15 +140,13 @@ export default function TrackDetailPage() {
               updated_at: new Date().toISOString(),
             }).eq('id', recent.id);
           } else {
-            await supabase.from('notifications').insert({
-              user_id:        artist.user_id,
-              artist_id:      artist.id,
-              type:           'track_liked',
-              title:          `${likerName} liked "${track.title}"`,
-              message:        '',
-              track_id:       track.id,
-              from_artist_id: liker?.id || null,
-              read:           false,
+            // Through send_notification: addressed to the artist by a
+            // listener, which the INSERT policy refuses. Migration 106.
+            await sendNotification(supabase, 'track_liked (track detail)', {
+              type:     'track_liked',
+              artistId: artist.id,
+              title:    `${likerName} liked "${track.title}"`,
+              trackId:  track.id,
               metadata: {
                 track_id:          track.id,
                 track_title:       track.title,
@@ -155,6 +154,7 @@ export default function TrackDetailPage() {
                 track_artwork:     track.cover_artwork_url || null,
                 like_count:        1,
                 first_liker_name:  likerName,
+                from_artist_id:    liker?.id || null,
                 from_artist_name:  likerName,
                 from_artist_image: liker?.profile_image_url || null,
                 from_artist_slug:  liker?.slug || null,

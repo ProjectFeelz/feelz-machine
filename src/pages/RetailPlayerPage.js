@@ -112,10 +112,18 @@ export default function RetailPlayerPage() {
   const [currentIndex, setCurrentIndex] = React.useState(0);
   const [isPlaying, setIsPlaying] = React.useState(false);
 
-  // Bumped every time playback is explicitly requested. The source effect
-  // below depends on it, which is what makes "play the track that is already
-  // selected" work at all — see the comment there.
+  // Bumped when playback of the ALREADY-SELECTED source is requested again —
+  // pressing play after a pause, or repeat-one. It is no longer load-bearing
+  // for starting a new track: the transport effect keys on isPlaying and the
+  // source effect keys on the URL, so forgetting to bump it can no longer
+  // stop a song from playing. See the two effects below.
   const [playToken, setPlayToken] = React.useState(0);
+
+  // The browser refused to start audio without a tap. Real on a browser tab,
+  // rare in the desktop app, and worth saying out loud: silently flipping the
+  // button back to Play is what made this look like a broken player rather
+  // than a browser rule.
+  const [needsGesture, setNeedsGesture] = React.useState(false);
 
   const [shuffle, setShuffle] = React.useState(false);
   const [repeat, setRepeat]   = React.useState('none'); // 'none' | 'one' | 'all'
@@ -324,9 +332,14 @@ export default function RetailPlayerPage() {
     const loaded = (data || []).map(d => d.track).filter(Boolean);
     setTracks(loaded);
     setLoadingTracks(false);
-    // Picking a vibe is the instruction to play it. Previously this loaded
-    // the tracks and stopped, so the first track never started until you
-    // clicked a different one, which looked like the first track was broken.
+    // Picking a vibe is the instruction to play it.
+    //
+    // This line alone used to do nothing: mode was already 'track' and
+    // currentIndex was already 0, so no dependency of the old single playback
+    // effect changed and the audio element was never given a src. It works now
+    // because setTracks changes the resolved URL, and the URL is what the
+    // source effect watches — there is no token to remember here.
+    setNeedsGesture(false);
     if (loaded.length > 0) setIsPlaying(true);
   };
 
@@ -399,48 +412,107 @@ export default function RetailPlayerPage() {
   const currentTrack = tracks[currentIndex];
   const currentAd = ads.length > 0 ? ads[currentAdIndex % ads.length] : null;
 
-  // Drives the actual audio source whenever what should be playing changes,
-  // either a new track index or a switch into/out of an ad.
+  // ── Playback, in two effects that do one job each ───────────────────────────
   //
-  // playToken is in the dependency list and that is the whole fix for "the
-  // first song never plays on open". currentIndex starts at 0, so tapping the
-  // first row called setCurrentIndex(0) — the same value — and setMode('track')
-  // when the mode was already 'track'. React saw no change, this effect never
-  // re-ran, audioRef.src was never assigned, and nothing loaded. Only
-  // setIsPlaying(true) took effect, so the button showed Pause over silence.
-  // Going to track 2 and back changed the index twice, which is why that
-  // worked. An imperative action must not depend on a state value happening
-  // to differ.
-  React.useEffect(() => {
-    if (!audioRef.current) return;
+  // WHY THIS IS TWO EFFECTS AND NOT ONE
+  //
+  // "The first song never plays" has now been reported three times, and each
+  // previous attempt fixed the path in front of it rather than the reason. The
+  // reason is that one effect was doing two unrelated jobs — deciding WHAT to
+  // load and deciding WHETHER to play — off a hand-written dependency list
+  // that deliberately excluded isPlaying. Every new call site then had to
+  // remember to bump playToken by hand, and openPlaylist did not:
+  //
+  //   openPlaylist() { setMode('track');      // already 'track'   → no change
+  //                    setCurrentIndex(0);    // already 0         → no change
+  //                    await fetch;
+  //                    setTracks(loaded);     // not a dependency
+  //                    setIsPlaying(true); }  // not a dependency
+  //
+  // Not one dependency changed, so the effect never ran, audioRef.src was
+  // never assigned, and nothing loaded. Going to track 2 and back changed the
+  // index twice, which is exactly why that always appeared to work.
+  //
+  // The fix is to stop depending on a token somebody has to remember. The real
+  // input is the URL, and the URL genuinely changes when the tracks arrive —
+  // so effect one keys on the URL and needs no token at all. Effect two then
+  // does nothing but make the element agree with isPlaying, which means
+  // "playing" is a state of the app rather than a side effect somebody has to
+  // trigger. A missed setPlayToken cannot break it again, because there is
+  // nothing left to miss.
+  const desiredSrc = mode === 'ad' ? (currentAd?.audio_url || null)
+                                   : (currentTrack?.file_url || null);
 
-    const attempt = () => {
-      if (!isPlaying) return;
-      const r = audioRef.current.play();
-      // play() rejects on autoplay policy, a missing file, or a bad URL. The
-      // old code swallowed it and left isPlaying true, so the transport lied
-      // about what was happening.
+  // 1. THE SOURCE. Loads whatever should be loaded. Idempotent: assigning the
+  //    same src again would restart the track from zero and abort the play()
+  //    already in flight, so it is compared first and skipped if unchanged.
+  //    playToken survives only for the deliberate "restart the same thing"
+  //    case (repeat-one), and is handled by seeking rather than reloading.
+  React.useEffect(() => {
+    const a = audioRef.current;
+    if (!a) return;
+
+    if (mode === 'ad' && !currentAd) { setMode('track'); return; }
+    if (!desiredSrc) return;
+
+    // a.src reports the fully-resolved absolute URL, so compare against that
+    // rather than against the raw string we last assigned.
+    const already = a.currentSrc || a.src;
+    if (already === desiredSrc || (already && already === new URL(desiredSrc, window.location.href).href)) {
+      return;
+    }
+
+    a.src = desiredSrc;
+    a.load();
+
+    if (mode === 'ad') {
+      logAdPlay(currentAd);
+    } else {
+      hasLoggedRef.current = false;
+      playedRef.current.add(currentIndex);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, desiredSrc, currentIndex, currentAdIndex]);
+
+  // 2. THE TRANSPORT. Makes the element agree with isPlaying, and nothing else.
+  //
+  //    Two rejections are handled differently on purpose, because the old code
+  //    treated both as "stop", which is how the button ended up showing Play
+  //    over a track that was about to start:
+  //
+  //      AbortError    — a new load interrupted this play(). Normal and
+  //                      self-correcting: the new src's own play() is already
+  //                      queued behind it. Setting isPlaying(false) here was
+  //                      cancelling playback that was working.
+  //      NotAllowedError — the browser wants a gesture. Real, and the person
+  //                      needs telling, so it surfaces a message rather than
+  //                      quietly flipping the button back.
+  React.useEffect(() => {
+    const a = audioRef.current;
+    if (!a) return;
+
+    if (!isPlaying) {
+      if (!a.paused) a.pause();
+      return;
+    }
+
+    if (!desiredSrc) return;
+
+    if (a.paused) {
+      const r = a.play();
       if (r && typeof r.catch === 'function') {
-        r.catch((err) => {
+        r.catch(err => {
+          if (err?.name === 'AbortError') return;   // superseded by a new load
           console.error('[retail-player] play() rejected:', err?.name, err?.message);
+          if (err?.name === 'NotAllowedError') {
+            setNeedsGesture(true);
+          }
           setIsPlaying(false);
         });
       }
-    };
-
-    if (mode === 'ad') {
-      if (!currentAd) { setMode('track'); return; }
-      audioRef.current.src = currentAd.audio_url;
-      logAdPlay(currentAd);
-      attempt();
-    } else if (currentTrack) {
-      audioRef.current.src = currentTrack.file_url;
-      hasLoggedRef.current = false;
-      playedRef.current.add(currentIndex);
-      attempt();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, currentIndex, currentAdIndex, playToken]);
+  }, [isPlaying, desiredSrc, playToken]);
 
   // The 30-second qualifying check, real playback position, not a timer,
   // so pausing partway through never falsely counts.
@@ -502,7 +574,15 @@ export default function RetailPlayerPage() {
   // Natural end of a track. This is where repeat-one lives.
   const handleEnded = () => {
     if (mode === 'track' && repeat === 'one') {
-      setPlayToken(t => t + 1);   // same index, so the token is what re-triggers it
+      // Same URL, so there is nothing for the source effect to reload —
+      // repeat-one is a seek, not a load. Reassigning src would work but
+      // re-downloads the file to play the same audio again.
+      const a = audioRef.current;
+      if (a) {
+        a.currentTime = 0;
+        const r = a.play();
+        if (r && typeof r.catch === 'function') r.catch(() => setIsPlaying(false));
+      }
       return;
     }
     advance();
@@ -544,33 +624,16 @@ export default function RetailPlayerPage() {
     setPlayToken(t => t + 1);   // required when index is unchanged — see the source effect
   };
 
+  // Records intent and nothing else. The transport effect is what touches the
+  // element, so there is exactly one place that can call play() or pause() and
+  // exactly one place that can get it wrong. The old version reached into the
+  // element from here as well, which is how the button and the audio could
+  // disagree about what was happening.
   const togglePlay = () => {
-    const a = audioRef.current;
-    if (!a) return;
-
-    if (isPlaying) {
-      a.pause();
-      setIsPlaying(false);
-      return;
-    }
-
-    // Nothing loaded yet — which is the state the player opens in. Calling
-    // play() on an element with no src rejects, so ask the source effect to
-    // load it instead of failing silently.
-    if (!a.src && mode === 'track' && currentTrack) {
-      setIsPlaying(true);
-      setPlayToken(t => t + 1);
-      return;
-    }
-
-    const r = a.play();
-    if (r && typeof r.catch === 'function') {
-      r.catch((err) => {
-        console.error('[retail-player] play() rejected:', err?.name, err?.message);
-        setIsPlaying(false);
-      });
-    }
+    setNeedsGesture(false);
+    if (isPlaying) { setIsPlaying(false); return; }
     setIsPlaying(true);
+    setPlayToken(t => t + 1);   // covers "press play on the same source again"
   };
 
   const cycleRepeat = () =>
@@ -1134,6 +1197,18 @@ export default function RetailPlayerPage() {
           isPreviewMode={isPreviewMode}
           onClose={() => setShowComments(false)}
         />
+      )}
+
+      {needsGesture && (
+        <div className="fixed bottom-24 left-0 right-0 z-30 px-4">
+          <button
+            onClick={togglePlay}
+            className="w-full py-3 rounded-xl text-xs font-semibold text-center transition active:scale-[0.99]"
+            style={{ background: 'rgba(167,139,250,0.18)', border: '1px solid rgba(167,139,250,0.35)', color: '#ddd6fe' }}
+          >
+            Tap to start playback — your browser needs one tap before it will play audio
+          </button>
+        </div>
       )}
 
       {(currentTrack || mode === 'ad') && (

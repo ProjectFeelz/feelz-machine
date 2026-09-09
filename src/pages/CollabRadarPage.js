@@ -138,7 +138,9 @@ function SendRequestModal({ target, onClose, onSent, myArtistId }) {
     if (!pitch.trim()) { setError('Add a short pitch so they know what you have in mind'); return; }
     setSending(true);
     try {
-      const { data: req, error: reqErr } = await supabase
+      // The row itself is all that is needed now — the notification comes
+      // from the trigger on this insert, so nothing here reads the new id.
+      const { error: reqErr } = await supabase
         .from('collab_requests')
         .insert({
           from_artist_id: myArtistId,
@@ -150,14 +152,10 @@ function SendRequestModal({ target, onClose, onSent, myArtistId }) {
         .select('id')
         .single();
       if (reqErr) throw reqErr;
-      await supabase.from('notifications').insert({
-        artist_id:      target.id,
-        type:           'collab_request',
-        title:          'New Collab Request',
-        message:        `${pitch.trim().slice(0, 80)}${pitch.length > 80 ? '…' : ''}`,
-        from_artist_id: myArtistId,
-        metadata:       { request_id: req.id, collab_type: collabType, from_artist_id: myArtistId },
-      });
+      // Nothing here on purpose. notify_collab_event (migration 96) is a
+      // trigger on collab_requests INSERT — the insert above is what notifies
+      // the target artist. This was a duplicate of it and a 403 besides,
+      // since it is addressed to the other artist.
       success();
       onSent();
     } catch (err) {

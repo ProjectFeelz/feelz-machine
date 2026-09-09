@@ -15,7 +15,7 @@ import {
   User, LogOut, DollarSign, Radio, Mic2,
   Loader, X, Youtube, Info, Search,
   Plus, MessageSquare, Check, Send, Store, Trophy, Sparkles, EyeOff, } from 'lucide-react';
-import { reportNotify } from '../utils/notify';
+import { sendNotification } from '../utils/notify';
 
 function LinkCard({ icon: Icon, label, description, path, color, onClick }) {
   const navigate = useNavigate();
@@ -118,14 +118,17 @@ export default function HubPage() {
     if (!dmUserId || !dmMessage.trim() || dmSending) return;
     setDmSending(true);
     try {
-      await reportNotify('admin_message (HubPage)', supabase.from('notifications').insert({
-        user_id:   dmUserId,
-        artist_id: dmArtistId || null,
-        type:      'admin_message',
-        title:     'Message from Feelz Machine',
-        message:   dmMessage.trim(),
-        metadata:  { from_admin: true },
-      }));
+      // Migration 106. admin_message is an admin-only type there, checked
+      // against the admins table rather than trusted from the client, so this
+      // now delivers instead of 403ing.
+      await sendNotification(supabase, 'admin_message (HubPage)', {
+        type:            'admin_message',
+        recipientUserId: dmUserId,
+        artistId:        dmArtistId || null,
+        title:           'Message from Feelz Machine',
+        message:         dmMessage.trim(),
+        metadata:        { from_admin: true },
+      });
       setDmSent(true);
       setTimeout(() => {
         setDmSent(false); setShowDMModal(false);

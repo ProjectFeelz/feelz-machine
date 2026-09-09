@@ -4,6 +4,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Loader, X, Send, CornerDownRight, Smile } from 'lucide-react';
 import { supabase } from '../supabaseClient';
+import { sendNotification } from '../utils/notify';
 import { useLocation } from 'react-router-dom';
 
 const REACTIONS = ['🔥','❤️','😤','🎯','💯','🙌'];
@@ -209,14 +210,16 @@ export default function TrackCommentSheet({ track, user, onClose, routePrefix = 
         ]);
         if (trackRow?.artists?.user_id && trackRow.artists.user_id !== user.id) {
           const name = commenterArtist?.artist_name || user.__profile?.name || 'Someone';
-          await supabase.from('notifications').insert({
-            user_id:        trackRow.artists.user_id,
-            artist_id:      trackRow.artist_id,
-            type:           'track_commented',
-            title:          `${name} commented on "${trackRow.title}"`,
-            message:        text.trim().slice(0, 100),
-            track_id:       track.id,
-            from_artist_id: commenterArtist?.id || null,
+          // Through the RPC, not a direct insert: this notification is
+          // addressed to the ARTIST by a commenter, and the INSERT policy on
+          // notifications only permits self-addressed rows — so this has been
+          // 403ing on every comment. See migration 106.
+          await sendNotification(supabase, 'track_commented (comment sheet)', {
+            type:      'track_commented',
+            artistId:  trackRow.artist_id,
+            title:     `${name} commented on "${trackRow.title}"`,
+            message:   text.trim().slice(0, 100),
+            trackId:   track.id,
             metadata: {
               track_id:           track.id,
               track_slug:         trackRow.slug || track.slug || null,
@@ -224,6 +227,7 @@ export default function TrackCommentSheet({ track, user, onClose, routePrefix = 
               track_title:        trackRow.title,
               track_artwork:      track.cover_artwork_url || null,
               comment:            text.trim().slice(0, 100),
+              from_artist_id:     commenterArtist?.id || null,
               from_artist_name:   name,
               from_artist_image:  commenterArtist?.profile_image_url || null,
             },

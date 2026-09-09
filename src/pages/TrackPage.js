@@ -13,7 +13,7 @@ import {
   Heart, Share2, Check, MoreHorizontal, Verified,
   Disc, ExternalLink
 } from 'lucide-react';
-import { reportNotify } from '../utils/notify';
+import { sendNotification } from '../utils/notify';
 import { fetchTrackCredits } from '../components/TrackCredits';
 
 const BASE_URL = 'https://www.feelzmachine.com';
@@ -200,16 +200,21 @@ export default function TrackPage() {
       // Notify the artist that someone downloaded their track
       if (artist?.user_id && artist?.id) {
         const { data: myProfile } = await supabase.from('artists').select('id, artist_name').eq('user_id', user.id).maybeSingle();
-        reportNotify('download (TrackPage)', supabase.from('notifications').insert({
-          user_id: artist.user_id,
-          artist_id: artist.id,
-          type: 'download',
-          title: `${myProfile?.artist_name || 'Someone'} downloaded ${track.title}`,
-          message: `${myProfile?.artist_name || 'Someone'} downloaded your track "${track.title}"`,
-          track_id: track.id,
-          from_artist_id: myProfile?.id || null,
-          metadata: { download: true, purchase_price: track.download_price || 0 },
-        }));
+        // Migration 106. reportNotify was doing its job — logging
+        // "blocked by row level security" on every download — but the write
+        // itself could never succeed from the client.
+        await sendNotification(supabase, 'download (TrackPage)', {
+          type:     'download',
+          artistId: artist.id,
+          title:    `${myProfile?.artist_name || 'Someone'} downloaded ${track.title}`,
+          message:  `${myProfile?.artist_name || 'Someone'} downloaded your track "${track.title}"`,
+          trackId:  track.id,
+          metadata: {
+            download:       true,
+            purchase_price: track.download_price || 0,
+            from_artist_id: myProfile?.id || null,
+          },
+        });
       }
     } catch (err) {
       // The backend's 403s are deliberate rules with real messages. Logging

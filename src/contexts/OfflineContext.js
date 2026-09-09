@@ -30,8 +30,9 @@ const OfflineContext = createContext(null);
 // and leave a button spinning forever.
 export function offlineErrorMessage(err) {
   switch (err?.message) {
-    case 'fan_pro_required':
-      return 'Offline listening is a Fan Pro feature. Upgrade to keep music on your device.';
+    case 'paid_tier_required':
+    case 'fan_pro_required':   // older code name, kept so a stale bundle still reads right
+      return 'Offline listening comes with Fan Pro, Artist Pro or Artist Premium. Upgrade to keep music on your device.';
     case 'purchase_required':
       return 'Buy this track first — then you can keep it offline.';
     case 'not_released_yet':

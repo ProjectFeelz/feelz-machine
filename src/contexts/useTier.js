@@ -25,6 +25,7 @@ const TIER_ACCESS = {
     pre_order: false,
     custom_branding: false,
     advanced_analytics: false,
+    offline_listening: false,            // Free: streaming only
     // Beatmaker limits
     max_beats: 3,                        // Free: 3 beats total
     beat_licences: ['free', 'basic'],    // Free: only Free and Basic Lease
@@ -48,6 +49,7 @@ const TIER_ACCESS = {
     advanced_analytics: false,
     community_post: true,
     daily_thought: true,
+    offline_listening: true,             // Pro: carry music with no signal
     // Beatmaker limits
     max_beats: 20,                                              // Pro: 20 beats
     beat_licences: ['free', 'basic', 'premium', 'unlimited'],  // Pro: all except Exclusive
@@ -72,6 +74,7 @@ const TIER_ACCESS = {
     advanced_analytics: true,
     community_post: true,
     daily_thought: true,
+    offline_listening: true,             // Premium: carry music with no signal
     // Beatmaker limits
     max_beats: Infinity,                                                      // Premium: unlimited
     beat_licences: ['free', 'basic', 'premium', 'unlimited', 'exclusive'],   // Premium: all tiers
@@ -89,6 +92,8 @@ export const LISTENER_TIER_ACCESS = {
     fan_badge:              false,
     free_downloads_monthly: 0,
     early_access:           false,
+    offline_listening:      false,
+    offline_track_limit:    0,
   },
   pro: {
     app_themes:             true,
@@ -96,6 +101,13 @@ export const LISTENER_TIER_ACCESS = {
     fan_badge:              true,
     free_downloads_monthly: 3,
     early_access:           true,
+    // Keeping tracks on the device to play with no connection. Deliberately
+    // separate from free_downloads_monthly: a download is a file you keep and
+    // it costs the artist a download count, offline is listening with the
+    // network removed and costs nothing. Conflating them would stop a Fan Pro
+    // listener after three songs.
+    offline_listening:      true,
+    offline_track_limit:    500,
   },
 };
 
@@ -118,6 +130,7 @@ const FEATURE_LABELS = {
   community_post: { name: 'Community Posts', description: 'Share updates and music with your fans', minTier: 'pro' },
   unlimited_uploads: { name: 'Unlimited Uploads', description: 'Upload unlimited tracks and albums', minTier: 'pro' },
   daily_thought: { name: 'Daily Thought', description: 'Post a daily message on your artist profile', minTier: 'pro' },
+  offline_listening: { name: 'Offline Listening', description: 'Save tracks to your device and play them with no connection', minTier: 'pro' },
   pre_order: { name: 'Pre-order Releases', description: 'Let fans pre-save upcoming releases before they drop', minTier: 'premium' },
   stems_upload: { name: 'Stem Uploads', description: 'Attach stems to your beats for buyers to download', minTier: 'pro' },
   beat_analytics: { name: 'Beat Analytics', description: 'Per-beat plays, licence views and purchase tracking', minTier: 'pro' },

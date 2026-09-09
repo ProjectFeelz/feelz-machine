@@ -13,6 +13,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
+import { sendNotification } from '../utils/notify';
 import { useAuth } from '../contexts/AuthContext';
 import { useHaptics } from '../hooks/useHaptics';
 import {
@@ -276,14 +277,22 @@ export function ArtistStoryView({ stories, artist, initialIndex = 0, onClose }) 
         supabase.from('artists').select('id, artist_name, profile_image_url, user_id').eq('user_id', user.id).maybeSingle()
           .then(({ data: liker }) => {
             if (liker && artist.user_id && artist.user_id !== user.id) {
-              supabase.from('notifications').insert({
-                user_id: artist.user_id, artist_id: artist.id,
-                type: 'track_liked',
-                title: `${liker.artist_name || 'Someone'} liked your story`,
-                message: story.caption || '',
-                from_artist_id: liker.id || null,
-                metadata: { story_id: storyId, from_artist_name: liker.artist_name, from_artist_image: liker.profile_image_url },
-              }).catch(() => {});
+              // .catch() on a supabase insert never fires for a database
+              // error — supabase-js resolves { data, error } rather than
+              // throwing — so this was a 403 nobody could see. Through the
+              // RPC, and the helper reads the error.
+              sendNotification(supabase, 'story like (stories)', {
+                type:     'track_liked',
+                artistId: artist.id,
+                title:    `${liker.artist_name || 'Someone'} liked your story`,
+                message:  story.caption || '',
+                metadata: {
+                  story_id: storyId,
+                  from_artist_id: liker.id || null,
+                  from_artist_name: liker.artist_name,
+                  from_artist_image: liker.profile_image_url,
+                },
+              });
             }
           });
       }

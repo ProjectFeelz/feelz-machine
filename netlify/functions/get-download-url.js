@@ -33,7 +33,13 @@ exports.handler = async (event) => {
 
   const { data: track, error: trackError } = await adminClient
     .from('tracks')
-    .select('file_url, title, is_preorder, release_date, download_price, artist_id, album_id')
+    // is_downloadable HAS to be here. The quota gate below reads it, and
+    // without it in the select it was always undefined — so `trackIsFree &&
+    // track.is_downloadable` was always false, the whole Fan Pro check and the
+    // 3-per-month quota were skipped, and every signed-in listener could
+    // download every free track without limit. One missing column, and the
+    // paywall had never fired.
+    .select('file_url, title, is_preorder, release_date, download_price, is_downloadable, artist_id, album_id')
     .eq('id', trackId)
     .maybeSingle();
 
@@ -86,25 +92,60 @@ exports.handler = async (event) => {
   // ── Listener download quota check ───────────────────────────────────────────
   // Free listeners cannot download. Pro listeners get 3 free downloads/month.
   // Paid downloads (download_price > 0) bypass the quota — they already paid.
-  if (trackIsFree && track.is_downloadable) {
+  // `!== false` rather than a truthy check, deliberately. is_downloadable is
+  // nullable and older rows have it null; a truthy check would let every one of
+  // those straight past the quota, which is the same hole in a smaller shape.
+  // An artist who has explicitly turned downloads off is handled separately
+  // below — this gate is about who may spend a free download, not whether the
+  // track offers one.
+  if (trackIsFree && track.is_downloadable !== false) {
     // Check if user is an artist (artists bypass listener quota)
     const { data: artistCheck } = await adminClient
       .from('artists').select('id').eq('user_id', user.id).maybeSingle();
 
     if (!artistCheck) {
-      // This is a listener — check their tier
-      const { data: listenerSub } = await adminClient
-        .from('listener_tier_subscriptions')
-        .select('tier_id')
+      // This is a listener — check their tier.
+      //
+      // BOTH sources, in the order they are authoritative. This function used
+      // to read only listener_tier_subscriptions, which is the older path.
+      // listeners.tier is what the PayPal webhook writes on activation and
+      // what an admin grant sets, and it is what useTier checks first on the
+      // client — so a listener whose Pro came from there was shown Fan Pro
+      // everywhere in the app and then told to upgrade the moment they tried
+      // to download. get-offline-url.js checks both; now so does this.
+      let isPro = false;
+
+      const { data: listenerRow } = await adminClient
+        .from('listeners')
+        .select('tier, tier_expires_at')
         .eq('user_id', user.id)
-        .eq('status', 'active')
         .maybeSingle();
 
-      // Look up Pro tier by slug instead of hardcoded UUID
-      const { data: proTier } = await adminClient
-        .from('platform_tiers').select('id').eq('slug', 'fan_pro').maybeSingle();
-      const PRO_TIER_ID = proTier?.id || 'a421dac1-f492-461c-88a5-f01b6942a042';
-      const isPro = listenerSub?.tier_id === PRO_TIER_ID;
+      if (listenerRow?.tier && listenerRow.tier !== 'free') {
+        const live = !listenerRow.tier_expires_at
+          || new Date(listenerRow.tier_expires_at) > new Date();
+        if (live) isPro = true;
+      }
+
+      if (!isPro) {
+        const { data: listenerSub } = await adminClient
+          .from('listener_tier_subscriptions')
+          .select('tier_id, expires_at')
+          .eq('user_id', user.id)
+          .eq('status', 'active')
+          .maybeSingle();
+
+        // Look up Pro tier by slug instead of a hardcoded UUID
+        const { data: proTier } = await adminClient
+          .from('platform_tiers').select('id').eq('slug', 'fan_pro').maybeSingle();
+        const PRO_TIER_ID = proTier?.id || 'a421dac1-f492-461c-88a5-f01b6942a042';
+
+        if (listenerSub?.tier_id === PRO_TIER_ID) {
+          const live = !listenerSub.expires_at
+            || new Date(listenerSub.expires_at) > new Date();
+          if (live) isPro = true;
+        }
+      }
 
       if (!isPro) {
         return {
