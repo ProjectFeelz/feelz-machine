@@ -47,9 +47,26 @@ export default function NewsletterPostPage() {
 
   return (
     <div className="min-h-screen bg-black text-white">
+      {/* The canonical was missing, and public/index.html hardcodes one
+          pointing at the homepage — so every newsletter post was telling
+          Google "I am the homepage" while sitemap.js was simultaneously
+          submitting it as its own URL. Google settles that contradiction by
+          dropping the page, which is what "Alternate page with proper
+          canonical tag" means in the Pages report.
+
+          Built from post.slug rather than window.location so it is stable
+          regardless of query strings, tracking parameters or a bare-domain
+          visit, all of which would otherwise each look like a separate URL. */}
       <Helmet>
         <title>{post.title}, Feelz Machine</title>
         <meta name="description" content={post.excerpt} />
+        <link rel="canonical" href={`https://www.feelzmachine.com/newsletter/${post.slug}`} />
+        <meta property="og:type" content="article" />
+        <meta property="og:url" content={`https://www.feelzmachine.com/newsletter/${post.slug}`} />
+        <meta property="og:title" content={`${post.title}, Feelz Machine`} />
+        {post.excerpt && <meta property="og:description" content={post.excerpt} />}
+        <meta name="twitter:title" content={`${post.title}, Feelz Machine`} />
+        {post.excerpt && <meta name="twitter:description" content={post.excerpt} />}
       </Helmet>
       <div className="max-w-2xl mx-auto px-5 pt-10 pb-24">
         <Link to="/" className="text-xs text-white/30 hover:text-white/60">&larr; Feelz Machine</Link>
