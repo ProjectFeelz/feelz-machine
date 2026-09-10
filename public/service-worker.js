@@ -158,10 +158,41 @@ function isHashedAsset(url) {
   return /\.[0-9a-f]{8,}\.(js|css|woff2?)$/i.test(url.pathname);
 }
 
+// Precached one at a time, not with addAll.
+//
+// cache.addAll() is atomic: if a SINGLE url in the list fails — a 404, a
+// network blip mid-install, a typo in a filename — the whole call rejects,
+// nothing at all is cached, and because skipWaiting() is chained after it
+// that never runs either. The worker then controls pages with an empty
+// cache, which is how a navigation ends up falling through to the
+// synthesised 503 below.
+//
+// Individually, a missing icon costs you that icon and nothing else. The
+// shell is what matters, so it is reported separately when it fails.
 self.addEventListener('install', e => {
-  e.waitUntil(
-    caches.open(STATIC_CACHE).then(c => c.addAll(PRECACHE)).then(() => self.skipWaiting())
-  );
+  e.waitUntil((async () => {
+    const cache = await caches.open(STATIC_CACHE);
+    const results = await Promise.allSettled(
+      PRECACHE.map(async (url) => {
+        // cache: 'reload' so an install never re-caches a stale HTTP-cached
+        // copy of the shell from a previous deploy.
+        const res = await fetch(url, { cache: 'reload' });
+        if (!res || !res.ok) throw new Error(`${url} -> ${res && res.status}`);
+        await cache.put(url, res);
+        return url;
+      })
+    );
+    const failed = results
+      .map((r, i) => (r.status === 'rejected' ? PRECACHE[i] : null))
+      .filter(Boolean);
+    if (failed.length) console.warn('[SW] precache missed:', failed.join(', '));
+    // If the shell itself did not cache, say so loudly: that is the one
+    // failure that costs offline support and makes navigation fall through.
+    if (!(await cache.match('/index.html'))) {
+      console.error('[SW] /index.html did NOT precache — offline navigation will not work.');
+    }
+    await self.skipWaiting();
+  })());
 });
 
 self.addEventListener('activate', e => {
@@ -200,22 +231,74 @@ self.addEventListener('fetch', e => {
 
   if (shouldNeverCache(url)) return;
 
-  // Navigation: network-first
+  // Navigation: cached shell FIRST, network in the background.
+  //
+  // This was network-first with no timeout, and that is the single biggest
+  // reason the app feels slow. Every page load — every one, even with a
+  // perfectly good shell already in the cache — sat waiting for a full
+  // round trip to Netlify before it could render a single pixel. On a
+  // strong connection that is 200ms nobody notices. On a phone on mobile
+  // data it is seconds, every time, and it is the first thing that happens
+  // so it delays everything after it.
+  //
+  // Serving the cached shell first is safe HERE, specifically, for two
+  // reasons that do not hold in general:
+  //
+  //   1. This is a single-page app. index.html is an 8KB shell with no
+  //      content in it — every artist, track and image arrives later over
+  //      the API, which this worker never caches (see NEVER_CACHE_ORIGINS).
+  //      So a cached shell cannot show stale CONTENT. It can only reference
+  //      an older set of hashed JS files.
+  //
+  //   2. It cannot even do that for long, because `activate` deletes every
+  //      cache whose name is not the current CACHE_VERSION, and
+  //      CACHE_VERSION is rewritten on every build. Anything still in this
+  //      cache is therefore from the current deploy by construction. The
+  //      stale window is one navigation, and the SW_UPDATED message the
+  //      activate handler already broadcasts is what closes it.
+  //
+  // The network copy still gets fetched on every navigation and written
+  // back, so the next load has the newest shell. That is the "revalidate"
+  // half — the user just is not made to wait for it.
   if (req.mode === 'navigate') {
-    e.respondWith(
-      fetch(req)
+    e.respondWith((async () => {
+      const cache = await caches.open(RUNTIME_CACHE);
+      const cached = (await cache.match(req))
+                  || (await caches.match('/index.html'));
+
+      // Kick the network off regardless, so the cache is fresh next time.
+      const network = fetch(req)
         .then(res => {
           if (res?.status === 200) {
-            const toCache = res.clone(); // clone synchronously before async gap
-            caches.open(RUNTIME_CACHE).then(c => c.put(req, toCache));
+            const copy = res.clone();      // clone before the async gap
+            cache.put(req, copy).catch(() => {});
           }
           return res;
         })
-        .catch(async () => {
-          const r = await caches.match(req) || await caches.match('/index.html') || await caches.match('/offline.html');
-          return r || new Response('<h1>Offline</h1>', { status: 503, headers: { 'Content-Type': 'text/html' } });
-        })
-    );
+        .catch(() => null);
+
+      if (cached) {
+        // Do not let the background fetch die with the response, and do not
+        // let its rejection surface as an unhandled error.
+        e.waitUntil(network.catch(() => {}));
+        return cached;
+      }
+
+      // Nothing cached yet — first ever visit, or the precache failed.
+      // Wait for the network, and only then fall back.
+      const res = await network;
+      if (res) return res;
+
+      return (await caches.match('/index.html'))
+          || (await caches.match('/offline.html'))
+          || new Response(
+               '<!doctype html><meta charset="utf-8"><title>Offline</title>'
+               + '<body style="font:16px system-ui;padding:2rem"><h1>No connection</h1>'
+               + '<p>Feelz Machine needs a connection the first time it loads. '
+               + 'Once it has, your saved music plays without one.</p>',
+               { status: 503, headers: { 'Content-Type': 'text/html; charset=utf-8' } }
+             );
+    })());
     return;
   }
 
