@@ -181,23 +181,50 @@ exports.handler = async () => {
           .from('artists').select('paypal_email').eq('id', winner.artist_id).maybeSingle();
         const paypalEmail = artistData?.paypal_email;
         if (paypalEmail) {
-          await fetch(`${process.env.URL}/.netlify/functions/paypal-payout`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'x-internal-secret': process.env.INTERNAL_FUNCTION_SECRET || '',
-            },
-            body: JSON.stringify({
-              email:          paypalEmail,
-              amount:         50,
-              currency:       'USD',
-              note:           `Congratulations! You won the Feelz Machine Paid Collaboration: "${comp.title}". Your $50 prize is here!`,
-              competition_id: challenge.competition_id,
-              entry_id:       winner.id,
-              artist_id:      winner.artist_id,
-            }),
-          });
-          console.log(`[close-wheel-competition] $50 payout sent to ${paypalEmail}`);
+          // The response is READ. This used to be a bare `await fetch(...)`
+          // followed unconditionally by a log line claiming the money had
+          // gone out — while paypal-payout was returning 403 to every one of
+          // these calls, because it only accepted an admin bearer token and
+          // this sends an internal secret. Weeks of "payout sent" in the logs
+          // and no payout.
+          //
+          // If INTERNAL_FUNCTION_SECRET is unset, do not even try: an empty
+          // secret cannot authenticate and pretending otherwise is how this
+          // failed silently in the first place.
+          if (!process.env.INTERNAL_FUNCTION_SECRET) {
+            console.error(`[close-wheel-competition] INTERNAL_FUNCTION_SECRET is not set — the $50 prize for ${paypalEmail} was NOT paid. Set it in Netlify and pay this one by hand.`);
+          } else {
+            let payoutOk = false;
+            let payoutDetail = '';
+            try {
+              const payoutRes = await fetch(`${process.env.URL}/.netlify/functions/paypal-payout`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'x-internal-secret': process.env.INTERNAL_FUNCTION_SECRET,
+                },
+                body: JSON.stringify({
+                  email:          paypalEmail,
+                  amount:         50,
+                  currency:       'USD',
+                  note:           `Congratulations! You won the Feelz Machine Paid Collaboration: "${comp.title}". Your $50 prize is here!`,
+                  competition_id: challenge.competition_id,
+                  entry_id:       winner.id,
+                  artist_id:      winner.artist_id,
+                }),
+              });
+              payoutDetail = await payoutRes.text();
+              payoutOk = payoutRes.ok;
+            } catch (payoutErr) {
+              payoutDetail = payoutErr?.message || String(payoutErr);
+            }
+
+            if (payoutOk) {
+              console.log(`[close-wheel-competition] $50 payout accepted for ${paypalEmail}: ${payoutDetail.slice(0, 200)}`);
+            } else {
+              console.error(`[close-wheel-competition] $50 payout FAILED for ${paypalEmail} — pay this one by hand. Response: ${payoutDetail.slice(0, 400)}`);
+            }
+          }
         } else {
           console.warn(`[close-wheel-competition] Winner has no PayPal email set — payout skipped. Artist: ${winner.artist_id}`);
           // Notify winner to set their PayPal email
@@ -241,20 +268,36 @@ exports.handler = async () => {
         ).catch(() => {});
       }
 
-      await fetch(`${process.env.URL}/.netlify/functions/send-push`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-internal-secret': process.env.INTERNAL_FUNCTION_SECRET || '',
-        },
-        body: JSON.stringify({
-          user_ids: userIds.slice(0, 1000),
-          title: '🏆 Collab Roulette — Winner Revealed!',
-          body: `${winnerName} won this week's challenge!`,
-          url: `/competition/${challenge.competition_id}`,
-          tag: `wheel-winner-${challenge.competition_id}`,
-        }),
-      }).catch(() => {});
+      // Same shape of mistake as the payout above, one severity down: the
+      // secret was sent as `|| ''` and the response was thrown away by
+      // `.catch(() => {})`, so if INTERNAL_FUNCTION_SECRET is unset the winner
+      // announcement is refused by send-push and nothing anywhere says so.
+      // Nobody gets the push and the log claims a clean run.
+      if (!process.env.INTERNAL_FUNCTION_SECRET) {
+        console.error('[close-wheel-competition] INTERNAL_FUNCTION_SECRET is not set — the winner announcement push was NOT sent.');
+      } else {
+        try {
+          const pushRes = await fetch(`${process.env.URL}/.netlify/functions/send-push`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-internal-secret': process.env.INTERNAL_FUNCTION_SECRET,
+            },
+            body: JSON.stringify({
+              user_ids: userIds.slice(0, 1000),
+              title: '🏆 Collab Roulette — Winner Revealed!',
+              body: `${winnerName} won this week's challenge!`,
+              url: `/competition/${challenge.competition_id}`,
+              tag: `wheel-winner-${challenge.competition_id}`,
+            }),
+          });
+          if (!pushRes.ok) {
+            console.error(`[close-wheel-competition] send-push returned ${pushRes.status}: ${await pushRes.text()}`);
+          }
+        } catch (pushErr) {
+          console.error('[close-wheel-competition] send-push threw:', pushErr.message);
+        }
+      }
     }
 
     console.log(`[close-wheel-competition] Winner: ${winnerName} (${winner.artist_id}) — Pro extended 90 days`);

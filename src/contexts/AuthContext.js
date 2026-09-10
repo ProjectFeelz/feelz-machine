@@ -211,11 +211,26 @@ export function AuthProvider({ children }) {
     try {
       const ref = sessionStorage.getItem('feelz_ref');
       if (ref) {
-        fetch('/.netlify/functions/affiliate-track', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'convert', refCode: ref, userId: sessionUser.id }),
-        }).then(() => sessionStorage.removeItem('feelz_ref')).catch(() => {});
+        // affiliate-track now takes the user from the bearer token rather
+        // than from the body — it was an unauthenticated, service-role
+        // endpoint that would mint credits for any user id it was handed.
+        // The token is what makes the conversion attributable, so it has to
+        // be sent or the call is refused with a 401.
+        (async () => {
+          const { data: { session: refSession } } = await supabase.auth.getSession();
+          if (!refSession?.access_token) return;
+          const res = await fetch('/.netlify/functions/affiliate-track', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${refSession.access_token}`,
+            },
+            body: JSON.stringify({ action: 'convert', refCode: ref }),
+          }).catch(() => null);
+          // Only clear the ref once it was actually recorded, so a failed
+          // call does not silently lose the referral.
+          if (res?.ok) sessionStorage.removeItem('feelz_ref');
+        })();
       }
     } catch {}
     try {

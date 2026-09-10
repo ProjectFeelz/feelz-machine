@@ -13,10 +13,19 @@ exports.handler = async (event) => {
     return { statusCode: 400, body: 'Missing url parameter' };
   }
 
-  // Only allow proxying from our own Supabase project
+  // Only allow proxying from our own Supabase project.
+  //
+  // This was matched with hostname.endsWith(domain) against a list that
+  // included the bare 'supabase.co', which is two holes in one:
+  //
+  //   evilsupabase.co        .endsWith('supabase.co')  -> true
+  //   anyproject.supabase.co .endsWith('supabase.co')  -> true
+  //
+  // The first is an attacker-registered domain, which makes this a
+  // server-side request forgery: the function fetches whatever it is pointed
+  // at and returns the body. An exact hostname match closes both.
   const allowed = [
     'bycdnwenbjusxpowojdb.supabase.co',
-    'supabase.co',
   ];
   let parsedUrl;
   try {
@@ -25,7 +34,10 @@ exports.handler = async (event) => {
     return { statusCode: 400, body: 'Invalid url' };
   }
 
-  if (!allowed.some(domain => parsedUrl.hostname.endsWith(domain))) {
+  // Exact match, lowercased, and https only. A hostname is compared whole:
+  // no endsWith, no includes, nothing that a longer attacker-chosen domain
+  // can satisfy.
+  if (parsedUrl.protocol !== 'https:' || !allowed.includes(parsedUrl.hostname.toLowerCase())) {
     return { statusCode: 403, body: 'Forbidden' };
   }
 

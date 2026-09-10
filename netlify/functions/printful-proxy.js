@@ -168,7 +168,26 @@ exports.handler = async (event) => {
 
     // ── Create order ──────────────────────────────────────────────────────────
     if (action === 'create_order') {
+      // verifyUser was missing here and present on every other mutating
+      // action in this file. This one places a Printful order and then
+      // CONFIRMS it to production a few lines below — real fulfilment against
+      // the artist's own Printful account, billed to them — from a body an
+      // anonymous caller supplies. It is the most expensive unauthenticated
+      // endpoint in the repo.
+      //
+      // Note what this does and does not fix: it now requires a signed-in
+      // caller, so orders are attributable and rate-limitable. It still does
+      // NOT verify that anybody paid — nothing in this file checks a purchase
+      // or a PayPal capture before confirming to production. That needs a
+      // decision about where merch payment is taken, so it is flagged rather
+      // than guessed at.
+      await verifyUser(event.headers.authorization);
+
       const { shipping_address, items, email } = body;
+      if (!shipping_address || !Array.isArray(items) || items.length === 0) {
+        return { statusCode: 400, headers: cors, body: JSON.stringify({ error: 'shipping_address and items required' }) };
+      }
+
       const { data: artist } = await supabase
         .from('artists').select('printful_access_token, merch_enabled, artist_name').eq('id', artist_id).maybeSingle();
       if (!artist?.merch_enabled || !artist.printful_access_token) {

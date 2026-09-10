@@ -1,24 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
 import { Search, X, Users, Percent, ChevronDown, AlertCircle } from 'lucide-react';
+import { COLLAB_ROLES } from '../constants/collabRoles';
 
-const ROLES = [
-  { value: 'featured', label: 'Featured Artist' },
-  { value: 'performing_artist', label: 'Performing Artist' },
-  { value: 'producer', label: 'Producer' },
-  { value: 'co_producer', label: 'Co-Producer' },
-  { value: 'beatmaker', label: 'Beatmaker' },
-  { value: 'songwriter', label: 'Songwriter' },
-  { value: 'lyricist', label: 'Lyricist' },
-  { value: 'vocalist', label: 'Vocalist' },
-  { value: 'musician', label: 'Musician' },
-  { value: 'arranger', label: 'Arranger' },
-  { value: 'remix', label: 'Remix' },
-  { value: 'engineer', label: 'Mixing Engineer' },
-  { value: 'mastering', label: 'Mastering Engineer' },
-  { value: 'recording', label: 'Recording Engineer' },
-  { value: 'director', label: 'A&R / Director' },
-];
+// Sourced from src/constants/collabRoles.js so the picker and every place
+// that renders a role back cannot drift apart.
+const ROLES = COLLAB_ROLES;
 
 export default function CollaboratorSearch({ collaborators, setCollaborators, currentArtistId }) {
   const [query, setQuery] = useState('');

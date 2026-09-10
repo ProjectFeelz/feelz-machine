@@ -49,11 +49,19 @@ function RetailPayPalButton({ venueId, onSubscribed }) {
   }, []);
 
   React.useEffect(() => {
-    fetch('/.netlify/functions/retail-paypal-subscription', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'get-plan', venueId }),
-    })
+    // retail-paypal-subscription requires a session now: it had none, held
+    // the service role key, and would activate any venue the caller named.
+    (async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      return fetch('/.netlify/functions/retail-paypal-subscription', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session?.access_token || ''}`,
+        },
+        body: JSON.stringify({ action: 'get-plan', venueId }),
+      });
+    })()
       .then(r => r.json())
       .then(data => { if (data.planId) { setPlanId(data.planId); setUsdAmount(data.usdAmount); } else setError(data.error || 'Billing not set up yet, contact us.'); })
       .catch(() => setError('Could not reach billing. Try again shortly.'));
@@ -66,9 +74,13 @@ function RetailPayPalButton({ venueId, onSubscribed }) {
       style: { shape: 'pill', color: 'white', layout: 'vertical', label: 'subscribe' },
       createSubscription: (data, actions) => actions.subscription.create({ plan_id: planId }),
       onApprove: async (data) => {
+        const { data: { session: linkSession } } = await supabase.auth.getSession();
         await fetch('/.netlify/functions/retail-paypal-subscription', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${linkSession?.access_token || ''}`,
+          },
           body: JSON.stringify({ action: 'link', venueId, subscriptionId: data.subscriptionID }),
         }).catch(() => {});
         onSubscribed();

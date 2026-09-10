@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { downloadTrack, downloadErrorMessage } from '../utils/downloadTrack';
+import { collabRoleLabel, collabCredit } from '../constants/collabRoles';
 import TrackActionSheet from '../components/TrackActionSheet';
 // TrackVersions is not imported here any more: versions moved to the track
 // page when Popular became a card rail with nowhere to expand into.
@@ -667,9 +668,21 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
       // Errors read, not discarded. The Collaborations section renders nothing
       // when the list is empty, so a failed query used to look exactly like an
       // artist who has never collaborated.
+      // The collaborating artist's name is selected as well as the track.
+      //
+      // The relationship MUST be named. `collaborations` has two foreign keys
+      // to `artists` — collaborations_artist_id_fkey and
+      // collaborations_invited_by_fkey — so a bare `artists(...)` embed is
+      // ambiguous and PostgREST answers PGRST201 as HTTP 300. That is the exact
+      // failure that emptied For You and Browse on 2026-09-08, and an
+      // unqualified embed here would have taken this rail down the same way.
+      const COLLAB_SELECT =
+        '*, tracks(id, title, slug, cover_artwork_url, file_url, duration, stream_count, artist_id, is_downloadable, download_price, is_published)'
+        + ', artists!collaborations_artist_id_fkey(id, artist_name, slug)';
+
       const { data: asCollaborator, error: asCollabErr } = await supabase
         .from('collaborations')
-        .select('*, tracks(id, title, slug, cover_artwork_url, file_url, duration, stream_count, artist_id, is_downloadable, download_price, is_published)')
+        .select(COLLAB_SELECT)
         .eq('artist_id', artistData.id).eq('status', 'accepted');
       if (asCollabErr) console.error('[profile] collaborations (as collaborator) failed:',
         asCollabErr.code, asCollabErr.message, asCollabErr.details || '', asCollabErr.hint || '');
@@ -680,7 +693,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
       if (ownTrackIds.length > 0) {
         const { data: ownTrackCollabs, error: ownCollabErr } = await supabase
           .from('collaborations')
-          .select('*, tracks(id, title, slug, cover_artwork_url, file_url, duration, stream_count, artist_id, is_downloadable, download_price, is_published)')
+          .select(COLLAB_SELECT)
           .in('track_id', ownTrackIds)
           .eq('status', 'accepted')
           .neq('artist_id', artistData.id);
@@ -689,8 +702,23 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
         onOwnTracks = ownTrackCollabs || [];
       }
 
-      // Merge and deduplicate by id
-      const allCollabs = [...(asCollaborator || []), ...onOwnTracks];
+      // Merge and deduplicate by id.
+      //
+      // The two queries mean OPPOSITE things and the merge used to lose that.
+      //
+      //   asCollaborator — artist_id = me. I am the guest on someone else's
+      //                    track, and `role` is MY role. "Featured" is right.
+      //   onOwnTracks    — the track is mine and artist_id is somebody ELSE.
+      //                    `role` is THEIR role, not mine.
+      //
+      // The card rendered `collab.role` either way with no name attached, so
+      // every guest credited on this artist's own songs came out reading
+      // "featured" — as if they were featured on their own track. Tagging the
+      // direction here is what lets the card say whose role it is.
+      const allCollabs = [
+        ...(asCollaborator || []).map(c => ({ ...c, direction: 'guest' })),
+        ...onOwnTracks.map(c => ({ ...c, direction: 'host' })),
+      ];
       const seenCollabs = new Set();
       const uniqueCollabs = allCollabs.filter(col => {
         if (seenCollabs.has(col.id)) return false;
@@ -2014,46 +2042,67 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
           <h2 className="text-lg font-bold mb-3 px-6" style={{ fontFamily: `"${headingFont}", sans-serif` }}>Collaborations</h2>
 
           <div className="flex space-x-3 overflow-x-auto px-6 scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
-            {collabs.map(collab => (
-              <button
-                key={collab.id}
-                onClick={() => handlePlayTrack(collab.tracks)}
-                className="flex-shrink-0 w-36 text-left cursor-pointer group"
-              >
-                <div
-                  className="relative aspect-square rounded-2xl overflow-hidden mb-2"
-                  style={{
-                    backgroundColor: `${secondaryColor}12`,
-                    boxShadow: `inset 0 0 0 1px ${secondaryColor}33`,
-                  }}
+            {collabs.map(collab => {
+              // Whose role is this?
+              //
+              // 'host' means the track belongs to THIS artist and the
+              // collaboration row describes somebody else on it — so the chip
+              // has to credit that person by name. Rendering the bare role
+              // here is what made this artist's own songs read "featured":
+              // true of the guest, nonsense about the owner.
+              //
+              // 'guest' means this artist appears on someone else's track, and
+              // the role genuinely is theirs.
+              const other = collab.artists;
+              const chip = collab.direction === 'host'
+                ? collabCredit(collab.role, other?.artist_name)
+                : collabRoleLabel(collab.role);
+              const line = collab.direction === 'host'
+                ? (other?.artist_name ? `On this track: ${other.artist_name}` : 'Featured guest')
+                : `${collabRoleLabel(collab.role) || 'Collaboration'} credit`;
+              return (
+                <button
+                  key={collab.id}
+                  onClick={() => handlePlayTrack(collab.tracks)}
+                  className="flex-shrink-0 w-36 text-left cursor-pointer group"
                 >
-                  {collab.tracks?.cover_artwork_url
-                    ? <img src={collab.tracks.cover_artwork_url} alt={collab.tracks?.title || ''} className="w-full h-full object-cover" />
-                    : <div className="w-full h-full flex items-center justify-center"><Music className="w-8 h-8" style={{ color: `${textColor}20` }} /></div>}
+                  <div
+                    className="relative aspect-square rounded-2xl overflow-hidden mb-2"
+                    style={{
+                      backgroundColor: `${secondaryColor}12`,
+                      boxShadow: `inset 0 0 0 1px ${secondaryColor}33`,
+                    }}
+                  >
+                    {collab.tracks?.cover_artwork_url
+                      ? <img src={collab.tracks.cover_artwork_url} alt={collab.tracks?.title || ''} className="w-full h-full object-cover" />
+                      : <div className="w-full h-full flex items-center justify-center"><Music className="w-8 h-8" style={{ color: `${textColor}20` }} /></div>}
 
-                  {/* Role on the artwork, where Popular puts its rank. */}
-                  {collab.role && (
-                    <span
-                      className="absolute bottom-1.5 left-1.5 max-w-[calc(100%-12px)] truncate px-2 py-0.5 rounded-full text-[10px] font-semibold"
-                      style={{ background: 'rgba(0,0,0,0.55)', color: '#fff', backdropFilter: 'blur(4px)' }}
-                    >
-                      {collab.role}
-                    </span>
-                  )}
+                    {/* The credit on the artwork, where Popular puts its rank. */}
+                    {chip && (
+                      <span
+                        className="absolute bottom-1.5 left-1.5 max-w-[calc(100%-12px)] truncate px-2 py-0.5 rounded-full text-[10px] font-semibold"
+                        style={{ background: 'rgba(0,0,0,0.55)', color: '#fff', backdropFilter: 'blur(4px)' }}
+                      >
+                        {chip}
+                      </span>
+                    )}
 
-                  <div className="absolute inset-0 flex items-center justify-center bg-black/35 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <Play className="w-7 h-7 text-white" fill="white" />
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/35 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <Play className="w-7 h-7 text-white" fill="white" />
+                    </div>
                   </div>
-                </div>
 
-                <p className="text-sm font-medium truncate" style={{ color: textColor }}>
-                  {collab.tracks?.title}
-                </p>
-                <p className="text-xs truncate" style={{ color: secondaryColor }}>
-                  Collab
-                </p>
-              </button>
-            ))}
+                  <p className="text-sm font-medium truncate" style={{ color: textColor }}>
+                    {collab.tracks?.title}
+                  </p>
+                  {/* Was the literal string "Collab" on every card, which said
+                      nothing the section heading had not already said. */}
+                  <p className="text-xs truncate" style={{ color: secondaryColor }}>
+                    {line}
+                  </p>
+                </button>
+              );
+            })}
           </div>
 
           {collabs.length > 6 && (

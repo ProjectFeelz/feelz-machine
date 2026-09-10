@@ -140,10 +140,16 @@ export default function AffiliatePage() {
   const handleApply = async () => {
     setApplying(true);
     try {
+      // You may only apply as yourself, and that is now established by the
+      // token rather than by the body.
+      const { data: { session } } = await supabase.auth.getSession();
       const res = await fetch('/.netlify/functions/affiliate-track', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'apply', userId: user.id }),
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session?.access_token || ''}`,
+        },
+        body: JSON.stringify({ action: 'apply' }),
       });
       const data = await res.json();
       if (data.error) { alert(data.error); }

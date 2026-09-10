@@ -276,15 +276,44 @@ export default function AdminAnalytics({ embedded = false }) {
       setUploadTimeline(Object.entries(uploadMap).map(([date, uploads]) => ({ date, uploads })));
 
       // ── Device split ──────────────────────────────────────────────────────
-      const { data: deviceRows } = await supabase
+      // Everything on the Behaviour tab is computed from this one read, and this
+      // read is RLS-scoped. `streams` has no admin policy: the SELECT policies
+      // are "Streams are viewable by owner" and "Artists can read streams of
+      // their tracks", so an admin querying with their own JWT gets the streams
+      // of their OWN tracks and nothing else. The completion rate, the average
+      // listen time, the sample size and the source and device splits were all
+      // presented as platform figures while describing one artist.
+      //
+      // `placeholders` exists because of the other half of the story. Until
+      // migration 107, log_stream wrote every row with duration_played = 30 and
+      // completed = true, and finalise_stream never ran on a skip. Those rows
+      // are still here, and they are what makes the average land on exactly
+      // 0:30 and the completion rate implausibly high — so the tab now says how
+      // many of its sample are still placeholders instead of averaging them in
+      // silently.
+      const { data: deviceRows, error: deviceErr } = await supabase
         .from('streams').select('device_type, source, completed, duration_played').gte('created_at', cutoff).limit(10000);
-      const dc = { mobile: 0, desktop: 0, unknown: 0 };
+      if (deviceErr) console.error('[analytics] streams read failed:', deviceErr.code, deviceErr.message);
+      // 'venue' is a real third value, not a stray: retail plays record it.
+      // The live catalogue reports exactly three — desktop, mobile, venue — and
+      // the old `dc[s.device_type]++` turned every venue play into NaN on a new
+      // key that `total` never summed, so retail listening was missing from
+      // this split entirely rather than showing up anywhere.
+      const dc = { mobile: 0, desktop: 0, venue: 0, unknown: 0 };
       const sc = {}, completedCount = { yes: 0, no: 0 }, durAll = [];
+      let placeholders = 0;
       (deviceRows || []).forEach(s => {
-        dc[s.device_type || 'unknown']++;
+        // Bucketed against the known set, so a value nobody anticipated lands
+        // in Unknown instead of writing NaN to a key the total never reads.
+        const bucket = Object.prototype.hasOwnProperty.call(dc, s.device_type)
+          ? s.device_type : 'unknown';
+        dc[bucket]++;
         sc[s.source || 'unknown'] = (sc[s.source || 'unknown'] || 0) + 1;
         if (s.completed) completedCount.yes++; else completedCount.no++;
         if (s.duration_played > 0) durAll.push(s.duration_played);
+        // The pre-107 signature: exactly 30 seconds and completed true, which
+        // is what log_stream hardcoded rather than anything a listener did.
+        if (s.duration_played === 30 && s.completed === true) placeholders++;
       });
       const totalStreamsForPct = (deviceRows || []).length || 1;
       setSourceSplit(Object.entries(sc).map(([name, count]) => ({
@@ -294,7 +323,9 @@ export default function AdminAnalytics({ embedded = false }) {
       setCompletionStats({
         rate: Math.round((completedCount.yes / totalStreamsForPct) * 100),
         avgDuration: durAll.length ? Math.round(durAll.reduce((a,b)=>a+b,0)/durAll.length) : 0,
-        total: totalStreamsForPct,
+        total: (deviceRows || []).length,
+        placeholders,
+        scope: deviceErr ? 'error' : 'own',
       });
 
       // Sitewide listener demographics. Location and completion come from
@@ -340,12 +371,15 @@ export default function AdminAnalytics({ embedded = false }) {
           keyCounts,
         });
       } catch { setBeatStats({ count: 0, purchases: 0, revenue: '0.00', licenceCounts: {} }); }
-      const total = dc.mobile + dc.desktop + dc.unknown;
+      // Summed from the bucket object rather than by naming three keys, so
+      // adding a bucket above cannot silently drop it out of the denominator.
+      const total = Object.values(dc).reduce((a, b) => a + b, 0);
       setDeviceSplit([
         { name: 'Mobile',  value: dc.mobile,  pct: pct(dc.mobile, total),  color: PURPLE },
         { name: 'Desktop', value: dc.desktop, pct: pct(dc.desktop, total), color: CYAN },
+        { name: 'Venue',   value: dc.venue,   pct: pct(dc.venue, total),   color: GREEN  },
         { name: 'Unknown', value: dc.unknown, pct: pct(dc.unknown, total), color: '#4b5563' },
-      ]);
+      ].filter(d => d.value > 0 || d.name === 'Mobile' || d.name === 'Desktop'));
 
       // ── Tier split ────────────────────────────────────────────────────────
       const { data: tierRows } = await supabase
@@ -439,42 +473,148 @@ export default function AdminAnalytics({ embedded = false }) {
       })));
 
       // ── Revenue ────────────────────────────────────────────────────────────
+      //
+      // Three things were wrong here and all three pointed the same way: the
+      // tab under-reported and then filled the gap with a made-up number.
+      //
+      // 1. RLS. tips, downloads, beat_purchases and listener_tier_subscriptions
+      //    have no admin SELECT policy. Their policies are owner-scoped —
+      //    "artists see tips they received", "auth.uid() = user_id" — and this
+      //    page queries with the admin's own authenticated JWT, not the service
+      //    role. So these four read one artist's data, not the platform's, and
+      //    a blocked read returns rows: [] with an error, which the old code
+      //    discarded by destructuring only `data`. $0.00 was therefore
+      //    indistinguishable from "you are not allowed to see this".
+      //    Errors are read now and surfaced as `scope`, so the UI can say which
+      //    it is. The real fix is an admin-gated SECURITY DEFINER function, the
+      //    same shape as get_platform_listener_stats above.
+      //
+      // 2. Hardcoded tier UUIDs. Pro and Premium were matched on two literal
+      //    ids, and the SAME id used for artist Pro was also used below as the
+      //    listener Fan Pro id — a tier cannot be both, so at least one of
+      //    those two counts was matching nothing. Matched on platform_tiers.slug
+      //    now, which is what the unique constraint is on.
+      //
+      // 3. Invented MRR. The estimate multiplied each count by a hardcoded
+      //    4.99 / 9.99 / 2.99 and counted every active row as paying. A tier
+      //    an admin grants by hand is an active row with amount_paid 0, so
+      //    comps were being billed into MRR. MRR is now summed from what the
+      //    subscriptions actually record, normalised to a month, with
+      //    admin_grant rows counted and reported separately as comps.
       try {
+        const { data: tierRefRows, error: tierRefErr } = await supabase
+          .from('platform_tiers').select('id, slug, price_monthly, price_yearly');
+        if (tierRefErr) console.error('[analytics] platform_tiers failed:', tierRefErr.code, tierRefErr.message);
+        const tierBySlug = {};
+        (tierRefRows || []).forEach(t => { if (t.slug) tierBySlug[t.slug] = t; });
+
         const [
-          { data: tipRevenue },
-          { data: dlRevenue },
-          { data: beatRevenue },
-          { count: artistProCount },
-          { count: artistPremCount },
-          { count: fanProCount },
+          { data: tipRevenue,  error: tipErr },
+          { data: dlRevenue,   error: dlErr },
+          { data: beatRevenue, error: beatErr },
+          { data: artistSubs,  error: artistSubErr },
+          { data: listenerSubs, error: listenerSubErr },
         ] = await Promise.all([
-          supabase.from('tips').select('amount').gte('created_at', cutoff),
+          supabase.from('tips').select('amount, currency').gte('created_at', cutoff),
           supabase.from('downloads').select('amount_paid').gt('amount_paid', 0).gte('created_at', cutoff),
           supabase.from('beat_purchases').select('amount_paid').eq('status', 'completed').gte('created_at', cutoff),
-          supabase.from('artist_tier_subscriptions').select('*', { count: 'exact', head: true }).eq('status', 'active')
-            .in('tier_id', ['a421dac1-f492-461c-88a5-f01b6942a042']), // pro
-          supabase.from('artist_tier_subscriptions').select('*', { count: 'exact', head: true }).eq('status', 'active')
-            .in('tier_id', ['f0b8b8f5-bfc2-496e-9fb4-8904d9dc6fe4']), // premium
-          supabase.from('listener_tier_subscriptions').select('*', { count: 'exact', head: true }).eq('status', 'active'),
+          // Rows, not counts: the tier, what was actually paid, how often, and
+          // whether it was a grant are all needed to state MRR honestly.
+          supabase.from('artist_tier_subscriptions')
+            .select('tier_id, amount_paid, currency, billing_cycle, payment_provider')
+            .eq('status', 'active'),
+          supabase.from('listener_tier_subscriptions')
+            .select('tier_id, billing_cycle').eq('status', 'active'),
         ]);
+
+        [['tips', tipErr], ['downloads', dlErr], ['beat_purchases', beatErr],
+         ['artist_tier_subscriptions', artistSubErr],
+         ['listener_tier_subscriptions', listenerSubErr],
+         ['platform_tiers', tierRefErr]]
+          .filter(([, e]) => e)
+          .forEach(([name, e]) => console.error(`[analytics] revenue: ${name} blocked or failed:`, e.code, e.message));
+
+        // Any of these failing means the figures below are not the platform's.
+        const blocked = [tipErr, dlErr, beatErr, listenerSubErr].some(Boolean);
+
         const tipTotal  = (tipRevenue  || []).reduce((s, t) => s + (parseFloat(t.amount)      || 0), 0);
         const dlTotal   = (dlRevenue   || []).reduce((s, d) => s + (parseFloat(d.amount_paid) || 0), 0);
         const beatTotal = (beatRevenue || []).reduce((s, b) => s + (parseFloat(b.amount_paid) || 0), 0);
+
+        // Tips carry a currency column and are summed here regardless of it.
+        // Flagged rather than converted: a made-up FX rate would be the same
+        // mistake as the made-up MRR this replaces.
+        const tipCurrencies = [...new Set((tipRevenue || []).map(t => t.currency).filter(Boolean))];
+
+        const proId  = tierBySlug.pro?.id;
+        const premId = tierBySlug.premium?.id;
+        const subs   = artistSubs || [];
+        const countFor = id => (id ? subs.filter(s => s.tier_id === id).length : 0);
+
+        // What a subscription contributes per month. Prefer what was actually
+        // paid; fall back to the tier's list price only when amount_paid is 0
+        // on a row that is not a grant (older rows predate the column).
+        // The live tier table has price_yearly set (pro 20, premium 50) and
+        // price_monthly at 0.00 for BOTH paid tiers. So a monthly-billed row
+        // has no monthly price to read, and returning price_monthly verbatim
+        // would score it as free. Where monthly is unset but yearly is not,
+        // monthly is derived from yearly — stated here rather than silently,
+        // because a derived twelfth is an approximation and the fix is to set
+        // price_monthly in platform_tiers.
+        const monthlyOf = (s) => {
+          if (s.payment_provider === 'admin_grant') return 0;
+          const tier = (tierRefRows || []).find(t => t.id === s.tier_id);
+          const annual = s.billing_cycle === 'annual';
+          const paid = parseFloat(s.amount_paid) || 0;
+          if (paid > 0) return annual ? paid / 12 : paid;
+          if (!tier) return 0;
+          const yearly  = parseFloat(tier.price_yearly)  || 0;
+          const monthly = parseFloat(tier.price_monthly) || 0;
+          if (annual) return yearly / 12;
+          return monthly > 0 ? monthly : yearly / 12;
+        };
+
+        // Tier table problems worth naming on the page, because each one makes
+        // a number below quietly wrong rather than visibly broken.
+        const tierWarnings = [];
+        ['pro', 'premium'].forEach(slug => {
+          const t = tierBySlug[slug];
+          if (!t) { tierWarnings.push(`No platform_tiers row with slug "${slug}".`); return; }
+          if (!(parseFloat(t.price_monthly) > 0) && parseFloat(t.price_yearly) > 0) {
+            tierWarnings.push(`${slug}: price_monthly is unset, so monthly subscriptions are valued at price_yearly ÷ 12.`);
+          }
+        });
+        if (!tierBySlug.fan_pro && !tierBySlug['fan-pro']) {
+          tierWarnings.push('No platform_tiers row with slug "fan_pro" — every active listener subscription is being counted as Fan Pro.');
+        }
+
+        const mrr   = subs.reduce((s, r) => s + monthlyOf(r), 0);
+        const comps = subs.filter(s => s.payment_provider === 'admin_grant').length;
+
         setRevenueStats({
           tips:        tipTotal.toFixed(2),
           downloads:   dlTotal.toFixed(2),
           beats:       beatTotal.toFixed(2),
           total:       (tipTotal + dlTotal + beatTotal).toFixed(2),
-          artistPro:   artistProCount  || 0,
-          artistPrem:  artistPremCount || 0,
-          fanPro:      fanProCount     || 0,
+          artistPro:   countFor(proId),
+          artistPrem:  countFor(premId),
+          fanPro:      (listenerSubs || []).length,
+          mrr:         mrr.toFixed(2),
+          comps,
+          tierIdsResolved: !!(proId && premId),
+          tierWarnings,
+          tipCurrencies,
+          scope: blocked ? 'own' : 'platform',
         });
 
         // ── Listener tier split ───────────────────────────────────────────
-        const { data: lTierRows } = await supabase
-          .from('listener_tier_subscriptions').select('tier_id').eq('status', 'active');
-        const PRO_ID = 'a421dac1-f492-461c-88a5-f01b6942a042';
-        const lProCount = (lTierRows || []).filter(r => r.tier_id === PRO_ID).length;
+        // Matched on the Fan Pro tier's real id. This used to compare against
+        // the artist Pro uuid, which no listener subscription can hold, so
+        // Fan Pro was pinned at 0 and Free at 100% by construction.
+        const fanProId = tierBySlug.fan_pro?.id || tierBySlug['fan-pro']?.id;
+        const lProCount = fanProId
+          ? (listenerSubs || []).filter(r => r.tier_id === fanProId).length
+          : (listenerSubs || []).length;
         const lFreeCount = Math.max(0, (listenerCount || 0) - lProCount);
         const lTotal = lFreeCount + lProCount || 1;
         setListenerTierSplit([
@@ -789,10 +929,37 @@ export default function AdminAnalytics({ embedded = false }) {
           {/* ── REVENUE ─────────────────────────────────────────────────── */}
           {tab === 'revenue' && (
             <>
+              {/* A number that is $0.00 because there were no sales and a number
+                  that is $0.00 because the query was refused look identical, and
+                  this page showed the second as if it were the first. Said out
+                  loud now, because "no revenue" is a business decision and "I
+                  cannot see the revenue" is a bug. */}
+              {revenueStats.scope === 'own' && (
+                <div className="rounded-2xl p-4 mb-4 border border-amber-500/25 bg-amber-500/[0.07]">
+                  <p className="text-xs font-bold text-amber-300 mb-1">These are not platform figures.</p>
+                  <p className="text-[11px] text-amber-200/60 leading-relaxed">
+                    tips, downloads, beat_purchases and listener_tier_subscriptions have no
+                    admin read policy, so this page — which queries as your own signed-in
+                    user, not the service role — can only see rows you own. Everything below
+                    is your own activity. The console names each refused table.
+                  </p>
+                </div>
+              )}
+              {revenueStats.tierWarnings?.length > 0 && (
+                <div className="rounded-2xl p-4 mb-4 border border-red-500/25 bg-red-500/[0.07]">
+                  <p className="text-xs font-bold text-red-300 mb-1">
+                    Tier table needs attention — MRR below is affected.
+                  </p>
+                  <ul className="text-[11px] text-red-200/60 leading-relaxed space-y-1 mt-1.5">
+                    {revenueStats.tierWarnings.map((w, i) => <li key={i}>· {w}</li>)}
+                  </ul>
+                </div>
+              )}
+
               {/* Total revenue KPIs */}
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
                 <KPI icon={DollarSign}  label="Total Revenue"    value={`$${revenueStats.total || '0.00'}`}     color="bg-green-500/20"  sub={`Last ${range} days`} />
-                <KPI icon={Heart}       label="Tips"             value={`$${revenueStats.tips || '0.00'}`}      color="bg-pink-500/20"   />
+                <KPI icon={Heart}       label="Tips"             value={`$${revenueStats.tips || '0.00'}`}      color="bg-pink-500/20"   sub={revenueStats.tipCurrencies?.length > 1 ? `mixed: ${revenueStats.tipCurrencies.join(', ')}` : undefined} />
                 <KPI icon={Download}    label="Download Sales"   value={`$${revenueStats.downloads || '0.00'}`} color="bg-blue-500/20"   />
                 <KPI icon={Music}       label="Beat Sales"       value={`$${revenueStats.beats || '0.00'}`}     color="bg-yellow-500/20" />
               </div>
@@ -802,19 +969,26 @@ export default function AdminAnalytics({ embedded = false }) {
                 <SectionTitle icon={Crown} title="Active Subscriptions" color="text-yellow-400" />
                 <div className="grid grid-cols-3 lg:grid-cols-6 gap-3 mt-3">
                   {[
-                    { label: 'Artist Pro',     value: revenueStats.artistPro  || 0, color: 'text-purple-400', est: ((revenueStats.artistPro || 0) * 4.99).toFixed(0) },
-                    { label: 'Artist Premium', value: revenueStats.artistPrem || 0, color: 'text-yellow-400', est: ((revenueStats.artistPrem || 0) * 9.99).toFixed(0) },
-                    { label: 'Fan Pro',        value: revenueStats.fanPro     || 0, color: 'text-cyan-400',   est: ((revenueStats.fanPro || 0) * 2.99).toFixed(0) },
+                    { label: 'Artist Pro',     value: revenueStats.artistPro  || 0, color: 'text-purple-400' },
+                    { label: 'Artist Premium', value: revenueStats.artistPrem || 0, color: 'text-yellow-400' },
+                    { label: 'Fan Pro',        value: revenueStats.fanPro     || 0, color: 'text-cyan-400'   },
                   ].map(s => (
                     <div key={s.label} className="bg-white/[0.03] rounded-xl p-3 border border-white/[0.05] text-center">
                       <p className={`text-xl font-black ${s.color}`}>{s.value}</p>
                       <p className="text-[10px] text-white/30 mt-0.5">{s.label}</p>
-                      <p className="text-[10px] text-green-400/60 mt-0.5">~${s.est}/mo</p>
                     </div>
                   ))}
                 </div>
-                <p className="text-[10px] text-white/20 mt-3 text-center">
-                  Estimated MRR: ~${((revenueStats.artistPro || 0) * 4.99 + (revenueStats.artistPrem || 0) * 9.99 + (revenueStats.fanPro || 0) * 2.99).toFixed(2)}/mo
+                {/* Summed from what the subscription rows actually record, not
+                    from a hardcoded price list, and grants are excluded rather
+                    than billed. The per-tier "~$X/mo" captions are gone: they
+                    multiplied a count by a literal, so they asserted revenue
+                    from tiers nobody has paid for. */}
+                <p className="text-[10px] text-white/25 mt-3 text-center">
+                  MRR from recorded subscription payments: <span className="text-green-400/70 font-semibold">${revenueStats.mrr || '0.00'}/mo</span>
+                  {revenueStats.comps > 0 && (
+                    <span className="text-white/20"> · {revenueStats.comps} admin-granted {revenueStats.comps === 1 ? 'comp' : 'comps'} excluded</span>
+                  )}
                 </p>
               </div>
 
@@ -981,6 +1155,32 @@ export default function AdminAnalytics({ embedded = false }) {
           {/* ── BEHAVIOUR ─────────────────────────────────────────────── */}
           {tab === 'behaviour' && (
             <div className="space-y-4">
+              {/* Two disclosures, because without them every figure on this tab
+                  reads as something it is not: platform-wide, and measured. */}
+              <div className="rounded-2xl p-4 border border-amber-500/25 bg-amber-500/[0.07]">
+                <p className="text-xs font-bold text-amber-300 mb-1">Scope: your own tracks.</p>
+                <p className="text-[11px] text-amber-200/60 leading-relaxed">
+                  <code>streams</code> has no admin read policy — only "viewable by owner"
+                  and "artists can read streams of their tracks" — and this page queries as
+                  your signed-in user rather than the service role. Every figure below is
+                  computed from streams on tracks you own, not the platform's.
+                </p>
+              </div>
+              {completionStats.placeholders > 0 && (
+                <div className="rounded-2xl p-4 border border-red-500/25 bg-red-500/[0.07]">
+                  <p className="text-xs font-bold text-red-300 mb-1">
+                    {completionStats.placeholders} of {completionStats.total || 0} sampled streams are placeholders.
+                  </p>
+                  <p className="text-[11px] text-red-200/60 leading-relaxed">
+                    Before migration 107, <code>log_stream</code> wrote every row with
+                    duration 30s and completed=true, and <code>finalise_stream</code> never
+                    ran when a listener skipped. Those rows are what pull the average to
+                    0:30 and inflate the completion rate. Both numbers become real as new
+                    streams accumulate; they cannot be repaired retrospectively.
+                  </p>
+                </div>
+              )}
+
               {/* Completion funnel */}
               <div className="rounded-2xl p-4 bg-white/[0.02] border border-white/[0.05]">
                 <SectionTitle icon={Activity} title="Stream Quality" color="text-green-400" />
@@ -1036,17 +1236,26 @@ export default function AdminAnalytics({ embedded = false }) {
                 <div className="rounded-2xl p-4 bg-white/[0.02] border border-white/[0.05]">
                   <SectionTitle icon={Activity} title="Device Split" color="text-purple-400" />
                   <div className="space-y-2">
-                    {deviceSplit.map(d => (
-                      <div key={d.name}>
-                        <div className="flex justify-between text-xs mb-1">
-                          <span className="text-white/60">{d.name}</span>
-                          <span className="text-white/40">{d.pct || Math.round((d.value/(completionStats.total||1))*100)}%</span>
+                    {/* d.pct is a STRING that already ends in '%' — pct() appends
+                        it. So the old `{d.pct}%` printed "10.7%%", and the style
+                        below built width:"10.7%%", which is not a valid CSS
+                        length: the browser discarded the declaration and every
+                        bar rendered at zero width. Same value, used correctly in
+                        both places now, via one variable so they cannot drift. */}
+                    {deviceSplit.map(d => {
+                      const share = d.pct || `${Math.round((d.value / (completionStats.total || 1)) * 100)}%`;
+                      return (
+                        <div key={d.name}>
+                          <div className="flex justify-between text-xs mb-1">
+                            <span className="text-white/60">{d.name}</span>
+                            <span className="text-white/40">{share} · {fmt(d.value)}</span>
+                          </div>
+                          <div className="h-1.5 bg-white/[0.06] rounded-full overflow-hidden">
+                            <div className="h-full rounded-full bg-purple-400" style={{ width: share }} />
+                          </div>
                         </div>
-                        <div className="h-1.5 bg-white/[0.06] rounded-full overflow-hidden">
-                          <div className="h-full rounded-full bg-purple-400" style={{ width: `${d.pct || Math.round((d.value/(completionStats.total||1))*100)}%` }} />
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               )}

@@ -57,9 +57,17 @@ export default function AdminUserBehaviorPage({ embedded = false }) {
     setLoading(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
+      // The admin check is done on the TOKEN now. It used to be done on the
+      // user_id in this body, with no token verified at all — so anyone who
+      // knew a master artist's id could pull this report, and the value was
+      // interpolated unescaped into a PostgREST filter. user_id below is now
+      // only the subject of the report.
       const res = await fetch('/.netlify/functions/admin-user-behavior', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session?.access_token || ''}`,
+        },
         body: JSON.stringify({
           user_id: session?.user?.id,
           action_types: selectedTypes,
@@ -85,9 +93,17 @@ export default function AdminUserBehaviorPage({ embedded = false }) {
     setExporting(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
+      // The admin check is done on the TOKEN now. It used to be done on the
+      // user_id in this body, with no token verified at all — so anyone who
+      // knew a master artist's id could pull this report, and the value was
+      // interpolated unescaped into a PostgREST filter. user_id below is now
+      // only the subject of the report.
       const res = await fetch('/.netlify/functions/admin-user-behavior', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session?.access_token || ''}`,
+        },
         body: JSON.stringify({
           user_id: session?.user?.id,
           action_types: selectedTypes,

@@ -95,6 +95,34 @@ exports.handler = async (event) => {
     return { statusCode: 400, body: JSON.stringify({ error: 'action and venueId required' }) };
   }
 
+  // ── AUTHENTICATION ─────────────────────────────────────────────────────────
+  //
+  // There was none. This endpoint holds the service role key and, with
+  // action:'link', flips retail_subscriptions and retail_venues to active for
+  // any venueId the caller names. Anyone could activate any venue.
+  //
+  // The caller must now be signed in AND own the venue, or be an admin.
+  const authHeader = event.headers?.authorization || event.headers?.Authorization || '';
+  if (!authHeader.startsWith('Bearer ')) {
+    return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized' }) };
+  }
+  const { data: { user: caller }, error: authError } =
+    await supabase.auth.getUser(authHeader.slice(7).trim());
+  if (authError || !caller) {
+    return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized' }) };
+  }
+
+  const [{ data: venueRow }, { data: adminRow }] = await Promise.all([
+    supabase.from('retail_venues').select('id, user_id').eq('id', venueId).maybeSingle(),
+    supabase.from('admins').select('id').eq('user_id', caller.id).maybeSingle(),
+  ]);
+  if (!venueRow) {
+    return { statusCode: 404, body: JSON.stringify({ error: 'Venue not found' }) };
+  }
+  if (venueRow.user_id !== caller.id && !adminRow) {
+    return { statusCode: 403, body: JSON.stringify({ error: 'Not your venue' }) };
+  }
+
   try {
     // ========== GET OR CREATE PLAN ==========
     if (action === 'get-plan') {
@@ -188,7 +216,31 @@ exports.handler = async (event) => {
       }
 
       const paypalStatus = verify.body.status; // APPROVAL_PENDING, APPROVED, ACTIVE, etc.
-      const mappedStatus = paypalStatus === 'ACTIVE' ? 'active' : 'active'; // treat approved+active as active; webhook confirms/corrects later
+
+      // Both branches of this used to be 'active':
+      //
+      //     paypalStatus === 'ACTIVE' ? 'active' : 'active'
+      //
+      // so the PayPal status was computed and then thrown away, and an
+      // APPROVAL_PENDING subscription — one nobody has paid for — activated
+      // the venue and switched its player on. The comment said the webhook
+      // would "confirm or correct later"; BILLING.SUBSCRIPTION.ACTIVATED only
+      // ever sets active, so nothing ever corrected it.
+      //
+      // ACTIVE is a paid, running subscription. APPROVED means the payer
+      // approved it but the first payment has not settled, so it waits for
+      // the webhook — which is exactly the event that will set it active.
+      if (paypalStatus !== 'ACTIVE' && paypalStatus !== 'APPROVED') {
+        return {
+          statusCode: 402,
+          body: JSON.stringify({
+            error: 'subscription_not_paid',
+            paypal_status: paypalStatus,
+            message: 'PayPal has not confirmed payment for this subscription yet.',
+          }),
+        };
+      }
+      const mappedStatus = paypalStatus === 'ACTIVE' ? 'active' : 'pending';
 
       const { error } = await supabase.from('retail_subscriptions')
         .update({ paypal_subscription_id: subscriptionId, status: mappedStatus })
@@ -199,10 +251,24 @@ exports.handler = async (event) => {
 
       // Flip the venue itself active too — no reason to make the venue
       // wait on a separate manual admin step once they've actually paid.
-      await supabase.from('retail_venues')
-        .update({ status: 'active' })
-        .eq('id', venueId)
-        .eq('status', 'pending');
+      // Only for a genuinely ACTIVE subscription: an APPROVED one has not
+      // been charged yet, and the webhook will activate it when it is.
+      if (mappedStatus === 'active') {
+        const { error: venueErr } = await supabase.from('retail_venues')
+          .update({ status: 'active' })
+          .eq('id', venueId)
+          .eq('status', 'pending');
+        // Read, rather than discarded. A paying venue whose row silently
+        // stays 'pending' has a player that never turns on, and the endpoint
+        // used to return success anyway.
+        if (venueErr) {
+          console.error('[retail-paypal-subscription] venue activation failed:', venueErr.message);
+          return {
+            statusCode: 500,
+            body: JSON.stringify({ error: 'subscription_linked_but_venue_not_activated', detail: venueErr.message }),
+          };
+        }
+      }
 
       return { statusCode: 200, body: JSON.stringify({ success: true, status: paypalStatus }) };
     }

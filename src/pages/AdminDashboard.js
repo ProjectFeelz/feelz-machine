@@ -69,15 +69,32 @@ export default function AdminDashboard() {
 
       // ── Platform stats ─────────────────────────────────────────────────
       const cutoff7d = new Date(Date.now() - 7 * 86400000).toISOString();
+      // Which of these tiles can actually see the platform, and which can only
+      // see this admin's own rows, comes down to RLS:
+      //
+      //   artists, listeners, tracks, follows  — USING (true) / is_published.
+      //                                          Platform-wide. Trustworthy.
+      //   streams, tips, downloads,            — owner-scoped only. No admin
+      //   beat_purchases,                        policy exists, and this page
+      //   listener_tier_subscriptions            queries as the signed-in
+      //                                          admin, not the service role.
+      //                                          These four read ONE artist.
+      //
+      // So "Streams (7d)", "Revenue (7d)" and "Fan Pro" are not platform
+      // figures and cannot become platform figures from the client. They need
+      // an admin-gated SECURITY DEFINER function, the way
+      // get_platform_listener_stats already does it in AdminAnalytics.
+      // Until then the errors are at least read, so a refused query is
+      // distinguishable in the console from a genuine zero.
       const [
-        { count: totalStreams7d },
-        { data: tipData },
-        { data: dlData },
-        { data: beatData },
-        { count: fanProCount },
-        { count: activeListeners7d },
-        { count: totalTracks },
-        { count: totalFollows },
+        { count: totalStreams7d, error: streamErr },
+        { data: tipData, error: tipErr },
+        { data: dlData, error: dlErr },
+        { data: beatData, error: beatErr },
+        { count: fanProCount, error: fanProErr },
+        { count: activeListeners7d, error: activeErr },
+        { count: totalTracks, error: trackErr },
+        { count: totalFollows, error: followErr },
       ] = await Promise.all([
         supabase.from('streams').select('*', { count: 'exact', head: true }).gte('created_at', cutoff7d),
         supabase.from('tips').select('amount').gte('created_at', cutoff7d),
@@ -88,11 +105,33 @@ export default function AdminDashboard() {
         supabase.from('tracks').select('*', { count: 'exact', head: true }).eq('is_published', true),
         supabase.from('follows').select('*', { count: 'exact', head: true }),
       ]);
-      // Fetch total listener count separately to avoid RLS interference in Promise.all
-      const { data: listenerRows } = await supabase.from('listeners').select('id');
-      const totalListeners = (listenerRows || []).length;
-      const { data: beatmakerRows } = await supabase.from('artists').select('id').eq('role', 'beatmaker');
-      const totalBeatmakers = (beatmakerRows || []).length;
+      // Counted, not fetched-and-measured.
+      //
+      // These were `.select('id')` followed by `.length`, which is a row fetch
+      // and therefore subject to PostgREST's max-rows ceiling — 1000 by
+      // default. At 265 listeners the number happens to be right; the first
+      // time the platform passes a thousand, this tile silently stops at 1000
+      // and stays there, which is the worst kind of wrong for a metric nobody
+      // re-derives by hand. A head count has no such ceiling.
+      //
+      // (The old comment claimed the split-out avoided "RLS interference in
+      // Promise.all". Promise.all has no bearing on RLS — the policies are
+      // evaluated per request, however the requests are scheduled.)
+      const [
+        { count: totalListeners, error: listenerErr },
+        { count: totalBeatmakers, error: beatmakerErr },
+      ] = await Promise.all([
+        supabase.from('listeners').select('*', { count: 'exact', head: true }),
+        supabase.from('artists').select('*', { count: 'exact', head: true }).eq('role', 'beatmaker'),
+      ]);
+      if (listenerErr)  console.error('[admin] listener count failed:', listenerErr.code, listenerErr.message);
+      if (beatmakerErr) console.error('[admin] beatmaker count failed:', beatmakerErr.code, beatmakerErr.message);
+      [['streams', streamErr], ['tips', tipErr], ['downloads', dlErr],
+       ['beat_purchases', beatErr], ['listener_tier_subscriptions', fanProErr],
+       ['listeners (active)', activeErr], ['tracks', trackErr], ['follows', followErr]]
+        .filter(([, e]) => e)
+        .forEach(([name, e]) => console.error(`[admin] ${name} blocked or failed:`, e.code, e.message));
+
       const tipsTotal  = (tipData  || []).reduce((s, t) => s + (t.amount      || 0), 0);
       const dlTotal    = (dlData   || []).reduce((s, d) => s + (d.amount_paid || 0), 0);
       const beatTotal  = (beatData || []).reduce((s, b) => s + (b.amount_paid || 0), 0);
@@ -137,9 +176,18 @@ export default function AdminDashboard() {
       if (!tier) throw new Error('Tier not found');
       await supabase.from('artist_tier_subscriptions').delete().eq('artist_id', artist.id);
       if (tierSlug !== 'free') {
-        await supabase.from('artist_tier_subscriptions').insert({
+        // payment_provider stamped, deliberately.
+        //
+        // The column defaults to 'paypal_web', so a tier granted by hand from
+        // this panel was indistinguishable in the data from one somebody paid
+        // for. That is what put ten comped Premium accounts into the Revenue
+        // tab's MRR at $9.99 each. 'admin_grant' is one of the values the
+        // table's CHECK constraint already allows.
+        const { error: subErr } = await supabase.from('artist_tier_subscriptions').insert({
           artist_id: artist.id, tier_id: tier.id, status: 'active',
+          payment_provider: 'admin_grant', amount_paid: 0,
         });
+        if (subErr) throw subErr;
       }
       await fetchData();
     } catch (err) { console.error('Set tier error:', err); }

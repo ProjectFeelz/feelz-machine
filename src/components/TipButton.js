@@ -80,11 +80,19 @@ export default function TipButton({ artist, onTipSent }) {
               try {
                 const ref = sessionStorage.getItem('feelz_ref');
                 if (ref && user?.id) {
-                  fetch('/.netlify/functions/affiliate-track', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ action: 'convert', refCode: ref, userId: user.id, conversionType: 'tip' }),
-                  }).catch(() => {});
+                  // Bearer token required now — see AuthContext for why.
+                  (async () => {
+                    const { data: { session: tipSession } } = await supabase.auth.getSession();
+                    if (!tipSession?.access_token) return;
+                    await fetch('/.netlify/functions/affiliate-track', {
+                      method: 'POST',
+                      headers: {
+                        'Content-Type': 'application/json',
+                        Authorization: `Bearer ${tipSession.access_token}`,
+                      },
+                      body: JSON.stringify({ action: 'convert', refCode: ref, conversionType: 'tip' }),
+                    }).catch(() => {});
+                  })();
                 }
               } catch {}
             }

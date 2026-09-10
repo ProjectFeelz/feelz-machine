@@ -50,10 +50,14 @@ export default function RetailReferrals({ venue, user, onClose }) {
     setApplying(true);
     setError('');
     try {
+      const { data: { session } } = await supabase.auth.getSession();
       const res = await fetch('/.netlify/functions/affiliate-track', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'apply', userId: user.id }),
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session?.access_token || ''}`,
+        },
+        body: JSON.stringify({ action: 'apply' }),
       });
       const data = await res.json();
       if (data.error) setError(data.error);

@@ -2,6 +2,7 @@
 // Sends a PayPal payout to a competition winner from your PayPal business balance.
 // Requires: PAYPAL_CLIENT_ID, PAYPAL_SECRET, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
 
+const crypto = require('crypto');
 const { createClient } = require('@supabase/supabase-js');
 const paypalEnv = require('../lib/paypal-env');
 
@@ -55,12 +56,47 @@ exports.handler = async (event) => {
     return { statusCode: 405, body: JSON.stringify({ error: 'Method not allowed' }) };
   }
 
-  // ── Auth check — must be a verified admin ──────────────────
-  const isAdmin = await verifyAdmin(event.headers?.authorization);
+  // ── Auth check — an admin, or a trusted server-side caller ──────────────
+  //
+  // WHY THIS SECOND PATH EXISTS, AND WHAT IT FIXES
+  //
+  // This gate read ONLY the Authorization header. close-wheel-competition.js
+  // calls this function to pay the $50 paid-collaboration prize and sends
+  // `x-internal-secret`, not a bearer token — it runs on a cron, so there is
+  // no admin session to borrow. So every one of those calls was rejected with
+  // a 403. And close-wheel never inspected the response: it logged
+  // "$50 payout sent to <email>" unconditionally.
+  //
+  // The prize has therefore never been paid, and the log said it had, every
+  // week.
+  //
+  // Two accepted callers now: a signed-in admin (unchanged), or a server-side
+  // function presenting INTERNAL_FUNCTION_SECRET — the same pattern
+  // compute-behavior-profiles.js and engagement-drip-background.js already
+  // use for internal calls.
+  //
+  // It fails CLOSED. Note the shape of the callers in this repo:
+  //
+  //     'x-internal-secret': process.env.INTERNAL_FUNCTION_SECRET || ''
+  //
+  // If that variable is unset they send an empty string. A naive
+  // `header === process.env.SECRET` would then compare '' to undefined
+  // (false, fine) — but `header === (process.env.SECRET || '')` would compare
+  // '' to '' and let ANYONE in. So the secret must be non-empty before it is
+  // compared at all, and the comparison is timing-safe.
+  const internalSecret = process.env.INTERNAL_FUNCTION_SECRET;
+  const presented = event.headers?.['x-internal-secret'] || '';
+
+  let isInternal = false;
+  if (internalSecret && presented && presented.length === internalSecret.length) {
+    isInternal = crypto.timingSafeEqual(Buffer.from(presented), Buffer.from(internalSecret));
+  }
+
+  const isAdmin = isInternal ? true : await verifyAdmin(event.headers?.authorization);
   if (!isAdmin) {
     return {
       statusCode: 403,
-      body: JSON.stringify({ error: 'Forbidden — admin access required' }),
+      body: JSON.stringify({ error: 'Forbidden — admin access or internal secret required' }),
     };
   }
 

@@ -40,13 +40,58 @@ exports.handler = async (event) => {
 
   const { user_id, action_types = [], from_date, to_date, artist_id, format = 'json' } = body;
 
-  // Verify requester is admin
-  const adminCheck = await supabaseGet(
-    `/rest/v1/artists?user_id=eq.${user_id}&select=is_master`,
-    serviceKey, supabaseUrl
-  );
-  const isAdmin = Array.isArray(adminCheck.body) && adminCheck.body.some(a => a.is_master);
+  // ── AUTHENTICATION ─────────────────────────────────────────────────────────
+  //
+  // This function had none. It read `user_id` FROM THE REQUEST BODY and asked
+  // the database whether THAT user was a master artist:
+  //
+  //     /rest/v1/artists?user_id=eq.${user_id}&select=is_master
+  //
+  // No bearer token was ever verified. So anyone who knew or guessed a master
+  // artist's user id got everything below — every stream, download, like and
+  // playlist row, plus a user_id-to-EMAIL map for up to a thousand accounts —
+  // from an endpoint holding the service role key.
+  //
+  // The interpolation made it worse: `user_id` went into the query string
+  // unescaped, so a value containing `&` could append its own PostgREST
+  // filters and satisfy the is_master test without knowing anybody's id.
+  //
+  // Identity now comes from the Authorization header, which is signed and
+  // cannot be chosen by the caller. `user_id` from the body is used only as
+  // the SUBJECT of the report, never as the authority for reading it.
+  const authHeader = event.headers?.authorization || event.headers?.Authorization || '';
+  if (!authHeader.startsWith('Bearer ')) {
+    return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized' }) };
+  }
+
+  const { createClient } = require('@supabase/supabase-js');
+  const authClient = createClient(supabaseUrl, serviceKey);
+  const { data: { user: caller }, error: authError } =
+    await authClient.auth.getUser(authHeader.slice(7).trim());
+
+  if (authError || !caller) {
+    return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized' }) };
+  }
+
+  // Is the CALLER an admin? Two accepted sources, because this codebase has
+  // three different answers to "who is an admin" and the admins table is the
+  // one the other privileged functions use.
+  const [{ data: adminRow }, { data: masterRows }] = await Promise.all([
+    authClient.from('admins').select('id').eq('user_id', caller.id).maybeSingle(),
+    authClient.from('artists').select('is_master').eq('user_id', caller.id),
+  ]);
+  const isAdmin = !!adminRow || (Array.isArray(masterRows) && masterRows.some(a => a.is_master));
   if (!isAdmin) return { statusCode: 403, body: JSON.stringify({ error: 'Admin only' }) };
+
+  // The report subject still has to be a well-formed uuid, because it is
+  // interpolated into PostgREST paths below and that is how the filter
+  // injection above was possible in the first place.
+  if (user_id && !/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(user_id)) {
+    return { statusCode: 400, body: JSON.stringify({ error: 'user_id must be a uuid' }) };
+  }
+  if (artist_id && !/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(artist_id)) {
+    return { statusCode: 400, body: JSON.stringify({ error: 'artist_id must be a uuid' }) };
+  }
 
   const dateFilter = (table, col) => {
     let f = '';

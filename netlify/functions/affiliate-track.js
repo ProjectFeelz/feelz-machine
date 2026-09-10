@@ -9,8 +9,48 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
+// Identity from the bearer token, never from the body. Returns the caller's
+// user id, or null when there is no valid session.
+async function callerUserId(event) {
+  const authHeader = event.headers?.authorization || event.headers?.Authorization || '';
+  if (!authHeader.startsWith('Bearer ')) return null;
+  try {
+    const { data: { user }, error } = await supabase.auth.getUser(authHeader.slice(7).trim());
+    if (error || !user) return null;
+    return user.id;
+  } catch {
+    return null;
+  }
+}
+
 exports.handler = async (event) => {
-  const { action, refCode, page, userId, conversionType } = JSON.parse(event.body || '{}');
+  if (event.httpMethod !== 'POST') {
+    return { statusCode: 405, body: JSON.stringify({ error: 'Method Not Allowed' }) };
+  }
+
+  // JSON.parse was outside any try/catch, so a malformed body threw and
+  // Netlify served an HTML error page.
+  let payload;
+  try { payload = JSON.parse(event.body || '{}'); }
+  catch { return { statusCode: 400, body: JSON.stringify({ error: 'Invalid JSON' }) }; }
+
+  const { action, refCode, page, conversionType } = payload;
+
+  // ── userId comes from the TOKEN, not the body ──────────────────────────────
+  //
+  // It used to be read straight out of the request body, on an endpoint with
+  // no authentication and the service role key. Two consequences:
+  //
+  //   * Credit minting. `action:'convert'` with any active refCode inserts a
+  //     credits_transactions row worth up to 200 credits. The only dedupe was
+  //     guarded by `if (userId)` — so OMITTING userId skipped the dedupe
+  //     entirely and the same call could be looped for 50 credits a time.
+  //   * `action:'apply'` created an affiliate record for any user id given.
+  //
+  // The click path stays anonymous, because a click genuinely is: somebody
+  // who is not signed in follows a referral link. It writes only a click row.
+  const authedUserId = await callerUserId(event);
+  const userId = authedUserId;
 
   // ── LOG CLICK ──────────────────────────────────────────────────────────────
   if (action === 'click') {
@@ -43,6 +83,13 @@ exports.handler = async (event) => {
 
   // ── LOG CONVERSION (signup / subscription / tip) ───────────────────────────
   if (action === 'convert') {
+    // A conversion is always about a specific signed-in person. Without a
+    // session there is nobody to attribute it to, and the dedupe below has
+    // nothing to key on.
+    if (!userId) {
+      return { statusCode: 401, body: JSON.stringify({ error: 'Sign in required to record a conversion' }) };
+    }
+
     const { data: affiliate } = await supabase
       .from('affiliates').select('id, role, credits_balance')
       .eq('ref_code', refCode).eq('status', 'active').maybeSingle();
@@ -90,14 +137,26 @@ exports.handler = async (event) => {
     });
 
     // Use RPC for atomic increments, fall back to read-modify-write if RPC missing
+    // The `catch` around this used to be the fallback path for "RPC missing".
+    // supabase-js resolves { data, error } rather than throwing, so a missing
+    // (42883) or refused (42501) RPC never reached the catch and the fallback
+    // was dead code — affiliate credits and signup counters silently never
+    // incremented. The error is read now and the fallback runs on it.
+    let statsError = null;
     try {
-      await supabase.rpc('increment_affiliate_stats', {
+      const { error } = await supabase.rpc('increment_affiliate_stats', {
         p_affiliate_id: affiliate.id,
         p_signups: effectiveType === 'signup' ? 1 : 0,
         p_conversions: 1,
         p_credits: creditsEarned,
       });
-    } catch {
+      statsError = error;
+    } catch (err) {
+      statsError = err;
+    }
+
+    if (statsError) {
+      console.error('[affiliate-track] increment_affiliate_stats failed, falling back:', statsError.message || statsError);
       // Fallback: manual increment
       const updates = {
         total_signups:    (affiliate.total_signups || 0) + (effectiveType === 'signup' ? 1 : 0),
@@ -107,7 +166,10 @@ exports.handler = async (event) => {
         updates.credits_balance  = newBalance;
         updates.credits_lifetime = (affiliate.credits_lifetime || 0) + creditsEarned;
       }
-      await supabase.from('affiliates').update(updates).eq('id', affiliate.id);
+      const { error: fallbackError } = await supabase.from('affiliates').update(updates).eq('id', affiliate.id);
+      if (fallbackError) {
+        console.error('[affiliate-track] fallback stats update ALSO failed:', fallbackError.message);
+      }
     }
 
     if (creditsEarned > 0) {
@@ -133,7 +195,9 @@ exports.handler = async (event) => {
 
   // ── CHECK ELIGIBILITY & CREATE AFFILIATE ───────────────────────────────────
   if (action === 'apply') {
-    if (!userId) return { statusCode: 400, body: JSON.stringify({ error: 'userId required' }) };
+    // You may only apply as yourself. userId is the token's subject now, so
+    // this is true by construction rather than by trusting the body.
+    if (!userId) return { statusCode: 401, body: JSON.stringify({ error: 'Sign in required' }) };
 
     // Check if already an affiliate — return existing record immediately
     const { data: existing } = await supabase
