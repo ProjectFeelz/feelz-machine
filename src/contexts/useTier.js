@@ -219,9 +219,18 @@ function useTierInternal() {
           setLoading(false);
           return;
         }
+        // Fan Pro has its own platform_tiers row now (migration 111). The
+        // OLD artist-pro id stays in this map deliberately: listener
+        // subscriptions created before migration 112 repointed them still
+        // carry it, and dropping it here would resolve those listeners to
+        // 'free' — silently taking away offline listening and their three
+        // monthly downloads. Both ids mean the same entitlement, so both map
+        // to 'pro'. The artist-pro entry can be removed once no listener
+        // subscription references it.
         const TIER_ID_MAP = {
           '289f65ec-4b2f-4868-b71f-9f560d493225': 'free',
-          'a421dac1-f492-461c-88a5-f01b6942a042': 'pro',
+          '917a2c63-815d-48db-80d0-5d9d3078ee9b': 'pro',      // fan_pro (current)
+          'a421dac1-f492-461c-88a5-f01b6942a042': 'pro',      // artist pro (legacy listener rows)
           'f0b8b8f5-bfc2-496e-9fb4-8904d9dc6fe4': 'premium',
         };
         setListenerTierSlug(TIER_ID_MAP[sub.tier_id] || 'free');

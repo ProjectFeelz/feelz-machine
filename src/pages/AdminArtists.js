@@ -80,6 +80,9 @@ export default function AdminArtists() {
           artist_id: artistId,
           tier_id: tier.id,
           status: 'active',
+          // See AdminPeople.js — a granted tier must not read as a sale.
+          payment_provider: 'admin_grant',
+          amount_paid: 0,
           paypal_subscription_id: `admin_grant_${Date.now()}`,
           started_at: new Date().toISOString(),
           expires_at: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),

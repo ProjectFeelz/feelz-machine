@@ -585,9 +585,14 @@ export default function CompetitionRoomPage() {
             if (currentSlug === 'free') {
               const { data: proTier } = await supabase
                 .from('platform_tiers').select('id').eq('slug', 'pro').maybeSingle();
+              // A prize, not a sale. 'admin_grant' is the only non-paying value
+              // the table's CHECK constraint allows, so it is used for prizes too
+              // rather than leaving them to default to 'paypal_web' and count as
+              // revenue. The 90-day expires_at is what marks it as a prize.
               if (proTier) await supabase.from('artist_tier_subscriptions').insert({
                 artist_id: winnerEntry.artist_id, tier_id: proTier.id,
                 status: 'active', started_at: now.toISOString(), expires_at: expiry.toISOString(),
+                payment_provider: 'admin_grant', amount_paid: 0,
               });
             } else if (currentSlug === 'pro') {
               const { data: premTier } = await supabase
@@ -599,6 +604,7 @@ export default function CompetitionRoomPage() {
                 await supabase.from('artist_tier_subscriptions').insert({
                   artist_id: winnerEntry.artist_id, tier_id: premTier.id,
                   status: 'active', started_at: now.toISOString(), expires_at: expiry.toISOString(),
+                  payment_provider: 'admin_grant', amount_paid: 0,
                 });
               }
             } else if (currentSlug === 'premium') {

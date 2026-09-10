@@ -118,9 +118,12 @@ exports.handler = async () => {
         if (proTier) {
           const expiry = new Date(now);
           expiry.setDate(expiry.getDate() + 90);
+          // A prize. Marked non-paying so it cannot be counted as revenue —
+          // see the note in CompetitionRoomPage.js.
           await supabase.from('artist_tier_subscriptions').insert({
             artist_id: winner.artist_id, tier_id: proTier.id,
             status: 'active', started_at: now.toISOString(), expires_at: expiry.toISOString(),
+            payment_provider: 'admin_grant', amount_paid: 0,
           });
         }
       } else if (currentSlug === 'pro') {
@@ -137,6 +140,7 @@ exports.handler = async () => {
           await supabase.from('artist_tier_subscriptions').insert({
             artist_id: winner.artist_id, tier_id: premiumTier.id,
             status: 'active', started_at: now.toISOString(), expires_at: expiry.toISOString(),
+            payment_provider: 'admin_grant', amount_paid: 0,
           });
         }
       }

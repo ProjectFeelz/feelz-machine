@@ -117,11 +117,14 @@ function ListenersTab() {
                   </div>
                 </div>
                 <div className="flex items-center space-x-2 flex-shrink-0 ml-3">
-                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${l.tier === 'pro' ? 'bg-purple-500/20 text-purple-400' : 'bg-white/10 text-white/30'}`}>{l.tier || 'free'}</span>
+                  {/* Both values mean Fan Pro. paypal-webhook.js writes 'fan_pro' and this
+                      page used to write 'pro', so checking only 'pro' showed every
+                      listener who actually PAID as if they were on Free. */}
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${['pro','fan_pro'].includes(l.tier) ? 'bg-purple-500/20 text-purple-400' : 'bg-white/10 text-white/30'}`}>{l.tier === 'pro' ? 'fan_pro' : (l.tier || 'free')}</span>
                   {grantingId === l.id ? <Loader className="w-4 h-4 animate-spin text-white/30" /> : (
-                    <select value={l.tier || 'free'} onChange={e => grantTier(l.id, l.user_id, e.target.value, l.display_name)}
+                    <select value={l.tier === 'pro' ? 'fan_pro' : (l.tier || 'free')} onChange={e => grantTier(l.id, l.user_id, e.target.value, l.display_name)}
                       className="text-[10px] bg-white/[0.06] text-white/50 rounded-lg px-2 py-1.5 border border-white/[0.08] focus:outline-none cursor-pointer hover:bg-white/[0.10] transition">
-                      <option value="free">Free</option><option value="pro">Fan Pro</option>
+                      <option value="free">Free</option><option value="fan_pro">Fan Pro</option>
                     </select>
                   )}
                 </div>
@@ -170,6 +173,11 @@ function ArtistsTab() {
       if (tierSlug !== 'free') {
         await supabase.from('artist_tier_subscriptions').insert({
           artist_id: artistId, tier_id: tier.id, status: 'active',
+          // Stamped so revenue reporting can tell a granted tier from a sold
+          // one. Without it payment_provider defaults to 'paypal_web' and a
+          // comp is indistinguishable from a purchase.
+          payment_provider: 'admin_grant',
+          amount_paid: 0,
           paypal_subscription_id: `admin_grant_${Date.now()}`,
           started_at: new Date().toISOString(),
           expires_at: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),

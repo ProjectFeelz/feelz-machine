@@ -38,7 +38,12 @@ const TIERS = [
     ],
   },
   {
-    slug: 'pro',
+    // 'fan_pro' is the canonical slug everywhere now: platform_tiers.slug,
+    // listeners.tier, and what paypal-webhook.js already writes. This page
+    // used 'pro' and wrote 'pro' onto listeners.tier, while the webhook wrote
+    // 'fan_pro' for the same purchase — so the same product existed under two
+    // names and the admin panel showed PayPal subscribers as Free.
+    slug: 'fan_pro',
     label: 'Fan Pro',
     price_monthly: 2.99,
     price_annual:  1.99,
@@ -124,7 +129,7 @@ export default function ListenerUpgradePage() {
     try {
       // Look up tier_id for 'pro'
       const { data: tier } = await supabase
-        .from('platform_tiers').select('id').eq('slug', 'pro').maybeSingle();
+        .from('platform_tiers').select('id').eq('slug', 'fan_pro').maybeSingle();
       if (!tier) throw new Error('Tier not found');
 
       // Cancel any existing subscription
@@ -149,10 +154,10 @@ export default function ListenerUpgradePage() {
 
       // Mirror tier onto listeners table for easy reads
       await supabase.from('listeners')
-        .update({ tier: 'pro', updated_at: new Date().toISOString() })
+        .update({ tier: 'fan_pro', updated_at: new Date().toISOString() })
         .eq('user_id', user.id);
 
-      setCurrentTier('pro');
+      setCurrentTier('fan_pro');
       setSuccess('Welcome to Fan Pro! Your themes and badge are now active.');
       await refreshProfile();
 
@@ -225,11 +230,16 @@ export default function ListenerUpgradePage() {
         {TIERS.map(tier => {
           const Icon    = tier.icon;
           const price   = cycle === 'annual' ? tier.price_annual : tier.price_monthly;
-          const isCurrent = currentTier === tier.slug;
+          // Accepts the legacy value too: a listener subscription not yet
+          // repointed by migration 112 still resolves to slug 'pro', and
+          // showing them an upgrade button they already paid for is worse
+          // than showing the badge early.
+          const isCurrent = currentTier === tier.slug
+            || (tier.slug === 'fan_pro' && currentTier === 'pro');
           return (
             <div key={tier.slug}
               className={`rounded-2xl border p-5 relative ${
-                tier.slug === 'pro'
+                tier.slug === 'fan_pro'
                   ? 'border-purple-500/30 bg-purple-500/5'
                   : 'border-white/[0.08] bg-white/[0.02]'
               }`}>
@@ -275,16 +285,16 @@ export default function ListenerUpgradePage() {
               </div>
 
               {/* CTA */}
-              {tier.slug === 'pro' && !isCurrent && (
+              {tier.slug === 'fan_pro' && !isCurrent && (
                 <PayPalSubscribeButton
                   planId={LISTENER_PLAN_IDS[`pro_${cycle}`]}
-                  tierSlug="pro"
+                  tierSlug="fan_pro"
                   billingCycle={cycle}
                   onSuccess={handleSuccess}
                   onError={() => setError('Payment failed — please try again')}
                 />
               )}
-              {tier.slug === 'pro' && isCurrent && (
+              {tier.slug === 'fan_pro' && isCurrent && (
                 <button onClick={handleCancel}
                   className="w-full py-2.5 rounded-xl text-xs text-white/30 border border-white/[0.08] hover:bg-white/[0.04] transition">
                   Cancel subscription
