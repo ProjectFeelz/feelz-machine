@@ -14,11 +14,14 @@ import {
   ChevronRight, Crown, Zap, Star, LayoutDashboard,
   User, LogOut, DollarSign, Radio, Mic2,
   Loader, X, Youtube, Info, Search,
-  Plus, MessageSquare, Check, Send, Store, Trophy, Sparkles, EyeOff, } from 'lucide-react';
+  Plus, MessageSquare, Check, Send, Store, Trophy, Sparkles, EyeOff, Bug,
+} from 'lucide-react';
 import { sendNotification } from '../utils/notify';
 
 function LinkCard({ icon: Icon, label, description, path, color, onClick }) {
   const navigate = useNavigate();
+
+
   return (
     <button
       onClick={() => onClick ? onClick() : navigate(path)}
@@ -61,6 +64,22 @@ const ARTIST_TABS = [
 
 export default function HubPage() {
   const navigate = useNavigate();
+
+  // Resolved by name rather than a hardcoded id, so recreating the room
+  // does not silently break this button. If it has been deleted the person
+  // is told, instead of being dropped on a blank chat screen.
+  const openBugRoom = async () => {
+    const { data, error } = await supabase
+      .from('chat_rooms')
+      .select('id, name')
+      .ilike('name', '%bug%')
+      .limit(1)
+      .maybeSingle();
+    if (error) { console.error('[hub] bug room lookup failed:', error.code, error.message); }
+    if (data?.id) { navigate(`/chat/${data.id}`); return; }
+    navigate('/community');
+  };
+
   const { user, artist, isAdmin, isArtist, signOut } = useAuth();
   const { tierSlug, tierLoading, isPremium } = useTier();
   const { streak } = useStreakContext();
@@ -316,6 +335,12 @@ export default function HubPage() {
             )}
             <LinkCard icon={EyeOff} label="Hidden" description="Artists and tracks you took out of your feed" path="/hidden" color="bg-white/[0.06]" />
             <LinkCard icon={Info} label="About" description="App info, plans, privacy and terms" path="/about" color="bg-white/[0.06]" />
+            {/* The one deliberate way in.
+                The bug room is a pinned chat room, so it used to sit at the
+                top of Chat Rooms and anyone could wander into it — which is
+                how confused messages ended up buried in with real reports.
+                It is hidden from that list now and reached from here. */}
+            <LinkCard icon={Bug} label="Report a Bug" description="Something broken? Tell us here" onClick={() => openBugRoom()} color="bg-red-500/15" />
           </Section>
 
           {/* Sign out */}

@@ -313,6 +313,55 @@ export default function NotificationsPage() {
     prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
   );
 
+  // Fill in the cover art a notification did not store.
+  //
+  // The playable pill renders `meta.track_artwork`, and only some producers
+  // write it: a "new stream" notification carries it, a "liked your track"
+  // or a comment one does not. Same pill, same track, artwork on one and a
+  // grey music note on the other.
+  //
+  // Resolved here rather than fixed at each producer, because that would
+  // only help notifications sent from now on — every one already in
+  // somebody's list would stay blank. One query per page covers both.
+  const withTrackArtwork = async (rows) => {
+    const needing = rows.filter(n => {
+      const m = n.metadata || {};
+      return m.track_id && !m.track_artwork;
+    });
+    if (needing.length === 0) return rows;
+
+    const ids = [...new Set(needing.map(n => n.metadata.track_id))];
+    const { data: tracks, error } = await supabase
+      .from('tracks')
+      .select('id, cover_artwork_url, title')
+      .in('id', ids);
+
+    // Read, not swallowed: without artwork the pill still renders with its
+    // placeholder, so a failure here is cosmetic — but silent cosmetic bugs
+    // are how this one survived in the first place.
+    if (error) {
+      console.error('[notifications] artwork lookup failed:', error.code, error.message);
+      return rows;
+    }
+
+    const art = Object.fromEntries((tracks || []).map(t => [t.id, t]));
+    return rows.map(n => {
+      const m = n.metadata || {};
+      const hit = m.track_id && !m.track_artwork ? art[m.track_id] : null;
+      if (!hit) return n;
+      return {
+        ...n,
+        metadata: {
+          ...m,
+          track_artwork: hit.cover_artwork_url || null,
+          // A pill needs a title to render at all, so backfill that too
+          // where it is missing.
+          track_title: m.track_title || hit.title || null,
+        },
+      };
+    });
+  };
+
   const fetchAll = useCallback(async (pageNum = 0) => {
     if (!user) return;
     if (pageNum === 0) setPageLoading(true);
@@ -335,7 +384,7 @@ export default function NotificationsPage() {
         else console.error('Notifications fetch error:', error);
         setAllNotifs([]);
       } else {
-        const incoming = data || [];
+        const incoming = await withTrackArtwork(data || []);
         setAllNotifs(prev => pageNum === 0 ? incoming : [...prev, ...incoming]);
         setHasMore(incoming.length === PAGE_SIZE);
       }
@@ -388,8 +437,18 @@ export default function NotificationsPage() {
 
   // Types that have inline actions (don't navigate on tap)
   const INLINE_ACTION_TYPES = new Set(['collab_request']);
+  // A type in here marks itself read and goes nowhere.
+  //
+  // weekly_report and monthly_wrapped were in this set AND had navigate()
+  // branches further down that could never run — the early return beat them
+  // to it. So tapping "Your week: 55 streams" did nothing at all, which
+  // reads as a dead app rather than a deliberate choice. Both now fall
+  // through to their pages.
+  //
+  // streak and top_supporter genuinely have nowhere to go: they are about
+  // you, not about a track or a person, so they stay read-only.
   const READ_ONLY_TYPES = new Set([
-    'streak','top_supporter','weekly_report','monthly_wrapped',
+    'streak','top_supporter',
     'bug_report',
   ]);
 
@@ -501,7 +560,14 @@ export default function NotificationsPage() {
     if (type === 'new_follower') {
       if (meta.from_artist_slug) { navigate('/artist/' + meta.from_artist_slug); return; }
       if (notif.from_artist?.slug) { navigate('/artist/' + notif.from_artist.slug); return; }
-      navigate('/community');
+      // A LISTENER followed you, so there is no artist page to open — and
+      // there is no public listener page either: UserProfilePage is mounted
+      // at /profile/edit, which is the viewer's OWN edit screen.
+      //
+      // This used to fall through to navigate('/community'), so tapping
+      // "someone started following you" threw you into the chat rooms for
+      // no reason. Now it does what the read-only types do: the tap marks
+      // it read and you stay where you are.
       return;
     }
 
@@ -565,6 +631,7 @@ export default function NotificationsPage() {
 
     if (type === 'tier_granted')                         { navigate('/profile'); return; }
     if (type === 'weekly_report')                         { navigate('/dashboard?tab=analytics&section=stats'); return; }
+    if (type === 'monthly_wrapped')                       { navigate('/dashboard?tab=analytics&section=stats'); return; }
     if (type === 'download') {
       const dlTrackId = meta.track_id || notif.track_id;
       if (meta.track_slug) { navigate(`/track/${meta.track_slug}`); return; }
@@ -583,9 +650,11 @@ export default function NotificationsPage() {
       const flTrackId = meta.track_id || notif.track_id;
       if (meta.track_slug) { navigate(`/track/${meta.track_slug}`); return; }
       if (flTrackId) { navigate(`/track/${flTrackId}`); return; }
+      // "You are the first person to listen to this track" with no track
+      // recorded on the row. Older rows are like this. Sending someone to
+      // Browse is worse than doing nothing: it looks like the app lost the
+      // song rather than never having stored it.
       if (artist) { navigate('/dashboard?tab=analytics&section=tracks'); return; }
-      if (meta.artist_slug) { navigate(`/artist/${meta.artist_slug}`); return; }
-      navigate('/browse');
       return;
     }
     if (type?.startsWith('collab_')) {

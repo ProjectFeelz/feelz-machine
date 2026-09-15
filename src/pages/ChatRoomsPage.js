@@ -316,8 +316,23 @@ export default function ChatRoomsPage() {
   };
 
   // Pinned first, then regular by member count
-  const pinnedRooms  = rooms.filter(r => r.is_pinned);
-  const regularRooms = rooms.filter(r => !r.is_pinned);
+  // The bug-report room is reachable from the Hub by its own button and is
+  // kept out of this list on purpose.
+  //
+  // It was pinned, so it sat at the very top of Chat Rooms — and any
+  // notification that fell through to /community landed people on it by
+  // accident. A room for reporting faults is not somewhere you want someone
+  // arriving without meaning to; it fills up with confused messages and
+  // buries the real reports.
+  //
+  // Matched on the name rather than an id so this survives the room being
+  // recreated, and kept as one predicate so there is a single place to
+  // change if it is ever renamed.
+  const isBugRoom = r => /report\s*a?\s*bug/i.test(r.name || '');
+
+  const visibleRooms = rooms.filter(r => !isBugRoom(r));
+  const pinnedRooms  = visibleRooms.filter(r => r.is_pinned);
+  const regularRooms = visibleRooms.filter(r => !r.is_pinned);
 
   const filteredRegular = query.trim()
     ? regularRooms.filter(r =>
