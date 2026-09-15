@@ -21,6 +21,19 @@ export default function CreateMenuModal({ artist, user, onClose, primaryColor = 
   // Newsletter shortcut, shown only to admins and newsletter editors so
   // Jane can reach it in one tap instead of Monetize > Affiliates > Newsletter.
   const [canNewsletter, setCanNewsletter] = useState(false);
+
+  // ── My Top Pick ───────────────────────────────────────────────────────
+  // The control for this existed only in ProfileSetup.js (/setup). The
+  // Create menu's "Edit Profile" goes to /profile/edit, which is a
+  // different, near-duplicate page that never had it — so the feature was
+  // live on the public profile and unreachable from anywhere a person
+  // would actually look. Surfaced here.
+  const [topPickTracks, setTopPickTracks]   = useState([]);
+  const [topPickId, setTopPickId]           = useState(null);
+  const [topPickNote, setTopPickNote]       = useState('');
+  const [topPickSaving, setTopPickSaving]   = useState(false);
+  const [topPickMsg, setTopPickMsg]         = useState('');
+  const [topPickLoading, setTopPickLoading] = useState(false);
   useEffect(() => {
     if (!user) return;
     // isAdmin isn't passed to this component, so check both tables directly.
@@ -30,6 +43,46 @@ export default function CreateMenuModal({ artist, user, onClose, primaryColor = 
     ]).then(([a, e]) => setCanNewsletter(!!a.data || !!e.data));
   }, [user]);
 
+
+  // Loaded when the tab is opened rather than on mount: most opens of this
+  // menu are for something else, and this is two round trips.
+  const loadTopPick = async () => {
+    if (!artist?.id) return;
+    setTopPickLoading(true);
+    const [{ data: tracks, error: tErr }, { data: me, error: aErr }] = await Promise.all([
+      supabase.from('tracks').select('id, title')
+        .eq('artist_id', artist.id).eq('is_published', true)
+        .order('created_at', { ascending: false }),
+      supabase.from('artists').select('top_pick_track_id, top_pick_note')
+        .eq('id', artist.id).maybeSingle(),
+    ]);
+    if (tErr) console.error('[create] top pick tracks failed:', tErr.message);
+    if (aErr) console.error('[create] top pick current failed:', aErr.message);
+    setTopPickTracks(tracks || []);
+    setTopPickId(me?.top_pick_track_id || null);
+    setTopPickNote(me?.top_pick_note || '');
+    setTopPickLoading(false);
+  };
+
+  // Ownership of the track is checked inside set_my_top_pick, in the
+  // database — not trusted from here.
+  const saveTopPick = async (trackId) => {
+    setTopPickSaving(true);
+    setTopPickMsg('');
+    const { error } = await supabase.rpc('set_my_top_pick', {
+      p_track_id: trackId,
+      p_note: trackId ? (topPickNote.trim() || null) : null,
+    });
+    if (error) {
+      setTopPickMsg('Could not save: ' + error.message);
+    } else {
+      setTopPickId(trackId);
+      if (!trackId) setTopPickNote('');
+      setTopPickMsg(trackId ? 'Top pick saved' : 'Top pick cleared');
+      setTimeout(() => { close(); setTopPickMsg(''); }, 1100);
+    }
+    setTopPickSaving(false);
+  };
   const { isPremium } = useTier();
 
   const [createTab, setCreateTab] = useState('menu'); // 'menu' | 'story' | 'thought' | 'dm' | 'memo' | 'live'
@@ -185,7 +238,7 @@ export default function CreateMenuModal({ artist, user, onClose, primaryColor = 
               </button>
             )}
             <p className="text-sm font-bold text-white">
-              {createTab === 'menu' ? 'Create' : createTab === 'story' ? 'Add Story' : createTab === 'thought' ? 'Thought of the Day' : createTab === 'live' ? 'Go Live' : createTab === 'memo' ? 'Voice Memo' : 'Message Fans'}
+              {createTab === 'menu' ? 'Create' : createTab === 'story' ? 'Add Story' : createTab === 'thought' ? 'Thought of the Day' : createTab === 'live' ? 'Go Live' : createTab === 'memo' ? 'Voice Memo' : createTab === 'toppick' ? 'My Top Pick' : 'Message Fans'}
             </p>
           </div>
           <button onClick={close}
@@ -204,6 +257,7 @@ export default function CreateMenuModal({ artist, user, onClose, primaryColor = 
                 { id: 'story', icon: '📸', label: 'Add Story', sub: 'Share a 24hr clip with fans', color: 'purple' },
                 { id: 'thought', icon: '💭', label: 'Thought of the Day', sub: "Share what's on your mind", color: 'blue' },
                 { id: 'edit', icon: '✏️', label: 'Edit Profile', sub: 'Update your bio, photo and links', color: 'gray' },
+                { id: 'toppick', icon: '⭐', label: 'Top Pick', sub: 'Choose the track your profile leads with', color: 'yellow' },
                 isPremium
                   ? { id: 'merch', icon: '🛍️', label: 'Merch Store', sub: 'Connect Printful · sell to your fans', color: 'purple' }
                   : { id: 'merch_locked', icon: '🛍️', label: 'Merch Store', sub: 'Premium only — upgrade to unlock', color: 'gray' },
@@ -218,6 +272,7 @@ export default function CreateMenuModal({ artist, user, onClose, primaryColor = 
                     else if (id === 'memo') { setCreateTab('memo'); }
                     else if (id === 'upload') { close(); navigate('/dashboard?tab=upload'); }
                     else if (id === 'edit') { close(); navigate('/profile/edit'); }
+                    else if (id === 'toppick') { setCreateTab('toppick'); loadTopPick(); }
                     else if (id === 'merch') { setShowMerchConnect(true); }
                     else if (id === 'merch_locked') { close(); navigate('/upgrade'); }
                     else if (id === 'newsletter') { close(); navigate('/newsletter/compose'); }
@@ -278,6 +333,79 @@ export default function CreateMenuModal({ artist, user, onClose, primaryColor = 
                 style={{ backgroundColor: primaryColor, color: bgColor }}>
                 {createThoughtSaving ? <Loader className="w-4 h-4 animate-spin" /> : <span>Post Thought</span>}
               </button>
+            </div>
+          )}
+
+          {/* ── My Top Pick ── */}
+          {createTab === 'toppick' && (
+            <div className="space-y-3">
+              {topPickLoading ? (
+                <div className="py-10 flex justify-center"><Loader className="w-5 h-5 animate-spin text-white/30" /></div>
+              ) : topPickTracks.length === 0 ? (
+                <p className="text-sm text-white/40 text-center py-8">
+                  Publish a track first — your top pick is chosen from your own published music.
+                </p>
+              ) : (
+                <>
+                  <p className="text-xs text-white/40 leading-relaxed">
+                    This track sits at the very top of your profile, above everything else.
+                    Pick the one you want a first-time listener to hear.
+                  </p>
+
+                  {/* Scrolls on its own rather than growing the sheet, which
+                      already caps at 85vh — an artist with forty tracks would
+                      otherwise push the Save button off the bottom. */}
+                  <div className="max-h-56 overflow-y-auto space-y-2 pr-1">
+                    {topPickTracks.map(t => {
+                      const chosen = topPickId === t.id;
+                      return (
+                        <button key={t.id} type="button"
+                          onClick={() => setTopPickId(chosen ? null : t.id)}
+                          className="w-full flex items-center space-x-3 p-3 rounded-xl border transition active:scale-[0.99] text-left"
+                          style={{
+                            borderColor: chosen ? primaryColor : 'rgba(255,255,255,0.06)',
+                            background: chosen ? `${primaryColor}1A` : 'rgba(255,255,255,0.02)',
+                          }}>
+                          <Music className="w-4 h-4 flex-shrink-0" style={{ color: chosen ? primaryColor : 'rgba(255,255,255,0.3)' }} />
+                          <span className="text-sm text-white truncate flex-1">{t.title}</span>
+                          {chosen && <Check className="w-4 h-4 flex-shrink-0" style={{ color: primaryColor }} />}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <textarea rows={2} maxLength={140} value={topPickNote}
+                    onChange={e => setTopPickNote(e.target.value)}
+                    placeholder="Why this one? (optional)"
+                    className="w-full px-3 py-2.5 bg-white/[0.06] rounded-xl text-white text-sm outline-none resize-none border border-white/[0.06] focus:border-white/20 transition placeholder-white/20" />
+
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-white/20">{topPickNote.length}/140</span>
+                    {topPickMsg && (
+                      <span className={`text-xs ${topPickMsg.startsWith('Could not') ? 'text-red-400' : 'text-green-400'}`}>
+                        {topPickMsg}
+                      </span>
+                    )}
+                  </div>
+
+                  <button
+                    disabled={topPickSaving || !topPickId}
+                    onClick={() => saveTopPick(topPickId)}
+                    className="w-full py-3 rounded-2xl text-sm font-semibold transition disabled:opacity-40 flex items-center justify-center space-x-2"
+                    style={{ backgroundColor: primaryColor, color: bgColor }}>
+                    {topPickSaving ? <Loader className="w-4 h-4 animate-spin" /> : <span>Save Top Pick</span>}
+                  </button>
+
+                  {/* Only offered when there is something to clear. */}
+                  {topPickId && (
+                    <button type="button" disabled={topPickSaving}
+                      onClick={() => saveTopPick(null)}
+                      className="w-full py-2.5 rounded-2xl text-xs font-semibold text-white/40 hover:text-white/70 transition disabled:opacity-40">
+                      Remove my top pick
+                    </button>
+                  )}
+                </>
+              )}
             </div>
           )}
 
