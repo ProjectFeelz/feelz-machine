@@ -256,8 +256,16 @@ export default function ProfilePage() {
   const uploadFile = async (file, folder) => {
     const ext  = file.name.split('.').pop();
     const name = `${folder}${Date.now()}-${Math.random().toString(36).substring(7)}.${ext}`;
+      // No upsert. The filename above is Date.now() plus a random suffix,
+      // so it cannot collide — and `upsert: true` turns the insert into
+      // INSERT ... ON CONFLICT DO UPDATE, which Postgres will only run if
+      // it can READ the conflicting row. artist-images had no SELECT policy,
+      // so every profile-image upload was refused with
+      // "new row violates row-level security policy" while a plain insert
+      // of the same row was fine. Migration 115 adds that policy; dropping
+      // the flag here means this call no longer depends on it.
     const { error: uploadError } = await supabase.storage
-      .from(PROFILE_IMAGE_BUCKET).upload(name, file, { upsert: true });
+      .from(PROFILE_IMAGE_BUCKET).upload(name, file);
     if (uploadError) throw new Error(`Image upload failed: ${uploadError.message}`);
     const { data: { publicUrl } } = supabase.storage.from(PROFILE_IMAGE_BUCKET).getPublicUrl(name);
     return publicUrl;
@@ -305,8 +313,11 @@ export default function ProfilePage() {
       if (editAvatarFile) {
         const ext  = editAvatarFile.name.split('.').pop();
         const path = `profile-images/${user.id}-${Date.now()}.${ext}`;
+        // Same reasoning as uploadFile above: the path carries user.id and
+        // Date.now(), so it is unique per upload and upsert bought nothing
+        // except a dependency on a SELECT policy that did not exist.
         const { error: uploadErr } = await supabase.storage
-          .from('artist-images').upload(path, editAvatarFile, { upsert: true });
+          .from('artist-images').upload(path, editAvatarFile);
         if (uploadErr) throw uploadErr;
         const { data: urlData } = supabase.storage.from('artist-images').getPublicUrl(path);
         newAvatarUrl = urlData.publicUrl;
