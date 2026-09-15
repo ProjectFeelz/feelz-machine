@@ -23,10 +23,15 @@ export function downloadErrorMessage(err) {
       return "You can't download your own track — it would inflate your download count.";
     case 'not_released_yet':
       return "This track hasn't been released yet. You'll be able to download it on the release date.";
+    // Kept, but the server no longer sends it: free listeners now get three
+    // a month rather than none at all. A stale bundle in someone's cache can
+    // still receive it, so the wording stays accurate for that case.
     case 'fan_pro_required':
       return 'Free downloads are a Fan Pro feature. Upgrade to download this one.';
     case 'monthly_quota_exceeded':
-      return "You've used your 3 free downloads this month. They reset on the 1st.";
+      return "You've used your 3 free downloads this month. They reset on the 1st — or go Fan Pro for unlimited downloads.";
+    case 'quota_check_failed':
+      return "Couldn't check your download allowance just now. Try again in a moment.";
     case 'purchase_required':
       return 'This track needs to be bought before you can download it.';
     case 'Not authenticated':
