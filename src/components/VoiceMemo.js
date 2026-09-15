@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
+import { useAuth } from '../contexts/AuthContext';
 import { Mic, Play, Pause, Trash2, Upload, Loader, X } from 'lucide-react';
 
 // ── Waveform visual (static bars that animate while playing) ──────────────────
@@ -121,6 +122,7 @@ export function VoiceMemoCard({ memo, canDelete = false, onDelete }) {
 
 // ── Upload panel (shown in artist dashboard) ──────────────────────────────────
 export function VoiceMemoUpload({ artistId, onUploaded }) {
+  const { user } = useAuth();
   const [recording, setRecording]   = useState(false);
   const [audioBlob, setAudioBlob]   = useState(null);
   const [title, setTitle]           = useState('');
@@ -165,14 +167,40 @@ export function VoiceMemoUpload({ artistId, onUploaded }) {
 
   const upload = async () => {
     if (!audioBlob || !artistId) return;
+    if (!user?.id) { setError('You appear to be signed out. Sign in and try again.'); return; }
     setUploading(true);
     setError(null);
     try {
-      const filename = `${artistId}/${Date.now()}.webm`;
+      // The first folder is the USER id, not the artist id.
+      //
+      // This line read `${artistId}/...`, and the storage policy on this
+      // bucket — "Artists can upload own voice memos" — compares the first
+      // folder to auth.uid(). auth.uid() is the USER id; artistId is the
+      // ARTIST row id. They are different uuids on every single account, so
+      // the two were never going to be equal and this upload has been
+      // refused on every attempt since the day it was written. Confirmed
+      // against the live catalog rather than assumed: that policy mentions
+      // auth.uid(), does not mention the artists table, and the uuid in the
+      // failing request is an artists.id.
+      //
+      // Fixed here rather than in the policy on purpose. Keying the folder
+      // to the uploader is the shape the DELETE policy on this bucket uses
+      // too, so both halves agree; and no file has ever landed under an
+      // artist-id folder, so there is nothing to migrate. The artist is
+      // still recorded — on the artist_voice_memos row below, which is where
+      // that relationship belongs.
+      const filename = `${user.id}/${Date.now()}.webm`;
       const { error: uploadErr } = await supabase.storage
         .from('artist-voice-memos')
         .upload(filename, audioBlob, { contentType: 'audio/webm', upsert: false });
-      if (uploadErr) throw uploadErr;
+      if (uploadErr) {
+        console.error('[voice-memo] storage upload refused:', uploadErr.message);
+        throw new Error(
+          /row-level security|violates/i.test(uploadErr.message)
+            ? 'The recording was refused by storage. If this keeps happening, send me this message — the bucket rule and the upload path disagree.'
+            : uploadErr.message
+        );
+      }
 
       const { data: urlData } = supabase.storage
         .from('artist-voice-memos')
@@ -191,7 +219,10 @@ export function VoiceMemoUpload({ artistId, onUploaded }) {
         audio_url: urlData.publicUrl,
         duration,
       });
-      if (dbErr) throw dbErr;
+      if (dbErr) {
+        console.error('[voice-memo] row insert refused:', dbErr.code, dbErr.message);
+        throw new Error(`Recording uploaded but could not be saved: ${dbErr.message}`);
+      }
 
       discard();
       onUploaded?.();

@@ -515,7 +515,22 @@ export default function ChatRoomView() {
   // backing out of it dropped people onto a Chat Rooms page showing "No chat
   // rooms yet": a dead end they never asked to visit, and the one screen the
   // bug room was deliberately taken out of.
-  const backTarget = isBugRoom ? (artist ? '/hub' : '/profile') : '/chat';
+  const backTarget = isBugRoom ? (artist ? '/hub' : '/profile') : '/community';
+
+  // Back, for a normal room.
+  //
+  // Hard-coding /community was right when the room list was the only way in.
+  // It is not any more: the Chat button on an artist profile and the Your
+  // Chats list in Library both land here, and sending those people to a
+  // browse-all page they never visited is a detour, not a back button.
+  // History does the right thing from every one of those entry points; the
+  // fixed target is the fallback for a cold deep link, where there is no
+  // history to go back to.
+  const goBack = () => {
+    if (isBugRoom) { navigate(backTarget); return; }
+    if (window.history.length > 2) navigate(-1);
+    else navigate('/community');
+  };
   const isRoomAdmin   = room?.artists?.user_id === user?.id || myMembership?.role === 'admin' || myMembership?.role === 'moderator';
 
   // ── Initial load ────────────────────────────────────────────────────────────
@@ -917,7 +932,7 @@ export default function ChatRoomView() {
         }
       >
         <div className="flex items-center space-x-3">
-          <button onClick={() => navigate(backTarget)} className="w-9 h-9 flex items-center justify-center rounded-full bg-white/[0.06]">
+          <button onClick={goBack} className="w-9 h-9 flex items-center justify-center rounded-full bg-white/[0.06]">
             <ArrowLeft className="w-5 h-5 text-white" />
           </button>
           <button onClick={() => room.artists?.slug && navigate(`/artist/${room.artists.slug}`)} className="flex items-center space-x-2.5">

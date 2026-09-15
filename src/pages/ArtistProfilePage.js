@@ -150,6 +150,8 @@ export default function ArtistProfilePage() {
   const [purchasedTracks, setPurchasedTracks] = useState({});
   const [liveSession, setLiveSession] = useState(null);
   const [radioLoading, setRadioLoading] = useState(false);
+  const [chatOpening, setChatOpening]   = useState(false);
+  const [chatError, setChatError]       = useState('');
   const [notifEnabled, setNotifEnabled] = useState(false);
   const [notifLoading, setNotifLoading] = useState(false);
   const [showDMModal, setShowDMModal] = useState(false);
@@ -692,6 +694,41 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
       if (!scheduleMode || !scheduledAt) navigate(`/session/${session.id}`);
     } catch (err) { console.error('Start session error:', err); }
     setStartingSession(false);
+  };
+
+  // Open — or, on the first fan who ever asks, create — this artist's room.
+  //
+  // The room is made by ensure_artist_chat_room (migration 117), a
+  // SECURITY DEFINER function, because chat_rooms' only write policy is
+  // "artist_id belongs to auth.uid()" and a listener is by definition not
+  // that artist. Loosening that policy instead would have let anyone create
+  // rooms in any artist's name; the function can do one thing and nothing
+  // else. It returns the existing room untouched when there is one.
+  //
+  // Fan Pro is NOT checked here on purpose. Getting to the room and being
+  // able to speak in it are different questions, and ChatRoomView already
+  // answers the second one — sending an unsubscribed listener to a locked
+  // door they can see through is a better sell than a button that refuses to
+  // move.
+  const openArtistChat = async () => {
+    if (!user)   { navigate('/login'); return; }
+    if (!artist?.id || chatOpening) return;
+    setChatOpening(true);
+    setChatError('');
+    const { data, error } = await supabase.rpc('ensure_artist_chat_room', { p_artist_id: artist.id });
+    setChatOpening(false);
+    if (error) {
+      console.error('[profile] ensure_artist_chat_room failed:', error.code, error.message);
+      setChatError(
+        /no account to chat with/i.test(error.message)
+          ? `${artist.artist_name} hasn't claimed their account yet, so there's nobody to chat to.`
+          : `Couldn't open the chat: ${error.message}`
+      );
+      setTimeout(() => setChatError(''), 6000);
+      return;
+    }
+    if (!data) { setChatError("Couldn't open the chat just now. Try again in a moment."); return; }
+    navigate(`/chat/${data}`);
   };
 
   const handleArtistRadio = async () => {
@@ -1243,6 +1280,28 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
               </button>
             </>
           )}
+          {/* Chat.
+              This is the whole entry point to the chat feature, and until now
+              there wasn't one. The Chat Rooms page was reachable from a button
+              on /feed — a page nothing in the app links to — and from a
+              Community modal on THIS page whose `showCommunity` flag was
+              declared, rendered, and never once set to true. So chat was
+              reachable by typing a URL and no other way, which is the real
+              reason it never took off.
+
+              It sits here because this is where the intent is: you are looking
+              at an artist and you want to talk to them. Deliberately the
+              listener's move — nothing pushes an artist at a fan. */}
+          {!isProfileOwner && (
+            <button onClick={openArtistChat} disabled={chatOpening}
+              className="flex items-center space-x-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all active:scale-95 disabled:opacity-40"
+              style={{ backgroundColor: `${accentColor}25`, color: accentColor, border: `1px solid ${accentColor}45` }}>
+              {chatOpening
+                ? <Loader className="w-3.5 h-3.5 animate-spin" />
+                : <MessageCircle className="w-3.5 h-3.5" />}
+              <span>Chat</span>
+            </button>
+          )}
           <button onClick={handleShare}
             className="flex items-center space-x-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all active:scale-95"
             style={{ backgroundColor: `${textColor}10`, color: `${textColor}70`, border: `1px solid ${textColor}20` }}>
@@ -1270,6 +1329,14 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
             isOwner={user?.id === artist.user_id}
           />
         </div>
+
+        {/* Said out loud rather than logged. The Chat button calls a function
+            that can legitimately refuse — an unclaimed artist has nobody on
+            the other end — and a button that does nothing with the reason in
+            the console is indistinguishable from a broken one. */}
+        {chatError && (
+          <p className="mt-2 text-xs px-1" style={{ color: '#f87171' }}>{chatError}</p>
+        )}
 
 
 

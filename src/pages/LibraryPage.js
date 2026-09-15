@@ -9,7 +9,7 @@ import { useOfflineLibrary } from '../contexts/OfflineContext';
 import {
   Heart, Download, ListMusic, Users, Clock, ChevronRight, TrendingUp, ArrowDownToLine,
   Music, BarChart3, Zap, Crown, Palette,
-  Shield, ChevronDown, Check, BarChart2, Play,
+  Shield, ChevronDown, Check, BarChart2, Play, MessageCircle,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
@@ -52,6 +52,40 @@ export default function LibraryPage() {
   const [newToYou, setNewToYou] = useState([]);
   const [savingPrefs, setSavingPrefs] = useState(false);
   const [showThemes, setShowThemes] = useState(false);
+
+  // Rooms this person has actually joined.
+  //
+  // Getting INTO a chat was the hard problem; getting BACK to one was the
+  // quiet second half of it. Without this the only way to return to a
+  // conversation was to remember which artist it belonged to, open their
+  // profile and press Chat again — so every visit cost as much as the first.
+  const [myRooms, setMyRooms] = useState([]);
+  useEffect(() => {
+    if (!user) { setMyRooms([]); return; }
+    let cancelled = false;
+    (async () => {
+      // Two queries rather than one embed. chat_room_members has no foreign
+      // key to artists, so the artist name has to come through chat_rooms —
+      // and chat_rooms has exactly one FK to artists, which means the embed
+      // is unambiguous and safe to name.
+      const { data: memberships, error: mErr } = await supabase
+        .from('chat_room_members')
+        .select('room_id, last_read_at')
+        .eq('user_id', user.id);
+      if (mErr) { console.error('[library] chat memberships failed:', mErr.code, mErr.message); return; }
+      const ids = (memberships || []).map(m => m.room_id);
+      if (!ids.length) { if (!cancelled) setMyRooms([]); return; }
+
+      const { data: rooms, error: rErr } = await supabase
+        .from('chat_rooms')
+        .select('id, name, is_active, member_count, artists(artist_name, slug, profile_image_url)')
+        .in('id', ids)
+        .eq('is_active', true);
+      if (rErr) { console.error('[library] chat rooms failed:', rErr.code, rErr.message); return; }
+      if (!cancelled) setMyRooms(rooms || []);
+    })();
+    return () => { cancelled = true; };
+  }, [user]);
 
   // Load preferences from DB
   useEffect(() => {
@@ -220,6 +254,42 @@ export default function LibraryPage() {
       <div className="sticky top-0 z-20 bg-black/95 backdrop-blur-xl md:relative md:top-auto md:bg-transparent pt-14 md:pt-4 pb-3 -mx-4 px-4 border-b border-white/[0.04] md:border-none mb-5">
         <h1 className="text-2xl font-bold text-white">Your Library</h1>
       </div>
+
+      {/* ── Your chats ── */}
+      {myRooms.length > 0 && (
+        <div className="mb-5">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center space-x-2">
+              <MessageCircle className="w-3.5 h-3.5 text-purple-400/70" />
+              <span className="section-label">Your Chats</span>
+            </div>
+            <button onClick={() => navigate('/community')}
+              className="text-[11px] text-white/30 hover:text-white/60 transition">
+              Browse all →
+            </button>
+          </div>
+          <div className="space-y-2">
+            {myRooms.map(room => (
+              <button key={room.id}
+                onClick={() => navigate(`/chat/${room.id}`)}
+                className="w-full flex items-center gap-3 p-2.5 rounded-xl bg-white/[0.03] border border-white/[0.05] hover:bg-white/[0.06] transition active:scale-[0.99] text-left">
+                <div className="w-10 h-10 rounded-xl overflow-hidden flex-shrink-0 flex items-center justify-center bg-purple-500/15">
+                  {room.artists?.profile_image_url
+                    ? <img src={room.artists.profile_image_url} alt="" className="w-full h-full object-cover" />
+                    : <MessageCircle className="w-4 h-4 text-purple-400/70" />}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-white truncate">{room.name}</p>
+                  <p className="text-[11px] text-white/30 truncate">
+                    {room.artists?.artist_name || 'Artist'} · {room.member_count || 0} members
+                  </p>
+                </div>
+                <ChevronRight className="w-4 h-4 text-white/20 flex-shrink-0" />
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* ── Listener stats snapshot ── */}
       {!isArtist && stats.totalStreams > 0 && (
