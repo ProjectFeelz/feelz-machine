@@ -14,7 +14,7 @@ import {
   ChevronRight, Crown, Zap, Star, LayoutDashboard,
   User, LogOut, DollarSign, Radio, Mic2,
   Loader, X, Youtube, Info, Search,
-  Plus, MessageSquare, Check, Send, Store, Trophy, Sparkles, EyeOff, Bug,
+  Plus, MessageSquare, Check, Send, Store, Trophy, Sparkles, EyeOff, Bug, Newspaper,
 } from 'lucide-react';
 import { sendNotification } from '../utils/notify';
 
@@ -311,7 +311,13 @@ export default function HubPage() {
               <LinkCard icon={Music}         label="Browse Music"     description="Find new tracks and artists"   path="/browse"             color="bg-purple-500/20" />
               <LinkCard icon={Mic2}          label="Discover Artists" description="Find and follow new artists"   path="/browse?tab=artists" color="bg-indigo-500/20" />
               <LinkCard icon={Users}         label="Following"        description="Artists you follow"            path="/library/following"  color="bg-cyan-500/20" />
-              <LinkCard icon={MessageCircle} label="Community"        description="Feed, posts and artist updates"           path="/community"          color="bg-teal-500/20" />
+              {/* Was one card labelled "Community — Feed, posts and artist
+                  updates" pointing at /community, which renders the CHAT ROOM
+                  LIST, not the feed. Two different things wearing one name.
+                  Split, so each label matches where it goes — and this is now
+                  the only route to /feed anywhere in the app. */}
+              <LinkCard icon={MessageCircle} label="Chat Rooms"      description="Talk to artists and other fans" path="/community"          color="bg-teal-500/20" />
+              <LinkCard icon={Newspaper}     label="Feed"            description="Posts and artist updates"       path="/feed"               color="bg-sky-500/20" />
               <LinkCard icon={Star}          label="Liked Songs"      description="Your saved tracks"             path="/library/likes"      color="bg-pink-500/20" />
             </Section>
           )}
@@ -323,6 +329,15 @@ export default function HubPage() {
               <LinkCard icon={Radio}          label="Collab Radar"   description="Find artists who vibe with your sound"  onClick={() => navigate('/collab-radar')} color="bg-purple-500/20" />
               <LinkCard icon={HeartHandshake} label="Collaborations" description="Manage collab requests and credits"     onClick={() => setActiveTab('collabs')}   color="bg-cyan-500/20" />
               <LinkCard icon={BarChart3}      label="Analytics"      description="Track performance and stream data"      path="/dashboard?tab=analytics" color="bg-indigo-500/20" />
+              {/* Artists had NO route to chat rooms at all.
+                  The Chat Rooms card lives in the Discover section, which is
+                  wrapped in {!isArtist}. The Chat button on an artist profile
+                  is hidden on your OWN profile. So an artist who had never
+                  joined a room could not reach the room list, and therefore
+                  could not create the room their fans are meant to find —
+                  the same dead end that killed chat for listeners, rebuilt on
+                  the artist side. */}
+              <LinkCard icon={MessageCircle}  label="Your Fan Chat"  description="Talk to your fans, or start a room"     path="/community"               color="bg-teal-500/20" />
             </Section>
           )}
 

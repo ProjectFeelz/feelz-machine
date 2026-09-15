@@ -661,7 +661,12 @@ export default function NotificationsPage() {
       const collabTrackId = meta.track_id || notif.track_id;
       if (meta.track_slug) { navigate(`/track/${meta.track_slug}`); return; }
       if (collabTrackId) { navigate(`/track/${collabTrackId}`); return; }
-      navigate(artist ? '/dashboard?tab=collabs' : '/community');
+      // A listener got sent to the CHAT ROOM LIST for a collaboration
+      // notification. Those two have nothing to do with each other, and
+      // landing somewhere unrelated reads as the app losing the thing you
+      // tapped. Artists still go to their collabs tab; for anyone else there
+      // is no better destination than staying put.
+      if (artist) { navigate('/dashboard?tab=collabs'); }
       return;
     }
     if (type?.startsWith('milestone_')) {

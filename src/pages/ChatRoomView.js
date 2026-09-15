@@ -59,14 +59,22 @@ function TrackPill({ trackId, navigate }) {
   const [track, setTrack] = React.useState(null);
   React.useEffect(() => {
     supabase.from('tracks')
-      .select('id, title, cover_artwork_url, artists(artist_name, slug)')
+      .select('id, title, slug, cover_artwork_url, artists(artist_name, slug)')
       .eq('id', trackId).maybeSingle()
       .then(({ data }) => setTrack(data));
   }, [trackId]);
   if (!track) return <span className="text-white/30 text-xs italic">♪</span>;
   return (
     <button
-      onClick={e => { e.stopPropagation(); if (track.artists?.slug) navigate(`/artist/${track.artists.slug}`); }}
+      // The pill shows a track title and a play icon, so it opens the TRACK.
+      // It used to go to the artist page, which is neither what it depicts nor
+      // what someone tapping a song in a chat expects. Falls back to the
+      // artist only when the track has no slug of its own.
+      onClick={e => {
+        e.stopPropagation();
+        if (track.slug) navigate(`/track/${track.slug}`);
+        else if (track.artists?.slug) navigate(`/artist/${track.artists.slug}`);
+      }}
       className="inline-flex items-center space-x-1.5 px-2 py-0.5 rounded-lg bg-purple-500/15 border border-purple-500/20 hover:bg-purple-500/25 transition mx-0.5 align-middle"
     >
       <div className="w-5 h-5 rounded overflow-hidden flex-shrink-0 bg-white/10">
@@ -911,7 +919,10 @@ export default function ChatRoomView() {
     <div className="min-h-screen bg-black flex flex-col items-center justify-center px-6">
       <AlertTriangle className="w-12 h-12 text-white/10 mb-4" />
       <p className="text-white/40 text-sm">Room not found</p>
-      <button onClick={() => navigate('/chat')} className="mt-4 text-sm text-white/30 hover:text-white/50">Back to rooms</button>
+      {/* Was navigate('/chat'), which only exists as a redirect to
+          /community — so a stale link from a profile or from Library dumped
+          you on the browse-all list. Same back logic as the header. */}
+      <button onClick={goBack} className="mt-4 text-sm text-white/30 hover:text-white/50">Back</button>
     </div>
   );
 
@@ -935,7 +946,14 @@ export default function ChatRoomView() {
           <button onClick={goBack} className="w-9 h-9 flex items-center justify-center rounded-full bg-white/[0.06]">
             <ArrowLeft className="w-5 h-5 text-white" />
           </button>
-          <button onClick={() => room.artists?.slug && navigate(`/artist/${room.artists.slug}`)} className="flex items-center space-x-2.5">
+          {/* Not clickable in the bug room. This header shows a Bug icon and
+              the room name there, but the handler still sent you to whichever
+              artist row happens to own that room — a destination with no
+              relationship to what was tapped. */}
+          <button
+            onClick={() => { if (!isBugRoom && room.artists?.slug) navigate(`/artist/${room.artists.slug}`); }}
+            disabled={isBugRoom || !room.artists?.slug}
+            className="flex items-center space-x-2.5 disabled:cursor-default">
             <div className="w-9 h-9 rounded-xl overflow-hidden flex items-center justify-center flex-shrink-0"
               style={isBugRoom ? { background: `${accentColor}25` } : { background: 'linear-gradient(135deg,rgba(124,58,237,0.3),rgba(37,99,235,0.2))' }}>
               {isBugRoom
@@ -1238,7 +1256,9 @@ export default function ChatRoomView() {
                 <p className="text-xs text-white/40 mb-3">
                   Purchase at least <span className="text-white font-semibold">$5</span> of music from <span className="text-white">{room?.artists?.artist_name}</span> to join.
                 </p>
-                <button onClick={() => navigate(`/artist/${room?.artists?.slug}`)}
+                <button
+                  onClick={() => room?.artists?.slug && navigate(`/artist/${room.artists.slug}`)}
+                  disabled={!room?.artists?.slug}
                   className="w-full py-2.5 bg-yellow-500 text-black rounded-xl font-semibold text-sm transition active:scale-95">
                   Browse {room?.artists?.artist_name}&apos;s Music
                 </button>
