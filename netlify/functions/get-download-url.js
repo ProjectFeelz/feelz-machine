@@ -147,36 +147,60 @@ exports.handler = async (event) => {
         }
       }
 
-      if (!isPro) {
-        return {
-          statusCode: 403,
-          body: JSON.stringify({
-            error: 'fan_pro_required',
-            message: 'Upgrade to Fan Pro to download tracks',
-          }),
-        };
-      }
+      // These two rules were the wrong way round.
+      //
+      // As written, a listener who was NOT Fan Pro got a flat 403 and could
+      // never download anything, and a listener who WAS Fan Pro got a cap of
+      // three a month. So the paid tier was the restricted one and the free
+      // tier was locked out entirely — the opposite of what Fan Pro is sold
+      // as, and the reason Davu (genuinely Fan Pro, correctly recognised)
+      // was refused after her third download.
+      //
+      // The intended rule:
+      //
+      //   Fan Pro      unlimited free downloads
+      //   everyone else  three a month, then they are invited to upgrade
+      //
+      // A Fan Pro listener now returns before the quota is ever counted.
+      if (isPro) {
+        // Unlimited. Nothing else to check.
+      } else {
+        const monthStart = new Date();
+        monthStart.setDate(1); monthStart.setHours(0, 0, 0, 0);
+        const { count: monthlyCount, error: quotaErr } = await adminClient
+          .from('downloads')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', user.id)
+          .eq('amount_paid', 0)
+          .gte('created_at', monthStart.toISOString());
 
-      // Pro listener — check monthly quota (3/month)
-      const monthStart = new Date();
-      monthStart.setDate(1); monthStart.setHours(0, 0, 0, 0);
-      const { count: monthlyCount } = await adminClient
-        .from('downloads')
-        .select('*', { count: 'exact', head: true })
-        .eq('user_id', user.id)
-        .eq('amount_paid', 0)
-        .gte('created_at', monthStart.toISOString());
+        // Read, not discarded. A failed count used to come back undefined,
+        // which `(monthlyCount || 0) >= FREE_MONTHLY_QUOTA` reads as 0 — so a
+        // broken count silently handed out unlimited downloads to everyone.
+        if (quotaErr) {
+          console.error('[get-download-url] quota count failed:', quotaErr.message);
+          return {
+            statusCode: 503,
+            body: JSON.stringify({
+              error: 'quota_check_failed',
+              message: 'Could not check your download allowance just now. Try again in a moment.',
+            }),
+          };
+        }
 
-      if ((monthlyCount || 0) >= 3) {
-        return {
-          statusCode: 403,
-          body: JSON.stringify({
-            error: 'monthly_quota_exceeded',
-            message: 'You have used your 3 free downloads this month. They reset on the 1st.',
-            quota: 3,
-            used: monthlyCount,
-          }),
-        };
+        const FREE_MONTHLY_QUOTA = 3;
+        if ((monthlyCount || 0) >= FREE_MONTHLY_QUOTA) {
+          return {
+            statusCode: 403,
+            body: JSON.stringify({
+              error: 'monthly_quota_exceeded',
+              message: `You have used your ${FREE_MONTHLY_QUOTA} free downloads this month. They reset on the 1st — or go Fan Pro for unlimited downloads.`,
+              quota: FREE_MONTHLY_QUOTA,
+              used: monthlyCount,
+              upgrade: true,
+            }),
+          };
+        }
       }
     }
   }
