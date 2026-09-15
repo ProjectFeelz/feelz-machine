@@ -19,8 +19,17 @@ async function printfulProxy(action, artistId, params = {}) {
     },
     body: JSON.stringify({ action, artist_id: artistId, ...params }),
   });
-  const json = await res.json();
-  if (!json.ok) throw new Error(json.error || 'Request failed');
+  const json = await res.json().catch(() => ({}));
+  if (!json.ok) {
+    // The proxy now sends a `hint` when the failure is something the artist
+    // can actually fix — a token missing scopes, most often. Showing the raw
+    // Printful sentence alone ("This endpoint requires any of the following
+    // scopes granted: stores_list/read!") tells you nothing about what to do
+    // next, so the hint is appended when there is one.
+    const err = new Error(json.error || `Request failed (${res.status})`);
+    err.hint = json.hint;
+    throw err;
+  }
   return json;
 }
 
@@ -51,7 +60,7 @@ export default function MerchConnectSheet({ artist, onClose, onConnected }) {
         onConnected?.();
       }
     } catch (err) {
-      setError(err.message);
+      setError(err.hint ? `${err.message}\n\n${err.hint}` : err.message);
     }
     setLoading(false);
   };
@@ -64,7 +73,7 @@ export default function MerchConnectSheet({ artist, onClose, onConnected }) {
       setApiKey('');
       onConnected?.();
     } catch (err) {
-      setError(err.message);
+      setError(err.hint ? `${err.message}\n\n${err.hint}` : err.message);
     }
     setLoading(false);
   };
@@ -84,7 +93,7 @@ export default function MerchConnectSheet({ artist, onClose, onConnected }) {
         setError(`Store needs: ${issues.join(' and ')}`);
       }
     } catch (err) {
-      setError(err.message);
+      setError(err.hint ? `${err.message}\n\n${err.hint}` : err.message);
     }
     setLoading(false);
   };
@@ -92,8 +101,11 @@ export default function MerchConnectSheet({ artist, onClose, onConnected }) {
   return (
     <div className="fixed inset-0 z-[700] flex items-center justify-center bg-black/70 backdrop-blur-sm px-4 py-6"
       onClick={onClose}>
-      <div className="w-full max-w-sm rounded-3xl overflow-hidden flex flex-col" style={{ maxHeight: "calc(100vh - 48px)" }}
-        style={{ backgroundColor: '#0f0f0f', border: '1px solid rgba(255,255,255,0.08)', boxShadow: '0 -16px 48px rgba(0,0,0,0.6)' }}
+      {/* Two `style` props were set on this element; JSX keeps the last and
+          drops the first, so the maxHeight that stops this sheet running off
+          a short screen was never applied. Merged. */}
+      <div className="w-full max-w-sm rounded-3xl overflow-hidden flex flex-col"
+        style={{ maxHeight: 'calc(100vh - 48px)', backgroundColor: '#0f0f0f', border: '1px solid rgba(255,255,255,0.08)', boxShadow: '0 -16px 48px rgba(0,0,0,0.6)' }}
         onClick={e => e.stopPropagation()}>
 
         {/* Header */}
@@ -179,7 +191,7 @@ export default function MerchConnectSheet({ artist, onClose, onConnected }) {
                 <div className="flex items-start space-x-2 rounded-xl p-3"
                   style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.15)' }}>
                   <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
-                  <p className="text-xs text-red-300/80">{error}</p>
+                  <p className="text-xs text-red-300/80 whitespace-pre-line">{error}</p>
                 </div>
               )}
 
@@ -221,7 +233,7 @@ export default function MerchConnectSheet({ artist, onClose, onConnected }) {
                   <div className="flex items-start space-x-2 rounded-xl p-3"
                     style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)' }}>
                     <AlertCircle className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
-                    <p className="text-xs text-amber-300/80">{error}</p>
+                    <p className="text-xs text-amber-300/80 whitespace-pre-line">{error}</p>
                   </div>
                   <button onClick={handleRevalidate} disabled={loading}
                     className="w-full py-2.5 rounded-xl text-xs font-semibold text-white/60 border border-white/[0.08] hover:bg-white/[0.04] transition disabled:opacity-40 flex items-center justify-center space-x-1.5">

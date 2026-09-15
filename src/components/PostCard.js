@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import { usePlayer } from '../contexts/PlayerContext';
-import { Heart, MessageCircle, Share2, MoreHorizontal, Trash2, Flag, Verified, Loader, Send, Music, Play, Pause, CornerDownRight, Pin } from 'lucide-react';
+import { Heart, MessageCircle, Share2, MoreHorizontal, Trash2, Flag, Loader, Send, Music, Play, Pause, CornerDownRight, Pin } from 'lucide-react';
+import VerifiedBadge from './VerifiedBadge';
 
 function timeAgo(date) {
   const seconds = Math.floor((Date.now() - new Date(date).getTime()) / 1000);
@@ -299,7 +300,7 @@ export default function PostCard({ post, onDelete, onUpdate }) {
           <div className="text-left">
             <div className="flex items-center space-x-1.5">
               <span className="text-sm font-semibold text-white">{postArtist?.artist_name || 'Anonymous'}</span>
-              {postArtist?.is_verified && <Verified className="w-3.5 h-3.5 text-blue-400" />}
+              {postArtist?.is_verified && <VerifiedBadge size="md" />}
             </div>
             <span className="text-[11px] text-white/30">{timeAgo(post.created_at)}</span>
           </div>
@@ -384,7 +385,7 @@ export default function PostCard({ post, onDelete, onUpdate }) {
                     : <span className="text-[8px] font-bold text-white flex items-center justify-center w-full h-full">{ta.artist_name?.[0]}</span>}
                 </div>
                 <span className="text-xs text-purple-400 font-medium">{ta.artist_name}</span>
-                {ta.is_verified && <Verified className="w-2.5 h-2.5 text-blue-400" />}
+                {ta.is_verified && <VerifiedBadge size="xs" />}
               </button>
             ))}
           </div>

@@ -5,13 +5,15 @@ import { useAuth } from '../contexts/AuthContext';
 import { useStreakContext } from '../contexts/StreakContext';
 import { usePlayer } from '../contexts/PlayerContext';
 import PreorderTag from '../components/PreorderTag';
-import { Flame, Play, Pause, Music, Verified, MoreHorizontal, Disc, Sparkles, Users, Trophy, Compass, Headphones, Radio, Zap, ListMusic } from 'lucide-react';
+import { Flame, Play, Pause, Music, MoreHorizontal, Disc, Sparkles, Users, Trophy, Compass, Headphones, Radio, Zap, ListMusic } from 'lucide-react';
+import VerifiedBadge from '../components/VerifiedBadge';
 import { useNavigate } from 'react-router-dom';
 import TrackActionSheet from '../components/TrackActionSheet';
 import { usePullToRefresh } from '../hooks/usePullToRefresh';
 import PullToRefreshIndicator from '../components/PullToRefreshIndicator';
 import { HomeSkeleton } from '../components/SkeletonLoader';
 import { StoriesRail } from '../components/ArtistStories';
+import { CollabRail } from '../components/CollaborationsSpotlight';
 import WrappedCard from '../components/WrappedCard';
 import OnThisDay from '../components/OnThisDay';
 
@@ -770,6 +772,12 @@ export default function HomePage() {
       {/* Stories rail — followed artists' 24hr clips */}
       <StoriesRail userId={user?.id} />
 
+      {/* Collaborations get their own row. They existed only at the bottom of
+          an artist's own profile before this, which meant the platform's own
+          argument — that artists here work together — was the thing hardest
+          to see. */}
+      <CollabRail limit={12} />
+
 
 
 
@@ -849,7 +857,7 @@ export default function HomePage() {
             <div className="flex-1 min-w-0 text-left">
               <div className="flex items-center space-x-1.5 mb-0.5">
                 <p className="text-base font-semibold text-white truncate">{spotlightArtist.artist_name}</p>
-                {spotlightArtist.is_verified && <Verified className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" />}
+                {spotlightArtist.is_verified && <VerifiedBadge size="md" />}
               </div>
               <p className="text-xs text-white/35">
                 {spotlightArtist.total_streams > 0
@@ -1052,7 +1060,7 @@ export default function HomePage() {
                 </div>
                 <div className="flex items-center justify-center space-x-1">
                   <p className="text-sm font-medium text-white truncate max-w-[140px]">{a.artist_name}</p>
-                  {a.is_verified && <Verified className="w-3 h-3 text-blue-400 flex-shrink-0" />}
+                  {a.is_verified && <VerifiedBadge size="sm" />}
                 </div>
                 <p className="text-xs text-white/30 mt-0.5">{formatNumber(a.follower_count)} followers</p>
               </button>

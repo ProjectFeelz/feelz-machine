@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
-import { Save, Loader, Eye, X, Play, Shuffle, UserPlus, Music, Radio, Share2, Verified, Target, Globe } from 'lucide-react';
+import { Save, Loader, Eye, X, Play, Shuffle, UserPlus, Music, Radio, Share2, Target, Globe } from 'lucide-react';
+import VerifiedBadge from './VerifiedBadge';
 
 const PRESETS = [
   { name: 'Default',   slug: 'default',       primary: '#FFFFFF', secondary: '#8B5CF6', accent: '#3B82F6', bg: '#000000', text: '#FFFFFF' },
@@ -92,12 +93,10 @@ function ProfilePreview({ theme, artist }) {
               <p className="text-lg font-bold truncate" style={{ ...heading, color: text }}>
                 {artist.artist_name}
               </p>
-              {artist.is_verified && (
-                <span className="w-3.5 h-3.5 rounded-full flex items-center justify-center flex-shrink-0"
-                  style={{ backgroundColor: accent }}>
-                  <Verified style={{ width: 8, height: 8, color: bg }} />
-                </span>
-              )}
+              {/* Same fix as the real profile header: the preview drew the
+                  tick in the theme background inside an accent circle, so a
+                  theme could hide its own badge. */}
+              {artist.is_verified && <VerifiedBadge size="sm" />}
             </div>
 
             <p className="text-[10px] mb-2.5" style={{ color: `${text}80` }}>

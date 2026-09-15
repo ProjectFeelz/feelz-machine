@@ -8,8 +8,11 @@ import { usePlayer } from '../contexts/PlayerContext';
 import { useAuth } from '../contexts/AuthContext';
 import {
   Search, Flame, TrendingUp, Play, Pause, Music, Crown,
-  Loader, Verified, Disc3, Star, Sparkles, Clock,
+  Loader, Disc3, Star, Sparkles, Clock, Users,
 } from 'lucide-react';
+import VerifiedBadge from '../components/VerifiedBadge';
+import { CollabGrid } from '../components/CollaborationsSpotlight';
+import { StoriesRail } from '../components/ArtistStories';
 
 function formatNumber(n) {
   if (!n) return '0';
@@ -275,6 +278,7 @@ export default function BrowsePage() {
     { key: 'trending', label: 'Trending', icon: Flame },
     { key: 'tracks',   label: 'Tracks',   icon: Music },
     { key: 'artists',  label: 'Artists',  icon: Crown },
+    { key: 'collabs',  label: 'Collabs',  icon: Users },
     { key: 'albums',   label: 'Albums',   icon: Disc3 },
   ];
 
@@ -360,6 +364,14 @@ export default function BrowsePage() {
 
       {/* ── Scrollable content ── */}
       <div className="px-6 md:px-0 pt-5">
+
+        {/* Stories, on a page mobile can actually reach.
+            The rail lived only on HomePage, and /home is in the desktop
+            sidebar and NOT in the mobile tab bar — so on a phone there was no
+            route to it at all. Stories were being uploaded into a screen that
+            half the audience could not open. Hidden while searching, because
+            a search result page should be search results. */}
+        {!searchResults && <div className="-mx-6 md:mx-0 mb-6"><StoriesRail userId={user?.id} /></div>}
 
         {/* Search results */}
         {searchResults && (
@@ -668,7 +680,7 @@ export default function BrowsePage() {
                     </div>
                     <div className="flex items-center justify-center space-x-1 mb-0.5">
                       <p className="text-sm font-medium text-white truncate">{a.artist_name}</p>
-                      {a.is_verified && <Verified className="w-3 h-3 text-blue-400 flex-shrink-0" />}
+                      {a.is_verified && <VerifiedBadge size="sm" />}
                     </div>
                     <p className="text-[10px] text-white/25">{formatNumber(a.follower_count)} followers</p>
                   </button>
@@ -681,6 +693,13 @@ export default function BrowsePage() {
         )}
 
         {/* ALBUMS */}
+        {activeTab === 'collabs' && (
+          <div>
+            <SectionLabel icon={Users} title="Collaborations" subtitle="Tracks made by more than one artist" />
+            <CollabGrid limit={48} />
+          </div>
+        )}
+
         {activeTab === 'albums' && (
           <div>
             <SectionLabel icon={Disc3} title="Albums & EPs" subtitle="Latest releases" />
@@ -794,7 +813,7 @@ function TrendingRow({ track, rank, currentTrack, isPlaying, onPlay, onMore, onA
         </div>
         <button onClick={(e) => { e.stopPropagation(); onArtist(); }} className="flex items-center space-x-1">
           <span className="text-xs text-white/40 truncate hover:text-white/60 transition">{track.artist_name}</span>
-          {track.artists?.is_verified && <Verified className="w-2.5 h-2.5 text-blue-400 flex-shrink-0" />}
+          {track.artists?.is_verified && <VerifiedBadge size="xs" />}
         </button>
       </div>
       <div className="flex flex-col items-end flex-shrink-0 space-y-0.5">

@@ -5,8 +5,8 @@ import { useHaptics } from '../hooks/useHaptics';
 import {
   Send, Loader, Check, X, Radio,
   Mic2, Headphones, PenLine, Shuffle, Sliders, MoreHorizontal,
-  ChevronRight, Verified,
-} from 'lucide-react';
+  ChevronRight, } from 'lucide-react';
+import VerifiedBadge from './VerifiedBadge';
 import { useNavigate } from 'react-router-dom';
 
 const TYPE_LABELS = {
@@ -61,7 +61,7 @@ function RequestCard({ request, myArtistId, onRespond, onClick, isSelected }) {
         <div className="flex-1 min-w-0">
           <div className="flex items-center space-x-1.5 mb-0.5">
             <p className="text-sm font-semibold text-white truncate">{other?.artist_name}</p>
-            {other?.is_verified && <Verified className="w-3 h-3 text-blue-400 flex-shrink-0" />}
+            {other?.is_verified && <VerifiedBadge size="sm" />}
           </div>
           <div className="flex items-center space-x-1.5">
             <TypeIcon className="w-3 h-3 text-white/30 flex-shrink-0" />

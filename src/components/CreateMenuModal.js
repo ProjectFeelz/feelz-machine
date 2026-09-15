@@ -85,12 +85,8 @@ export default function CreateMenuModal({ artist, user, onClose, primaryColor = 
   };
   const { isPremium } = useTier();
 
-  const [createTab, setCreateTab] = useState('menu'); // 'menu' | 'story' | 'thought' | 'dm' | 'memo' | 'live'
+  const [createTab, setCreateTab] = useState('menu'); // 'menu' | 'story' | 'dm' | 'memo' | 'live' | 'toppick'
   const [showMerchConnect, setShowMerchConnect] = useState(false);
-
-  const [createThought, setCreateThought] = useState('');
-  const [createThoughtSaving, setCreateThoughtSaving] = useState(false);
-  const [createThoughtMsg, setCreateThoughtMsg] = useState('');
 
   const [dmMessage, setDmMessage] = useState('');
   const [dmSending, setDmSending] = useState(false);
@@ -110,8 +106,6 @@ export default function CreateMenuModal({ artist, user, onClose, primaryColor = 
   const close = () => {
     onClose();
     setCreateTab('menu');
-    setCreateThought('');
-    setCreateThoughtMsg('');
   };
 
   // Live session track search
@@ -192,9 +186,13 @@ export default function CreateMenuModal({ artist, user, onClose, primaryColor = 
       }
       try {
         const { data: { session: authSession } } = await supabase.auth.getSession();
+        // The empty 'x-internal-secret' header is gone. send-push compared it
+        // against INTERNAL_FUNCTION_SECRET and returned 401 every time — the
+        // browser cannot hold that secret. It accepts a signed-in artist's
+        // token now and scopes the send to that artist's real followers.
         fetch('/.netlify/functions/send-push', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'x-internal-secret': '' },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             user_ids: followerIds,
             title: `Message from ${artist.artist_name}`,
@@ -232,13 +230,13 @@ export default function CreateMenuModal({ artist, user, onClose, primaryColor = 
         <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.06]">
           <div className="flex items-center space-x-2">
             {createTab !== 'menu' && (
-              <button onClick={() => { setCreateTab('menu'); setCreateThought(''); setCreateThoughtMsg(''); }}
+              <button onClick={() => setCreateTab('menu')}
                 className="w-7 h-7 flex items-center justify-center rounded-full bg-white/[0.08] hover:bg-white/[0.15] transition">
                 <ChevronDown className="w-3.5 h-3.5 text-white/60 rotate-90" />
               </button>
             )}
             <p className="text-sm font-bold text-white">
-              {createTab === 'menu' ? 'Create' : createTab === 'story' ? 'Add Story' : createTab === 'thought' ? 'Thought of the Day' : createTab === 'live' ? 'Go Live' : createTab === 'memo' ? 'Voice Memo' : createTab === 'toppick' ? 'My Top Pick' : 'Message Fans'}
+              {createTab === 'menu' ? 'Create' : createTab === 'story' ? 'Add Story' : createTab === 'live' ? 'Go Live' : createTab === 'memo' ? 'Voice Memo' : createTab === 'toppick' ? 'My Top Pick' : 'Message Fans'}
             </p>
           </div>
           <button onClick={close}
@@ -255,7 +253,12 @@ export default function CreateMenuModal({ artist, user, onClose, primaryColor = 
               {[
                 { id: 'upload', icon: '🎵', label: 'Upload Track', sub: 'Add new music to your profile', color: 'yellow' },
                 { id: 'story', icon: '📸', label: 'Add Story', sub: 'Share a 24hr clip with fans', color: 'purple' },
-                { id: 'thought', icon: '💭', label: 'Thought of the Day', sub: "Share what's on your mind", color: 'blue' },
+                // 'Thought of the Day' removed. It wrote to artist_thoughts
+                // and rendered in exactly one place — the artist's own
+                // profile — so the entry sat in the create menu offering a
+                // post almost nobody made and nobody found. Voice Memo and
+                // Story cover the same "say something today" intent and both
+                // actually surface.
                 { id: 'edit', icon: '✏️', label: 'Edit Profile', sub: 'Update your bio, photo and links', color: 'gray' },
                 { id: 'toppick', icon: '⭐', label: 'Top Pick', sub: 'Choose the track your profile leads with', color: 'yellow' },
                 isPremium
@@ -294,45 +297,6 @@ export default function CreateMenuModal({ artist, user, onClose, primaryColor = 
           {createTab === 'story' && (
             <div className="rounded-2xl border border-white/[0.06] overflow-hidden" style={{ background: 'rgba(255,255,255,0.02)' }}>
               <StoryUpload artistId={artist.id} inline onUploaded={close} />
-            </div>
-          )}
-
-          {/* ── Thought of the Day ── */}
-          {createTab === 'thought' && (
-            <div className="space-y-3">
-              <textarea rows={4} maxLength={280} value={createThought}
-                onChange={e => setCreateThought(e.target.value)}
-                placeholder="What's on your mind today?"
-                className="w-full px-3 py-2.5 bg-white/[0.06] rounded-xl text-white text-sm outline-none resize-none border border-white/[0.06] focus:border-white/20 transition placeholder-white/20" />
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-white/20">{createThought.length}/280</span>
-                {createThoughtMsg && (
-                  <span className={`text-xs ${createThoughtMsg.includes('limit') || createThoughtMsg.includes('Failed') ? 'text-red-400' : 'text-green-400'}`}>
-                    {createThoughtMsg}
-                  </span>
-                )}
-              </div>
-              <button
-                disabled={createThoughtSaving || !createThought.trim()}
-                onClick={async () => {
-                  if (!createThought.trim()) return;
-                  setCreateThoughtSaving(true);
-                  try {
-                    const { error } = await supabase.from('artist_thoughts').insert({
-                      artist_id: artist.id, content: createThought.trim(),
-                      created_at: new Date().toISOString(),
-                    });
-                    if (error) throw error;
-                    setCreateThoughtMsg('Posted!');
-                    setCreateThought('');
-                    setTimeout(() => { close(); setCreateThoughtMsg(''); }, 1200);
-                  } catch { setCreateThoughtMsg('Failed to post'); }
-                  setCreateThoughtSaving(false);
-                }}
-                className="w-full py-3 rounded-2xl text-sm font-semibold transition disabled:opacity-40 flex items-center justify-center space-x-2"
-                style={{ backgroundColor: primaryColor, color: bgColor }}>
-                {createThoughtSaving ? <Loader className="w-4 h-4 animate-spin" /> : <span>Post Thought</span>}
-              </button>
             </div>
           )}
 

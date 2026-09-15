@@ -10,9 +10,9 @@ import { downloadTrack, downloadErrorMessage } from '../utils/downloadTrack';
 import TrackActionSheet from '../components/TrackActionSheet';
 import {
   ArrowLeft, Play, Pause, Music, Loader, Download,
-  Heart, Share2, Check, MoreHorizontal, Verified,
-  Disc, ExternalLink
+  Heart, Share2, Check, MoreHorizontal, Disc, ExternalLink
 } from 'lucide-react';
+import VerifiedBadge from '../components/VerifiedBadge';
 import { sendNotification } from '../utils/notify';
 import { fetchTrackCredits } from '../components/TrackCredits';
 
@@ -363,7 +363,7 @@ export default function TrackPage() {
               <span className="text-sm text-white/60 group-hover:text-white/90 transition truncate">
                 {artist?.artist_name}
               </span>
-              {artist?.is_verified && <Verified className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" />}
+              {artist?.is_verified && <VerifiedBadge size="md" />}
             </button>
             {album && (
               <button

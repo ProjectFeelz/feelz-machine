@@ -28,10 +28,12 @@ const TIERS = [
       { text: 'Full music streaming',          included: true },
       { text: 'Follow artists',                included: true },
       { text: 'Playlists & liked songs',       included: true },
-      { text: 'Chat rooms & competitions',     included: true },
+      { text: 'Competitions',                  included: true },
       { text: 'Listening stats',               included: true },
+      { text: '3 free downloads a month',      included: true },
+      { text: 'Chat with your favourite artists', included: false },
       { text: 'Offline listening',             included: false },
-      { text: 'Free downloads',                included: false },
+      { text: 'Unlimited free downloads',      included: false },
       { text: 'Custom app theme',              included: false },
       { text: 'Tip artists (special badge)',   included: false },
       { text: 'Early access to new features',  included: false },
@@ -54,13 +56,16 @@ const TIERS = [
       { text: 'Full music streaming',          included: true },
       { text: 'Follow artists',                included: true },
       { text: 'Playlists & liked songs',       included: true },
-      { text: 'Chat rooms & competitions',     included: true },
+      { text: 'Competitions',                  included: true },
       { text: 'Listening stats',               included: true },
       // The headline benefit, so it sits at the top of what Pro adds.
       { text: 'Offline listening — play with no signal', included: true },
-      // This was already true (get-download-url grants Pro listeners three a
-      // month) and the page never said so.
-      { text: '3 free downloads a month',      included: true },
+      // Corrected. get-download-url had the two tiers the wrong way round —
+      // Fan Pro was capped at three a month and everybody else was refused
+      // outright. It is the other way now: free gets three, Fan Pro gets no
+      // cap, and this page says so.
+      { text: 'Unlimited free downloads',      included: true },
+      { text: 'Chat with your favourite artists', included: true },
       { text: '10 custom app themes',          included: true },
       { text: 'Fan badge on tips & comments',  included: true },
       { text: 'Early access to new features',  included: true },

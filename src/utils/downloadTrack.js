@@ -27,9 +27,9 @@ export function downloadErrorMessage(err) {
     // a month rather than none at all. A stale bundle in someone's cache can
     // still receive it, so the wording stays accurate for that case.
     case 'fan_pro_required':
-      return 'Free downloads are a Fan Pro feature. Upgrade to download this one.';
+      return 'Fan Pro members download without limits. Upgrade to grab this one.';
     case 'monthly_quota_exceeded':
-      return "You've used your 3 free downloads this month. They reset on the 1st — or go Fan Pro for unlimited downloads.";
+      return "That's your 3 free downloads for this month. They reset on the 1st — or go Fan Pro and download as much as you like, whenever you like.";
     case 'quota_check_failed':
       return "Couldn't check your download allowance just now. Try again in a moment.";
     case 'purchase_required':

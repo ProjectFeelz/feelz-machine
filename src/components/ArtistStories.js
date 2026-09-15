@@ -18,7 +18,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useHaptics } from '../hooks/useHaptics';
 import {
   X, Plus, Upload, Loader, Play, Pause, Music, Image, Video,
-  Eye, Clock, Download, Heart,
+  Eye, Clock, Download, Heart, Sparkles, Trash2,
 } from 'lucide-react';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -32,9 +32,16 @@ function timeLeft(expiresAt) {
 }
 
 // ── Story Upload ──────────────────────────────────────────────────────────────
-export function StoryUpload({ artistId, onUploaded }) {
+export function StoryUpload({ artistId, onUploaded, inline = false }) {
   const { tap } = useHaptics();
-  const [open, setOpen]         = useState(false);
+  // `inline` was already being PASSED by both call sites — CreateMenuModal
+  // and the profile's own + menu — and this component never declared it. So
+  // it rendered its trigger button and its own full-screen overlay inside a
+  // sheet that was already a modal: you opened "Add Story" and were shown a
+  // second "Add Story" button, and tapping that threw a bottom sheet over the
+  // card you were already looking at. In inline mode the form is now the
+  // content, with no trigger and no overlay.
+  const [open, setOpen]         = useState(inline);
   const [file, setFile]         = useState(null);
   const [caption, setCaption]   = useState('');
   const [uploading, setUploading] = useState(false);
@@ -45,8 +52,60 @@ export function StoryUpload({ artistId, onUploaded }) {
   const [myTracks, setMyTracks] = useState([]);
   const fileRef                 = useRef(null);
 
+  // The artist's own stories that have not expired yet.
+  //
+  // There was no way to see what you had posted and no way to take it down —
+  // the only remedy for a mistake was to wait out the full 24 hours. Now the
+  // sheet you post from is also the sheet you manage from.
+  const [mine, setMine]             = useState([]);
+  const [mineLoading, setMineLoading] = useState(false);
+  const [deletingId, setDeletingId]   = useState(null);
+
   const ACCEPT = 'image/*,audio/*,video/mp4,video/webm';
   const MAX_MB = 50;
+
+  const loadMine = useCallback(async () => {
+    if (!artistId) return;
+    setMineLoading(true);
+    const { data, error } = await supabase
+      .from('artist_stories')
+      .select('id, media_url, media_type, caption, view_count, like_count, expires_at, created_at')
+      .eq('artist_id', artistId)
+      .gt('expires_at', new Date().toISOString())
+      .order('created_at', { ascending: false });
+    if (error) console.error('[story] own stories load failed:', error.code, error.message);
+    setMine(data || []);
+    setMineLoading(false);
+  }, [artistId]);
+
+  useEffect(() => { if (open) loadMine(); }, [open, loadMine]);
+
+  const deleteStory = async (story) => {
+    setDeletingId(story.id);
+    // The row first. If the row goes and the file lingers, the story is gone
+    // from the app and the orphan costs a few KB. Deleting the file first and
+    // then failing to delete the row would leave a story that renders as a
+    // broken image — the worse of the two failures, so it is the one that
+    // cannot happen.
+    const { error } = await supabase.from('artist_stories').delete().eq('id', story.id);
+    if (error) {
+      console.error('[story] delete refused:', error.code, error.message);
+      setError(`Could not delete: ${error.message}`);
+      setDeletingId(null);
+      return;
+    }
+    // Best-effort file cleanup. The public URL ends in the storage path.
+    try {
+      const marker = '/stories/';
+      const i = story.media_url.indexOf(marker);
+      if (i !== -1) {
+        await supabase.storage.from('stories').remove([story.media_url.slice(i + 1)]);
+      }
+    } catch { /* the row is gone; an orphaned object is not worth failing over */ }
+    setMine(prev => prev.filter(x => x.id !== story.id));
+    setDeletingId(null);
+    onUploaded?.();
+  };
 
   const openTrackPicker = async () => {
     if (!myTracks.length) {
@@ -122,7 +181,15 @@ export function StoryUpload({ artistId, onUploaded }) {
 
       const { data: { publicUrl } } = supabase.storage.from('stories').getPublicUrl(storagePath);
 
-      await supabase.from('artist_stories').insert({
+      // The error was discarded here.
+      //
+      // The file uploaded to storage, this line ran, whatever the database
+      // said was thrown away, the modal closed and everything looked like it
+      // had worked. If the row was refused there was no story and no message
+      // saying so — which is exactly the "I uploaded a story but it's not
+      // showing" symptom, and it is unfalsifiable from the outside because
+      // success and failure produce identical screens.
+      const { error: insErr } = await supabase.from('artist_stories').insert({
         artist_id:       artistId,
         media_url:       publicUrl,
         media_type:      mediaType,
@@ -130,16 +197,133 @@ export function StoryUpload({ artistId, onUploaded }) {
         tagged_track_id: taggedTrack?.id || null,
         expires_at:      new Date(Date.now() + 24 * 3600000).toISOString(),
       });
+      if (insErr) {
+        console.error('[story] insert refused:', insErr.code, insErr.message, insErr.details || '', insErr.hint || '');
+        throw new Error(
+          insErr.code === '42501' || /row-level security/i.test(insErr.message)
+            ? 'The file uploaded but the story could not be saved — your account is not allowed to post stories for this artist.'
+            : `Story could not be saved: ${insErr.message}`
+        );
+      }
 
-      setOpen(false);
       setFile(null);
       setCaption('');
       setPreview(null);
       setTaggedTrack(null);
+      loadMine();
+      if (!inline) setOpen(false);
       onUploaded?.();
     } catch (err) { setError(err.message); }
     setUploading(false);
   };
+
+  // ── The form body, shared by both modes ────────────────────────────────
+  const body = (
+    <>
+      <p className="text-xs text-white/35 mb-4 leading-relaxed">
+        Stories disappear after 24 hours. Share audio clips, images, or short
+        videos with your followers.
+      </p>
+
+      {/* Your live stories — see them, and take one down.
+          This is the half that did not exist. An artist could post and then
+          had no view of what was up and no way to remove it short of waiting
+          out the full day. */}
+      {(mineLoading || mine.length > 0) && (
+        <div className="mb-4">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-white/30 mb-2">
+            Live now {mine.length > 0 && `(${mine.length})`}
+          </p>
+          {mineLoading ? (
+            <div className="py-4 flex justify-center"><Loader className="w-4 h-4 animate-spin text-white/25" /></div>
+          ) : (
+            <div className="space-y-2">
+              {mine.map(st => (
+                <div key={st.id} className="flex items-center gap-3 p-2 rounded-xl bg-white/[0.04] border border-white/[0.06]">
+                  <div className="w-11 h-11 rounded-lg overflow-hidden bg-black flex-shrink-0 flex items-center justify-center">
+                    {st.media_type === 'image'
+                      ? <img src={st.media_url} alt="" className="w-full h-full object-cover" />
+                      : st.media_type === 'video'
+                        ? <Video className="w-5 h-5 text-white/35" />
+                        : <Music className="w-5 h-5 text-white/35" />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs text-white/80 truncate">
+                      {st.caption || `${st.media_type[0].toUpperCase()}${st.media_type.slice(1)} story`}
+                    </p>
+                    <div className="flex items-center gap-2.5 mt-0.5 text-[10px] text-white/30">
+                      <span className="inline-flex items-center gap-1"><Eye className="w-2.5 h-2.5" />{st.view_count || 0}</span>
+                      <span className="inline-flex items-center gap-1"><Heart className="w-2.5 h-2.5" />{st.like_count || 0}</span>
+                      <span className="inline-flex items-center gap-1"><Clock className="w-2.5 h-2.5" />{timeLeft(st.expires_at) || 'expiring'}</span>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => deleteStory(st)}
+                    disabled={deletingId === st.id}
+                    title="Delete this story"
+                    className="w-8 h-8 flex items-center justify-center rounded-full bg-white/[0.06] hover:bg-red-500/20 transition active:scale-90 flex-shrink-0 disabled:opacity-40"
+                  >
+                    {deletingId === st.id
+                      ? <Loader className="w-3.5 h-3.5 animate-spin text-white/40" />
+                      : <Trash2 className="w-3.5 h-3.5 text-white/40" />}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* File picker */}
+      {!file ? (
+        <button onClick={() => fileRef.current?.click()}
+          className="w-full py-8 rounded-2xl border-2 border-dashed border-white/15 flex flex-col items-center space-y-2 text-white/30 hover:border-white/25 hover:text-white/50 transition mb-3">
+          <Upload className="w-8 h-8" />
+          <span className="text-sm">Tap to choose audio, image, or video</span>
+          <span className="text-[10px] text-white/20 mt-1">Videos convert to MP4 automatically</span>
+          <span className="text-xs">Max {MAX_MB}MB</span>
+        </button>
+      ) : (
+        <div className="rounded-2xl overflow-hidden bg-black mb-3 relative">
+          {mediaType === 'image' && <img src={preview} alt="" className="w-full max-h-48 object-contain" />}
+          {mediaType === 'audio' && (
+            <div className="flex items-center space-x-3 p-4">
+              <div className="w-10 h-10 rounded-full bg-purple-500/20 flex items-center justify-center flex-shrink-0">
+                <Music className="w-5 h-5 text-purple-400" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm text-white truncate">{file.name}</p>
+                <audio controls src={preview} className="mt-1 w-full" style={{ height: 32 }} />
+              </div>
+            </div>
+          )}
+          {mediaType === 'video' && <video src={preview} controls className="w-full max-h-48" />}
+          <button onClick={() => { setFile(null); setPreview(null); }}
+            className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/60 flex items-center justify-center">
+            <X className="w-3.5 h-3.5 text-white" />
+          </button>
+        </div>
+      )}
+
+      <input ref={fileRef} type="file" accept={ACCEPT} onChange={handleFile} className="hidden" />
+
+      <input value={caption} onChange={e => setCaption(e.target.value)} maxLength={150}
+        placeholder="Add a caption (optional)"
+        className="w-full bg-white/[0.06] rounded-xl px-3 py-2.5 text-sm text-white placeholder-white/20 outline-none mb-3" />
+
+      {error && <p className="text-xs text-red-400 mb-3">{error}</p>}
+
+      <button onClick={handleUpload} disabled={!file || uploading}
+        className="w-full py-3 bg-purple-600 rounded-xl text-sm font-semibold text-white disabled:opacity-40 transition flex items-center justify-center space-x-2">
+        {uploading ? <Loader className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+        <span>{uploading ? (error === 'Converting video…' ? 'Converting...' : 'Uploading...') : 'Share Story'}</span>
+      </button>
+    </>
+  );
+
+  // Inline: the caller already owns a modal shell. Render the content only —
+  // no trigger button, no second overlay.
+  if (inline) return <div>{body}</div>;
 
   return (
     <>
@@ -153,61 +337,29 @@ export function StoryUpload({ artistId, onUploaded }) {
         <span className="text-[10px] text-white/30">Add Story</span>
       </button>
 
+      {/* A centre-floating card, matching CreateMenuModal and MerchConnectSheet.
+          This was the only sheet in the app that slid up from the bottom edge
+          and squared off its top corners, so it read as a different app's
+          component every time it appeared. Same shell as the others now:
+          items-center, max-w-sm, rounded-3xl, #0f0f0f, a header row with a
+          close button, and its own scroll so a long list of live stories
+          cannot push the Share button off a short screen. */}
       {open && (
-        <div className="fixed inset-0 z-[600] flex items-end justify-center bg-black/80 backdrop-blur-sm"
+        <div className="fixed inset-0 z-[600] flex items-center justify-center bg-black/70 backdrop-blur-sm px-4 py-6"
           onClick={() => setOpen(false)}>
-          <div className="w-full max-w-lg bg-neutral-900 rounded-t-2xl p-5 border-t border-white/[0.08]"
+          <div className="w-full max-w-sm rounded-3xl overflow-hidden flex flex-col"
+            style={{ maxHeight: 'calc(100vh - 48px)', backgroundColor: '#0f0f0f', border: '1px solid rgba(255,255,255,0.08)', boxShadow: '0 32px 64px rgba(0,0,0,0.6)' }}
             onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-bold text-white">Add a Story</h3>
-              <button onClick={() => setOpen(false)}><X className="w-4 h-4 text-white/30" /></button>
-            </div>
-            <p className="text-xs text-white/30 mb-4">Stories disappear after 24 hours. Share audio clips, images, or short videos with your followers.</p>
 
-            {/* File picker */}
-            {!file ? (
-              <button onClick={() => fileRef.current?.click()}
-                className="w-full py-8 rounded-2xl border-2 border-dashed border-white/15 flex flex-col items-center space-y-2 text-white/30 hover:border-white/25 hover:text-white/50 transition mb-3">
-                <Upload className="w-8 h-8" />
-                <span className="text-sm">Tap to choose audio, image, or video</span>
-                <span className="text-[10px] text-white/20 mt-1">Videos convert to MP4 automatically</span>
-                <span className="text-xs">Max {MAX_MB}MB</span>
+            <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.06]">
+              <p className="text-sm font-bold text-white">Add a Story</p>
+              <button onClick={() => setOpen(false)}
+                className="w-8 h-8 flex items-center justify-center rounded-full bg-white/[0.08] hover:bg-white/[0.15] transition">
+                <X className="w-4 h-4 text-white/60" />
               </button>
-            ) : (
-              <div className="rounded-2xl overflow-hidden bg-black mb-3 relative">
-                {mediaType === 'image' && <img src={preview} alt="" className="w-full max-h-48 object-contain" />}
-                {mediaType === 'audio' && (
-                  <div className="flex items-center space-x-3 p-4">
-                    <div className="w-10 h-10 rounded-full bg-purple-500/20 flex items-center justify-center">
-                      <Music className="w-5 h-5 text-purple-400" />
-                    </div>
-                    <div>
-                      <p className="text-sm text-white">{file.name}</p>
-                      <audio controls src={preview} className="mt-1 w-full" style={{ height: 32 }} />
-                    </div>
-                  </div>
-                )}
-                {mediaType === 'video' && <video src={preview} controls className="w-full max-h-48" />}
-                <button onClick={() => { setFile(null); setPreview(null); }}
-                  className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/60 flex items-center justify-center">
-                  <X className="w-3.5 h-3.5 text-white" />
-                </button>
-              </div>
-            )}
+            </div>
 
-            <input ref={fileRef} type="file" accept={ACCEPT} onChange={handleFile} className="hidden" />
-
-            <input value={caption} onChange={e => setCaption(e.target.value)} maxLength={150}
-              placeholder="Add a caption (optional)"
-              className="w-full bg-white/[0.06] rounded-xl px-3 py-2.5 text-sm text-white placeholder-white/20 outline-none mb-3" />
-
-            {error && <p className="text-xs text-red-400 mb-3">{error}</p>}
-
-            <button onClick={handleUpload} disabled={!file || uploading}
-              className="w-full py-3 bg-purple-600 rounded-xl text-sm font-semibold text-white disabled:opacity-40 transition flex items-center justify-center space-x-2">
-              {uploading ? <Loader className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-              <span>{uploading ? (error === 'Converting video…' ? 'Converting...' : 'Uploading...') : 'Share Story'}</span>
-            </button>
+            <div className="p-5 overflow-y-auto flex-1">{body}</div>
           </div>
         </div>
       )}
@@ -220,9 +372,24 @@ function StoryBubble({ artist, stories, viewed, onClick }) {
   const hasUnviewed = stories.some(s => !viewed.has(s.id));
   return (
     <button onClick={onClick}
-      className="flex-shrink-0 flex flex-col items-center space-y-1.5 w-16">
-      <div className={`w-16 h-16 rounded-full p-0.5 ${hasUnviewed ? 'bg-gradient-to-tr from-purple-500 to-pink-400' : 'bg-white/20'}`}>
-        <div className="w-full h-full rounded-full overflow-hidden bg-black border border-black">
+      className="flex-shrink-0 flex flex-col items-center space-y-1.5 w-[68px]">
+      {/* The ring, made to read as a ring.
+          It was a 2px (p-0.5) two-stop gradient, which at 64px across is a
+          hairline — on a dark page next to full-colour artwork it reads as an
+          edge on the avatar rather than as the "there is something new here"
+          signal every other app has trained people to look for. Three
+          changes: 3px so it has actual width, a three-stop gradient so it
+          does not flatten into one purple, and a soft coloured glow so it
+          separates from the black behind it. Viewed stories stay deliberately
+          flat and grey — the contrast between the two states is the whole
+          point, and brightening both would have destroyed it. */}
+      <div
+        className={`w-16 h-16 rounded-full ${hasUnviewed
+          ? 'p-[3px] bg-gradient-to-tr from-fuchsia-500 via-pink-500 to-amber-400'
+          : 'p-[2px] bg-white/15'}`}
+        style={hasUnviewed ? { boxShadow: '0 0 12px rgba(236,72,153,0.45)' } : undefined}
+      >
+        <div className="w-full h-full rounded-full overflow-hidden bg-black border-2 border-black">
           {artist.profile_image_url
             ? <img src={artist.profile_image_url} alt={artist.artist_name} className="w-full h-full object-cover" />
             : <div className="w-full h-full bg-white/10 flex items-center justify-center text-sm font-bold text-white/40">
@@ -230,7 +397,9 @@ function StoryBubble({ artist, stories, viewed, onClick }) {
               </div>}
         </div>
       </div>
-      <span className="text-[10px] text-white/50 truncate max-w-[64px]">{artist.artist_name}</span>
+      <span className={`text-[10px] truncate max-w-[68px] ${hasUnviewed ? 'text-white/80 font-semibold' : 'text-white/40'}`}>
+        {artist.artist_name}
+      </span>
     </button>
   );
 }
@@ -534,7 +703,18 @@ export function StoriesRail({ userId }) {
 
   return (
     <>
-      <div className="flex space-x-4 overflow-x-auto px-6 pb-1 scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
+      {/* Given a heading and real vertical space.
+          On Home this sat directly under "Welcome back" as a lone avatar with
+          no label and no margin — it looked like a stray account chip rather
+          than a row of stories, which is exactly how it was being read. Every
+          other rail on that page has a labelled header; this one now matches. */}
+      <div className="mb-5">
+        <div className="flex items-center space-x-2 mb-3 px-6">
+          <Sparkles className="w-3.5 h-3.5 text-pink-400/70" />
+          <span className="section-label">Stories</span>
+          <span className="text-[10px] text-white/25">24h</span>
+        </div>
+        <div className="flex space-x-4 overflow-x-auto px-6 pb-1 scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
         {storyGroups.map(({ artist, stories }) => (
           <StoryBubble
             key={artist.id}
@@ -544,6 +724,7 @@ export function StoriesRail({ userId }) {
             onClick={() => setViewing({ artist, stories, idx: 0 })}
           />
         ))}
+        </div>
       </div>
 
       {viewing && (

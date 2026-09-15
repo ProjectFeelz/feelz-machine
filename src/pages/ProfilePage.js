@@ -1,8 +1,7 @@
 import { Helmet } from 'react-helmet-async';
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
-import { sendArtistBroadcast } from '../utils/notify';
 import { slugForNameChange } from '../utils/artistSlug';
 import { useAuth } from '../contexts/AuthContext';
 import {
@@ -11,6 +10,7 @@ import {
   Save, Palette, ExternalLink, DollarSign, Camera, Check,
   Link, Zap, Crown, Star, Trash2, AlertTriangle, Plus, Mic, Sparkles, Info, Send
 } from 'lucide-react';
+import VerifiedBadge from '../components/VerifiedBadge';
 import ThemeEditor from '../components/ThemeEditor';
 import PaymentSettings from '../components/PaymentSettings';
 import TierGate from '../components/TierGate';
@@ -25,7 +25,7 @@ import { useStreakContext } from '../contexts/StreakContext';
 // not imported: both were defined in both files and rendered in neither.
 import {
   SOCIALS, GENRES_LIST, MOODS_LIST, ARTIST_TABS,
-  PROFILE_IMAGE_BUCKET, MAX_DAILY_THOUGHTS, THOUGHT_TTL_MS, BIO_MAX,
+  PROFILE_IMAGE_BUCKET, BIO_MAX,
 } from './profile/profileShared';
 
 export default function ProfilePage() {
@@ -106,11 +106,7 @@ export default function ProfilePage() {
   const [deleting, setDeleting]                   = useState(false);
   const [deleteError, setDeleteError]             = useState('');
 
-  const [thoughts, setThoughts]           = useState([]);
-  const [thoughtInput, setThoughtInput]   = useState('');
-  const [thoughtSaving, setThoughtSaving] = useState(false);
-  const [thoughtMsg, setThoughtMsg]       = useState('');
-  const [deletingId, setDeletingId]       = useState(null);
+  // Thought-of-the-Day state removed along with the feature.
 
   const tierConfig = {
     premium: { label: 'Premium', color: '#F59E0B', bg: 'rgba(245,158,11,0.08)', icon: Crown },
@@ -120,64 +116,6 @@ export default function ProfilePage() {
   const tier     = tierConfig[tierSlug] || tierConfig.free;
   const TierIcon = tier.icon;
 
-  const fetchThoughts = useCallback(async () => {
-    if (!artist) return;
-    const cutoff = new Date(Date.now() - THOUGHT_TTL_MS).toISOString();
-    const { data, error } = await supabase.from('artist_thoughts')
-      .select('id, content, created_at').eq('artist_id', artist.id)
-      .gte('created_at', cutoff).order('created_at', { ascending: false });
-    if (!error) setThoughts(data || []);
-  }, [artist]);
-
-  const todayCount     = thoughts.filter(t => {
-    const p = new Date(t.created_at), n = new Date();
-    return p.getFullYear() === n.getFullYear() && p.getMonth() === n.getMonth() && p.getDate() === n.getDate();
-  }).length;
-  const remainingToday = MAX_DAILY_THOUGHTS - todayCount;
-
-  const postThought = async () => {
-    if (!thoughtInput.trim() || !artist) return;
-    // Captured before setThoughtInput('') below clears it. The follower
-    // notification is sent after that line, so reading the state there gave
-    // an empty message.
-    const thoughtText = thoughtInput.trim();
-    if (remainingToday <= 0) {
-      setThoughtMsg('Daily limit reached (3/3). Come back tomorrow!');
-      setTimeout(() => setThoughtMsg(''), 3000); return;
-    }
-    setThoughtSaving(true);
-    const { error } = await supabase.from('artist_thoughts').insert({
-      artist_id: artist.id, content: thoughtInput.trim(),
-      created_at: new Date().toISOString(),
-      expires_at: new Date(Date.now() + THOUGHT_TTL_MS).toISOString(),
-    });
-    setThoughtSaving(false);
-    if (error) { setThoughtMsg('Failed to post'); }
-    else {
-      setThoughtInput(''); setThoughtMsg('Posted!'); fetchThoughts();
-      // Notify followers. One call, and the follower list is resolved
-      // server-side — the client no longer reads every follower id just to
-      // write it back. See migration 108: the batch insert this replaces was
-      // refused by the notifications INSERT policy, so no follower has ever
-      // been told about a thought.
-      await sendArtistBroadcast(supabase, 'artist_thought (profile)', {
-        type:    'artist_thought',
-        title:   `${artist.artist_name} shared a thought`,
-        message: thoughtText.slice(0, 140),
-        metadata: { artist_id: artist.id, artist_name: artist.artist_name },
-      });
-    }
-    setTimeout(() => setThoughtMsg(''), 2500);
-  };
-
-  const deleteThought = async (id) => {
-    setDeletingId(id);
-    await supabase.from('artist_thoughts').delete().eq('id', id);
-    setThoughts(prev => prev.filter(t => t.id !== id));
-    setDeletingId(null);
-  };
-
-  useEffect(() => { if (artist) fetchThoughts(); }, [artist, fetchThoughts]);
 
   // Load edit tab data from user_profiles when switching to edit tab
   useEffect(() => {
@@ -436,7 +374,7 @@ export default function ProfilePage() {
               <p className="text-xs text-white/30 truncate mb-1.5">{user.email}</p>
               <div className="flex items-center flex-wrap gap-1.5">
                 {isArtist && <span className="text-[10px] px-1.5 py-0.5 bg-purple-500/10 text-purple-400 rounded font-medium">Artist</span>}
-                {artist?.is_verified && <span className="text-[10px] px-1.5 py-0.5 bg-blue-500/10 text-blue-400 rounded font-medium">Verified</span>}
+                {artist?.is_verified && <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-medium" style={{ background: 'rgba(245,197,24,0.12)', color: '#F5C518' }}><VerifiedBadge size="xs" />Verified</span>}
                 {artist?.is_master && <span className="text-[10px] px-1.5 py-0.5 bg-yellow-500/10 text-yellow-400 rounded font-medium">Master</span>}
                 <TierBadge size="xs" />
               </div>
@@ -527,74 +465,10 @@ export default function ProfilePage() {
                 </div>
               </div>
 
-              {/* Thought of the Day */}
-              <TierGate feature="daily_thought">
-                <div className="rounded-2xl border border-white/[0.06] overflow-hidden mb-4"
-                  style={{ background: 'rgba(255,255,255,0.02)' }}>
-                  <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.05]">
-                    <p className="text-sm font-semibold text-white">💭 Thought of the Day</p>
-                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                      remainingToday === 0 ? 'bg-red-500/10 text-red-400' : 'bg-white/[0.06] text-white/30'
-                    }`}>{remainingToday}/{MAX_DAILY_THOUGHTS} left today</span>
-                  </div>
-                  <div className="p-4 space-y-3">
-                    <p className="text-xs text-white/30">Share what's on your mind — appears on your profile for 24 hours</p>
-                    <textarea rows={3} maxLength={280} value={thoughtInput}
-                      onChange={e => setThoughtInput(e.target.value)}
-                      placeholder="What's on your mind today?"
-                      disabled={remainingToday <= 0}
-                      className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none resize-none border border-white/[0.06] focus:border-white/20 transition placeholder-white/15 disabled:opacity-40" />
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs text-white/20">{thoughtInput.length}/280</span>
-                      <div className="flex items-center space-x-3">
-                        <button
-                          onClick={() => nav('/dashboard?tab=memos')}
-                          title="Record a Voice Memo"
-                          className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-white/[0.06] border border-white/[0.06] hover:bg-white/[0.1] transition active:scale-95"
-                        >
-                          <Mic className="w-3.5 h-3.5 text-pink-400" />
-                          <span className="text-xs text-white/50">Voice Memo</span>
-                        </button>
-                        {thoughtMsg && (
-                          <span className={`text-xs ${thoughtMsg.includes('Failed') || thoughtMsg.includes('limit') ? 'text-red-400' : 'text-green-400'}`}>
-                            {thoughtMsg}
-                          </span>
-                        )}
-                        <button onClick={postThought}
-                          disabled={thoughtSaving || !thoughtInput.trim() || remainingToday <= 0}
-                          className="px-4 py-1.5 bg-white text-black text-xs font-semibold rounded-lg disabled:opacity-40 transition active:scale-95">
-                          {thoughtSaving ? 'Posting...' : 'Post'}
-                        </button>
-                      </div>
-                    </div>
-                    {thoughts.length > 0 && (
-                      <div className="space-y-2 pt-1">
-                        <p className="text-[11px] text-white/20 uppercase tracking-wider font-medium">Active thoughts</p>
-                        {thoughts.map(t => {
-                          const expiresAt = new Date(t.created_at).getTime() + THOUGHT_TTL_MS;
-                          const minsLeft  = Math.max(0, Math.round((expiresAt - Date.now()) / 60000));
-                          const hrsLeft   = Math.floor(minsLeft / 60);
-                          const timeLabel = hrsLeft > 0 ? `${hrsLeft}h ${minsLeft % 60}m` : `${minsLeft}m`;
-                          return (
-                            <div key={t.id} className="flex items-start space-x-3 p-3 bg-white/[0.04] rounded-xl border border-white/[0.05]">
-                              <div className="flex-1 min-w-0">
-                                <p className="text-sm text-white/80 leading-relaxed">{t.content}</p>
-                                <p className="text-[10px] text-white/20 mt-1">Expires in {timeLabel}</p>
-                              </div>
-                              <button onClick={() => deleteThought(t.id)} disabled={deletingId === t.id}
-                                className="flex-shrink-0 w-7 h-7 flex items-center justify-center rounded-lg hover:bg-red-500/10 transition">
-                                {deletingId === t.id
-                                  ? <Loader className="w-3.5 h-3.5 animate-spin text-white/30" />
-                                  : <Trash2 className="w-3.5 h-3.5 text-white/20 hover:text-red-400 transition" />}
-                              </button>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </TierGate>
+              {/* Thought of the Day removed — it posted to artist_thoughts
+                  and surfaced in one place only, so almost nobody made one
+                  and almost nobody saw one. Story and Voice Memo cover the
+                  same intent and both actually reach followers. */}
             </>
           )}
 

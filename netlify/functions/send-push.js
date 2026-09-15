@@ -35,12 +35,57 @@ exports.handler = async (event) => {
   let body;
   try { body = JSON.parse(event.body); } catch { return { statusCode: 400, body: 'Invalid JSON' }; }
 
-  const secret = event.headers['x-internal-secret'];
-  if (!secret || secret !== process.env.INTERNAL_FUNCTION_SECRET) {
-    return { statusCode: 401, body: 'Unauthorized' };
-  }
-  const { user_ids, title, body: msgBody, url = '/', tag = 'feelz' } = body;
+  let { user_ids, title, body: msgBody, url = '/', tag = 'feelz', token } = body;
   if (!user_ids?.length || !title) return { statusCode: 400, body: 'user_ids and title required' };
+
+  // ── Two ways in ──────────────────────────────────────────────────────────
+  //
+  // Only one existed: a shared secret in `x-internal-secret`. That is right
+  // for the other functions, which are servers calling a server. It cannot
+  // work from a browser — putting INTERNAL_FUNCTION_SECRET in the bundle
+  // would hand it to everyone — and the two BROWSER callers
+  // (CreateMenuModal.js and ArtistProfilePage.js, both "Message Fans") sent
+  //
+  //     'x-internal-secret': ''
+  //
+  // which is the 401 in the console. One of them even carried a comment
+  // saying "send-push auth is user-token based". It was not. It is now, and
+  // that comment was wrong when it was written — the in-app notification went
+  // out and the push never did, every time, since the day it shipped.
+  //
+  // The user path is deliberately narrower than the internal one: a
+  // signed-in ARTIST may push only to people who follow them. A listener
+  // cannot push at all, and nobody can push to a list of their choosing —
+  // the recipient list is intersected with the caller's real followers
+  // server-side, so a tampered request reaches fewer people, never more.
+  const secret = event.headers['x-internal-secret'];
+  const internalOk = !!secret && secret === process.env.INTERNAL_FUNCTION_SECRET;
+
+  if (!internalOk) {
+    if (!token) return { statusCode: 401, body: 'Unauthorized' };
+
+    const { data: { user }, error: authErr } = await supabase.auth.getUser(token);
+    if (authErr || !user) return { statusCode: 401, body: 'Unauthorized' };
+
+    const { data: artist, error: artistErr } = await supabase
+      .from('artists').select('id').eq('user_id', user.id).maybeSingle();
+    if (artistErr) {
+      console.error('[send-push] artist lookup failed:', artistErr.message);
+      return { statusCode: 503, body: 'Could not verify sender' };
+    }
+    if (!artist) return { statusCode: 403, body: 'Only artists can send push to followers' };
+
+    const { data: follows, error: followErr } = await supabase
+      .from('follows').select('follower_id').eq('artist_id', artist.id);
+    if (followErr) {
+      console.error('[send-push] follower lookup failed:', followErr.message);
+      return { statusCode: 503, body: 'Could not resolve followers' };
+    }
+
+    const allowed = new Set((follows || []).map(f => f.follower_id));
+    user_ids = user_ids.filter(id => allowed.has(id));
+    if (!user_ids.length) return { statusCode: 200, body: JSON.stringify({ sent: 0, reason: 'no followers in list' }) };
+  }
 
   // Fetch all push subscriptions for these users
   const { data: subs } = await supabase

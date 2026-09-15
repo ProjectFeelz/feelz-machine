@@ -459,7 +459,7 @@ function StoryFeedCard({ item, isActive, onOpen, navigate }) {
 }
 
 // ── Single card ───────────────────────────────────────────────────────────────
-function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare, onNext, onHide, queue, queueIndex }) {
+function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare, onNext, onHide, queue, queueIndex, storyArtistIds }) {
   const [justHid, setJustHid] = React.useState(null); // { id, title } for undo
   const { currentTrack, isPlaying, currentTime, setIsMinimized, togglePlay } = usePlayer();
   const { artist: myArtist } = useAuth();
@@ -639,6 +639,16 @@ function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare, onN
   // handle, it does not prefix "EON Jams".
   const artistLabel = (track.artist_name || '').trim()
     || (track.artist_slug ? `@${track.artist_slug}` : 'Unknown artist');
+
+  // Does this artist have a story running right now?
+  //
+  // Stories reach this page as their own injected cards, but only from
+  // artists the viewer already FOLLOWS and only on the first page of the
+  // feed. So an artist you have just discovered here can be mid-story and
+  // give no sign of it. The credit pill is already the tap target for "go see
+  // this artist", so it carries the signal: it glows, and the artist profile
+  // it opens is where the story ring lives.
+  const hasStory = !!track.artist_id && !!storyArtistIds && storyArtistIds.has(track.artist_id);
 
   const handleTap = () => {
     togglePlay();
@@ -858,11 +868,17 @@ function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare, onN
               "EON Jams Collective" on a phone that had room for all of it.
               The full name stays available on long-press via `title`. */}
           <button onClick={goToArtist}
-            title={artistLabel}
-            className="min-w-0 truncate px-2.5 py-0.5 rounded-full
-                       text-[12px] font-bold text-white/75 text-left
-                       hover:text-white hover:bg-white/[0.14] transition active:scale-95"
-            style={{ background: 'rgba(255,255,255,0.10)', border: '1px solid rgba(255,255,255,0.16)' }}>
+            title={hasStory ? `${artistLabel} — story running now` : artistLabel}
+            className={`min-w-0 truncate px-2.5 py-0.5 rounded-full
+                       text-[12px] font-bold text-left transition active:scale-95
+                       ${hasStory ? 'text-white' : 'text-white/75 hover:text-white hover:bg-white/[0.14]'}`}
+            style={hasStory
+              ? {
+                  background: 'linear-gradient(90deg, rgba(217,70,239,0.30), rgba(236,72,153,0.26))',
+                  border: '1px solid rgba(244,114,182,0.60)',
+                  boxShadow: '0 0 10px rgba(236,72,153,0.45)',
+                }
+              : { background: 'rgba(255,255,255,0.10)', border: '1px solid rgba(255,255,255,0.16)' }}>
             {artistLabel}
           </button>
           {user && !isOwnTrack && following === false && (
@@ -1046,6 +1062,25 @@ export default function ForYouPage() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [viewingStory, setViewingStory] = useState(null); // { artist, stories }
   const [activeSheet, setActiveSheet]   = useState(null); // { type, track }
+
+  // Every artist with a story running right now, regardless of whether the
+  // viewer follows them. The story CARDS injected into this feed are
+  // follow-gated and first-page only; this is just the set of ids, so the
+  // credit pill on any card can light up. One small query, once per mount.
+  const [storyArtistIds, setStoryArtistIds] = useState(() => new Set());
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { data, error } = await supabase
+        .from('artist_stories')
+        .select('artist_id')
+        .gt('expires_at', new Date().toISOString())
+        .limit(500);
+      if (error) { console.error('[foryou] active stories failed:', error.code, error.message); return; }
+      if (!cancelled) setStoryArtistIds(new Set((data || []).map(r => r.artist_id).filter(Boolean)));
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   // Deep-link support — notifications land here with ?openComments=<trackId>
   // or ?openCommentsSlug=<slug> instead of going to the separate track page
@@ -1696,7 +1731,7 @@ export default function ForYouPage() {
                         updated_at: new Date().toISOString(),
                       }, { onConflict: 'user_id,track_id' }));
                     }
-                  }} queue={filteredTracks} queueIndex={i} /> : null
+                  }} queue={filteredTracks} queueIndex={i} storyArtistIds={storyArtistIds} /> : null
               )}
             </div>
           );

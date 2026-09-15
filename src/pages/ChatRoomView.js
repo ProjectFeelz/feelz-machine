@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
+import { useTier } from '../contexts/useTier';
 import { usePullToRefresh } from '../hooks/usePullToRefresh';
 import PullToRefreshIndicator from '../components/PullToRefreshIndicator';
 import {
@@ -457,9 +458,11 @@ export default function ChatRoomView() {
   const { roomId } = useParams();
   const navigate   = useNavigate();
   const { user, artist, isAdmin } = useAuth();
+  const { isListenerPro, tierLoading } = useTier();
 
   const [room, setRoom]                           = useState(null);
   const [spendGate, setSpendGate]                 = useState(false);
+  const [proGate, setProGate]                     = useState(false);
   const [messages, setMessages]                   = useState([]);
   const [polls, setPolls]                         = useState([]);
   const [reactions, setReactions]                 = useState({});   // { messageId: [{emoji,user_id},...] }
@@ -491,8 +494,28 @@ export default function ChatRoomView() {
   const typingTimerRef = useRef(null);
 
   const isRoomArtist  = room?.artists?.user_id === user?.id;
-  const isBugRoom     = room?.is_pinned && !!room?.accent_color;
+  // Identified by NAME first, the same test HubPage and ChatRoomsPage use.
+  //
+  // This was `is_pinned && accent_color`, which is a description of how the
+  // bug room happens to be styled rather than of what it is. Any pinned room
+  // with an accent colour matched it, and the bug room itself stopped
+  // matching the moment someone unpinned it — so the one place that has to
+  // know "am I the bug room" was the least reliable. The styling test is
+  // kept as a fallback so nothing that looks right today starts looking
+  // wrong.
+  const isBugRoom     = /report\s*a?\s*bug/i.test(room?.name || '')
+                     || (room?.is_pinned && !!room?.accent_color);
   const accentColor   = room?.accent_color || null;
+
+  // Where the back arrow goes.
+  //
+  // It always went to /chat. That is correct for a real artist room — you
+  // came from the room list — but the bug room is reached from a dedicated
+  // button on Hub or Profile and is hidden from the room list entirely, so
+  // backing out of it dropped people onto a Chat Rooms page showing "No chat
+  // rooms yet": a dead end they never asked to visit, and the one screen the
+  // bug room was deliberately taken out of.
+  const backTarget = isBugRoom ? (artist ? '/hub' : '/profile') : '/chat';
   const isRoomAdmin   = room?.artists?.user_id === user?.id || myMembership?.role === 'admin' || myMembership?.role === 'moderator';
 
   // ── Initial load ────────────────────────────────────────────────────────────
@@ -739,6 +762,24 @@ export default function ChatRoomView() {
     if (!user) { navigate('/login'); return; }
     setJoining(true);
     try {
+      // Talking to an artist is a Fan Pro thing.
+      //
+      // Artists are exempt — an artist walking into another artist's room is
+      // a peer, not a fan buying access — and so are admins, who have to be
+      // able to moderate. The bug room is exempt too: charging people to
+      // report that something is broken would be absurd.
+      //
+      // This is a UX gate, not a security boundary. The database still
+      // decides: chat_room_members has its own INSERT policy and
+      // chat_messages checks membership. If someone bypasses this button they
+      // gain nothing the policies do not already allow, and the honest fix
+      // for that is a policy, not a bigger button.
+      if (!isBugRoom && !artist && !isAdmin && !tierLoading && !isListenerPro) {
+        setProGate(true);
+        setJoining(false);
+        return;
+      }
+
       if (room?.is_subscribers_only) {
         const artistId = room?.artists?.id;
         if (artistId) {
@@ -876,7 +917,7 @@ export default function ChatRoomView() {
         }
       >
         <div className="flex items-center space-x-3">
-          <button onClick={() => navigate('/chat')} className="w-9 h-9 flex items-center justify-center rounded-full bg-white/[0.06]">
+          <button onClick={() => navigate(backTarget)} className="w-9 h-9 flex items-center justify-center rounded-full bg-white/[0.06]">
             <ArrowLeft className="w-5 h-5 text-white" />
           </button>
           <button onClick={() => room.artists?.slug && navigate(`/artist/${room.artists.slug}`)} className="flex items-center space-x-2.5">
@@ -1157,6 +1198,22 @@ export default function ChatRoomView() {
                   </div>
                 </>
               )}
+            </div>
+          ) : proGate ? (
+            <div className="px-4 py-4 border-t border-white/[0.06] flex-shrink-0">
+              <div className="rounded-xl bg-purple-500/10 border border-purple-500/20 p-4 text-center">
+                <Lock className="w-6 h-6 text-purple-400 mx-auto mb-2" />
+                <p className="text-sm font-semibold text-white mb-1">Chatting is a Fan Pro thing</p>
+                <p className="text-xs text-white/40 mb-3">
+                  Fan Pro lets you talk directly to{' '}
+                  <span className="text-white">{room?.artists?.artist_name || 'the artists you follow'}</span>
+                  {' '}— plus unlimited downloads and offline listening.
+                </p>
+                <button onClick={() => navigate('/listener/upgrade')}
+                  className="w-full py-2.5 bg-purple-500 text-white rounded-xl font-semibold text-sm transition active:scale-95">
+                  See Fan Pro
+                </button>
+              </div>
             </div>
           ) : spendGate ? (
             <div className="px-4 py-4 border-t border-white/[0.06] flex-shrink-0">

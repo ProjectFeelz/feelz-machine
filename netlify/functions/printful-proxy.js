@@ -31,6 +31,36 @@ const cors = {
   'Content-Type': 'application/json',
 };
 
+// Errors that are Printful telling us something about the TOKEN get turned
+// into a 400 with an instruction, not a 500.
+//
+// A 500 says "the server broke". Printful answering
+// "This endpoint requires any of the following scopes granted: stores_list/read"
+// is not the server breaking — it is a correct, specific answer that the key
+// the artist pasted was created without the permissions this needs. Reported
+// as a 500 it looked like an outage and the actual instruction (go back to
+// Printful and tick the boxes) was nowhere in the response.
+class PrintfulError extends Error {
+  constructor(message, status, hint) {
+    super(message);
+    this.name = 'PrintfulError';
+    this.status = status;
+    this.hint = hint;
+  }
+}
+
+function tokenHint(message, status) {
+  if (/scopes? granted|scope/i.test(message)) {
+    return 'That key works, but it was created without enough permissions. In Printful go to '
+         + 'Settings > Developers > your token > Edit, and enable read access for Stores, '
+         + 'Products, Orders and Shipping. Then paste the key again.';
+  }
+  if (status === 401 || status === 403) {
+    return 'Printful rejected that key. Check it was copied in full and has not been revoked.';
+  }
+  return null;
+}
+
 async function printfulFetch(path, accessToken, options = {}) {
   const res = await fetch(`${PRINTFUL_API}${path}`, {
     ...options,
@@ -40,8 +70,16 @@ async function printfulFetch(path, accessToken, options = {}) {
       ...(options.headers || {}),
     },
   });
-  const json = await res.json();
-  if (!res.ok) throw new Error(json.error?.message || `Printful error ${res.status}`);
+
+  // Printful does not always answer JSON — an edge/gateway error is HTML, and
+  // res.json() on that throws a SyntaxError that buries the real status.
+  let json = null;
+  try { json = await res.json(); } catch { /* handled below */ }
+
+  if (!res.ok) {
+    const message = json?.error?.message || json?.result || `Printful error ${res.status}`;
+    throw new PrintfulError(message, res.status, tokenHint(String(message), res.status));
+  }
   return json;
 }
 
@@ -280,7 +318,22 @@ exports.handler = async (event) => {
     return { statusCode: 400, headers: cors, body: JSON.stringify({ error: 'Unknown action' }) };
 
   } catch (err) {
-    console.error('printful-proxy error:', err);
-    return { statusCode: 500, headers: cors, body: JSON.stringify({ error: err.message }) };
+    console.error('printful-proxy error:', err.name, err.status || '', err.message);
+
+    // A refusal from Printful, or from our own ownership checks, is a 4xx.
+    // Only an actual unhandled fault is a 500.
+    if (err instanceof PrintfulError) {
+      const status = err.status >= 400 && err.status < 500 ? 400 : 502;
+      return {
+        statusCode: status,
+        headers: cors,
+        body: JSON.stringify({ ok: false, error: err.message, hint: err.hint || undefined }),
+      };
+    }
+    if (/^(Unauthorized|Forbidden|Artist not found|Printful not connected|API key required)$/.test(err.message)) {
+      return { statusCode: 403, headers: cors, body: JSON.stringify({ ok: false, error: err.message }) };
+    }
+
+    return { statusCode: 500, headers: cors, body: JSON.stringify({ ok: false, error: err.message }) };
   }
 };

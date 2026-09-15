@@ -5,10 +5,11 @@ import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import { useHaptics } from '../hooks/useHaptics';
 import {
-  Radio, Loader, Verified, Send, Check,
+  Radio, Loader, Send, Check,
   Music, Mic2, Headphones, PenLine, Shuffle, Sliders, MoreHorizontal,
   ChevronRight, Zap,
 } from 'lucide-react';
+import VerifiedBadge from '../components/VerifiedBadge';
 
 const COLLAB_TYPES = [
   { key: 'featured', label: 'Featured',   icon: Mic2,           desc: 'Guest verse or hook' },
@@ -249,7 +250,7 @@ function MatchCard({ match, myArtistId, alreadySent, onRequestSent }) {
           <div className="flex-1 min-w-0">
             <div className="flex items-center space-x-1.5 mb-0.5">
               <p className="text-sm font-semibold text-white truncate">{match.artist_name}</p>
-              {match.is_verified && <Verified className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" />}
+              {match.is_verified && <VerifiedBadge size="md" />}
             </div>
             <MatchBadge score={match._score} />
             <SharedTags tags={match._shared} />

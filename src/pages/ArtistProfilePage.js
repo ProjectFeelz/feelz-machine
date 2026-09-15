@@ -13,11 +13,11 @@ import { usePlayer } from '../contexts/PlayerContext';
 import {
   ArrowLeft, Calendar, Play, Share2,
   UserPlus, UserCheck, Instagram, Twitter, Youtube,
-  Globe, Music, Loader, Verified,
-  Heart, Check, DollarSign, MessageCircle,
+  Globe, Music, Loader, Heart, Check, DollarSign, MessageCircle,
   ChevronDown, ChevronUp, Send, Trash2, Shuffle, Users, Plus, ShoppingBag,
   Radio, X, Search, Info, Bell, BellOff, ChevronRight,
 } from 'lucide-react';
+import VerifiedBadge from '../components/VerifiedBadge';
 import { ArtistProfileSkeleton } from '../components/SkeletonLoader';
 import ShareCard from '../components/ShareCard';
 import PreorderTag from '../components/PreorderTag';
@@ -36,7 +36,6 @@ import { sendArtistBroadcast, sendNotification } from '../utils/notify';
 
 const PAYPAL_CLIENT_ID = process.env.REACT_APP_PAYPAL_CLIENT_ID;
 const EMOJI_REACTIONS = ['🔥', '❤️', '👏', '😮', '😂', '🎵'];
-const THOUGHT_TTL_MS = 24 * 60 * 60 * 1000;
 const BASE_URL = 'https://www.feelzmachine.com';
 
 const TikTokIcon = ({ className, style }) => (
@@ -83,276 +82,10 @@ function timeAgo(date) {
   return new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
-function ThoughtBlock({ thought, isOwner, secondaryColor, textColor, bgColor, user, navigate, onDeleted }) {
-  const [reactions, setReactions] = useState({});
-  const [myReactions, setMyReactions] = useState({});
-  const [liked, setLiked] = useState(false);
-  const [likeCount, setLikeCount] = useState(0);
-  const [comments, setComments] = useState([]);
-  const [commentCount, setCommentCount] = useState(0);
-  const [showComments, setShowComments] = useState(false);
-  const [commentText, setCommentText] = useState('');
-  const [posting, setPosting] = useState(false);
-  const [deleting, setDeleting] = useState(false);
-  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
-
-  useEffect(() => {
-    fetchReactions();
-    fetchLikes();
-    fetchCommentCount();
-  }, [thought.id]);
-
-  const fetchReactions = async () => {
-    const { data } = await supabase
-      .from('thought_reactions').select('emoji, user_id').eq('thought_id', thought.id);
-    const counts = {};
-    const mine = {};
-    (data || []).forEach(r => {
-      counts[r.emoji] = (counts[r.emoji] || 0) + 1;
-      if (user && r.user_id === user.id) mine[r.emoji] = true;
-    });
-    setReactions(counts);
-    setMyReactions(mine);
-  };
-
-  const fetchLikes = async () => {
-    const { count } = await supabase
-      .from('thought_reactions').select('*', { count: 'exact', head: true })
-      .eq('thought_id', thought.id).eq('emoji', 'like');
-    setLikeCount(count || 0);
-    if (user) {
-      const { data } = await supabase
-        .from('thought_reactions').select('id')
-        .eq('thought_id', thought.id).eq('user_id', user.id).eq('emoji', 'like').maybeSingle();
-      setLiked(!!data);
-    }
-  };
-
-  const fetchCommentCount = async () => {
-    const { count } = await supabase
-      .from('thought_comments').select('*', { count: 'exact', head: true })
-      .eq('thought_id', thought.id);
-    setCommentCount(count || 0);
-  };
-
-  const fetchComments = async () => {
-    const { data, error } = await supabase
-      .from('thought_comments').select('id, thought_id, user_id, content, created_at')
-      .eq('thought_id', thought.id).order('created_at', { ascending: true }).limit(50);
-    if (error || !data || data.length === 0) { setComments([]); return; }
-    const userIds = [...new Set(data.map(c => c.user_id))].filter(Boolean);
-    if (!userIds.length) { setComments(data.map(c => ({ ...c, commenter: null }))); return; }
-    const { data: artistsData } = await supabase
-      .from('artists').select('user_id, artist_name, slug, profile_image_url, is_verified')
-      .in('user_id', userIds);
-    const artistMap = {};
-    (artistsData || []).forEach(a => { artistMap[a.user_id] = a; });
-    const missingIds = userIds.filter(id => id && !artistMap[id]);
-    const profileMap = {};
-    if (missingIds.length > 0) {
-      const { data: profilesData } = await supabase
-        .from('user_profiles').select('user_id, name, avatar_url').in('user_id', missingIds);
-      (profilesData || []).forEach(p => { profileMap[p.user_id] = p; });
-    }
-    setComments(data.map(c => {
-      if (artistMap[c.user_id]) return { ...c, commenter: artistMap[c.user_id] };
-      const profile = profileMap[c.user_id];
-      return {
-        ...c,
-        commenter: profile
-          ? { artist_name: profile.name || 'Listener', profile_image_url: profile.avatar_url || null, slug: null }
-          : null,
-      };
-    }));
-  };
-
-  const handleLike = async () => {
-    if (!user) { navigate('/login'); return; }
-    if (liked) {
-      await supabase.from('thought_reactions').delete()
-        .eq('thought_id', thought.id).eq('user_id', user.id).eq('emoji', 'like');
-      setLiked(false);
-      setLikeCount(prev => Math.max(prev - 1, 0));
-    } else {
-      await supabase.from('thought_reactions')
-        .insert({ thought_id: thought.id, user_id: user.id, emoji: 'like' });
-      setLiked(true);
-      setLikeCount(prev => prev + 1);
-    }
-  };
-
-  const handleEmojiReact = async (emoji) => {
-    if (!user) { navigate('/login'); return; }
-    setShowEmojiPicker(false);
-    if (myReactions[emoji]) {
-      await supabase.from('thought_reactions').delete()
-        .eq('thought_id', thought.id).eq('user_id', user.id).eq('emoji', emoji);
-      setReactions(prev => ({ ...prev, [emoji]: Math.max((prev[emoji] || 1) - 1, 0) }));
-      setMyReactions(prev => { const n = { ...prev }; delete n[emoji]; return n; });
-    } else {
-      await supabase.from('thought_reactions')
-        .insert({ thought_id: thought.id, user_id: user.id, emoji });
-      setReactions(prev => ({ ...prev, [emoji]: (prev[emoji] || 0) + 1 }));
-      setMyReactions(prev => ({ ...prev, [emoji]: true }));
-    }
-  };
-
-  const toggleComments = () => {
-    if (!showComments) fetchComments();
-    setShowComments(p => !p);
-  };
-
-  const submitComment = async () => {
-    if (!commentText.trim() || !user) return;
-    setPosting(true);
-    const { error } = await supabase.from('thought_comments').insert({
-      thought_id: thought.id, user_id: user.id, content: commentText.trim(),
-    });
-    if (!error) {
-      setCommentText('');
-      setCommentCount(prev => prev + 1);
-      fetchComments();
-    }
-    setPosting(false);
-  };
-
-  const handleDelete = async () => {
-    if (!isOwner) return;
-    setDeleting(true);
-    await supabase.from('artist_thoughts').delete().eq('id', thought.id);
-    if (onDeleted) onDeleted(thought.id);
-    setDeleting(false);
-  };
-
-  const expiresAt = new Date(thought.created_at).getTime() + THOUGHT_TTL_MS;
-  const pct = Math.min(100, ((Date.now() - new Date(thought.created_at).getTime()) / THOUGHT_TTL_MS) * 100);
-  const minsLeft = Math.max(0, Math.round((expiresAt - Date.now()) / 60000));
-  const hrsLeft = Math.floor(minsLeft / 60);
-  const timeLabel = hrsLeft > 0 ? `${hrsLeft}h ${minsLeft % 60}m` : `${minsLeft}m`;
-  const activeReactions = Object.entries(reactions).filter(([emoji, count]) => emoji !== 'like' && count > 0);
-
-  return (
-    <div className="rounded-2xl overflow-hidden" style={{ backgroundColor: `${secondaryColor}10`, border: `1px solid ${secondaryColor}20` }}>
-      <div className="flex items-center justify-between px-4 pt-4 pb-0">
-        <p className="text-xs font-semibold" style={{ color: `${secondaryColor}90` }}>💭 Thought of the Day</p>
-        <div className="flex items-center space-x-2">
-          <span className="text-[10px]" style={{ color: `${textColor}30` }}>{timeAgo(thought.created_at)}</span>
-          {isOwner && (
-            <button onClick={handleDelete} disabled={deleting} className="w-6 h-6 flex items-center justify-center rounded-full transition">
-              {deleting
-                ? <Loader className="w-3 h-3 animate-spin" style={{ color: `${textColor}30` }} />
-                : <Trash2 className="w-3 h-3" style={{ color: `${textColor}20` }} />}
-            </button>
-          )}
-        </div>
-      </div>
-      <div className="px-4 py-3">
-        <p className="text-sm leading-relaxed" style={{ color: `${textColor}90` }}>{thought.content}</p>
-        {isOwner && (
-          <div className="mt-3">
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-[10px]" style={{ color: `${textColor}25` }}>Expires in {timeLabel}</span>
-              <span className="text-[10px]" style={{ color: `${textColor}25` }}>{Math.round(100 - pct)}%</span>
-            </div>
-            <div className="w-full h-0.5 rounded-full overflow-hidden" style={{ backgroundColor: `${textColor}10` }}>
-              <div className="h-full rounded-full transition-all duration-1000"
-                style={{ width: `${100 - pct}%`, background: `linear-gradient(to right, ${secondaryColor}80, ${secondaryColor}40)` }} />
-            </div>
-          </div>
-        )}
-      </div>
-      {activeReactions.length > 0 && (
-        <div className="px-4 pb-2 flex flex-wrap gap-1.5">
-          {activeReactions.map(([emoji, count]) => (
-            <button key={emoji} onClick={() => handleEmojiReact(emoji)}
-              className="flex items-center space-x-1 px-2 py-0.5 rounded-full text-xs transition active:scale-90"
-              style={{
-                backgroundColor: myReactions[emoji] ? `${secondaryColor}25` : `${textColor}08`,
-                border: `1px solid ${myReactions[emoji] ? secondaryColor + '40' : textColor + '10'}`,
-                color: myReactions[emoji] ? secondaryColor : `${textColor}60`,
-              }}>
-              <span>{emoji}</span><span>{count}</span>
-            </button>
-          ))}
-        </div>
-      )}
-      <div className="flex items-center px-4 py-2.5 relative" style={{ borderTop: `1px solid ${textColor}08` }}>
-        <button onClick={handleLike} className="flex items-center space-x-1.5 mr-4 transition active:scale-90">
-          <Heart className="w-4 h-4 transition" style={{ color: liked ? '#ef4444' : `${textColor}30` }} fill={liked ? '#ef4444' : 'none'} />
-          {likeCount > 0 && <span className="text-xs" style={{ color: liked ? '#ef4444' : `${textColor}30` }}>{likeCount}</span>}
-        </button>
-        <div className="relative mr-4">
-          <button onClick={() => { if (!user) { navigate('/login'); return; } setShowEmojiPicker(p => !p); }}
-            className="text-base leading-none transition active:scale-90" style={{ opacity: 0.4 }}>😊</button>
-          {showEmojiPicker && (
-            <div className="absolute bottom-8 left-0 z-50 flex items-center space-x-1.5 p-2 rounded-xl shadow-2xl"
-              style={{ backgroundColor: '#1a1a1a', border: '1px solid rgba(255,255,255,0.1)' }}>
-              {EMOJI_REACTIONS.map(emoji => (
-                <button key={emoji} onClick={() => handleEmojiReact(emoji)}
-                  className="text-xl transition active:scale-90 hover:scale-125 w-8 h-8 flex items-center justify-center rounded-lg"
-                  style={{ backgroundColor: myReactions[emoji] ? `${secondaryColor}25` : 'transparent' }}>
-                  {emoji}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-        <button onClick={toggleComments} className="flex items-center space-x-1.5 transition active:scale-90">
-          <MessageCircle className="w-4 h-4" style={{ color: `${textColor}30` }} />
-          {commentCount > 0 && <span className="text-xs" style={{ color: `${textColor}30` }}>{commentCount}</span>}
-          {showComments
-            ? <ChevronUp className="w-3 h-3" style={{ color: `${textColor}20` }} />
-            : <ChevronDown className="w-3 h-3" style={{ color: `${textColor}20` }} />}
-        </button>
-      </div>
-      {showComments && (
-        <div style={{ borderTop: `1px solid ${textColor}08` }}>
-          <div className="max-h-56 overflow-y-auto">
-            {comments.map(comment => (
-              <div key={comment.id} className="flex space-x-3 px-4 py-3" style={{ borderBottom: `1px solid ${textColor}05` }}>
-                <button onClick={() => comment.commenter?.slug && navigate(`/artist/${comment.commenter.slug}`)}
-                  className="w-7 h-7 rounded-full flex items-center justify-center overflow-hidden flex-shrink-0"
-                  style={{ background: `linear-gradient(135deg, ${secondaryColor}50, ${secondaryColor}20)` }}>
-                  {comment.commenter?.profile_image_url
-                    ? <img src={comment.commenter.profile_image_url} alt="" className="w-7 h-7 rounded-full object-cover" />
-                    : <span className="text-[10px] font-bold" style={{ color: textColor }}>{(comment.commenter?.artist_name || '?')[0]?.toUpperCase()}</span>}
-                </button>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center space-x-1.5">
-                    <span className="text-xs font-medium" style={{ color: textColor }}>{comment.commenter?.artist_name || 'User'}</span>
-                    <span className="text-[10px]" style={{ color: `${textColor}20` }}>{timeAgo(comment.created_at)}</span>
-                  </div>
-                  <p className="text-xs mt-0.5" style={{ color: `${textColor}60` }}>{comment.content}</p>
-                </div>
-              </div>
-            ))}
-            {comments.length === 0 && (
-              <p className="text-center text-xs py-6" style={{ color: `${textColor}20` }}>No comments yet</p>
-            )}
-          </div>
-          {user && (
-            <div className="px-4 py-3">
-              <div className="flex items-center space-x-2">
-                <input type="text" value={commentText} onChange={e => setCommentText(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && submitComment()}
-                  placeholder="Add a comment..." maxLength={500}
-                  className="flex-1 rounded-lg px-3 py-2 text-sm outline-none"
-                  style={{ backgroundColor: `${textColor}08`, color: textColor, border: `1px solid ${textColor}10` }} />
-                <button onClick={submitComment} disabled={!commentText.trim() || posting}
-                  className="w-8 h-8 flex items-center justify-center rounded-full transition disabled:opacity-30"
-                  style={{ backgroundColor: `${textColor}08` }}>
-                  {posting
-                    ? <Loader className="w-3.5 h-3.5 animate-spin" style={{ color: `${textColor}40` }} />
-                    : <Send className="w-3.5 h-3.5" style={{ color: `${textColor}50` }} />}
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
+// ThoughtBlock removed with the Thought of the Day feature.
+// It posted to artist_thoughts and rendered only inside one tab on
+// this page, so it was made rarely and found less often. Story and
+// Voice Memo carry the same intent and both reach followers.
 
 export default function ArtistProfilePage() {
   const { slug } = useParams();
@@ -392,7 +125,6 @@ export default function ArtistProfilePage() {
   const [addedTo, setAddedTo] = useState({});
   const [similarArtists, setSimilarArtists] = useState([]);
   const [artistPlaylists, setArtistPlaylists] = useState([]);
-  const [thoughts, setThoughts] = useState([]);
   const [highlightedTrackId, setHighlightedTrackId] = useState(null);
   const [voiceMemos, setVoiceMemos] = useState([]);
   const [stories, setStories]         = useState([]);
@@ -402,10 +134,7 @@ export default function ArtistProfilePage() {
   const [showCommunity, setShowCommunity]     = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showMerchConnect, setShowMerchConnect] = useState(false);
-  const [createTab, setCreateTab]             = useState('menu'); // 'menu' | 'story' | 'thought' | 'dm'
-  const [createThought, setCreateThought]     = useState('');
-  const [createThoughtSaving, setCreateThoughtSaving] = useState(false);
-  const [createThoughtMsg, setCreateThoughtMsg] = useState('');
+  const [createTab, setCreateTab]             = useState('menu'); // 'menu' | 'story' | 'dm' | 'memo' | 'live'
   // Live session state (for create modal)
   const [liveTitle, setLiveTitle]               = useState('');
   const [liveMode, setLiveMode]                 = useState('audio');
@@ -740,12 +469,6 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
       // viewer by RLS cannot leak its existence through a credit.
       .filter(col => col.tracks && col.tracks.is_published);
       setCollabs(uniqueCollabs);
-      const cutoff = new Date(Date.now() - THOUGHT_TTL_MS).toISOString();
-      const { data: thoughtsData } = await supabase
-        .from('artist_thoughts').select('id, content, created_at')
-        .eq('artist_id', artistData.id).gte('created_at', cutoff)
-        .order('created_at', { ascending: false });
-      setThoughts(thoughtsData || []);
       if (user) {
         const artistTrackIds = (trackData || []).map(t => t.id).filter(Boolean);
         const { data: streamData } = artistTrackIds.length > 0
@@ -1051,18 +774,20 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
       // Send push notification to all followers
       try {
         const { data: { session: authSession } } = await supabase.auth.getSession();
+        // That comment was wrong: send-push auth was NOT user-token based, it
+        // compared 'x-internal-secret' against a server-only env var, so this
+        // call returned 401 on every send and no follower ever got the push.
+        // It is user-token based now — and the token has to actually be sent.
         fetch('/.netlify/functions/send-push', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-internal-secret': '',  // send-push auth is user-token based
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             user_ids: followerIds,
             title:    `Message from ${artist.artist_name}`,
             body:     dmMessage.trim().slice(0, 100),
             url:      `/artist/${artist.slug}`,
             tag:      `dm-${artist.id}-${Date.now()}`,
+            token:    authSession?.access_token,
           }),
         }).catch(() => {});
       } catch {}
@@ -1426,11 +1151,13 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
         <div className="flex flex-col items-center lg:items-start mb-1">
           <div className="flex items-center space-x-2">
             <h1 className="text-3xl font-bold" style={{ fontFamily: `"${headingFont}", sans-serif`, color: textColor }}>{artist.artist_name}</h1>
-            {artist.is_verified && (
-              <div className="w-5 h-5 rounded-full flex items-center justify-center" style={{ backgroundColor: accentColor }}>
-                <Verified className="w-3 h-3" style={{ color: bgColor }} />
-              </div>
-            )}
+            {/* The tick was drawn in `bgColor` inside a circle of
+                `accentColor` — theme colours the artist picks. On a theme
+                where those two are close, the badge was a solid dot with an
+                invisible tick in it. Gold on its own, shadowed, so it reads
+                the same on every theme and matches the badge everywhere
+                else on the platform. */}
+            {artist.is_verified && <VerifiedBadge size="lg" />}
           </div>
           {isBeatmakerProfile && (
             <span className="mt-1.5 text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full"
@@ -2057,13 +1784,28 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
               const chip = collab.direction === 'host'
                 ? collabCredit(collab.role, other?.artist_name)
                 : collabRoleLabel(collab.role);
-              const line = collab.direction === 'host'
-                ? (other?.artist_name ? `On this track: ${other.artist_name}` : 'Featured guest')
-                : `${collabRoleLabel(collab.role) || 'Collaboration'} credit`;
+              // The second line under the title is gone.
+              //
+              // It said "Featured Artist credit" or "On this track: Ian Sani",
+              // which is the SAME fact as the chip on the artwork, written
+              // twice in two different shapes — and neither of them is where
+              // the full picture lives. The track page has the whole credit
+              // list: every collaborator, every role, in one place. So the
+              // card now carries the chip for the glance and an ⓘ for the
+              // detail, the same affordance For You uses for exactly this.
+              //
+              // The outer element changed from <button> to <div role="button">
+              // on purpose: the ⓘ is a real button, and a button inside a
+              // button is invalid HTML that React warns about and browsers
+              // resolve inconsistently.
+              const trackPath = collab.tracks?.slug ? `/track/${collab.tracks.slug}` : null;
               return (
-                <button
+                <div
                   key={collab.id}
+                  role="button"
+                  tabIndex={0}
                   onClick={() => handlePlayTrack(collab.tracks)}
+                  onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handlePlayTrack(collab.tracks); } }}
                   className="flex-shrink-0 w-36 text-left cursor-pointer group"
                 >
                   <div
@@ -2092,15 +1834,26 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
                     </div>
                   </div>
 
-                  <p className="text-sm font-medium truncate" style={{ color: textColor }}>
-                    {collab.tracks?.title}
-                  </p>
-                  {/* Was the literal string "Collab" on every card, which said
-                      nothing the section heading had not already said. */}
-                  <p className="text-xs truncate" style={{ color: secondaryColor }}>
-                    {line}
-                  </p>
-                </button>
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <p className="text-sm font-medium truncate flex-1 min-w-0" style={{ color: textColor }}>
+                      {collab.tracks?.title}
+                    </p>
+                    {/* Full credits, on the page that owns them. Rendered only
+                        when the track actually has a slug — without one this
+                        would link to /track/undefined, which is the "not
+                        found" page wearing a working link's clothes. */}
+                    {trackPath && (
+                      <button
+                        onClick={e => { e.stopPropagation(); navigate(trackPath); }}
+                        title="Full credits"
+                        aria-label={`Credits for ${collab.tracks?.title || 'this track'}`}
+                        className="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-full transition hover:bg-white/10 active:scale-90"
+                      >
+                        <Info className="w-3.5 h-3.5" style={{ color: `${textColor}45` }} strokeWidth={2} />
+                      </button>
+                    )}
+                  </div>
+                </div>
               );
             })}
           </div>
@@ -2449,7 +2202,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
       {/* ── Create Modal ─────────────────────────────────────────────────── */}
       {showCreateModal && (
         <div className="fixed inset-0 z-[600] flex items-center justify-center px-6 bg-black/80 backdrop-blur-sm md:pl-64"
-          onClick={() => { setShowCreateModal(false); setCreateTab('menu'); setCreateThought(''); setCreateThoughtMsg(''); }}>
+          onClick={() => { setShowCreateModal(false); setCreateTab('menu'); }}>
           <div className="w-full overflow-y-auto overflow-x-hidden rounded-3xl"
             style={{ maxWidth: 360, maxHeight: '85vh', backgroundColor: '#0f0f0f', border: '1px solid rgba(255,255,255,0.08)', boxShadow: '0 32px 64px rgba(0,0,0,0.6)' }}
             onClick={e => e.stopPropagation()}>
@@ -2458,16 +2211,16 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
             <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.06]">
               <div className="flex items-center space-x-2">
                 {createTab !== 'menu' && (
-                  <button onClick={() => { setCreateTab('menu'); setCreateThought(''); setCreateThoughtMsg(''); }}
+                  <button onClick={() => { setCreateTab('menu'); }}
                     className="w-7 h-7 flex items-center justify-center rounded-full bg-white/[0.08] hover:bg-white/[0.15] transition">
                     <ChevronDown className="w-3.5 h-3.5 text-white/60 rotate-90" />
                   </button>
                 )}
                 <p className="text-sm font-bold text-white">
-                  {createTab === 'menu' ? 'Create' : createTab === 'story' ? 'Add Story' : createTab === 'thought' ? 'Thought of the Day' : 'Message Fans'}
+                  {createTab === 'menu' ? 'Create' : createTab === 'story' ? 'Add Story' : 'Message Fans'}
                 </p>
               </div>
-              <button onClick={() => { setShowCreateModal(false); setCreateTab('menu'); setCreateThought(''); setCreateThoughtMsg(''); }}
+              <button onClick={() => { setShowCreateModal(false); setCreateTab('menu'); }}
                 className="w-8 h-8 flex items-center justify-center rounded-full bg-white/[0.08] hover:bg-white/[0.15] transition">
                 <X className="w-4 h-4 text-white/60" />
               </button>
@@ -2481,7 +2234,6 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
                   {[
                     { id: 'upload',  icon: '🎵', label: 'Upload Track',        sub: 'Add new music to your profile',         color: 'yellow' },
                     { id: 'story',   icon: '📸', label: 'Add Story',           sub: 'Share a 24hr clip with fans',           color: 'purple' },
-                    { id: 'thought', icon: '💭', label: 'Thought of the Day',  sub: "Share what's on your mind",            color: 'blue' },
                     { id: 'edit',    icon: '✏️', label: 'Edit Profile',        sub: 'Update your bio, photo and links',      color: 'gray' },
                     isPremium
                       ? { id: 'merch',        icon: '🛍️', label: 'Merch Store',    sub: 'Connect Printful · sell to your fans', color: 'purple' }
@@ -2516,45 +2268,6 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
               {createTab === 'story' && (
                 <div className="rounded-2xl border border-white/[0.06] overflow-hidden" style={{ background: 'rgba(255,255,255,0.02)' }}>
                   <StoryUpload artistId={artist.id} inline onUploaded={() => { setShowCreateModal(false); setCreateTab('menu'); }} />
-                </div>
-              )}
-
-              {/* ── Thought of the Day ── */}
-              {createTab === 'thought' && (
-                <div className="space-y-3">
-                  <textarea rows={4} maxLength={280} value={createThought}
-                    onChange={e => setCreateThought(e.target.value)}
-                    placeholder="What's on your mind today?"
-                    className="w-full px-3 py-2.5 bg-white/[0.06] rounded-xl text-white text-sm outline-none resize-none border border-white/[0.06] focus:border-white/20 transition placeholder-white/20" />
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-white/20">{createThought.length}/280</span>
-                    {createThoughtMsg && (
-                      <span className={`text-xs ${createThoughtMsg.includes('limit') || createThoughtMsg.includes('Failed') ? 'text-red-400' : 'text-green-400'}`}>
-                        {createThoughtMsg}
-                      </span>
-                    )}
-                  </div>
-                  <button
-                    disabled={createThoughtSaving || !createThought.trim()}
-                    onClick={async () => {
-                      if (!createThought.trim()) return;
-                      setCreateThoughtSaving(true);
-                      try {
-                        const { error } = await supabase.from('artist_thoughts').insert({
-                          artist_id: artist.id, content: createThought.trim(),
-                          created_at: new Date().toISOString(),
-                        });
-                        if (error) throw error;
-                        setCreateThoughtMsg('Posted!');
-                        setCreateThought('');
-                        setTimeout(() => { setShowCreateModal(false); setCreateTab('menu'); setCreateThoughtMsg(''); }, 1200);
-                      } catch { setCreateThoughtMsg('Failed to post'); }
-                      setCreateThoughtSaving(false);
-                    }}
-                    className="w-full py-3 rounded-2xl text-sm font-semibold transition disabled:opacity-40 flex items-center justify-center space-x-2"
-                    style={{ backgroundColor: primaryColor, color: bgColor }}>
-                    {createThoughtSaving ? <Loader className="w-4 h-4 animate-spin" /> : <span>Post Thought</span>}
-                  </button>
                 </div>
               )}
 
@@ -2758,21 +2471,6 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
                 <ArtistGuestbook artistId={artist?.id} textColor={textColor} accentColor={accentColor} isOwner={isProfileOwner} />
               </div>
 
-              {/* Thoughts of the Day */}
-              {thoughts.length > 0 && (
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: `${textColor}40` }}>Thoughts</p>
-                  <div className="space-y-3">
-                    {thoughts.map(thought => (
-                      <ThoughtBlock key={thought.id} thought={thought} isOwner={isProfileOwner}
-                        secondaryColor={secondaryColor} textColor={textColor} bgColor={bgColor}
-                        user={user} navigate={navigate}
-                        onDeleted={(id) => setThoughts(prev => prev.filter(t => t.id !== id))} />
-                    ))}
-                  </div>
-                </div>
-              )}
-
               {/* Voice Memos */}
               {voiceMemos.length > 0 && (
                 <div>
@@ -2785,7 +2483,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
                 </div>
               )}
 
-              {thoughts.length === 0 && voiceMemos.length === 0 && (
+              {voiceMemos.length === 0 && (
                 <p className="text-xs text-white/20 text-center py-4">Nothing here yet, check back soon</p>
               )}
             </div>
