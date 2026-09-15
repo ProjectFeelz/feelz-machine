@@ -619,9 +619,26 @@ function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare, onN
   };
 
   const goToArtist = () => {
+    // Guarded. Without a slug this navigated to /artist/null, which renders
+    // the "artist not found" page — so a track whose artist row is missing a
+    // slug gave the credit the look of a working link and the behaviour of a
+    // dead end.
+    if (!track.artist_slug) return;
     setIsMinimized(true);
     navigate(`/artist/${track.artist_slug}`);
   };
+
+  // What the credit on the card actually says.
+  //
+  // This used to be `@{track.artist_slug || track.artist_name}` — slug FIRST,
+  // so the card showed a database key in preference to the name the artist
+  // typed in. On any account created during the old signup race that key is
+  // something like `eon-jams-mooqa3lj`, a real name with a random suffix
+  // welded on. The name comes first now, and the `@` goes with it only when
+  // there is no name and a handle is genuinely all we have: `@` prefixes a
+  // handle, it does not prefix "EON Jams".
+  const artistLabel = (track.artist_name || '').trim()
+    || (track.artist_slug ? `@${track.artist_slug}` : 'Unknown artist');
 
   const handleTap = () => {
     togglePlay();
@@ -824,14 +841,33 @@ function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare, onN
 
       {/* Bottom info */}
       <div className="absolute bottom-24 left-4 right-16 z-20" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center space-x-3 mb-1">
+        {/* min-w-0 on the row, so the credit pill below is allowed to shrink.
+            A flex child will not go narrower than its content unless it can,
+            and without this the long-name truncation never engages — the pill
+            just pushes Follow and the hide button off the right edge. */}
+        <div className="flex items-center space-x-2 mb-1 min-w-0">
+          {/* The credit, as a pill.
+              Deliberately the QUIET one. Follow beside it is the action and
+              keeps the loud red treatment; identity should not compete with
+              it, so this is neutral glass — it reads as a pill and as
+              tappable without pulling the eye off the button that matters.
+              No max-width on purpose: `min-w-0` plus `truncate` lets flex give
+              the pill whatever the row has left after Follow and the hide
+              button (both flex-shrink-0), so a name is cut ONLY when it
+              genuinely does not fit. A fixed cap would have clipped
+              "EON Jams Collective" on a phone that had room for all of it.
+              The full name stays available on long-press via `title`. */}
           <button onClick={goToArtist}
-            className="text-[13px] font-bold text-white/60 text-left hover:text-white transition">
-            @{track.artist_slug || track.artist_name}
+            title={artistLabel}
+            className="min-w-0 truncate px-2.5 py-0.5 rounded-full
+                       text-[12px] font-bold text-white/75 text-left
+                       hover:text-white hover:bg-white/[0.14] transition active:scale-95"
+            style={{ background: 'rgba(255,255,255,0.10)', border: '1px solid rgba(255,255,255,0.16)' }}>
+            {artistLabel}
           </button>
           {user && !isOwnTrack && following === false && (
             <button onClick={e => { e.stopPropagation(); handleFollow(); }}
-              className="flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-bold text-white transition active:scale-95"
+              className="flex-shrink-0 flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-bold text-white transition active:scale-95"
               style={{ background: 'rgba(239,68,68,0.25)', border: '1px solid rgba(239,68,68,0.4)' }}>
               <span>+ Follow</span>
             </button>
@@ -854,7 +890,7 @@ function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare, onN
                 }, 3000);
                 window.__feelz_hide_timer = t;
               }}
-              className="flex items-center space-x-1 opacity-40 hover:opacity-70 transition active:scale-90"
+              className="flex-shrink-0 flex items-center space-x-1 opacity-40 hover:opacity-70 transition active:scale-90"
             >
               <EyeOff className="w-3.5 h-3.5 text-white/70" strokeWidth={2} />
               <span className="text-[11px] text-white/60">Hide</span>
