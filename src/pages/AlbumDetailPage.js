@@ -244,7 +244,15 @@ export default function AlbumDetailPage() {
     setShowShareCard(true);
   };
 
+  // The album-price fallback is what puts a "$1.43" on a track that has no
+  // price of its own — the album's price split across its tracks.
+  //
+  // A track marked NOT downloadable is excluded now. It used to get a price
+  // and a buy button from this fallback, the server refused the order because
+  // the track is not downloadable, and the buyer saw "payment failed" on a
+  // button that should never have been there.
   const getTrackPrice = (track) => {
+    if (track.is_downloadable === false) return 0;
     if (track.download_price > 0) return track.download_price;
     if (album?.price > 0 && tracks.length > 0) return parseFloat((album.price / tracks.length).toFixed(2));
     return 0;

@@ -177,6 +177,21 @@ function useTierInternal() {
         .eq('user_id', userId)
         .maybeSingle();
 
+      // An explicit 'free' is an ANSWER, not a miss.
+      //
+      // This used to fall straight through to the subscriptions table whenever
+      // listeners.tier was 'free', which meant an admin toggling somebody down
+      // to free did nothing at all: the old active grant row was still there,
+      // the fallback found it, and the account resolved back to pro. "Set to
+      // free" and "we have no idea what this account is" were the same state
+      // to this function. They are not the same thing, and only the second one
+      // should be asking the subscriptions table.
+      if (listenerRow && listenerRow.tier === 'free') {
+        setListenerTierSlug('free');
+        setLoading(false);
+        return;
+      }
+
       if (listenerRow?.tier && listenerRow.tier !== 'free') {
         // Check expiry
         if (listenerRow.tier_expires_at) {

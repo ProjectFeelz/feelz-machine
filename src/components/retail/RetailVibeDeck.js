@@ -23,6 +23,34 @@ import { R } from './retailTheme';
 
 const SWIPE_COMMIT = 110;   // px past which a release counts as a decision
 const SWIPE_HINT   = 40;    // px at which the accept/reject tint starts showing
+const DEPTH        = 3;     // cards visible behind the front one
+
+// Reduced motion is honoured: the stack still shows depth, it just does not
+// animate between positions.
+const REDUCED = typeof window !== 'undefined'
+  && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+
+// Where a card sits at a given depth. 0 is the front card.
+// Cascading UP, the way records lean back in a crate: each one behind is
+// smaller, higher, dimmer and very slightly out of focus, so the eye reads
+// distance rather than a stack of identical rectangles.
+function depthStyle(d) {
+  if (d === 0) return { transform: 'translate3d(0,0,0) scale(1)', opacity: 1, filter: 'none', zIndex: 40 };
+
+  // The numbers matter more than they look. Scaling a card down already pulls
+  // its top edge DOWN by half the height it loses, so a -20px lift against a
+  // 0.93 scale nets about 11px of visible card — which against a black page is
+  // nothing, and the stack reads as a shadow. The lift has to beat the shrink
+  // by enough to leave a real band showing, hence 38 against 0.05.
+  const lift  = d * 38;
+  const scale = 1 - d * 0.05;
+  return {
+    transform: `translate3d(0, ${-lift}px, 0) scale(${scale})`,
+    opacity: Math.max(0.3, 0.74 - (d - 1) * 0.2),
+    filter: `saturate(${Math.max(0.4, 0.9 - d * 0.18)}) blur(${(d - 1) * 0.8}px)`,
+    zIndex: 40 - d,
+  };
+}
 
 export default function RetailVibeDeck({
   playlists,
@@ -41,10 +69,15 @@ export default function RetailVibeDeck({
   const moved  = React.useRef(false);
 
   const top  = playlists[idx] || null;
-  // Three behind, not one: a single ghost card reads as a rendering artefact,
-  // a stack reads as a queue with more in it.
-  const queue = [playlists[idx + 1], playlists[idx + 2], playlists[idx + 3]].filter(Boolean);
   const done = idx >= playlists.length;
+
+  // The visible stack: the front card plus DEPTH behind it. Rendered from one
+  // array rather than three hard-coded classes, which is what makes the
+  // cascade work — each card keeps its DOM node as idx advances, so when the
+  // front one flies out the others animate FORWARD into its place instead of
+  // snapping. A fixed slice also means a forty-vibe queue still renders four
+  // nodes, not forty.
+  const visible = playlists.slice(idx, idx + DEPTH + 1);
 
   // The card is sized from the viewport rather than a fixed max-width, because
   // at 420px wide a 3:4 card is 560px tall and, once the preview line and the
@@ -57,10 +90,14 @@ export default function RetailVibeDeck({
   const [box, setBox] = React.useState({ w: 360, h: 480 });
   React.useEffect(() => {
     const measure = () => {
-      const chrome = window.innerWidth >= 1024 ? 300 : 250;  // header, preview line, buttons
+      // Header, preview line and buttons — plus the room the cascade needs
+      // ABOVE the front card, since each card behind lifts DEPTH * 38px out of
+      // the box. Without that in the budget the top of the stack runs into the
+      // line above it.
+      const chrome = (window.innerWidth >= 1024 ? 250 : 210) + DEPTH * 38;
       const railW  = window.innerWidth >= 1024 ? 360 : 0;    // the rail beside it
-      const byHeight = Math.max(280, Math.min(window.innerHeight - chrome, 520));
-      const byWidth  = Math.max(210, Math.min(window.innerWidth - railW - 40, 420));
+      const byHeight = Math.max(240, Math.min(window.innerHeight - chrome, 520));
+      const byWidth  = Math.max(180, Math.min(window.innerWidth - railW - 40, 420));
       const h = Math.min(byHeight, byWidth / 0.75);
       setBox({ w: Math.round(h * 0.75), h: Math.round(h) });
     };
@@ -148,45 +185,6 @@ export default function RetailVibeDeck({
   const tint     = Math.min(Math.abs(offset) / 200, 0.55);
   const saved    = savedIds.has(top.id);
 
-  const Card = ({ pl, style, faded, onClick }) => (
-    <div
-      className="absolute inset-0 rounded-[28px] overflow-hidden select-none"
-      style={{
-        background: 'linear-gradient(150deg, rgba(26,22,40,0.94) 0%, rgba(12,12,20,0.98) 60%, rgba(6,6,10,0.99) 100%)',
-        border: `1px solid ${R.borderUp}`,
-        boxShadow: faded ? '0 8px 30px rgba(0,0,0,0.4)' : '0 24px 70px rgba(0,0,0,0.65)',
-        ...style,
-      }}
-      onClick={onClick}
-    >
-      {pl.cover_image_url ? (
-        <img src={pl.cover_image_url} alt="" className="absolute inset-0 w-full h-full object-cover" draggable={false} />
-      ) : (
-        <div className="absolute inset-0 flex items-center justify-center">
-          <Music className="w-16 h-16" style={{ color: R.textGhost }} />
-        </div>
-      )}
-
-      {/* The text has to stay readable over any artwork, so it sits on its own
-          gradient rather than trusting the image to be dark at the bottom. */}
-      <div
-        className="absolute inset-x-0 bottom-0 p-6"
-        style={{ background: 'linear-gradient(to top, rgba(5,5,9,0.97) 12%, rgba(5,5,9,0.82) 48%, transparent 100%)' }}
-      >
-        {pl.mood && (
-          <span className="inline-block text-[10px] font-bold uppercase tracking-[0.18em] px-2.5 py-1 rounded-full mb-2.5"
-            style={{ background: R.blueSoft, color: R.blueLift, border: '1px solid rgba(37,81,196,0.40)' }}>
-            {pl.mood}
-          </span>
-        )}
-        <h3 className="text-2xl sm:text-3xl font-black leading-tight" style={{ color: R.text }}>{pl.title}</h3>
-        {pl.description && (
-          <p className="text-sm mt-1.5 line-clamp-2 leading-relaxed" style={{ color: R.textDim }}>{pl.description}</p>
-        )}
-      </div>
-    </div>
-  );
-
   return (
     <div>
       <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
@@ -196,61 +194,107 @@ export default function RetailVibeDeck({
         <p className="text-[11px]" style={{ color: R.textGhost }}>{playlists.length - idx} left</p>
       </div>
 
-      {/* The deck. A 3:4 window sized to fit the screen it is on, centred,
-          with the rest of the queue stacked behind it. */}
+      {/* THE CASCADE
+          One absolutely-positioned stack, rendered from `visible` deepest
+          first so DOM order and z-index agree. The front card is the only one
+          that takes the drag; the others are inert and lean back behind it.
+
+          The thing that makes it cascade rather than cut: every card is keyed
+          by its playlist id, so when idx advances React keeps each node and
+          only changes its transform. Depth 2 animates into depth 1, depth 1
+          into the front, all on the same easing as the card flying out. Keying
+          by index instead would swap the contents underneath a static
+          transform and the whole effect collapses. */}
       <div
         className="relative mx-auto"
-        style={{ width: cardW, height: cardH }}
+        style={{ width: cardW, height: cardH, marginTop: DEPTH * 38 }}
       >
-        {/* The queue. Each one further back, smaller, dimmer and greyer, so
-            the stack has depth without any of them competing to be read. */}
-        {queue.map((pl, n) => {
-          const depth = queue.length - n;   // the furthest card draws first
-          const q = queue[queue.length - n - 1];
+        {visible.slice().reverse().map((pl) => {
+          const d = visible.indexOf(pl);
+          const isFront = d === 0;
+          const ds = depthStyle(d);
+
           return (
-            <Card
-              key={q.id}
-              pl={q}
-              faded
+            <div
+              key={pl.id}
+              className="absolute inset-0"
               style={{
-                transform: `scale(${1 - depth * 0.045}) translateY(${depth * 12}px)`,
-                opacity: 0.55 - (depth - 1) * 0.16,
-                filter: `saturate(${0.7 - (depth - 1) * 0.2}) blur(${(depth - 1) * 1.2}px)`,
-                zIndex: 0,
+                ...ds,
+                // The front card carries the drag on top of its own transform.
+                transform: isFront
+                  ? `translate3d(${offset}px,0,0) rotate(${rotation}deg)`
+                  : ds.transform,
+                transition: REDUCED
+                  ? 'none'
+                  : (isFront && startX.current !== null
+                      ? 'none'                       // following the finger, no lag
+                      : 'transform 0.34s cubic-bezier(0.32,0.72,0,1), opacity 0.34s ease, filter 0.34s ease'),
+                willChange: 'transform, opacity',
+                touchAction: isFront ? 'pan-y' : 'auto',
+                pointerEvents: isFront ? 'auto' : 'none',
               }}
-            />
+              onTouchStart={isFront ? onTouchStart : undefined}
+              onTouchMove={isFront ? onTouchMove : undefined}
+              onTouchEnd={isFront ? onTouchEnd : undefined}
+            >
+              <div
+                className="absolute inset-0 rounded-[28px] overflow-hidden select-none"
+                style={{
+                  background: 'linear-gradient(150deg, rgba(26,22,40,0.94) 0%, rgba(12,12,20,0.98) 60%, rgba(6,6,10,0.99) 100%)',
+                  border: `1px solid ${isFront ? R.chromeDim : R.border}`,
+                  boxShadow: isFront
+                    ? '0 26px 70px rgba(0,0,0,0.7), 0 0 0 1px rgba(139,92,246,0.10)'
+                    // A lit top edge on the ones behind. Without it a dark
+                    // sleeve on a black page has no silhouette at all and the
+                    // depth disappears on exactly the artwork that needs it.
+                    : '0 -1px 0 rgba(198,202,212,0.22) inset, 0 12px 34px rgba(0,0,0,0.55)',
+                }}
+                onClick={isFront ? () => { if (!moved.current) onOpen?.(pl); } : undefined}
+              >
+                {pl.cover_image_url ? (
+                  <img src={pl.cover_image_url} alt="" className="absolute inset-0 w-full h-full object-cover" draggable={false} />
+                ) : (
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <Music className="w-16 h-16" style={{ color: R.textGhost }} />
+                  </div>
+                )}
+
+                {/* Only the front card carries type. The ones behind are
+                    shapes — three stacked titles would read as a list. */}
+                {isFront && (
+                  <div
+                    className="absolute inset-x-0 bottom-0 p-6"
+                    style={{ background: 'linear-gradient(to top, rgba(5,5,9,0.97) 12%, rgba(5,5,9,0.82) 48%, transparent 100%)' }}
+                  >
+                    {pl.mood && (
+                      <span className="inline-block text-[10px] font-bold uppercase tracking-[0.18em] px-2.5 py-1 rounded-full mb-2.5"
+                        style={{ background: R.violetSoft, color: R.violetLift, border: `1px solid ${R.violetEdge}` }}>
+                        {pl.mood}
+                      </span>
+                    )}
+                    <h3 className="text-2xl sm:text-3xl font-black leading-tight" style={{ color: R.text }}>{pl.title}</h3>
+                    {pl.description && (
+                      <p className="text-sm mt-1.5 line-clamp-2 leading-relaxed" style={{ color: R.textDim }}>{pl.description}</p>
+                    )}
+                  </div>
+                )}
+
+                {/* Decision tint, front card only. It appears as you drag, so
+                    the gesture confirms itself before you let go. */}
+                {isFront && Math.abs(offset) > SWIPE_HINT && (
+                  <div
+                    className="absolute inset-0 pointer-events-none flex items-center justify-center"
+                    style={{ background: offset > 0 ? `rgba(47,125,79,${tint})` : `rgba(163,43,43,${tint})` }}
+                  >
+                    {offset > 0
+                      ? <Bookmark className="w-16 h-16 drop-shadow-lg" style={{ color: '#fff' }} fill="currentColor" />
+                      : <X className="w-16 h-16 drop-shadow-lg" style={{ color: '#fff' }} />}
+                  </div>
+                )}
+              </div>
+            </div>
           );
         })}
-
-        <div
-          className="absolute inset-0"
-          style={{
-            transform: `translateX(${offset}px) rotate(${rotation}deg)`,
-            transition: startX.current === null ? 'transform 0.22s cubic-bezier(0.32,0.72,0,1)' : 'none',
-            touchAction: 'pan-y',
-          }}
-          onTouchStart={onTouchStart}
-          onTouchMove={onTouchMove}
-          onTouchEnd={onTouchEnd}
-        >
-          <Card
-            pl={top}
-            onClick={() => { if (!moved.current) onOpen?.(top); }}
-          />
-
-          {/* Decision tint. Green for keep, red for pass — it appears as you
-              drag so the gesture confirms itself before you let go. */}
-          {Math.abs(offset) > SWIPE_HINT && (
-            <div
-              className="absolute inset-0 rounded-[28px] pointer-events-none flex items-center justify-center"
-              style={{ background: offset > 0 ? `rgba(47,125,79,${tint})` : `rgba(163,43,43,${tint})` }}
-            >
-              {offset > 0
-                ? <Bookmark className="w-16 h-16 text-white drop-shadow-lg" fill="currentColor" />
-                : <X className="w-16 h-16 text-white drop-shadow-lg" />}
-            </div>
-          )}
-        </div>
       </div>
 
       {/* What is playing underneath the deck — the preview is the whole point,

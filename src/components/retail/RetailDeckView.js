@@ -54,7 +54,9 @@ export default function RetailDeckView({
         /* Desktop only — see the note in RetailRecordSleeve about 100vh on a
            phone. On mobile the deck sizes itself from the card instead. */
         @media (min-width: 1024px) {
-          .fm-retail-rail { width: ${PANEL}px; height: calc(100vh - ${HEADER}px); }
+          /* Height only — the width is on the element via lg:w-[360px], so it
+             does not depend on this rule out-specifying Tailwind's w-full. */
+          .fm-retail-rail { height: calc(100vh - ${HEADER}px); }
           .fm-retail-deck { min-height: calc(100vh - ${HEADER}px); }
         }
       `}</style>
@@ -84,7 +86,7 @@ export default function RetailDeckView({
           moving between the two screens does not feel like moving between two
           products. Pinned and scrollable in its own right. */}
       <aside
-        className="fm-retail-rail w-full lg:flex-shrink-0 lg:sticky lg:overflow-y-auto px-5 py-6 space-y-8"
+        className="fm-retail-rail w-full lg:w-[360px] lg:flex-shrink-0 lg:sticky lg:overflow-y-auto px-5 py-6 space-y-8"
         style={{
           background: R.bgPanel,
           borderLeft: `1px solid ${R.border}`,

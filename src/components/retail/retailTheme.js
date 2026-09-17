@@ -33,11 +33,18 @@ export const R = {
   textFaint: 'rgba(236, 236, 242, 0.34)',
   textGhost: 'rgba(236, 236, 242, 0.17)',
 
-  // Accents — dark, never neon
-  violet:     '#5B21B6',
-  violetLift: '#6D28D9',
-  violetSoft: 'rgba(109, 40, 217, 0.18)',
-  violetEdge: 'rgba(124, 58, 237, 0.42)',
+  // Accents. Pitched at the Victrola: a saturated purple sitting on black
+  // felt, with chrome on the corners. Bright enough to be the product's
+  // colour, dark enough that a venue screen is still mostly black.
+  violet:     '#6D28D9',
+  violetLift: '#8B5CF6',
+  violetGlow: '#A176F6',
+  violetSoft: 'rgba(139, 92, 246, 0.16)',
+  violetEdge: 'rgba(139, 92, 246, 0.45)',
+
+  // The chrome on the case corners — hairlines and metal highlights.
+  chrome:     '#C6CAD4',
+  chromeDim:  'rgba(198, 202, 212, 0.30)',
 
   blue:       '#1E3A8A',
   blueLift:   '#2A4CA8',

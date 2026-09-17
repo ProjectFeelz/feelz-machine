@@ -106,7 +106,7 @@ export default function RetailRecordSleeve({
           hairline is the border now, which is calmer than drawing a box
           around either side. */}
       <aside
-        className="w-full lg:flex-shrink-0 lg:flex lg:flex-col lg:sticky"
+        className="w-full lg:w-[360px] lg:flex-shrink-0 lg:flex lg:flex-col lg:sticky"
         style={{
           background: R.bgPanel,
           borderRight: `1px solid ${R.border}`,
@@ -122,7 +122,11 @@ export default function RetailRecordSleeve({
              transport below the fold — the exact thing pinning it is for. */
           @media (min-width: 1024px) {
             .fm-retail-record { min-height: calc(100vh - ${HEADER}px); }
-            .fm-retail-panel  { height: calc(100vh - ${HEADER}px); width: ${PANEL}px; }
+            /* Height only. The WIDTH lives on the <aside> itself via
+               lg:w-[360px]. It used to be set here, on the inner div, while
+               the aside kept w-full — so the aside ate the whole flex row and
+               the record and tracklist beside it were squeezed to nothing. */
+            .fm-retail-panel  { height: calc(100vh - ${HEADER}px); }
           }
         `}</style>
 

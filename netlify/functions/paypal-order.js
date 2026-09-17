@@ -100,19 +100,72 @@ exports.handler = async (event) => {
       );
       const { data: track, error: trackErr } = await adminClient
         .from('tracks')
-        .select('id, title, download_price, is_downloadable')
+        .select('id, title, download_price, is_downloadable, album_id')
         .eq('id', trackId)
         .maybeSingle();
 
       if (trackErr || !track) {
         return { statusCode: 404, body: JSON.stringify({ error: 'Track not found' }) };
       }
-      if (!track.is_downloadable || !track.download_price || track.download_price <= 0) {
-        return { statusCode: 400, body: JSON.stringify({ error: 'This track is not available for paid download' }) };
+
+      if (!track.is_downloadable) {
+        console.warn('[paypal-order] refused:', trackId, 'is not downloadable');
+        return {
+          statusCode: 400,
+          body: JSON.stringify({ error: 'This track is not available for download', reason: 'not_downloadable' }),
+        };
       }
 
-      const safeAmount = parseFloat(track.download_price).toFixed(2);
+      // ── The price, resolved the way the ALBUM PAGE resolves it ──────────
+      //
+      // This is what was breaking purchases. A track that carries no price of
+      // its own still shows a buy button on an album page, priced at the
+      // album's price divided by its tracks — that is where a "$1.43" on a
+      // $10 album of seven tracks comes from. This function only ever looked
+      // at tracks.download_price, found nothing, and returned 400. The buyer
+      // saw "payment failed" on a button the app had offered them, on a track
+      // that was genuinely for sale.
+      //
+      // Resolved here, from the database, for the same reason the track price
+      // is: the client is never trusted with an amount.
+      let price = Number(track.download_price) || 0;
+      let priceSource = 'track';
+
+      if (price <= 0 && track.album_id) {
+        const [{ data: album }, { count: trackCount }] = await Promise.all([
+          adminClient.from('albums').select('price').eq('id', track.album_id).maybeSingle(),
+          adminClient.from('tracks').select('id', { count: 'exact', head: true })
+            .eq('album_id', track.album_id).eq('is_published', true),
+        ]);
+
+        const albumPrice = Number(album?.price) || 0;
+        if (albumPrice > 0 && trackCount > 0) {
+          price = Math.round((albumPrice / trackCount) * 100) / 100;
+          priceSource = `album (${albumPrice} / ${trackCount} tracks)`;
+        }
+      }
+
+      if (price <= 0) {
+        console.warn('[paypal-order] refused:', trackId, 'has no price on the track or its album');
+        return {
+          statusCode: 400,
+          body: JSON.stringify({ error: 'This track is not for sale', reason: 'no_price' }),
+        };
+      }
+
+      // PayPal rejects an order below its minimum, which would otherwise come
+      // back as an opaque 400 from the block below rather than saying why.
+      if (price < 0.5) {
+        console.warn('[paypal-order] refused:', trackId, 'price', price, 'is below the PayPal minimum');
+        return {
+          statusCode: 400,
+          body: JSON.stringify({ error: 'This track costs too little to sell on its own', reason: 'below_minimum' }),
+        };
+      }
+
+      const safeAmount = price.toFixed(2);
       const trackTitle = track.title;
+      console.log('[paypal-order] CREATE', JSON.stringify({ trackId, safeAmount, priceSource }));
 
       const orderPayload = {
         intent: 'CAPTURE',
@@ -136,6 +189,11 @@ exports.handler = async (event) => {
       const result = await paypalRequest('POST', '/v2/checkout/orders', orderPayload, accessToken);
 
       if (result.status !== 201) {
+        // Logged as well as returned. "Failed to create order" in a toast with
+        // the reason only in the response body is how a payment bug stays
+        // invisible for a week.
+        console.error('[paypal-order] PayPal refused the order:',
+          result.status, JSON.stringify(result.body));
         return {
           statusCode: 400,
           body: JSON.stringify({ error: 'Failed to create order', details: result.body }),
