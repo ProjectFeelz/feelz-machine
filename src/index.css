@@ -172,6 +172,46 @@ html, body, #root {
 * { scrollbar-width: none; -ms-overflow-style: none; }
 *::-webkit-scrollbar { display: none; }
 
+/* ── Horizontal rails, for a mouse ──────────────────────────────────────────
+   Hiding every scrollbar is right on touch and wrong on a desktop mouse: a
+   rail like "New to you" had no way to reach what is past the fold, because a
+   trackpad can swipe sideways and a wheel cannot.
+
+   This used to be solved with a global wheel listener in index.js that turned
+   vertical wheel input into horizontal movement over a rail. That froze the
+   page — the rails cover most of the viewport, so the pointer was nearly
+   always inside one and every tick was swallowed before the page could move.
+
+   A scrollbar does the same job with no event handling at all. `pointer: fine`
+   means a mouse or trackpad: phones and tablets are untouched and keep the
+   clean, bar-free rows. */
+@media (pointer: fine) {
+  .overflow-x-auto,
+  .overflow-x-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.20) transparent;
+    padding-bottom: 2px;
+  }
+  .overflow-x-auto::-webkit-scrollbar,
+  .overflow-x-scroll::-webkit-scrollbar {
+    display: block;
+    height: 6px;
+  }
+  .overflow-x-auto::-webkit-scrollbar-track,
+  .overflow-x-scroll::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .overflow-x-auto::-webkit-scrollbar-thumb,
+  .overflow-x-scroll::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.16);
+    border-radius: 999px;
+  }
+  .overflow-x-auto:hover::-webkit-scrollbar-thumb,
+  .overflow-x-scroll:hover::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.34);
+  }
+}
+
 @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
 .animate-slide-up { animation: slideUp 0.25s ease-out; }
 

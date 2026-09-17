@@ -11,12 +11,13 @@
 import React from 'react';
 import { Helmet } from 'react-helmet-async';
 import { useNavigate } from 'react-router-dom';
-import { Loader, Play, Pause, SkipForward, SkipBack, Shuffle, Repeat, Repeat1, Music, MapPin, Megaphone, Heart, Bell, Bookmark, MessageCircle, User, LogOut, FileText, Shield, Menu, ChevronRight , TrendingUp} from 'lucide-react';
+import { Loader, Play, Pause, SkipForward, SkipBack, Shuffle, Repeat, Repeat1, Music, MapPin, Megaphone, Heart, Bell, User, LogOut, FileText, Shield, Menu, ChevronRight , TrendingUp} from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../supabaseClient';
 import RetailPlaylistComments from '../components/retail/RetailPlaylistComments';
+import RetailVibeDeck from '../components/retail/RetailVibeDeck';
+import RetailRecordSleeve from '../components/retail/RetailRecordSleeve';
 import InstallPrompt from '../components/InstallPrompt';
-import VinylRecord from '../components/VinylRecord';
 import RetailReferrals from '../components/retail/RetailReferrals';
 import { buildPlayRow, sendPlay, flushQueue } from '../utils/retailPlayQueue';
 import useRetailManifest from '../hooks/useRetailManifest';
@@ -119,6 +120,9 @@ export default function RetailPlayerPage() {
   const [showInbox, setShowInbox] = React.useState(false);
   const [loadingPlaylists, setLoadingPlaylists] = React.useState(false);
   const [selectedPlaylist, setSelectedPlaylist] = React.useState(null);
+  // 'deck'   — the jukebox, one vibe at a time, previewing itself
+  // 'record' — that vibe opened up as a record out of its sleeve
+  const [view, setView] = React.useState('deck');
   const [tracks, setTracks] = React.useState([]);
   const [loadingTracks, setLoadingTracks] = React.useState(false);
   const [currentIndex, setCurrentIndex] = React.useState(0);
@@ -329,7 +333,22 @@ export default function RetailPlayerPage() {
       });
   };
 
-  const openPlaylist = async (playlist) => {
+  // Loading a vibe and OPENING it are now two different things.
+  //
+  // The deck previews whatever card is on top — the music starts while you are
+  // still deciding, which is the whole point of a jukebox — but you are still
+  // on the deck, not inside the record. `open` is what moves the screen.
+  //
+  // selectedPlaylist therefore means "the vibe that is playing", not "the
+  // screen you are on". That distinction matters for logPlay: a preview is a
+  // real play of a real track in a real room, so it must carry its playlist id
+  // like any other, and it does.
+  const loadPlaylist = async (playlist, { open }) => {
+    if (open) setView('record');
+    if (selectedPlaylist?.id === playlist.id && tracks.length > 0) {
+      // Already loaded and playing — opening it should not restart the room.
+      return;
+    }
     audioRef.current?.pause();
     setIsPlaying(false);
     setMode('track');
@@ -353,6 +372,14 @@ export default function RetailPlayerPage() {
     // source effect watches — there is no token to remember here.
     setNeedsGesture(false);
     if (loaded.length > 0) setIsPlaying(true);
+  };
+
+  const openPlaylist    = (playlist) => loadPlaylist(playlist, { open: true });
+  const previewPlaylist = (playlist) => loadPlaylist(playlist, { open: false });
+
+  const stopPreview = () => {
+    audioRef.current?.pause();
+    setIsPlaying(false);
   };
 
   // These rows are what calculate_retail_payout() divides the artist pool
@@ -861,7 +888,7 @@ export default function RetailPlayerPage() {
       )}
 
       <div className="px-4 pt-5">
-        {!selectedPlaylist ? (
+        {view === 'deck' ? (
           <>
             {savedPlaylists.length > 0 && (
               <div className="mb-5">
@@ -945,187 +972,49 @@ export default function RetailPlayerPage() {
                 </div>
               </div>
             )}
-            <p className="text-xs text-white/40 mb-3">Pick a vibe to play.</p>
             {loadingPlaylists ? (
               <div className="flex justify-center py-12"><Loader className="w-5 h-5 text-white/30 animate-spin" /></div>
-            ) : playlists.length === 0 ? (
-              <p className="text-sm text-white/30 text-center py-12">No playlists available yet.</p>
             ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-                {playlists.map(pl => (
-                  <button key={pl.id} onClick={() => openPlaylist(pl)}
-                    className="text-left group">
-                    <div className="w-full aspect-square rounded-xl overflow-hidden mb-3 flex items-center justify-center transition duration-300 group-hover:-translate-y-1"
-                      style={{
-                        background: 'linear-gradient(135deg, rgba(167,139,250,0.14) 0%, rgba(30,20,55,0.9) 100%)',
-                        border: '1px solid rgba(167,139,250,0.20)',
-                        boxShadow: '0 6px 24px rgba(0,0,0,0.45)',
-                      }}>
-                      {pl.cover_image_url
-                        ? <img src={pl.cover_image_url} alt="" className="w-full h-full object-cover group-hover:scale-105 transition duration-300" />
-                        : <Music className="w-9 h-9 text-purple-300/25" />}
-                    </div>
-                    <p className="text-sm font-bold text-white truncate">{pl.title}</p>
-                    {pl.mood && <p className="text-xs text-white/40 mt-0.5 truncate">{pl.mood}</p>}
-                  </button>
-                ))}
-              </div>
+              <RetailVibeDeck
+                playlists={playlists}
+                savedIds={savedPlaylistIds}
+                onSave={toggleSave}
+                onOpen={(pl) => openPlaylist(pl)}
+                onPreview={(pl) => pl && previewPlaylist(pl)}
+                onStopPreview={stopPreview}
+                isPreviewing={isPlaying && mode === 'track'}
+                previewLabel={
+                  tracks[currentIndex]
+                    ? `${tracks[currentIndex].artist?.artist_name || 'Unknown'} — ${tracks[currentIndex].title}`
+                    : null
+                }
+              />
             )}
           </>
         ) : (
-          <>
-            {/* Back is navigation, not a stop button. This used to pause the
-                audio, so a venue browsing other vibes silenced their own
-                room. The player bar stays up and keeps playing. */}
-            <button onClick={() => setSelectedPlaylist(null)}
-              className="text-xs text-white/40 mb-4 hover:text-white/70 transition">&larr; All playlists</button>
-
-            {/* Album-style header: cover, mood, description, featured artists.
-                `relative` so the half-vinyl below can be anchored to the
-                header's bottom edge, which is what does the cutting off. */}
-            <div className="relative flex flex-col sm:flex-row sm:items-end gap-5 mb-6">
-              {/* Artwork with half a record sliding out from behind it while
-                  this playlist is playing. Same VinylRecord component the
-                  mini player and For You use, not a copy: it already handles
-                  the spin, the grooves and putting the current track's
-                  artwork on the centre label, and a second implementation
-                  would drift from it.
-
-                  Clipped to its left half by the overflow-hidden wrapper, so
-                  it reads as a record sitting in a sleeve. Hidden on small
-                  screens, where there is no room beside the cover. */}
-              <div className="relative flex-shrink-0 flex items-center">
-                <div className="w-56 h-56 rounded-xl overflow-hidden flex items-center justify-center relative z-10"
-                  style={{
-                    background: 'linear-gradient(135deg, rgba(167,139,250,0.16) 0%, rgba(30,20,55,0.9) 100%)',
-                    border: '1px solid rgba(167,139,250,0.22)',
-                    boxShadow: '0 8px 28px rgba(0,0,0,0.5)',
-                  }}>
-                  {selectedPlaylist.cover_image_url
-                    ? <img src={selectedPlaylist.cover_image_url} alt="" className="w-full h-full object-cover" />
-                    : <Music className="w-14 h-14 text-purple-300/25" />}
-                </div>
-
-              </div>
-
-              {/* Right padding on lg reserves the space the half-vinyl
-                  occupies, so a long title or description runs out of room
-                  rather than running underneath it. */}
-              <div className="min-w-0 flex-1 lg:pr-[500px]">
-                <p className="text-[10px] uppercase tracking-[0.2em] text-purple-400 font-bold mb-1.5">Playlist</p>
-                <h2 className="text-3xl font-black text-white leading-tight mb-2">{selectedPlaylist.title}</h2>
-                {selectedPlaylist.description && (
-                  <p className="text-sm text-white/45 mb-3 max-w-xl leading-relaxed">{selectedPlaylist.description}</p>
-                )}
-                <div className="flex items-center flex-wrap gap-2 mb-3">
-                  {selectedPlaylist.mood && (
-                    <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-purple-500/15 text-purple-200 border border-purple-400/20">
-                      {selectedPlaylist.mood}
-                    </span>
-                  )}
-                  <span className="text-xs text-white/30">{tracks.length} {tracks.length === 1 ? 'track' : 'tracks'}</span>
-                </div>
-                {featuredArtists.length > 0 && (
-                  <p className="text-xs text-white/35">
-                    Featuring <span className="text-white/65">{featuredArtists.join(', ')}</span>
-                    {distinctArtistCount > featuredArtists.length && (
-                      <span className="text-white/30"> and {distinctArtistCount - featuredArtists.length} more</span>
-                    )}
-                  </p>
-                )}
-
-                <div className="flex items-center gap-2 mt-4">
-                  <button onClick={() => toggleSave(selectedPlaylist)}
-                    className={`flex items-center gap-1.5 text-xs font-semibold px-3.5 py-2 rounded-full transition ${
-                      savedPlaylistIds.has(selectedPlaylist.id)
-                        ? 'bg-purple-500 text-white'
-                        : 'bg-white/[0.06] text-white/60 border border-white/[0.08] hover:bg-white/[0.1]'
-                    }`}>
-                    <Bookmark className="w-3.5 h-3.5"
-                      fill={savedPlaylistIds.has(selectedPlaylist.id) ? 'currentColor' : 'none'} />
-                    {savedPlaylistIds.has(selectedPlaylist.id) ? 'Saved' : 'Save this vibe'}
-                  </button>
-                  <button onClick={() => setShowComments(true)}
-                    className="flex items-center gap-1.5 text-xs font-semibold px-3.5 py-2 rounded-full bg-white/[0.06] text-white/60 border border-white/[0.08] hover:bg-white/[0.1] transition">
-                    <MessageCircle className="w-3.5 h-3.5" />
-                    Comments
-                  </button>
-                </div>
-              </div>
-
-              {/* HALF-VINYL IN THE HEADER
-                  Steve's brief: move the record here, much bigger, still
-                  spinning with the artwork spinning on it, and let the bottom
-                  half be cut off so it reads as half a record rising out of
-                  the header.
-
-                  How the cut works: this box is anchored to the header's
-                  bottom edge and is exactly half the record's diameter tall,
-                  with `overflow-hidden`. The record is placed at its top, so
-                  the box shows the top half and clips the rest. Nothing is
-                  drawn over it and nothing has to move to accommodate it —
-                  the previous two attempts both failed by pushing layout
-                  around or sitting outside it.
-
-                  `items-end` on the parent means the header's bottom edge is
-                  where the artwork and the text block end, so the cut line
-                  sits exactly there.
-
-                  lg and up only. Below that the header is a single column and
-                  there is no empty space to put a 360px record into. */}
-              {currentTrack && (
-                <div
-                  className="hidden lg:block absolute right-32 bottom-0 w-[360px] h-[180px] overflow-hidden pointer-events-none select-none z-0"
-                  style={{
-                    // The dark rectangle behind the record was the record's own
-                    // drop-shadow being clipped by this box: a big soft blur cut
-                    // off square at the edges. Killed at the source with
-                    // shadow={false} below.
-                    //
-                    // This mask then softens what remains. The bottom stays a
-                    // hard cut, because a clean cut at the header's edge is the
-                    // point — the grooves fade towards the outer rim instead, so
-                    // the record dissolves into the page rather than ending on a
-                    // visible boundary.
-                    maskImage: 'radial-gradient(circle at 50% 100%, black 55%, rgba(0,0,0,0.55) 80%, transparent 100%)',
-                    WebkitMaskImage: 'radial-gradient(circle at 50% 100%, black 55%, rgba(0,0,0,0.55) 80%, transparent 100%)',
-                  }}
-                >
-                  <div className="absolute top-0 left-0">
-                    <VinylRecord
-                      coverUrl={currentTrack.cover_artwork_url}
-                      isPlaying={isPlaying}
-                      size={360}
-                      shadow={false}
-                    />
-                  </div>
-                </div>
-              )}
-            </div>
-            {loadingTracks ? (
-              <div className="flex justify-center py-12"><Loader className="w-5 h-5 text-white/30 animate-spin" /></div>
-            ) : tracks.length === 0 ? (
-              <p className="text-sm text-white/30 text-center py-12">No tracks in this playlist yet.</p>
-            ) : (
-              <div className="space-y-1.5">
-                {tracks.map((t, i) => (
-                  <div key={t.id} onClick={() => playTrackAt(i)}
-                    className={`flex items-center space-x-3 p-2.5 rounded-xl cursor-pointer transition ${mode === 'track' && i === currentIndex ? 'bg-white/[0.08]' : 'hover:bg-white/[0.04]'}`}>
-                    <div className="w-10 h-10 rounded-lg overflow-hidden bg-white/[0.06] flex-shrink-0">
-                      {t.cover_artwork_url
-                        ? <img src={t.cover_artwork_url} alt="" className="w-full h-full object-cover" />
-                        : <div className="w-full h-full flex items-center justify-center"><Music className="w-4 h-4 text-white/20" /></div>}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className={`text-sm truncate ${mode === 'track' && i === currentIndex ? 'text-purple-400 font-semibold' : 'text-white'}`}>{t.title}</p>
-                      <p className="text-xs text-white/40 truncate">{t.artist?.artist_name}</p>
-                    </div>
-                    {mode === 'track' && i === currentIndex && isPlaying && <Play className="w-3.5 h-3.5 text-purple-400 flex-shrink-0" fill="currentColor" />}
-                  </div>
-                ))}
-              </div>
-            )}
-          </>
+          <RetailRecordSleeve
+            playlist={selectedPlaylist}
+            tracks={tracks}
+            loadingTracks={loadingTracks}
+            currentIndex={currentIndex}
+            isCurrentPlaylist={mode === 'track'}
+            isPlaying={isPlaying}
+            currentTrack={tracks[currentIndex] || null}
+            onPlayTrackAt={playTrackAt}
+            onTogglePlay={() => {
+              if (isPlaying) { audioRef.current?.pause(); setIsPlaying(false); }
+              else { setNeedsGesture(false); setIsPlaying(true); }
+            }}
+            /* Back is navigation, not a stop button. Going back to the deck
+               used to pause the audio, so a venue browsing other vibes
+               silenced their own room. The music keeps playing. */
+            onBack={() => setView('deck')}
+            onToggleSave={() => toggleSave(selectedPlaylist)}
+            isSaved={savedPlaylistIds.has(selectedPlaylist.id)}
+            onComments={() => setShowComments(true)}
+            featuredArtists={featuredArtists}
+            distinctArtistCount={distinctArtistCount}
+          />
         )}
       </div>
 
