@@ -95,6 +95,19 @@ export default function RetailTonearm({ playing = false, uid = 'a' }) {
         <filter id={g('soft')} x="-30%" y="-30%" width="160%" height="160%">
           <feGaussianBlur stdDeviation="1.4" />
         </filter>
+        {/* Down: a hard little shadow right under the cartridge. */}
+        <filter id={g('tight')} x="-80%" y="-200%" width="260%" height="500%">
+          <feGaussianBlur stdDeviation="0.55" />
+        </filter>
+        {/* Up: wide and diffuse, the way a shadow opens out as the thing
+            casting it moves away from the surface. */}
+        <filter id={g('wide')} x="-80%" y="-200%" width="260%" height="500%">
+          <feGaussianBlur stdDeviation="2.1" />
+        </filter>
+        {/* The whole arm's shadow, lifted: further out and softer. */}
+        <filter id={g('softUp')} x="-40%" y="-40%" width="180%" height="180%">
+          <feGaussianBlur stdDeviation="3.1" />
+        </filter>
       </defs>
 
       {/* Everything pivots about the post at (110, 86). Parked out to the right
@@ -110,10 +123,29 @@ export default function RetailTonearm({ playing = false, uid = 'a' }) {
         {/* 1. THE SHADOW, on the vinyl. Drawn first, offset down and left of
                the light, blurred. This is the single element doing most of the
                work of lifting the arm off the record. */}
-        <g opacity="0.55" filter={`url(#${g('soft')})`} transform="translate(-1.6, 3.2)">
+        {/* Down — close to the record, so the shadow sits almost under the arm
+            and keeps its edges. */}
+        <g
+          filter={`url(#${g('soft')})`}
+          transform="translate(-1.6, 3.2)"
+          style={{ opacity: playing ? 0.55 : 0, transition: 'opacity 0.9s ease' }}
+        >
           <rect x="33" y="74.2" width="71" height="3.8" rx="1.9" fill="#000" />
           <circle cx="103" cy="79" r="9.4" fill="#000" />
           <rect x="27" y="73.6" width="11" height="6.4" rx="1.6" fill="#000"
+            transform="rotate(-17, 33, 76.8)" />
+        </g>
+        {/* Lifted — further from the record, so the same shadow throws further
+            and loses its edges. This pair is the whole trick: nothing about the
+            arm changes size, and it still reads as rising off the vinyl. */}
+        <g
+          filter={`url(#${g('softUp')})`}
+          transform="translate(-3.4, 7.0)"
+          style={{ opacity: playing ? 0 : 0.34, transition: 'opacity 0.9s ease' }}
+        >
+          <rect x="33" y="74.2" width="71" height="4.6" rx="2.3" fill="#000" />
+          <circle cx="103" cy="79" r="10.2" fill="#000" />
+          <rect x="27" y="73.6" width="12" height="7.2" rx="1.8" fill="#000"
             transform="rotate(-17, 33, 76.8)" />
         </g>
 
@@ -144,11 +176,28 @@ export default function RetailTonearm({ playing = false, uid = 'a' }) {
             {/* cartridge body */}
             <rect x="26.4" y="81.9" width="7.6" height="3.2" rx="0.8" fill="#17141D" />
             <rect x="26.4" y="81.9" width="7.6" height="0.8" rx="0.4" fill="#8B5CF6" opacity="0.60" />
-            {/* the stylus itself, the one point where the machine touches the
-                music. Deliberately the brightest thing in the drawing. */}
-            <path d="M 29.3 85.0 L 28.8 86.9" stroke="#D6DCEA" strokeWidth="0.5" strokeLinecap="round" />
-            <ellipse cx="28.8" cy="87.1" rx="1.5" ry="0.5" fill="#000" opacity="0.5" />
-            <circle cx="28.8" cy="86.95" r="0.42" fill="#FFFFFF" opacity="0.92" />
+            {/* NO DRAWN NEEDLE.
+                A white pin sticking out of the cartridge read as a drawing of a
+                stylus rather than a stylus — at this size a real one is a few
+                thousandths of an inch and is simply not visible. What you
+                actually see on a deck is the shadow: tight and dark when the
+                cartridge is down on the record, wide and soft when it is
+                lifted. So the contact is drawn as shadow alone, and the shadow
+                is what moves.
+
+                Two ellipses crossfading rather than one being animated: blur
+                radius cannot be transitioned in CSS, so each state gets its own
+                and only the opacity changes. */}
+            <ellipse
+              cx="28.9" cy="86.0" rx="2.0" ry="0.62" fill="#000"
+              filter={`url(#${g('tight')})`}
+              style={{ opacity: playing ? 0.72 : 0, transition: 'opacity 0.9s ease' }}
+            />
+            <ellipse
+              cx="29.6" cy="88.4" rx="4.2" ry="1.5" fill="#000"
+              filter={`url(#${g('wide')})`}
+              style={{ opacity: playing ? 0 : 0.38, transition: 'opacity 0.9s ease' }}
+            />
           </g>
         </g>
 

@@ -33,13 +33,16 @@ function Stat({ value, label }) {
 }
 
 export default function RetailDeckView({
-  playlists,
+  playlists,          // the UNDECIDED ones — the page filters out saved and passed
+  allPlaylists = [],  // everything, for the counts in the rail
   savedIds,
   savedPlaylists = [],
   recommended = [],
   impact,
   loadingPlaylists,
   onSave,
+  onPass,
+  onReset,
   onOpen,
   onPreview,
   onStopPreview,
@@ -85,6 +88,8 @@ export default function RetailDeckView({
             playlists={playlists}
             savedIds={savedIds}
             onSave={onSave}
+            onPass={onPass}
+            onReset={onReset}
             onOpen={onOpen}
             onPreview={onPreview}
             onStopPreview={onStopPreview}
@@ -214,7 +219,7 @@ export default function RetailDeckView({
               {recommended.map(r => (
                 <button
                   key={r.playlist_id}
-                  onClick={() => onOpen(playlists.find(p => p.id === r.playlist_id) || { id: r.playlist_id, title: r.title, mood: r.mood })}
+                  onClick={() => onOpen((allPlaylists.length ? allPlaylists : playlists).find(p => p.id === r.playlist_id) || { id: r.playlist_id, title: r.title, mood: r.mood })}
                   className="w-full px-3 py-2.5 rounded-lg text-left transition"
                   style={{ background: 'rgba(255,255,255,0.03)', border: `1px solid ${R.border}` }}
                   onMouseEnter={(e) => { e.currentTarget.style.borderColor = R.violetEdge; }}

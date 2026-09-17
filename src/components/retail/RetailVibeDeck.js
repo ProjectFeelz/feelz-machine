@@ -70,6 +70,8 @@ export default function RetailVibeDeck({
   playlists,
   savedIds,
   onSave,          // (playlist) => void   — right swipe
+  onPass,          // (playlist) => void   — left swipe; RECORDED, see below
+  onReset,         // () => void           — "start again" clears the passes
   onOpen,          // (playlist) => void   — tap
   onPreview,       // (playlist) => void   — called when a card becomes the top card
   onStopPreview,
@@ -196,6 +198,10 @@ export default function RetailVibeDeck({
     if (!top) return;
     setLeaving(dir);
     if (dir === 'right' && !savedIds.has(top.id)) onSave?.(top);
+    // A left swipe used to do nothing but move this component's own counter
+    // on, so the vibe came back on the next refresh and the ✕ looked broken.
+    // The decision now goes to the page, which writes it down.
+    if (dir === 'left') onPass?.(top);
     // Let the card fly out before the next one takes its place.
     setTimeout(() => {
       setLeaving(null);
@@ -220,7 +226,9 @@ export default function RetailVibeDeck({
     setDrag(0);
   };
 
-  const restart = () => { setIdx(0); setDrag(0); };
+  // Starting again means asking for the ones that were turned down back —
+  // otherwise the deck is empty for ever and there is no way out of it.
+  const restart = () => { setIdx(0); setDrag(0); onReset?.(); };
 
   // ── Empty and exhausted states ─────────────────────────────────────────
   if (playlists.length === 0) {

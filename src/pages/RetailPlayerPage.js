@@ -159,6 +159,15 @@ export default function RetailPlayerPage() {
   const [currentAdIndex, setCurrentAdIndex] = React.useState(0);
   const [likedTrackIds, setLikedTrackIds] = React.useState(new Set());
   const [savedPlaylistIds, setSavedPlaylistIds] = React.useState(new Set());
+  // Vibes this venue has turned down. Held here rather than in the deck
+  // because the deck is unmounted and remounted every time the venue opens a
+  // record and comes back, and a decision that lives in a component's state
+  // lasts exactly as long as that component does — which is the bug.
+  const [passedPlaylistIds, setPassedPlaylistIds] = React.useState(new Set());
+  // Both decision sets have come back from the database. The deck waits for
+  // this before it seeds itself, otherwise a fast playlist query and a slow
+  // passes query would put already-rejected vibes back on the screen.
+  const [decisionsLoaded, setDecisionsLoaded] = React.useState(false);
   const [showComments, setShowComments] = React.useState(false);
   const [showAccount, setShowAccount] = React.useState(false);
   const [showReferrals, setShowReferrals] = React.useState(false);
@@ -215,6 +224,30 @@ export default function RetailPlayerPage() {
     () => playlists.filter(p => savedPlaylistIds.has(p.id)),
     [playlists, savedPlaylistIds]
   );
+
+  // The deck offers what this venue has not decided about yet — but it is
+  // SEEDED ONCE rather than recomputed as they swipe.
+  //
+  // The obvious version of this is a useMemo over saved and passed. It is
+  // wrong, and wrong in a way that would look like a new bug: the deck advances
+  // its own index when a card flies out, so if the list it is reading also
+  // loses that card at the same moment, everything shifts up by one and the
+  // venue skips a vibe on every single decision. So the list is fixed at the
+  // moment the screen loads, and the decisions made during that session play
+  // out in the deck's own index. The next load picks up the new state.
+  const [deckPlaylists, setDeckPlaylists] = React.useState([]);
+  const deckSeeded = React.useRef(false);
+
+  React.useEffect(() => {
+    if (!playlists.length || !decisionsLoaded || deckSeeded.current) return;
+    deckSeeded.current = true;
+    setDeckPlaylists(playlists.filter(
+      p => !savedPlaylistIds.has(p.id) && !passedPlaylistIds.has(p.id)
+    ));
+    // Seeded from whatever was true at that moment; the sets deliberately are
+    // not dependencies, so later swipes cannot re-run this.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playlists, decisionsLoaded]);
 
   React.useEffect(() => {
     if (!venue) return;
@@ -307,9 +340,49 @@ export default function RetailPlayerPage() {
 
   React.useEffect(() => {
     if (!venue) return;
-    supabase.from('retail_venue_saved_playlists').select('playlist_id').eq('venue_id', venue.id)
-      .then(({ data }) => setSavedPlaylistIds(new Set((data || []).map(s => s.playlist_id))));
+    Promise.all([
+      supabase.from('retail_venue_saved_playlists').select('playlist_id').eq('venue_id', venue.id),
+      supabase.from('retail_venue_passed_playlists').select('playlist_id').eq('venue_id', venue.id),
+    ]).then(([saved, passed]) => {
+      setSavedPlaylistIds(new Set((saved.data || []).map(r => r.playlist_id)));
+      // Not fatal: a venue whose passes cannot be read gets the whole deck
+      // again, which is the old behaviour rather than a broken screen.
+      if (passed.error) {
+        console.warn('[retail] passes unavailable:', passed.error.code, passed.error.message);
+      } else {
+        setPassedPlaylistIds(new Set((passed.data || []).map(r => r.playlist_id)));
+      }
+      setDecisionsLoaded(true);
+    });
   }, [venue]);
+
+  // Swiping left, or tapping the ✕. Written down, so a refresh does not put
+  // the same vibe back in front of them.
+  const passPlaylist = async (playlist) => {
+    if (!venue || !playlist) return;
+    setPassedPlaylistIds(prev => new Set(prev).add(playlist.id));   // instant, optimistic
+    if (isPreviewMode) return;                                       // an admin preview writes nothing
+    const { error } = await supabase.from('retail_venue_passed_playlists')
+      .insert({ venue_id: venue.id, playlist_id: playlist.id });
+    // 23505 is the unique index doing its job on a double tap — not an error.
+    if (error && error.code !== '23505') {
+      console.error('[retail] could not record the pass:', error.code, error.message);
+    }
+  };
+
+  // "Start again" on the end-of-deck screen. Clears the passes so the whole
+  // catalogue comes back — the one way out of having turned everything down.
+  const resetPasses = async () => {
+    if (!venue) return;
+    setPassedPlaylistIds(new Set());
+    // Re-seed the deck immediately: "start again" has to put cards back on the
+    // screen now, not on the next page load.
+    setDeckPlaylists(playlists.filter(p => !savedPlaylistIds.has(p.id)));
+    if (isPreviewMode) return;
+    const { error } = await supabase.from('retail_venue_passed_playlists')
+      .delete().eq('venue_id', venue.id);
+    if (error) console.error('[retail] could not clear passes:', error.code, error.message);
+  };
 
   // Save is the combined signal here, there is no separate like on a
   // playlist. Saving puts the vibe in the venue's library and is also
@@ -900,13 +973,16 @@ export default function RetailPlayerPage() {
       <div>
         {view === 'deck' ? (
           <RetailDeckView
-            playlists={playlists}
+            playlists={deckPlaylists}
+            allPlaylists={playlists}
             savedIds={savedPlaylistIds}
             savedPlaylists={savedPlaylists}
             recommended={recommended}
             impact={impact}
             loadingPlaylists={loadingPlaylists}
             onSave={toggleSave}
+            onPass={passPlaylist}
+            onReset={resetPasses}
             onOpen={(pl) => openPlaylist(pl)}
             onPreview={(pl) => pl && previewPlaylist(pl)}
             onStopPreview={stopPreview}
