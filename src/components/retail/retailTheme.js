@@ -1,73 +1,63 @@
 // src/components/retail/retailTheme.js
 //
-// Feelz Retail's own palette: dark rustic, warm, with purple demoted to an
-// accent instead of being the personality of the whole product.
+// Feelz Retail's palette: black, with DARK versions of violet, blue and red.
 //
-// Two reasons this is a JS object of inline-style values rather than CSS:
+// The previous attempt read "rustic" as warm brown. Wrong call — brown is a
+// colour you notice, and a venue screen should be a black rectangle with a few
+// lit edges. Everything here is either near-black or a deep, desaturated
+// version of a colour: violet at the darkness of a bruise rather than a
+// highlighter, blue like ink, red like a dark cherry. Nothing is bright except
+// type and artwork.
 //
-//   1. index.css globally overrides Tailwind's purple classes to the listener
-//      theme accent (`.bg-purple-500 { background: var(--app-accent) !important }`).
-//      Any retail styling built on Tailwind purple would inherit whatever
-//      theme a listener happened to pick. Inline values are immune to that.
-//
-//   2. It keeps retail's look entirely inside retail. Nothing here can change
-//      how the main app renders, which after today is a property worth having.
-//
-// The palette is warm-black and brass rather than cool-black and violet:
-// worn wood, an amp in a corner, a record sleeve that has been handled. Rust
-// is the primary accent, brass the secondary, purple appears roughly twice a
-// screen and never as a surface.
+// Still inline-style values rather than CSS, for two reasons that have not
+// changed: index.css globally rewrites Tailwind's purple classes to whatever
+// theme a listener picked, and keeping retail's look inside retail means it
+// cannot leak into the main app.
 
 export const R = {
-  // Surfaces — warm blacks, not blue-blacks
-  bg:        '#0C0A09',
-  bgRaised:  '#141110',
-  bgSunken:  '#080706',
+  // Surfaces — cool near-blacks
+  bg:        '#08080C',
+  bgRaised:  '#0E0E15',
+  bgPanel:   '#050508',   // the left panel, deliberately darker than the page
+  bgSunken:  '#040406',
 
-  surface:   'rgba(255, 244, 232, 0.035)',
-  surface2:  'rgba(255, 244, 232, 0.065)',
-  surface3:  'rgba(255, 244, 232, 0.10)',
+  surface:   'rgba(255, 255, 255, 0.042)',
+  surface2:  'rgba(255, 255, 255, 0.07)',
+  surface3:  'rgba(255, 255, 255, 0.11)',
 
-  border:    'rgba(255, 233, 209, 0.10)',
-  borderUp:  'rgba(255, 233, 209, 0.17)',
+  border:    'rgba(255, 255, 255, 0.085)',
+  borderUp:  'rgba(255, 255, 255, 0.15)',
 
-  // Type — bone rather than pure white, which reads warmer against brown-black
-  text:      '#F3EDE5',
-  textDim:   'rgba(243, 237, 229, 0.58)',
-  textFaint: 'rgba(243, 237, 229, 0.32)',
-  textGhost: 'rgba(243, 237, 229, 0.18)',
+  text:      '#ECECF2',
+  textDim:   'rgba(236, 236, 242, 0.58)',
+  textFaint: 'rgba(236, 236, 242, 0.34)',
+  textGhost: 'rgba(236, 236, 242, 0.17)',
 
-  // Accents
-  rust:      '#B5613A',
-  rustBright:'#CE7245',
-  rustSoft:  'rgba(181, 97, 58, 0.15)',
-  rustEdge:  'rgba(181, 97, 58, 0.38)',
+  // Accents — dark, never neon
+  violet:     '#5B21B6',
+  violetLift: '#6D28D9',
+  violetSoft: 'rgba(109, 40, 217, 0.18)',
+  violetEdge: 'rgba(124, 58, 237, 0.42)',
 
-  brass:     '#C9973F',
-  brassSoft: 'rgba(201, 151, 63, 0.14)',
+  blue:       '#1E3A8A',
+  blueLift:   '#2A4CA8',
+  blueSoft:   'rgba(30, 58, 138, 0.22)',
 
-  // Kept, and used sparingly — a highlight, never a background
-  violet:    '#8B5CF6',
+  red:        '#7F1D1D',
+  redLift:    '#A32B2B',
+  redSoft:    'rgba(127, 29, 29, 0.24)',
 
-  green:     '#4E9A6B',
-  red:       '#B4503F',
+  green:      '#14532D',
+  greenLift:  '#2F7D4F',
 };
 
-// The page background: a warm gradient rather than flat black, so the record
-// and the artwork have something to sit on.
+// A black page with two low, cold lights on it.
 export const pageBg =
-  'radial-gradient(1200px 700px at 15% -10%, rgba(181,97,58,0.10) 0%, transparent 60%), ' +
-  'radial-gradient(900px 600px at 95% 10%, rgba(201,151,63,0.06) 0%, transparent 55%), ' +
-  'linear-gradient(180deg, #100D0B 0%, #0C0A09 55%, #080706 100%)';
+  'radial-gradient(1100px 620px at 12% -12%, rgba(109,40,217,0.16) 0%, transparent 62%), ' +
+  'radial-gradient(900px 560px at 92% 4%, rgba(30,58,138,0.14) 0%, transparent 58%), ' +
+  'linear-gradient(180deg, #0A0A11 0%, #08080C 50%, #050508 100%)';
 
-// Card surfaces, used often enough to be worth naming.
 export const card = {
-  background: 'linear-gradient(160deg, rgba(255,244,232,0.055) 0%, rgba(255,244,232,0.02) 100%)',
+  background: 'linear-gradient(160deg, rgba(255,255,255,0.055) 0%, rgba(255,255,255,0.02) 100%)',
   border: `1px solid ${R.border}`,
-};
-
-export const cardRaised = {
-  background: 'linear-gradient(160deg, rgba(38,28,22,0.95) 0%, rgba(16,13,11,0.97) 100%)',
-  border: `1px solid ${R.borderUp}`,
-  boxShadow: '0 20px 50px rgba(0,0,0,0.55)',
 };

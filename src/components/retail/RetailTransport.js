@@ -79,7 +79,7 @@ export default function RetailTransport({
     <div
       className="rounded-2xl p-4 mt-5"
       style={{
-        background: 'linear-gradient(160deg, rgba(255,244,232,0.055) 0%, rgba(255,244,232,0.02) 100%)',
+        background: 'linear-gradient(160deg, rgba(255,255,255,0.055) 0%, rgba(255,255,255,0.02) 100%)',
         border: `1px solid ${R.border}`,
       }}
     >
@@ -101,15 +101,15 @@ export default function RetailTransport({
         aria-valuenow={Math.round(time)}
         tabIndex={0}
       >
-        <div className="w-full h-1 rounded-full overflow-hidden" style={{ background: 'rgba(255,233,209,0.10)' }}>
+        <div className="w-full h-1 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.10)' }}>
           <div
             className="h-full rounded-full transition-[width] duration-150"
-            style={{ width: `${pct}%`, background: `linear-gradient(90deg, ${R.rust}, ${R.brass})` }}
+            style={{ width: `${pct}%`, background: `linear-gradient(90deg, ${R.violet}, ${R.blueLift})` }}
           />
         </div>
         <span
           className="absolute w-2.5 h-2.5 rounded-full opacity-0 group-hover:opacity-100 transition"
-          style={{ left: `calc(${pct}% - 5px)`, background: R.brass, boxShadow: '0 0 0 3px rgba(12,10,9,0.9)' }}
+          style={{ left: `calc(${pct}% - 5px)`, background: R.blueLift, boxShadow: '0 0 0 3px rgba(8,8,12,0.9)' }}
         />
       </div>
 
@@ -126,7 +126,7 @@ export default function RetailTransport({
           className="w-9 h-9 rounded-lg flex items-center justify-center transition hover:bg-white/[0.06]"
           style={ghostBtn}
         >
-          <Shuffle className="w-4 h-4" style={{ color: shuffle ? R.brass : R.textFaint }} />
+          <Shuffle className="w-4 h-4" style={{ color: shuffle ? R.blueLift : R.textFaint }} />
         </button>
 
         <button
@@ -143,13 +143,13 @@ export default function RetailTransport({
           title={isPlaying ? 'Pause' : 'Play'}
           className="w-12 h-12 rounded-full flex items-center justify-center transition active:scale-95 flex-shrink-0"
           style={{
-            background: `linear-gradient(145deg, ${R.rustBright}, ${R.rust})`,
-            boxShadow: '0 6px 18px rgba(181,97,58,0.35)',
+            background: `linear-gradient(145deg, ${R.violetLift}, ${R.violet})`,
+            boxShadow: '0 6px 18px rgba(109,40,217,0.42)',
           }}
         >
           {isPlaying
-            ? <Pause className="w-5 h-5" style={{ color: '#1A1310' }} fill="#1A1310" />
-            : <Play className="w-5 h-5 ml-0.5" style={{ color: '#1A1310' }} fill="#1A1310" />}
+            ? <Pause className="w-5 h-5" style={{ color: '#F5F3FF' }} fill="#F5F3FF" />
+            : <Play className="w-5 h-5 ml-0.5" style={{ color: '#F5F3FF' }} fill="#F5F3FF" />}
         </button>
 
         <button
@@ -168,8 +168,8 @@ export default function RetailTransport({
           style={ghostBtn}
         >
           {repeat === 'one'
-            ? <Repeat1 className="w-4 h-4" style={{ color: R.brass }} />
-            : <Repeat className="w-4 h-4" style={{ color: repeat === 'all' ? R.brass : R.textFaint }} />}
+            ? <Repeat1 className="w-4 h-4" style={{ color: R.blueLift }} />
+            : <Repeat className="w-4 h-4" style={{ color: repeat === 'all' ? R.blueLift : R.textFaint }} />}
         </button>
       </div>
 
@@ -178,9 +178,9 @@ export default function RetailTransport({
           onClick={onToggleLike}
           className="w-full mt-3 py-2 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition"
           style={{
-            background: liked ? R.rustSoft : 'rgba(255,244,232,0.04)',
-            border: `1px solid ${liked ? R.rustEdge : R.border}`,
-            color: liked ? R.rustBright : R.textDim,
+            background: liked ? R.violetSoft : 'rgba(255,255,255,0.04)',
+            border: `1px solid ${liked ? R.violetEdge : R.border}`,
+            color: liked ? R.violetLift : R.textDim,
           }}
         >
           <Heart className="w-3.5 h-3.5" fill={liked ? 'currentColor' : 'none'} />

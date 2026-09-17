@@ -41,8 +41,35 @@ export default function RetailVibeDeck({
   const moved  = React.useRef(false);
 
   const top  = playlists[idx] || null;
-  const next = playlists[idx + 1] || null;
+  // Three behind, not one: a single ghost card reads as a rendering artefact,
+  // a stack reads as a queue with more in it.
+  const queue = [playlists[idx + 1], playlists[idx + 2], playlists[idx + 3]].filter(Boolean);
   const done = idx >= playlists.length;
+
+  // The card is sized from the viewport rather than a fixed max-width, because
+  // at 420px wide a 3:4 card is 560px tall and, once the preview line and the
+  // three buttons are under it, ran off the bottom of a laptop screen. This
+  // keeps the whole control — card, preview, buttons — inside one screen.
+  // Constrained by BOTH axes. Height alone was not enough: on a 390px phone a
+  // 520px-tall card wants to be 390 wide, the container clamps it to ~350, and
+  // the height does not follow — so the card stops being 3:4 and the artwork
+  // stretches. Whichever axis runs out first decides the size.
+  const [box, setBox] = React.useState({ w: 360, h: 480 });
+  React.useEffect(() => {
+    const measure = () => {
+      const chrome = window.innerWidth >= 1024 ? 300 : 250;  // header, preview line, buttons
+      const railW  = window.innerWidth >= 1024 ? 360 : 0;    // the rail beside it
+      const byHeight = Math.max(280, Math.min(window.innerHeight - chrome, 520));
+      const byWidth  = Math.max(210, Math.min(window.innerWidth - railW - 40, 420));
+      const h = Math.min(byHeight, byWidth / 0.75);
+      setBox({ w: Math.round(h * 0.75), h: Math.round(h) });
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, []);
+  const cardW = box.w;
+  const cardH = box.h;
 
   // Preview follows the top card. Keyed on the id rather than the object so a
   // re-render of the same card does not restart the track, and delayed so that
@@ -107,7 +134,7 @@ export default function RetailVibeDeck({
         <button
           onClick={restart}
           className="inline-flex items-center gap-2 px-5 py-3 rounded-full text-sm font-bold transition"
-          style={{ background: `linear-gradient(145deg, ${R.rustBright}, ${R.rust})`, color: '#1A1310' }}
+          style={{ background: `linear-gradient(145deg, ${R.violetLift}, ${R.violet})`, color: '#F5F3FF' }}
         >
           <RotateCcw className="w-4 h-4" />
           Go through them again
@@ -125,7 +152,7 @@ export default function RetailVibeDeck({
     <div
       className="absolute inset-0 rounded-[28px] overflow-hidden select-none"
       style={{
-        background: 'linear-gradient(150deg, rgba(58,40,30,0.96) 0%, rgba(22,17,14,0.98) 60%, rgba(10,8,7,0.99) 100%)',
+        background: 'linear-gradient(150deg, rgba(26,22,40,0.94) 0%, rgba(12,12,20,0.98) 60%, rgba(6,6,10,0.99) 100%)',
         border: `1px solid ${R.borderUp}`,
         boxShadow: faded ? '0 8px 30px rgba(0,0,0,0.4)' : '0 24px 70px rgba(0,0,0,0.65)',
         ...style,
@@ -144,11 +171,11 @@ export default function RetailVibeDeck({
           gradient rather than trusting the image to be dark at the bottom. */}
       <div
         className="absolute inset-x-0 bottom-0 p-6"
-        style={{ background: 'linear-gradient(to top, rgba(8,6,5,0.97) 12%, rgba(8,6,5,0.80) 48%, transparent 100%)' }}
+        style={{ background: 'linear-gradient(to top, rgba(5,5,9,0.97) 12%, rgba(5,5,9,0.82) 48%, transparent 100%)' }}
       >
         {pl.mood && (
           <span className="inline-block text-[10px] font-bold uppercase tracking-[0.18em] px-2.5 py-1 rounded-full mb-2.5"
-            style={{ background: R.brassSoft, color: R.brass, border: '1px solid rgba(201,151,63,0.30)' }}>
+            style={{ background: R.blueSoft, color: R.blueLift, border: '1px solid rgba(37,81,196,0.40)' }}>
             {pl.mood}
           </span>
         )}
@@ -169,16 +196,31 @@ export default function RetailVibeDeck({
         <p className="text-[11px]" style={{ color: R.textGhost }}>{playlists.length - idx} left</p>
       </div>
 
-      {/* The deck. Fixed aspect so the card is the same shape on a phone and
-          on the counter tablet — a jukebox window, not a responsive panel. */}
-      <div className="relative mx-auto w-full max-w-[420px]" style={{ aspectRatio: '3 / 4' }}>
-        {next && (
-          <Card
-            pl={next}
-            faded
-            style={{ transform: 'scale(0.94) translateY(14px)', opacity: 0.55, filter: 'saturate(0.8)' }}
-          />
-        )}
+      {/* The deck. A 3:4 window sized to fit the screen it is on, centred,
+          with the rest of the queue stacked behind it. */}
+      <div
+        className="relative mx-auto"
+        style={{ width: cardW, height: cardH }}
+      >
+        {/* The queue. Each one further back, smaller, dimmer and greyer, so
+            the stack has depth without any of them competing to be read. */}
+        {queue.map((pl, n) => {
+          const depth = queue.length - n;   // the furthest card draws first
+          const q = queue[queue.length - n - 1];
+          return (
+            <Card
+              key={q.id}
+              pl={q}
+              faded
+              style={{
+                transform: `scale(${1 - depth * 0.045}) translateY(${depth * 12}px)`,
+                opacity: 0.55 - (depth - 1) * 0.16,
+                filter: `saturate(${0.7 - (depth - 1) * 0.2}) blur(${(depth - 1) * 1.2}px)`,
+                zIndex: 0,
+              }}
+            />
+          );
+        })}
 
         <div
           className="absolute inset-0"
@@ -201,7 +243,7 @@ export default function RetailVibeDeck({
           {Math.abs(offset) > SWIPE_HINT && (
             <div
               className="absolute inset-0 rounded-[28px] pointer-events-none flex items-center justify-center"
-              style={{ background: offset > 0 ? `rgba(78,154,107,${tint})` : `rgba(180,80,63,${tint})` }}
+              style={{ background: offset > 0 ? `rgba(47,125,79,${tint})` : `rgba(163,43,43,${tint})` }}
             >
               {offset > 0
                 ? <Bookmark className="w-16 h-16 text-white drop-shadow-lg" fill="currentColor" />
@@ -247,7 +289,7 @@ export default function RetailVibeDeck({
         <button
           onClick={() => onOpen?.(top)}
           className="px-6 h-14 rounded-full text-sm font-bold flex items-center gap-2 transition active:scale-95"
-          style={{ background: `linear-gradient(145deg, ${R.rustBright}, ${R.rust})`, color: '#1A1310', boxShadow: '0 8px 22px rgba(181,97,58,0.32)' }}
+          style={{ background: `linear-gradient(145deg, ${R.violetLift}, ${R.violet})`, color: '#F5F3FF', boxShadow: '0 8px 22px rgba(109,40,217,0.40)' }}
         >
           <ChevronLeft className="w-4 h-4 rotate-180" />
           Open the record
@@ -258,7 +300,7 @@ export default function RetailVibeDeck({
           title={saved ? 'Already in Your Vibes' : 'Keep this vibe'}
           className="w-14 h-14 rounded-full flex items-center justify-center transition"
           style={saved
-            ? { background: R.brassSoft, border: `1px solid rgba(201,151,63,0.45)`, color: R.brass }
+            ? { background: R.blueSoft, border: `1px solid rgba(37,81,196,0.55)`, color: R.blueLift }
             : { background: R.surface, border: `1px solid ${R.border}`, color: R.textDim }}
         >
           <Bookmark className="w-6 h-6" fill={saved ? 'currentColor' : 'none'} />

@@ -21,6 +21,9 @@ import { Music, Loader, TrendingUp } from 'lucide-react';
 import RetailVibeDeck from './RetailVibeDeck';
 import { R } from './retailTheme';
 
+const HEADER = 76;   // matches the page's sticky header
+const PANEL  = 360;  // matches the record page's left panel
+
 function Stat({ value, label }) {
   return (
     <div className="flex items-baseline justify-between gap-3 py-2">
@@ -45,10 +48,19 @@ export default function RetailDeckView({
   previewLabel,
 }) {
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_290px] gap-8 lg:gap-12">
+    <div className="lg:flex">
 
-      {/* ── The deck, and nothing else ──────────────────────────────────── */}
-      <div className="flex flex-col justify-center min-h-[72vh] lg:min-h-[80vh]">
+      <style>{`
+        /* Desktop only — see the note in RetailRecordSleeve about 100vh on a
+           phone. On mobile the deck sizes itself from the card instead. */
+        @media (min-width: 1024px) {
+          .fm-retail-rail { width: ${PANEL}px; height: calc(100vh - ${HEADER}px); }
+          .fm-retail-deck { min-height: calc(100vh - ${HEADER}px); }
+        }
+      `}</style>
+
+      {/* ── The deck, centred, and nothing else ─────────────────────────── */}
+      <div className="fm-retail-deck flex-1 min-w-0 flex flex-col items-center justify-center px-5 py-6">
         {loadingPlaylists ? (
           <div className="flex justify-center py-20">
             <Loader className="w-5 h-5 animate-spin" style={{ color: R.textFaint }} />
@@ -67,15 +79,26 @@ export default function RetailDeckView({
         )}
       </div>
 
-      {/* ── The rail ────────────────────────────────────────────────────── */}
-      <aside className="lg:pt-10 space-y-8">
+      {/* ── The rail ─────────────────────────────────────────────────────
+          Same width, surface and edge as the record page's left panel, so
+          moving between the two screens does not feel like moving between two
+          products. Pinned and scrollable in its own right. */}
+      <aside
+        className="fm-retail-rail w-full lg:flex-shrink-0 lg:sticky lg:overflow-y-auto px-5 py-6 space-y-8"
+        style={{
+          background: R.bgPanel,
+          borderLeft: `1px solid ${R.border}`,
+          boxShadow: '-18px 0 40px -28px rgba(0,0,0,0.9)',
+          top: HEADER,
+        }}
+      >
 
         {/* What the room has actually done. Kept, because it is the only place
             a venue sees what their subscription bought — but no longer the
             first thing on the page, because it is not a decision. */}
         {impact && impact.total_plays > 0 && (
           <div>
-            <p className="text-[10px] uppercase tracking-[0.24em] font-bold mb-2" style={{ color: R.rustBright }}>
+            <p className="text-[10px] uppercase tracking-[0.24em] font-bold mb-2" style={{ color: R.violetLift }}>
               This room
             </p>
             <div style={{ borderTop: `1px solid ${R.border}` }}>
@@ -120,7 +143,7 @@ export default function RetailDeckView({
                   key={pl.id}
                   onClick={() => onOpen(pl)}
                   className="w-full flex items-center gap-3 p-2 rounded-lg text-left transition"
-                  onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,244,232,0.045)'; }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.045)'; }}
                   onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
                 >
                   <div className="w-10 h-10 rounded overflow-hidden flex-shrink-0 flex items-center justify-center"
@@ -151,8 +174,8 @@ export default function RetailDeckView({
                   key={r.playlist_id}
                   onClick={() => onOpen(playlists.find(p => p.id === r.playlist_id) || { id: r.playlist_id, title: r.title, mood: r.mood })}
                   className="w-full px-3 py-2.5 rounded-lg text-left transition"
-                  style={{ background: 'rgba(255,244,232,0.03)', border: `1px solid ${R.border}` }}
-                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = R.rustEdge; }}
+                  style={{ background: 'rgba(255,255,255,0.03)', border: `1px solid ${R.border}` }}
+                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = R.violetEdge; }}
                   onMouseLeave={(e) => { e.currentTarget.style.borderColor = R.border; }}
                 >
                   <p className="text-sm font-semibold truncate" style={{ color: R.text }}>{r.title}</p>

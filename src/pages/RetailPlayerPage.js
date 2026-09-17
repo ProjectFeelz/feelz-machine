@@ -766,13 +766,13 @@ export default function RetailPlayerPage() {
 
       <div className="sticky top-0 z-10 backdrop-blur-xl px-4 py-4"
         style={{
-          background: 'linear-gradient(180deg, rgba(20,16,14,0.96) 0%, rgba(12,10,9,0.92) 100%)',
+          background: 'linear-gradient(180deg, rgba(13,13,20,0.96) 0%, rgba(8,8,12,0.92) 100%)',
           borderBottom: `1px solid ${R.border}`,
           boxShadow: '0 8px 32px rgba(0,0,0,0.45)',
         }}>
         <div className="flex items-start justify-between">
           <div>
-            <p className="text-xs font-bold tracking-[0.24em] uppercase" style={{ color: R.rustBright }}>Feelz Retail</p>
+            <p className="text-xs font-bold tracking-[0.24em] uppercase" style={{ color: R.violetLift }}>Feelz Retail</p>
             <h1 className="text-lg font-bold" style={{ color: R.text }}>{venue.business_name}</h1>
           </div>
           <div className="flex items-center space-x-1 flex-shrink-0">
@@ -888,7 +888,7 @@ export default function RetailPlayerPage() {
         </div>
       )}
 
-      <div className="px-4 sm:px-6 lg:px-8 pt-5">
+      <div>
         {view === 'deck' ? (
           <RetailDeckView
             playlists={playlists}
@@ -1052,14 +1052,14 @@ export default function RetailPlayerPage() {
       {mode === 'ad' && (
         <div className="fixed bottom-0 left-0 right-0 backdrop-blur-xl px-4 py-3 z-30"
           style={{
-            background: 'linear-gradient(180deg, rgba(34,25,19,0.97) 0%, rgba(12,10,9,0.98) 100%)',
+            background: 'linear-gradient(180deg, rgba(16,14,24,0.97) 0%, rgba(8,8,12,0.98) 100%)',
             borderTop: `1px solid ${R.borderUp}`,
             boxShadow: '0 -8px 32px rgba(0,0,0,0.6)',
           }}>
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
-              style={{ background: R.brassSoft }}>
-              <Megaphone className="w-4 h-4" style={{ color: R.brass }} />
+              style={{ background: R.blueSoft }}>
+              <Megaphone className="w-4 h-4" style={{ color: R.blueLift }} />
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold truncate" style={{ color: R.text }}>Advert</p>
@@ -1068,10 +1068,10 @@ export default function RetailPlayerPage() {
             <button onClick={togglePlay}
               title={isPlaying ? 'Pause' : 'Play'}
               className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 transition"
-              style={{ background: `linear-gradient(145deg, ${R.rustBright}, ${R.rust})` }}>
+              style={{ background: `linear-gradient(145deg, ${R.violetLift}, ${R.violet})` }}>
               {isPlaying
-                ? <Pause className="w-4 h-4" style={{ color: '#1A1310' }} fill="#1A1310" />
-                : <Play className="w-4 h-4" style={{ color: '#1A1310' }} fill="#1A1310" />}
+                ? <Pause className="w-4 h-4" style={{ color: '#F5F3FF' }} fill="#F5F3FF" />
+                : <Play className="w-4 h-4" style={{ color: '#F5F3FF' }} fill="#F5F3FF" />}
             </button>
             <button onClick={advance} title="Skip advert"
               className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 transition hover:bg-white/[0.06]">
