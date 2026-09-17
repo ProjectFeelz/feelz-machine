@@ -23,7 +23,15 @@ import { R } from './retailTheme';
 
 const SWIPE_COMMIT = 110;   // px past which a release counts as a decision
 const SWIPE_HINT   = 40;    // px at which the accept/reject tint starts showing
-const DEPTH        = 3;     // cards visible behind the front one
+const DEPTH        = 3;     // cards flanking the front one
+// How many card-widths the fan occupies in total: the card plus what the
+// outermost flank reaches past each side.
+// On a wide screen the flanks stand well clear of the front card; on a phone
+// they tuck in to a peek, because a fan wide enough to look good on a desktop
+// would otherwise force the card itself down to a thumbnail.
+const FAN_WIDE     = 0.30;   // ≥ 640px: how far out the first flank sits
+const FAN_TIGHT    = 0.15;   // < 640px
+const fanRoom = (base) => 1 + 2 * (base + (Math.ceil(DEPTH / 2) - 1) * base * 0.53);
 
 // Reduced motion is honoured: the stack still shows depth, it just does not
 // animate between positions.
@@ -31,23 +39,29 @@ const REDUCED = typeof window !== 'undefined'
   && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
 // Where a card sits at a given depth. 0 is the front card.
-// Cascading UP, the way records lean back in a crate: each one behind is
-// smaller, higher, dimmer and very slightly out of focus, so the eye reads
-// distance rather than a stack of identical rectangles.
-function depthStyle(d) {
-  if (d === 0) return { transform: 'translate3d(0,0,0) scale(1)', opacity: 1, filter: 'none', zIndex: 40 };
+//
+// The queue FLANKS the front card rather than stacking behind it: depth 1 to
+// the right, depth 2 to the left, depth 3 further right, alternating outwards.
+// Each one is rotated slightly away and pushed back, like records fanned in a
+// crate, so the stack has width and the front card has air around it instead
+// of a pile of edges poking out of its top.
+//
+// `fan` is a fraction of the card's own width, so the spread scales with the
+// card on a phone instead of flying off the sides.
+function depthStyle(d, w, base) {
+  if (d === 0) {
+    return { transform: 'translate3d(0,0,0) rotate(0deg) scale(1)', opacity: 1, filter: 'none', zIndex: 40 };
+  }
+  const side  = d % 2 === 1 ? 1 : -1;          // right, left, right, …
+  const rank  = Math.ceil(d / 2);              // how far out on that side
+  const shift = side * w * (base + (rank - 1) * base * 0.53);
+  const tilt  = side * (5 + (rank - 1) * 3);
+  const scale = 1 - rank * 0.07;
 
-  // The numbers matter more than they look. Scaling a card down already pulls
-  // its top edge DOWN by half the height it loses, so a -20px lift against a
-  // 0.93 scale nets about 11px of visible card — which against a black page is
-  // nothing, and the stack reads as a shadow. The lift has to beat the shrink
-  // by enough to leave a real band showing, hence 38 against 0.05.
-  const lift  = d * 38;
-  const scale = 1 - d * 0.05;
   return {
-    transform: `translate3d(0, ${-lift}px, 0) scale(${scale})`,
-    opacity: Math.max(0.3, 0.74 - (d - 1) * 0.2),
-    filter: `saturate(${Math.max(0.4, 0.9 - d * 0.18)}) blur(${(d - 1) * 0.8}px)`,
+    transform: `translate3d(${shift}px, ${rank * 10}px, 0) rotate(${tilt}deg) scale(${scale})`,
+    opacity: Math.max(0.26, 0.72 - (rank - 1) * 0.26),
+    filter: `saturate(${Math.max(0.35, 0.85 - rank * 0.22)}) blur(${(rank - 1) * 1.2}px)`,
     zIndex: 40 - d,
   };
 }
@@ -87,19 +101,23 @@ export default function RetailVibeDeck({
   // 520px-tall card wants to be 390 wide, the container clamps it to ~350, and
   // the height does not follow — so the card stops being 3:4 and the artwork
   // stretches. Whichever axis runs out first decides the size.
-  const [box, setBox] = React.useState({ w: 360, h: 480 });
+  const [box, setBox] = React.useState({ w: 360, h: 480, fan: FAN_WIDE });
   React.useEffect(() => {
     const measure = () => {
-      // Header, preview line and buttons — plus the room the cascade needs
-      // ABOVE the front card, since each card behind lifts DEPTH * 38px out of
-      // the box. Without that in the budget the top of the stack runs into the
-      // line above it.
-      const chrome = (window.innerWidth >= 1024 ? 250 : 210) + DEPTH * 38;
+      // Header, preview line and buttons. The fan spreads SIDEWAYS now, so it
+      // costs width rather than height — the vertical budget is back to just
+      // the chrome, and the horizontal one has to leave room for the cards
+      // flanking the front one (see FAN_ROOM below).
+      const chrome = (window.innerWidth >= 1024 ? 260 : 230);
       const railW  = window.innerWidth >= 1024 ? 360 : 0;    // the rail beside it
       const byHeight = Math.max(240, Math.min(window.innerHeight - chrome, 520));
-      const byWidth  = Math.max(180, Math.min(window.innerWidth - railW - 40, 420));
+      // The fan reaches about 0.62 of a card's width past each side, so the
+      // card itself can only have what is left after both flanks.
+      const base     = window.innerWidth >= 640 ? FAN_WIDE : FAN_TIGHT;
+      const usable   = window.innerWidth - railW - 40;
+      const byWidth  = Math.max(170, Math.min(usable / fanRoom(base), 400));
       const h = Math.min(byHeight, byWidth / 0.75);
-      setBox({ w: Math.round(h * 0.75), h: Math.round(h) });
+      setBox({ w: Math.round(h * 0.75), h: Math.round(h), fan: base });
     };
     measure();
     window.addEventListener('resize', measure);
@@ -207,12 +225,12 @@ export default function RetailVibeDeck({
           transform and the whole effect collapses. */}
       <div
         className="relative mx-auto"
-        style={{ width: cardW, height: cardH, marginTop: DEPTH * 38 }}
+        style={{ width: cardW, height: cardH }}
       >
         {visible.slice().reverse().map((pl) => {
           const d = visible.indexOf(pl);
           const isFront = d === 0;
-          const ds = depthStyle(d);
+          const ds = depthStyle(d, cardW, box.fan);
 
           return (
             <div

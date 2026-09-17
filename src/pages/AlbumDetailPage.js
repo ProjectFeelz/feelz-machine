@@ -120,7 +120,14 @@ export default function AlbumDetailPage() {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               action: 'create',
-              trackId: purchaseTarget.track?.id || null,
+              // An album purchase names the album; a track purchase names the
+              // track. It used to send `trackId: null` for a whole album,
+              // which the server refused outright — so buying an album has
+              // never worked. The price is resolved server-side either way;
+              // `amount` is sent for the logs only and is ignored there.
+              ...(purchaseTarget.type === 'album'
+                ? { albumId: album.id }
+                : { trackId: purchaseTarget.track?.id || null }),
               amount: purchaseTarget.price,
               trackTitle: purchaseTarget.label,
               artistName: artist?.artist_name,

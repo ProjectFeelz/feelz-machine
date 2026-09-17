@@ -250,7 +250,11 @@ export default function BeatDetailPage() {
         try {
           const res = await fetch('/.netlify/functions/paypal-order', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'create', trackId: track.id, amount: lic.price, trackTitle: `${track.title} — ${lic.label} Lease`, artistName: artist?.artist_name }),
+            // licenceId is what decides the price now: the server reads the
+            // licence off the beat itself. Sending only `amount` meant a $99
+            // exclusive was charged at the track's download price while
+            // beat_purchases recorded the $99 that was never taken.
+            body: JSON.stringify({ action: 'create', trackId: track.id, licenceId: lic.id, amount: lic.price, trackTitle: `${track.title} — ${lic.label} Lease`, artistName: artist?.artist_name }),
           });
           const { orderId, error } = await res.json();
           if (error || !orderId) throw new Error(error || 'Failed to create order');

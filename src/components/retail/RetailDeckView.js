@@ -22,13 +22,12 @@ import RetailVibeDeck from './RetailVibeDeck';
 import { R } from './retailTheme';
 
 const HEADER = 76;   // matches the page's sticky header
-const PANEL  = 360;  // matches the record page's left panel
 
 function Stat({ value, label }) {
   return (
     <div className="flex items-baseline justify-between gap-3 py-2">
-      <span className="text-xs" style={{ color: R.textFaint }}>{label}</span>
-      <span className="text-lg font-black tabular-nums" style={{ color: R.text }}>{value}</span>
+      <span className="text-sm" style={{ color: R.textFaint }}>{label}</span>
+      <span className="text-xl font-black tabular-nums" style={{ color: R.text }}>{value}</span>
     </div>
   );
 }
@@ -48,21 +47,26 @@ export default function RetailDeckView({
   previewLabel,
 }) {
   return (
-    <div className="lg:flex">
+    <div className="fm-retail-deckpage flex flex-col lg:flex-row">
 
       <style>{`
-        /* Desktop only — see the note in RetailRecordSleeve about 100vh on a
-           phone. On mobile the deck sizes itself from the card instead. */
+        /* The page does not scroll. dvh rather than vh so a phone's address
+           bar is subtracted and nothing is cut off at the bottom. The only
+           thing that scrolls on this screen is the saved-vibes list in the
+           rail, once the collection outgrows it — and its bar is hidden by
+           the global rule in index.css. */
+        .fm-retail-deckpage {
+          height: calc(100vh - ${HEADER}px);
+          height: calc(100dvh - ${HEADER}px);
+          overflow: hidden;
+        }
         @media (min-width: 1024px) {
-          /* Height only — the width is on the element via lg:w-[360px], so it
-             does not depend on this rule out-specifying Tailwind's w-full. */
-          .fm-retail-rail { height: calc(100vh - ${HEADER}px); }
-          .fm-retail-deck { min-height: calc(100vh - ${HEADER}px); }
+          .fm-retail-rail { height: 100%; }
         }
       `}</style>
 
       {/* ── The deck, centred, and nothing else ─────────────────────────── */}
-      <div className="fm-retail-deck flex-1 min-w-0 flex flex-col items-center justify-center px-5 py-6">
+      <div className="flex-1 min-w-0 min-h-0 flex flex-col items-center justify-center px-5 py-4">
         {loadingPlaylists ? (
           <div className="flex justify-center py-20">
             <Loader className="w-5 h-5 animate-spin" style={{ color: R.textFaint }} />
@@ -86,12 +90,11 @@ export default function RetailDeckView({
           moving between the two screens does not feel like moving between two
           products. Pinned and scrollable in its own right. */}
       <aside
-        className="fm-retail-rail w-full lg:w-[360px] lg:flex-shrink-0 lg:sticky lg:overflow-y-auto px-5 py-6 space-y-8"
+        className="fm-retail-rail w-full lg:w-[360px] flex-shrink-0 flex flex-col min-h-0 px-5 py-5"
         style={{
           background: R.bgPanel,
           borderLeft: `1px solid ${R.border}`,
           boxShadow: '-18px 0 40px -28px rgba(0,0,0,0.9)',
-          top: HEADER,
         }}
       >
 
@@ -99,8 +102,8 @@ export default function RetailDeckView({
             a venue sees what their subscription bought — but no longer the
             first thing on the page, because it is not a decision. */}
         {impact && impact.total_plays > 0 && (
-          <div>
-            <p className="text-[10px] uppercase tracking-[0.24em] font-bold mb-2" style={{ color: R.violetLift }}>
+          <div className="flex-shrink-0">
+            <p className="text-[11px] uppercase tracking-[0.24em] font-bold mb-2.5" style={{ color: R.violetLift }}>
               This room
             </p>
             <div style={{ borderTop: `1px solid ${R.border}` }}>
@@ -113,19 +116,19 @@ export default function RetailDeckView({
             {(impact.top_artist || impact.top_playlist) && (
               <div className="mt-3 pt-3 space-y-1" style={{ borderTop: `1px solid ${R.border}` }}>
                 {impact.top_artist && (
-                  <p className="text-[11px]" style={{ color: R.textFaint }}>
+                  <p className="text-xs" style={{ color: R.textFaint }}>
                     Most played · <span style={{ color: R.textDim }}>{impact.top_artist}</span>
                   </p>
                 )}
                 {impact.top_playlist && (
-                  <p className="text-[11px]" style={{ color: R.textFaint }}>
+                  <p className="text-xs" style={{ color: R.textFaint }}>
                     Favourite vibe · <span style={{ color: R.textDim }}>{impact.top_playlist}</span>
                   </p>
                 )}
               </div>
             )}
 
-            <p className="text-[10px] mt-3 leading-relaxed" style={{ color: R.textGhost }}>
+            <p className="text-[11px] mt-3 leading-relaxed" style={{ color: R.textGhost }}>
               Half of what you pay is pooled to the artists whose music plays in your space.
             </p>
           </div>
@@ -135,11 +138,14 @@ export default function RetailDeckView({
             nine saved vibes had a horizontal scroller above the fold; here
             they are nine lines you can read at once. */}
         {savedPlaylists.length > 0 && (
-          <div>
-            <p className="text-[10px] uppercase tracking-[0.24em] font-bold mb-2" style={{ color: R.textFaint }}>
+          <div className="flex flex-col min-h-0 flex-1 mt-7">
+            <p className="text-[11px] uppercase tracking-[0.24em] font-bold mb-2.5 flex-shrink-0" style={{ color: R.textFaint }}>
               Your vibes
             </p>
-            <div className="space-y-1">
+            {/* The saved collection is the only scrolling element on this
+                screen. It grows as a venue keeps vibes, and rather than
+                pushing the page taller it scrolls inside the rail. */}
+            <div className="space-y-1 overflow-y-auto min-h-0 flex-1 -mr-2 pr-2">
               {savedPlaylists.map(pl => (
                 <button
                   key={pl.id}
@@ -155,8 +161,8 @@ export default function RetailDeckView({
                       : <Music className="w-4 h-4" style={{ color: R.textGhost }} />}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm truncate" style={{ color: R.text }}>{pl.title}</p>
-                    {pl.mood && <p className="text-[11px] truncate" style={{ color: R.textFaint }}>{pl.mood}</p>}
+                    <p className="text-[15px] truncate" style={{ color: R.text }}>{pl.title}</p>
+                    {pl.mood && <p className="text-xs truncate" style={{ color: R.textFaint }}>{pl.mood}</p>}
                   </div>
                 </button>
               ))}
@@ -165,8 +171,8 @@ export default function RetailDeckView({
         )}
 
         {recommended.length > 0 && (
-          <div>
-            <p className="text-[10px] uppercase tracking-[0.24em] font-bold mb-2 flex items-center gap-1.5" style={{ color: R.textFaint }}>
+          <div className="flex-shrink-0 mt-7">
+            <p className="text-[11px] uppercase tracking-[0.24em] font-bold mb-2.5 flex items-center gap-1.5" style={{ color: R.textFaint }}>
               <TrendingUp className="w-3 h-3" />
               Might suit this room
             </p>
@@ -180,8 +186,8 @@ export default function RetailDeckView({
                   onMouseEnter={(e) => { e.currentTarget.style.borderColor = R.violetEdge; }}
                   onMouseLeave={(e) => { e.currentTarget.style.borderColor = R.border; }}
                 >
-                  <p className="text-sm font-semibold truncate" style={{ color: R.text }}>{r.title}</p>
-                  {r.mood && <p className="text-[11px] truncate" style={{ color: R.textFaint }}>{r.mood}</p>}
+                  <p className="text-[15px] font-semibold truncate" style={{ color: R.text }}>{r.title}</p>
+                  {r.mood && <p className="text-xs truncate" style={{ color: R.textFaint }}>{r.mood}</p>}
                 </button>
               ))}
             </div>

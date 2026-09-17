@@ -829,7 +829,7 @@ export default function RetailPlayerPage() {
           which ate vertical space on a venue tablet and is only ever used by
           an admin. Same destinations, now behind the burger. */}
       {showAdminMenu && isAdmin && (
-        <div className="fixed inset-0 z-30 bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center"
+        <div className="fixed inset-0 z-[200] bg-black/80 backdrop-blur-sm flex items-end sm:items-start sm:justify-end sm:pt-20 sm:pr-5 justify-center"
           onClick={() => setShowAdminMenu(false)}>
           <div className="w-full sm:max-w-sm rounded-t-2xl sm:rounded-2xl overflow-hidden max-h-[80vh] overflow-y-auto"
             style={{
@@ -861,7 +861,7 @@ export default function RetailPlayerPage() {
       )}
 
       {showInbox && (
-        <div className="fixed inset-0 z-30 bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center" onClick={() => setShowInbox(false)}>
+        <div className="fixed inset-0 z-[200] bg-black/80 backdrop-blur-sm flex items-end sm:items-start sm:justify-end sm:pt-20 sm:pr-5 justify-center" onClick={() => setShowInbox(false)}>
           <div className="bg-black border border-white/10 rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md max-h-[70vh] overflow-y-auto p-4" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-3">
               <p className="text-sm font-bold text-white">Updates</p>
@@ -963,7 +963,7 @@ export default function RetailPlayerPage() {
           sign out without leaving Retail for the main app, which defeats
           keeping the two separate. Everything here stays in Retail. */}
       {showAccount && (
-        <div className="fixed inset-0 z-30 bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center"
+        <div className="fixed inset-0 z-[200] bg-black/80 backdrop-blur-sm flex items-end sm:items-start sm:justify-end sm:pt-20 sm:pr-5 justify-center"
           onClick={() => setShowAccount(false)}>
           <div className="w-full sm:max-w-sm rounded-t-2xl sm:rounded-2xl overflow-hidden"
             style={{

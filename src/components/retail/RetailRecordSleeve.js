@@ -37,7 +37,6 @@ function splitCredits(title = '') {
 }
 
 const HEADER = 76;       // the page's sticky header
-const PANEL  = 360;      // the left panel, matched by the deck's rail
 
 export default function RetailRecordSleeve({
   playlist,
@@ -78,7 +77,10 @@ export default function RetailRecordSleeve({
   const [jacket, setJacket] = React.useState(520);
   React.useEffect(() => {
     const measure = () =>
-      setJacket(Math.round(Math.max(320, Math.min(window.innerHeight * 0.74, 680))));
+      // A little smaller than the frame it sits in, and positioned above
+      // centre, so there is air under the record instead of it running into
+      // the bottom edge on a short window.
+      setJacket(Math.round(Math.max(300, Math.min(window.innerHeight * 0.62, 620))));
     measure();
     window.addEventListener('resize', measure);
     return () => window.removeEventListener('resize', measure);
@@ -98,7 +100,7 @@ export default function RetailRecordSleeve({
   const credits    = splitCredits(heroTitle);
 
   return (
-    <div className="lg:flex fm-retail-record">
+    <div className="fm-retail-record flex flex-col lg:flex-row">
 
       {/* ── LEFT PANEL ──────────────────────────────────────────────────────
           Darker than the page on purpose. The seam between this and the
@@ -106,33 +108,40 @@ export default function RetailRecordSleeve({
           hairline is the border now, which is calmer than drawing a box
           around either side. */}
       <aside
-        className="w-full lg:w-[360px] lg:flex-shrink-0 lg:flex lg:flex-col lg:sticky"
+        className="w-full lg:w-[360px] flex-shrink-0 flex flex-col"
         style={{
           background: R.bgPanel,
           borderRight: `1px solid ${R.border}`,
+          borderBottom: `1px solid ${R.border}`,
           boxShadow: '18px 0 40px -28px rgba(0,0,0,0.9)',
-          top: HEADER,
           maxWidth: '100%',
           minWidth: 0,
         }}
       >
         <style>{`
-          /* Desktop only. 100vh on a phone is taller than the visible area
-             because the address bar is not subtracted, which would push the
-             transport below the fold — the exact thing pinning it is for. */
+          /* The page does not scroll. It is a fixed frame the height of the
+             viewport, and the tracklist is the only thing inside it that
+             moves — which is why the frame is sized in dvh rather than vh:
+             on a phone, vh does not subtract the address bar, so a "fixed"
+             page would still be taller than the screen and the bottom of it
+             would be cut off. dvh is the visible height, address bar and all.
+
+             Scrollbars stay hidden globally (index.css), so the scrolling
+             tracklist shows no bar. */
+          .fm-retail-record {
+            height: calc(100vh - ${HEADER}px);
+            height: calc(100dvh - ${HEADER}px);
+            overflow: hidden;
+          }
+          /* Height only. The WIDTH lives on the <aside> via lg:w-[360px]. */
           @media (min-width: 1024px) {
-            .fm-retail-record { min-height: calc(100vh - ${HEADER}px); }
-            /* Height only. The WIDTH lives on the <aside> itself via
-               lg:w-[360px]. It used to be set here, on the inner div, while
-               the aside kept w-full — so the aside ate the whole flex row and
-               the record and tracklist beside it were squeezed to nothing. */
-            .fm-retail-panel  { height: calc(100vh - ${HEADER}px); }
+            .fm-retail-panel { height: 100%; }
           }
         `}</style>
 
-        <div className="fm-retail-panel lg:flex lg:flex-col lg:h-full w-full">
+        <div className="fm-retail-panel flex flex-col w-full min-h-0">
           {/* Everything above the transport scrolls; the transport does not. */}
-          <div className="lg:flex-1 lg:min-h-0 lg:overflow-y-auto px-5 pt-5 pb-3">
+          <div className="lg:flex-1 lg:min-h-0 lg:overflow-y-auto px-5 pt-4 lg:pt-5 pb-3">
             <button
               onClick={onBack}
               className="inline-flex items-center gap-1.5 text-xs transition mb-4 opacity-70 hover:opacity-100"
@@ -143,7 +152,7 @@ export default function RetailRecordSleeve({
             </button>
 
             <div
-              className="relative w-full aspect-square rounded-xl overflow-hidden"
+              className="relative w-32 sm:w-40 lg:w-full aspect-square rounded-xl overflow-hidden mx-auto lg:mx-0"
               style={{
                 background: 'linear-gradient(145deg, #16121F 0%, #0A0A10 100%)',
                 border: `1px solid ${R.borderUp}`,
@@ -239,7 +248,7 @@ export default function RetailRecordSleeve({
               of the viewport on a phone — the same promise on a screen that
               has no second column. */}
           <div
-            className="lg:flex-shrink-0 px-4 pt-3 pb-4 sticky bottom-0 z-20"
+            className="flex-shrink-0 px-4 pt-3 pb-4 z-20"
             style={{ background: R.bgPanel, borderTop: `1px solid ${R.border}` }}
           >
             <RetailTransport
@@ -262,7 +271,7 @@ export default function RetailRecordSleeve({
       </aside>
 
       {/* ── RIGHT: the record, and the tracklist over it ───────────────────── */}
-      <main className="relative flex-1 min-w-0">
+      <main className="relative flex-1 min-w-0 min-h-0 overflow-hidden">
 
         {/* Scenery. Sleeve pinned to the right edge and allowed to bleed off
             it; the disc travels left, into the page, behind the tracklist. */}
@@ -272,8 +281,8 @@ export default function RetailRecordSleeve({
             style={{
               width: jacket,
               height: jacket,
-              right: -Math.round(jacket * 0.10),
-              top: '50%',
+              right: -Math.round(jacket * 0.08),
+              top: '46%',
               marginTop: -(jacket / 2),
             }}
           >
@@ -327,7 +336,9 @@ export default function RetailRecordSleeve({
 
         {/* Tracklist. Fades out to the right so it dissolves into the disc
             arriving underneath rather than stopping at a hard edge. */}
-        <div className="relative z-10 px-5 lg:px-8 py-6 lg:[mask-image:linear-gradient(to_right,black_52%,rgba(0,0,0,0.28)_80%,transparent_100%)] lg:[-webkit-mask-image:linear-gradient(to_right,black_52%,rgba(0,0,0,0.28)_80%,transparent_100%)]">
+        {/* THE ONLY SCROLLING ELEMENT ON THE PAGE.
+            Its bar is hidden by the global rule in index.css. */}
+        <div className="relative z-10 h-full overflow-y-auto px-5 lg:px-8 py-6 lg:[mask-image:linear-gradient(to_right,black_52%,rgba(0,0,0,0.28)_80%,transparent_100%)] lg:[-webkit-mask-image:linear-gradient(to_right,black_52%,rgba(0,0,0,0.28)_80%,transparent_100%)]">
           <p className="text-[10px] uppercase tracking-[0.24em] font-bold mb-3" style={{ color: R.textFaint }}>
             Tracklist
           </p>

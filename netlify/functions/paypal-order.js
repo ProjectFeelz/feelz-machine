@@ -88,84 +88,170 @@ exports.handler = async (event) => {
     const accessToken = await getPayPalAccessToken();
 
     // ========== CREATE ORDER ==========
+    //
+    // ONE PLACE DECIDES WHAT ANYTHING COSTS.
+    //
+    // Before this, five screens each had their own idea of a price and all
+    // five sent it in the request body, and this function ignored every one
+    // of them and charged tracks.download_price instead. That is three
+    // separate bugs rather than one:
+    //
+    //   * an album page priced a track at album.price ÷ tracks and the order
+    //     was refused, because the track itself had no price;
+    //   * an artist page priced the same track at the WHOLE album price;
+    //   * a beat page sent the licence price — $99 for an exclusive — and the
+    //     buyer was charged the track's download price, while beat_purchases
+    //     recorded the $99 that was never taken;
+    //   * pay-what-you-want sent the amount the fan chose and it was thrown
+    //     away.
+    //
+    // Everything below is resolved from the database. The only client amount
+    // still honoured is a pay-what-you-want one, and it is floored at the
+    // minimum the artist set.
     if (action === 'create') {
-      if (!trackId) {
-        return { statusCode: 400, body: JSON.stringify({ error: 'trackId required' }) };
-      }
-
-      // ── Look up authoritative price and title from DB — never trust client ──
       const adminClient = createClient(
         process.env.SUPABASE_URL,
         process.env.SUPABASE_SERVICE_ROLE_KEY
       );
-      const { data: track, error: trackErr } = await adminClient
-        .from('tracks')
-        .select('id, title, download_price, is_downloadable, album_id')
-        .eq('id', trackId)
-        .maybeSingle();
 
-      if (trackErr || !track) {
-        return { statusCode: 404, body: JSON.stringify({ error: 'Track not found' }) };
-      }
+      const { albumId, licenceId } = body;
+      let price = 0;
+      let label = '';
+      let customId = null;   // what the capture will read back
+      let source = '';
 
-      if (!track.is_downloadable) {
-        console.warn('[paypal-order] refused:', trackId, 'is not downloadable');
-        return {
-          statusCode: 400,
-          body: JSON.stringify({ error: 'This track is not available for download', reason: 'not_downloadable' }),
-        };
-      }
+      // ── An album ────────────────────────────────────────────────────────
+      if (albumId) {
+        const { data: album } = await adminClient
+          .from('albums')
+          .select('id, title, price, is_published')
+          .eq('id', albumId)
+          .maybeSingle();
 
-      // ── The price, resolved the way the ALBUM PAGE resolves it ──────────
-      //
-      // This is what was breaking purchases. A track that carries no price of
-      // its own still shows a buy button on an album page, priced at the
-      // album's price divided by its tracks — that is where a "$1.43" on a
-      // $10 album of seven tracks comes from. This function only ever looked
-      // at tracks.download_price, found nothing, and returned 400. The buyer
-      // saw "payment failed" on a button the app had offered them, on a track
-      // that was genuinely for sale.
-      //
-      // Resolved here, from the database, for the same reason the track price
-      // is: the client is never trusted with an amount.
-      let price = Number(track.download_price) || 0;
-      let priceSource = 'track';
+        if (!album) {
+          return { statusCode: 404, body: JSON.stringify({ error: 'Album not found' }) };
+        }
+        price    = Number(album.price) || 0;
+        label    = album.title;
+        // Prefixed so the capture knows this was an album without being told
+        // by the client. The old code took `albumId` from the capture request
+        // body, which meant a buyer could pay for one track and claim a whole
+        // album on the way back.
+        customId = `album:${album.id}`;
+        source   = 'album';
 
-      if (price <= 0 && track.album_id) {
-        const [{ data: album }, { count: trackCount }] = await Promise.all([
-          adminClient.from('albums').select('price').eq('id', track.album_id).maybeSingle(),
-          adminClient.from('tracks').select('id', { count: 'exact', head: true })
-            .eq('album_id', track.album_id).eq('is_published', true),
-        ]);
+        if (price <= 0) {
+          return { statusCode: 400, body: JSON.stringify({ error: 'This album is not for sale', reason: 'no_price' }) };
+        }
+      } else {
+        if (!trackId) {
+          return { statusCode: 400, body: JSON.stringify({ error: 'trackId or albumId required' }) };
+        }
 
-        const albumPrice = Number(album?.price) || 0;
-        if (albumPrice > 0 && trackCount > 0) {
-          price = Math.round((albumPrice / trackCount) * 100) / 100;
-          priceSource = `album (${albumPrice} / ${trackCount} tracks)`;
+        const { data: track, error: trackErr } = await adminClient
+          .from('tracks')
+          .select('id, title, download_price, is_downloadable, album_id, is_beat, beat_licence, pay_what_you_want, pwyw_minimum_price, minimum_price')
+          .eq('id', trackId)
+          .maybeSingle();
+
+        if (trackErr || !track) {
+          return { statusCode: 404, body: JSON.stringify({ error: 'Track not found' }) };
+        }
+
+        label    = track.title;
+        customId = track.id;
+
+        // ── A beat licence ────────────────────────────────────────────────
+        // The licences live on the track as JSON, so the price can be read
+        // here rather than taken on trust from the page that rendered it.
+        if (licenceId) {
+          let licences = [];
+          try {
+            const raw = typeof track.beat_licence === 'string'
+              ? JSON.parse(track.beat_licence)
+              : track.beat_licence;
+            licences = Array.isArray(raw) ? raw : (raw?.licences || []);
+          } catch {
+            licences = [];
+          }
+
+          const lic = licences.find(l => String(l.id) === String(licenceId));
+          if (!lic) {
+            console.warn('[paypal-order] refused: licence', licenceId, 'not found on track', trackId);
+            return { statusCode: 400, body: JSON.stringify({ error: 'That licence is not offered on this beat', reason: 'unknown_licence' }) };
+          }
+          price    = Number(lic.price) || 0;
+          label    = `${track.title} — ${lic.label || licenceId} licence`;
+          customId = `lic:${licenceId}:${track.id}`;
+          source   = `beat_licence:${licenceId}`;
+
+          if (price <= 0) {
+            return { statusCode: 400, body: JSON.stringify({ error: 'That licence is free — no payment needed', reason: 'free_licence' }) };
+          }
+        }
+
+        // ── Pay what you want ─────────────────────────────────────────────
+        // The one case where the buyer's number is the right number. It is
+        // still floored at what the artist set, so "pay what you want" cannot
+        // be read as "pay one cent".
+        else if (track.pay_what_you_want) {
+          const floor = Math.max(
+            Number(track.pwyw_minimum_price) || 0,
+            Number(track.minimum_price) || 0,
+            0.50
+          );
+          const offered = Number(body.amount) || 0;
+          price  = Math.max(floor, Math.round(offered * 100) / 100);
+          source = `pwyw (offered ${offered}, floor ${floor})`;
+
+          if (price > 10000) {
+            return { statusCode: 400, body: JSON.stringify({ error: 'That amount is too large', reason: 'amount_too_large' }) };
+          }
+        }
+
+        // ── An ordinary paid download ─────────────────────────────────────
+        else {
+          if (!track.is_downloadable) {
+            console.warn('[paypal-order] refused:', trackId, 'is not downloadable');
+            return { statusCode: 400, body: JSON.stringify({ error: 'This track is not available for download', reason: 'not_downloadable' }) };
+          }
+
+          price  = Number(track.download_price) || 0;
+          source = 'track';
+
+          // The album fallback, matching what the album page shows: a track
+          // with no price of its own costs the album's price split across
+          // its published tracks.
+          if (price <= 0 && track.album_id) {
+            const [{ data: album }, { count: trackCount }] = await Promise.all([
+              adminClient.from('albums').select('price').eq('id', track.album_id).maybeSingle(),
+              adminClient.from('tracks').select('id', { count: 'exact', head: true })
+                .eq('album_id', track.album_id).eq('is_published', true),
+            ]);
+            const albumPrice = Number(album?.price) || 0;
+            if (albumPrice > 0 && trackCount > 0) {
+              price  = Math.round((albumPrice / trackCount) * 100) / 100;
+              source = `album share (${albumPrice} / ${trackCount})`;
+            }
+          }
+
+          if (price <= 0) {
+            console.warn('[paypal-order] refused:', trackId, 'has no price on the track or its album');
+            return { statusCode: 400, body: JSON.stringify({ error: 'This track is not for sale', reason: 'no_price' }) };
+          }
         }
       }
 
-      if (price <= 0) {
-        console.warn('[paypal-order] refused:', trackId, 'has no price on the track or its album');
-        return {
-          statusCode: 400,
-          body: JSON.stringify({ error: 'This track is not for sale', reason: 'no_price' }),
-        };
-      }
-
-      // PayPal rejects an order below its minimum, which would otherwise come
-      // back as an opaque 400 from the block below rather than saying why.
-      if (price < 0.5) {
-        console.warn('[paypal-order] refused:', trackId, 'price', price, 'is below the PayPal minimum');
-        return {
-          statusCode: 400,
-          body: JSON.stringify({ error: 'This track costs too little to sell on its own', reason: 'below_minimum' }),
-        };
+      // PayPal refuses anything under about half a dollar. Caught here so it
+      // reads as a price problem rather than an opaque failure from PayPal.
+      if (price < 0.50) {
+        console.warn('[paypal-order] refused: resolved price', price, 'is below the PayPal minimum', { trackId, albumId, licenceId });
+        return { statusCode: 400, body: JSON.stringify({ error: 'This costs too little to sell on its own', reason: 'below_minimum' }) };
       }
 
       const safeAmount = price.toFixed(2);
-      const trackTitle = track.title;
-      console.log('[paypal-order] CREATE', JSON.stringify({ trackId, safeAmount, priceSource }));
+      console.log('[paypal-order] CREATE',
+        JSON.stringify({ trackId: trackId || null, albumId: albumId || null, licenceId: licenceId || null, safeAmount, source }));
 
       const orderPayload = {
         intent: 'CAPTURE',
@@ -174,8 +260,8 @@ exports.handler = async (event) => {
             currency_code: 'USD',
             value: safeAmount,
           },
-          description: `${trackTitle} by ${artistName || 'Artist'} - Feelz Machine`,
-          custom_id: trackId,
+          description: `${label} by ${artistName || 'Artist'} - Feelz Machine`,
+          custom_id: customId,
         }],
         application_context: {
           brand_name: 'Feelz Machine',
@@ -367,7 +453,36 @@ exports.handler = async (event) => {
         //    so a lapsed session also produced a paid track with no download.
         //    The payer's PayPal email is now the fallback: it comes from the
         //    capture itself, so it cannot be absent or forged.
-        const { userId: buyerUserId, albumId } = body;
+        // ── WHAT WAS BOUGHT COMES FROM THE ORDER, NOT THE BUYER ──────────
+        //
+        // albumId used to be read straight out of the capture request body.
+        // Since it decides whether a whole album is granted, that let anyone
+        // pay for a single track and then claim the album on the way back.
+        //
+        // It is now decoded from the custom_id we set when the order was
+        // created, which PayPal echoes back and the buyer never touches. The
+        // body is still accepted as a fallback, but only for orders created
+        // before this deploy, which carry no prefix to decode.
+        const { userId: buyerUserId } = body;
+
+        let albumId   = null;
+        let licenceId = null;
+
+        if (typeof captureTrackId === 'string' && captureTrackId.startsWith('album:')) {
+          albumId        = captureTrackId.slice('album:'.length);
+          captureTrackId = null;
+        } else if (typeof captureTrackId === 'string' && captureTrackId.startsWith('lic:')) {
+          const parts = captureTrackId.split(':');
+          licenceId      = parts[1] || null;
+          captureTrackId = parts[2] || null;
+        } else if (!captureTrackId && body.albumId) {
+          // Legacy order, created before custom_id carried the kind.
+          albumId = body.albumId;
+          console.warn('[paypal-order] legacy capture: album taken from the request body, not custom_id');
+        }
+
+        console.log('[paypal-order] CAPTURE RESOLVED',
+          JSON.stringify({ orderId, trackId: captureTrackId, albumId, licenceId }));
         const payerEmail = result.body.payer?.email_address || null;
 
         let resolvedUserId = buyerUserId || null;
