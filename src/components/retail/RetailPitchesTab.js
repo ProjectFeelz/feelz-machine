@@ -14,7 +14,7 @@
 // track available to venues.
 
 import React from 'react';
-import { Music, Play, Pause, Check, X, Loader, Inbox } from 'lucide-react';
+import { Music, Play, Pause, Check, X, Loader, Inbox, ShieldCheck } from 'lucide-react';
 import { supabase } from '../../supabaseClient';
 import { useAuth } from '../../contexts/AuthContext';
 import { usePlayer } from '../../contexts/PlayerContext';
@@ -43,7 +43,8 @@ export default function RetailPitchesTab({ showToast }) {
         .select(`
           id, pitch_note, status, rejection_reason, created_at, reviewed_at,
           track:tracks ( id, title, file_url, cover_artwork_url, is_explicit, is_published,
-                         artist:artists ( id, artist_name ) )
+                         artist:artists ( id, artist_name ) ),
+          acceptances:legal_acceptances ( accepted_at, document:legal_documents ( slug, version ) )
         `)
         .eq('status', filter)
         .order('created_at', { ascending: false }),
@@ -209,6 +210,31 @@ export default function RetailPitchesTab({ showToast }) {
                   {row.pitch_note && (
                     <p className="text-xs text-white/55 mt-1.5 italic break-words">“{row.pitch_note}”</p>
                   )}
+
+                  {/* Whether the terms were actually agreed to, and which
+                      version. A reviewer should never have to take that on
+                      trust, and a pitch from before the gate existed has no
+                      acceptance on file — which is worth seeing rather than
+                      hiding behind a default tick. */}
+                  {(() => {
+                    const lic = (row.acceptances || []).find(a => a.document?.slug === 'retail-licence');
+                    const sub = (row.acceptances || []).find(a => a.document?.slug === 'retail-submission-terms');
+                    if (lic && sub) {
+                      return (
+                        <p className="text-[11px] text-emerald-300/70 mt-1.5 flex items-center gap-1">
+                          <ShieldCheck className="w-3 h-3 flex-shrink-0" />
+                          Terms agreed v{sub.document.version}/{lic.document.version} on{' '}
+                          {new Date(sub.accepted_at).toLocaleDateString()}
+                        </p>
+                      );
+                    }
+                    return (
+                      <p className="text-[11px] text-amber-300/80 mt-1.5 flex items-center gap-1">
+                        <ShieldCheck className="w-3 h-3 flex-shrink-0" />
+                        Submitted before the terms gate existed — no agreement on file
+                      </p>
+                    );
+                  })()}
 
                   {t.is_explicit && (
                     <p className="text-[11px] text-amber-300/90 mt-1.5">

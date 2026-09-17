@@ -78,86 +78,36 @@ if ('serviceWorker' in navigator) {
 }
 
 
-// ── Horizontal rows: grab and pull them with a mouse ─────────────────────────
+// ── Horizontal rows scroll with a normal mouse wheel ─────────────────────────
 //
-// Two earlier attempts at this problem, and why neither survived:
+// Scrollbars are hidden site-wide, which is right on touch and wrong on a
+// desktop mouse: rows like "New to you" in Library, the Home carousels and
+// Browse had no way to reach the content past the fold. A trackpad can swipe
+// sideways, a mouse wheel cannot.
 //
-//   1. A window-level `wheel` listener that turned vertical wheel input into
-//      sideways movement whenever the pointer sat inside a rail, and called
-//      preventDefault(). It froze the page. Rails cover most of the viewport
-//      on Home and Library, so the pointer was nearly always inside one, and
-//      every tick was swallowed before the page could move. The "let the
-//      event through at either end" guard was worthless — a forty-item rail
-//      has a very long middle. Touch never emits wheel events, so phones were
-//      fine and it looked like it came from nowhere.
+// One global listener instead of touching all 47 rows. Vertical wheel input
+// over a horizontally scrollable element moves it sideways.
 //
-//   2. Turning the native scrollbars back on for desktop. It worked and it
-//      looked terrible: a grey bar with stepper arrows under every row, and
-//      those arrows became the only way to move a rail with a mouse.
-//
-// So: grab and pull. Press on a rail, drag sideways, let go.
-//
-// The important property is what this does NOT do. It never listens for
-// `wheel` and never preventDefaults one, so the page keeps scrolling normally
-// wherever the pointer is — the failure mode of attempt 1 is not reachable
-// from here. It also injects no DOM, so React is free to re-render a rail
-// without anything to clean up.
-//
-// Touch devices are excluded: a finger already swipes rails natively, and
-// adding this on top would fight it.
-if (typeof window !== 'undefined' && window.matchMedia?.('(pointer: fine)').matches) {
-  const RAILS = '.overflow-x-auto, .overflow-x-scroll';
-  const DRAG_THRESHOLD = 6; // px before a press counts as a drag rather than a click
+// It only takes over while that row still has somewhere to go in the
+// direction you are scrolling. At either end the event passes through and the
+// page scrolls normally, so a row can never trap you on the way down a page.
+// Shift-wheel is left alone since browsers already map it to horizontal.
+if (typeof window !== 'undefined') {
+  window.addEventListener('wheel', (e) => {
+    if (e.shiftKey || e.ctrlKey) return;
+    if (Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;
 
-  let rail = null;
-  let startX = 0;
-  let startLeft = 0;
-  let dragging = false;
-  let suppressClickUntil = 0;
+    const row = e.target?.closest?.('.overflow-x-auto, .overflow-x-scroll');
+    if (!row) return;
 
-  window.addEventListener('pointerdown', (e) => {
-    if (e.button !== 0) return;                       // left button only
-    if (e.pointerType && e.pointerType !== 'mouse') return;
-    const r = e.target?.closest?.(RAILS);
-    if (!r) return;
-    if (r.scrollWidth - r.clientWidth <= 1) return;   // nothing to pull
-    rail = r;
-    startX = e.clientX;
-    startLeft = r.scrollLeft;
-    dragging = false;
-  });
+    const maxScroll = row.scrollWidth - row.clientWidth;
+    if (maxScroll <= 1) return;
 
-  window.addEventListener('pointermove', (e) => {
-    if (!rail) return;
-    const dx = e.clientX - startX;
-    if (!dragging) {
-      if (Math.abs(dx) < DRAG_THRESHOLD) return;      // still could be a click
-      dragging = true;
-      document.body.classList.add('fm-dragging-rail');
-    }
-    rail.scrollLeft = startLeft - dx;
-  });
+    const atStart = row.scrollLeft <= 0;
+    const atEnd   = row.scrollLeft >= maxScroll - 1;
+    if ((e.deltaY < 0 && atStart) || (e.deltaY > 0 && atEnd)) return;
 
-  const endDrag = () => {
-    if (dragging) {
-      // A drag ends with a click on whatever card was under the cursor. Without
-      // this, pulling a rail opens a track.
-      suppressClickUntil = Date.now() + 150;
-      document.body.classList.remove('fm-dragging-rail');
-    }
-    rail = null;
-    dragging = false;
-  };
-
-  window.addEventListener('pointerup', endDrag);
-  window.addEventListener('pointercancel', endDrag);
-  // Releasing outside the window would otherwise leave a rail stuck to the cursor.
-  window.addEventListener('blur', endDrag);
-
-  window.addEventListener('click', (e) => {
-    if (Date.now() >= suppressClickUntil) return;
-    suppressClickUntil = 0;
-    e.stopPropagation();
+    row.scrollLeft += e.deltaY;
     e.preventDefault();
-  }, { capture: true });
+  }, { passive: false });
 }

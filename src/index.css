@@ -9,18 +9,6 @@
   box-sizing: border-box;
 }
 
-/* overflow-x must be on html AS WELL AS body.
-   It was on body alone, which is the one configuration that does NOT contain
-   a too-wide child on mobile: the browser propagates body's overflow to the
-   viewport only when html has `visible`, and the result is a page that still
-   pans sideways while every position:fixed element stays pinned to the
-   viewport. That is what "the whole screen shifts, almost like it's zooming"
-   is — the content sliding under a fixed header and mini player that cannot
-   slide with it. */
-html {
-  overflow-x: hidden;
-}
-
 body {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   -webkit-font-smoothing: antialiased;
@@ -171,45 +159,6 @@ html, body, #root {
 /* Hide scrollbars site-wide */
 * { scrollbar-width: none; -ms-overflow-style: none; }
 *::-webkit-scrollbar { display: none; }
-
-/* ── Horizontal rails, for a mouse ──────────────────────────────────────────
-   Scrollbars stay hidden. An earlier attempt turned them back on for desktop
-   and it looked exactly as bad as it sounds: a grey native bar with stepper
-   arrows sitting under every row.
-
-   Rails are moved with a mouse by grabbing and pulling them — the handler is
-   in index.js and it touches pointer events only, never the wheel, so it
-   cannot freeze the page the way the old wheel hijack did.
-
-   This is the cursor that says so. `pointer: fine` means a mouse or trackpad;
-   touch devices are untouched. */
-@media (pointer: fine) {
-  .overflow-x-auto,
-  .overflow-x-scroll {
-    cursor: grab;
-  }
-  .overflow-x-auto:active,
-  .overflow-x-scroll:active {
-    cursor: grabbing;
-  }
-  /* Anything you can actually click keeps a normal pointer, so a card does
-     not look like it is only there to be dragged. */
-  .overflow-x-auto a,
-  .overflow-x-auto button,
-  .overflow-x-scroll a,
-  .overflow-x-scroll button {
-    cursor: pointer;
-  }
-}
-
-/* Set on <body> for the duration of a rail drag. Without it the browser
-   starts selecting text and ghost-dragging images the moment you pull. */
-body.fm-dragging-rail,
-body.fm-dragging-rail * {
-  user-select: none !important;
-  -webkit-user-select: none !important;
-  cursor: grabbing !important;
-}
 
 @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
 .animate-slide-up { animation: slideUp 0.25s ease-out; }

@@ -12,6 +12,7 @@ import { useTier } from '../contexts/useTier';
 import { useAudioConverter } from '../hooks/useAudioConverter';
 import UploadHelpPanel from '../components/UploadHelpPanel';
 import { notifyCollabRequest } from '../components/notificationTriggers';
+import RetailSubmitGate from '../components/legal/RetailSubmitGate';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -1790,20 +1791,18 @@ export default function TrackUploadPanel() {
   };
 
   const [retailPitchedIds, setRetailPitchedIds] = useState([]);
-  const submitToRetail = async (track) => {
+
+  // Pitching used to be a window.prompt for a note followed by a direct insert
+  // into retail_pitches — no terms shown, nothing agreed, nothing recorded.
+  // It now opens the agreement gate, and the gate is what submits: it calls
+  // submit_retail_pitch(), which writes the pitch and the artist's acceptance
+  // of both documents in a single transaction. There is deliberately no path
+  // left from this file that creates a pitch on its own.
+  const [retailGateTrack, setRetailGateTrack] = useState(null);
+
+  const submitToRetail = (track) => {
     if (!artist?.id) return;
-    const note = window.prompt(`Pitch "${track.title}" for Feelz Retail? Add a short note (optional):`, '');
-    if (note === null) return; // cancelled
-    try {
-      const { error } = await supabase.from('retail_pitches').insert({
-        track_id: track.id,
-        artist_id: artist.id,
-        pitch_note: note.trim() || null,
-      });
-      if (error) throw error;
-      showMessage('success', 'Pitched, you\'ll see the decision once it\'s reviewed');
-      setRetailPitchedIds(prev => [...prev, track.id]);
-    } catch (err) { showMessage('error', 'Failed: ' + err.message); }
+    setRetailGateTrack(track);
   };
 
   const deleteAlbum = async (album) => {
@@ -2963,6 +2962,18 @@ export default function TrackUploadPanel() {
             </div>
           )}
         </div>
+      )}
+
+      {retailGateTrack && (
+        <RetailSubmitGate
+          track={retailGateTrack}
+          onClose={() => setRetailGateTrack(null)}
+          onSubmitted={() => {
+            setRetailPitchedIds(prev => [...prev, retailGateTrack.id]);
+            setRetailGateTrack(null);
+            showMessage('success', 'Submitted. You\'ll see the decision once it\'s reviewed.');
+          }}
+        />
       )}
     </div>
   );
