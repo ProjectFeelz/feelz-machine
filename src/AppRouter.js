@@ -11,6 +11,8 @@ import AppLayout from './components/layout/AppLayout';
 // Mounted once, listens for a window event, shows the confirmation sheet after
 // a payment. See PurchaseReceipt.js for why it is an event and not a context.
 import PurchaseReceipt from './components/PurchaseReceipt';
+import MerchParked from './components/MerchParked';
+import { MERCH_PARKED } from './config/features';
 // The offline library. A static import, not React.lazy, on purpose: it is the
 // one page that has to render with no network, and a lazy chunk that was never
 // fetched cannot be loaded offline — the person would tap Offline and sit on
@@ -384,9 +386,22 @@ export default function AppRouter() {
                 <Route path="/admin/growth"       element={<AdminGrowth />} />
                 <Route path="/beat/:slug" element={<BeatDetailPage />} />
                 <Route path="/artist/:slug" element={<ArtistProfilePage />} />
-                <Route path="/artist/:slug/merch" element={<MerchPage />} />
-                <Route path="/artist/:slug/merch/checkout" element={<MerchCheckoutPage />} />
-                <Route path="/artist/:slug/merch/orders" element={<MerchOrdersPage />} />
+                {/* Merch is parked — src/config/features.js.
+                    The switch is HERE, at the route, and not inside the three
+                    pages: an early return above a component's hooks changes
+                    the number of hooks React sees between renders, which the
+                    build refuses outright (rules-of-hooks). At the route there
+                    is no component to half-render — the parked notice is
+                    simply what the URL resolves to, so a bookmarked shop link
+                    gets the explanation instead of a checkout, and the pages
+                    themselves stay exactly as they were for when it comes
+                    back. */}
+                <Route path="/artist/:slug/merch"
+                  element={MERCH_PARKED ? <MerchParked /> : <MerchPage />} />
+                <Route path="/artist/:slug/merch/checkout"
+                  element={MERCH_PARKED ? <MerchParked /> : <MerchCheckoutPage />} />
+                <Route path="/artist/:slug/merch/orders"
+                  element={MERCH_PARKED ? <MerchParked /> : <MerchOrdersPage />} />
                 <Route path="/artist/:slug/fans" element={<FanLeaderboardPage />} />
                 {/* The full lists behind "See all" on the profile's Albums and
                     Singles cards. Declared before nothing else that could

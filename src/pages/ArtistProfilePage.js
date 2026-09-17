@@ -2071,7 +2071,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
                               kind: 'purchase',
                               title: pwywTrack?.title,
                               subtitle: artist?.artist_name,
-                              amount: pwywAmount,
+                              amount: parseFloat(pwywFanPrice) || 0,
                             });
                             setTimeout(async () => {
                               await triggerDownload(pwywTrack);
