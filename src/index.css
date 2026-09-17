@@ -9,6 +9,18 @@
   box-sizing: border-box;
 }
 
+/* overflow-x must be on html AS WELL AS body.
+   It was on body alone, which is the one configuration that does NOT contain
+   a too-wide child on mobile: the browser propagates body's overflow to the
+   viewport only when html has `visible`, and the result is a page that still
+   pans sideways while every position:fixed element stays pinned to the
+   viewport. That is what "the whole screen shifts, almost like it's zooming"
+   is — the content sliding under a fixed header and mini player that cannot
+   slide with it. */
+html {
+  overflow-x: hidden;
+}
+
 body {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   -webkit-font-smoothing: antialiased;

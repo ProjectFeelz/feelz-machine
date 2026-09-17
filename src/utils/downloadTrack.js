@@ -34,6 +34,11 @@ export function downloadErrorMessage(err) {
       return "Couldn't check your download allowance just now. Try again in a moment.";
     case 'purchase_required':
       return 'This track needs to be bought before you can download it.';
+    case 'insufficient_payment':
+      // Distinct from purchase_required on purpose. "You need to buy this"
+      // is wrong and infuriating when you HAVE paid — it just went through
+      // for less than the artist's minimum.
+      return 'The amount paid was below this track\u2019s minimum price. Pay the difference to download it.';
     case 'Not authenticated':
       return 'Sign in to download.';
     default:
@@ -68,6 +73,7 @@ export async function downloadTrack(trackId, title, authToken) {
     if (err.error === 'artists_cannot_download') throw new Error('artists_cannot_download');
     if (err.error === 'fan_pro_required')        throw new Error('fan_pro_required');
     if (err.error === 'monthly_quota_exceeded')  throw new Error('monthly_quota_exceeded');
+    if (err.error === 'Insufficient payment')    throw new Error('insufficient_payment');
     throw new Error('purchase_required');
   }
 

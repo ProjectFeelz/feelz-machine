@@ -146,9 +146,15 @@ function NotFoundRedirect() {
   if (vanityTrack) {
     return <Navigate to={`/track/${vanityTrack[2]}`} replace />;
   }
+  // This one was the worst of the three, because it is the SHARE link.
+  // /@handle/album/<slug> redirected to /album/<handle>/<slug> — two segments
+  // against a one-segment route — so it came straight back to this same
+  // catch-all and then fell through to "/". Every album link anyone has ever
+  // shared has landed on For You. The handle is not part of the destination;
+  // AlbumDetailPage looks the album up by slug.
   const vanityAlbum = location.pathname.match(/^\/@([^/]+)\/album\/(.+)$/);
   if (vanityAlbum) {
-    return <Navigate to={`/album/${vanityAlbum[1]}/${vanityAlbum[2]}`} replace />;
+    return <Navigate to={`/album/${vanityAlbum[2]}`} replace />;
   }
   const vanityBeat = location.pathname.match(/^\/@([^/]+)\/beat\/(.+)$/);
   if (vanityBeat) {

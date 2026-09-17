@@ -423,6 +423,18 @@ export default function AlbumDetailPage() {
         )}
       </div>
 
+      {/* Who made this record — up here, where the track page puts it.
+          One card per track that HAS credits, each naming its track, so a
+          listener can see at a glance that a song is a collaboration without
+          scrolling to the end of the album. */}
+      {tracks.some(t => t.id) && (
+        <div className="px-4 mt-1 mb-2 space-y-3">
+          {tracks.map(track => (
+            <TrackCredits key={track.id} trackId={track.id} title={track.title} />
+          ))}
+        </div>
+      )}
+
       {/* Tracks */}
       <div className="px-4">
         {tracks.length === 0 ? (
@@ -550,11 +562,15 @@ export default function AlbumDetailPage() {
         })}
       </div>
 
-      {tracks.some(t => t.id) && (
-        <div className="px-4 mt-2 space-y-3">
-          {tracks.map(track => <TrackCredits key={track.id} trackId={track.id} />)}
-        </div>
-      )}
+      {/* Credits moved OFF the bottom of the page.
+          They used to render here, after the whole track list: one card per
+          track, every one headed just "Credits", with nothing saying which
+          track it belonged to. On a two-track album that is two identical
+          cards stacked at the very bottom — you could see that somebody had a
+          50% split without being able to tell of what.
+          They are now near the top, under the action bar, in the same place
+          the track detail page puts Featuring, and each one names its track.
+          See the block above. */}
 
       <PaidPlayGate track={limitedTrack} artist={artist} onClose={() => setLimitedTrack(null)}
         onPurchaseComplete={(t) => {

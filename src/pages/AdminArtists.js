@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
+import { GRANT_DURATIONS, DEFAULT_GRANT_MONTHS, grantExpiry } from '../utils/grantDuration';
 import { sendNotification } from '../utils/notify';
 import { useAuth } from '../contexts/AuthContext';
 import {
@@ -16,6 +17,10 @@ export default function AdminArtists() {
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState('newest');
   const [grantingId, setGrantingId] = useState(null);
+  // How long the next grant lasts. One control per page, so an admin sets the
+  // length once and then grants normally — rather than being asked twice for
+  // every person, which is how a length setting ends up ignored.
+  const [grantMonths, setGrantMonths] = useState(DEFAULT_GRANT_MONTHS);
   const [toast, setToast] = useState(null); // { message, type: 'success'|'error' }
 
   const showToast = (message, type = 'success') => {
@@ -56,7 +61,7 @@ export default function AdminArtists() {
     fetchArtists();
   }, [isAdmin, navigate, fetchArtists]);
 
-  const grantTier = async (artistId, tierSlug, artistName) => {
+  const grantTier = async (artistId, tierSlug, artistName, months = DEFAULT_GRANT_MONTHS) => {
     setGrantingId(artistId);
     try {
       const { data: tier, error: tierErr } = await supabase
@@ -85,7 +90,8 @@ export default function AdminArtists() {
           amount_paid: 0,
           paypal_subscription_id: `admin_grant_${Date.now()}`,
           started_at: new Date().toISOString(),
-          expires_at: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
+          // Was a flat 365 days — one click, a free year. See grantDuration.js.
+          expires_at: grantExpiry(months),
         });
         if (insertErr) throw new Error(`Subscription insert: ${insertErr.message}`);
       }
@@ -157,6 +163,15 @@ export default function AdminArtists() {
         <span className="text-sm text-white/30 ml-auto">{artists.length} total</span>
       </div>
 
+      {/* How long a grant lasts. Was a hard-coded 365 days with no control at
+          all — one click in the tier dropdown and somebody had a free year. */}
+      <div className="flex items-center space-x-2 mb-3">
+        <span className="text-[11px] text-white/35">Grants last</span>
+        <select value={grantMonths} onChange={e => setGrantMonths(Number(e.target.value))}
+          className="px-2.5 py-1.5 bg-white/[0.04] rounded-lg text-xs text-white/70 border border-white/[0.06] focus:outline-none">
+          {GRANT_DURATIONS.map(d => <option key={d.months} value={d.months}>{d.label}</option>)}
+        </select>
+      </div>
       {/* Search + Sort */}
       <div className="flex space-x-2 mb-4">
         <div className="relative flex-1">
@@ -238,7 +253,7 @@ export default function AdminArtists() {
                   ) : (
                     <select
                       value={a.tier === 'master' ? 'premium' : (a.tier || 'free')}
-                      onChange={(e) => grantTier(a.id, e.target.value, a.artist_name)}
+                      onChange={(e) => grantTier(a.id, e.target.value, a.artist_name, grantMonths)}
                       className="text-[10px] bg-white/[0.06] text-white/50 rounded-lg px-2 py-1.5 border border-white/[0.08] focus:outline-none cursor-pointer hover:bg-white/[0.10] transition"
                       title="Grant tier">
                       <option value="free">Free</option>

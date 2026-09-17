@@ -51,7 +51,11 @@ export default function AdminContent() {
           <Layers className="w-5 h-5 text-amber-400" />
           <h1 className="text-base font-bold text-white">Content</h1>
         </div>
-        <div className="flex space-x-1 p-1 bg-white/[0.03] rounded-xl border border-white/[0.06]">
+        {/* Scrolls rather than wraps. These are TABS: a wrapped second row of
+            tabs reads as a second, unrelated control. The Tab component sets
+            whitespace-nowrap, so the strip needs somewhere to scroll — and
+            the four labels come to about 428px against a 360px phone. */}
+        <div className="flex space-x-1 p-1 bg-white/[0.03] rounded-xl border border-white/[0.06] overflow-x-auto scrollbar-hide">
           <Tab active={tab === 'boost'}        onClick={() => switchTab('boost')}>Boost</Tab>
           <Tab active={tab === 'competitions'} onClick={() => switchTab('competitions')}>Competitions</Tab>
           <Tab active={tab === 'schoolsessions'} onClick={() => switchTab('schoolsessions')}>School Sessions</Tab>

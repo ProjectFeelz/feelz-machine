@@ -270,8 +270,17 @@ self.addEventListener('fetch', e => {
       const network = fetch(req)
         .then(res => {
           if (res?.status === 200) {
-            const copy = res.clone();      // clone before the async gap
-            cache.put(req, copy).catch(() => {});
+            // Cache it under the requested URL AND as the shell.
+            //
+            // Every navigation on this SPA returns the same 8KB index.html —
+            // Netlify's /* -> /index.html rule sees to that. Seeding the shell
+            // key from any successful navigation means the app can survive
+            // offline even if the install-time precache of /index.html missed,
+            // which is exactly the hole a 503 on /admin/content falls through.
+            cache.put(req, res.clone()).catch(() => {});
+            caches.open(STATIC_CACHE)
+              .then(c => c.put('/index.html', res.clone()))
+              .catch(() => {});
           }
           return res;
         })
@@ -284,20 +293,31 @@ self.addEventListener('fetch', e => {
         return cached;
       }
 
-      // Nothing cached yet — first ever visit, or the precache failed.
+      // Nothing cached yet — first ever visit, or the precache missed.
       // Wait for the network, and only then fall back.
       const res = await network;
       if (res) return res;
 
-      return (await caches.match('/index.html'))
-          || (await caches.match('/offline.html'))
-          || new Response(
-               '<!doctype html><meta charset="utf-8"><title>Offline</title>'
-               + '<body style="font:16px system-ui;padding:2rem"><h1>No connection</h1>'
-               + '<p>Feelz Machine needs a connection the first time it loads. '
-               + 'Once it has, your saved music plays without one.</p>',
-               { status: 503, headers: { 'Content-Type': 'text/html; charset=utf-8' } }
-             );
+      const shell = (await caches.match('/index.html'))
+                 || (await caches.match('/offline.html'));
+      if (shell) return shell;
+
+      // No shell, no network.
+      //
+      // This used to synthesise a 503, and that was wrong in two ways. A 503
+      // says "the server is broken" when the truth is "this device has no
+      // connection" — so a dropped signal on a page the cache had never seen
+      // showed up in the console, and in any error reporting, as a server
+      // fault. It is also a REAL response as far as the browser is concerned,
+      // which means the page it replaces never gets Chrome's own offline UI,
+      // the one people actually recognise and know to retry.
+      //
+      // Rejecting instead hands the navigation back to the browser, which
+      // shows its native offline page. Logged loudly, because reaching here
+      // at all means the shell is missing and that is worth knowing.
+      console.error('[SW] navigation failed with no cached shell:', req.url,
+        '— the precache of /index.html is missing. It will be re-seeded on the next successful load.');
+      throw new Error('offline and no cached shell');
     })());
     return;
   }

@@ -112,6 +112,28 @@ export default function PaymentSettings() {
         setHasProfile(true);
       }
 
+      // Write the SAME address to artists.paypal_email too.
+      //
+      // There are two tables holding a payout email and two screens writing
+      // them: this one saves artist_payment_profiles, Profile > Edit saves
+      // artists. Which screen an artist happened to use decided whether the
+      // payout function could find them — and this is the screen that
+      // promises "This is where you'll receive payouts", so it was the worst
+      // one to be ignored.
+      //
+      // process-split-payout now prefers this table and falls back to the
+      // other, so writing both means the two can never disagree again
+      // whichever screen someone edits.
+      const { error: mirrorErr } = await supabase
+        .from('artists')
+        .update({ paypal_email: paypalEmail.trim() })
+        .eq('id', artist.id);
+      if (mirrorErr) {
+        // Not fatal — the payout function reads this table first. Worth
+        // knowing about, not worth failing a save the artist just made.
+        console.error('[payments] could not mirror payout email to artists:', mirrorErr.message);
+      }
+
       setMsg('Payment settings saved!');
       setTimeout(() => setMsg(''), 3000);
     } catch (err) {

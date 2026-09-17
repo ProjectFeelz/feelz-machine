@@ -179,6 +179,21 @@
 [functions."monthly-wrapped"]
   schedule = "0 9 1 * *"
 
+# 01:00 daily — end subscriptions whose expiry has passed, paid and granted
+# alike. useTier already refuses an expired tier at read time; this is what
+# writes it down, so the row, the tier column and the admin counts agree.
+[functions."expire-subscriptions"]
+  schedule = "0 1 * * *"
+
+# Monday 07:00 — release royalties that have built up past an artist's
+# threshold, plus anything that has been waiting more than 60 days whatever
+# the amount. Without this, an artist who sells once below their threshold
+# and never sells again waits forever: the money is recorded, owed, and
+# unreachable. Weekly rather than daily because each run is a PayPal payout
+# batch, and batching is the entire point of having a threshold.
+[functions."release-pending-payouts"]
+  schedule = "0 7 * * 1"
+
 # feature-education-drip is deliberately NOT scheduled. Its schedule was
 # already commented out here — "platform tips not landing" — and switching it
 # on as a side effect of a syntax fix would start sending something that was

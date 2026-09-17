@@ -115,8 +115,11 @@ export default function ArtistCollectionPage({ kind = 'albums' }) {
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6 gap-4">
           {items.map(item => (
             <div key={item.id} className="cursor-pointer group"
+              /* Same two-segment bug as the profile's album grid: /album/:id
+                 takes one segment, so this landed on the catch-all and bounced
+                 the visitor to For You. */
               onClick={() => isAlbums
-                ? navigate(`/album/${slug}/${item.slug}`)
+                ? navigate(`/album/${item.slug || item.id}`)
                 : playTrack({ ...item, artist_name: artist.artist_name, artist_slug: artist.slug }, items)}>
               <div className="aspect-square rounded-xl overflow-hidden mb-2 bg-white/[0.05]">
                 {item.cover_artwork_url

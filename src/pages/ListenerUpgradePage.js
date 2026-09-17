@@ -132,35 +132,32 @@ export default function ListenerUpgradePage() {
   const handleSuccess = async (subscriptionId, billingCycle) => {
     setProcessing(true); setError('');
     try {
-      // Look up tier_id for 'pro'
-      const { data: tier } = await supabase
-        .from('platform_tiers').select('id').eq('slug', 'fan_pro').maybeSingle();
-      if (!tier) throw new Error('Tier not found');
-
-      // Cancel any existing subscription
-      await supabase.from('listener_tier_subscriptions')
-        .update({ status: 'cancelled', cancelled_at: new Date().toISOString() })
-        .eq('user_id', user.id).eq('status', 'active');
-
-      // Create new subscription
-      const expiresAt = billingCycle === 'annual'
-        ? new Date(Date.now() + 365 * 86400000).toISOString()
-        : new Date(Date.now() +  30 * 86400000).toISOString();
-
-      await supabase.from('listener_tier_subscriptions').insert({
-        user_id:               user.id,
-        tier_id:               tier.id,
-        status:                'active',
-        paypal_subscription_id: subscriptionId,
-        billing_cycle:         billingCycle,
-        started_at:            new Date().toISOString(),
-        expires_at:            expiresAt,
+      // The grant happens on the server now.
+      //
+      // This block used to write listener_tier_subscriptions and set
+      // listeners.tier = 'fan_pro' directly from the browser, using nothing
+      // but the subscription id the PayPal button handed back. Nothing
+      // checked that the subscription existed, so anyone with a console could
+      // grant themselves Fan Pro — free, permanently, in one line. And every
+      // write discarded its error, so a refusal left a paying subscriber with
+      // no tier and a "Welcome to Fan Pro!" message on screen.
+      //
+      // verify-subscription asks PayPal whether the id is real and active,
+      // grants the tier to the SIGNED-IN user rather than to a user id from
+      // the request body, and reads the result of every write.
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch('/.netlify/functions/verify-subscription', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.access_token}`,
+        },
+        body: JSON.stringify({ subscription_id: subscriptionId, billing_cycle: billingCycle }),
       });
-
-      // Mirror tier onto listeners table for easy reads
-      await supabase.from('listeners')
-        .update({ tier: 'fan_pro', updated_at: new Date().toISOString() })
-        .eq('user_id', user.id);
+      const result = await res.json().catch(() => ({}));
+      if (!res.ok || !result.ok) {
+        throw new Error(result.error || 'We could not confirm that subscription. Please contact us.');
+      }
 
       setCurrentTier('fan_pro');
       setSuccess('Welcome to Fan Pro! Your themes and badge are now active.');

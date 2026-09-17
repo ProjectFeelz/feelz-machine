@@ -1758,7 +1758,13 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 {albums.slice(0, 6).map(album => (
                   <div key={album.id} className="cursor-pointer group"
-                    onClick={() => navigate(`/album/${artist.slug}/${album.slug}`)}>
+                    /* `/album/:id` is a ONE-segment route (AppRouter.js:364). This
+                       built a TWO-segment path, so it matched no route, fell through
+                       to the catch-all, and the catch-all redirects to "/" — which is
+                       why tapping an album threw you onto For You and looked like the
+                       app had reloaded. AlbumDetailPage resolves an id OR a slug, so
+                       the artist handle was never needed here. */
+                    onClick={() => navigate(`/album/${album.slug || album.id}`)}>
                     <div className="aspect-square rounded-xl overflow-hidden mb-2" style={{ backgroundColor: `${textColor}08` }}>
                       {album.cover_artwork_url
                         ? <img src={album.cover_artwork_url} alt={album.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />

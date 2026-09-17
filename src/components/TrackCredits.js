@@ -157,7 +157,11 @@ export function TrackCreditsInline({ trackId }) {
 }
 
 // Full credits block — for track detail pages
-export default function TrackCredits({ trackId }) {
+// `title` is optional and only used by the album page, where several of
+// these render one after another. Without it they are a stack of identical
+// cards headed "Credits" with no way to tell which track each belongs to —
+// which is exactly how the album page read.
+export default function TrackCredits({ trackId, title }) {
   const navigate = useNavigate();
   const [credits, setCredits] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -197,9 +201,11 @@ export default function TrackCredits({ trackId }) {
 
   return (
     <div className="bg-white/[0.03] rounded-xl p-4 border border-white/[0.06]">
-      <div className="flex items-center space-x-2 mb-3">
-        <Users className="w-4 h-4 text-white/40" />
-        <h4 className="text-sm font-semibold text-white">Credits</h4>
+      <div className="flex items-center space-x-2 mb-3 min-w-0">
+        <Users className="w-4 h-4 text-white/40 flex-shrink-0" />
+        <h4 className="text-sm font-semibold text-white truncate">
+          {title ? `Credits · ${title}` : 'Credits'}
+        </h4>
       </div>
       <div className="space-y-2">
         {credits.map((c, i) => (

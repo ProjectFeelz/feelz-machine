@@ -288,7 +288,11 @@ export default function PlaylistDetailPage() {
 
       {/* ── Controls ── */}
       <div className="px-4">
-        <div className="flex items-center justify-between py-3 mb-2"
+        {/* `flex-wrap gap-2` added. An owner of a shared playlist sees Play
+            All + Add on the left and Public/Private + Share + a Collaborator
+            pill on the right — about 390px of labelled buttons that nothing
+            allowed to wrap or shrink. */}
+        <div className="flex flex-wrap items-center justify-between gap-2 py-3 mb-2"
           style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
           {/* Play all + Add */}
           <div className="flex items-center space-x-2">

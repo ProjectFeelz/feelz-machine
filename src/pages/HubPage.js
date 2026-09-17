@@ -85,6 +85,7 @@ export default function HubPage() {
   const { streak } = useStreakContext();
   const [activeTab, setActiveTab] = useState('home');
   const [isRetailVenue, setIsRetailVenue] = useState(false);
+  const [retailStaffRole, setRetailStaffRole] = useState(null);
   const [isNewsletterEditor, setIsNewsletterEditor] = useState(false);
   const [isSchoolSessionsJudge, setIsSchoolSessionsJudge] = useState(false);
 
@@ -104,6 +105,24 @@ export default function HubPage() {
     if (!user) return;
     supabase.from('retail_venues').select('id').eq('user_id', user.id).maybeSingle()
       .then(({ data }) => setIsRetailVenue(!!data));
+  }, [user]);
+
+  // Retail staff who are not platform admins. Before this they had access to
+  // /retail-admin and no way to reach it — the Hub only offered the panel to
+  // admins, so the only route in was a URL someone had to send them.
+  useEffect(() => {
+    if (!user) return;
+    supabase.from('retail_admins').select('id, role').eq('user_id', user.id).maybeSingle()
+      .then(({ data, error }) => {
+        // 42703 means migration 122 has not run yet; treat any row as full
+        // access, which is what it meant before levels existed.
+        if (error && error.code === '42703') {
+          supabase.from('retail_admins').select('id').eq('user_id', user.id).maybeSingle()
+            .then(({ data: d2 }) => setRetailStaffRole(d2 ? 'manager' : null));
+          return;
+        }
+        setRetailStaffRole(data ? (data.role === 'manager' ? 'manager' : 'editor') : null);
+      });
   }, [user]);
 
   const [showDMModal, setShowDMModal]           = useState(false);
@@ -288,6 +307,25 @@ export default function HubPage() {
             </Section>
           )}
 
+          {/* Retail staff — non-admin. An editor gets Playlists and Pitches
+              inside the panel; a manager gets Venues and Staff as well. The
+              panel and the database both enforce that, so this card is the
+              same door for both and the level decides what is behind it. */}
+          {!isAdmin && retailStaffRole && (
+            <Section title="Feelz Retail" icon={Store}>
+              <LinkCard
+                icon={Store}
+                label="Retail Admin"
+                description={retailStaffRole === 'manager'
+                  ? 'Playlists · submissions · venues · staff'
+                  : 'Build playlists and review artist submissions'}
+                path="/retail-admin"
+                color="bg-purple-500/20"
+              />
+              <LinkCard icon={Radio} label="Retail Player" description="Hear what venues hear" path="/retail/player" color="bg-purple-500/20" />
+            </Section>
+          )}
+
           {/* School Sessions judge — non-admin. Admins already get this in
               the Admin section above, so this would otherwise double up. */}
           {!isAdmin && isSchoolSessionsJudge && (
@@ -299,7 +337,7 @@ export default function HubPage() {
           {/* Retail venue. Admins get the player under Retail Admin above, so
               this is gated to non-admins to avoid the same link twice. A real
               venue owner is not an admin and still needs this. */}
-          {isRetailVenue && !isAdmin && (
+          {isRetailVenue && !isAdmin && !retailStaffRole && (
             <Section title="Feelz Retail" icon={Store}>
               <LinkCard icon={Store} label="Retail Player" description="Pick a mood, play music for your venue" path="/retail/player" color="bg-purple-500/20" />
             </Section>

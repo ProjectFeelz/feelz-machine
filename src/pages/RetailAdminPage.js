@@ -27,13 +27,26 @@ export default function RetailAdminPage() {
 
   const [checking, setChecking] = React.useState(true);
   const [allowed, setAllowed]   = React.useState(false);
+  const [role, setRole]         = React.useState('editor');
   const [stats, setStats]       = React.useState(null);
 
   React.useEffect(() => {
     if (!user) { setChecking(false); return; }
-    if (rawIsAdmin) { setAllowed(true); setChecking(false); return; }
-    supabase.from('retail_admins').select('id').eq('user_id', user.id).maybeSingle()
-      .then(({ data }) => { setAllowed(!!data); setChecking(false); });
+    if (rawIsAdmin) { setAllowed(true); setRole('manager'); setChecking(false); return; }
+    supabase.from('retail_admins').select('id, role').eq('user_id', user.id).maybeSingle()
+      .then(({ data, error }) => {
+        // 42703 is migration 122 not having run yet. Falling back to manager
+        // matches the behaviour before roles existed, so a missed migration
+        // does not lock the existing retail staff out of their own panel.
+        if (error && error.code === '42703') {
+          supabase.from('retail_admins').select('id').eq('user_id', user.id).maybeSingle()
+            .then(({ data: d2 }) => { setAllowed(!!d2); setRole('manager'); setChecking(false); });
+          return;
+        }
+        setAllowed(!!data);
+        setRole(data?.role === 'manager' ? 'manager' : 'editor');
+        setChecking(false);
+      });
   }, [user, rawIsAdmin]);
 
   // Retail-only stats. Deliberately no revenue figures: retail admins see
@@ -105,7 +118,14 @@ export default function RetailAdminPage() {
             </button>
             <div>
               <p className="text-purple-400 text-[10px] font-bold tracking-[0.2em] uppercase">Feelz Retail</p>
-              <h1 className="text-lg font-bold text-white">Admin</h1>
+              <h1 className="text-lg font-bold text-white">
+                Admin
+                {role === 'editor' && (
+                  <span className="ml-2 align-middle text-[10px] font-bold px-2 py-0.5 rounded-full bg-white/[0.08] text-white/50 uppercase tracking-wide">
+                    Editor
+                  </span>
+                )}
+              </h1>
             </div>
           </div>
           <button onClick={() => navigate('/retail/player')}
@@ -141,7 +161,7 @@ export default function RetailAdminPage() {
       {/* Playlists, Venues and Staff, rebuilt after the original panel was
           lost from the repo. Honours ?sub= so the player's admin bar links
           land on the right tab instead of all going to the same page. */}
-      <RetailAdminPanel />
+      <RetailAdminPanel role={role} />
     </div>
   );
 }

@@ -402,8 +402,17 @@ export default function TrackPage() {
         )}
       </div>
 
-      {/* Action bar */}
-      <div className="flex items-center space-x-3 px-5 py-4">
+      {/* Action bar
+          `space-x-3` with no wrap was the whole bug. Four children — Play,
+          Like, a Download that grows a text label once you own the track, and
+          Artist — add up to about 443px of content that cannot shrink,
+          against a 360px phone. Flex does not wrap by default and a labelled
+          button will not go below its text, so the row simply made the page
+          wider than the screen.
+          `flex-wrap` plus `gap` instead of `space-x`: gap applies between
+          wrapped rows too, which `space-x-*` does not, so a wrapped second
+          line would otherwise sit flush against the first. */}
+      <div className="flex flex-wrap items-center gap-3 px-5 py-4">
         {/* Play button */}
         <button
           onClick={handlePlay}
@@ -456,7 +465,10 @@ export default function TrackPage() {
         {/* View artist */}
         <button
           onClick={() => artist?.slug && navigate(`/artist/${artist.slug}`)}
-          className="ml-auto flex items-center space-x-1.5 px-3 py-2 rounded-full bg-white/[0.06] hover:bg-white/[0.1] transition text-xs text-white/50"
+          /* `ml-auto` dropped. It only ever did anything when the row fit,
+             and once the row wraps it shoves this button to the far edge of
+             whatever line it lands on, which looks like a mistake. */
+          className="flex items-center space-x-1.5 px-3 py-2 rounded-full bg-white/[0.06] hover:bg-white/[0.1] transition text-xs text-white/50"
         >
           <ExternalLink className="w-3.5 h-3.5" />
           <span>Artist</span>
@@ -491,14 +503,19 @@ export default function TrackPage() {
             {credits.map(cr => (
               <button key={cr.id}
                 onClick={() => navigate(`/artist/${cr.artists.slug}`)}
-                className="flex items-center gap-2 pl-1 pr-3 py-1 rounded-full bg-white/[0.05] border border-white/[0.08] hover:bg-white/[0.1] transition">
+                /* max-w + min-w-0 so ONE pill cannot be wider than the
+                   screen. The row already wraps between pills, but wrapping
+                   cannot help when a single pill with a long artist name is
+                   itself too wide — and the avatar needs flex-shrink-0 or it
+                   squashes into an oval instead of letting the text give. */
+                className="flex items-center gap-2 pl-1 pr-3 py-1 rounded-full bg-white/[0.05] border border-white/[0.08] hover:bg-white/[0.1] transition max-w-full min-w-0">
                 {cr.artists.profile_image_url
-                  ? <img src={cr.artists.profile_image_url} alt="" className="w-7 h-7 rounded-full object-cover" />
-                  : <span className="w-7 h-7 rounded-full bg-white/10 flex items-center justify-center text-[11px] font-bold text-white/60">
+                  ? <img src={cr.artists.profile_image_url} alt="" className="w-7 h-7 rounded-full object-cover flex-shrink-0" />
+                  : <span className="w-7 h-7 flex-shrink-0 rounded-full bg-white/10 flex items-center justify-center text-[11px] font-bold text-white/60">
                       {(cr.artists.artist_name || '?')[0].toUpperCase()}
                     </span>}
-                <span className="text-sm text-white">{cr.artists.artist_name}</span>
-                {cr.role && <span className="text-[11px] text-white/35">{cr.role}</span>}
+                <span className="text-sm text-white truncate min-w-0">{cr.artists.artist_name}</span>
+                {cr.role && <span className="text-[11px] text-white/35 flex-shrink-0">{cr.role}</span>}
               </button>
             ))}
           </div>

@@ -18,22 +18,30 @@
 import React from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
-  Loader, Plus, Trash2, Search, Music, Link2, Check, UserPlus, Store, ListMusic, Users, Pencil, ImagePlus,
+  Loader, Plus, Trash2, Music, Link2, Check, UserPlus, Store, ListMusic, Users, Pencil, ImagePlus, Inbox,
 } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
+import RetailTrackPicker from '../components/retail/RetailTrackPicker';
+import RetailPitchesTab from '../components/retail/RetailPitchesTab';
 
 const inputCls = "w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none focus:bg-white/[0.1] transition";
 const btnCls = "flex items-center gap-2 text-sm font-semibold px-4 py-2.5 rounded-lg bg-purple-500 hover:bg-purple-400 text-white transition disabled:opacity-40";
 
+// `minRole` is the level a tab needs. An editor runs the music — playlists and
+// the submissions that feed them. Venues and Staff are accounts and access, so
+// they are manager-only. This list is what the page SHOWS; the database
+// refuses the writes either way (migration 122), because a hidden tab is not
+// security on its own.
 const TABS = [
-  { key: 'playlists', label: 'Playlists', icon: ListMusic },
-  { key: 'venues',    label: 'Venues',    icon: Store },
-  { key: 'staff',     label: 'Staff',     icon: Users },
+  { key: 'playlists', label: 'Playlists', icon: ListMusic, minRole: 'editor'  },
+  { key: 'pitches',   label: 'Pitches',   icon: Inbox,     minRole: 'editor'  },
+  { key: 'venues',    label: 'Venues',    icon: Store,     minRole: 'manager' },
+  { key: 'staff',     label: 'Staff',     icon: Users,     minRole: 'manager' },
 ];
 
 const NOT_BUILT = {
-  ads: 'Ads', pitches: 'Pitches', payouts: 'Payouts',
+  ads: 'Ads', payouts: 'Payouts',
   analytics: 'Analytics', pricing: 'Pricing', autocompile: 'Auto-Compile',
 };
 
@@ -52,9 +60,6 @@ function PlaylistsTab({ showToast }) {
   const [savingEdit, setSavingEdit] = React.useState(false);
   const [uploadingCover, setUploadingCover] = React.useState(false);
   const [tracks, setTracks] = React.useState([]);
-  const [query, setQuery] = React.useState('');
-  const [results, setResults] = React.useState([]);
-  const [searching, setSearching] = React.useState(false);
 
   const load = React.useCallback(async () => {
     const { data } = await supabase.from('retail_playlists')
@@ -107,7 +112,6 @@ function PlaylistsTab({ showToast }) {
     setOpen(pl);
     setEditing(false);
     setDraft({ title: pl.title || '', mood: pl.mood || '', description: pl.description || '' });
-    setResults([]); setQuery('');
     const { data } = await supabase.from('retail_playlist_tracks')
       .select('id, position, track:tracks(id, title, cover_artwork_url, artist:artists(artist_name))')
       .eq('playlist_id', pl.id).order('position');
@@ -140,30 +144,9 @@ function PlaylistsTab({ showToast }) {
     load();
   };
 
-  // Live search, same shape as the cold start picker. Explicit tracks are
-  // blocked by a database trigger on insert, not hidden here, so the error
-  // surfaces rather than the track silently vanishing.
-  React.useEffect(() => {
-    const t = setTimeout(async () => {
-      const q = query.trim();
-      if (q.length < 2) { setResults([]); return; }
-      setSearching(true);
-      const cols = 'id, title, cover_artwork_url, artist:artists(id, artist_name)';
-      const [byTitle, byArtist] = await Promise.all([
-        supabase.from('tracks').select(cols).eq('is_published', true).ilike('title', `%${q}%`).limit(20),
-        supabase.from('tracks').select('id, title, cover_artwork_url, artist:artists!inner(id, artist_name)')
-          .eq('is_published', true).ilike('artists.artist_name', `%${q}%`).limit(20),
-      ]);
-      setSearching(false);
-      const seen = new Set(); const merged = [];
-      [...(byTitle.data || []), ...(byArtist.data || [])].forEach(t2 => {
-        if (seen.has(t2.id)) return; seen.add(t2.id); merged.push(t2);
-      });
-      setResults(merged);
-    }, 300);
-    return () => clearTimeout(t);
-  }, [query]);
-
+  // Explicit tracks are blocked by a database trigger on insert, not hidden
+  // in the picker, so the error surfaces rather than the track silently
+  // vanishing.
   const addTrack = async (track) => {
     const nextPos = tracks.length > 0 ? Math.max(...tracks.map(t => t.position)) + 1 : 0;
     const { error } = await supabase.from('retail_playlist_tracks')
@@ -174,7 +157,7 @@ function PlaylistsTab({ showToast }) {
         : (error.code === '23505' ? 'Already in this playlist' : 'Error: ' + error.message));
       return;
     }
-    setQuery(''); setResults([]);
+    showToast(`Added "${track.title}"`);
     openPlaylist(open);
   };
 
@@ -243,37 +226,14 @@ function PlaylistsTab({ showToast }) {
           </div>
         </div>
 
-        <div className="rounded-2xl border border-white/[0.07] bg-white/[0.02] p-5 mb-6">
-          <p className="text-xs font-bold text-white/50 uppercase tracking-wide mb-3">Add tracks</p>
-          <div className="relative">
-            <Search className="w-4 h-4 text-white/25 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-            <input className={`${inputCls} pl-9`} placeholder="Search a song or artist"
-              value={query} onChange={e => setQuery(e.target.value)} />
-            {searching && <Loader className="w-4 h-4 text-white/30 animate-spin absolute right-3 top-1/2 -translate-y-1/2" />}
-          </div>
-          {results.length > 0 && (
-            <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2">
-              {results.map(t => (
-                <button key={t.id} onClick={() => addTrack(t)}
-                  className="flex items-center gap-3 p-2.5 rounded-xl bg-white/[0.03] hover:bg-white/[0.08] transition text-left">
-                  <div className="w-9 h-9 rounded-lg overflow-hidden bg-white/[0.06] flex-shrink-0">
-                    {t.cover_artwork_url
-                      ? <img src={t.cover_artwork_url} alt="" className="w-full h-full object-cover" />
-                      : <div className="w-full h-full flex items-center justify-center"><Music className="w-4 h-4 text-white/20" /></div>}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm text-white truncate">{t.title}</p>
-                    <p className="text-xs text-white/40 truncate">{t.artist?.artist_name}</p>
-                  </div>
-                  <Plus className="w-4 h-4 text-white/30 flex-shrink-0" />
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+        <RetailTrackPicker
+          existingTrackIds={tracks.map(r => r.track?.id).filter(Boolean)}
+          onAdd={addTrack}
+          showToast={showToast}
+        />
 
         {tracks.length === 0 ? (
-          <p className="text-sm text-white/30 py-8 text-center">No tracks yet. Search above to add some.</p>
+          <p className="text-sm text-white/30 py-8 text-center">No tracks yet. Add some from the catalogue above.</p>
         ) : (
           <div className="space-y-1.5">
             {tracks.map((row, i) => (
@@ -564,11 +524,22 @@ function StaffTab({ showToast }) {
   const [loading, setLoading] = React.useState(true);
   const [email, setEmail] = React.useState('');
   const [name, setName] = React.useState('');
+  const [newRole, setNewRole] = React.useState('editor');
   const [adding, setAdding] = React.useState(false);
+  const [hasRoles, setHasRoles] = React.useState(true);
 
   const load = React.useCallback(async () => {
-    const { data } = await supabase.from('retail_admins')
-      .select('id, user_id, admin_name, created_at').order('created_at', { ascending: false });
+    let { data, error } = await supabase.from('retail_admins')
+      .select('id, user_id, admin_name, role, created_at').order('created_at', { ascending: false });
+
+    // Migration 122 not run yet: fall back to the shape that existed before
+    // levels, so the tab still works rather than showing an empty list.
+    if (error && error.code === '42703') {
+      setHasRoles(false);
+      ({ data } = await supabase.from('retail_admins')
+        .select('id, user_id, admin_name, created_at').order('created_at', { ascending: false }));
+    }
+
     const rows = data || [];
     if (rows.length > 0) {
       const { data: profiles } = await supabase.from('user_profiles')
@@ -590,15 +561,24 @@ function StaffTab({ showToast }) {
       showToast('No account with that email. They need to sign up first.');
       return;
     }
-    const { error } = await supabase.from('retail_admins')
-      .insert({ user_id: foundUserId, admin_name: name.trim() || null });
+    const payload = { user_id: foundUserId, admin_name: name.trim() || null };
+    if (hasRoles) payload.role = newRole;
+
+    const { error } = await supabase.from('retail_admins').insert(payload);
     setAdding(false);
     if (error) {
       showToast(error.code === '23505' ? 'They already have access' : 'Error: ' + error.message);
       return;
     }
     setEmail(''); setName('');
-    showToast('Retail admin access granted');
+    showToast(hasRoles ? `Granted as ${newRole}` : 'Retail admin access granted');
+    load();
+  };
+
+  const changeRole = async (row, role) => {
+    const { error } = await supabase.from('retail_admins').update({ role }).eq('id', row.id);
+    if (error) { showToast('Error: ' + error.message); return; }
+    showToast(`${row.profile?.name || row.admin_name || 'They'} are now a ${role}`);
     load();
   };
 
@@ -615,9 +595,11 @@ function StaffTab({ showToast }) {
     <div>
       <div className="rounded-2xl border border-white/[0.07] bg-white/[0.02] p-4 mb-5">
         <p className="text-xs text-white/40 leading-relaxed">
-          Retail staff manage the catalogue, playlists, venues and ads. They never see
-          revenue or payouts, and they cannot grant this access to anyone else. Only
-          platform admins can do that.
+          <span className="text-white/70 font-semibold">Editors</span> build playlists and
+          review artist submissions.{' '}
+          <span className="text-white/70 font-semibold">Managers</span> do that plus venues
+          and ads. Neither ever sees revenue or payouts, and neither can grant this access —
+          only platform admins can.
         </p>
       </div>
 
@@ -627,9 +609,26 @@ function StaffTab({ showToast }) {
           <input className={inputCls} placeholder="Their account email" value={email} onChange={e => setEmail(e.target.value)} />
           <input className={inputCls} placeholder="Name for your reference (optional)" value={name} onChange={e => setName(e.target.value)} />
         </div>
+
+        {hasRoles && (
+          <div className="flex items-center gap-2 mb-3 flex-wrap">
+            {['editor', 'manager'].map(r => (
+              <button
+                key={r}
+                onClick={() => setNewRole(r)}
+                className={`px-3.5 py-2 rounded-lg text-sm font-semibold capitalize transition ${
+                  newRole === r ? 'bg-purple-500 text-white' : 'bg-white/[0.06] text-white/50 hover:text-white/80'
+                }`}
+              >
+                {r}
+              </button>
+            ))}
+          </div>
+        )}
+
         <button onClick={add} disabled={!email.trim() || adding} className={btnCls}>
           {adding ? <Loader className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
-          Grant retail admin
+          {hasRoles ? `Grant ${newRole} access` : 'Grant retail admin'}
         </button>
       </div>
 
@@ -650,6 +649,19 @@ function StaffTab({ showToast }) {
               <div className="min-w-0 flex-1">
                 <p className="text-sm text-white truncate">{s.profile?.name || s.admin_name || 'Unknown account'}</p>
                 <p className="text-xs text-white/35 truncate">{s.profile?.email || s.user_id}</p>
+                {hasRoles && (
+                  <button
+                    onClick={() => changeRole(s, s.role === 'manager' ? 'editor' : 'manager')}
+                    title="Tap to switch level"
+                    className={`mt-1.5 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide transition ${
+                      s.role === 'manager'
+                        ? 'bg-purple-500/20 text-purple-200 hover:bg-purple-500/35'
+                        : 'bg-white/[0.08] text-white/50 hover:bg-white/[0.16]'
+                    }`}
+                  >
+                    {s.role === 'manager' ? 'Manager' : 'Editor'}
+                  </button>
+                )}
               </div>
               <button onClick={() => revoke(s)}
                 className="w-8 h-8 flex items-center justify-center rounded-lg bg-white/[0.05] hover:bg-red-500/20 transition flex-shrink-0">
@@ -663,13 +675,23 @@ function StaffTab({ showToast }) {
   );
 }
 
-export default function RetailAdminPanel() {
+export default function RetailAdminPanel({ role = 'manager' }) {
   const [params, setParams] = useSearchParams();
   const sub = params.get('sub') || 'playlists';
   const [toast, setToast] = React.useState('');
   const showToast = (m) => { setToast(m); setTimeout(() => setToast(''), 3000); };
 
-  const active = TABS.some(t => t.key === sub) ? sub : (NOT_BUILT[sub] ? sub : 'playlists');
+  const visibleTabs = React.useMemo(
+    () => TABS.filter(t => role === 'manager' || t.minRole === 'editor'),
+    [role]
+  );
+
+  // A ?sub= link to a tab this person cannot open — an old bookmark, or a link
+  // passed on from someone with more access — lands on Playlists rather than
+  // on an empty screen or a permission error.
+  const active = visibleTabs.some(t => t.key === sub)
+    ? sub
+    : (role === 'manager' && NOT_BUILT[sub] ? sub : 'playlists');
 
   return (
     <div className="px-6 pb-16">
@@ -680,7 +702,7 @@ export default function RetailAdminPanel() {
       )}
 
       <div className="flex items-center gap-1 p-1 rounded-xl bg-white/[0.03] border border-white/[0.06] mb-6 overflow-x-auto">
-        {TABS.map(({ key, label, icon: Icon }) => (
+        {visibleTabs.map(({ key, label, icon: Icon }) => (
           <button key={key} onClick={() => setParams({ sub: key })}
             className={`flex items-center gap-2 text-sm font-semibold px-4 py-2 rounded-lg whitespace-nowrap transition ${
               active === key ? 'bg-purple-500 text-white' : 'text-white/50 hover:text-white hover:bg-white/[0.06]'}`}>
@@ -700,6 +722,7 @@ export default function RetailAdminPanel() {
           </p>
         </div>
       ) : active === 'playlists' ? <PlaylistsTab showToast={showToast} />
+        : active === 'pitches'  ? <RetailPitchesTab showToast={showToast} />
         : active === 'venues'   ? <VenuesTab showToast={showToast} />
         : <StaffTab showToast={showToast} />}
     </div>

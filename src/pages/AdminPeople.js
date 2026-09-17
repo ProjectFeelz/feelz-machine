@@ -6,6 +6,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
+import { GRANT_DURATIONS, DEFAULT_GRANT_MONTHS, grantExpiry } from '../utils/grantDuration';
 import { sendNotification } from '../utils/notify';
 import { useAuth } from '../contexts/AuthContext';
 import {
@@ -33,6 +34,10 @@ function ListenersTab() {
   const [searchQuery, setSearch]  = useState('');
   const [sortBy, setSortBy]       = useState('newest');
   const [grantingId, setGranting] = useState(null);
+  // How long the next grant lasts. One control per page, so an admin sets the
+  // length once and then grants normally — rather than being asked twice for
+  // every person, which is how a length setting ends up ignored.
+  const [grantMonths, setGrantMonths] = useState(DEFAULT_GRANT_MONTHS);
   const [toast, setToast]         = useState(null);
 
   const showToast = (msg, type = 'success') => {
@@ -58,7 +63,7 @@ function ListenersTab() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${session?.access_token || ''}`,
         },
-        body: JSON.stringify({ listenerId, userId, tierSlug }),
+        body: JSON.stringify({ listenerId, userId, tierSlug, months: grantMonths }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Grant failed');
@@ -85,6 +90,15 @@ function ListenersTab() {
           <span>{toast.msg}</span>
         </div>
       )}
+      {/* How long a grant lasts. Was a hard-coded 365 days with no control at
+          all — one click in the tier dropdown and somebody had a free year. */}
+      <div className="flex items-center space-x-2 mb-3">
+        <span className="text-[11px] text-white/35">Grants last</span>
+        <select value={grantMonths} onChange={e => setGrantMonths(Number(e.target.value))}
+          className="px-2.5 py-1.5 bg-white/[0.04] rounded-lg text-xs text-white/70 border border-white/[0.06] focus:outline-none">
+          {GRANT_DURATIONS.map(d => <option key={d.months} value={d.months}>{d.label}</option>)}
+        </select>
+      </div>
       <div className="flex space-x-2 mb-4">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20" />
@@ -145,6 +159,10 @@ function ArtistsTab() {
   const [searchQuery, setSearch]  = useState('');
   const [sortBy, setSortBy]       = useState('newest');
   const [grantingId, setGranting] = useState(null);
+  // How long the next grant lasts. One control per page, so an admin sets the
+  // length once and then grants normally — rather than being asked twice for
+  // every person, which is how a length setting ends up ignored.
+  const [grantMonths, setGrantMonths] = useState(DEFAULT_GRANT_MONTHS);
   const [toast, setToast]         = useState(null);
 
   const showToast = (msg, type = 'success') => {
@@ -164,7 +182,7 @@ function ArtistsTab() {
 
   useEffect(() => { fetchArtists(); }, [fetchArtists]);
 
-  const grantTier = async (artistId, tierSlug, artistName) => {
+  const grantTier = async (artistId, tierSlug, artistName, months = DEFAULT_GRANT_MONTHS) => {
     setGranting(artistId);
     try {
       const { data: tier } = await supabase.from('platform_tiers').select('id').eq('slug', tierSlug).single();
@@ -180,7 +198,8 @@ function ArtistsTab() {
           amount_paid: 0,
           paypal_subscription_id: `admin_grant_${Date.now()}`,
           started_at: new Date().toISOString(),
-          expires_at: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
+          // Was a flat 365 days — one click, a free year. See grantDuration.js.
+          expires_at: grantExpiry(months),
         });
       }
       await supabase.from('artists').update({ tier: tierSlug, current_tier_id: tierSlug !== 'free' ? tier.id : null }).eq('id', artistId);
@@ -217,6 +236,15 @@ function ArtistsTab() {
           <span>{toast.msg}</span>
         </div>
       )}
+      {/* How long a grant lasts. Was a hard-coded 365 days with no control at
+          all — one click in the tier dropdown and somebody had a free year. */}
+      <div className="flex items-center space-x-2 mb-3">
+        <span className="text-[11px] text-white/35">Grants last</span>
+        <select value={grantMonths} onChange={e => setGrantMonths(Number(e.target.value))}
+          className="px-2.5 py-1.5 bg-white/[0.04] rounded-lg text-xs text-white/70 border border-white/[0.06] focus:outline-none">
+          {GRANT_DURATIONS.map(d => <option key={d.months} value={d.months}>{d.label}</option>)}
+        </select>
+      </div>
       <div className="flex space-x-2 mb-4">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20" />
@@ -260,7 +288,7 @@ function ArtistsTab() {
                 <div className="flex items-center space-x-2 flex-shrink-0 ml-3">
                   <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${a.tier === 'premium' || a.tier === 'master' ? 'bg-yellow-500/20 text-yellow-400' : a.tier === 'pro' ? 'bg-purple-500/20 text-purple-400' : 'bg-white/10 text-white/30'}`}>{a.tier || 'free'}</span>
                   {grantingId === a.id ? <Loader className="w-4 h-4 animate-spin text-white/30" /> : (
-                    <select value={a.tier === 'master' ? 'premium' : (a.tier || 'free')} onChange={e => grantTier(a.id, e.target.value, a.artist_name)}
+                    <select value={a.tier === 'master' ? 'premium' : (a.tier || 'free')} onChange={e => grantTier(a.id, e.target.value, a.artist_name, grantMonths)}
                       className="text-[10px] bg-white/[0.06] text-white/50 rounded-lg px-2 py-1.5 border border-white/[0.08] focus:outline-none cursor-pointer hover:bg-white/[0.10] transition">
                       <option value="free">Free</option><option value="pro">Pro</option><option value="premium">Premium</option>
                     </select>

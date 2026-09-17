@@ -133,7 +133,24 @@ export default function TrackActionSheet({ track, artist, onClose }) {
                     });
                     const captureData = await res.json();
                     if (!captureData.success) throw new Error('Payment capture failed');
-                    // purchases + downloads recorded server-side in paypal-order.js
+
+                    // `success` only ever meant "PayPal took the money". It did
+                    // NOT mean the sale was recorded or the download granted —
+                    // and when the recording step silently did nothing, this
+                    // showed a green tick to somebody who had just paid for a
+                    // file they were then refused. The function now reports
+                    // whether the grant was written, and this believes it.
+                    if (captureData.recorded === false) {
+                      setPurchasing(false);
+                      setPurchaseError(
+                        'Your payment went through, but we could not unlock the download automatically. '
+                        + 'Nothing further is owed — contact us with this reference and we will send it straight over: '
+                        + (captureData.captureId || 'no reference')
+                      );
+                      console.error('[purchase] paid but not recorded:',
+                        captureData.captureId, captureData.recordError);
+                      return;
+                    }
 
                     setPurchaseSuccess(true);
                     setPurchasing(false);
@@ -148,8 +165,21 @@ export default function TrackActionSheet({ track, artist, onClose }) {
                         try {
                             const { data: { session } } = await supabase.auth.getSession();
                             await downloadTrack(track.id, track.title, session?.access_token);
-                        } catch {}
-                        onClose();
+                            onClose();
+                        } catch (dlErr) {
+                            // `catch {}` — the download failing right after a
+                            // successful payment was the single most important
+                            // error in this file to surface, and it was the one
+                            // being thrown away. The sheet now stays open and
+                            // says so, instead of closing on a paid-for file
+                            // that never arrived.
+                            console.error('[purchase] post-payment download failed:', dlErr.message);
+                            setPurchaseSuccess(false);
+                            setPurchaseError(
+                              'Payment received, but the download did not start. '
+                              + 'It is saved to your account — open Library \u2192 Downloads to get it.'
+                            );
+                        }
                     }, 1500);
                 } catch (err) {
                     setPurchaseError(err.message);

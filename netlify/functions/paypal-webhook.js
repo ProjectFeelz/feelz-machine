@@ -222,6 +222,34 @@ exports.handler = async (event) => {
       await activateArtistSubscription(subscriptionId);
       await activateRetailSubscription(subscriptionId);
 
+      // ── Push the expiry out by one billing period ──────────────────────
+      //
+      // This was missing, and it is the reason a paying subscriber loses
+      // access. ListenerUpgradePage sets expires_at to signup + 30 days;
+      // nothing ever moved it again. useTier.js reads it and treats an
+      // expired row as free. So on day 31 PayPal charges them, this handler
+      // fires, the affiliate gets paid — and the subscriber drops to Free
+      // while the money keeps leaving their account every month.
+      //
+      // extend_listener_subscription (migration 120) extends from the LATER
+      // of now and the current expiry, so an early renewal cannot shorten a
+      // subscription and a duplicated webhook cannot double it. It reads the
+      // row's own billing_cycle, so an annual plan is not renewed by a month.
+      try {
+        const { data: extended, error: extErr } = await supabase
+          .rpc('extend_listener_subscription', { p_paypal_subscription_id: subscriptionId });
+        if (extErr) {
+          console.error('[paypal-webhook] could not extend subscription', subscriptionId, extErr.message);
+        } else if (extended?.length) {
+          console.log('[paypal-webhook] subscription extended to', extended[0].new_expiry,
+            'for user', extended[0].user_id);
+        }
+        // No row found is normal here — this event also fires for artist and
+        // retail subscriptions, which the two calls above already handled.
+      } catch (e) {
+        console.error('[paypal-webhook] extend threw:', e.message);
+      }
+
       // ── Affiliate commission ──────────────────────────────────────────────
       // This is the only place on the platform where affiliate money is
       // earned, and this event is the right one: it is money that has actually

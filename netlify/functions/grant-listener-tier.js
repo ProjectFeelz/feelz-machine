@@ -6,6 +6,20 @@
 
 const { createClient } = require('@supabase/supabase-js');
 
+// Mirrors src/utils/grantDuration.js. Deliberately duplicated rather than
+// imported: this is a CommonJS function and that is an ES module in the app
+// bundle. Both default to 3 months; if you change one, change the other.
+const DEFAULT_GRANT_MONTHS = 3;
+function grantExpiry(months) {
+  const n = Number(months);
+  const m = Number.isFinite(n) && n > 0 && n <= 12 ? n : DEFAULT_GRANT_MONTHS;
+  const d = new Date();
+  const day = d.getDate();
+  d.setMonth(d.getMonth() + m);
+  if (d.getDate() < day) d.setDate(0);   // clamp to the last day of that month
+  return d.toISOString();
+}
+
 const supabase = createClient(
   process.env.SUPABASE_URL || process.env.REACT_APP_SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -38,7 +52,9 @@ exports.handler = async (event) => {
       return { statusCode: 403, headers, body: JSON.stringify({ error: 'Admin access required' }) };
     }
 
-    const { listenerId, userId, tierSlug } = JSON.parse(event.body || '{}');
+    const { listenerId, userId, tierSlug, months } = JSON.parse(event.body || '{}');
+    // grantExpiry clamps anything silly (missing, zero, negative, > 12) back
+    // to the default, so a malformed request cannot mint a long grant.
     if (!listenerId || !userId || !tierSlug) {
       return { statusCode: 400, headers, body: JSON.stringify({ error: 'Missing fields' }) };
     }
@@ -63,7 +79,7 @@ exports.handler = async (event) => {
       const { error: insertErr } = await supabase.from('listener_tier_subscriptions').insert({
         user_id: userId, tier_id: tierId, status: 'active', billing_cycle: 'annual',
         started_at: new Date().toISOString(),
-        expires_at: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
+        expires_at: grantExpiry(months),
       });
       if (insertErr) throw new Error(`Insert new subscription failed: ${insertErr.message}`);
     }
@@ -71,7 +87,7 @@ exports.handler = async (event) => {
     const { error: listenerErr } = await supabase.from('listeners').update({
       tier: tierSlug,
       tier_started_at: new Date().toISOString(),
-      tier_expires_at: tierSlug !== 'free' ? new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString() : null,
+      tier_expires_at: tierSlug !== 'free' ? grantExpiry(months) : null,
     }).eq('id', listenerId);
     if (listenerErr) throw new Error(`Update listeners row failed: ${listenerErr.message}`);
 

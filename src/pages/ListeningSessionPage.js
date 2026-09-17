@@ -1148,8 +1148,12 @@ export default function ListeningSessionPage() {
         {/* Host controls */}
         {isHost && (
           <div className="px-4 pb-3 flex-shrink-0 space-y-3">
-            {/* Mode toggle + YouTube input */}
-            <div className="flex space-x-2">
+            {/* Mode toggle + YouTube input
+                Four labelled buttons — Audio, YouTube Live, Save chat, End —
+                come to roughly 429px. Wrapping is right here rather than a
+                scroll strip: "End" is the one you reach for in a hurry and it
+                must never be the one hidden off the edge. */}
+            <div className="flex flex-wrap gap-2">
               <button
                 onClick={() => updateSession({ mode: 'audio' })}
                 className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition ${session.mode === 'audio' ? 'bg-white/15 text-white' : 'bg-white/[0.04] text-white/40 hover:bg-white/[0.08]'}`}

@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import {
-  MessageCircle, Plus, Loader, Lock, Users, Search, Zap, X, Pencil, Trash2, Trophy, Crown, Clock, Bug
+  MessageCircle, Plus, Loader, Lock, Users, Search, Zap, X, Pencil, Trash2, Trophy, Crown, Clock, Bug, ArrowLeft
 } from 'lucide-react';
 import TierGate from '../components/TierGate';
 import { useTier } from '../contexts/useTier';
@@ -214,10 +214,16 @@ export default function ChatRoomsPage() {
   const fetchRooms = async () => {
     setLoading(true);
     try {
-      const { data } = await supabase
+      // is_active was not filtered. A room an artist had deactivated still
+      // appeared in this list and still opened — and migration 117 treats an
+      // inactive room as gone, so the browse list and the Chat button could
+      // disagree about whether a room exists. They agree now.
+      const { data, error } = await supabase
         .from('chat_rooms')
         .select('*, artists(id, artist_name, slug, profile_image_url, is_verified)')
+        .eq('is_active', true)
         .order('member_count', { ascending: false });
+      if (error) console.error('[chat] room list failed:', error.code, error.message);
       const roomData = data || [];
       setRooms(roomData);
       fetchLastMessages(roomData.map(r => r.id));
@@ -367,7 +373,32 @@ export default function ChatRoomsPage() {
 
       {/* Header */}
       <div className="flex items-center justify-between mb-6 sticky top-0 z-20 bg-black/95 backdrop-blur-xl md:relative md:top-auto md:bg-transparent md:backdrop-blur-none pt-14 md:pt-4 pb-3 -mx-6 px-6 border-b border-white/[0.04] md:border-none">
-        <h1 className="text-2xl font-bold text-white">Chat Rooms</h1>
+        <div className="flex items-center space-x-3">
+          {/* This page is now arrived AT — from Library's "Browse all" and
+              from a competition room — rather than being somewhere you just
+              were. It had no way back. History first, Library as the fallback
+              for a cold link. */}
+          <button
+            onClick={() => { if (window.history.length > 2) navigate(-1); else navigate('/library'); }}
+            aria-label="Back"
+            className="w-9 h-9 flex items-center justify-center rounded-full bg-white/[0.06] hover:bg-white/[0.1] transition active:scale-95">
+            <ArrowLeft className="w-4 h-4 text-white/70" />
+          </button>
+          <h1 className="text-2xl font-bold text-white">Chat Rooms</h1>
+        </div>
+        {/* The ONLY control that opened the create form was a floating button
+            carrying `md:hidden`, so on any screen at the md breakpoint or
+            above an artist had no way at all to make a room. This is the same
+            action, visible exactly where that one is not. */}
+        {artist && (
+          <button
+            onClick={() => { setShowCreate(!showCreate); setError(''); }}
+            className="hidden md:flex items-center space-x-1.5 px-3 py-1.5 rounded-full text-xs font-semibold text-white transition active:scale-95"
+            style={{ backgroundColor: showCreate ? 'rgba(255,255,255,0.15)' : '#7c3aed' }}>
+            {showCreate ? <X className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
+            <span>{showCreate ? 'Cancel' : 'New room'}</span>
+          </button>
+        )}
       </div>
 
       {/* Create room form */}

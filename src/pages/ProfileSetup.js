@@ -222,6 +222,7 @@ export default function ProfilePage() {
         genre:        form.genre || null,
         mood:         form.mood  || null,
         social_links: sl,
+        // Mirrored into artist_payment_profiles below — see the note there.
         paypal_email: form.paypal_email?.trim() || null,
         updated_at:   new Date().toISOString(),
       };
@@ -236,6 +237,23 @@ export default function ProfilePage() {
       if (profileImgFile) updateData.profile_image_url = await uploadFile(profileImgFile, 'profile-images/');
       const { error } = await supabase.from('artists').update(updateData).eq('id', artist.id);
       if (error) throw error;
+
+      // Mirror the payout email into artist_payment_profiles.
+      //
+      // Two tables hold one address, and two screens write them: this one and
+      // Payment Settings. process-split-payout reads artist_payment_profiles
+      // first, so an artist who only ever edited THIS screen was invisible to
+      // it. Upserted rather than updated, because an artist who has never
+      // opened Payment Settings has no profile row yet.
+      if (updateData.paypal_email) {
+        const { error: mirrorErr } = await supabase
+          .from('artist_payment_profiles')
+          .upsert(
+            { artist_id: artist.id, paypal_email: updateData.paypal_email, updated_at: new Date().toISOString() },
+            { onConflict: 'artist_id' }
+          );
+        if (mirrorErr) console.error('[profile] could not mirror payout email:', mirrorErr.message);
+      }
       setMsg('Saved!'); setEditing(false); setProfileImgFile(null); setPreviewUrl(null);
       await refreshProfile();
       setTimeout(() => setMsg(''), 3000);

@@ -470,6 +470,16 @@ export default function ChatRoomView() {
 
   const [room, setRoom]                           = useState(null);
   const [spendGate, setSpendGate]                 = useState(false);
+  // Is the realtime channel actually delivering?
+  //
+  // `.subscribe()` reporting SUBSCRIBED does NOT mean rows will arrive — if a
+  // table is not in the supabase_realtime publication the channel connects
+  // happily and then carries nothing, forever. That is the failure this app
+  // had: the code looked right and the page never moved. So the client no
+  // longer trusts the channel on its own; it records what the channel says
+  // and polls whenever the answer is anything other than "connected".
+  const [liveStatus, setLiveStatus]               = useState('connecting'); // connecting | live | offline
+  const [sendError, setSendError]                 = useState('');
   const [proGate, setProGate]                     = useState(false);
   const [messages, setMessages]                   = useState([]);
   const [polls, setPolls]                         = useState([]);
@@ -497,6 +507,55 @@ export default function ChatRoomView() {
   const [longPressTimer, setLongPressTimer]       = useState(null);
 
   const messagesEndRef = useRef(null);
+  // The newest created_at on screen, kept in a ref so the poll can read it
+  // without being re-created every time a message arrives.
+  const latestMessageAtRef = useRef(null);
+  const scrollBoxRef       = useRef(null);
+  // True while the reader is at (or near) the newest message.
+  const atBottomRef        = useRef(true);
+
+  // Name resolution for a batch of messages, in one place.
+  //
+  // This logic existed twice — once in fetchMessages for the initial load and
+  // once in fetchSingleMessage for socket events — which is how the two could
+  // disagree about what an unnamed listener is called. The poll needed it a
+  // third time, so it is now written once and merged by id: a message already
+  // on screen is updated, never duplicated, whichever path delivered it.
+  const mergeMessages = useCallback(async (rows) => {
+    if (!rows?.length) return;
+    const userIds = [...new Set(rows.map(m => m.user_id))];
+    const { data: artistsData } = await supabase.from('artists')
+      .select('user_id, artist_name, slug, profile_image_url, is_verified').in('user_id', userIds);
+    const artistMap = {};
+    (artistsData || []).forEach(a => { artistMap[a.user_id] = a; });
+    const missingIds = userIds.filter(id => !artistMap[id]);
+    const profileMap = {};
+    if (missingIds.length) {
+      const { data: profilesData } = await supabase.from('user_profiles')
+        .select('user_id, name, avatar_url').in('user_id', missingIds);
+      (profilesData || []).forEach(p => { profileMap[p.user_id] = p; });
+    }
+    const hydrated = rows.map(m => {
+      if (artistMap[m.user_id]) return { ...m, artist: artistMap[m.user_id] };
+      const profile = profileMap[m.user_id];
+      if (profile) return { ...m, artist: { artist_name: profile.name || 'Listener', profile_image_url: profile.avatar_url || null, slug: null, is_verified: false } };
+      return { ...m, artist: null };
+    });
+
+    setMessages(prev => {
+      const byId = new Map(prev.map(m => [m.id, m]));
+      hydrated.forEach(m => byId.set(m.id, { ...(byId.get(m.id) || {}), ...m }));
+      // Drop an optimistic placeholder once the real row for the same text
+      // has arrived — whichever path delivered it first. Matching on content
+      // and sender rather than on id, because the placeholder's id is one we
+      // invented and the real row's is one the database chose.
+      const arrived = new Set(hydrated.map(m => `${m.user_id}|${m.content}`));
+      const merged = [...byId.values()].filter(m => !(m._pending && arrived.has(`${m.user_id}|${m.content}`)));
+      merged.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+      return merged;
+    });
+  }, []);
+
   const inputRef       = useRef(null);
   const presenceRef    = useRef(null);
   const typingTimerRef = useRef(null);
@@ -562,9 +621,53 @@ export default function ChatRoomView() {
         () => fetchPolls())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'chat_reactions' },
         () => fetchReactions())
-      .subscribe();
-    return () => supabase.removeChannel(channel);
+      .subscribe(status => {
+        // CHANNEL_ERROR / TIMED_OUT / CLOSED all mean "do not rely on this".
+        if (status === 'SUBSCRIBED') setLiveStatus('live');
+        else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') setLiveStatus('offline');
+      });
+    return () => { supabase.removeChannel(channel); setLiveStatus('connecting'); };
   }, [roomId]);
+
+  // ── The safety net ──────────────────────────────────────────────────────────
+  //
+  // Polls for anything newer than the newest message already on screen. It is
+  // cheap — one indexed query returning zero rows most of the time — and it
+  // means the room stays current even when realtime is misconfigured, blocked
+  // by a corporate proxy, or asleep on a backgrounded phone.
+  //
+  // Deliberately slower while realtime says it is live (a belt-and-braces
+  // 20s sweep to catch anything the socket dropped) and brisk when it is not.
+  // It pauses entirely while the tab is hidden, so a phone in a pocket is not
+  // making requests all afternoon.
+  useEffect(() => {
+    if (!roomId || !user) return;
+    let stopped = false;
+
+    const sweep = async () => {
+      if (stopped || document.hidden) return;
+      const newest = latestMessageAtRef.current;
+      let q = supabase.from('chat_messages')
+        .select('id, room_id, user_id, content, created_at, is_deleted, deleted_reason, is_pinned')
+        .eq('room_id', roomId)
+        .order('created_at', { ascending: true })
+        .limit(50);
+      if (newest) q = q.gt('created_at', newest);
+      const { data, error } = await q;
+      if (error) { console.error('[chat] poll failed:', error.code, error.message); return; }
+      if (!data?.length) return;
+      // Hydrate names the same way the initial load does, then merge by id so
+      // a message that arrived over the socket first is not duplicated.
+      await mergeMessages(data);
+    };
+
+    const interval = setInterval(sweep, liveStatus === 'live' ? 20000 : 4000);
+    // One immediate sweep on becoming visible again — coming back to the tab
+    // should show the conversation as it is now, not as it was when you left.
+    const onVisible = () => { if (!document.hidden) sweep(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => { stopped = true; clearInterval(interval); document.removeEventListener('visibilitychange', onVisible); };
+  }, [roomId, user, liveStatus, mergeMessages]);
 
   // ── Presence: typing indicators ─────────────────────────────────────────────
   useEffect(() => {
@@ -660,7 +763,41 @@ export default function ChatRoomView() {
     return () => clearTimeout(t);
   }, [trackQuery]);
 
-  useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, polls]);
+  // Auto-scroll, but only when you are already at the bottom.
+  //
+  // It scrolled to the newest message on EVERY change, so scrolling up to
+  // read something and having anyone post — or a poll refresh land — yanked
+  // you back down mid-sentence. In a busy room that makes the history
+  // unreadable. Now: at the bottom, you follow the conversation; scrolled up,
+  // you are left where you put yourself.
+  useEffect(() => {
+    if (!atBottomRef.current) return;
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, polls]);
+
+  // Your own message is the exception — sending is an explicit act, so it
+  // always brings you back down to see it.
+  const scrollToNewest = useCallback(() => {
+    atBottomRef.current = true;
+    requestAnimationFrame(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }));
+  }, []);
+
+  const handleScroll = useCallback((e) => {
+    const el = e.currentTarget;
+    // 80px of slack: "near enough the bottom" beats "exactly at it", which no
+    // touch device ever reports precisely.
+    atBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+  }, []);
+
+  // The poll asks for "anything after this". Kept in a ref rather than read
+  // from state inside the interval, so the interval does not need to be torn
+  // down and rebuilt on every single message.
+  useEffect(() => {
+    const real = messages.filter(m => !m._pending && m.created_at);
+    if (!real.length) return;
+    latestMessageAtRef.current = real.reduce(
+      (max, m) => (m.created_at > max ? m.created_at : max), real[0].created_at);
+  }, [messages]);
 
   // Update last_read_at when entering the room
   useEffect(() => {
@@ -862,16 +999,71 @@ export default function ChatRoomView() {
     if (myMembership?.is_muted) { setModWarning('You are muted in this room'); setTimeout(() => setModWarning(''), 3000); return; }
     const modResult = moderateMessage(input.trim());
     if (modResult) { setModWarning(modResult); setTimeout(() => setModWarning(''), 4000); return; }
+
+    const content = replyingTo ? `@${replyingTo.artist_name} ${input.trim()}` : input.trim();
+
+    // Your own message appears immediately.
+    //
+    // It used to insert and then wait for the row to come back around through
+    // the realtime channel before drawing anything. So the one message you are
+    // guaranteed to know about — the one you just typed — was the one that
+    // took a network round trip to appear, and when realtime was not
+    // delivering at all it simply never showed up. Nobody should have to
+    // refresh to see what they typed.
+    //
+    // The placeholder carries `_pending`, which the renderer dims; `.select()`
+    // brings the real row straight back, and mergeMessages swaps it in.
+    const tempId = `pending-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const optimistic = {
+      id: tempId,
+      _pending: true,
+      room_id: roomId,
+      user_id: user.id,
+      content,
+      created_at: new Date().toISOString(),
+      is_deleted: false,
+      is_pinned: false,
+      artist: artist
+        ? { artist_name: artist.artist_name, slug: artist.slug, profile_image_url: artist.profile_image_url, is_verified: artist.is_verified }
+        : null,
+    };
+
     setSending(true);
+    setSendError('');
     broadcastTyping(false);
+    setMessages(prev => [...prev, optimistic]);
+    setInput(''); setReplyingTo(null); inputRef.current?.focus();
+    scrollToNewest();
+
     try {
-      const { error } = await supabase.from('chat_messages').insert({
-        room_id: roomId, user_id: user.id,
-        content: replyingTo ? `@${replyingTo.artist_name} ${input.trim()}` : input.trim(),
-      });
+      const { data, error } = await supabase.from('chat_messages')
+        .insert({ room_id: roomId, user_id: user.id, content })
+        .select('id, room_id, user_id, content, created_at, is_deleted, deleted_reason, is_pinned')
+        .single();
       if (error) throw error;
-      setInput(''); setReplyingTo(null); inputRef.current?.focus();
-    } catch (err) { console.error('Send error:', err); }
+
+      // Swap the placeholder for the real row. Written as a filter-then-add
+      // rather than a map, because the realtime channel may already have
+      // delivered this exact row while the insert was in flight — a plain map
+      // would leave both on screen.
+      setMessages(prev => {
+        const withoutTemp = prev.filter(m => m.id !== tempId && m.id !== data.id);
+        return [...withoutTemp, { ...data, artist: optimistic.artist }]
+          .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+      });
+    } catch (err) {
+      // The old handler logged and returned, so a refused message just
+      // vanished and the text you typed was already gone from the box.
+      console.error('[chat] send failed:', err.code || '', err.message);
+      setMessages(prev => prev.filter(m => m.id !== tempId));
+      setInput(content);   // give them their words back
+      setSendError(
+        /row-level security|violates/i.test(err.message || '')
+          ? 'You are not allowed to post in this room.'
+          : "Message didn't send. Check your connection and try again."
+      );
+      setTimeout(() => setSendError(''), 6000);
+    }
     setSending(false);
   };
 
@@ -1003,7 +1195,8 @@ export default function ChatRoomView() {
         <>
           {/* Regular chat timeline */}
           <div className="flex-1 flex flex-col overflow-hidden min-h-0">
-            <div className="flex-1 overflow-y-auto px-4 py-3 space-y-1" {...pullProps}>
+            <div ref={scrollBoxRef} onScroll={handleScroll}
+              className="flex-1 overflow-y-auto px-4 py-3 space-y-1" {...pullProps}>
               <PullToRefreshIndicator pullProgress={pullProgress} isRefreshing={isRefreshing} />
               <div className="flex items-center space-x-2 px-2 py-2 mb-2 border-b border-white/[0.04]">
                 <div className="w-7 h-7 rounded-lg overflow-hidden flex items-center justify-center flex-shrink-0"
@@ -1035,7 +1228,12 @@ export default function ChatRoomView() {
 
                 return (
                   <div key={msg.id}
-                    className={`group flex items-start space-x-2.5 px-2 py-1 rounded-lg hover:bg-white/[0.02] transition select-none ${sameSender ? 'mt-0' : 'mt-2'} ${msg.is_pinned ? 'bg-purple-500/[0.05] border-l-2 border-purple-500/40' : ''}`}
+                    /* `_pending` is a message that is on screen but not yet
+                       acknowledged by the database. Dimmed rather than hidden:
+                       you see your words the instant you send them, and the
+                       half-second of lower opacity is an honest "not saved
+                       yet" instead of a spinner that blocks the room. */
+                    className={`group flex items-start space-x-2.5 px-2 py-1 rounded-lg hover:bg-white/[0.02] transition select-none ${sameSender ? 'mt-0' : 'mt-2'} ${msg.is_pinned ? 'bg-purple-500/[0.05] border-l-2 border-purple-500/40' : ''} ${msg._pending ? 'opacity-50' : ''}`}
                     onTouchStart={() => startLongPress(msg.id)}
                     onTouchEnd={cancelLongPress}
                     onTouchMove={cancelLongPress}
@@ -1119,6 +1317,27 @@ export default function ChatRoomView() {
             <div className="mx-4 mb-2 p-2.5 rounded-lg bg-red-500/10 border border-red-500/20 flex items-center space-x-2">
               <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0" />
               <p className="text-xs text-red-400">{modWarning}</p>
+            </div>
+          )}
+
+          {/* A refused message used to disappear along with the text you had
+              typed, and say nothing. Now it says what happened and the words
+              are put back in the box. */}
+          {sendError && (
+            <div className="mx-4 mb-2 p-2.5 rounded-lg bg-red-500/10 border border-red-500/20 flex items-center space-x-2">
+              <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0" />
+              <p className="text-xs text-red-400">{sendError}</p>
+            </div>
+          )}
+
+          {/* Only shown once the channel has actually reported a problem —
+              never during the normal second or two of connecting, which would
+              make a healthy room look broken on every open. Messages still
+              arrive while this is up; the poll is doing the work. */}
+          {liveStatus === 'offline' && isMember && (
+            <div className="mx-4 mb-2 px-2.5 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center space-x-2">
+              <Loader className="w-3 h-3 text-amber-400/70 animate-spin flex-shrink-0" />
+              <p className="text-[11px] text-amber-300/80">Live updates are reconnecting — checking for new messages every few seconds.</p>
             </div>
           )}
 
