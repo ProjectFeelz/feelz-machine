@@ -37,28 +37,60 @@ export default function RetailPitchesTab({ showToast }) {
 
   const load = React.useCallback(async () => {
     setLoading(true);
+    // The agreements are fetched SEPARATELY, on purpose.
+    //
+    // legal_acceptances.pitch_id is a plain uuid column with no foreign key
+    // behind it (migration 123 left it unconstrained so it could be written
+    // before a pitch row existed). PostgREST builds its embeds from foreign
+    // keys, so asking for `acceptances:legal_acceptances(...)` inside this
+    // select is a 400 — PGRST200, "could not find a relationship" — and it
+    // fails the WHOLE query, which is why the tab showed nothing at all
+    // rather than showing submissions without their paperwork.
+    //
+    // Two reads, joined here. The second one is allowed to fail quietly: if
+    // migration 123 is not in yet, or RLS refuses it, a reviewer should still
+    // see the queue. The agreement badge just does not appear.
     const [{ data, error }, tally] = await Promise.all([
       supabase
         .from('retail_pitches')
         .select(`
           id, pitch_note, status, rejection_reason, created_at, reviewed_at,
           track:tracks ( id, title, file_url, cover_artwork_url, is_explicit, is_published,
-                         artist:artists ( id, artist_name ) ),
-          acceptances:legal_acceptances ( accepted_at, document:legal_documents ( slug, version ) )
+                         artist:artists ( id, artist_name ) )
         `)
         .eq('status', filter)
         .order('created_at', { ascending: false }),
       supabase.from('retail_pitches').select('status'),
     ]);
 
-    setLoading(false);
-
     if (error) {
+      setLoading(false);
       console.error('[retail-pitches] read failed:', error.code, error.message);
       showToast?.('Could not load submissions: ' + error.message);
       return;
     }
-    setRows((data || []).filter(r => r.track));
+
+    const pitches = (data || []).filter(r => r.track);
+    const ids = pitches.map(p => p.id);
+
+    let byPitch = {};
+    if (ids.length) {
+      const { data: accepted, error: accErr } = await supabase
+        .from('legal_acceptances')
+        .select('pitch_id, accepted_at, document:legal_documents ( slug, version )')
+        .in('pitch_id', ids);
+      if (accErr) {
+        console.warn('[retail-pitches] agreements unavailable:', accErr.code, accErr.message);
+      } else {
+        (accepted || []).forEach(a => {
+          if (!a.pitch_id) return;
+          (byPitch[a.pitch_id] = byPitch[a.pitch_id] || []).push(a);
+        });
+      }
+    }
+
+    setLoading(false);
+    setRows(pitches.map(p => ({ ...p, acceptances: byPitch[p.id] || [] })));
 
     const c = { pending: 0, approved: 0, rejected: 0 };
     (tally.data || []).forEach(r => { if (c[r.status] !== undefined) c[r.status] += 1; });

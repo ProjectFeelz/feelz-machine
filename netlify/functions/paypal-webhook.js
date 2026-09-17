@@ -231,23 +231,80 @@ exports.handler = async (event) => {
       // fires, the affiliate gets paid — and the subscriber drops to Free
       // while the money keeps leaving their account every month.
       //
-      // extend_listener_subscription (migration 120) extends from the LATER
-      // of now and the current expiry, so an early renewal cannot shorten a
-      // subscription and a duplicated webhook cannot double it. It reads the
-      // row's own billing_cycle, so an annual plan is not renewed by a month.
-      try {
-        const { data: extended, error: extErr } = await supabase
-          .rpc('extend_listener_subscription', { p_paypal_subscription_id: subscriptionId });
-        if (extErr) {
-          console.error('[paypal-webhook] could not extend subscription', subscriptionId, extErr.message);
-        } else if (extended?.length) {
-          console.log('[paypal-webhook] subscription extended to', extended[0].new_expiry,
-            'for user', extended[0].user_id);
+      // All three extend functions (migrations 120 and 124) work the same
+      // way: from the LATER of now and the current expiry, so an early
+      // renewal cannot shorten a subscription and a lapsed one is not
+      // credited for the gap; by the row's own billing_cycle, so an annual
+      // plan is not renewed by a month; and against the renewal ledger keyed
+      // on the sale id, so a webhook PayPal delivers twice does not hand out
+      // two periods.
+      //
+      // ALL THREE ARE CALLED. Only one of them will find a row — the other
+      // two return nothing, which is why no row found is not an error here.
+      // Calling only the listener one is exactly how artists came to lose
+      // Pro on their renewal date while still paying for it.
+      const renewalRef = resource?.id || null;   // PayPal's sale id
+      const EXTENDERS = [
+        ['listener', 'extend_listener_subscription'],
+        ['artist',   'extend_artist_subscription'],
+        ['retail',   'extend_retail_subscription'],
+      ];
+      for (const [kind, fn] of EXTENDERS) {
+        try {
+          const { data: extended, error: extErr } = await supabase.rpc(fn, {
+            p_paypal_subscription_id: subscriptionId,
+            p_external_ref:           renewalRef,
+          });
+          if (extErr) {
+            console.error(`[paypal-webhook] could not extend ${kind} subscription`,
+              subscriptionId, extErr.message);
+          } else if (extended?.length) {
+            const row = extended[0];
+            const until = row.new_expiry || row.new_period_end;
+            console.log(`[paypal-webhook] ${kind} subscription extended to`, until,
+              'for', row.user_id || row.artist_id || row.venue_id);
+
+            // Tell them it renewed — but only when it IS a renewal.
+            //
+            // The first payment of a subscription fires this event too, and
+            // the welcome receipt for that one is written by
+            // verify-subscription.js (listeners) and TierUpgradePage (artists)
+            // the moment the person is standing in front of the screen. The
+            // renewal ledger from migration 124 is what tells the two apart:
+            // more than one row for this subscription means this is not the
+            // first payment.
+            try {
+              const { count } = await supabase
+                .from('subscription_renewals')
+                .select('id', { count: 'exact', head: true })
+                .eq('paypal_subscription_id', subscriptionId);
+
+              const isRenewal = (count || 0) > 1;
+              const who = kind === 'artist'
+                ? { artist_id: row.artist_id }
+                : kind === 'listener'
+                ? { user_id: row.user_id }
+                : null;   // a venue has no personal inbox; the admin panel shows it
+
+              if (isRenewal && who && until) {
+                const when = new Date(until).toLocaleDateString('en-GB',
+                  { day: 'numeric', month: 'long', year: 'numeric' });
+                const { error: nErr } = await supabase.from('notifications').insert({
+                  ...who,
+                  type:    'subscription',
+                  title:   'Your subscription renewed',
+                  message: `Payment received. You are covered until ${when}.`,
+                  metadata: { audience: kind, renewed_until: until, subscription: subscriptionId },
+                });
+                if (nErr) console.error('[paypal-webhook] renewal receipt refused:', nErr.code, nErr.message);
+              }
+            } catch (e) {
+              console.error('[paypal-webhook] renewal receipt threw:', e.message);
+            }
+          }
+        } catch (e) {
+          console.error(`[paypal-webhook] ${kind} extend threw:`, e.message);
         }
-        // No row found is normal here — this event also fires for artist and
-        // retail subscriptions, which the two calls above already handled.
-      } catch (e) {
-        console.error('[paypal-webhook] extend threw:', e.message);
       }
 
       // ── Affiliate commission ──────────────────────────────────────────────

@@ -2,6 +2,7 @@ import { Helmet } from 'react-helmet-async';
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
+import { showReceipt } from '../components/PurchaseReceipt';
 import { useAuth } from '../contexts/AuthContext';
 import { ChevronLeft, Check, Zap, Crown, Loader, Palette, BarChart3, Star } from 'lucide-react';
 
@@ -161,6 +162,17 @@ export default function ListenerUpgradePage() {
 
       setCurrentTier('fan_pro');
       setSuccess('Welcome to Fan Pro! Your themes and badge are now active.');
+      // Sani paid for Pro and got no confirmation of any kind — the app just
+      // started behaving differently. The sheet stays until dismissed and the
+      // server writes a notification to go with it.
+      showReceipt({
+        kind: 'subscription',
+        heading: 'Fan Pro is live',
+        title: 'Fan Pro',
+        subtitle: billingCycle === 'annual' ? 'Billed yearly' : 'Billed monthly',
+        note: 'Unlimited downloads, offline listening, themes and your badge are on now. '
+            + 'Your renewal date is in your notifications, and PayPal has emailed you a receipt.',
+      });
       await refreshProfile();
 
       // Affiliate conversion — non-fatal

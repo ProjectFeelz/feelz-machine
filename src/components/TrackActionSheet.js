@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import OfflineSaveButton from './OfflineSaveButton';
 import { supabase } from '../supabaseClient';
+import { showReceipt } from './PurchaseReceipt';
 import { useAuth } from '../contexts/AuthContext';
 import { usePlayer } from '../contexts/PlayerContext';
 import { downloadTrack } from '../utils/downloadTrack';
@@ -154,6 +155,17 @@ export default function TrackActionSheet({ track, artist, onClose }) {
 
                     setPurchaseSuccess(true);
                     setPurchasing(false);
+                    showReceipt({
+                      kind: 'purchase',
+                      title: track.title,
+                      subtitle: artist?.artist_name,
+                      amount: effectivePrice,
+                      ...(isPreorder && isNotYetReleased
+                        ? { heading: 'Pre-order placed',
+                            note: 'You will get the download the moment it is released. '
+                                + 'There is a copy of this in your notifications.' }
+                        : {}),
+                    });
 
                     if (isPreorder && isNotYetReleased) {
                         setAlreadyPreordered(true);

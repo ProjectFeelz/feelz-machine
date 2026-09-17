@@ -7,6 +7,7 @@ import TrackActionSheet from '../components/TrackActionSheet';
 // page when Popular became a card rail with nowhere to expand into.
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
+import { showReceipt } from '../components/PurchaseReceipt';
 import { useAuth } from '../contexts/AuthContext';
 import { useTier } from '../contexts/useTier';
 import { usePlayer } from '../contexts/PlayerContext';
@@ -30,6 +31,8 @@ import { ArtistStoryView, StoryUpload } from '../components/ArtistStories';
 // PreSaveButton moved to the track page with versions, for the same reason.
 import ArtistGuestbook from '../components/ArtistGuestbook';
 import MerchConnectSheet from '../components/MerchConnectSheet';
+import MerchParked from '../components/MerchParked';
+import { MERCH_PARKED } from '../config/features';
 import ChallengeXPModal from '../components/ChallengeXPModal';
 import { askNotificationPermission } from '../utils/askNotificationPermission';
 import { sendArtistBroadcast, sendNotification } from '../utils/notify';
@@ -134,6 +137,7 @@ export default function ArtistProfilePage() {
   const [showCommunity, setShowCommunity]     = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showMerchConnect, setShowMerchConnect] = useState(false);
+  const [showMerchParked, setShowMerchParked]   = useState(false);
   const [createTab, setCreateTab]             = useState('menu'); // 'menu' | 'story' | 'dm' | 'memo' | 'live'
   // Live session state (for create modal)
   const [liveTitle, setLiveTitle]               = useState('');
@@ -586,6 +590,12 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
           if (!captureData.success) throw new Error('Payment capture failed');
           // purchases + downloads recorded server-side in paypal-order.js
           setPurchaseSuccess(true); setPurchasing(false);
+          showReceipt({
+            kind: 'purchase',
+            title: purchaseTrack?.title,
+            subtitle: artist?.artist_name,
+            amount: purchaseTrack?.download_price,
+          });
           setTimeout(async () => { await triggerDownload(purchaseTrack); setPurchaseTrack(null); setPurchaseSuccess(false); }, 1500);
         } catch (err) { setPurchaseError(err.message); setPurchasing(false); }
       },
@@ -1308,7 +1318,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
             <Share2 className="w-3.5 h-3.5" />
             <span>Share</span>
           </button>
-          {artist.merch_enabled && (
+          {artist.merch_enabled && !MERCH_PARKED && (
             <button onClick={() => navigate(`/artist/${slug}/merch`)}
               className="flex items-center space-x-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all active:scale-95"
               style={{ backgroundColor: `${accentColor}25`, border: `1px solid ${accentColor}50`, color: accentColor }}>
@@ -1346,6 +1356,16 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
             userId={artist?.user_id}
             onClose={() => setShowXPModal(false)}
           />
+        )}
+
+        {/* Merch is parked — this is the explanation, not a store. */}
+        {showMerchParked && (
+          <div className="fixed inset-0 z-[210] bg-black/85 backdrop-blur-sm flex items-center justify-center px-5"
+            onClick={() => setShowMerchParked(false)}>
+            <div onClick={(e) => e.stopPropagation()} className="w-full flex justify-center">
+              <MerchParked full={false} onClose={() => setShowMerchParked(false)} />
+            </div>
+          </div>
         )}
 
         {/* Merch Connect Sheet */}
@@ -2047,6 +2067,12 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
                             if (!captureData.success) throw new Error('Payment capture failed');
                             // purchases + downloads recorded server-side in paypal-order.js
                             setPwywPurchaseSuccess(true);
+                            showReceipt({
+                              kind: 'purchase',
+                              title: pwywTrack?.title,
+                              subtitle: artist?.artist_name,
+                              amount: pwywAmount,
+                            });
                             setTimeout(async () => {
                               await triggerDownload(pwywTrack);
                               setPwywTrack(null);
@@ -2308,9 +2334,11 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
                     { id: 'upload',  icon: '🎵', label: 'Upload Track',        sub: 'Add new music to your profile',         color: 'yellow' },
                     { id: 'story',   icon: '📸', label: 'Add Story',           sub: 'Share a 24hr clip with fans',           color: 'purple' },
                     { id: 'edit',    icon: '✏️', label: 'Edit Profile',        sub: 'Update your bio, photo and links',      color: 'gray' },
-                    isPremium
-                      ? { id: 'merch',        icon: '🛍️', label: 'Merch Store',    sub: 'Connect Printful · sell to your fans', color: 'purple' }
-                      : { id: 'merch_locked', icon: '🛍️', label: 'Merch Store',    sub: 'Premium only, upgrade to unlock',     color: 'gray'   },
+                    MERCH_PARKED
+                      ? { id: 'merch_parked', icon: '🛍️', label: 'Merch Store',    sub: 'Paused — tap to see why',             color: 'gray'   }
+                      : isPremium
+                        ? { id: 'merch',        icon: '🛍️', label: 'Merch Store',    sub: 'Connect Printful · sell to your fans', color: 'purple' }
+                        : { id: 'merch_locked', icon: '🛍️', label: 'Merch Store',    sub: 'Premium only, upgrade to unlock',     color: 'gray'   },
                     { id: 'dm',      icon: '📣', label: 'Message Fans',        sub: 'Send a notification to all followers',  color: 'green' },
                     { id: 'memo',    icon: '🎙️', label: 'Voice Memo',          sub: 'Record a message for your fans',        color: 'pink' },
                     { id: 'live',    icon: '🔴', label: 'Go Live',             sub: 'Start a live session',                  color: 'red' },
@@ -2321,6 +2349,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
                         else if (id === 'memo')   { setCreateTab('memo'); }
                         else if (id === 'upload') { setShowCreateModal(false); setCreateTab('menu'); navigate('/dashboard?tab=upload'); }
                         else if (id === 'edit')   { setShowCreateModal(false); setCreateTab('menu'); navigate('/profile/edit'); }
+                        else if (id === 'merch_parked') { setShowCreateModal(false); setCreateTab('menu'); setShowMerchParked(true); }
                         else if (id === 'merch')        { setShowCreateModal(false); setCreateTab('menu'); setShowMerchConnect(true); }
                         else if (id === 'merch_locked') { setShowCreateModal(false); setCreateTab('menu'); navigate('/upgrade'); }
                         else setCreateTab(id);

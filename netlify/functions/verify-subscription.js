@@ -174,6 +174,35 @@ exports.handler = async (event) => {
       console.error('[verify-subscription] could not mirror tier onto listeners:', mirrorErr.message);
     }
 
+    // ── The receipt ────────────────────────────────────────────────────────
+    // Same reason as paypal-order.js: the on-screen confirmation disappears,
+    // and a subscriber who comes back tomorrow wondering whether the payment
+    // worked needs something to look at. Written with the service role so it
+    // does not depend on the browser surviving the redirect back from PayPal.
+    try {
+      const { error: notifErr } = await supabase.from('notifications').insert({
+        user_id: user.id,
+        type:    'subscription',
+        title:   'Fan Pro is live',
+        message: `Unlimited downloads, offline listening and themes are on now. `
+               + `Renews ${new Date(expiresAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}.`,
+        metadata: {
+          audience:      'listener',
+          tier:          'fan_pro',
+          billing_cycle: cycle,
+          expires_at:    expiresAt,
+          subscription:  subscriptionId,
+        },
+      });
+      if (notifErr) {
+        console.error('[verify-subscription] receipt refused (subscription is fine):',
+          notifErr.code, notifErr.message,
+          notifErr.code === '23514' ? '— run migration 125.' : '');
+      }
+    } catch (e) {
+      console.error('[verify-subscription] receipt threw (subscription is fine):', e.message);
+    }
+
     console.log('[verify-subscription] granted fan_pro to', user.id, 'until', expiresAt);
 
     return {

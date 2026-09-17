@@ -10,6 +10,8 @@ import {
 import { VoiceMemoUpload } from './VoiceMemo';
 import { StoryUpload } from './ArtistStories';
 import MerchConnectSheet from './MerchConnectSheet';
+import MerchParked from './MerchParked';
+import { MERCH_PARKED } from '../config/features';
 
 // Exact copy of the "+" create menu from ArtistProfilePage.js — same
 // dimensions (maxWidth 360, maxHeight 85vh), same styling, same tab flow.
@@ -87,6 +89,7 @@ export default function CreateMenuModal({ artist, user, onClose, primaryColor = 
 
   const [createTab, setCreateTab] = useState('menu'); // 'menu' | 'story' | 'dm' | 'memo' | 'live' | 'toppick'
   const [showMerchConnect, setShowMerchConnect] = useState(false);
+  const [showMerchParked, setShowMerchParked]   = useState(false);
 
   const [dmMessage, setDmMessage] = useState('');
   const [dmSending, setDmSending] = useState(false);
@@ -208,6 +211,17 @@ export default function CreateMenuModal({ artist, user, onClose, primaryColor = 
     setDmSending(false);
   };
 
+  if (showMerchParked) {
+    return (
+      <div className="fixed inset-0 z-[210] bg-black/85 backdrop-blur-sm flex items-center justify-center px-5"
+        onClick={() => setShowMerchParked(false)}>
+        <div onClick={(e) => e.stopPropagation()} className="w-full flex justify-center">
+          <MerchParked full={false} onClose={() => setShowMerchParked(false)} />
+        </div>
+      </div>
+    );
+  }
+
   if (showMerchConnect) {
     return createPortal(
       <MerchConnectSheet
@@ -261,9 +275,15 @@ export default function CreateMenuModal({ artist, user, onClose, primaryColor = 
                 // actually surface.
                 { id: 'edit', icon: '✏️', label: 'Edit Profile', sub: 'Update your bio, photo and links', color: 'gray' },
                 { id: 'toppick', icon: '⭐', label: 'Top Pick', sub: 'Choose the track your profile leads with', color: 'yellow' },
-                isPremium
-                  ? { id: 'merch', icon: '🛍️', label: 'Merch Store', sub: 'Connect Printful · sell to your fans', color: 'purple' }
-                  : { id: 'merch_locked', icon: '🛍️', label: 'Merch Store', sub: 'Premium only — upgrade to unlock', color: 'gray' },
+                // Merch is parked (src/config/features.js). The entry stays
+                // visible rather than vanishing, because an artist who set a
+                // store up should be told it is paused, not left wondering
+                // where it went. Tapping it explains; it does not open a shop.
+                MERCH_PARKED
+                  ? { id: 'merch_parked', icon: '🛍️', label: 'Merch Store', sub: 'Paused — tap to see why', color: 'gray' }
+                  : isPremium
+                    ? { id: 'merch', icon: '🛍️', label: 'Merch Store', sub: 'Connect Printful · sell to your fans', color: 'purple' }
+                    : { id: 'merch_locked', icon: '🛍️', label: 'Merch Store', sub: 'Premium only — upgrade to unlock', color: 'gray' },
                 { id: 'dm', icon: '📣', label: 'Message Fans', sub: 'Send a notification to all followers', color: 'green' },
                 { id: 'memo', icon: '🎙️', label: 'Voice Memo', sub: 'Record a message for your fans', color: 'pink' },
                 { id: 'live', icon: '🔴', label: 'Go Live', sub: 'Start a live session', color: 'red' },
@@ -276,6 +296,7 @@ export default function CreateMenuModal({ artist, user, onClose, primaryColor = 
                     else if (id === 'upload') { close(); navigate('/dashboard?tab=upload'); }
                     else if (id === 'edit') { close(); navigate('/profile/edit'); }
                     else if (id === 'toppick') { setCreateTab('toppick'); loadTopPick(); }
+                    else if (id === 'merch_parked') { setShowMerchParked(true); }
                     else if (id === 'merch') { setShowMerchConnect(true); }
                     else if (id === 'merch_locked') { close(); navigate('/upgrade'); }
                     else if (id === 'newsletter') { close(); navigate('/newsletter/compose'); }

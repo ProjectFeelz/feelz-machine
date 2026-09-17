@@ -17,6 +17,7 @@ import { supabase } from '../supabaseClient';
 import RetailPlaylistComments from '../components/retail/RetailPlaylistComments';
 import RetailDeckView from '../components/retail/RetailDeckView';
 import RetailRecordSleeve from '../components/retail/RetailRecordSleeve';
+import RetailGlass from '../components/retail/RetailGlass';
 import { R, pageBg } from '../components/retail/retailTheme';
 import InstallPrompt from '../components/InstallPrompt';
 import RetailReferrals from '../components/retail/RetailReferrals';
@@ -764,11 +765,19 @@ export default function RetailPlayerPage() {
       </Helmet>
       <audio ref={audioRef} onEnded={handleEnded} onTimeUpdate={handleTimeUpdate} />
 
-      <div className="sticky top-0 z-10 backdrop-blur-xl px-4 py-4"
+      {/* The lid. Decorative, inert, and above everything except the sheets
+          you open on purpose — see RetailGlass.js. */}
+      <RetailGlass />
+
+      {/* The header was the same translucent gradient as the cards under it,
+          so the two ran together and the page had no top. It is now opaque —
+          still a gradient, but of solid colours, sitting on a lit edge and a
+          real shadow so the content reads as passing underneath it. */}
+      <div className="sticky top-0 z-10 px-4 py-4"
         style={{
-          background: 'linear-gradient(180deg, rgba(13,13,20,0.96) 0%, rgba(8,8,12,0.92) 100%)',
-          borderBottom: `1px solid ${R.border}`,
-          boxShadow: '0 8px 32px rgba(0,0,0,0.45)',
+          background: 'linear-gradient(180deg, #0C0B12 0%, #08070C 60%, #060509 100%)',
+          borderBottom: '1px solid rgba(255,255,255,0.10)',
+          boxShadow: '0 12px 34px rgba(0,0,0,0.72), inset 0 -1px 0 rgba(139,92,246,0.22)',
         }}>
         <div className="flex items-start justify-between">
           <div>

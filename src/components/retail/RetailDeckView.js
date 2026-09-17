@@ -17,7 +17,7 @@
 // reason: the decision first, the context second.
 
 import React from 'react';
-import { Music, Loader, TrendingUp } from 'lucide-react';
+import { Music, Loader, TrendingUp, ChevronDown } from 'lucide-react';
 import RetailVibeDeck from './RetailVibeDeck';
 import { R } from './retailTheme';
 
@@ -46,6 +46,9 @@ export default function RetailDeckView({
   isPreviewing,
   previewLabel,
 }) {
+  // Folded away on a phone, always open on a desktop rail (CSS decides which).
+  const [statsOpen, setStatsOpen] = React.useState(false);
+
   return (
     <div className="fm-retail-deckpage flex flex-col lg:flex-row">
 
@@ -65,8 +68,13 @@ export default function RetailDeckView({
         }
       `}</style>
 
-      {/* ── The deck, centred, and nothing else ─────────────────────────── */}
-      <div className="flex-1 min-w-0 min-h-0 flex flex-col items-center justify-center px-5 py-4">
+      {/* ── The deck, centred, and nothing else ───────────────────────────
+          On a phone it takes a FIXED share of the frame rather than flex-1.
+          Sharing the frame with a rail that could grow meant the rail won and
+          the deck was squeezed — the cut-off card at the top of the phone
+          screenshots. 58% here, matching the same figure in RetailVibeDeck's
+          card measurement; the rail scrolls in what is left. */}
+      <div className="h-[58%] lg:h-auto flex-shrink-0 lg:flex-1 min-w-0 min-h-0 flex flex-col items-center justify-center px-5 py-4">
         {loadingPlaylists ? (
           <div className="flex justify-center py-20">
             <Loader className="w-5 h-5 animate-spin" style={{ color: R.textFaint }} />
@@ -90,7 +98,8 @@ export default function RetailDeckView({
           moving between the two screens does not feel like moving between two
           products. Pinned and scrollable in its own right. */}
       <aside
-        className="fm-retail-rail w-full lg:w-[360px] flex-shrink-0 flex flex-col min-h-0 px-5 py-5"
+        className="fm-retail-rail w-full lg:w-[360px] flex-1 lg:flex-none lg:flex-shrink-0
+                   flex flex-col min-h-0 px-5 py-5 overflow-y-auto lg:overflow-visible"
         style={{
           background: R.bgPanel,
           borderLeft: `1px solid ${R.border}`,
@@ -100,12 +109,35 @@ export default function RetailDeckView({
 
         {/* What the room has actually done. Kept, because it is the only place
             a venue sees what their subscription bought — but no longer the
-            first thing on the page, because it is not a decision. */}
+            first thing on the page, because it is not a decision.
+            ON A PHONE IT IS FOLDED AWAY. Four stat rows, two "most played"
+            lines and a paragraph about the artist pool is most of a phone
+            screen spent on something nobody taps, and in the screenshots it
+            was the block colliding with the card. One line, tap to open. */}
         {impact && impact.total_plays > 0 && (
           <div className="flex-shrink-0">
-            <p className="text-[11px] uppercase tracking-[0.24em] font-bold mb-2.5" style={{ color: R.violetLift }}>
+            <button
+              onClick={() => setStatsOpen(o => !o)}
+              className="lg:hidden w-full flex items-center justify-between gap-3 py-1.5 text-left"
+              aria-expanded={statsOpen}
+            >
+              <span className="text-[11px] uppercase tracking-[0.24em] font-bold" style={{ color: R.violetLift }}>
+                This room
+              </span>
+              <span className="flex items-center gap-1.5 text-xs" style={{ color: R.textFaint }}>
+                {impact.tracks_played} played · {impact.artists_supported} artists
+                <ChevronDown
+                  className="w-3.5 h-3.5 transition-transform"
+                  style={{ transform: statsOpen ? 'rotate(180deg)' : 'none' }}
+                />
+              </span>
+            </button>
+
+            <p className="hidden lg:block text-[11px] uppercase tracking-[0.24em] font-bold mb-2.5" style={{ color: R.violetLift }}>
               This room
             </p>
+
+            <div className={statsOpen ? 'block' : 'hidden lg:block'}>
             <div style={{ borderTop: `1px solid ${R.border}` }}>
               <Stat value={impact.artists_supported} label={impact.artists_supported === 1 ? 'artist supported' : 'artists supported'} />
               <Stat value={impact.tracks_played} label="tracks played here" />
@@ -131,6 +163,7 @@ export default function RetailDeckView({
             <p className="text-[11px] mt-3 leading-relaxed" style={{ color: R.textGhost }}>
               Half of what you pay is pooled to the artists whose music plays in your space.
             </p>
+            </div>
           </div>
         )}
 
@@ -138,14 +171,14 @@ export default function RetailDeckView({
             nine saved vibes had a horizontal scroller above the fold; here
             they are nine lines you can read at once. */}
         {savedPlaylists.length > 0 && (
-          <div className="flex flex-col min-h-0 flex-1 mt-7">
+          <div className="flex flex-col min-h-0 lg:flex-1 mt-6 lg:mt-7">
             <p className="text-[11px] uppercase tracking-[0.24em] font-bold mb-2.5 flex-shrink-0" style={{ color: R.textFaint }}>
               Your vibes
             </p>
             {/* The saved collection is the only scrolling element on this
                 screen. It grows as a venue keeps vibes, and rather than
                 pushing the page taller it scrolls inside the rail. */}
-            <div className="space-y-1 overflow-y-auto min-h-0 flex-1 -mr-2 pr-2">
+            <div className="space-y-1 lg:overflow-y-auto min-h-0 lg:flex-1 -mr-2 pr-2">
               {savedPlaylists.map(pl => (
                 <button
                   key={pl.id}

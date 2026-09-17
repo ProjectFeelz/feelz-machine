@@ -46,6 +46,13 @@ const TYPE_CONFIG = {
   weekly_report:      { icon: TrendingUp,    color: 'text-cyan-400',   bg: 'bg-cyan-500/10',    label: 'Weekly Report' },
   first_listener:     { icon: Heart,         color: 'text-yellow-400', bg: 'bg-yellow-500/10',  label: 'First! 🎯' },
   tip:                { icon: DollarSign,    color: 'text-green-400',  bg: 'bg-green-500/10',   label: 'Tip Received' },
+  // Receipts. A purchase or a subscription that tells you nothing afterwards
+  // is how somebody ends up unsure whether they were charged at all — these
+  // are the durable half of the confirmation sheet, written by the server so
+  // they survive a closed tab.
+  purchase:           { icon: Download,      color: 'text-green-400',  bg: 'bg-green-500/10',   label: 'Purchase' },
+  sale:               { icon: DollarSign,    color: 'text-green-400',  bg: 'bg-green-500/10',   label: 'Sale' },
+  subscription:       { icon: Star,          color: 'text-yellow-400', bg: 'bg-yellow-500/10',  label: 'Subscription' },
   payout_pending:     { icon: DollarSign,    color: 'text-green-400',  bg: 'bg-green-500/10',   label: 'Payout' },
   admin_message:      { icon: Megaphone,     color: 'text-yellow-400', bg: 'bg-yellow-500/10',  label: 'From Admin' },
   bug_report:         { icon: MessageCircle, color: 'text-red-400',    bg: 'bg-red-500/10',     label: 'Bug Report' },
@@ -66,7 +73,7 @@ function filterMatch(type, filter) {
   if (filter === 'collabs')    return type?.startsWith('collab_');
   if (filter === 'social')     return ['new_follower','track_liked','playlist_add','track_commented','new_comment','new_post','new_stream','mention','artist_thought'].includes(type);
   if (filter === 'milestones') return type?.startsWith('milestone_') || ['top_supporter','streak','first_listener','competition_winner','weekly_report','monthly_wrapped'].includes(type);
-  if (filter === 'money')      return ['tip','download','payout_pending','beat_purchase'].includes(type);
+  if (filter === 'money')      return ['tip','download','payout_pending','beat_purchase','purchase','sale','subscription'].includes(type);
   return true;
 }
 
@@ -630,6 +637,15 @@ export default function NotificationsPage() {
     }
 
     if (type === 'tier_granted')                         { navigate('/profile'); return; }
+    // A receipt opens the thing it is a receipt FOR where there is one, and
+    // the library otherwise — a dead-end receipt is barely better than none.
+    if (type === 'purchase') {
+      if (meta.album_id)    { navigate(`/album/${meta.album_id}`); return; }
+      if (notif.track_id)   { navigate(`/track/${notif.track_id}`); return; }
+      navigate('/library'); return;
+    }
+    if (type === 'sale')         { navigate('/dashboard?tab=analytics&section=earnings'); return; }
+    if (type === 'subscription') { navigate(meta.audience === 'artist' ? '/upgrade' : '/listener/upgrade'); return; }
     if (type === 'weekly_report')                         { navigate('/dashboard?tab=analytics&section=stats'); return; }
     if (type === 'monthly_wrapped')                       { navigate('/dashboard?tab=analytics&section=stats'); return; }
     if (type === 'download') {

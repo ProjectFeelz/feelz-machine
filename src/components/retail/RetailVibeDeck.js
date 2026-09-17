@@ -108,9 +108,22 @@ export default function RetailVibeDeck({
       // costs width rather than height — the vertical budget is back to just
       // the chrome, and the horizontal one has to leave room for the cards
       // flanking the front one (see FAN_ROOM below).
-      const chrome = (window.innerWidth >= 1024 ? 260 : 230);
-      const railW  = window.innerWidth >= 1024 ? 360 : 0;    // the rail beside it
-      const byHeight = Math.max(240, Math.min(window.innerHeight - chrome, 520));
+      //
+      // ON A PHONE THE BUDGET IS A SHARE OF THE PAGE, NOT THE WHOLE WINDOW.
+      //
+      // The rail sits BELOW the deck on a phone, inside the same fixed frame.
+      // Sizing the card off the full window height meant the card and the
+      // rail together were taller than the screen, and because the frame is
+      // overflow:hidden the browser resolved that by squeezing the flex child
+      // the card lives in — which is why the top of the card was cut off by
+      // the header in the screenshots. The card now takes its share (58%) and
+      // the rail scrolls in the rest.
+      const wide   = window.innerWidth >= 1024;
+      const frameH = window.innerHeight - 76;                // the page frame
+      const chrome = wide ? 184 : 132;                       // preview line + buttons
+      const budget = wide ? frameH : frameH * 0.58;
+      const railW  = wide ? 360 : 0;                         // the rail beside it
+      const byHeight = Math.max(240, Math.min(budget - chrome, 520));
       // The fan reaches about 0.62 of a card's width past each side, so the
       // card itself can only have what is left after both flanks.
       const base     = window.innerWidth >= 640 ? FAN_WIDE : FAN_TIGHT;

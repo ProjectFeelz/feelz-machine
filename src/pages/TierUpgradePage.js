@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
+import { showReceipt } from '../components/PurchaseReceipt';
 import { useAuth } from '../contexts/AuthContext';
 import { useTier } from '../contexts/useTier';
 import {
@@ -95,7 +96,7 @@ const BEATMAKER_TIER_FEATURES = {
       { text: 'Featured beat placement', included: true },
       { text: 'Competition entry', included: true },
       { text: 'Offline listening — play with no signal', included: true },
-      { text: 'Merch store integration', included: true },
+      { text: 'Merch store integration (paused \u2014 see notice)', included: false },
     ],
   },
 };
@@ -163,7 +164,7 @@ const TIER_FEATURES = {
       { text: 'Featured track placement', included: true },
       { text: 'Live streaming to followers', included: true },
       { text: 'Tip goals & fan fundraising', included: true },
-      { text: 'Merch store (Printful integration)', included: true },
+      { text: 'Merch store (paused \u2014 our print partner, not you)', included: false },
     ],
   },
 };
@@ -371,8 +372,46 @@ export default function TierUpgradePage() {
         .update({ current_tier_id: tier.id, tier: tierSlug, updated_at: new Date().toISOString() })
         .eq('id', artist.id);
 
+      // The durable receipt. Self-addressed, which is the one insert the
+      // notifications policy does allow from a browser — and it is written
+      // here rather than waiting for the webhook because the person is
+      // standing in front of the screen right now wondering whether it
+      // worked. Renewals are announced by paypal-webhook.js instead.
+      try {
+        const { error: notifErr } = await supabase.from('notifications').insert({
+          artist_id: artist.id,
+          user_id:   user?.id || null,
+          type:      'subscription',
+          title:     `${tierSlug === 'pro' ? 'Artist Pro' : 'Artist Premium'} is live`,
+          message:   `Your new upload and payout limits are active. `
+                   + `Renews ${new Date(expiresAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}.`,
+          metadata: {
+            audience:      'artist',
+            tier:          tierSlug,
+            billing_cycle: cycle || 'monthly',
+            expires_at:    expiresAt,
+            subscription:  subscriptionId,
+          },
+        });
+        if (notifErr) {
+          console.error('[tier-upgrade] receipt refused (subscription is fine):',
+            notifErr.code, notifErr.message,
+            notifErr.code === '23514' ? '— run migration 125.' : '');
+        }
+      } catch (e) {
+        console.error('[tier-upgrade] receipt threw (subscription is fine):', e.message);
+      }
+
       setCurrentTier(tierSlug);
       setSuccess(`Welcome to ${tierSlug === 'pro' ? 'Pro' : 'Premium'}! Your new features are active.`);
+      showReceipt({
+        kind: 'subscription',
+        heading: `${tierSlug === 'pro' ? 'Pro' : 'Premium'} is live`,
+        title: tierSlug === 'pro' ? 'Artist Pro' : 'Artist Premium',
+        subtitle: cycle === 'annual' ? 'Billed yearly' : 'Billed monthly',
+        note: 'Your new upload and payout limits are active now. The renewal date is in your '
+            + 'notifications, and PayPal has emailed you a receipt.',
+      });
       setSelectedTier(null);
       refreshProfile();
 

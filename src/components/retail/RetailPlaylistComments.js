@@ -190,8 +190,10 @@ export default function RetailPlaylistComments({ playlist, venue, isPreviewMode 
 
   const inputBarBottom = keyboardOffset > 0 ? keyboardOffset : 0;
 
+  // z-200, with the account, admin and inbox sheets: a sheet opened on
+  // purpose sits above the deck cards AND above the glass lid.
   return (
-    <div className="fixed inset-0 z-40 bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center"
+    <div className="fixed inset-0 z-[200] bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center"
       onClick={onClose}>
       <div
         className="relative w-full sm:max-w-lg h-[80vh] sm:h-[70vh] flex flex-col rounded-t-2xl sm:rounded-2xl overflow-hidden"

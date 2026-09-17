@@ -15,6 +15,7 @@ import {
   Heart, Share2, Check, ListMusic, ShoppingCart, X
 } from 'lucide-react';
 import ShareCard from '../components/ShareCard';
+import { showReceipt } from '../components/PurchaseReceipt';
 
 const PAYPAL_CLIENT_ID = process.env.REACT_APP_PAYPAL_CLIENT_ID;
 const BASE_URL = 'https://www.feelzmachine.com';
@@ -148,6 +149,15 @@ export default function AlbumDetailPage() {
           if (!captureData.success) throw new Error('Payment capture failed');
           // purchases + downloads recorded server-side in paypal-order.js
           setPurchaseSuccess(true); setPurchasing(false);
+          // A tick that vanishes in 1.5 seconds is what left Sani unsure he
+          // had bought anything. The sheet stays until it is dismissed, and
+          // the server has also written a notification he can come back to.
+          showReceipt({
+            kind: 'purchase',
+            title: purchaseTarget.label,
+            subtitle: artist?.artist_name,
+            amount: purchaseTarget.price,
+          });
           setTimeout(async () => {
             if (purchaseTarget.type === 'album') { await triggerAlbumDownload(); }
             else { await triggerDownload(purchaseTarget.track); }

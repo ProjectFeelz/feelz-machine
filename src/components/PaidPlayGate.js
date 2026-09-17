@@ -29,6 +29,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
+import { showReceipt } from './PurchaseReceipt';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { Music, Loader, ShoppingCart, X, Headphones } from 'lucide-react';
@@ -100,6 +101,12 @@ export default function PaidPlayGate({ track, artist, onClose, onPurchaseComplet
           if (!captureData.success) throw new Error('Payment capture failed');
           // purchases + downloads recorded server-side in paypal-order.js
           setSuccess(true); setPurchasing(false);
+          showReceipt({
+            kind: 'purchase',
+            title: track.title,
+            subtitle: artist?.artist_name,
+            amount: track.download_price,
+          });
           setTimeout(() => { onPurchaseComplete?.(track); }, 1500);
         } catch (e) { setError(e.message); setPurchasing(false); }
       },

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
-import { sendNotification } from '../utils/notify';
+import { showReceipt } from '../components/PurchaseReceipt';
 import { useAuth } from '../contexts/AuthContext';
 import { usePlayer } from '../contexts/PlayerContext';
 import { downloadTrack, downloadErrorMessage } from '../utils/downloadTrack';
@@ -276,22 +276,23 @@ export default function BeatDetailPage() {
             paypal_order_id: data.orderID, paypal_capture_id: captureData.captureId,
             status: 'completed',
           });
-          // Notify producer
-          if (artist?.user_id) {
-            try {
-              // Migration 106. A beat sale notification is addressed to the
-              // producer by the buyer, so the direct insert was refused.
-              await sendNotification(supabase, 'beat purchase (beat detail)', {
-                type:     'download',
-                artistId: artist.id,
-                title:    `Someone purchased "${track.title}"`,
-                message:  `${lic.label} lease — $${lic.price}`,
-                trackId:  track.id,
-                metadata: { track_id: track.id, track_title: track.title, licence: lic.id, amount: lic.price },
-              });
-            } catch {}
-          }
+          // The producer's notification is NOT sent from here any more.
+          //
+          // paypal-order.js now writes a 'sale' receipt with the service role
+          // the moment the capture is recorded, and it knows what actually
+          // landed after PayPal's cut rather than only the sticker price.
+          // Sending one from here as well would put two notifications about
+          // one sale in the producer's list — and this one went missing
+          // whenever the buyer closed the tab before it fired.
           setAlreadyPurchased(true); setPurchaseSuccess(true); setPurchasing(false);
+          showReceipt({
+            kind: 'purchase',
+            title: `${track.title} \u2014 ${lic.label} lease`,
+            subtitle: artist?.artist_name,
+            amount: lic.price,
+            note: 'Your files are downloading. The licence terms are in your notifications '
+                + 'along with this receipt, and PayPal has emailed you one too.',
+          });
           // Trigger download
           setTimeout(() => triggerDownload(), 800);
         } catch (err) { setPurchaseError(err.message); setPurchasing(false); }

@@ -89,8 +89,9 @@ export default function RetailReferrals({ venue, user, onClose }) {
     </div>
   );
 
+  // z-200, with the other sheets: above the deck cards and above the glass lid.
   return (
-    <div className="fixed inset-0 z-30 bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center"
+    <div className="fixed inset-0 z-[200] bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center"
       onClick={onClose}>
       <div className="w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl overflow-hidden"
         style={{

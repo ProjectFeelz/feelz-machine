@@ -570,6 +570,99 @@ exports.handler = async (event) => {
           } else {
             recorded = !purchaseErr;
           }
+
+          // ── The receipt ────────────────────────────────────────────────
+          //
+          // "The app just started working differently." Until now a purchase
+          // left the buyer nothing to look at: the on-screen tick cleared
+          // after a second and a half, and nothing was written anywhere a
+          // person could see. `purchases` and `downloads` are bookkeeping,
+          // not a receipt.
+          //
+          // Written here rather than in the browser on purpose. A receipt
+          // that depends on the buyer's tab still being open is exactly the
+          // receipt that goes missing when the download fails, the phone
+          // locks, or the connection drops on the way back from PayPal.
+          //
+          // Both sides are told. Failure to write either is logged and
+          // otherwise ignored — a missing notification must never turn a
+          // completed sale into an error.
+          try {
+            let what = 'Your purchase';
+            let sellerArtistId = null;
+            let sellerLabel = null;
+
+            if (albumId) {
+              const { data: al } = await adminClient
+                .from('albums').select('title, artist_id, artists ( artist_name )')
+                .eq('id', albumId).maybeSingle();
+              if (al) {
+                what = al.title || 'Album';
+                sellerArtistId = al.artist_id || null;
+                sellerLabel = al.artists?.artist_name || null;
+              }
+            } else if (captureTrackId) {
+              const { data: tr } = await adminClient
+                .from('tracks').select('title, artist_id, artists ( artist_name )')
+                .eq('id', captureTrackId).maybeSingle();
+              if (tr) {
+                what = tr.title || 'Track';
+                sellerArtistId = tr.artist_id || null;
+                sellerLabel = tr.artists?.artist_name || null;
+              }
+            }
+
+            const receipts = [];
+
+            if (resolvedUserId) {
+              receipts.push({
+                user_id:  resolvedUserId,
+                type:     'purchase',
+                title:    `You bought "${what}"`,
+                message:  `$${Number(capturedAmount).toFixed(2)} paid${sellerLabel ? ` to ${sellerLabel}` : ''}`
+                          + `${licenceId ? ' · licence included' : ''}`
+                          + '. Your download is in your library whenever you need it again.',
+                track_id: albumId ? null : captureTrackId,
+                metadata: {
+                  album_id:   albumId || null,
+                  licence_id: licenceId || null,
+                  amount:     capturedAmount,
+                  capture_id: captureId,
+                },
+              });
+            }
+
+            if (sellerArtistId) {
+              const landed = Number.isFinite(netLanded) ? netLanded : Number(capturedAmount);
+              const yours  = Math.max(0, landed - (Number(platformFee) || 0));
+              receipts.push({
+                artist_id: sellerArtistId,
+                type:      'sale',
+                title:     `"${what}" sold`,
+                message:   `$${Number(capturedAmount).toFixed(2)} paid · $${yours.toFixed(2)} is yours after fees.`,
+                track_id:  albumId ? null : captureTrackId,
+                metadata: {
+                  album_id:   albumId || null,
+                  amount:     capturedAmount,
+                  net:        landed,
+                  your_share: Number(yours.toFixed(2)),
+                  capture_id: captureId,
+                },
+              });
+            }
+
+            if (receipts.length) {
+              const { error: notifErr } = await adminClient.from('notifications').insert(receipts);
+              if (notifErr) {
+                console.error('[paypal-order] receipt notification refused (sale is fine, receipt is not):',
+                  notifErr.code, notifErr.message,
+                  notifErr.code === '23514'
+                    ? '— the type is not allowed yet; run migration 125.' : '');
+              }
+            }
+          } catch (e) {
+            console.error('[paypal-order] receipt write threw (sale is fine):', e.message);
+          }
         }
       }
 

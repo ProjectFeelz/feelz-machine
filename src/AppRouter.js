@@ -8,6 +8,9 @@ import { OfflineProvider } from './contexts/OfflineContext';
 import { useSessionRefresh } from './useSessionRefresh';
 import { useActivityPing } from './useActivityPing';
 import AppLayout from './components/layout/AppLayout';
+// Mounted once, listens for a window event, shows the confirmation sheet after
+// a payment. See PurchaseReceipt.js for why it is an event and not a context.
+import PurchaseReceipt from './components/PurchaseReceipt';
 // The offline library. A static import, not React.lazy, on purpose: it is the
 // one page that has to render with no network, and a lazy chunk that was never
 // fetched cannot be loaded offline — the person would tap Offline and sit on
@@ -281,6 +284,7 @@ export default function AppRouter() {
             <TierProvider>
             <OfflineProvider>
             <OnboardingGuard>
+            <PurchaseReceipt />
             <Suspense fallback={<div style={{ minHeight: '100vh', background: '#000' }} />}>
             <Routes>
               {/* Legacy /player/* redirects */}

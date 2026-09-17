@@ -74,23 +74,79 @@ export default function RetailRecordSleeve({
   // One number drives the jacket, the disc and the travel, so they cannot get
   // out of step the way they did when the box was sized in vh and the record
   // in px. Much larger than before — this is the focal point now.
-  const [jacket, setJacket] = React.useState(520);
+  // MEASURED FROM THE FRAME IT LIVES IN, not from the window.
+  //
+  // Every previous version of this sized the record off window.innerHeight and
+  // a fraction somebody guessed at (0.62, then 620px, then 46% from the top),
+  // which is why it kept moving instead of landing: the fraction was of the
+  // wrong box, so the gap underneath changed with every window and the record
+  // never sat where it was drawn.
+  //
+  // The rule now comes from the marked-up screenshot rather than a guess, and
+  // it is stated as a rule so it holds at every size:
+  //
+  //   the record fills the right-hand area from just under the header down to
+  //   a gap at the bottom of about a tenth of that area's height, and it is
+  //   anchored to THAT GAP — not centred, not offset from the top.
+  //
+  // At 1907×992 that is a 787px sleeve running from y≈113 to y≈900 with a
+  // 92px gap beneath it, and a visible left edge at x≈1183. Those are the
+  // numbers on the screenshot, within a few pixels, and they are reached by
+  // measuring rather than by tuning a percentage until it looks right.
+  const frameRef = React.useRef(null);
+  const [geom, setGeom] = React.useState({ jacket: 520, gap: 48 });
   React.useEffect(() => {
-    const measure = () =>
-      // A little smaller than the frame it sits in, and positioned above
-      // centre, so there is air under the record instead of it running into
-      // the bottom edge on a short window.
-      setJacket(Math.round(Math.max(300, Math.min(window.innerHeight * 0.62, 620))));
+    const measure = () => {
+      const el = frameRef.current;
+      // Before the first paint there is nothing to measure; the window minus
+      // the header is the same box, so it is a safe stand-in for one frame.
+      const h = el?.clientHeight || (window.innerHeight - HEADER);
+      const w = el?.clientWidth  || window.innerWidth;
+
+      const gapBelow = Math.round(h * 0.10);   // the breathing room he asked for
+      const gapAbove = Math.round(h * 0.04);   // just enough to clear the header
+
+      let jacket = h - gapBelow - gapAbove;
+      // On a narrow desktop the height would hand the record the whole column
+      // and leave the tracklist a sliver. The width gets a say.
+      jacket = Math.min(jacket, Math.round(w * 0.72));
+      jacket = Math.max(300, Math.min(jacket, 980));
+
+      setGeom({ jacket, gap: gapBelow });
+    };
     measure();
     window.addEventListener('resize', measure);
-    return () => window.removeEventListener('resize', measure);
+    // The frame is a flex child; its height settles after layout, not after
+    // the first render, so one more measurement on the next frame.
+    const raf = requestAnimationFrame(measure);
+    return () => { window.removeEventListener('resize', measure); cancelAnimationFrame(raf); };
+  }, []);
+  const jacket = geom.jacket;
+
+  // The phone's half-record needs a pixel diameter, because VinylRecord draws
+  // an SVG and an SVG cannot be sized in percentages the way a div can.
+  const halfRef = React.useRef(null);
+  const [halfW, setHalfW] = React.useState(300);
+  React.useEffect(() => {
+    const measure = () => setHalfW(halfRef.current?.clientWidth || 300);
+    measure();
+    window.addEventListener('resize', measure);
+    const raf = requestAnimationFrame(measure);
+    return () => { window.removeEventListener('resize', measure); cancelAnimationFrame(raf); };
   }, []);
 
-  // A 12" record in a 12⅜" sleeve. Travel is half the disc's width, inward,
-  // so half of it is always still inside the jacket.
+  // A 12" record in a 12⅜" sleeve.
+  //
+  // Travel is a fraction of the JACKET, not "however far it takes to leave
+  // half the disc showing". That older rule was written when the sleeve was
+  // 615px; at the size the record is now it threw the disc 441px across the
+  // page and sat it under the middle of the tracklist. 40% puts a little
+  // under half the record out of its sleeve — which is what a record being
+  // pulled out looks like — and leaves the track titles on the page rather
+  // than on the label.
   const disc    = Math.round(jacket * 0.88);
   const restX   = -Math.round(jacket * 0.03);
-  const pulledX = -Math.round(jacket - disc * 0.5);
+  const pulledX = -Math.round(jacket * 0.40);
 
   const hero = (isCurrentPlaylist && currentTrack) || tracks[0]?.track || tracks[0] || null;
 
@@ -128,13 +184,23 @@ export default function RetailRecordSleeve({
 
              Scrollbars stay hidden globally (index.css), so the scrolling
              tracklist shows no bar. */
+          /* PHONE: one column that scrolls.
+             The fixed frame is a DESKTOP rule and was never right on a phone —
+             the panel, the record, the details and the transport cannot fit in
+             one screen at that width, so a frame with overflow:hidden simply
+             cut the bottom off, which is what the phone screenshots show. Here
+             it is a normal page: at least a screen tall, scrolling if longer. */
           .fm-retail-record {
-            height: calc(100vh - ${HEADER}px);
-            height: calc(100dvh - ${HEADER}px);
-            overflow: hidden;
+            min-height: calc(100vh - ${HEADER}px);
+            min-height: calc(100dvh - ${HEADER}px);
           }
-          /* Height only. The WIDTH lives on the <aside> via lg:w-[360px]. */
           @media (min-width: 1024px) {
+            .fm-retail-record {
+              height: calc(100vh - ${HEADER}px);
+              height: calc(100dvh - ${HEADER}px);
+              overflow: hidden;
+            }
+            /* Height only. The WIDTH lives on the <aside> via lg:w-[360px]. */
             .fm-retail-panel { height: 100%; }
           }
         `}</style>
@@ -151,8 +217,51 @@ export default function RetailRecordSleeve({
               All vibes
             </button>
 
+            {/* ── PHONE: half a record, not a postage stamp ─────────────────
+                The square cover art was 128px of the screen doing the job of
+                an icon. On a phone there is no room for the big sleeve on the
+                right, so the record comes here instead: the top half of it,
+                full width, turning while the music plays, cut flat along the
+                bottom edge. Tapping it plays and pauses.
+
+                Clipped by the wrapper, which is why the record itself is drawn
+                with shadow={false} — a soft drop shadow inside a clipping box
+                reads as a grey rectangle rather than a shadow. */}
+            <div className="lg:hidden">
+              <div
+                ref={halfRef}
+                className="relative w-full max-w-[340px] mx-auto overflow-hidden"
+                style={{ height: Math.round(halfW / 2) }}
+              >
+                <button
+                  onClick={onTogglePlay}
+                  aria-label={isCurrentPlaylist && isPlaying ? 'Pause' : 'Play'}
+                  className="absolute inset-0 z-10"
+                  style={{ background: 'transparent' }}
+                />
+                <div className="absolute left-1/2 top-0" style={{ transform: 'translateX(-50%)' }}>
+                  <VinylRecord
+                    coverUrl={heroArt}
+                    isPlaying={isCurrentPlaylist && isPlaying}
+                    size={halfW}
+                    shadow={false}
+                  />
+                </div>
+                {/* The cut edge. A hairline of light along the bottom so the
+                    record reads as passing behind the panel rather than as an
+                    image that happens to stop. */}
+                <div
+                  className="absolute bottom-0 left-0 right-0 pointer-events-none"
+                  style={{
+                    height: 1,
+                    background: `linear-gradient(90deg, transparent, ${R.chromeDim}, transparent)`,
+                  }}
+                />
+              </div>
+            </div>
+
             <div
-              className="relative w-32 sm:w-40 lg:w-full aspect-square rounded-xl overflow-hidden mx-auto lg:mx-0"
+              className="relative hidden lg:block w-full aspect-square rounded-xl overflow-hidden lg:mx-0"
               style={{
                 background: 'linear-gradient(145deg, #16121F 0%, #0A0A10 100%)',
                 border: `1px solid ${R.borderUp}`,
@@ -271,7 +380,7 @@ export default function RetailRecordSleeve({
       </aside>
 
       {/* ── RIGHT: the record, and the tracklist over it ───────────────────── */}
-      <main className="relative flex-1 min-w-0 min-h-0 overflow-hidden">
+      <main ref={frameRef} className="relative flex-1 min-w-0 min-h-0 overflow-hidden">
 
         {/* Scenery. Sleeve pinned to the right edge and allowed to bleed off
             it; the disc travels left, into the page, behind the tracklist. */}
@@ -282,8 +391,10 @@ export default function RetailRecordSleeve({
               width: jacket,
               height: jacket,
               right: -Math.round(jacket * 0.08),
-              top: '46%',
-              marginTop: -(jacket / 2),
+              // Anchored to the gap underneath, which is the thing that was
+              // marked on the screenshot. Anchoring to the top or to a centre
+              // percentage is what let the gap drift with the window size.
+              bottom: geom.gap,
             }}
           >
             {/* The disc, behind the jacket, centred on it, emerging LEFT. */}
@@ -338,7 +449,7 @@ export default function RetailRecordSleeve({
             arriving underneath rather than stopping at a hard edge. */}
         {/* THE ONLY SCROLLING ELEMENT ON THE PAGE.
             Its bar is hidden by the global rule in index.css. */}
-        <div className="relative z-10 h-full overflow-y-auto px-5 lg:px-8 py-6 lg:[mask-image:linear-gradient(to_right,black_52%,rgba(0,0,0,0.28)_80%,transparent_100%)] lg:[-webkit-mask-image:linear-gradient(to_right,black_52%,rgba(0,0,0,0.28)_80%,transparent_100%)]">
+        <div className="relative z-10 lg:h-full lg:overflow-y-auto px-5 lg:px-8 py-6 lg:[mask-image:linear-gradient(to_right,black_52%,rgba(0,0,0,0.28)_80%,transparent_100%)] lg:[-webkit-mask-image:linear-gradient(to_right,black_52%,rgba(0,0,0,0.28)_80%,transparent_100%)]">
           <p className="text-[10px] uppercase tracking-[0.24em] font-bold mb-3" style={{ color: R.textFaint }}>
             Tracklist
           </p>

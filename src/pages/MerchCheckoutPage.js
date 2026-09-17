@@ -5,6 +5,8 @@
  */
 
 import React, { useState } from 'react';
+import { MERCH_PARKED } from '../config/features';
+import MerchParked from '../components/MerchParked';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 import { useAuth } from '../contexts/AuthContext';
@@ -42,6 +44,12 @@ async function proxyRequest(action, artistId, params = {}, authToken = null) {
 }
 
 export default function MerchCheckoutPage() {
+  // Merch is parked — see src/config/features.js. This guard is at the very
+  // top of the component so nothing below it runs: no Printful call, no
+  // storefront, no way to reach a checkout for something that may not ship.
+  if (MERCH_PARKED) return <MerchParked />;
+
+
   const location = useLocation();
   const navigate  = useNavigate();
   const { user }  = useAuth();
