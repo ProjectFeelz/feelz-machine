@@ -130,6 +130,128 @@ export async function fetchTrackCredits(trackId, orderBy = 'split_percent') {
   return { credits, error: null };
 }
 
+/**
+ * Every accepted credit across a set of tracks, in ONE pair of queries rather
+ * than one pair per track. An album of fifteen tracks was thirty round trips
+ * before this existed.
+ *
+ * Returns { credits, error } with the same shape as fetchTrackCredits, plus
+ * `track_id` on each row so a caller can still tell them apart.
+ */
+export async function fetchCreditsForTracks(trackIds = []) {
+  const ids = [...new Set(trackIds.filter(Boolean))];
+  if (ids.length === 0) return { credits: [], error: null };
+
+  const { data: collabs, error: collabErr } = await supabase
+    .from('collaborations')
+    .select('id, role, split_percent, artist_id, track_id')
+    .in('track_id', ids)
+    .eq('status', 'accepted')
+    .order('split_percent', { ascending: false });
+
+  if (collabErr) {
+    console.error('[credits] album collaborations query failed:',
+      collabErr.code, collabErr.message, collabErr.details || '', collabErr.hint || '');
+    return { credits: [], error: collabErr };
+  }
+  if (!collabs || collabs.length === 0) return { credits: [], error: null };
+
+  const artistIds = [...new Set(collabs.map(c => c.artist_id).filter(Boolean))];
+  if (artistIds.length === 0) return { credits: [], error: null };
+
+  const { data: artists, error: artistErr } = await supabase
+    .from('artists')
+    .select('id, artist_name, slug, profile_image_url')
+    .in('id', artistIds);
+
+  if (artistErr) {
+    console.error('[credits] album artists lookup failed:',
+      artistErr.code, artistErr.message, artistErr.details || '', artistErr.hint || '');
+    return { credits: [], error: artistErr };
+  }
+
+  const byId = new Map((artists || []).map(a => [a.id, a]));
+  const credits = collabs
+    .map(c => ({ ...c, artist: byId.get(c.artist_id) || null }))
+    .filter(c => c.artist);
+
+  return { credits, error: null };
+}
+
+/**
+ * The album-level "Featuring" row.
+ *
+ * This replaces a stack of full Credits cards — one per track that had any —
+ * which is what made the album page look nothing like the track page. Those
+ * cards were also saying something the page already said: each row in the
+ * tracklist below carries its own "ft. …" line, so the card naming the track
+ * was the same fact twice, in a much heavier box.
+ *
+ * So: one row of pills for everyone who appears anywhere on the record, in the
+ * same markup the track page uses. Which song each of them is on is answered
+ * by the tracklist, where the question is actually asked.
+ */
+export function AlbumCredits({ trackIds = [] }) {
+  const navigate = useNavigate();
+  const [credits, setCredits] = useState([]);
+
+  // Joined so the effect re-runs when the album's tracks actually change,
+  // rather than on every render of a new array with the same contents.
+  const key = trackIds.filter(Boolean).join(',');
+
+  useEffect(() => {
+    let live = true;
+    fetchCreditsForTracks(key ? key.split(',') : []).then(({ credits: c }) => {
+      if (live) setCredits(c);
+    });
+    return () => { live = false; };
+  }, [key]);
+
+  // One pill per artist, not one per credit: someone who features on four
+  // tracks is one person, and four identical pills would read as a bug.
+  const people = [];
+  const seen = new Set();
+  credits.forEach(c => {
+    if (!c.artist?.id || seen.has(c.artist.id)) return;
+    seen.add(c.artist.id);
+    people.push(c);
+  });
+
+  if (people.length === 0) return null;
+
+  return (
+    <div className="px-5 mt-2 mb-6">
+      <h2 className="text-sm font-semibold text-white/50 uppercase tracking-wider mb-3">
+        Featuring
+      </h2>
+      <div className="flex flex-wrap gap-2">
+        {people.map(cr => (
+          <button
+            key={cr.artist.id}
+            onClick={() => cr.artist.slug && navigate(`/artist/${cr.artist.slug}`)}
+            /* Identical to the track page pill, including the max-w/min-w-0
+               that stops a single long artist name being wider than the
+               screen, and the flex-shrink-0 that keeps the avatar round. */
+            className="flex items-center gap-2 pl-1 pr-3 py-1 rounded-full bg-white/[0.05] border border-white/[0.08] hover:bg-white/[0.1] transition max-w-full min-w-0"
+          >
+            {cr.artist.profile_image_url
+              ? <img src={cr.artist.profile_image_url} alt="" className="w-7 h-7 rounded-full object-cover flex-shrink-0" />
+              : <span className="w-7 h-7 flex-shrink-0 rounded-full bg-white/10 flex items-center justify-center text-[11px] font-bold text-white/60">
+                  {(cr.artist.artist_name || '?')[0].toUpperCase()}
+                </span>}
+            <span className="text-sm text-white truncate min-w-0">{cr.artist.artist_name}</span>
+            {cr.role && (
+              <span className="text-[11px] text-white/35 flex-shrink-0">
+                {ROLE_LABELS[cr.role] || cr.role}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // Inline credits — e.g. "ft. ArtistName, prod. AnotherArtist"
 export function TrackCreditsInline({ trackId }) {
   const [credits, setCredits] = useState([]);

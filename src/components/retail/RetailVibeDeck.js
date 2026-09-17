@@ -19,6 +19,7 @@
 
 import React from 'react';
 import { Music, X, Bookmark, Play, Pause, RotateCcw, ChevronLeft } from 'lucide-react';
+import { R } from './retailTheme';
 
 const SWIPE_COMMIT = 110;   // px past which a release counts as a decision
 const SWIPE_HINT   = 40;    // px at which the accept/reject tint starts showing
@@ -90,8 +91,8 @@ export default function RetailVibeDeck({
   if (playlists.length === 0) {
     return (
       <div className="py-20 text-center">
-        <Music className="w-10 h-10 text-white/10 mx-auto mb-3" />
-        <p className="text-sm text-white/30">No vibes available yet.</p>
+        <Music className="w-10 h-10 mx-auto mb-3" style={{ color: R.textGhost }} />
+        <p className="text-sm" style={{ color: R.textFaint }}>No vibes available yet.</p>
       </div>
     );
   }
@@ -99,13 +100,14 @@ export default function RetailVibeDeck({
   if (done) {
     return (
       <div className="py-20 text-center">
-        <p className="text-lg font-bold text-white mb-1.5">That's every vibe.</p>
-        <p className="text-sm text-white/35 mb-6">
+        <p className="text-lg font-bold mb-1.5" style={{ color: R.text }}>That's every vibe.</p>
+        <p className="text-sm mb-6" style={{ color: R.textFaint }}>
           The ones you kept are in Your Vibes at the top of this page.
         </p>
         <button
           onClick={restart}
-          className="inline-flex items-center gap-2 px-5 py-3 rounded-full bg-purple-500 hover:bg-purple-400 text-white text-sm font-bold transition"
+          className="inline-flex items-center gap-2 px-5 py-3 rounded-full text-sm font-bold transition"
+          style={{ background: `linear-gradient(145deg, ${R.rustBright}, ${R.rust})`, color: '#1A1310' }}
         >
           <RotateCcw className="w-4 h-4" />
           Go through them again
@@ -123,8 +125,8 @@ export default function RetailVibeDeck({
     <div
       className="absolute inset-0 rounded-[28px] overflow-hidden select-none"
       style={{
-        background: 'linear-gradient(150deg, rgba(167,139,250,0.16) 0%, rgba(24,16,46,0.96) 60%, rgba(10,10,14,0.99) 100%)',
-        border: '1px solid rgba(167,139,250,0.22)',
+        background: 'linear-gradient(150deg, rgba(58,40,30,0.96) 0%, rgba(22,17,14,0.98) 60%, rgba(10,8,7,0.99) 100%)',
+        border: `1px solid ${R.borderUp}`,
         boxShadow: faded ? '0 8px 30px rgba(0,0,0,0.4)' : '0 24px 70px rgba(0,0,0,0.65)',
         ...style,
       }}
@@ -134,7 +136,7 @@ export default function RetailVibeDeck({
         <img src={pl.cover_image_url} alt="" className="absolute inset-0 w-full h-full object-cover" draggable={false} />
       ) : (
         <div className="absolute inset-0 flex items-center justify-center">
-          <Music className="w-16 h-16 text-purple-300/20" />
+          <Music className="w-16 h-16" style={{ color: R.textGhost }} />
         </div>
       )}
 
@@ -142,16 +144,17 @@ export default function RetailVibeDeck({
           gradient rather than trusting the image to be dark at the bottom. */}
       <div
         className="absolute inset-x-0 bottom-0 p-6"
-        style={{ background: 'linear-gradient(to top, rgba(6,4,12,0.96) 12%, rgba(6,4,12,0.78) 48%, transparent 100%)' }}
+        style={{ background: 'linear-gradient(to top, rgba(8,6,5,0.97) 12%, rgba(8,6,5,0.80) 48%, transparent 100%)' }}
       >
         {pl.mood && (
-          <span className="inline-block text-[10px] font-bold uppercase tracking-[0.18em] px-2.5 py-1 rounded-full bg-purple-500/25 text-purple-100 border border-purple-300/25 mb-2.5">
+          <span className="inline-block text-[10px] font-bold uppercase tracking-[0.18em] px-2.5 py-1 rounded-full mb-2.5"
+            style={{ background: R.brassSoft, color: R.brass, border: '1px solid rgba(201,151,63,0.30)' }}>
             {pl.mood}
           </span>
         )}
-        <h3 className="text-2xl sm:text-3xl font-black text-white leading-tight">{pl.title}</h3>
+        <h3 className="text-2xl sm:text-3xl font-black leading-tight" style={{ color: R.text }}>{pl.title}</h3>
         {pl.description && (
-          <p className="text-sm text-white/55 mt-1.5 line-clamp-2 leading-relaxed">{pl.description}</p>
+          <p className="text-sm mt-1.5 line-clamp-2 leading-relaxed" style={{ color: R.textDim }}>{pl.description}</p>
         )}
       </div>
     </div>
@@ -160,10 +163,10 @@ export default function RetailVibeDeck({
   return (
     <div>
       <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
-        <p className="text-xs text-white/40">
+        <p className="text-xs" style={{ color: R.textFaint }}>
           Swipe left to pass, right to keep. Tap the card to open the record.
         </p>
-        <p className="text-[11px] text-white/25">{playlists.length - idx} left</p>
+        <p className="text-[11px]" style={{ color: R.textGhost }}>{playlists.length - idx} left</p>
       </div>
 
       {/* The deck. Fixed aspect so the card is the same shape on a phone and
@@ -198,7 +201,7 @@ export default function RetailVibeDeck({
           {Math.abs(offset) > SWIPE_HINT && (
             <div
               className="absolute inset-0 rounded-[28px] pointer-events-none flex items-center justify-center"
-              style={{ background: offset > 0 ? `rgba(16,185,129,${tint})` : `rgba(244,63,94,${tint})` }}
+              style={{ background: offset > 0 ? `rgba(78,154,107,${tint})` : `rgba(180,80,63,${tint})` }}
             >
               {offset > 0
                 ? <Bookmark className="w-16 h-16 text-white drop-shadow-lg" fill="currentColor" />
@@ -215,16 +218,17 @@ export default function RetailVibeDeck({
           <>
             <button
               onClick={() => (isPreviewing ? onStopPreview?.() : onPreview?.(top))}
-              className="w-7 h-7 rounded-full bg-white/[0.08] hover:bg-white/[0.16] flex items-center justify-center transition flex-shrink-0"
+              className="w-7 h-7 rounded-full flex items-center justify-center transition flex-shrink-0"
+              style={{ background: R.surface2, border: `1px solid ${R.border}` }}
             >
-              {isPreviewing ? <Pause className="w-3.5 h-3.5 text-white" /> : <Play className="w-3.5 h-3.5 text-white" />}
+              {isPreviewing ? <Pause className="w-3.5 h-3.5" style={{ color: R.text }} /> : <Play className="w-3.5 h-3.5" style={{ color: R.text }} />}
             </button>
-            <p className="text-xs text-white/45 truncate max-w-[280px]">
-              {isPreviewing ? 'Previewing' : 'Paused'} · <span className="text-white/70">{previewLabel}</span>
+            <p className="text-xs truncate max-w-[280px]" style={{ color: R.textFaint }}>
+              {isPreviewing ? 'Previewing' : 'Paused'} · <span style={{ color: R.textDim }}>{previewLabel}</span>
             </p>
           </>
         ) : (
-          <p className="text-xs text-white/20">No preview for this vibe yet</p>
+          <p className="text-xs" style={{ color: R.textGhost }}>No preview for this vibe yet</p>
         )}
       </div>
 
@@ -234,14 +238,16 @@ export default function RetailVibeDeck({
         <button
           onClick={() => commit('left')}
           title="Not for this room"
-          className="w-14 h-14 rounded-full bg-white/[0.05] border border-white/[0.1] hover:bg-rose-500/20 hover:border-rose-400/40 flex items-center justify-center transition"
+          className="w-14 h-14 rounded-full flex items-center justify-center transition"
+          style={{ background: R.surface, border: `1px solid ${R.border}` }}
         >
-          <X className="w-6 h-6 text-white/55" />
+          <X className="w-6 h-6" style={{ color: R.textDim }} />
         </button>
 
         <button
           onClick={() => onOpen?.(top)}
-          className="px-6 h-14 rounded-full bg-white text-black text-sm font-bold flex items-center gap-2 hover:bg-white/90 transition"
+          className="px-6 h-14 rounded-full text-sm font-bold flex items-center gap-2 transition active:scale-95"
+          style={{ background: `linear-gradient(145deg, ${R.rustBright}, ${R.rust})`, color: '#1A1310', boxShadow: '0 8px 22px rgba(181,97,58,0.32)' }}
         >
           <ChevronLeft className="w-4 h-4 rotate-180" />
           Open the record
@@ -250,11 +256,10 @@ export default function RetailVibeDeck({
         <button
           onClick={() => commit('right')}
           title={saved ? 'Already in Your Vibes' : 'Keep this vibe'}
-          className={`w-14 h-14 rounded-full flex items-center justify-center transition border ${
-            saved
-              ? 'bg-purple-500 border-purple-400 text-white'
-              : 'bg-white/[0.05] border-white/[0.1] text-white/55 hover:bg-emerald-500/20 hover:border-emerald-400/40'
-          }`}
+          className="w-14 h-14 rounded-full flex items-center justify-center transition"
+          style={saved
+            ? { background: R.brassSoft, border: `1px solid rgba(201,151,63,0.45)`, color: R.brass }
+            : { background: R.surface, border: `1px solid ${R.border}`, color: R.textDim }}
         >
           <Bookmark className="w-6 h-6" fill={saved ? 'currentColor' : 'none'} />
         </button>

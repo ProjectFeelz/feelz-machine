@@ -8,7 +8,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { usePlayer } from '../contexts/PlayerContext';
 import { usePaidPlayLimit } from '../hooks/usePaidPlayLimit';
 import PaidPlayGate from '../components/PaidPlayGate';
-import TrackCredits, { TrackCreditsInline } from '../components/TrackCredits';
+import { TrackCreditsInline, AlbumCredits } from '../components/TrackCredits';
 import TrackVersions from '../components/TrackVersions';
 import {
   ArrowLeft, Play, Pause, Music, Loader, Download,
@@ -423,17 +423,15 @@ export default function AlbumDetailPage() {
         )}
       </div>
 
-      {/* Who made this record — up here, where the track page puts it.
-          One card per track that HAS credits, each naming its track, so a
-          listener can see at a glance that a song is a collaboration without
-          scrolling to the end of the album. */}
-      {tracks.some(t => t.id) && (
-        <div className="px-4 mt-1 mb-2 space-y-3">
-          {tracks.map(track => (
-            <TrackCredits key={track.id} trackId={track.id} title={track.title} />
-          ))}
-        </div>
-      )}
+      {/* Who made this record — up here, where the track page puts it, and in
+          the same shape: one row of pills, not a stack of cards.
+
+          It used to render a full Credits card per track that had any. On an
+          album with three collaborations that was three heavy boxes above the
+          music, each repeating what the tracklist below already says on the
+          row itself ("ft. Epsilon Beats"). Same fact, twice, in the bulkier
+          of the two places. */}
+      <AlbumCredits trackIds={tracks.map(t => t.id)} />
 
       {/* Tracks */}
       <div className="px-4">

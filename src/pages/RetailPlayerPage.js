@@ -11,12 +11,13 @@
 import React from 'react';
 import { Helmet } from 'react-helmet-async';
 import { useNavigate } from 'react-router-dom';
-import { Loader, Play, Pause, SkipForward, SkipBack, Shuffle, Repeat, Repeat1, Music, MapPin, Megaphone, Heart, Bell, User, LogOut, FileText, Shield, Menu, ChevronRight , TrendingUp} from 'lucide-react';
+import { Loader, Play, Pause, SkipForward, MapPin, Megaphone, Bell, User, LogOut, FileText, Shield, Menu, ChevronRight, TrendingUp } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../supabaseClient';
 import RetailPlaylistComments from '../components/retail/RetailPlaylistComments';
-import RetailVibeDeck from '../components/retail/RetailVibeDeck';
+import RetailDeckView from '../components/retail/RetailDeckView';
 import RetailRecordSleeve from '../components/retail/RetailRecordSleeve';
+import { R, pageBg } from '../components/retail/retailTheme';
 import InstallPrompt from '../components/InstallPrompt';
 import RetailReferrals from '../components/retail/RetailReferrals';
 import { buildPlayRow, sendPlay, flushQueue } from '../utils/retailPlayQueue';
@@ -747,7 +748,7 @@ export default function RetailPlayerPage() {
   }
 
   return (
-    <div className="min-h-screen bg-black text-white pb-28">
+    <div className="min-h-screen pb-16" style={{ background: pageBg, color: R.text }}>
       <Helmet>
         <title>Feelz Retail, {venue.business_name}</title>
         <meta name="robots" content="noindex, nofollow" />
@@ -759,20 +760,20 @@ export default function RetailPlayerPage() {
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-title" content="Feelz Retail" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-        <meta name="theme-color" content="#000000" />
+        <meta name="theme-color" content="#0C0A09" />
       </Helmet>
       <audio ref={audioRef} onEnded={handleEnded} onTimeUpdate={handleTimeUpdate} />
 
       <div className="sticky top-0 z-10 backdrop-blur-xl px-4 py-4"
         style={{
-          background: 'linear-gradient(135deg, rgba(30,20,60,0.97) 0%, rgba(14,14,18,0.97) 60%)',
-          borderBottom: '1px solid rgba(167,139,250,0.18)',
-          boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+          background: 'linear-gradient(180deg, rgba(20,16,14,0.96) 0%, rgba(12,10,9,0.92) 100%)',
+          borderBottom: `1px solid ${R.border}`,
+          boxShadow: '0 8px 32px rgba(0,0,0,0.45)',
         }}>
         <div className="flex items-start justify-between">
           <div>
-            <p className="text-purple-400 text-xs font-bold tracking-widest uppercase">Feelz Retail</p>
-            <h1 className="text-lg font-bold text-white">{venue.business_name}</h1>
+            <p className="text-xs font-bold tracking-[0.24em] uppercase" style={{ color: R.rustBright }}>Feelz Retail</p>
+            <h1 className="text-lg font-bold" style={{ color: R.text }}>{venue.business_name}</h1>
           </div>
           <div className="flex items-center space-x-1 flex-shrink-0">
             {/* The referrals link that used to sit here navigated to
@@ -887,110 +888,26 @@ export default function RetailPlayerPage() {
         </div>
       )}
 
-      <div className="px-4 pt-5">
+      <div className="px-4 sm:px-6 lg:px-8 pt-5">
         {view === 'deck' ? (
-          <>
-            {savedPlaylists.length > 0 && (
-              <div className="mb-5">
-                {/* What playing this music has actually done. A venue sees a monthly
-                bill and never sees what it bought: half of it is pooled to the
-                artists whose tracks played here. These are counted from the same
-                logs the payout uses. */}
-            {impact && impact.total_plays > 0 && (
-              <div className="mb-6 rounded-2xl border border-purple-400/20 p-4"
-                style={{ background: 'linear-gradient(135deg, rgba(167,139,250,0.10) 0%, rgba(30,20,55,0.5) 100%)' }}>
-                <p className="text-[10px] uppercase tracking-[0.2em] text-purple-300 font-bold mb-3">
-                  Your impact
-                </p>
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                  <div>
-                    <p className="text-2xl font-black text-white">{impact.artists_supported}</p>
-                    <p className="text-[11px] text-white/45 mt-0.5">
-                      {impact.artists_supported === 1 ? 'artist supported' : 'artists supported'}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-2xl font-black text-white">{impact.tracks_played}</p>
-                    <p className="text-[11px] text-white/45 mt-0.5">tracks played in here</p>
-                  </div>
-                  <div>
-                    <p className="text-2xl font-black text-white">{impact.hours_played}</p>
-                    <p className="text-[11px] text-white/45 mt-0.5">hours of music</p>
-                  </div>
-                  <div>
-                    <p className="text-2xl font-black text-white">{impact.plays_this_month}</p>
-                    <p className="text-[11px] text-white/45 mt-0.5">plays this month</p>
-                  </div>
-                </div>
-                {(impact.top_artist || impact.top_playlist) && (
-                  <p className="text-[11px] text-white/35 mt-3 pt-3 border-t border-white/[0.06]">
-                    {impact.top_artist && <>Most played here: <span className="text-white/70">{impact.top_artist}</span></>}
-                    {impact.top_artist && impact.top_playlist && ' · '}
-                    {impact.top_playlist && <>Favourite vibe: <span className="text-white/70">{impact.top_playlist}</span></>}
-                  </p>
-                )}
-                <p className="text-[10px] text-white/25 mt-2">
-                  Half of what you pay is pooled to the artists whose music plays in your space.
-                </p>
-              </div>
-            )}
-
-            <p className="text-xs text-purple-300 font-bold uppercase tracking-wide mb-2">Your vibes</p>
-                <div className="flex space-x-3 overflow-x-auto pb-1">
-                  {savedPlaylists.map(pl => (
-                    <button key={pl.id} onClick={() => openPlaylist(pl)}
-                      className="text-left flex-shrink-0 w-32 group">
-                      <div className="w-32 h-32 rounded-xl overflow-hidden mb-2 flex items-center justify-center transition duration-300 group-hover:-translate-y-1"
-                        style={{
-                          background: 'linear-gradient(135deg, rgba(167,139,250,0.16) 0%, rgba(30,20,55,0.9) 100%)',
-                          border: '1px solid rgba(167,139,250,0.24)',
-                          boxShadow: '0 6px 24px rgba(0,0,0,0.45)',
-                        }}>
-                        {pl.cover_image_url
-                          ? <img src={pl.cover_image_url} alt="" className="w-full h-full object-cover" />
-                          : <Music className="w-8 h-8 text-purple-300/25" />}
-                      </div>
-                      <p className="text-sm font-bold text-white truncate">{pl.title}</p>
-                      {pl.mood && <p className="text-xs text-white/40 mt-0.5 truncate">{pl.mood}</p>}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-            {recommended.length > 0 && (
-              <div className="mb-5">
-                <p className="text-xs text-purple-300 font-bold uppercase tracking-wide mb-2">Recommended for you</p>
-                <div className="flex space-x-2 overflow-x-auto pb-1">
-                  {recommended.map(r => (
-                    <button key={r.playlist_id}
-                      onClick={() => openPlaylist(playlists.find(p => p.id === r.playlist_id) || { id: r.playlist_id, title: r.title, mood: r.mood })}
-                      className="rounded-xl bg-purple-500/10 border border-purple-500/30 px-4 py-3 text-left flex-shrink-0 min-w-[140px] hover:bg-purple-500/15 transition">
-                      <p className="text-sm font-bold text-white">{r.title}</p>
-                      {r.mood && <p className="text-xs text-white/40 mt-0.5">{r.mood}</p>}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-            {loadingPlaylists ? (
-              <div className="flex justify-center py-12"><Loader className="w-5 h-5 text-white/30 animate-spin" /></div>
-            ) : (
-              <RetailVibeDeck
-                playlists={playlists}
-                savedIds={savedPlaylistIds}
-                onSave={toggleSave}
-                onOpen={(pl) => openPlaylist(pl)}
-                onPreview={(pl) => pl && previewPlaylist(pl)}
-                onStopPreview={stopPreview}
-                isPreviewing={isPlaying && mode === 'track'}
-                previewLabel={
-                  tracks[currentIndex]
-                    ? `${tracks[currentIndex].artist?.artist_name || 'Unknown'} — ${tracks[currentIndex].title}`
-                    : null
-                }
-              />
-            )}
-          </>
+          <RetailDeckView
+            playlists={playlists}
+            savedIds={savedPlaylistIds}
+            savedPlaylists={savedPlaylists}
+            recommended={recommended}
+            impact={impact}
+            loadingPlaylists={loadingPlaylists}
+            onSave={toggleSave}
+            onOpen={(pl) => openPlaylist(pl)}
+            onPreview={(pl) => pl && previewPlaylist(pl)}
+            onStopPreview={stopPreview}
+            isPreviewing={isPlaying && mode === 'track'}
+            previewLabel={
+              tracks[currentIndex]
+                ? `${tracks[currentIndex].artist?.artist_name || 'Unknown'} — ${tracks[currentIndex].title}`
+                : null
+            }
+          />
         ) : (
           <RetailRecordSleeve
             playlist={selectedPlaylist}
@@ -1014,6 +931,17 @@ export default function RetailPlayerPage() {
             onComments={() => setShowComments(true)}
             featuredArtists={featuredArtists}
             distinctArtistCount={distinctArtistCount}
+            /* The transport lives in the left column of the record now — the
+               bar across the bottom of the window is gone. */
+            audioRef={audioRef}
+            onNext={advance}
+            onPrev={goBack}
+            shuffle={shuffle}
+            onToggleShuffle={toggleShuffle}
+            repeat={repeat}
+            onCycleRepeat={cycleRepeat}
+            liked={likedTrackIds.has(tracks[currentIndex]?.id)}
+            onToggleLike={() => toggleLike(tracks[currentIndex])}
           />
         )}
       </div>
@@ -1112,80 +1040,43 @@ export default function RetailPlayerPage() {
         </div>
       )}
 
-      {(currentTrack || mode === 'ad') && (
-        <div className="fixed bottom-0 left-0 right-0 backdrop-blur-xl px-4 py-3"
+      {/* THE PLAYER BAR IS GONE, except for adverts.
+          It used to run across the bottom of every screen for the sake of six
+          buttons, and on the record page it cut off the bottom of the record
+          itself. Transport now lives in a card under the song details, where
+          a venue is already looking when they decide to skip something.
+
+          An advert is the exception and has to stay: a venue must be able to
+          see that the thing playing in their room is an advert and not their
+          music, and there is no record page for an advert to put it on. */}
+      {mode === 'ad' && (
+        <div className="fixed bottom-0 left-0 right-0 backdrop-blur-xl px-4 py-3 z-30"
           style={{
-            background: 'linear-gradient(180deg, rgba(30,20,60,0.97) 0%, rgba(14,14,18,0.98) 100%)',
-            borderTop: '1px solid rgba(167,139,250,0.20)',
+            background: 'linear-gradient(180deg, rgba(34,25,19,0.97) 0%, rgba(12,10,9,0.98) 100%)',
+            borderTop: `1px solid ${R.borderUp}`,
             boxShadow: '0 -8px 32px rgba(0,0,0,0.6)',
           }}>
-          <div className="flex items-center space-x-3">
-            {mode === 'ad' ? (
-              <>
-                <div className="w-10 h-10 rounded-lg bg-purple-500/20 flex items-center justify-center flex-shrink-0">
-                  <Megaphone className="w-4 h-4 text-purple-300" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-white truncate">Advert</p>
-                  <p className="text-xs text-white/40 truncate">{currentAd?.advertiser_name}</p>
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="w-10 h-10 rounded-lg overflow-hidden bg-white/[0.06] flex-shrink-0">
-                  {currentTrack?.cover_artwork_url
-                    ? <img src={currentTrack.cover_artwork_url} alt="" className="w-full h-full object-cover" />
-                    : <div className="w-full h-full flex items-center justify-center"><Music className="w-4 h-4 text-white/20" /></div>}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-white truncate">{currentTrack?.title}</p>
-                  <p className="text-xs text-white/40 truncate">{currentTrack?.artist?.artist_name}</p>
-                </div>
-                <button onClick={() => toggleLike(currentTrack)} className="p-2 rounded-full hover:bg-white/[0.08] transition flex-shrink-0">
-                  <Heart className={`w-4 h-4 ${likedTrackIds.has(currentTrack?.id) ? 'text-purple-400' : 'text-white/30'}`}
-                    fill={likedTrackIds.has(currentTrack?.id) ? 'currentColor' : 'none'} />
-                </button>
-              </>
-            )}
-            {/* Transport. Shuffle, back and repeat are hidden during an advert:
-                they would be a second way to skip one, and the forward button
-                is already the only exit we intend to offer. */}
-            {mode === 'track' && (
-              <button onClick={toggleShuffle} title="Shuffle" aria-label="Shuffle"
-                aria-pressed={shuffle}
-                className="p-2 rounded-full hover:bg-white/[0.08] transition flex-shrink-0">
-                <Shuffle className={`w-4 h-4 ${shuffle ? 'text-purple-400' : 'text-white/40'}`} />
-              </button>
-            )}
-
-            {mode === 'track' && (
-              <button onClick={goBack} title="Previous" aria-label="Previous track"
-                className="p-2 rounded-full hover:bg-white/[0.08] transition flex-shrink-0">
-                <SkipBack className="w-4 h-4 text-white/50" />
-              </button>
-            )}
-
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
+              style={{ background: R.brassSoft }}>
+              <Megaphone className="w-4 h-4" style={{ color: R.brass }} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold truncate" style={{ color: R.text }}>Advert</p>
+              <p className="text-xs truncate" style={{ color: R.textFaint }}>{currentAd?.advertiser_name}</p>
+            </div>
             <button onClick={togglePlay}
-              title={isPlaying ? 'Pause' : 'Play'} aria-label={isPlaying ? 'Pause' : 'Play'}
-              className="p-2.5 rounded-full bg-purple-500 hover:bg-purple-400 transition flex-shrink-0">
-              {isPlaying ? <Pause className="w-4 h-4 text-white" fill="white" /> : <Play className="w-4 h-4 text-white" fill="white" />}
+              title={isPlaying ? 'Pause' : 'Play'}
+              className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 transition"
+              style={{ background: `linear-gradient(145deg, ${R.rustBright}, ${R.rust})` }}>
+              {isPlaying
+                ? <Pause className="w-4 h-4" style={{ color: '#1A1310' }} fill="#1A1310" />
+                : <Play className="w-4 h-4" style={{ color: '#1A1310' }} fill="#1A1310" />}
             </button>
-
-            <button onClick={advance} title="Next" aria-label="Next track"
-              className="p-2 rounded-full hover:bg-white/[0.08] transition flex-shrink-0">
-              <SkipForward className="w-4 h-4 text-white/50" />
+            <button onClick={advance} title="Skip advert"
+              className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 transition hover:bg-white/[0.06]">
+              <SkipForward className="w-4 h-4" style={{ color: R.textDim }} />
             </button>
-
-            {mode === 'track' && (
-              <button onClick={cycleRepeat}
-                title={repeat === 'one' ? 'Repeating this track' : repeat === 'all' ? 'Repeating the playlist' : 'Repeat off'}
-                aria-label="Repeat mode"
-                className="p-2 rounded-full hover:bg-white/[0.08] transition flex-shrink-0">
-                {repeat === 'one'
-                  ? <Repeat1 className="w-4 h-4 text-purple-400" />
-                  : <Repeat className={`w-4 h-4 ${repeat === 'all' ? 'text-purple-400' : 'text-white/40'}`} />}
-              </button>
-            )}
           </div>
         </div>
       )}
