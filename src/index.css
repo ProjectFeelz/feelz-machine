@@ -173,43 +173,42 @@ html, body, #root {
 *::-webkit-scrollbar { display: none; }
 
 /* ── Horizontal rails, for a mouse ──────────────────────────────────────────
-   Hiding every scrollbar is right on touch and wrong on a desktop mouse: a
-   rail like "New to you" had no way to reach what is past the fold, because a
-   trackpad can swipe sideways and a wheel cannot.
+   Scrollbars stay hidden. An earlier attempt turned them back on for desktop
+   and it looked exactly as bad as it sounds: a grey native bar with stepper
+   arrows sitting under every row.
 
-   This used to be solved with a global wheel listener in index.js that turned
-   vertical wheel input into horizontal movement over a rail. That froze the
-   page — the rails cover most of the viewport, so the pointer was nearly
-   always inside one and every tick was swallowed before the page could move.
+   Rails are moved with a mouse by grabbing and pulling them — the handler is
+   in index.js and it touches pointer events only, never the wheel, so it
+   cannot freeze the page the way the old wheel hijack did.
 
-   A scrollbar does the same job with no event handling at all. `pointer: fine`
-   means a mouse or trackpad: phones and tablets are untouched and keep the
-   clean, bar-free rows. */
+   This is the cursor that says so. `pointer: fine` means a mouse or trackpad;
+   touch devices are untouched. */
 @media (pointer: fine) {
   .overflow-x-auto,
   .overflow-x-scroll {
-    scrollbar-width: thin;
-    scrollbar-color: rgba(255, 255, 255, 0.20) transparent;
-    padding-bottom: 2px;
+    cursor: grab;
   }
-  .overflow-x-auto::-webkit-scrollbar,
-  .overflow-x-scroll::-webkit-scrollbar {
-    display: block;
-    height: 6px;
+  .overflow-x-auto:active,
+  .overflow-x-scroll:active {
+    cursor: grabbing;
   }
-  .overflow-x-auto::-webkit-scrollbar-track,
-  .overflow-x-scroll::-webkit-scrollbar-track {
-    background: transparent;
+  /* Anything you can actually click keeps a normal pointer, so a card does
+     not look like it is only there to be dragged. */
+  .overflow-x-auto a,
+  .overflow-x-auto button,
+  .overflow-x-scroll a,
+  .overflow-x-scroll button {
+    cursor: pointer;
   }
-  .overflow-x-auto::-webkit-scrollbar-thumb,
-  .overflow-x-scroll::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.16);
-    border-radius: 999px;
-  }
-  .overflow-x-auto:hover::-webkit-scrollbar-thumb,
-  .overflow-x-scroll:hover::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.34);
-  }
+}
+
+/* Set on <body> for the duration of a rail drag. Without it the browser
+   starts selecting text and ghost-dragging images the moment you pull. */
+body.fm-dragging-rail,
+body.fm-dragging-rail * {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  cursor: grabbing !important;
 }
 
 @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
