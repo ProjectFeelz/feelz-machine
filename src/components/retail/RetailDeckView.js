@@ -72,9 +72,10 @@ export default function RetailDeckView({
           On a phone it takes a FIXED share of the frame rather than flex-1.
           Sharing the frame with a rail that could grow meant the rail won and
           the deck was squeezed — the cut-off card at the top of the phone
-          screenshots. 58% here, matching the same figure in RetailVibeDeck's
-          card measurement; the rail scrolls in what is left. */}
-      <div className="h-[58%] lg:h-auto flex-shrink-0 lg:flex-1 min-w-0 min-h-0 flex flex-col items-center justify-center px-5 py-4">
+          screenshots. 64% here — the deck measures this box and fits itself
+          to it, so this number decides how the screen is split and nothing
+          else has to agree with it. The rail scrolls in what is left. */}
+      <div className="h-[64%] lg:h-auto flex-shrink-0 lg:flex-1 min-w-0 min-h-0 flex flex-col items-center justify-center px-5 py-4">
         {loadingPlaylists ? (
           <div className="flex justify-center py-20">
             <Loader className="w-5 h-5 animate-spin" style={{ color: R.textFaint }} />

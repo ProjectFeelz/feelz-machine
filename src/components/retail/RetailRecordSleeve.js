@@ -2,7 +2,8 @@
 //
 // The record, as the thing the room looks at.
 //
-// Three rounds of notes got it here, and each changed something structural:
+// Four rounds of notes got it here, and the last one removed more than it
+// added:
 //
 //   1. The disc used to drift clear of the sleeve. That was a bug, not a
 //      style: VinylRecord was drawn at a hard-coded px size inside a box
@@ -10,14 +11,18 @@
 //      frame and spilled out. Everything is one measured number now.
 //
 //   2. The record was a garnish on the right. It is now the largest object on
-//      the page and bleeds off the edge — big enough to be what a wall-mounted
-//      screen shows while the music runs.
+//      the page — big enough to be what a wall-mounted screen shows while the
+//      music runs.
 //
-//   3. It pulled OUTWARD, off the edge of the screen, which is the one
-//      direction where a bigger record buys nothing. The sleeve is now
-//      anchored right and the disc slides INWARD, across the page and under
-//      the tracklist, so the movement travels into the layout rather than out
-//      of it.
+//   3. It pulled outward, off the edge of the screen, which is the one
+//      direction where a bigger record buys nothing.
+//
+//   4. THE SLEEVE IS GONE. A flat jacket carrying the playlist artwork sat
+//      beside a disc that was mostly hidden behind it, and the two objects
+//      competed for the same corner without either being the thing you look
+//      at. One record, at the size the sleeve used to be, in the position
+//      marked on the screenshot, with a real shadow under it. The file keeps
+//      its name so the imports do not churn.
 //
 // The left column is a fixed panel, darker than the page so the seam between
 // it and the tracklist is a real edge, with the transport pinned to its floor
@@ -71,30 +76,28 @@ export default function RetailRecordSleeve({
     return () => clearTimeout(t);
   }, [playlist?.id]);
 
-  // One number drives the jacket, the disc and the travel, so they cannot get
-  // out of step the way they did when the box was sized in vh and the record
-  // in px. Much larger than before — this is the focal point now.
+  // ── WHERE THE RECORD SITS ─────────────────────────────────────────────
+  //
   // MEASURED FROM THE FRAME IT LIVES IN, not from the window.
   //
-  // Every previous version of this sized the record off window.innerHeight and
-  // a fraction somebody guessed at (0.62, then 620px, then 46% from the top),
-  // which is why it kept moving instead of landing: the fraction was of the
-  // wrong box, so the gap underneath changed with every window and the record
-  // never sat where it was drawn.
+  // Every earlier version sized this off window.innerHeight and a fraction
+  // somebody guessed at (0.62, then 620px, then 46% from the top), which is
+  // why it kept moving instead of landing: the fraction was of the wrong box,
+  // so the gap underneath changed with every window.
   //
-  // The rule now comes from the marked-up screenshot rather than a guess, and
-  // it is stated as a rule so it holds at every size:
+  // The rule comes from the marked-up screenshots and is stated as a rule, so
+  // it holds at every size:
   //
-  //   the record fills the right-hand area from just under the header down to
-  //   a gap at the bottom of about a tenth of that area's height, and it is
-  //   anchored to THAT GAP — not centred, not offset from the top.
+  //   the record is as tall as this area minus a gap of a tenth at the bottom
+  //   and a sliver at the top, it is anchored to THAT GAP, and it keeps a
+  //   margin on the right rather than running off the edge.
   //
-  // At 1907×992 that is a 787px sleeve running from y≈113 to y≈900 with a
-  // 92px gap beneath it, and a visible left edge at x≈1183. Those are the
-  // numbers on the screenshot, within a few pixels, and they are reached by
-  // measuring rather than by tuning a percentage until it looks right.
+  // At 1911×980 that puts a ~770px record between y≈124 and y≈891, right edge
+  // at x≈1750 — which is the circle drawn on the screenshot, within a few
+  // pixels, reached by measuring rather than by nudging a percentage until it
+  // looked close.
   const frameRef = React.useRef(null);
-  const [geom, setGeom] = React.useState({ jacket: 520, gap: 48 });
+  const [geom, setGeom] = React.useState({ disc: 520, gap: 48, right: 60 });
   React.useEffect(() => {
     const measure = () => {
       const el = frameRef.current;
@@ -103,16 +106,21 @@ export default function RetailRecordSleeve({
       const h = el?.clientHeight || (window.innerHeight - HEADER);
       const w = el?.clientWidth  || window.innerWidth;
 
-      const gapBelow = Math.round(h * 0.10);   // the breathing room he asked for
+      const gapBelow = Math.round(h * 0.10);   // the breathing room underneath
       const gapAbove = Math.round(h * 0.04);   // just enough to clear the header
 
-      let jacket = h - gapBelow - gapAbove;
-      // On a narrow desktop the height would hand the record the whole column
-      // and leave the tracklist a sliver. The width gets a say.
-      jacket = Math.min(jacket, Math.round(w * 0.72));
-      jacket = Math.max(300, Math.min(jacket, 980));
+      let d = h - gapBelow - gapAbove;
+      // On a narrow desktop the height alone would hand the record the whole
+      // column and leave the tracklist a sliver. The width gets a say.
+      d = Math.min(d, Math.round(w * 0.66));
+      d = Math.max(280, Math.min(d, 980));
 
-      setGeom({ jacket, gap: gapBelow });
+      // The margin on the right. Enough that the record reads as an object on
+      // the page and not a shape leaving it, and it shrinks on a narrow window
+      // rather than squeezing the tracklist.
+      const right = Math.max(16, Math.min(Math.round(w * 0.11), Math.round((w - d) * 0.42)));
+
+      setGeom({ disc: d, gap: gapBelow, right });
     };
     measure();
     window.addEventListener('resize', measure);
@@ -121,7 +129,7 @@ export default function RetailRecordSleeve({
     const raf = requestAnimationFrame(measure);
     return () => { window.removeEventListener('resize', measure); cancelAnimationFrame(raf); };
   }, []);
-  const jacket = geom.jacket;
+  const disc = geom.disc;
 
   // The phone's half-record needs a pixel diameter, because VinylRecord draws
   // an SVG and an SVG cannot be sized in percentages the way a div can.
@@ -134,19 +142,6 @@ export default function RetailRecordSleeve({
     const raf = requestAnimationFrame(measure);
     return () => { window.removeEventListener('resize', measure); cancelAnimationFrame(raf); };
   }, []);
-
-  // A 12" record in a 12⅜" sleeve.
-  //
-  // Travel is a fraction of the JACKET, not "however far it takes to leave
-  // half the disc showing". That older rule was written when the sleeve was
-  // 615px; at the size the record is now it threw the disc 441px across the
-  // page and sat it under the middle of the tracklist. 40% puts a little
-  // under half the record out of its sleeve — which is what a record being
-  // pulled out looks like — and leaves the track titles on the page rather
-  // than on the label.
-  const disc    = Math.round(jacket * 0.88);
-  const restX   = -Math.round(jacket * 0.03);
-  const pulledX = -Math.round(jacket * 0.40);
 
   const hero = (isCurrentPlaylist && currentTrack) || tracks[0]?.track || tracks[0] || null;
 
@@ -382,66 +377,51 @@ export default function RetailRecordSleeve({
       {/* ── RIGHT: the record, and the tracklist over it ───────────────────── */}
       <main ref={frameRef} className="relative flex-1 min-w-0 min-h-0 overflow-hidden">
 
-        {/* Scenery. Sleeve pinned to the right edge and allowed to bleed off
-            it; the disc travels left, into the page, behind the tracklist. */}
+        {/* ── THE RECORD ──────────────────────────────────────────────────
+            The sleeve is gone.
+
+            It was never working: a flat jacket with the playlist artwork on
+            it sat beside a disc that was mostly hidden behind it, and the two
+            objects fought each other for the same corner of the screen —
+            neither one large enough to be the thing you look at. One record,
+            at the size the sleeve used to be, in the position marked on the
+            screenshot, is what the page was reaching for.
+
+            Nothing animates sideways any more, because there is nothing to
+            slide out of. It arrives instead: a breath of scale and opacity,
+            then it turns while the music plays.
+
+            Placed by the same rule as before, so it cannot drift: the gap
+            underneath is a tenth of this area's height and the record is
+            anchored to it, with a margin on the right rather than bleeding
+            off the edge — the circle on the screenshot stops short of the
+            edge, and that margin is what makes it read as an object on a
+            surface rather than a shape leaving the screen. */}
         <div className="hidden lg:block absolute inset-0 pointer-events-none select-none z-0 overflow-hidden">
           <div
             className="absolute"
             style={{
-              width: jacket,
-              height: jacket,
-              right: -Math.round(jacket * 0.08),
-              // Anchored to the gap underneath, which is the thing that was
-              // marked on the screenshot. Anchoring to the top or to a centre
-              // percentage is what let the gap drift with the window size.
+              width: disc,
+              height: disc,
+              right: geom.right,
               bottom: geom.gap,
+              zIndex: 1,
+              // The shadow he asked for. Big, soft and offset down-right, so
+              // the record sits ON the page rather than being printed into
+              // it — with a tighter second one underneath for contact.
+              filter: 'drop-shadow(26px 34px 60px rgba(0,0,0,0.85)) '
+                    + 'drop-shadow(6px 10px 18px rgba(0,0,0,0.55))',
+              transform: pulled ? 'scale(1)' : 'scale(0.965)',
+              opacity: pulled ? 1 : 0,
+              transition: 'transform 1.1s cubic-bezier(0.22,0.9,0.24,1), opacity 0.7s ease',
             }}
           >
-            {/* The disc, behind the jacket, centred on it, emerging LEFT. */}
-            <div
-              className="absolute"
-              style={{
-                width: disc,
-                height: disc,
-                top: (jacket - disc) / 2,
-                left: 0,
-                zIndex: 1,
-                transform: `translateX(${pulled ? pulledX : restX}px)`,
-                transition: 'transform 1.3s cubic-bezier(0.22,0.9,0.24,1)',
-                filter: 'drop-shadow(10px 20px 44px rgba(0,0,0,0.8))',
-              }}
-            >
-              <VinylRecord
-                coverUrl={heroArt}
-                isPlaying={isCurrentPlaylist && isPlaying}
-                size={disc}
-                shadow={false}
-              />
-            </div>
-
-            {/* The jacket, on top. Its LEFT edge is now the mouth the record
-                comes out of, so that edge carries the depth. */}
-            <div
-              className="absolute inset-0 rounded-sm overflow-hidden"
-              style={{
-                zIndex: 2,
-                background: 'linear-gradient(145deg, #191426 0%, #0A0A12 100%)',
-                border: `1px solid ${R.borderUp}`,
-                boxShadow: '-18px 0 40px -14px rgba(0,0,0,0.92), 0 30px 70px rgba(0,0,0,0.65)',
-              }}
-            >
-              {playlist?.cover_image_url && (
-                <img src={playlist.cover_image_url} alt="" className="w-full h-full object-cover" draggable={false} />
-              )}
-              <div
-                className="absolute inset-0"
-                style={{ boxShadow: 'inset 24px 0 44px -24px rgba(0,0,0,0.95), inset 0 0 0 1px rgba(255,255,255,0.05)' }}
-              />
-              <div
-                className="absolute top-0 left-0 h-full"
-                style={{ width: 6, background: 'linear-gradient(270deg, rgba(0,0,0,0.55), rgba(0,0,0,0.05))' }}
-              />
-            </div>
+            <VinylRecord
+              coverUrl={heroArt}
+              isPlaying={isCurrentPlaylist && isPlaying}
+              size={disc}
+              shadow={false}
+            />
           </div>
         </div>
 

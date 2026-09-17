@@ -97,45 +97,85 @@ export default function RetailVibeDeck({
   // at 420px wide a 3:4 card is 560px tall and, once the preview line and the
   // three buttons are under it, ran off the bottom of a laptop screen. This
   // keeps the whole control — card, preview, buttons — inside one screen.
+  // ── HOW BIG THE CARD IS ───────────────────────────────────────────────
+  //
   // Constrained by BOTH axes. Height alone was not enough: on a 390px phone a
   // 520px-tall card wants to be 390 wide, the container clamps it to ~350, and
   // the height does not follow — so the card stops being 3:4 and the artwork
   // stretches. Whichever axis runs out first decides the size.
+  //
+  // THE HEIGHT IS MEASURED, NOT ESTIMATED.
+  //
+  // The version before this subtracted a guessed 132px for "the chrome" — the
+  // swipe hint, the preview line and the button row. On a phone the real
+  // figure is closer to 190 once those rows wrap, so the card was sized about
+  // fifty pixels too tall, the button row was pushed past the bottom of the
+  // deck's share of the frame, and the rail underneath sat on top of it. That
+  // is the cut-off "Open the record" button in the screenshot.
+  //
+  // So the rows measure themselves. The card gets whatever is left over,
+  // which is right at any font size, any language, and whether or not the
+  // preview line has anything in it.
+  const rootRef    = React.useRef(null);
+  const headRef    = React.useRef(null);
+  const previewRef = React.useRef(null);
+  const btnsRef    = React.useRef(null);
+
   const [box, setBox] = React.useState({ w: 360, h: 480, fan: FAN_WIDE });
   React.useEffect(() => {
     const measure = () => {
-      // Header, preview line and buttons. The fan spreads SIDEWAYS now, so it
-      // costs width rather than height — the vertical budget is back to just
-      // the chrome, and the horizontal one has to leave room for the cards
-      // flanking the front one (see FAN_ROOM below).
-      //
-      // ON A PHONE THE BUDGET IS A SHARE OF THE PAGE, NOT THE WHOLE WINDOW.
-      //
-      // The rail sits BELOW the deck on a phone, inside the same fixed frame.
-      // Sizing the card off the full window height meant the card and the
-      // rail together were taller than the screen, and because the frame is
-      // overflow:hidden the browser resolved that by squeezing the flex child
-      // the card lives in — which is why the top of the card was cut off by
-      // the header in the screenshots. The card now takes its share (58%) and
-      // the rail scrolls in the rest.
-      const wide   = window.innerWidth >= 1024;
-      const frameH = window.innerHeight - 76;                // the page frame
-      const chrome = wide ? 184 : 132;                       // preview line + buttons
-      const budget = wide ? frameH : frameH * 0.58;
-      const railW  = wide ? 360 : 0;                         // the rail beside it
-      const byHeight = Math.max(240, Math.min(budget - chrome, 520));
+      const wide = window.innerWidth >= 1024;
+
+      // The box the deck has been given. On a phone that is the 58% slice
+      // RetailDeckView hands it; on a desktop it is the full column. Measured
+      // from the parent rather than the window, because the window does not
+      // know about the header, the rail or the page's padding.
+      const parent  = rootRef.current?.parentElement;
+      const given   = parent?.clientHeight || (window.innerHeight - 76);
+
+      // The rows that are not the card, as they actually render — including
+      // the margins between them (mb-4 = 16, mt-5 = 20, twice) and the
+      // parent's own py-4.
+      const rows = (headRef.current?.offsetHeight    || 0) + 16
+                 + (previewRef.current?.offsetHeight || 0) + 20
+                 + (btnsRef.current?.offsetHeight    || 0) + 20;
+      const chrome = rows > 40 ? rows + 32 : (wide ? 216 : 190);   // fallback for the first paint
+
+      const byHeight = Math.max(200, Math.min(given - chrome, 520));
+
       // The fan reaches about 0.62 of a card's width past each side, so the
       // card itself can only have what is left after both flanks.
+      const railW    = wide ? 360 : 0;
       const base     = window.innerWidth >= 640 ? FAN_WIDE : FAN_TIGHT;
       const usable   = window.innerWidth - railW - 40;
-      const byWidth  = Math.max(170, Math.min(usable / fanRoom(base), 400));
+      const byWidth  = Math.max(150, Math.min(usable / fanRoom(base), 400));
+
       const h = Math.min(byHeight, byWidth / 0.75);
       setBox({ w: Math.round(h * 0.75), h: Math.round(h), fan: base });
     };
+
     measure();
+    // Twice more: once on the next frame, when the rows have laid out and can
+    // be measured for real, and once when anything around the deck resizes.
+    const raf = requestAnimationFrame(measure);
     window.addEventListener('resize', measure);
-    return () => window.removeEventListener('resize', measure);
-  }, []);
+
+    let ro;
+    const parent = rootRef.current?.parentElement;
+    if (parent && typeof ResizeObserver !== 'undefined') {
+      ro = new ResizeObserver(measure);
+      ro.observe(parent);
+    }
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener('resize', measure);
+      ro?.disconnect();
+    };
+    // previewLabel is in here because that line wraps to two rows on a narrow
+    // phone when a title is long, and that changes what is left for the card.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [previewLabel]);
+
   const cardW = box.w;
   const cardH = box.h;
 
@@ -217,9 +257,13 @@ export default function RetailVibeDeck({
   const saved    = savedIds.has(top.id);
 
   return (
-    <div>
-      <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
-        <p className="text-xs" style={{ color: R.textFaint }}>
+    <div ref={rootRef}>
+      <div ref={headRef} className="flex items-center justify-between gap-3 mb-4 flex-wrap">
+        {/* The instruction is for a mouse and a tablet on a stand. On a phone
+            it wrapped to two lines and ate the card's height to explain a
+            gesture that phone is already the natural home of — and the three
+            buttons underneath say the same thing without any words. */}
+        <p className="hidden sm:block text-xs" style={{ color: R.textFaint }}>
           Swipe left to pass, right to keep. Tap the card to open the record.
         </p>
         <p className="text-[11px]" style={{ color: R.textGhost }}>{playlists.length - idx} left</p>
@@ -330,7 +374,7 @@ export default function RetailVibeDeck({
 
       {/* What is playing underneath the deck — the preview is the whole point,
           so it gets a line of its own rather than being invisible. */}
-      <div className="mt-5 flex items-center justify-center gap-2.5 min-h-[24px]">
+      <div ref={previewRef} className="mt-5 flex items-center justify-center gap-2.5 min-h-[24px]">
         {previewLabel ? (
           <>
             <button
@@ -351,7 +395,7 @@ export default function RetailVibeDeck({
 
       {/* Same three decisions, for a mouse or a tablet on a stand where a
           full swipe is awkward. */}
-      <div className="mt-5 flex items-center justify-center gap-4">
+      <div ref={btnsRef} className="mt-5 flex items-center justify-center gap-4">
         <button
           onClick={() => commit('left')}
           title="Not for this room"

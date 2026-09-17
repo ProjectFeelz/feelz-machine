@@ -41,9 +41,9 @@ export default function RetailGlass() {
         style={{
           background:
             'radial-gradient(130% 95% at 50% 42%, rgba(0,0,0,0) 52%, rgba(0,0,0,0.34) 100%), ' +
-            'linear-gradient(168deg, rgba(196,204,232,0.030) 0%, rgba(255,255,255,0.008) 34%, rgba(0,0,0,0.045) 100%)',
+            'linear-gradient(168deg, rgba(196,204,232,0.016) 0%, rgba(255,255,255,0.005) 34%, rgba(0,0,0,0.045) 100%)',
           boxShadow:
-            'inset 0 1px 0 rgba(214,222,245,0.22), ' +
+            'inset 0 1px 0 rgba(214,222,245,0.13), ' +
             'inset 0 -1px 0 rgba(255,255,255,0.045), ' +
             'inset 0 0 160px rgba(0,0,0,0.30)',
         }}
@@ -57,14 +57,20 @@ export default function RetailGlass() {
         className="absolute inset-0"
         style={{
           mixBlendMode: 'screen',
-          opacity: 0.85,
+          // TURNED DOWN. The first pass at this was set by looking at an empty
+          // page, where a sheen has to be strong to be visible at all. Over a
+          // bright cover — a lit stage, a pink crowd — the same values sat on
+          // top of the artwork and washed it out, which is the one thing a
+          // dust cover should never do: you look THROUGH glass at the record,
+          // not at the glass. Roughly half of what it was.
+          opacity: 0.72,
           background:
             'linear-gradient(112deg, ' +
               'rgba(255,255,255,0) 0%, rgba(255,255,255,0) 15%, ' +
-              'rgba(226,232,255,0.055) 22%, rgba(226,232,255,0.125) 29%, ' +
-              'rgba(226,232,255,0.095) 32%, rgba(226,232,255,0.030) 38%, ' +
+              'rgba(226,232,255,0.026) 22%, rgba(226,232,255,0.058) 29%, ' +
+              'rgba(226,232,255,0.044) 32%, rgba(226,232,255,0.014) 38%, ' +
               'rgba(255,255,255,0) 46%, rgba(255,255,255,0) 60%, ' +
-              'rgba(226,232,255,0.060) 67%, rgba(226,232,255,0.020) 72%, ' +
+              'rgba(226,232,255,0.028) 67%, rgba(226,232,255,0.009) 72%, ' +
               'rgba(255,255,255,0) 78%)',
         }}
       />
@@ -76,8 +82,8 @@ export default function RetailGlass() {
         style={{
           mixBlendMode: 'screen',
           background:
-            'radial-gradient(760px 420px at 2% -10%, rgba(233,238,255,0.090) 0%, rgba(233,238,255,0) 62%), ' +
-            'radial-gradient(560px 340px at 99% 0%, rgba(139,92,246,0.085) 0%, rgba(139,92,246,0) 58%)',
+            'radial-gradient(760px 420px at 2% -10%, rgba(233,238,255,0.042) 0%, rgba(233,238,255,0) 62%), ' +
+            'radial-gradient(560px 340px at 99% 0%, rgba(139,92,246,0.040) 0%, rgba(139,92,246,0) 58%)',
         }}
       />
 
@@ -89,8 +95,8 @@ export default function RetailGlass() {
         style={{
           height: '2px',
           background:
-            'linear-gradient(90deg, rgba(198,202,212,0.10) 0%, rgba(232,236,248,0.55) 38%, ' +
-            'rgba(232,236,248,0.62) 52%, rgba(198,202,212,0.12) 100%)',
+            'linear-gradient(90deg, rgba(198,202,212,0.07) 0%, rgba(232,236,248,0.30) 38%, ' +
+            'rgba(232,236,248,0.34) 52%, rgba(198,202,212,0.08) 100%)',
         }}
       />
     </div>
