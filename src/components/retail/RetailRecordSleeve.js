@@ -32,6 +32,7 @@ import React from 'react';
 import { Music, Play, Pause, Bookmark, MessageCircle, ArrowLeft, Loader } from 'lucide-react';
 import VinylRecord from '../VinylRecord';
 import RetailTransport from './RetailTransport';
+import RetailTonearm from './RetailTonearm';
 import { R } from './retailTheme';
 
 // "Do You Wrong (feat. Xabrien)" → { name: 'Do You Wrong', feat: 'Xabrien' }
@@ -421,6 +422,29 @@ export default function RetailRecordSleeve({
               isPlaying={isCurrentPlaylist && isPlaying}
               size={disc}
               shadow={false}
+            />
+          </div>
+
+          {/* The arm, in its own box on exactly the same geometry.
+              NOT inside the record's div, because that div carries the record's
+              drop-shadow filter and a filter applies to everything underneath
+              it — the arm would have been given the record's shadow on top of
+              its own. Same width, same anchors, one layer up. */}
+          <div
+            className="absolute"
+            style={{
+              width: disc,
+              height: disc,
+              right: geom.right,
+              bottom: geom.gap,
+              zIndex: 2,
+              opacity: pulled ? 1 : 0,
+              transition: 'opacity 0.8s ease 0.15s',
+            }}
+          >
+            <RetailTonearm
+              playing={isCurrentPlaylist && isPlaying}
+              uid={playlist?.id || 'record'}
             />
           </div>
         </div>
