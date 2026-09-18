@@ -252,15 +252,58 @@ exports.handler = async (event) => {
       }
     }
   } else {
-    // One query, one decision. This used to run two near-identical selects and
-    // apply the minimum check with the WRONG minimum on a PWYW track.
+    // ── A COMPLETED SALE IS NOT RE-PRICED LATER ──────────────────────────────
     //
-    // `maybeSingle` is deliberately not used: a buyer can legitimately end up
-    // with more than one downloads row for a track (a free grant followed by a
-    // purchase, or a re-purchase), and maybeSingle raises PGRST116 on two rows —
-    // which the old code turned into a flat "Purchase required" for somebody who
-    // had paid twice. Take the highest amount_paid instead.
-    const { data: grants, error: purchaseError } = await adminClient
+    // This gate compared what somebody paid against what the track costs TODAY.
+    // Today's price is not a fact about a past sale, and treating it as one
+    // revokes downloads people have already bought:
+    //
+    //   * an artist raises a track from $2 to $5 and every earlier buyer is
+    //     locked out of their own purchase, silently, months later;
+    //   * a pay-what-you-want sale is below the listed price BY DESIGN, so the
+    //     moment the PWYW toggle is turned off again, every PWYW buyer of that
+    //     track is refused.
+    //
+    // The second one is not hypothetical. Davu paid $1.00 for Isandla Sami
+    // while it was pay-what-you-want. The row now reads pay_what_you_want =
+    // false, download_price = 2.00, minimum_price = null. Under the old rule she
+    // is refused her own purchase forever and there is nothing she or the artist
+    // can do about it short of paying a second time.
+    //
+    // The authority on "did this person buy this" is the purchases row that
+    // PayPal's capture wrote. When one exists and is completed, the download is
+    // theirs, at whatever the price is now.
+    //
+    // An album purchase counts too. paypal-order.js writes no downloads row for
+    // an album (`if (!albumId && resolvedUserId)`), so somebody who bought a
+    // whole album has never been able to download its tracks. Checking the
+    // album id here closes that as well.
+    let purchaseLookup = adminClient
+      .from('purchases')
+      .select('id, amount, track_id, album_id')
+      .eq('user_id', user.id)
+      .eq('status', 'completed');
+
+    purchaseLookup = track.album_id
+      ? purchaseLookup.or(`track_id.eq.${trackId},album_id.eq.${track.album_id}`)
+      : purchaseLookup.eq('track_id', trackId);
+
+    const { data: paidRows, error: payErr } = await purchaseLookup.limit(1);
+
+    if (payErr) {
+      // Not fatal, and deliberately not a 500: fall through to the grant check
+      // below, which is the stricter path. A reader failing must never hand out
+      // a file, but it must not lock out everyone either.
+      console.error('[get-download-url] purchases lookup failed:', payErr.code, payErr.message);
+    }
+    const boughtIt = (paidRows?.length || 0) > 0;
+
+    // The grant row. `maybeSingle` is deliberately not used: a buyer can
+    // legitimately end up with more than one downloads row for a track (a free
+    // grant followed by a purchase, or a re-purchase), and maybeSingle raises
+    // PGRST116 on two rows — which the old code turned into a flat "Purchase
+    // required" for somebody who had paid twice. Take the highest amount_paid.
+    const { data: grants, error: grantErr } = await adminClient
       .from('downloads')
       .select('id, amount_paid')
       .eq('user_id', user.id)
@@ -268,26 +311,52 @@ exports.handler = async (event) => {
       .order('amount_paid', { ascending: false })
       .limit(1);
 
-    if (purchaseError) {
-      console.error('Purchase check error:', purchaseError);
+    if (grantErr) {
+      console.error('Purchase check error:', grantErr);
       return { statusCode: 500, body: JSON.stringify({ error: 'Internal server error' }) };
     }
 
     const purchase = grants?.[0] || null;
-    if (!purchase) {
-      return { statusCode: 403, body: JSON.stringify({ error: 'Purchase required' }) };
-    }
 
-    // The minimum this track can be bought for. On a PWYW track that is the
-    // artist's floor, NOT download_price — paying less than the listed price is
-    // the feature. A tiny tolerance absorbs the rounding PayPal does on the way
-    // through, so $0.99 against a $1.00 floor is not read as non-payment.
-    const requiredPaid = isPwyw ? pwywFloor : effectivePrice;
-    if (requiredPaid > 0 && Number(purchase.amount_paid || 0) + 0.005 < requiredPaid) {
-      return {
-        statusCode: 403,
-        body: JSON.stringify({ error: 'Insufficient payment', minimum: requiredPaid }),
-      };
+    if (boughtIt) {
+      // Paid for, so it is theirs. Backfill the grant if it is missing — an
+      // album buyer never had one, and a capture that failed to write one left
+      // the buyer stranded. Non-fatal: the download proceeds either way.
+      if (!purchase) {
+        const { error: backfillErr } = await adminClient.from('downloads').insert({
+          user_id:       user.id,
+          track_id:      trackId,
+          download_type: 'paid',
+          amount_paid:   Number(paidRows[0].amount) || 0,
+          created_at:    new Date().toISOString(),
+        });
+        if (backfillErr) {
+          console.error('[get-download-url] grant backfill failed (download still allowed):',
+            backfillErr.code, backfillErr.message);
+        } else {
+          console.log('[get-download-url] grant backfilled from purchase', paidRows[0].id,
+            'for user', user.id, 'track', trackId);
+        }
+      }
+    } else {
+      // No purchase behind it. Now the grant has to stand on its own, and the
+      // amount check applies — this is where a hand-written or legacy row would
+      // otherwise hand out a paid track for nothing.
+      if (!purchase) {
+        return { statusCode: 403, body: JSON.stringify({ error: 'Purchase required' }) };
+      }
+
+      // On a PWYW track the bar is the artist's floor, NOT download_price:
+      // paying less than the listed price is the feature. The tolerance absorbs
+      // PayPal's rounding, so $0.99 against a $1.00 floor is not read as
+      // non-payment.
+      const requiredPaid = isPwyw ? pwywFloor : effectivePrice;
+      if (requiredPaid > 0 && Number(purchase.amount_paid || 0) + 0.005 < requiredPaid) {
+        return {
+          statusCode: 403,
+          body: JSON.stringify({ error: 'Insufficient payment', minimum: requiredPaid }),
+        };
+      }
     }
     // Increment download_count for paid track
     try {
