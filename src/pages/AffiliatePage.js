@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import useGoBack from '../hooks/useGoBack';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import {
@@ -25,6 +26,10 @@ function StatCard({ icon: Icon, label, value, sub, color = 'text-purple-400' }) 
 
 export default function AffiliatePage() {
   const navigate  = useNavigate();
+  // Back that works on a cold deep link. navigate(-1) does nothing when
+  // this page IS the first history entry, which is every shared link and
+  // every tapped push notification. See src/hooks/useGoBack.js.
+  const goBack = useGoBack('/hub');
   const { user, artist } = useAuth();
 
   const [affiliate, setAffiliate]     = useState(null);
@@ -250,7 +255,7 @@ export default function AffiliatePage() {
     return (
       <div className="min-h-screen bg-black text-white pb-32">
         <div className="px-4 pt-14 pb-4 flex items-center space-x-3 border-b border-white/[0.04]">
-          <button onClick={() => navigate(-1)} className="w-9 h-9 flex items-center justify-center rounded-full bg-white/[0.06]">
+          <button onClick={() => goBack()} className="w-9 h-9 flex items-center justify-center rounded-full bg-white/[0.06]">
             <ChevronLeft className="w-5 h-5" />
           </button>
           <div>
@@ -316,7 +321,7 @@ export default function AffiliatePage() {
     <div className="min-h-screen bg-black text-white pb-32">
       {/* Header */}
       <div className="px-4 pt-14 pb-4 flex items-center space-x-3 border-b border-white/[0.04]">
-        <button onClick={() => navigate(-1)}
+        <button onClick={() => goBack()}
           className="w-9 h-9 flex items-center justify-center rounded-full bg-white/[0.06]">
           <ChevronLeft className="w-5 h-5" />
         </button>

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
+import useKeyboardInset from '../hooks/useKeyboardInset';
 import { useAuth } from '../contexts/AuthContext';
 import { useTier } from '../contexts/useTier';
 import { usePullToRefresh } from '../hooks/usePullToRefresh';
@@ -467,6 +468,11 @@ export default function ChatRoomView() {
   const navigate   = useNavigate();
   const { user, artist, isAdmin } = useAuth();
   const { isListenerPro, tierLoading } = useTier();
+
+  // How much of the screen the keyboard is covering. 0 when it is closed, and 0
+  // on any browser that resizes the layout viewport itself, where the flex
+  // column below has already handled it.
+  const keyboardInset = useKeyboardInset();
 
   const [room, setRoom]                           = useState(null);
   const [spendGate, setSpendGate]                 = useState(false);
@@ -1123,7 +1129,24 @@ export default function ChatRoomView() {
     <div
       id="chat-room-root"
       className="flex flex-col bg-black text-white"
-      style={{ minHeight: '100dvh', maxHeight: '100dvh' }}
+      // height, not minHeight+maxHeight, and measured when the keyboard is up.
+      //
+      // 100dvh is the whole screen on Android Chrome even with the keyboard
+      // open, so the composer at the bottom of this column was laid out
+      // underneath it and only became visible because the browser scrolled the
+      // visual viewport. That scroll is a guess, it lands differently each
+      // time, and it is what clipped the top of the button row.
+      //
+      // Subtracting the measured inset makes the column end exactly where the
+      // keyboard begins, so the composer sits on it instead of being scrolled
+      // towards it. overscrollBehavior stops a flick in the message list from
+      // dragging the whole page and shifting it again.
+      style={{
+        height: keyboardInset > 0 ? `calc(100dvh - ${keyboardInset}px)` : '100dvh',
+        maxHeight: keyboardInset > 0 ? `calc(100dvh - ${keyboardInset}px)` : '100dvh',
+        overscrollBehavior: 'none',
+        transition: 'height 120ms ease-out',
+      }}
       onClick={() => { if (reactionTarget) setReactionTarget(null); }}
     >
       {/* Top bar — paddingTop accounts for iPhone notch/dynamic island */}

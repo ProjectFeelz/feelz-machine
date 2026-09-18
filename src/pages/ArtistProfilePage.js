@@ -6,6 +6,8 @@ import TrackActionSheet from '../components/TrackActionSheet';
 // TrackVersions is not imported here any more: versions moved to the track
 // page when Popular became a card rail with nowhere to expand into.
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import useGoBack from '../hooks/useGoBack';
+import PriceBreakdown, { useQuote } from '../components/PriceBreakdown';
 import { supabase } from '../supabaseClient';
 import { showReceipt } from '../components/PurchaseReceipt';
 import { useAuth } from '../contexts/AuthContext';
@@ -93,6 +95,10 @@ function timeAgo(date) {
 export default function ArtistProfilePage() {
   const { slug } = useParams();
   const navigate = useNavigate();
+  // Back that works on a cold deep link. navigate(-1) does nothing when
+  // this page IS the first history entry, which is every shared link and
+  // every tapped push notification. See src/hooks/useGoBack.js.
+  const goBack = useGoBack('/browse');
   const location = useLocation();
   const { user, artist: myArtist } = useAuth();
   const { isPremium, isListenerPro } = useTier();
@@ -122,37 +128,19 @@ export default function ArtistProfilePage() {
   const [pwywPurchaseSuccess, setPwywPurchaseSuccess] = useState(false);
   const [pwywPurchaseError, setPwywPurchaseError] = useState('');
 
-  // ── What the buyer will actually be charged ───────────────────────────────
+  // What the buyer will actually be charged.
   //
-  // The artist's price and the total are no longer the same number: the buyer
-  // now covers the processing cost so the artist receives what they set. That
-  // has to be on screen BEFORE the PayPal button, not discovered at PayPal.
-  // Showing $2.00 here and $2.43 there is how a platform gets accused of
-  // skimming, which is the opposite of what this change is for.
+  // Was a local useState plus a local fetch in this file, written before
+  // src/components/PriceBreakdown.js existed. Now the same hook the other four
+  // purchase screens use, so there is one implementation of "ask the server
+  // what this costs" rather than this file having its own. It also brings the
+  // out-of-order-response guard, which the local copy did not have: two quotes
+  // in flight while somebody types a pay-what-you-want amount could land in the
+  // wrong order and show a total that did not match the box.
   //
-  // The figure comes from paypal-order's `quote` action rather than being
-  // recomputed here, so the screen and the checkout can never disagree — the
-  // same reason the price itself is resolved server-side.
-  const [quote, setQuote] = useState(null);
-
-  const fetchQuote = React.useCallback(async (payload) => {
-    setQuote(null);
-    try {
-      const res = await fetch('/.netlify/functions/paypal-order', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'quote', ...payload }),
-      });
-      if (!res.ok) return;
-      const q = await res.json();
-      if (q?.buyerPays) setQuote(q);
-    } catch {
-      // Non-fatal and deliberately silent. A missing quote means the modal
-      // shows the artist's price alone, which is what it showed before this
-      // existed; PayPal still shows the true total. A broken quote must never
-      // block a sale.
-    }
-  }, []);
+  // `quoteFor` is what the two modals set; null clears it.
+  const [quoteFor, setQuoteFor] = useState(null);
+  const { quote } = useQuote(quoteFor, quoteFor?.amount != null ? 400 : 0);
   const [likedTracks, setLikedTracks] = useState({});
   const [showAddToPlaylist, setShowAddToPlaylist] = useState(null);
   const [playlists, setPlaylists] = useState([]);
@@ -620,6 +608,19 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
           });
           const captureData = await res.json();
           if (!captureData.success) throw new Error('Payment capture failed');
+
+          // Same guard as the pay-what-you-want button below and the other four
+          // purchase paths. `success` only means PayPal took the money; it says
+          // nothing about whether the download was granted.
+          if (captureData.recorded === false) {
+            setPurchasing(false);
+            setPurchaseError(
+              'Your payment went through, but we could not attach it to your account. '
+              + 'Nothing further will be charged. Contact support with this reference: '
+              + (captureData.captureId || 'unknown')
+            );
+            return;
+          }
           // purchases + downloads recorded server-side in paypal-order.js
           setPurchaseSuccess(true); setPurchasing(false);
           showReceipt({
@@ -927,10 +928,10 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
       setPwywFanPrice(suggested > 0 ? suggested.toFixed(2) : '');
       setPwywFanPriceError(''); setPwywPurchaseError(''); setPwywPurchaseSuccess(false);
       setPwywTrack(track);
-      if (suggested > 0) fetchQuote({ trackId: track.id, amount: suggested });
+      setQuoteFor(suggested > 0 ? { trackId: track.id, amount: suggested } : null);
     } else if (getEffectivePrice(track) > 0) {
       setPurchaseTrack(track);
-      fetchQuote({ trackId: track.id });
+      setQuoteFor({ trackId: track.id });
     } else {
       triggerDownload(track);
     }
@@ -1162,7 +1163,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
         )}
         <div className="absolute inset-0" style={{ background: `linear-gradient(to bottom, transparent 20%, ${bgColor} 100%)` }} />
         <div className="fixed top-0 left-0 right-0 flex items-center justify-between px-4 z-50" style={{ paddingTop: 'max(env(safe-area-inset-top, 0px), 12px)', height: 'calc(max(env(safe-area-inset-top, 0px), 12px) + 44px)' }}>
-          <button onClick={() => navigate(-1)}
+          <button onClick={() => goBack()}
             className="w-10 h-10 flex items-center justify-center rounded-full backdrop-blur-md"
             style={{ backgroundColor: `${bgColor}80` }}>
             <ArrowLeft className="w-5 h-5" style={{ color: textColor }} />
@@ -2043,16 +2044,10 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
                       onChange={e => {
                         setPwywFanPrice(e.target.value);
                         setPwywFanPriceError('');
-                        // Re-quote as they type, debounced, so the total keeps
-                        // up with the number in the box. Cleared immediately so
-                        // a stale total is never shown next to a new amount.
-                        setQuote(null);
-                        clearTimeout(window.__fmQuoteTimer);
+                        // The hook debounces and discards out-of-order
+                        // replies; this just says what to quote.
                         const v = parseFloat(e.target.value);
-                        if (v > 0) {
-                          window.__fmQuoteTimer = setTimeout(
-                            () => fetchQuote({ trackId: pwywTrack.id, amount: v }), 400);
-                        }
+                        setQuoteFor(v > 0 ? { trackId: pwywTrack.id, amount: v } : null);
                       }}
                       placeholder="0.00"
                       className="w-full pl-7 pr-4 py-3 rounded-xl text-lg font-semibold outline-none text-center"
@@ -2068,7 +2063,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
                         onClick={() => {
                           setPwywFanPrice(v.toFixed(2));
                           setPwywFanPriceError('');
-                          fetchQuote({ trackId: pwywTrack.id, amount: v });
+                          setQuoteFor({ trackId: pwywTrack.id, amount: v });
                         }}
                         className="flex-1 py-1.5 rounded-lg text-xs font-medium transition"
                         style={{
@@ -2080,24 +2075,8 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
                       </button>
                     ))}
                   </div>
-                  {quote && parseFloat(quote.serviceFee) > 0 && (
-                    <div className="rounded-xl p-3 space-y-1.5 mt-1"
-                      style={{ backgroundColor: `${textColor}05`, border: `1px solid ${textColor}10` }}>
-                      <div className="flex items-center justify-between text-xs">
-                        <span style={{ color: `${textColor}50` }}>{artist?.artist_name || 'The artist'} receives</span>
-                        <span style={{ color: textColor }}>${quote.artistPrice}</span>
-                      </div>
-                      <div className="flex items-center justify-between text-xs">
-                        <span style={{ color: `${textColor}50` }}>Payment processing</span>
-                        <span style={{ color: textColor }}>${quote.serviceFee}</span>
-                      </div>
-                      <div className="flex items-center justify-between text-sm font-semibold pt-1.5"
-                        style={{ borderTop: `1px solid ${textColor}10` }}>
-                        <span style={{ color: textColor }}>You pay</span>
-                        <span style={{ color: secondaryColor }}>${quote.buyerPays}</span>
-                      </div>
-                    </div>
-                  )}
+                  <PriceBreakdown quote={quote} sellerName={artist?.artist_name}
+                  textColor={textColor} accentColor={secondaryColor} />
                 </div>
                 {parseFloat(pwywFanPrice) > 0 ? (
                   <>
@@ -2259,23 +2238,8 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
                   </div>
                   <p className="text-xl font-bold flex-shrink-0" style={{ color: secondaryColor }}>${getEffectivePrice(purchaseTrack)}</p>
                 </div>
-                {quote && parseFloat(quote.serviceFee) > 0 && (
-                  <div className="rounded-xl p-3 space-y-1.5" style={{ backgroundColor: `${textColor}05`, border: `1px solid ${textColor}10` }}>
-                    <div className="flex items-center justify-between text-xs">
-                      <span style={{ color: `${textColor}50` }}>{artist.artist_name} receives</span>
-                      <span style={{ color: textColor }}>${quote.artistPrice}</span>
-                    </div>
-                    <div className="flex items-center justify-between text-xs">
-                      <span style={{ color: `${textColor}50` }}>Payment processing</span>
-                      <span style={{ color: textColor }}>${quote.serviceFee}</span>
-                    </div>
-                    <div className="flex items-center justify-between text-sm font-semibold pt-1.5"
-                      style={{ borderTop: `1px solid ${textColor}10` }}>
-                      <span style={{ color: textColor }}>You pay</span>
-                      <span style={{ color: secondaryColor }}>${quote.buyerPays}</span>
-                    </div>
-                  </div>
-                )}
+                <PriceBreakdown quote={quote} sellerName={artist?.artist_name}
+                  textColor={textColor} accentColor={secondaryColor} />
                 <div className="rounded-xl p-3 text-center" style={{ backgroundColor: `${textColor}05`, border: `1px solid ${textColor}10` }}>
                   <p className="text-xs" style={{ color: `${textColor}40` }}>High-quality MP3 download delivered instantly after payment</p>
                 </div>

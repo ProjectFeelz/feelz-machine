@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import PriceBreakdown, { useQuote } from '../components/PriceBreakdown';
 import { Helmet } from 'react-helmet-async';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import useGoBack from '../hooks/useGoBack';
 import { supabase } from '../supabaseClient';
 import { showReceipt } from '../components/PurchaseReceipt';
 import { useAuth } from '../contexts/AuthContext';
@@ -33,6 +34,10 @@ const LICENCE_META = {
 export default function BeatDetailPage() {
   const { slug }  = useParams();
   const navigate  = useNavigate();
+  // Back that works on a cold deep link. navigate(-1) does nothing when
+  // this page IS the first history entry, which is every shared link and
+  // every tapped push notification. See src/hooks/useGoBack.js.
+  const goBack = useGoBack('/beats');
   const { user, artist: myArtist } = useAuth();
   const { playTrack, currentTrack, isPlaying, togglePlay, showNotice } = usePlayer();
 
@@ -287,6 +292,22 @@ export default function BeatDetailPage() {
           });
           const captureData = await res.json();
           if (!captureData.success) throw new Error('Payment capture failed');
+
+          // `success` only means PayPal took the money. It does NOT mean the
+          // sale was recorded or the download granted. When the recording step
+          // silently did nothing, this showed a green tick to somebody who had
+          // just paid for a file they were then refused, which is exactly what
+          // happened on the artist page. paypal-order.js reports `recorded`;
+          // believe it.
+          if (captureData.recorded === false) {
+            setPurchasing(false);
+            setPurchaseError(
+              'Your payment went through, but we could not attach it to your account. '
+              + 'Nothing further will be charged. Contact support with this reference: '
+              + (captureData.captureId || 'unknown')
+            );
+            return;
+          }
           // Record beat purchase
           await supabase.from('beat_purchases').insert({
             track_id: track.id, buyer_user_id: user.id,
@@ -331,7 +352,7 @@ export default function BeatDetailPage() {
       <div>
         <Music className="w-12 h-12 mx-auto text-white/10 mb-4" />
         <p className="text-white/40 text-sm">Beat not found</p>
-        <button onClick={() => navigate(-1)} className="mt-4 text-xs text-white/30 hover:text-white/50 transition">← Go back</button>
+        <button onClick={() => goBack()} className="mt-4 text-xs text-white/30 hover:text-white/50 transition">← Go back</button>
       </div>
     </div>
   );
@@ -394,7 +415,7 @@ export default function BeatDetailPage() {
         </div>
 
         <div className="relative z-10 pt-14 px-4 pb-4">
-          <button onClick={() => navigate(-1)}
+          <button onClick={() => goBack()}
             className="w-9 h-9 flex items-center justify-center rounded-full bg-black/40 backdrop-blur-sm border border-white/10">
             <ChevronLeft className="w-5 h-5 text-white" />
           </button>

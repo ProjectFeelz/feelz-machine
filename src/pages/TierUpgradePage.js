@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import useGoBack from '../hooks/useGoBack';
 import { supabase } from '../supabaseClient';
 import { showReceipt } from '../components/PurchaseReceipt';
 import { useAuth } from '../contexts/AuthContext';
@@ -244,6 +245,10 @@ function PriceDisplay({ tier, billingCycle, geoRate, geoInfo }) {
 
 export default function TierUpgradePage() {
   const navigate = useNavigate();
+  // Back that works on a cold deep link. navigate(-1) does nothing when
+  // this page IS the first history entry, which is every shared link and
+  // every tapped push notification. See src/hooks/useGoBack.js.
+  const goBack = useGoBack('/hub');
   const { user, artist, refreshProfile, isBeatmaker } = useAuth();
   const [viewRole, setViewRole] = React.useState(isBeatmaker ? 'beatmaker' : 'artist');
 
@@ -484,7 +489,7 @@ export default function TierUpgradePage() {
     <div className="pb-32">
       {/* Header */}
       <div className="flex items-center p-5">
-        <button onClick={() => navigate(-1)}
+        <button onClick={() => goBack()}
           className="w-9 h-9 flex items-center justify-center rounded-full bg-white/[0.06]">
           <ArrowLeft className="w-5 h-5 text-white" />
         </button>

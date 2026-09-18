@@ -8,6 +8,7 @@
 import React, { useState, useEffect } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { useParams, useNavigate } from 'react-router-dom';
+import useGoBack from '../hooks/useGoBack';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import { ChevronLeft, Music, Loader, Zap, Users } from 'lucide-react';
@@ -22,6 +23,10 @@ function formatNumber(n) {
 export default function ListenerProfilePage() {
   const { userId } = useParams();
   const navigate   = useNavigate();
+  // Back that works on a cold deep link. navigate(-1) does nothing when
+  // this page IS the first history entry, which is every shared link and
+  // every tapped push notification. See src/hooks/useGoBack.js.
+  const goBack = useGoBack('/browse');
   const { user }   = useAuth();
   const [profile,     setProfile]     = useState(null);
   const [topArtists,  setTopArtists]  = useState([]);
@@ -121,7 +126,7 @@ export default function ListenerProfilePage() {
       </Helmet>
 
       <div className="flex items-center justify-between px-4 sticky top-0 z-20 bg-black/95 backdrop-blur-xl pt-14 md:pt-4 pb-3 border-b border-white/[0.04]">
-        <button onClick={() => navigate(-1)}
+        <button onClick={() => goBack()}
           className="w-9 h-9 flex items-center justify-center rounded-full bg-white/[0.06]">
           <ChevronLeft className="w-5 h-5 text-white" />
         </button>

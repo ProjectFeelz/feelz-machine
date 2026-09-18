@@ -9,12 +9,17 @@
 
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
+import useGoBack from '../hooks/useGoBack';
 import { PauseCircle, ArrowLeft } from 'lucide-react';
 import { MERCH_PARKED_HEADLINE, MERCH_PARKED_BODY } from '../config/features';
 
 export default function MerchParked({ full = true, onClose }) {
   const navigate = useNavigate();
 
+  // Back that works on a cold deep link. navigate(-1) does nothing when
+  // this page IS the first history entry, which is every shared link and
+  // every tapped push notification. See src/hooks/useGoBack.js.
+  const goBack = useGoBack('/browse');
   const panel = (
     <div
       className="w-full max-w-md rounded-2xl px-6 py-7"
@@ -34,7 +39,7 @@ export default function MerchParked({ full = true, onClose }) {
 
       <div className="mt-6 flex gap-2">
         <button
-          onClick={() => (onClose ? onClose() : navigate(-1))}
+          onClick={() => (onClose ? onClose() : goBack())}
           className="flex-1 py-3 rounded-xl text-sm font-semibold transition"
           style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.75)' }}
         >
@@ -56,7 +61,7 @@ export default function MerchParked({ full = true, onClose }) {
   return (
     <div className="min-h-screen bg-black flex flex-col items-center justify-center px-5">
       <button
-        onClick={() => navigate(-1)}
+        onClick={() => goBack()}
         className="self-start mb-6 flex items-center gap-2 text-sm text-white/45 hover:text-white/70 transition"
       >
         <ArrowLeft className="w-4 h-4" /> Back

@@ -14,6 +14,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import useGoBack from '../hooks/useGoBack';
 import TipButton from '../components/TipButton';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
@@ -618,6 +619,10 @@ function CreateReviewPollModal({ sessionId, artistId, onClose, onCreated }) {
 export default function ListeningSessionPage() {
   const { sessionId } = useParams();
   const navigate = useNavigate();
+  // Back that works on a cold deep link. navigate(-1) does nothing when
+  // this page IS the first history entry, which is every shared link and
+  // every tapped push notification. See src/hooks/useGoBack.js.
+  const goBack = useGoBack('/browse');
   const { user, artist } = useAuth();
 
   const [session, setSession]         = useState(null);
@@ -1032,7 +1037,7 @@ export default function ListeningSessionPage() {
 
       {/* Header */}
       <div className="flex items-center justify-between px-4 pt-safe pt-4 pb-3 flex-shrink-0 border-b border-white/[0.06]">
-        <button onClick={() => navigate(-1)} className="w-9 h-9 flex items-center justify-center rounded-full bg-white/[0.06] hover:bg-white/[0.1] transition">
+        <button onClick={() => goBack()} className="w-9 h-9 flex items-center justify-center rounded-full bg-white/[0.06] hover:bg-white/[0.1] transition">
           <ChevronDown className="w-5 h-5 text-white" />
         </button>
         <div className="text-center">

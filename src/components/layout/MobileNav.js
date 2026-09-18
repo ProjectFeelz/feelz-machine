@@ -3,27 +3,29 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { Home, Search, Library, LayoutDashboard, Sparkles, Plus, DollarSign } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useHaptics } from '../../hooks/useHaptics';
+import { useKeyboardOpen } from '../../hooks/useKeyboardInset';
 
 export default function MobileNav({ onOpenCreateMenu }) {
   const navigate        = useNavigate();
   const location        = useLocation();
   const { user, isBeatmaker, isArtist } = useAuth();
-  const [keyboardOpen, setKeyboardOpen] = React.useState(false);
 
-  React.useEffect(() => {
-    if (!window.visualViewport) return;
-    const check = () => {
-      const viewportHeight = window.visualViewport.height;
-      const windowHeight   = window.innerHeight;
-      // Keyboard open when viewport shrinks by >20% OR more than 100px
-      // Catches SwiftKey, Gboard, default iOS keyboard on all screen sizes
-      const shrunkRatio = viewportHeight / windowHeight < 0.8;
-      const shrunkAbs   = windowHeight - viewportHeight > 100;
-      setKeyboardOpen(shrunkRatio || shrunkAbs);
-    };
-    window.visualViewport.addEventListener('resize', check);
-    return () => window.visualViewport.removeEventListener('resize', check);
-  }, []);
+  // The detection that was inline here compared the visual viewport against
+  // window.innerHeight:
+  //
+  //     vv.height / window.innerHeight < 0.8  ||  window.innerHeight - vv.height > 100
+  //
+  // Both terms depend on window.innerHeight STAYING the full screen height
+  // while the keyboard is up. That was true before public/index.html asked for
+  // interactive-widget=resizes-content, and it is not true now: the layout
+  // viewport shrinks too, both sides of the comparison move together, and the
+  // nav would conclude the keyboard is closed while sitting directly on top of
+  // it. On a phone that is 64px of a short screen gone, and every comment
+  // composer pushed 64px further from the keyboard than it should be.
+  //
+  // useKeyboardOpen compares the visual viewport against the tallest it has
+  // been instead, which holds in both modes. See src/hooks/useKeyboardInset.js.
+  const keyboardOpen = useKeyboardOpen();
 
   const { tap }         = useHaptics();
 

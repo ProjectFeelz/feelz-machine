@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import useGoBack from '../hooks/useGoBack';
 import { useSearchParams } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import { sendNotification } from '../utils/notify';
@@ -33,6 +34,10 @@ function formatDuration(secs) {
 export default function TrackDetailPage() {
   const { slug } = useParams();
   const navigate  = useNavigate();
+  // Back that works on a cold deep link. navigate(-1) does nothing when
+  // this page IS the first history entry, which is every shared link and
+  // every tapped push notification. See src/hooks/useGoBack.js.
+  const goBack = useGoBack('/browse');
   const { user, artist: myArtist } = useAuth();
   const { playTrack, currentTrack, isPlaying, togglePlay, showNotice } = usePlayer();
 
@@ -214,7 +219,7 @@ export default function TrackDetailPage() {
       <div>
         <Music className="w-12 h-12 mx-auto text-white/10 mb-4" />
         <p className="text-white/40 text-sm">Track not found</p>
-        <button onClick={() => navigate(-1)} className="mt-4 text-xs text-white/30 hover:text-white/50 transition">← Go back</button>
+        <button onClick={() => goBack()} className="mt-4 text-xs text-white/30 hover:text-white/50 transition">← Go back</button>
       </div>
     </div>
   );
@@ -231,7 +236,7 @@ export default function TrackDetailPage() {
           <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/40 to-black" />
         </div>
         <div className="relative z-10 pt-14 px-4 pb-4">
-          <button onClick={() => navigate(-1)}
+          <button onClick={() => goBack()}
             className="w-9 h-9 flex items-center justify-center rounded-full bg-black/40 backdrop-blur-sm border border-white/10">
             <ChevronLeft className="w-5 h-5 text-white" />
           </button>

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import useGoBack from '../hooks/useGoBack';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import {
@@ -393,6 +394,10 @@ function PayoutModal({ competition, onClose }) {
 // ── Main Admin Competitions Page ──────────────────────────────
 export default function AdminCompetitions({ embedded = false }) {
   const navigate  = useNavigate();
+  // Back that works on a cold deep link. navigate(-1) does nothing when
+  // this page IS the first history entry, which is every shared link and
+  // every tapped push notification. See src/hooks/useGoBack.js.
+  const goBack = useGoBack('/admin');
   const { isAdmin } = useAuth();
 
   const [competitions, setCompetitions] = useState([]);
@@ -544,7 +549,7 @@ export default function AdminCompetitions({ embedded = false }) {
       {!embedded && (
       <div className="flex items-center justify-between px-5 pt-14 md:pt-4 pb-4 sticky top-0 z-20 bg-black/90 backdrop-blur-sm border-b border-white/[0.04]">
         <div className="flex items-center space-x-3">
-          <button onClick={() => navigate(-1)} className="w-8 h-8 flex items-center justify-center rounded-full bg-white/[0.06]">
+          <button onClick={() => goBack()} className="w-8 h-8 flex items-center justify-center rounded-full bg-white/[0.06]">
             <ArrowLeft className="w-4 h-4 text-white" />
           </button>
           <div className="flex items-center space-x-2">

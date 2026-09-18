@@ -4,7 +4,16 @@
     <meta charset="utf-8" />
     <meta name="google-site-verification" content="7xKu4iEnb4KoBjxHpJVf68s891Bul5ANhVz96Sl_tEI" />
     <link rel="icon" href="%PUBLIC_URL%/favicon.ico" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- interactive-widget=resizes-content is the fix for the composer not sticking
+         to the top of the keyboard on Android. Without it Chrome defaults to
+         resizes-visual: the layout viewport stays full-screen when the keyboard
+         opens, so 100dvh is still the whole screen, a bottom-anchored input is
+         still laid out underneath the keyboard, and what you see is the browser
+         scrolling the visual viewport to guess at it. That guess is what moved
+         around between renders and clipped the top of the button row.
+         iOS and older Android ignore this value; src/hooks/useKeyboardInset.js
+         measures it for them. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
     <meta name="theme-color" content="#000000" />
 
     <!-- Primary SEO -->

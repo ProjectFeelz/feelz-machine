@@ -102,7 +102,21 @@ export default function ContactPreferencesPage() {
   }
 
   const artists  = status?.artists || [];
-  const emailOn  = status?.email_subscribed !== false;
+
+  // `=== true`, not `!== false`.
+  //
+  // It was `!== false`, and get_my_contact_status returned coalesce(v_sub, true)
+  // for somebody with no email_subscribers row, so 97 listeners were shown this
+  // toggle already switched ON for a subscription that did not exist. The
+  // newsletter could not reach them, turning the switch off updated no rows and
+  // it sprang back on the next read, and turning it on did nothing either,
+  // because set_all_contact_optin was UPDATE-only with no insert.
+  //
+  // Migration 133 fixes both halves in the database: the status now reports
+  // no-row as not subscribed, and the setter creates the row. This line stops
+  // treating an absent value as a yes.
+  const emailOn  = status?.email_subscribed === true;
+  const hasSub   = status?.email_subscription_exists === true;
   const anyOn    = emailOn || artists.some(a => a.opted_in);
 
   return (
@@ -140,6 +154,17 @@ export default function ContactPreferencesPage() {
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-semibold text-white">Feelz Machine updates</p>
                 <p className="text-xs text-white/35 truncate">{status?.email || 'No email on your account'}</p>
+                {/* Says which of the three states they are in. "Off" and "never
+                    subscribed" look identical on a toggle and mean different
+                    things: one is a decision, the other is a default nobody
+                    chose. */}
+                <p className="text-[11px] mt-0.5 text-white/25">
+                  {emailOn
+                    ? 'Subscribed. New releases, features and platform news.'
+                    : hasSub
+                      ? 'Unsubscribed. Turn this on to start receiving updates again.'
+                      : 'Not subscribed. Turn this on to get new releases and platform news by email.'}
+                </p>
               </div>
               <Toggle on={emailOn} label="platform email" onChange={(v) => setAll(v)} />
             </div>

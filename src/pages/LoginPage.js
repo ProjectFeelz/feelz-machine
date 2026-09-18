@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import useGoBack from '../hooks/useGoBack';
 import { useAuth } from '../contexts/AuthContext';
 import {
   ArrowLeft, Check, X, Zap, Crown, Star, Mail, Lock,
@@ -255,6 +256,10 @@ function TierCard({ tier, symbol, rate, billingCycle = 'monthly' }) {
 export default function LoginPage() {
   const { signInWithGoogle, signInWithEmail, signUpWithEmail, signInWithMagicLink, user } = useAuth();
   const navigate      = useNavigate();
+  // Back that works on a cold deep link. navigate(-1) does nothing when
+  // this page IS the first history entry, which is every shared link and
+  // every tapped push notification. See src/hooks/useGoBack.js.
+  const goBack = useGoBack('/');
   const [searchParams] = useSearchParams();
 
   const redirectTo = searchParams.get('redirect') || null;
@@ -380,7 +385,7 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen bg-black overflow-y-auto">
       {/* Back button */}
-      <button onClick={() => navigate(-1)}
+      <button onClick={() => goBack()}
         className="fixed top-12 left-4 z-10 w-10 h-10 flex items-center justify-center rounded-full hover:bg-white/10 transition">
         <ArrowLeft className="w-5 h-5 text-white" />
       </button>

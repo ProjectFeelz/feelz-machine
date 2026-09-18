@@ -9,7 +9,8 @@
 // legal_documents carries a version column.
 
 import React from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
+import useGoBack from '../hooks/useGoBack';
 import { Helmet } from 'react-helmet-async';
 import { ArrowLeft, Loader, FileText, ShieldCheck } from 'lucide-react';
 import { supabase } from '../supabaseClient';
@@ -18,7 +19,10 @@ import LegalMarkdown from '../components/legal/LegalMarkdown';
 
 export default function LegalDocumentPage() {
   const { slug } = useParams();
-  const navigate = useNavigate();
+  // Back that works on a cold deep link. navigate(-1) does nothing when
+  // this page IS the first history entry, which is every shared link and
+  // every tapped push notification. See src/hooks/useGoBack.js.
+  const goBack = useGoBack('/hub');
   const { user } = useAuth();
 
   const [doc, setDoc]         = React.useState(null);
@@ -75,7 +79,7 @@ export default function LegalDocumentPage() {
 
       <div className="px-5 md:px-8 pt-8 max-w-3xl mx-auto">
         <button
-          onClick={() => navigate(-1)}
+          onClick={() => goBack()}
           className="inline-flex items-center gap-1.5 text-xs text-white/40 hover:text-white/70 transition mb-6"
         >
           <ArrowLeft className="w-3.5 h-3.5" />

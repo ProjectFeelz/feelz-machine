@@ -6,6 +6,7 @@
 
 import React, { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import useGoBack from '../hooks/useGoBack';
 import { Helmet } from 'react-helmet-async';
 import { useAuth } from '../contexts/AuthContext';
 import { ArrowLeft, Loader, Truck, Check, Package, ChevronDown } from 'lucide-react';
@@ -45,6 +46,10 @@ export default function MerchCheckoutPage() {
 
   const location = useLocation();
   const navigate  = useNavigate();
+  // Back that works on a cold deep link. navigate(-1) does nothing when
+  // this page IS the first history entry, which is every shared link and
+  // every tapped push notification. See src/hooks/useGoBack.js.
+  const goBack = useGoBack('/browse');
   const { user }  = useAuth();
 
   const { artist, product, variant, quantity } = location.state || {};
@@ -208,7 +213,7 @@ export default function MerchCheckoutPage() {
 
       {/* Header */}
       <div className="sticky top-0 z-20 bg-black/95 backdrop-blur-xl border-b border-white/[0.06] px-4 pt-14 pb-3 md:pt-4 flex items-center space-x-3">
-        <button onClick={() => navigate(-1)}
+        <button onClick={() => goBack()}
           className="w-9 h-9 flex items-center justify-center rounded-full bg-white/[0.06] hover:bg-white/[0.1] transition flex-shrink-0">
           <ArrowLeft className="w-4 h-4 text-white/60" />
         </button>

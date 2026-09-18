@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+
+import useGoBack from '../hooks/useGoBack';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import { Camera, Check, Loader, ChevronLeft, User } from 'lucide-react';
@@ -82,7 +83,10 @@ function SinglePillGrid({ options, selected, onToggle }) {
 }
 
 export default function UserProfilePage() {
-  const navigate = useNavigate();
+  // Back that works on a cold deep link. navigate(-1) does nothing when
+  // this page IS the first history entry, which is every shared link and
+  // every tapped push notification. See src/hooks/useGoBack.js.
+  const goBack = useGoBack('/browse');
   const { user, refreshProfile } = useAuth();
   const fileRef = useRef(null);
 
@@ -199,7 +203,7 @@ export default function UserProfilePage() {
 
         {/* Header */}
         <div className="flex items-center space-x-3 mb-8">
-          <button onClick={() => navigate(-1)}
+          <button onClick={() => goBack()}
             className="w-9 h-9 flex items-center justify-center rounded-full bg-white/[0.06] hover:bg-white/[0.1] transition">
             <ChevronLeft className="w-5 h-5 text-white" />
           </button>

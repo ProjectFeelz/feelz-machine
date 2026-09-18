@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import TrackActionSheet from '../components/TrackActionSheet';
 import { downloadTrack, downloadErrorMessage } from '../utils/downloadTrack';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import useGoBack from '../hooks/useGoBack';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import { usePlayer } from '../contexts/PlayerContext';
@@ -36,6 +37,10 @@ function formatNumber(n) {
 export default function AlbumDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
+  // Back that works on a cold deep link. navigate(-1) does nothing when
+  // this page IS the first history entry, which is every shared link and
+  // every tapped push notification. See src/hooks/useGoBack.js.
+  const goBack = useGoBack('/browse');
   const [searchParams] = useSearchParams();
   const { user } = useAuth();
   const { playTrack, currentTrack, isPlaying, togglePlay, showNotice } = usePlayer();
@@ -162,6 +167,22 @@ export default function AlbumDetailPage() {
           });
           const captureData = await res.json();
           if (!captureData.success) throw new Error('Payment capture failed');
+
+          // `success` only means PayPal took the money. It does NOT mean the
+          // sale was recorded or the download granted. When the recording step
+          // silently did nothing, this showed a green tick to somebody who had
+          // just paid for a file they were then refused, which is exactly what
+          // happened on the artist page. paypal-order.js reports `recorded`;
+          // believe it.
+          if (captureData.recorded === false) {
+            setPurchasing(false);
+            setPurchaseError(
+              'Your payment went through, but we could not attach it to your account. '
+              + 'Nothing further will be charged. Contact support with this reference: '
+              + (captureData.captureId || 'unknown')
+            );
+            return;
+          }
           // purchases + downloads recorded server-side in paypal-order.js
           setPurchaseSuccess(true); setPurchasing(false);
           // A tick that vanishes in 1.5 seconds is what left Sani unsure he
@@ -407,7 +428,7 @@ export default function AlbumDetailPage() {
           <div className="absolute inset-0 bg-gradient-to-b from-transparent via-black/60 to-black" />
         </div>
         <div className="absolute top-0 left-0 right-0 flex items-center justify-between p-5">
-          <button onClick={() => navigate(-1)} className="w-9 h-9 flex items-center justify-center rounded-full bg-black/40 backdrop-blur-md">
+          <button onClick={() => goBack()} className="w-9 h-9 flex items-center justify-center rounded-full bg-black/40 backdrop-blur-md">
             <ArrowLeft className="w-5 h-5 text-white" />
           </button>
           <button onClick={handleShare} className="w-9 h-9 flex items-center justify-center rounded-full bg-black/40 backdrop-blur-md">

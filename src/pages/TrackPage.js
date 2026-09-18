@@ -1,6 +1,7 @@
 import { Helmet } from 'react-helmet-async';
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import useGoBack from '../hooks/useGoBack';
 import { supabase } from '../supabaseClient';
 import TrackVersions from '../components/TrackVersions';
 import PreSaveButton from '../components/PreSaveButton';
@@ -33,6 +34,10 @@ function formatDuration(s) {
 export default function TrackPage() {
   const { slug } = useParams();
   const navigate = useNavigate();
+  // Back that works on a cold deep link. navigate(-1) does nothing when
+  // this page IS the first history entry, which is every shared link and
+  // every tapped push notification. See src/hooks/useGoBack.js.
+  const goBack = useGoBack('/browse');
   const { user } = useAuth();
   const { playTrack, currentTrack, isPlaying, togglePlay, showNotice } = usePlayer();
 
@@ -336,7 +341,7 @@ export default function TrackPage() {
 
         {/* Back + share buttons */}
         <div className="absolute top-0 left-0 right-0 flex items-center justify-between px-4" style={{ paddingTop: 'max(env(safe-area-inset-top, 0px), 12px)', height: 'calc(max(env(safe-area-inset-top, 0px), 12px) + 44px)' }}>
-          <button onClick={() => navigate(-1)}
+          <button onClick={() => goBack()}
             className="w-9 h-9 flex items-center justify-center rounded-full bg-black/40 backdrop-blur-md">
             <ArrowLeft className="w-5 h-5 text-white" />
           </button>

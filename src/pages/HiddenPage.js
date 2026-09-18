@@ -15,13 +15,17 @@
 
 import React from 'react';
 import { Helmet } from 'react-helmet-async';
-import { useNavigate } from 'react-router-dom';
+
+import useGoBack from '../hooks/useGoBack';
 import { ArrowLeft, Loader, EyeOff, Undo2, Music } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function HiddenPage() {
-  const navigate = useNavigate();
+  // Back that works on a cold deep link. navigate(-1) does nothing when
+  // this page IS the first history entry, which is every shared link and
+  // every tapped push notification. See src/hooks/useGoBack.js.
+  const goBack = useGoBack('/hub');
   const { user } = useAuth();
 
   const [artists, setArtists] = React.useState([]);
@@ -106,7 +110,7 @@ export default function HiddenPage() {
       )}
 
       <div className="flex items-center space-x-3 mb-6">
-        <button onClick={() => navigate(-1)} className="w-9 h-9 flex items-center justify-center rounded-full bg-white/[0.06] hover:bg-white/[0.1] transition">
+        <button onClick={() => goBack()} className="w-9 h-9 flex items-center justify-center rounded-full bg-white/[0.06] hover:bg-white/[0.1] transition">
           <ArrowLeft className="w-4 h-4 text-white" />
         </button>
         <div>

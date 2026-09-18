@@ -10,7 +10,8 @@
 
 import React from 'react';
 import { Helmet } from 'react-helmet-async';
-import { useNavigate } from 'react-router-dom';
+
+import useGoBack from '../hooks/useGoBack';
 import { ArrowLeft } from 'lucide-react';
 
 const CONTACT      = 'jane@projectfeelz.com';
@@ -27,7 +28,10 @@ function Section({ title, children }) {
 }
 
 export default function RetailTermsPage() {
-  const navigate = useNavigate();
+  // Back that works on a cold deep link. navigate(-1) does nothing when
+  // this page IS the first history entry, which is every shared link and
+  // every tapped push notification. See src/hooks/useGoBack.js.
+  const goBack = useGoBack('/retail');
   const pageUrl = `${BASE_URL}/retail/terms`;
 
   return (
@@ -39,7 +43,7 @@ export default function RetailTermsPage() {
       </Helmet>
 
       <div className="sticky top-0 z-10 bg-black/95 backdrop-blur-xl border-b border-white/[0.05] px-4 py-4 flex items-center space-x-3">
-        <button onClick={() => navigate(-1)} className="p-1.5 hover:bg-white/[0.06] rounded-lg transition">
+        <button onClick={() => goBack()} className="p-1.5 hover:bg-white/[0.06] rounded-lg transition">
           <ArrowLeft className="w-5 h-5 text-white/40" />
         </button>
         <h1 className="text-base font-bold text-white">Feelz Retail, Terms of Service</h1>

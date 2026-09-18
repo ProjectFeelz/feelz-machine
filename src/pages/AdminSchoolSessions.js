@@ -5,7 +5,8 @@
 // and see/export entries.
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { Link } from 'react-router-dom';
+import useGoBack from '../hooks/useGoBack';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import {
@@ -37,7 +38,10 @@ function Field({ label, children, hint }) {
 const inputCls = "w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none focus:bg-white/[0.1] transition";
 
 export default function AdminSchoolSessions({ embedded = false }) {
-  const navigate = useNavigate();
+  // Back that works on a cold deep link. navigate(-1) does nothing when
+  // this page IS the first history entry, which is every shared link and
+  // every tapped push notification. See src/hooks/useGoBack.js.
+  const goBack = useGoBack('/admin');
   const { isAdmin } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -387,7 +391,7 @@ export default function AdminSchoolSessions({ embedded = false }) {
 
       {!embedded && (
       <div className="flex items-center space-x-3 px-5 pt-14 md:pt-4 pb-4 sticky top-0 z-20 bg-black/90 backdrop-blur-sm border-b border-white/[0.04]">
-        <button onClick={() => navigate(-1)} className="w-8 h-8 flex items-center justify-center rounded-full bg-white/[0.06]">
+        <button onClick={() => goBack()} className="w-8 h-8 flex items-center justify-center rounded-full bg-white/[0.06]">
           <ArrowLeft className="w-4 h-4 text-white" />
         </button>
         <GraduationCap className="w-5 h-5 text-lime-400" />

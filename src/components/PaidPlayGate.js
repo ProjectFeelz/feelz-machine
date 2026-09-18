@@ -105,6 +105,22 @@ export default function PaidPlayGate({ track, artist, onClose, onPurchaseComplet
           });
           const captureData = await res.json();
           if (!captureData.success) throw new Error('Payment capture failed');
+
+          // `success` only means PayPal took the money. It does NOT mean the
+          // sale was recorded or the download granted. When the recording step
+          // silently did nothing, this showed a green tick to somebody who had
+          // just paid for a file they were then refused, which is exactly what
+          // happened on the artist page. paypal-order.js reports `recorded`;
+          // believe it.
+          if (captureData.recorded === false) {
+            setPurchasing(false);
+            setError(
+              'Your payment went through, but we could not attach it to your account. '
+              + 'Nothing further will be charged. Contact support with this reference: '
+              + (captureData.captureId || 'unknown')
+            );
+            return;
+          }
           // purchases + downloads recorded server-side in paypal-order.js
           setSuccess(true); setPurchasing(false);
           showReceipt({
