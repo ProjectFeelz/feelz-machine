@@ -44,7 +44,13 @@ function RetailPayPalButton({ venueId, onSubscribed }) {
     const existing = document.querySelector('script[src*="paypal.com/sdk"]');
     if (existing) { existing.addEventListener('load', () => setReady(true)); return; }
     const script = document.createElement('script');
-    script.src = `https://www.paypal.com/sdk/js?client-id=${PAYPAL_CLIENT_ID}&vault=true&intent=subscription&currency=ZAR`;
+    // USD, not ZAR. The plan this button subscribes to is created in USD by
+    // retail-paypal-subscription.js — deliberately, because ZAR billing plans
+    // did not work on this PayPal account. Loading the SDK under a different
+    // currency to the plan is a mismatch PayPal is entitled to reject, and the
+    // ZAR figure is a display figure only. The line under the button already
+    // tells the venue what it is charged in dollars.
+    script.src = `https://www.paypal.com/sdk/js?client-id=${PAYPAL_CLIENT_ID}&vault=true&intent=subscription&currency=USD`;
     script.async = true;
     script.onload = () => setReady(true);
     script.onerror = () => setError('Could not load PayPal. Try again shortly.');
@@ -78,14 +84,33 @@ function RetailPayPalButton({ venueId, onSubscribed }) {
       createSubscription: (data, actions) => actions.subscription.create({ plan_id: planId }),
       onApprove: async (data) => {
         const { data: { session: linkSession } } = await supabase.auth.getSession();
-        await fetch('/.netlify/functions/retail-paypal-subscription', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${linkSession?.access_token || ''}`,
-          },
-          body: JSON.stringify({ action: 'link', venueId, subscriptionId: data.subscriptionID }),
-        }).catch(() => {});
+        // The response was thrown away and onSubscribed() called regardless, so
+        // a link that came back 402 subscription_not_paid — or failed outright —
+        // still showed the venue a working, subscribed player that the server
+        // had not switched on. Read it.
+        try {
+          const res = await fetch('/.netlify/functions/retail-paypal-subscription', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${linkSession?.access_token || ''}`,
+            },
+            body: JSON.stringify({ action: 'link', venueId, subscriptionId: data.subscriptionID }),
+          });
+          const linked = await res.json().catch(() => ({}));
+          if (!res.ok || !linked.success) {
+            setError(
+              linked.error === 'subscription_not_paid'
+                ? 'PayPal has approved this but the first payment has not settled yet. '
+                  + 'Your player switches on by itself as soon as it does — usually within a few minutes.'
+                : 'Payment went through but we could not activate this venue. Contact us and we will sort it out.'
+            );
+            return;
+          }
+        } catch {
+          setError('Payment went through but we could not reach the server to activate the venue. Contact us.');
+          return;
+        }
         onSubscribed();
       },
       onError: () => setError('Payment failed. Try again.'),

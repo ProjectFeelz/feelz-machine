@@ -240,8 +240,55 @@ exports.handler = async (event) => {
     }
 
     // ── Forward tip to artist via PayPal Payouts ──────────────────────────────
-    // The order captured funds into the platform account; now send to the artist.
-    if (artist.paypal_email) {
+    //
+    // THE COMMENT THAT USED TO BE HERE SAID "the order captured funds into the
+    // platform account; now send to the artist". THAT IS NOT WHAT HAPPENS.
+    //
+    // The order is created at the bottom of this file with
+    //
+    //     payee: { email_address: artist.paypal_email }
+    //
+    // so PayPal puts the fan's money straight into the ARTIST's account. This
+    // block then sent the artist the same amount AGAIN, out of the platform
+    // account, as a Payout — plus PayPal's payout fee. Every tip that went
+    // through both paths cost the business the full face value of the tip and
+    // paid the artist twice.
+    //
+    // The capture response is the only thing that can settle which account the
+    // money actually landed in, so that is what decides now. If the payee on
+    // the capture is anyone other than us, the artist already has it and there
+    // is nothing to forward. The payout runs only when the funds genuinely
+    // landed in the platform account.
+    //
+    // PAYPAL_PLATFORM_MERCHANT_ID / PAYPAL_PLATFORM_EMAIL identify us. If
+    // neither is set we cannot tell the two apart, so we do NOT pay out —
+    // failing to forward a tip is recoverable by hand, paying one twice is not.
+    const capturePayee   = result?.purchase_units?.[0]?.payee || {};
+    const payeeEmail     = (capturePayee.email_address || '').toLowerCase();
+    const payeeMerchant  = capturePayee.merchant_id || null;
+    const ourMerchant    = process.env.PAYPAL_PLATFORM_MERCHANT_ID || null;
+    const ourEmail       = (process.env.PAYPAL_PLATFORM_EMAIL || '').toLowerCase();
+
+    const landedWithUs =
+      (ourMerchant && payeeMerchant && payeeMerchant === ourMerchant) ||
+      (ourEmail    && payeeEmail    && payeeEmail    === ourEmail);
+
+    if (!landedWithUs) {
+      console.log('[tip] not forwarding — funds did not land in the platform account', JSON.stringify({
+        order_id,
+        payeeEmail:    payeeEmail || null,
+        payeeMerchant,
+        identityConfigured: Boolean(ourMerchant || ourEmail),
+        note: (ourMerchant || ourEmail)
+          ? 'paid direct to the artist by payee on the order; no payout needed'
+          : 'PAYPAL_PLATFORM_MERCHANT_ID / PAYPAL_PLATFORM_EMAIL are unset, so we cannot verify — holding rather than risking a double payment',
+      }));
+      await supabase.from('tips')
+        .update({ payout_status: (ourMerchant || ourEmail) ? 'direct_to_artist' : 'held_unverified' })
+        .eq('paypal_order_id', order_id);
+    }
+
+    if (landedWithUs && artist.paypal_email) {
       // Declared out here, not inside the try: a `const` in the try block is
       // not in scope in the catch, so calling it from there would throw a
       // ReferenceError — on the error path, which is the one place you cannot

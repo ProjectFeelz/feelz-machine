@@ -639,10 +639,22 @@ export default function NotificationsPage() {
     if (type === 'tier_granted')                         { navigate('/profile'); return; }
     // A receipt opens the thing it is a receipt FOR where there is one, and
     // the library otherwise — a dead-end receipt is barely better than none.
+    // `/track/:slug` is resolved by TrackPage, which queried tracks by SLUG and
+    // nothing else. A track id is not a slug, so this sent every purchase
+    // receipt to a page that found no row and rendered "Track not found" on
+    // black — which on a phone reads as a blank page, and is exactly what a
+    // buyer saw when she tapped the receipt for a track she had just paid for.
+    //
+    // Every other branch in this handler already tries meta.track_slug first.
+    // This one did not. TrackPage now also falls back to an id, so both halves
+    // of the bug are closed; the slug is still preferred because it is the URL
+    // a person can read and share.
     if (type === 'purchase') {
+      if (meta.album_slug)  { navigate(`/album/${meta.album_slug}`); return; }
       if (meta.album_id)    { navigate(`/album/${meta.album_id}`); return; }
+      if (meta.track_slug)  { navigate(`/track/${meta.track_slug}`); return; }
       if (notif.track_id)   { navigate(`/track/${notif.track_id}`); return; }
-      navigate('/library'); return;
+      navigate('/library/downloads'); return;
     }
     if (type === 'sale')         { navigate('/dashboard?tab=analytics&section=earnings'); return; }
     if (type === 'subscription') { navigate(meta.audience === 'artist' ? '/upgrade' : '/listener/upgrade'); return; }

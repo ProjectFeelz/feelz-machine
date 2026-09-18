@@ -69,6 +69,57 @@ exports.handler = async (event) => {
 
   const { track_id, transaction_id, total_amount, net_amount, currency = 'USD', buyer_user_id } = body;
 
+  // ── A SECOND LOCK ON THE DOOR ────────────────────────────────────────────
+  //
+  // paypal-order.js only calls this when the capture landed in the platform
+  // account. This checks the same thing independently, against the row that was
+  // written for the sale, because this function SENDS MONEY and a caller that
+  // gets it wrong — a retry, a replay, a future caller written by someone who
+  // has not read this — spends real funds that never arrived.
+  //
+  // That is not hypothetical. tip-artist.js paid every tip twice for exactly
+  // this reason: one path set a payee on the order, another forwarded the same
+  // amount from the business account, and nothing checked the two against each
+  // other.
+  //
+  // A purchase recorded as anything other than 'platform' is not ours to
+  // forward. A row that cannot be found is left alone too — an unknown sale is
+  // not a platform sale.
+  if (transaction_id) {
+    const { data: purchaseRow, error: routeErr } = await supabase
+      .from('purchases')
+      .select('id, payout_route, payee_account')
+      .eq('paypal_transaction_id', transaction_id)
+      .maybeSingle();
+
+    if (routeErr) {
+      // PGRST204 / 42703 means payout_route does not exist yet, i.e. migration
+      // 127 has not run. Pre-migration every sale was a platform sale, so this
+      // continues rather than blocking payouts on a column that is not there.
+      const columnMissing = routeErr.code === '42703' || routeErr.code === 'PGRST204';
+      console.error('[split-payout] route check failed:', routeErr.code, routeErr.message,
+        columnMissing ? '— run migration 127; continuing on the pre-migration assumption.' : '');
+      if (!columnMissing) {
+        return {
+          statusCode: 500,
+          body: JSON.stringify({ error: 'Could not verify where this sale was paid — no payout was made', transaction_id }),
+        };
+      }
+    } else if (purchaseRow && purchaseRow.payout_route && purchaseRow.payout_route !== 'platform') {
+      console.warn('[split-payout] REFUSED — this sale was not captured into the platform account.',
+        JSON.stringify({ transaction_id, route: purchaseRow.payout_route, payee: purchaseRow.payee_account }));
+      return {
+        statusCode: 200,
+        body: JSON.stringify({
+          skipped: true,
+          reason: 'paid_direct_to_seller',
+          route: purchaseRow.payout_route,
+          transaction_id,
+        }),
+      };
+    }
+  }
+
   // What the splits are calculated from.
   //
   // `total_amount` is the GROSS — what the buyer was charged. Splitting that

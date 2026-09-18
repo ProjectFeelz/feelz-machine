@@ -104,19 +104,45 @@ async function activateArtistSubscription(subscriptionId) {
 // ── Retail venue subscriptions ──────────────────────────────────────────
 async function activateRetailSubscription(subscriptionId) {
   if (!subscriptionId) return;
-  const { data: sub } = await supabase
+  const { data: sub, error: subErr } = await supabase
     .from('retail_subscriptions')
     .update({ status: 'active' })
     .eq('paypal_subscription_id', subscriptionId)
     .select('venue_id')
     .maybeSingle();
+
+  if (subErr) {
+    console.error('[paypal-webhook] retail subscription activation failed:',
+      subErr.message, subscriptionId);
+  }
+
   // A venue whose payment just went through shouldn't sit waiting on a
   // separate manual admin step to actually turn the player on.
+  //
+  // THE FILTER WAS `.eq('status', 'pending')`, AND THAT IS THE HOLE.
+  //
+  // A venue suspended for non-payment has status 'suspended', not 'pending'.
+  // So the one case this function exists to handle — they missed a payment,
+  // the player went dark, they paid, PayPal charged them again and sent this
+  // event — matched no rows and did nothing. The venue stayed suspended while
+  // the money kept arriving every month, and the only way back was an admin
+  // noticing and flipping it by hand. "Access follows payment in both
+  // directions" was true in one direction.
+  //
+  // `in` rather than no filter at all, so this can never resurrect a venue an
+  // admin deliberately closed or a row in some other terminal state — it only
+  // reverses the two states billing itself is allowed to have caused.
   if (sub?.venue_id) {
-    await supabase.from('retail_venues')
+    const { data: reinstated, error: venueErr } = await supabase.from('retail_venues')
       .update({ status: 'active' })
       .eq('id', sub.venue_id)
-      .eq('status', 'pending');
+      .in('status', ['pending', 'suspended'])
+      .select('id, status');
+    if (venueErr) {
+      console.error('[paypal-webhook] venue activation failed:', venueErr.message, sub.venue_id);
+    } else if (reinstated?.length) {
+      console.log('[paypal-webhook] venue', sub.venue_id, 'is active on payment.');
+    }
   }
 }
 
@@ -155,9 +181,19 @@ exports.handler = async (event) => {
     const orderId   = resource?.supplementary_data?.related_ids?.order_id;
     if (captureId) {
       await supabase.from('payouts').update({ status: 'paid' }).eq('paypal_payout_id', captureId);
+      // paypal-order.js writes the CAPTURE id into purchases.paypal_transaction_id.
+      // This matched it against the ORDER id, so it has never updated a single
+      // row. Harmless only because the row is already inserted as 'completed' —
+      // but it means this line was not doing the job it appears to do, and a
+      // capture that completes later (a pending, bank-funded payment) was never
+      // marked. Match on the capture id, with the order id kept as a fallback
+      // for any legacy row written before that convention settled.
+      await supabase.from('purchases').update({ status: 'completed' })
+        .eq('paypal_transaction_id', captureId);
     }
     if (orderId) {
-      await supabase.from('purchases').update({ status: 'completed' }).eq('paypal_transaction_id', orderId).catch(() => {});
+      await supabase.from('purchases').update({ status: 'completed' })
+        .eq('paypal_transaction_id', orderId);
     }
   }
 
@@ -190,6 +226,40 @@ exports.handler = async (event) => {
       .select('user_id').maybeSingle();
     if (listenerSub?.user_id) {
       await supabase.from('listeners').update({ tier: 'free', tier_expires_at: null }).eq('user_id', listenerSub.user_id);
+    }
+  }
+
+  // ── A payment failed ──────────────────────────────────────────────────────
+  //
+  // This event was not handled at all, which is why "a failed payment suspends
+  // the venue" was not true. PayPal sends BILLING.SUBSCRIPTION.PAYMENT.FAILED
+  // on each failed attempt and only sends SUSPENDED once the plan's
+  // payment_failure_threshold is reached — 2, in the retail plans this codebase
+  // creates. So one failed payment produced no event this function looked at,
+  // and nothing anywhere recorded that billing was in trouble.
+  //
+  // Deliberately NOT suspending on the first failure: a card that fails once and
+  // retries successfully the next day is routine, and killing the music in a
+  // venue over it is a worse error than a day's grace. What this does is record
+  // it and leave a line in the log, so a venue drifting towards suspension is
+  // visible before the player goes dark rather than after.
+  if (eventType === 'BILLING.SUBSCRIPTION.PAYMENT.FAILED') {
+    const subscriptionId = resource?.id || resource?.billing_agreement_id;
+    const attempts = resource?.failed_payments_count ?? null;
+    console.warn('[paypal-webhook] subscription payment FAILED',
+      { subscriptionId, attempts, nextRetry: resource?.next_payment_retry_time || null });
+    if (subscriptionId) {
+      const { error } = await supabase.from('retail_subscriptions')
+        .update({ status: 'past_due' })
+        .eq('paypal_subscription_id', subscriptionId)
+        .eq('status', 'active');
+      // If `past_due` is not an allowed value for this column the update is
+      // refused; that is a schema gap to close, not a reason to fail the
+      // webhook, so PayPal still gets its 200 and does not retry forever.
+      if (error) {
+        console.error('[paypal-webhook] could not mark retail subscription past_due:',
+          error.code, error.message, '— if this is a check-constraint violation, add past_due to the allowed statuses.');
+      }
     }
   }
 
@@ -358,7 +428,13 @@ exports.handler = async (event) => {
 
   // ── Payment reversed / refunded ───────────────────────────────────────────
   if (eventType === 'PAYMENT.CAPTURE.REFUNDED' || eventType === 'PAYMENT.CAPTURE.REVERSED') {
-    const captureId = resource?.id || resource?.supplementary_data?.related_ids?.capture_id;
+    // Order matters, and it was the wrong way round. On a REFUNDED event
+    // `resource.id` is the REFUND's id, not the capture's — the capture is in
+    // supplementary_data.related_ids.capture_id. Reading resource.id first
+    // meant every refund matched nothing: the purchase was never marked
+    // refunded and the payout was never flagged for claw-back, so a refunded
+    // sale still looked like money the artist had earned.
+    const captureId = resource?.supplementary_data?.related_ids?.capture_id || resource?.id;
     if (captureId) {
       // Mark payouts as refunded so admin can claw back
       await supabase.from('payouts')

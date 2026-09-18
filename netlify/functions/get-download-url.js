@@ -39,7 +39,19 @@ exports.handler = async (event) => {
     // 3-per-month quota were skipped, and every signed-in listener could
     // download every free track without limit. One missing column, and the
     // paywall had never fired.
-    .select('file_url, title, is_preorder, release_date, download_price, is_downloadable, artist_id, album_id')
+    // pay_what_you_want / minimum_price HAVE to be here too, for the same
+    // reason is_downloadable did. This function priced every track at
+    // download_price and knew nothing about PWYW, so a buyer who paid a
+    // pay-what-you-want price BELOW the listed download_price — which is the
+    // entire point of pay-what-you-want — was refused her own purchase with
+    // "Insufficient payment", and one who paid on a PWYW track with
+    // download_price = 0 was handed the file free through the quota path.
+    // Same missing-column shape, both directions, on the money path.
+    //
+    // NOT pwyw_minimum_price. That column is in schema_dump.sql but not in the
+    // database — see the note in paypal-order.js. Selecting it here would take
+    // out every download on the platform, not just the PWYW ones.
+    .select('file_url, title, slug, is_preorder, release_date, download_price, is_downloadable, artist_id, album_id, pay_what_you_want, minimum_price')
     .eq('id', trackId)
     .maybeSingle();
 
@@ -87,7 +99,21 @@ exports.handler = async (event) => {
     }
   }
 
-  const trackIsFree = effectivePrice <= 0;
+  // ── Pay what you want ──────────────────────────────────────────────────────
+  //
+  // A PWYW track has no single price, so `amount_paid >= effectivePrice` is the
+  // wrong question to ask about it. The right one is: did this person pay, and
+  // was what they paid at least the floor the artist set?
+  //
+  // minimum_price, the same column paypal-order.js and ArtistProfilePage now
+  // read. Three files each having their own idea of the PWYW price is how this
+  // broke in the first place; there is one idea of it now.
+  const isPwyw = track.pay_what_you_want === true;
+  const pwywFloor = isPwyw ? (Number(track.minimum_price) || 0) : 0;
+
+  // A PWYW track with a floor is never "free", whatever download_price says.
+  // A PWYW track with no floor genuinely is: the artist chose to allow $0.
+  const trackIsFree = isPwyw ? pwywFloor <= 0 : effectivePrice <= 0;
 
   // ── Listener download quota check ───────────────────────────────────────────
   // Free listeners cannot download. Pro listeners get 3 free downloads/month.
@@ -206,13 +232,16 @@ exports.handler = async (event) => {
   }
 
   if (trackIsFree) {
-    const { data: existingDl } = await adminClient
+    // limit(1) rather than maybeSingle: two existing rows made maybeSingle
+    // return PGRST116 and no data, so this inserted a THIRD free grant and
+    // charged it against the monthly quota again.
+    const { data: existingDls } = await adminClient
       .from('downloads')
       .select('id')
       .eq('user_id', user.id)
       .eq('track_id', trackId)
-      .maybeSingle();
-    if (!existingDl) {
+      .limit(1);
+    if (!existingDls?.length) {
       await adminClient.from('downloads').insert({ user_id: user.id, track_id: trackId, amount_paid: 0, download_type: 'free' });
       // Increment download_count on track
       try {
@@ -223,36 +252,42 @@ exports.handler = async (event) => {
       }
     }
   } else {
-    // Server-side PWYW minimum check
-    if (effectivePrice > 0) {
-      const { data: purchase, error: purchaseError } = await adminClient
-        .from('downloads')
-        .select('id, amount_paid')
-        .eq('user_id', user.id)
-        .eq('track_id', trackId)
-        .maybeSingle();
-      if (purchaseError || !purchase) {
-        return { statusCode: 403, body: JSON.stringify({ error: 'Purchase required' }) };
-      }
-      if (purchase.amount_paid < effectivePrice) {
-        return { statusCode: 403, body: JSON.stringify({ error: 'Insufficient payment', minimum: effectivePrice }) };
-      }
-    }
-
-    const { data: purchase, error: purchaseError } = await adminClient
+    // One query, one decision. This used to run two near-identical selects and
+    // apply the minimum check with the WRONG minimum on a PWYW track.
+    //
+    // `maybeSingle` is deliberately not used: a buyer can legitimately end up
+    // with more than one downloads row for a track (a free grant followed by a
+    // purchase, or a re-purchase), and maybeSingle raises PGRST116 on two rows —
+    // which the old code turned into a flat "Purchase required" for somebody who
+    // had paid twice. Take the highest amount_paid instead.
+    const { data: grants, error: purchaseError } = await adminClient
       .from('downloads')
-      .select('id')
+      .select('id, amount_paid')
       .eq('user_id', user.id)
       .eq('track_id', trackId)
-      .maybeSingle();
+      .order('amount_paid', { ascending: false })
+      .limit(1);
 
     if (purchaseError) {
       console.error('Purchase check error:', purchaseError);
       return { statusCode: 500, body: JSON.stringify({ error: 'Internal server error' }) };
     }
 
+    const purchase = grants?.[0] || null;
     if (!purchase) {
       return { statusCode: 403, body: JSON.stringify({ error: 'Purchase required' }) };
+    }
+
+    // The minimum this track can be bought for. On a PWYW track that is the
+    // artist's floor, NOT download_price — paying less than the listed price is
+    // the feature. A tiny tolerance absorbs the rounding PayPal does on the way
+    // through, so $0.99 against a $1.00 floor is not read as non-payment.
+    const requiredPaid = isPwyw ? pwywFloor : effectivePrice;
+    if (requiredPaid > 0 && Number(purchase.amount_paid || 0) + 0.005 < requiredPaid) {
+      return {
+        statusCode: 403,
+        body: JSON.stringify({ error: 'Insufficient payment', minimum: requiredPaid }),
+      };
     }
     // Increment download_count for paid track
     try {

@@ -81,13 +81,40 @@ export default function TrackPage() {
     autoPlayedRef.current = false;
     setDataReady(false);
     try {
-      // Fetch track by slug
-      const { data: trackData, error } = await supabase
+      // Fetch track by slug — then, failing that, by id.
+      //
+      // The id fallback is not decoration. This route is reached with a raw
+      // track id from several places that only have one to hand, the purchase
+      // receipt in NotificationsPage above all. Without it, every one of those
+      // links landed on "Track not found" on a black screen, which reads as a
+      // blank page. AlbumDetailPage has always done both; this did not.
+      const SELECT = '*, artists!tracks_artist_id_fkey(*), albums(id, title, slug, cover_artwork_url, price, release_type, release_date)';
+      const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+      let { data: trackData, error } = await supabase
         .from('tracks')
-        .select('*, artists!tracks_artist_id_fkey(*), albums(id, title, slug, cover_artwork_url, price, release_type, release_date)')
+        .select(SELECT)
         .eq('slug', slug)
         .eq('is_published', true)
         .maybeSingle();
+
+      // Guarded on the uuid shape on purpose: `.eq('id', <not a uuid>)` is a
+      // 22P02 from Postgres, not an empty result, so firing it blindly would
+      // turn a plain "no such slug" into an error in the console every time.
+      if (!trackData && UUID_RE.test(slug || '')) {
+        const byId = await supabase
+          .from('tracks')
+          .select(SELECT)
+          .eq('id', slug)
+          .eq('is_published', true)
+          .maybeSingle();
+        trackData = byId.data;
+        error = byId.error;
+        // Put the readable URL in the address bar so a share from here works.
+        if (trackData?.slug) {
+          window.history.replaceState(null, '', `/track/${trackData.slug}`);
+        }
+      }
 
       if (error || !trackData) { setLoading(false); return; }
 

@@ -128,7 +128,7 @@ exports.handler = async (event) => {
     if (action === 'get-plan') {
       const { data: sub, error: subErr } = await supabase
         .from('retail_subscriptions')
-        .select('id, venue_id, monthly_fee, paypal_plan_id, paypal_product_id, paypal_billed_usd, retail_venues(business_name)')
+        .select('id, venue_id, monthly_fee, paypal_plan_id, paypal_product_id, paypal_billed_usd, paypal_plan_fee_zar, retail_venues(business_name)')
         .eq('venue_id', venueId)
         .order('created_at', { ascending: false })
         .limit(1)
@@ -140,8 +140,45 @@ exports.handler = async (event) => {
       if (!sub.monthly_fee || sub.monthly_fee <= 0) {
         return { statusCode: 400, body: JSON.stringify({ error: 'No fee set for this venue yet' }) };
       }
-      if (sub.paypal_plan_id) {
+      // ── The cached plan has to still match the fee ──────────────────────
+      //
+      // This returned sub.paypal_plan_id the moment one existed, forever. A
+      // PayPal plan's price is fixed at creation, so once the plan was built the
+      // figure in retail_subscriptions.monthly_fee stopped meaning anything: an
+      // admin could renegotiate a venue from R400 to R900 in the admin panel,
+      // see the new number on screen, and the venue would still be handed the
+      // R400 plan at the PayPal button. The claim that the plan is priced from
+      // the fee we hold was true exactly once per venue.
+      //
+      // paypal_plan_fee_zar records the ZAR figure the live plan was built from.
+      // Comparing in ZAR rather than USD is deliberate: the USD number moves
+      // with the exchange rate every time this runs, so comparing on that would
+      // rebuild the plan daily for no reason.
+      //
+      // Only the plan is rebuilt, not the product. An existing subscriber is
+      // untouched — PayPal keeps billing them on the plan they approved, which
+      // is correct: a price change applies to whoever subscribes next, and
+      // moving an existing payer to a new price is a conversation, not a deploy.
+      const planFeeOnRecord = sub.paypal_plan_fee_zar == null ? null : Number(sub.paypal_plan_fee_zar);
+      const currentFee      = Number(sub.monthly_fee);
+      const feeMatches      = planFeeOnRecord != null && Math.abs(planFeeOnRecord - currentFee) < 0.005;
+
+      if (sub.paypal_plan_id && (feeMatches || planFeeOnRecord === null)) {
+        // planFeeOnRecord === null means this plan predates the column — it is
+        // grandfathered rather than rebuilt, because we cannot tell what it was
+        // priced at and rebuilding every legacy plan on the next page load
+        // would be worse than leaving them.
+        if (planFeeOnRecord === null) {
+          console.warn('[retail-paypal-subscription] plan', sub.paypal_plan_id,
+            'has no recorded fee — cannot verify it still matches monthly_fee', currentFee,
+            '(venue', venueId + ')');
+        }
         return { statusCode: 200, body: JSON.stringify({ planId: sub.paypal_plan_id, usdAmount: sub.paypal_billed_usd }) };
+      }
+
+      if (sub.paypal_plan_id) {
+        console.log('[retail-paypal-subscription] fee changed for venue', venueId,
+          'from', planFeeOnRecord, 'to', currentFee, '— building a new plan.');
       }
 
       const accessToken = await getPayPalAccessToken();
@@ -196,9 +233,23 @@ exports.handler = async (event) => {
         return { statusCode: 400, body: JSON.stringify({ error: 'Failed to create PayPal plan', details: planResult.body }) };
       }
 
-      await supabase.from('retail_subscriptions')
-        .update({ paypal_plan_id: planResult.body.id, paypal_product_id: productId, paypal_billed_usd: usdAmount })
+      const { error: planSaveErr } = await supabase.from('retail_subscriptions')
+        .update({
+          paypal_plan_id:      planResult.body.id,
+          paypal_product_id:   productId,
+          paypal_billed_usd:   usdAmount,
+          // What the plan was actually priced from, so the check above can tell
+          // a stale plan from a current one on the next call.
+          paypal_plan_fee_zar: currentFee,
+        })
         .eq('id', sub.id);
+      // Read, not discarded. If this write fails the plan exists at PayPal and
+      // we have no record of it, so the next call builds another one — an
+      // orphaned plan per page load. That has to be visible.
+      if (planSaveErr) {
+        console.error('[retail-paypal-subscription] plan created at PayPal but NOT saved:',
+          planSaveErr.message, 'planId=', planResult.body.id, 'venue=', venueId);
+      }
 
       return { statusCode: 200, body: JSON.stringify({ planId: planResult.body.id, usdAmount }) };
     }
@@ -254,10 +305,14 @@ exports.handler = async (event) => {
       // Only for a genuinely ACTIVE subscription: an APPROVED one has not
       // been charged yet, and the webhook will activate it when it is.
       if (mappedStatus === 'active') {
+        // `in` rather than `.eq('status','pending')`, for the same reason as in
+        // paypal-webhook.js: a venue that was suspended for non-payment and has
+        // now re-subscribed is 'suspended', not 'pending', so the old filter
+        // matched nothing and left a paying venue's player switched off.
         const { error: venueErr } = await supabase.from('retail_venues')
           .update({ status: 'active' })
           .eq('id', venueId)
-          .eq('status', 'pending');
+          .in('status', ['pending', 'suspended']);
         // Read, rather than discarded. A paying venue whose row silently
         // stays 'pending' has a player that never turns on, and the endpoint
         // used to return success anyway.

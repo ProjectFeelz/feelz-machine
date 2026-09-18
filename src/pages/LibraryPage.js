@@ -222,9 +222,11 @@ export default function LibraryPage() {
   }, [user]);
 
   const isPro          = listenerTierSlug === 'pro' || listenerTierSlug === 'premium' || listenerTierSlug === 'fan_pro';
-  const freeQuota      = 3;
-  const downloadsLeft  = Math.max(0, freeQuota - stats.monthlyDownloads);
-  const quotaPct       = Math.min(100, Math.round((stats.monthlyDownloads / freeQuota) * 100));
+  // The quota meter these fed is gone — it only ever rendered for Pro members,
+  // who are not subject to the quota. Left out rather than left unused so the
+  // next person does not wire them back into a Pro-only card.
+  // FREE_MONTHLY_QUOTA lives in netlify/functions/get-download-url.js, which is
+  // where it is actually enforced.
 
   const items = [
     { icon: Heart,     label: 'Liked Songs',          path: '/library/likes',       iconColor: 'text-red-400/70',    count: stats.likes,     accent: 'bg-red-500/10' },
@@ -343,21 +345,29 @@ export default function LibraryPage() {
                 </span>
               </div>
 
-              {/* Downloads quota */}
+              {/* Downloads — this whole card only renders when isPro is true.
+                  So the 3-a-month quota meter was being shown to the ONE group
+                  of people the quota does not apply to, and to nobody else.
+                  A Fan Pro member with five downloads saw "5 / 3 used" with the
+                  bar full and red — a limit she had paid to not have, drawn as
+                  if she had blown through it. Free listeners, who do have the
+                  cap, never saw this card at all.
+
+                  Pro is unlimited, so there is nothing to meter. What is worth
+                  showing a subscriber is what their subscription has got them,
+                  which is the count. */}
               <div className="px-4 py-3 border-b border-white/[0.04]">
-                <div className="flex items-center justify-between mb-1.5">
+                <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-1.5">
                     <Download className="w-3 h-3 text-green-400" />
-                    <p className="text-xs font-semibold text-white">Free Downloads</p>
+                    <p className="text-xs font-semibold text-white">Downloads</p>
                   </div>
-                  <p className="text-[11px] text-white/40">{stats.monthlyDownloads} / {freeQuota} used</p>
-                </div>
-                <div className="h-1.5 bg-white/[0.06] rounded-full overflow-hidden">
-                  <div className={`h-full rounded-full transition-all ${quotaPct >= 100 ? 'bg-red-400' : quotaPct >= 66 ? 'bg-yellow-400' : 'bg-green-400'}`}
-                    style={{ width: `${quotaPct}%` }} />
+                  <p className="text-[11px] font-semibold text-green-400">Unlimited</p>
                 </div>
                 <p className="text-[11px] text-white/20 mt-1">
-                  {downloadsLeft > 0 ? `${downloadsLeft} left this month` : 'Resets 1st of next month'}
+                  {stats.monthlyDownloads > 0
+                    ? `${stats.monthlyDownloads} download${stats.monthlyDownloads === 1 ? '' : 's'} this month`
+                    : 'No downloads yet this month'}
                 </p>
               </div>
 

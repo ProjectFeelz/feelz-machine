@@ -5,6 +5,8 @@
 const https = require('https');
 const { createClient } = require('@supabase/supabase-js');
 const paypalEnv = require('../lib/paypal-env');
+const payeeLib  = require('../lib/payee');
+const pricing   = require('../lib/pricing');
 
 async function getPayPalAccessToken() {
   return new Promise((resolve, reject) => {
@@ -39,7 +41,7 @@ async function getPayPalAccessToken() {
   });
 }
 
-async function paypalRequest(method, path, body, accessToken) {
+async function paypalRequest(method, path, body, accessToken, extraHeaders = {}) {
   return new Promise((resolve, reject) => {
     const payload = body ? JSON.stringify(body) : null;
     const options = {
@@ -49,6 +51,7 @@ async function paypalRequest(method, path, body, accessToken) {
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${accessToken}`,
+        ...extraHeaders,
         ...(payload ? { 'Content-Length': Buffer.byteLength(payload) } : {}),
       },
     };
@@ -124,7 +127,7 @@ exports.handler = async (event) => {
       if (albumId) {
         const { data: album } = await adminClient
           .from('albums')
-          .select('id, title, price, is_published')
+          .select('id, title, price, is_published, artist_id')
           .eq('id', albumId)
           .maybeSingle();
 
@@ -150,7 +153,24 @@ exports.handler = async (event) => {
 
         const { data: track, error: trackErr } = await adminClient
           .from('tracks')
-          .select('id, title, download_price, is_downloadable, album_id, is_beat, beat_licence, pay_what_you_want, pwyw_minimum_price, minimum_price')
+          // pwyw_minimum_price is gone from this select on purpose, and NOT
+          // because the column is missing — it exists, defaults to 0, and is
+          // NOT NULL.
+          //
+          // It exists and nothing writes it. TrackUploadPanel.js sets
+          // minimum_price on upload and on edit, in all four places it touches
+          // a track, and never touches pwyw_minimum_price. So the old
+          //
+          //     Math.max(pwyw_minimum_price || 0, minimum_price || 0, 0.50)
+          //
+          // was reading a column that is 0 on every row in the table: it could
+          // only ever have been max(minimum_price, 0.50) in practice, and the
+          // extra term was a decoy that made three files look like they
+          // disagreed about the PWYW price when only one column was ever live.
+          //
+          // One column, one meaning, everywhere. Dropping the dead one changes
+          // no behaviour today and removes the thing that made this confusing.
+          .select('id, title, download_price, is_downloadable, album_id, is_beat, beat_licence, pay_what_you_want, minimum_price, artist_id')
           .eq('id', trackId)
           .maybeSingle();
 
@@ -196,7 +216,6 @@ exports.handler = async (event) => {
         // be read as "pay one cent".
         else if (track.pay_what_you_want) {
           const floor = Math.max(
-            Number(track.pwyw_minimum_price) || 0,
             Number(track.minimum_price) || 0,
             0.50
           );
@@ -249,19 +268,118 @@ exports.handler = async (event) => {
         return { statusCode: 400, body: JSON.stringify({ error: 'This costs too little to sell on its own', reason: 'below_minimum' }) };
       }
 
-      const safeAmount = price.toFixed(2);
+      // ── THE ARTIST'S PRICE, AND WHAT THE BUYER PAYS ──────────────────────
+      //
+      // `price` up to this point is the ARTIST's price: what they set, and what
+      // they should end up holding. It is no longer what the buyer is charged.
+      //
+      // The buyer now also pays the processing cost, as a visible line item, so
+      // PayPal's fee stops coming out of the artist's side. See
+      // netlify/lib/pricing.js for the arithmetic and for why the old 20%
+      // could never have done this job.
+      //
+      // With the fee settings at 0, or absent because migration 128 has not
+      // run, quote() returns buyerPays === artistPrice and everything below
+      // behaves exactly as it did before.
+      const q = await pricing.quote(adminClient, price);
+      const artistPrice = q.artistPrice;
+      const serviceFee  = q.serviceFee;
+      const safeAmount  = q.buyerPays.toFixed(2);
+
+      if (q.capped) {
+        console.error('[paypal-order] service fee hit the safety cap — check platform_settings.',
+          JSON.stringify({ trackId, albumId, artistPrice, serviceFee }));
+      }
+
+      // ── WHERE THE MONEY GOES ─────────────────────────────────────────────
+      //
+      // Resolved here, from the database, for the same reason the price is:
+      // the browser does not get a say in who gets paid. netlify/lib/payee.js
+      // holds the whole decision and its reasoning; the short version is that
+      // a sale only leaves the platform account when direct routing is turned
+      // on, the item has exactly one recipient, and that recipient has PayPal
+      // details on file. Anything else stays on the existing capture-then-
+      // split-payout path, which is the only one that can pay collaborators.
+      //
+      // sellerArtistId is the track's or album's artist. It is NOT taken from
+      // artistName in the request body, which is a display string the client
+      // supplies and has always been decorative.
+      const sellerArtistId = albumId
+        ? (await adminClient.from('albums').select('artist_id').eq('id', albumId).maybeSingle()).data?.artist_id || null
+        : (await adminClient.from('tracks').select('artist_id').eq('id', trackId).maybeSingle()).data?.artist_id || null;
+
+      let commissionPct = 0;
+      try {
+        const { data: r } = await adminClient.rpc('platform_commission_percent');
+        commissionPct = Math.min(100, Math.max(0, parseFloat(r ?? 0)));
+      } catch (e) {
+        console.error('[paypal-order] commission rate unreadable at create, using 0:', e.message);
+      }
+
+      let routing;
+      try {
+        routing = await payeeLib.resolvePayee({
+          supabase: adminClient,
+          artistId: sellerArtistId,
+          trackId:  albumId ? null : trackId,
+          commissionPct,
+        });
+      } catch (e) {
+        // A failure to decide is a decision to change nothing. Never let a bug
+        // in the routing layer stop a sale or, worse, send it somewhere
+        // unintended.
+        console.error('[paypal-order] payee resolution threw, staying on the platform route:', e.message);
+        routing = { route: 'platform', payee: null, reason: 'resolver_threw', commissionPct };
+      }
+
+      const { fragment: payeeFragment, headers: payeeHeaders } =
+        payeeLib.purchaseUnitFor(routing, { grossValue: price, currency: 'USD' });
+
       console.log('[paypal-order] CREATE',
-        JSON.stringify({ trackId: trackId || null, albumId: albumId || null, licenceId: licenceId || null, safeAmount, source }));
+        JSON.stringify({
+          trackId: trackId || null, albumId: albumId || null,
+          licenceId: licenceId || null, safeAmount, source,
+          route: routing.route, routeReason: routing.reason,
+          sellerArtistId, commissionPct,
+        }));
+
+      // The buyer sees what they are paying for. A total that is 43 cents more
+      // than the price on the page, with no explanation, reads as a platform
+      // skimming — which is precisely the thing this change exists to stop.
+      // Split into an item and a handling line, PayPal's own checkout shows
+      // "Isandla Sami $2.00 / Handling $0.43 / Total $2.43" before they
+      // authorise anything.
+      //
+      // breakdown is only sent when there IS a fee. PayPal requires the parts
+      // to sum to `value` to the cent, and an item_total with no handling on a
+      // zero-fee order is just a second chance to get that wrong.
+      const amountBlock = serviceFee > 0
+        ? {
+            currency_code: 'USD',
+            value: safeAmount,
+            breakdown: {
+              item_total: { currency_code: 'USD', value: artistPrice.toFixed(2) },
+              handling:   { currency_code: 'USD', value: serviceFee.toFixed(2) },
+            },
+          }
+        : { currency_code: 'USD', value: safeAmount };
 
       const orderPayload = {
         intent: 'CAPTURE',
         purchase_units: [{
-          amount: {
-            currency_code: 'USD',
-            value: safeAmount,
-          },
+          amount: amountBlock,
+          ...(serviceFee > 0 ? {
+            items: [{
+              name: String(label || 'Track').slice(0, 127),
+              description: 'Processing fee added so the artist receives their full price',
+              unit_amount: { currency_code: 'USD', value: artistPrice.toFixed(2) },
+              quantity: '1',
+              category: 'DIGITAL_GOODS',
+            }],
+          } : {}),
           description: `${label} by ${artistName || 'Artist'} - Feelz Machine`,
           custom_id: customId,
+          ...payeeFragment,
         }],
         application_context: {
           brand_name: 'Feelz Machine',
@@ -272,7 +390,39 @@ exports.handler = async (event) => {
         },
       };
 
-      const result = await paypalRequest('POST', '/v2/checkout/orders', orderPayload, accessToken);
+      let result = await paypalRequest('POST', '/v2/checkout/orders', orderPayload, accessToken, payeeHeaders);
+
+      // ── If the payee is refused, sell it anyway ──────────────────────────
+      //
+      // PayPal rejects an order whose payee it will not accept — an address
+      // that is not a verified business account, a merchant id we have no
+      // permission for, a platform fee on an account that is not a partner.
+      // Those all read as a 4xx at create.
+      //
+      // A routing preference is not worth a lost sale. Retry once on the plain
+      // platform route, which is known to work, and log the reason loudly so
+      // the artist's setup can be fixed rather than quietly failing forever.
+      if (result.status !== 201 && routing.route !== 'platform') {
+        console.error('[paypal-order] PAYEE REFUSED by PayPal — falling back to the platform route.',
+          'route=', routing.route, 'artist=', sellerArtistId,
+          'status=', result.status, 'body=', JSON.stringify(result.body));
+
+        routing = { route: 'platform', payee: null, reason: 'paypal_refused_payee', commissionPct };
+        // The amount, items and breakdown are carried over unchanged. Only the
+        // payee and the platform fee are dropped — the buyer is charged exactly
+        // the same total either way, because where the money goes is our
+        // problem and not theirs.
+        const fallbackPayload = {
+          ...orderPayload,
+          purchase_units: [{
+            amount:      orderPayload.purchase_units[0].amount,
+            items:       orderPayload.purchase_units[0].items,
+            description: orderPayload.purchase_units[0].description,
+            custom_id:   orderPayload.purchase_units[0].custom_id,
+          }],
+        };
+        result = await paypalRequest('POST', '/v2/checkout/orders', fallbackPayload, accessToken);
+      }
 
       if (result.status !== 201) {
         // Logged as well as returned. "Failed to create order" in a toast with
@@ -288,7 +438,85 @@ exports.handler = async (event) => {
 
       return {
         statusCode: 200,
-        body: JSON.stringify({ orderId: result.body.id, amount: safeAmount }),
+        // The breakdown goes back to the client so a screen can show the same
+        // three numbers PayPal will show, before the buyer ever leaves the
+        // page. `amount` keeps its old meaning — the total charged — so no
+        // existing caller breaks by reading it.
+        body: JSON.stringify({
+          orderId:     result.body.id,
+          amount:      safeAmount,
+          artistPrice: artistPrice.toFixed(2),
+          serviceFee:  serviceFee.toFixed(2),
+        }),
+      };
+    }
+
+    // ========== QUOTE ==========
+    //
+    // What a purchase will cost, without creating an order. Exists so a screen
+    // can show "$2.00 + $0.43 fee = $2.43" before the buyer commits, rather
+    // than showing one number and PayPal showing another.
+    //
+    // It resolves the price through exactly the same code as `create` — a quote
+    // endpoint that computes the price a second way is a quote endpoint that
+    // will eventually disagree with the checkout.
+    if (action === 'quote') {
+      const adminClient = createClient(
+        process.env.SUPABASE_URL,
+        process.env.SUPABASE_SERVICE_ROLE_KEY
+      );
+      const { albumId, licenceId, amount: offered } = body;
+
+      let base = 0;
+      if (albumId) {
+        const { data: album } = await adminClient
+          .from('albums').select('price').eq('id', albumId).maybeSingle();
+        base = Number(album?.price) || 0;
+      } else if (trackId) {
+        const { data: track } = await adminClient
+          .from('tracks')
+          .select('download_price, album_id, pay_what_you_want, minimum_price, beat_licence')
+          .eq('id', trackId).maybeSingle();
+
+        if (!track) return { statusCode: 404, body: JSON.stringify({ error: 'Track not found' }) };
+
+        if (licenceId) {
+          let licences = [];
+          try {
+            const raw = typeof track.beat_licence === 'string'
+              ? JSON.parse(track.beat_licence) : track.beat_licence;
+            licences = Array.isArray(raw) ? raw : (raw?.licences || []);
+          } catch { licences = []; }
+          base = Number(licences.find(l => String(l.id) === String(licenceId))?.price) || 0;
+        } else if (track.pay_what_you_want) {
+          const floor = Math.max(Number(track.minimum_price) || 0, 0.50);
+          base = Math.max(floor, Math.round((Number(offered) || 0) * 100) / 100);
+        } else {
+          base = Number(track.download_price) || 0;
+          if (base <= 0 && track.album_id) {
+            const [{ data: album }, { count: trackCount }] = await Promise.all([
+              adminClient.from('albums').select('price').eq('id', track.album_id).maybeSingle(),
+              adminClient.from('tracks').select('id', { count: 'exact', head: true })
+                .eq('album_id', track.album_id).eq('is_published', true),
+            ]);
+            const albumPrice = Number(album?.price) || 0;
+            if (albumPrice > 0 && trackCount > 0) {
+              base = Math.round((albumPrice / trackCount) * 100) / 100;
+            }
+          }
+        }
+      } else {
+        return { statusCode: 400, body: JSON.stringify({ error: 'trackId or albumId required' }) };
+      }
+
+      const quoted = await pricing.quote(adminClient, base);
+      return {
+        statusCode: 200,
+        body: JSON.stringify({
+          artistPrice: quoted.artistPrice.toFixed(2),
+          serviceFee:  quoted.serviceFee.toFixed(2),
+          buyerPays:   quoted.buyerPays.toFixed(2),
+        }),
       };
     }
 
@@ -401,10 +629,49 @@ exports.handler = async (event) => {
       let recorded = false;
       let recordError = null;
 
+      // ── DID THIS MONEY ACTUALLY ARRIVE HERE? ─────────────────────────────
+      //
+      // Everything below forwards the artist their share out of the business
+      // account. That is only ever correct when the business account is where
+      // the buyer's money landed.
+      //
+      // The routing decision was made minutes ago at order creation, but a
+      // decision is not evidence. PayPal's capture response names the payee,
+      // and that is the only authority on the question. This is the exact
+      // mistake tip-artist.js was making — it set a payee on the order and then
+      // paid out anyway, on the strength of a comment that said the funds were
+      // here when they were not, and paid artists twice for months.
+      //
+      // null means "cannot tell", which happens when PAYPAL_PLATFORM_MERCHANT_ID
+      // and PAYPAL_PLATFORM_EMAIL are both unset. Cannot tell is treated as
+      // do-not-forward: failing to forward is fixed by hand in a minute, a
+      // double payment leaves the account and has to be asked back.
+      const landedHere = payeeLib.landedWithPlatform(result.body);
+      const capturePayee = result.body?.purchase_units?.[0]?.payee || {};
+
+      if (landedHere !== true) {
+        console.log('[paypal-order] NOT FORWARDING — funds did not land in the platform account',
+          JSON.stringify({
+            orderId, captureId,
+            payeeEmail:    capturePayee.email_address || null,
+            payeeMerchant: capturePayee.merchant_id || null,
+            verdict: landedHere === null
+              ? 'UNVERIFIABLE — set PAYPAL_PLATFORM_MERCHANT_ID or PAYPAL_PLATFORM_EMAIL in Netlify'
+              : 'paid direct to the seller',
+          }));
+      }
+
       if (captureTrackId && captureId && capturedAmount > 0) {
+        // NOTE the `landedHere === true` on the payout trigger below, and NOT
+        // on this outer condition. The recording — the purchases row, the
+        // download grant, the receipts — must happen for every completed sale
+        // whichever account the money went to. Only the forwarding of money is
+        // conditional. Gating the whole block would mean a direct sale paid the
+        // artist and left the buyer with no download, which is the original bug
+        // wearing a different hat.
         try {
           const siteUrl = process.env.URL || 'https://www.feelzmachine.com';
-          fetch(`${siteUrl}/.netlify/functions/process-split-payout`, {
+          if (landedHere === true) fetch(`${siteUrl}/.netlify/functions/process-split-payout`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -523,6 +790,31 @@ exports.handler = async (event) => {
           }
           const platformFee = parseFloat(((commissionPct / 100) * netLanded).toFixed(2));
 
+          // Where this sale's money went, recorded at the time it went there.
+          //
+          // Without it the purchases table cannot answer "did we receive this,
+          // or did the artist?", and every reconciliation afterwards is a
+          // guess. platform_fee on a direct sale is what we WOULD have taken:
+          // recorded so it is visible as commission foregone or owed, rather
+          // than silently becoming zero and never being noticed.
+          const payoutRoute = landedHere === true ? 'platform'
+                            : landedHere === false ? 'direct'
+                            : 'unverified';
+
+          // What the artist's price was on this order, read back from the
+          // breakdown we sent. Recorded separately from `amount` so the books
+          // can tell the artist's price from the buyer's total — without it,
+          // every report would have to re-derive the fee from a rate that may
+          // since have changed, which is how a figure becomes wrong the first
+          // time someone edits a setting.
+          //
+          // Absent breakdown means the order was created before this deploy, or
+          // with the fee at zero. Both mean the artist's price was the whole
+          // amount.
+          const breakdown  = result.body?.purchase_units?.[0]?.amount?.breakdown || null;
+          const itemTotal  = parseFloat(breakdown?.item_total?.value ?? capturedAmount);
+          const buyerFee   = parseFloat(breakdown?.handling?.value ?? 0) || 0;
+
           const { error: purchaseErr } = await adminClient.from('purchases').insert({
             user_id:               resolvedUserId,
             track_id:              albumId ? null : captureTrackId,
@@ -535,6 +827,12 @@ exports.handler = async (event) => {
             paypal_payer_email:    payerEmail,
             status:                'completed',
             purchased_at:          new Date().toISOString(),
+            payout_route:          payoutRoute,
+            payee_account:         capturePayee.merchant_id || capturePayee.email_address || null,
+            // The buyer's contribution towards processing. amount stays the
+            // total charged, so nothing that already reads it changes meaning.
+            buyer_service_fee:     buyerFee,
+            artist_price:          Number.isFinite(itemTotal) ? itemTotal : capturedAmount,
           });
 
           if (purchaseErr) {
@@ -592,21 +890,30 @@ exports.handler = async (event) => {
             let sellerArtistId = null;
             let sellerLabel = null;
 
+            // The slugs are selected so the receipt can carry them. A receipt
+            // that stores only an id forces whatever opens it to route by id,
+            // and /track/:slug resolved slugs only — so tapping a receipt for a
+            // track you had just paid for showed "Track not found".
+            let trackSlug = null;
+            let albumSlug = null;
+
             if (albumId) {
               const { data: al } = await adminClient
-                .from('albums').select('title, artist_id, artists ( artist_name )')
+                .from('albums').select('title, slug, artist_id, artists ( artist_name )')
                 .eq('id', albumId).maybeSingle();
               if (al) {
                 what = al.title || 'Album';
+                albumSlug = al.slug || null;
                 sellerArtistId = al.artist_id || null;
                 sellerLabel = al.artists?.artist_name || null;
               }
             } else if (captureTrackId) {
               const { data: tr } = await adminClient
-                .from('tracks').select('title, artist_id, artists ( artist_name )')
+                .from('tracks').select('title, slug, artist_id, artists ( artist_name )')
                 .eq('id', captureTrackId).maybeSingle();
               if (tr) {
                 what = tr.title || 'Track';
+                trackSlug = tr.slug || null;
                 sellerArtistId = tr.artist_id || null;
                 sellerLabel = tr.artists?.artist_name || null;
               }
@@ -625,6 +932,8 @@ exports.handler = async (event) => {
                 track_id: albumId ? null : captureTrackId,
                 metadata: {
                   album_id:   albumId || null,
+                  album_slug: albumSlug,
+                  track_slug: trackSlug,
                   licence_id: licenceId || null,
                   amount:     capturedAmount,
                   capture_id: captureId,
