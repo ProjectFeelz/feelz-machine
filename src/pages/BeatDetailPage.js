@@ -59,6 +59,23 @@ export default function BeatDetailPage() {
   const [shareCard, setShareCard]   = useState(null);
   const [downloading, setDownloading] = useState(false);
 
+  // The buyer's total for the licence they have selected. Quoted per licence,
+  // because a $99 exclusive and a $15 lease carry different processing costs
+  // and the beatmaker should net the figure on the card either way.
+  //
+  // Declared HERE, with the other hooks, and not next to the markup that uses
+  // it. It was next to the markup, which put it after `if (loading) return`
+  // and `if (!track) return`, so on the first render it did not run and on the
+  // next one it did, which is the hook-order violation eslint failed the build
+  // on. Resolving selectedLicence to its licence object inline keeps this
+  // independent of anything computed after those returns.
+  const quotedLicence = licences.find(l => l.id === selectedLicence);
+  const { quote: licenceQuote } = useQuote(
+    track?.id && quotedLicence && quotedLicence.price > 0
+      ? { trackId: track.id, licenceId: quotedLicence.id }
+      : null
+  );
+
   const isCurrentTrack = currentTrack?.id === track?.id;
 
 
@@ -321,14 +338,6 @@ export default function BeatDetailPage() {
 
   const selectedLic = licences.find(l => l.id === selectedLicence);
 
-  // The buyer's total for the licence they have selected. Quoted per licence,
-  // because a $99 exclusive and a $15 lease carry different processing costs
-  // and the beatmaker should net the figure on the card either way.
-  const { quote: licenceQuote } = useQuote(
-    track?.id && selectedLic && selectedLic.price > 0
-      ? { trackId: track.id, licenceId: selectedLic.id }
-      : null
-  );
 
   const BASE_URL   = 'https://www.feelzmachine.com';
   const pageUrl     = `${BASE_URL}/beat/${slug}`;

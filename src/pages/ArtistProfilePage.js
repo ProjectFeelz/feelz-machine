@@ -2190,7 +2190,21 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
                   <button onClick={async () => {
                     const minPrice = parseFloat(pwywTrack.minimum_price) || 0;
                     if (minPrice > 0) { setPwywFanPriceError(`Minimum is $${minPrice.toFixed(2)}`); return; }
-                    try { await supabase.from('downloads').insert({ user_id: user.id, track_id: pwywTrack.id, amount_paid: 0, download_type: 'free' }); } catch {}
+                    // The client-side downloads insert that was here is gone.
+                    //
+                    // It was redundant: triggerDownload below calls
+                    // get-download-url.js, whose free branch writes exactly this
+                    // row server-side moments later, with the service role.
+                    //
+                    // It was also the only reason the browser needed insert
+                    // rights on a table that grants access to files. The policy
+                    // backing it was `with check (auth.uid() = user_id)` and
+                    // nothing else, so any signed-in listener could insert
+                    // { track_id: <any paid track>, amount_paid: 9999,
+                    //   download_type: 'paid' } from the console and download
+                    // the whole catalogue. Migration 132 narrows the policy to
+                    // free grants only; removing this call is what makes that
+                    // narrowing cost nothing.
                     await triggerDownload(pwywTrack);
                     setPwywTrack(null);
                   }}
