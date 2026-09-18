@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import ShareCard from '../components/ShareCard';
 import { showReceipt } from '../components/PurchaseReceipt';
+import PriceBreakdown, { useQuote } from '../components/PriceBreakdown';
 
 const PAYPAL_CLIENT_ID = process.env.REACT_APP_PAYPAL_CLIENT_ID;
 const BASE_URL = 'https://www.feelzmachine.com';
@@ -62,6 +63,20 @@ export default function AlbumDetailPage() {
   const [purchasing, setPurchasing] = useState(false);
   const [purchaseSuccess, setPurchaseSuccess] = useState(false);
   const [purchaseError, setPurchaseError] = useState('');
+
+  // purchaseTarget is either the whole album or one track off it, so the quote
+  // follows whichever is open rather than assuming the album price.
+  //
+  // Its shape is { type: 'album' | 'track', track?, price, label } — read off
+  // the three setPurchaseTarget calls below rather than assumed, because the
+  // album id is NOT on this object and a guess at `.id` would have quoted
+  // undefined and silently shown nothing.
+  const { quote: buyQuote } = useQuote(
+    !purchaseTarget ? null
+      : purchaseTarget.type === 'album'
+        ? (album?.id ? { albumId: album.id } : null)
+        : (purchaseTarget.track?.id ? { trackId: purchaseTarget.track.id } : null)
+  );
   const [purchasedTracks, setPurchasedTracks] = useState({});
 
   const checkExistingPurchases = async () => {
@@ -646,6 +661,7 @@ export default function AlbumDetailPage() {
                 </div>
                 {purchaseError && <p className="text-xs text-red-400 text-center">{purchaseError}</p>}
                 {!paypalReady && !purchaseError && <div className="flex justify-center py-3"><Loader className="w-5 h-5 animate-spin text-white/30" /></div>}
+                <PriceBreakdown quote={buyQuote} sellerName={artist?.artist_name} />
                 <div id="paypal-album-container" style={{ backgroundColor: '#fff', borderRadius: '8px', padding: '4px' }} />
                 <button onClick={() => { setPurchaseTarget(null); setPurchaseError(''); }}
                   className="w-full py-2.5 rounded-xl text-sm text-white/30 hover:text-white/50 transition">

@@ -6,6 +6,7 @@ import { showReceipt } from './PurchaseReceipt';
 import { useAuth } from '../contexts/AuthContext';
 import { usePlayer } from '../contexts/PlayerContext';
 import { downloadTrack } from '../utils/downloadTrack';
+import PriceBreakdown, { useQuote } from './PriceBreakdown';
 import {
     X, Share2, ListMusic, Download, Heart, Play, Music, Loader, Check,
     ChevronLeft, ShoppingCart, Lock, PlusCircle, DollarSign, Clock, Info,
@@ -55,6 +56,17 @@ export default function TrackActionSheet({ track, artist, onClose }) {
     const [fanPriceError, setFanPriceError] = useState('');
 
     const effectivePrice = isPWYW ? (parseFloat(fanPrice) || 0) : basePrice;
+
+    // What the buyer is charged, from the server. effectivePrice above is the
+    // ARTIST's price; the processing line is added on top so the artist keeps
+    // what they set. Debounced on a pay-what-you-want amount because the buyer
+    // is typing it.
+    const { quote } = useQuote(
+        track?.id && effectivePrice > 0 && view === 'purchase'
+            ? (isPWYW ? { trackId: track.id, amount: effectivePrice } : { trackId: track.id })
+            : null,
+        isPWYW ? 400 : 0
+    );
 
     const isPreorder = track?.is_preorder === true;
     const releaseDate = track?.release_date || null;
@@ -556,6 +568,7 @@ export default function TrackActionSheet({ track, artist, onClose }) {
                                                 </div>
                                                 <p className="text-lg font-bold text-white">${effectivePrice.toFixed(2)}</p>
                                             </div>
+                                            <PriceBreakdown quote={quote} sellerName={artist?.artist_name} />
                                             <p className="text-xs text-white/30 text-center">
                                                 {isPreorder && isNotYetReleased
                                                     ? `High-quality MP3 delivered automatically on ${formatReleaseDate(releaseDate)}`

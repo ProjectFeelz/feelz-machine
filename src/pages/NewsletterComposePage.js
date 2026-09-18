@@ -9,10 +9,43 @@
 import React from 'react';
 import { Helmet } from 'react-helmet-async';
 import { useNavigate } from 'react-router-dom';
-import { Loader, Send, Users, Store, Plus, X, ArrowLeft, Mail, Check, AlertTriangle } from 'lucide-react';
+import { Loader, Send, Users, Store, Headphones, Plus, X, ArrowLeft, Mail, Check, AlertTriangle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../supabaseClient';
 import { WysiwygEditor } from '../components/admin/WysiwygEditor';
+
+// One table for the three audiences. Every place that needed to know about an
+// audience was a ternary that read "retail ? ... : ..." and silently treated
+// anything that was not retail as main_app — which is exactly how a third
+// audience gets announced as "the main app" in the confirmation dialog and the
+// toast. Adding a fourth now means adding a row here and nothing else.
+const AUDIENCE = {
+  main_app:  {
+    label:   'Main App',
+    blurb:   'Goes to every artist on the platform.',
+    confirm: 'every artist on the platform',
+    sent:    'the main app',
+    badge:   'bg-cyan-500/15 text-cyan-300',
+  },
+  listeners: {
+    label:   'Listeners',
+    // Says what it actually does. The email half reaches only listeners who are
+    // already opted in to the mailing list and are not artists; the in-app half
+    // reaches every non-artist listener, because an in-app notice is not email
+    // and does not need an email opt-in.
+    blurb:   'Goes to listeners who are not artists. In-app for all of them, email only to those already subscribed.',
+    confirm: 'every listener who is not an artist',
+    sent:    'listeners',
+    badge:   'bg-emerald-500/15 text-emerald-300',
+  },
+  retail:    {
+    label:   'Retail',
+    blurb:   'Goes to every currently active retail venue.',
+    confirm: 'every active retail venue',
+    sent:    'retail venues',
+    badge:   'bg-purple-500/15 text-purple-300',
+  },
+};
 
 const inputCls = "w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none focus:bg-white/[0.1] transition";
 
@@ -21,7 +54,7 @@ export default function NewsletterComposePage() {
   const { user, isAdmin } = useAuth();
   const [checking, setChecking] = React.useState(true);
   const [authorized, setAuthorized] = React.useState(false);
-  const [audience, setAudience] = React.useState(null); // 'main_app' | 'retail' | null
+  const [audience, setAudience] = React.useState(null); // 'main_app' | 'retail' | 'listeners' | null
   const [title, setTitle] = React.useState('');
   const [excerpt, setExcerpt] = React.useState('');
   const [body, setBody] = React.useState('');
@@ -214,7 +247,7 @@ export default function NewsletterComposePage() {
     setSending(false);
     setConfirmOpen(false);
     if (error) { showToast('Error: ' + error.message); return; }
-    showToast(`Sent to ${audience === 'retail' ? 'retail venues' : 'the main app'}`);
+    showToast(`Sent to ${AUDIENCE[audience]?.sent || audience}`);
     setTitle(''); setExcerpt(''); setBody(''); setYoutubeUrl(''); setAudience(null);
     setEditorResetKey(k => k + 1);
     loadPosts();
@@ -291,19 +324,23 @@ export default function NewsletterComposePage() {
 
         <div className="space-y-3">
           <p className="text-xs font-bold text-white/50 uppercase tracking-wide">Who's this going to?</p>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-3 gap-2">
             <button onClick={() => setAudience('main_app')}
-              className={`flex items-center justify-center space-x-2 py-4 rounded-xl border-2 transition ${audience === 'main_app' ? 'bg-purple-500 border-purple-500 text-white' : 'bg-white/[0.03] border-white/10 text-white/50'}`}>
-              <Users className="w-4 h-4" /><span className="text-sm font-bold">Main App</span>
+              className={`flex flex-col items-center justify-center space-y-1 py-3.5 rounded-xl border-2 transition ${audience === 'main_app' ? 'bg-purple-500 border-purple-500 text-white' : 'bg-white/[0.03] border-white/10 text-white/50'}`}>
+              <Users className="w-4 h-4" /><span className="text-xs font-bold">Main App</span>
+            </button>
+            <button onClick={() => setAudience('listeners')}
+              className={`flex flex-col items-center justify-center space-y-1 py-3.5 rounded-xl border-2 transition ${audience === 'listeners' ? 'bg-purple-500 border-purple-500 text-white' : 'bg-white/[0.03] border-white/10 text-white/50'}`}>
+              <Headphones className="w-4 h-4" /><span className="text-xs font-bold">Listeners</span>
             </button>
             <button onClick={() => setAudience('retail')}
-              className={`flex items-center justify-center space-x-2 py-4 rounded-xl border-2 transition ${audience === 'retail' ? 'bg-purple-500 border-purple-500 text-white' : 'bg-white/[0.03] border-white/10 text-white/50'}`}>
-              <Store className="w-4 h-4" /><span className="text-sm font-bold">Retail</span>
+              className={`flex flex-col items-center justify-center space-y-1 py-3.5 rounded-xl border-2 transition ${audience === 'retail' ? 'bg-purple-500 border-purple-500 text-white' : 'bg-white/[0.03] border-white/10 text-white/50'}`}>
+              <Store className="w-4 h-4" /><span className="text-xs font-bold">Retail</span>
             </button>
           </div>
           {audience && (
             <p className="text-[11px] text-white/30">
-              {audience === 'main_app' ? 'Goes to every artist on the platform.' : 'Goes to every currently active retail venue.'}
+              {AUDIENCE[audience]?.blurb}
             </p>
           )}
         </div>
@@ -331,7 +368,7 @@ export default function NewsletterComposePage() {
           <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center px-6" onClick={() => setConfirmOpen(false)}>
             <div className="bg-black border border-white/10 rounded-2xl p-5 max-w-sm w-full" onClick={e => e.stopPropagation()}>
               <p className="text-sm font-bold text-white mb-2">
-                Send to {audience === 'retail' ? 'every active retail venue' : 'every artist on the platform'}?
+                Send to {AUDIENCE[audience]?.confirm || audience}?
               </p>
               <p className="text-xs text-white/40 mb-4">This can't be recalled once sent.</p>
               <div className="flex space-x-2">
@@ -362,8 +399,8 @@ export default function NewsletterComposePage() {
                         <Check className="w-3 h-3 mr-0.5" />{log.sent} emailed
                       </span>
                     )}
-                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${p.audience === 'retail' ? 'bg-purple-500/15 text-purple-300' : 'bg-cyan-500/15 text-cyan-300'}`}>
-                      {p.audience === 'retail' ? 'Retail' : 'Main App'}
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${AUDIENCE[p.audience]?.badge || 'bg-white/10 text-white/50'}`}>
+                      {AUDIENCE[p.audience]?.label || p.audience}
                     </span>
                   </div>
                 </div>

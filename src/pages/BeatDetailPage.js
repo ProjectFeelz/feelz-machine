@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import PriceBreakdown, { useQuote } from '../components/PriceBreakdown';
 import { Helmet } from 'react-helmet-async';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
@@ -320,6 +321,15 @@ export default function BeatDetailPage() {
 
   const selectedLic = licences.find(l => l.id === selectedLicence);
 
+  // The buyer's total for the licence they have selected. Quoted per licence,
+  // because a $99 exclusive and a $15 lease carry different processing costs
+  // and the beatmaker should net the figure on the card either way.
+  const { quote: licenceQuote } = useQuote(
+    track?.id && selectedLic && selectedLic.price > 0
+      ? { trackId: track.id, licenceId: selectedLic.id }
+      : null
+  );
+
   const BASE_URL   = 'https://www.feelzmachine.com';
   const pageUrl     = `${BASE_URL}/beat/${slug}`;
   const pageTitle   = `${track.title} — beat by ${artist?.artist_name} · Feelz Machine`;
@@ -533,6 +543,7 @@ export default function BeatDetailPage() {
                   </div>
                 ) : purchasing ? (
                   <div>
+                    <PriceBreakdown quote={licenceQuote} sellerName={artist?.artist_name} className="mb-3" />
                     <div id="beat-paypal-container" className="min-h-[48px]" />
                     {purchaseError && <p className="text-xs text-red-400 mt-2 text-center">{purchaseError}</p>}
                   </div>

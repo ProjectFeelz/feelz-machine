@@ -28,6 +28,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import PriceBreakdown, { useQuote } from './PriceBreakdown';
 import { supabase } from '../supabaseClient';
 import { showReceipt } from './PurchaseReceipt';
 import { useAuth } from '../contexts/AuthContext';
@@ -45,6 +46,11 @@ export default function PaidPlayGate({ track, artist, onClose, onPurchaseComplet
   const [purchasing, setPurchasing] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
+
+  // What the buyer is actually charged. The artist's price is what the copy
+  // above quotes; this adds the processing line so the total is on screen
+  // before they reach PayPal.
+  const { quote } = useQuote(track?.id ? { trackId: track.id } : null);
 
   useEffect(() => {
     if (!track) return;
@@ -162,6 +168,7 @@ export default function PaidPlayGate({ track, artist, onClose, onPurchaseComplet
                   Purchase this track for <span className="text-white font-semibold">${track.download_price?.toFixed(2)}</span> to unlock unlimited listening + download
                 </p>
               </div>
+              <PriceBreakdown quote={quote} sellerName={artist?.artist_name} className="mt-3" />
             </div>
 
             {/* PayPal */}
@@ -171,7 +178,7 @@ export default function PaidPlayGate({ track, artist, onClose, onPurchaseComplet
                 <button onClick={() => navigate('/login')}
                   className="w-full py-3 rounded-xl text-sm font-semibold bg-white text-black transition hover:bg-white/90 flex items-center justify-center space-x-2">
                   <ShoppingCart className="w-4 h-4" />
-                  <span>Sign in to purchase · ${track.download_price?.toFixed(2)}</span>
+                  <span>Sign in to purchase · ${quote?.buyerPays || track.download_price?.toFixed(2)}</span>
                 </button>
               )}
               {user && !paypalReady && !error && (
