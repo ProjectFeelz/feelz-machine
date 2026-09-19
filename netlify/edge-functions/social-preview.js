@@ -49,17 +49,35 @@ export default async (request, context) => {
   ogUrl.searchParams.set('type', type);
   if (slug) ogUrl.searchParams.set('slug', slug);
 
+  // Budgeted, because this function has no budget of its own.
+  //
+  // og-meta does a Supabase round trip and runs on Netlify's 10 second default.
+  // This fetch had no timeout and no res.ok check, so a slow og-meta held the
+  // edge invocation open until the PLATFORM killed it — and a platform kill is
+  // a 5xx that never reaches the catch below, because nothing was thrown.
+  // Three seconds is well inside the edge limit and far more than a healthy
+  // og-meta needs; past that, the crawler gets the app rather than an error.
+  const abort = AbortController ? new AbortController() : null;
+  const timer = abort ? setTimeout(() => abort.abort(), 3000) : null;
+
   try {
-    const res = await fetch(ogUrl.toString());
+    const res = await fetch(ogUrl.toString(), abort ? { signal: abort.signal } : undefined);
+    if (!res.ok) {
+      // A 500 from og-meta used to be returned to the crawler AS the page,
+      // with status 200 and an error body, which is worse than no preview.
+      return context.next();
+    }
     const html = await res.text();
     return new Response(html, {
       status: 200,
       headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'public, max-age=1800' },
     });
   } catch {
-    // If the meta function fails for any reason, fall through to the
-    // normal app rather than showing an error to the crawler.
+    // Timed out, refused, or threw. Fall through to the normal app rather
+    // than showing an error to the crawler.
     return context.next();
+  } finally {
+    if (timer) clearTimeout(timer);
   }
 };
 

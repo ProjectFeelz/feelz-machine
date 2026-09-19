@@ -37,9 +37,13 @@ export default function InstallPrompt({
   storageKey  = 'install_prompt_dismissed',
   blurb       = 'Get push notifications and the full app experience.',
   positionClass = 'fixed bottom-24 left-4 right-4 z-50',
+  // Show manual instructions when the browser never offers an automatic
+  // install. Opt in, because on the main app a card that cannot be acted on
+  // is a nag; on Retail it is the only route in. See the comment below.
+  manualFallback = false,
 } = {}) {
   const [show, setShow]           = useState(false);
-  const [mode, setMode]           = useState(null); // 'ios' | 'android'
+  const [mode, setMode]           = useState(null); // 'ios' | 'prompt' | 'manual'
   const [deferredPrompt, setDeferredPrompt] = useState(null);
 
   useEffect(() => {
@@ -60,8 +64,36 @@ export default function InstallPrompt({
       setShow(true);
     };
     window.addEventListener('beforeinstallprompt', handler);
-    return () => window.removeEventListener('beforeinstallprompt', handler);
-  }, [storageKey]);
+
+    // WHY RETAIL NEVER GETS AN AUTOMATIC PROMPT ONCE THE MAIN APP IS INSTALLED
+    //
+    // Not a bug in this file, and not something useRetailManifest can fix.
+    // manifest.json declares "scope": "/", so once Feelz Machine is installed
+    // the browser treats EVERY page on this origin as already belonging to an
+    // installed app — /retail/player included, because /retail is inside /.
+    // beforeinstallprompt is suppressed for a page already covered by an
+    // installed app, so the handler above simply never fires and the card
+    // never appears. Uninstalling the main app makes it appear again, which is
+    // exactly the "I can't get them separate" behaviour.
+    //
+    // The two real options are: serve Retail from its own origin, which is the
+    // proper fix and a DNS and deploy change (retail.feelzmachine.com), or
+    // tell the venue how to install it by hand. Chrome still allows the manual
+    // install, because retail-manifest.json carries its own "id", so the menu
+    // route works even when the prompt is suppressed. That is what this is.
+    let timer = null;
+    if (manualFallback) {
+      timer = setTimeout(() => {
+        setMode(m => (m ? m : 'manual'));
+        setShow(s => s || true);
+      }, 6000);
+    }
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handler);
+      if (timer) clearTimeout(timer);
+    };
+  }, [storageKey, manualFallback]);
 
   const dismiss = () => {
     setShow(false);
@@ -130,6 +162,26 @@ export default function InstallPrompt({
                   <Download className="w-3.5 h-3.5" />
                   <span>Install App</span>
                 </button>
+              </>
+            )}
+
+            {mode === 'manual' && (
+              <>
+                <p className="text-xs text-white/40 mb-3">{blurb}</p>
+                <div className="flex items-start space-x-2">
+                  <div className="w-6 h-6 rounded-lg bg-purple-500/20 flex items-center justify-center flex-shrink-0">
+                    <Download className="w-3.5 h-3.5 text-purple-400" />
+                  </div>
+                  <p className="text-xs text-white/60">
+                    Open the browser menu <span className="text-white font-medium">⋮</span> and choose{' '}
+                    <span className="text-white font-medium">Install app</span> or{' '}
+                    <span className="text-white font-medium">Add to Home screen</span>.
+                  </p>
+                </div>
+                <p className="text-[10px] text-white/20 mt-2">
+                  {appName} installs as its own app with its own icon, even if Feelz Machine
+                  is already installed on this device.
+                </p>
               </>
             )}
           </div>

@@ -21,26 +21,17 @@
   schedule = "0 8 * * 1,4"
 
 # ── Edge functions ────────────────────────────────────────────────────────────
-
-[[edge_functions]]
-  path = "/artist/*"
-  function = "social-preview"
-
-[[edge_functions]]
-  path = "/track/*"
-  function = "social-preview"
-
-[[edge_functions]]
-  path = "/beat/*"
-  function = "social-preview"
-
-[[edge_functions]]
-  path = "/album/*"
-  function = "social-preview"
-
-[[edge_functions]]
-  path = "/schoolsessions"
-  function = "social-preview"
+#
+# social-preview was registered TWICE: here, as five [[edge_functions]] blocks,
+# and again in the function's own `export const config = { path: [...] }`.
+# Netlify merges the two declarations, so every request to /artist/*, /track/*,
+# /beat/*, /album/* and /schoolsessions was registering the same function on
+# the same path twice. That is a known source of intermittent 5xx at the edge,
+# which is what /artist/stevecsa was returning.
+#
+# The declaration now lives in one place: netlify/edge-functions/social-preview.js.
+# Do not add [[edge_functions]] blocks for it back here — change the paths in
+# the function's config instead, so there is only ever one source of truth.
 
 # ── Cache headers ─────────────────────────────────────────────────────────────
 

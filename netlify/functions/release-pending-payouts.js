@@ -70,6 +70,25 @@ async function sendPayPalPayout(accessToken, items, batchId) {
   return data;
 }
 
+//
+// WHY THE AUTH CHECK IN HERE LOOKS BACKWARDS, AND WHY IT IS FINE
+//
+// The check below only demands the secret when the caller SETS x-manual-run,
+// which read as opt-in authentication: omit the header, skip the check. That
+// would be a live hole if this function were reachable over HTTP.
+//
+// It is not. This function is declared with a `schedule` in netlify.toml, and
+// Netlify's own documentation is explicit: "Scheduled functions only run on
+// their schedule for published deploys and ... you can't invoke them directly
+// with a URL." The platform refuses the request before this file runs, so the
+// header check is a guard on an entry point that does not exist.
+//
+// The thing to remember: that is true ONLY while the `schedule` line is there.
+// Delete it from netlify.toml and this becomes a public endpoint with opt-in
+// authentication, which on a function that moves money is as bad as it sounds.
+// If this is ever taken off its schedule, invert the check first: require the
+// secret always, and let nothing through without it.
+//
 exports.handler = async (event) => {
   // Scheduled invocations carry no secret header, so allow them; a manual
   // POST still has to prove itself.

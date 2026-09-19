@@ -23,14 +23,56 @@ function getArtistLimit(totalArtists) {
   return 1;
 }
 
-function limitPerArtist(items, totalArtists) {
-  const max = getArtistLimit(totalArtists);
+// How many cards a horizontal row tries to show before it stops looking thin.
+const ROW_TARGET = 12;
+
+// Artists of the Day. Must match SPOTLIGHT_PER_DAY in
+// netlify/functions/daily-spotlight.js.
+const SPOTLIGHT_PER_DAY = 3;
+
+/**
+ * Spread a row across artists WITHOUT letting it go half empty.
+ *
+ * The old limitPerArtist() was a plain filter, and every caller sliced the
+ * list to its display length BEFORE filtering. So a row that fetched 8 tracks
+ * and capped 2 per artist showed 4 cards when 3 artists had uploaded that
+ * week. That is the empty-looking home page: the catalogue was there, the
+ * filter threw it away and nothing backfilled.
+ *
+ * Now: first pass takes up to `max` per artist in the order given, which is
+ * the diversity rule unchanged. If that leaves the row short of `target`, a
+ * second pass adds the overflow back round robin, one per artist per lap, so
+ * the row fills from the widest spread available instead of stopping.
+ */
+function diversify(items, totalArtists, target = ROW_TARGET) {
+  const max   = getArtistLimit(totalArtists);
+  const keyOf = (i) => i.artist_slug || i.artist_name || 'unknown';
+
   const counts = {};
-  return items.filter(item => {
-    const key = item.artist_slug || item.artist_name || 'unknown';
-    counts[key] = (counts[key] || 0) + 1;
-    return counts[key] <= max;
-  });
+  const picked = [];
+  const overflowByArtist = {};
+
+  for (const item of items || []) {
+    const k = keyOf(item);
+    counts[k] = (counts[k] || 0) + 1;
+    if (counts[k] <= max) picked.push(item);
+    else (overflowByArtist[k] = overflowByArtist[k] || []).push(item);
+  }
+
+  if (picked.length >= target) return picked.slice(0, target);
+
+  const queues = Object.values(overflowByArtist);
+  let addedThisLap = true;
+  while (picked.length < target && addedThisLap) {
+    addedThisLap = false;
+    for (const q of queues) {
+      if (!q.length) continue;
+      picked.push(q.shift());
+      addedThisLap = true;
+      if (picked.length >= target) break;
+    }
+  }
+  return picked.slice(0, target);
 }
 
 function formatNumber(n) {
@@ -178,13 +220,11 @@ export default function HomePage() {
   const { discoveryStreak, recordDiscovery } = useStreakContext();
   const navigate = useNavigate();
 
-  const [featuredTracks, setFeaturedTracks]         = useState([]);
   const [newReleases, setNewReleases]               = useState([]);
   const [newAlbums, setNewAlbums]                   = useState([]);
   const [trending, setTrending]                     = useState([]);
   const [topArtists, setTopArtists]                 = useState([]);
   const [recommended, setRecommended]               = useState([]);
-  const [similarArtists, setSimilarArtists]         = useState([]);
   const [featuredPlaylists, setFeaturedPlaylists]   = useState([]);
   const [hero, setHero]                             = useState(null);
   const [libraryPeek, setLibraryPeek]               = useState([]);
@@ -193,7 +233,7 @@ export default function HomePage() {
   const [actionSheetTrack, setActionSheetTrack]     = useState(null);
   const [activeCompetitions, setActiveCompetitions] = useState([]);
   const [wrappedNotif, setWrappedNotif]             = useState(null);
-  const [spotlightArtist, setSpotlightArtist]       = useState(null);
+  const [spotlightArtists, setSpotlightArtists]     = useState([]);
   const [unheardTracks, setUnheardTracks]           = useState([]);
   const [weeklyDiscoveries, setWeeklyDiscoveries]   = useState(0);
   const [liveSessions, setLiveSessions]             = useState([]);
@@ -201,31 +241,37 @@ export default function HomePage() {
   const fetchData = async () => {
     setLoading(true);
     try {
+      // Pools are deliberately deeper than the rows that display them. The
+      // per-artist spread is applied to the pool and THEN cut to length, so a
+      // row only runs short when the catalogue genuinely is.
       const [
-        { data: featured },
         { data: recentTracks },
         { data: recentAlbums },
         { data: trendingRaw },
         { data: artists },
+        { count: publishedArtistCount },
       ] = await Promise.all([
         supabase.from('tracks')
-          .select('*, albums(title, cover_artwork_url, price), artists!tracks_artist_id_fkey(artist_name, slug, profile_image_url, tier)')
-          .eq('is_published', true).eq('featured', true)
-          .order('created_at', { ascending: false }).limit(10),
-        supabase.from('tracks')
           .select('*, albums(title, cover_artwork_url, price), artists!tracks_artist_id_fkey(artist_name, slug, profile_image_url)')
-          .eq('is_published', true).order('created_at', { ascending: false }).limit(8),
+          .eq('is_published', true).order('created_at', { ascending: false }).limit(60),
         supabase.from('albums')
           .select('*, artists(artist_name, slug, profile_image_url)')
-          .eq('is_published', true).order('created_at', { ascending: false }).limit(10),
+          .eq('is_published', true).order('created_at', { ascending: false }).limit(40),
         supabase.from('tracks')
           .select('*, albums(title, cover_artwork_url, price), artists!tracks_artist_id_fkey(artist_name, slug, profile_image_url, is_verified, tier)')
-          .eq('is_published', true).order('engagement_score', { ascending: false }).limit(20),
+          .eq('is_published', true).order('engagement_score', { ascending: false }).limit(60),
         supabase.from('artists')
           .select('id, artist_name, slug, profile_image_url, is_verified, follower_count, total_streams, tier')
           .not('profile_image_url', 'is', null)
           .neq('profile_image_url', '')
-          .order('follower_count', { ascending: false }).limit(10),
+          .order('follower_count', { ascending: false }).limit(24),
+        // The tuning number for the spread. It used to be the LENGTH of the
+        // query above, which is capped at 24, so a 200 artist platform was
+        // being tuned as if it had 24 artists.
+        supabase.from('artists')
+          .select('id', { count: 'exact', head: true })
+          .not('profile_image_url', 'is', null)
+          .neq('profile_image_url', ''),
       ]);
 
       const normTrack = (list) => (list || []).map(t => ({
@@ -240,11 +286,11 @@ export default function HomePage() {
       // Albums get their own dedicated row — no longer merged with singles
       const albumList = normAlbum(recentAlbums);
 
-      // New Releases = tracks only, sorted by date
+      // New Releases = tracks only, sorted by date. No slice here: diversify()
+      // does the cutting, after the spread, so the row reaches its length.
       const trackList = normTrack(recentTracks)
         .map(t => ({ ...t, _isAlbum: false, _date: t.created_at }))
-        .sort((a, b) => new Date(b._date) - new Date(a._date))
-        .slice(0, 10);
+        .sort((a, b) => new Date(b._date) - new Date(a._date));
 
       const trendingBoosted = (trendingRaw || [])
         .map(t => ({
@@ -254,17 +300,23 @@ export default function HomePage() {
             t.artists?.tier === 'premium' ? 1.5 : t.artists?.tier === 'pro' ? 1.2 : 1
           ),
         }))
-        .sort((a, b) => b._boosted - a._boosted).slice(0, 8);
+        .sort((a, b) => b._boosted - a._boosted);
 
-      const artistCount = (artists || []).length;
-      setFeaturedTracks(limitPerArtist(normTrack(featured), artistCount));
-      setNewReleases(limitPerArtist(trackList, artistCount));
-      setNewAlbums(limitPerArtist(albumList, artistCount));
-      setTrending(limitPerArtist(trendingBoosted, artistCount));
+      const artistCount = publishedArtistCount || (artists || []).length;
+      setNewReleases(diversify(trackList, artistCount));
+      setNewAlbums(diversify(albumList, artistCount));
+      setTrending(diversify(trendingBoosted, artistCount));
       setTopArtists(artists || []);
 
+      // artistCount is passed down rather than read off topArtists state. The
+      // setter above has not applied yet inside this function, so the old code
+      // read [] here and tuned every personalised row as a zero artist site.
       if (user) {
-        await Promise.all([fetchRecommendations(), fetchFollowedReleases(), fetchCompetitions(), fetchWrapped(), fetchLiveSessions(), fetchSimilarArtists(), fetchFeaturedPlaylists()]);
+        await Promise.all([
+          fetchRecommendations(artistCount),
+          fetchFollowedReleases(artistCount),
+          fetchCompetitions(), fetchWrapped(), fetchLiveSessions(), fetchFeaturedPlaylists(),
+        ]);
       } else {
         await Promise.all([fetchCompetitions(), fetchLiveSessions()]);
       }
@@ -339,7 +391,7 @@ export default function HomePage() {
     } catch (err) { console.error('Wrapped fetch error:', err); }
   };
 
-  const fetchFollowedReleases = async () => {
+  const fetchFollowedReleases = async (artistCount = 0) => {
     try {
       // Get artist IDs the user follows
       const { data: follows } = await supabase
@@ -355,17 +407,17 @@ export default function HomePage() {
         .eq('is_published', true)
         .in('artist_id', artistIds)
         .order('created_at', { ascending: false })
-        .limit(12);
+        .limit(48);
 
-      setFollowedReleases(limitPerArtist((tracks || []).map(t => ({
+      setFollowedReleases(diversify((tracks || []).map(t => ({
         ...t,
         artist_name: t.artists?.artist_name || 'Unknown Artist',
         artist_slug: t.artists?.slug || null,
-      })), topArtists.length));
+      })), artistCount));
     } catch (err) { console.error('Followed releases error:', err); }
   };
 
-  const fetchRecommendations = async () => {
+  const fetchRecommendations = async (artistCount = 0) => {
     try {
       const { data: streamData } = await supabase
         .from('streams').select('track_id, tracks(genre, mood)')
@@ -391,13 +443,13 @@ export default function HomePage() {
       let query = supabase.from('tracks')
         .select('*, artists!tracks_artist_id_fkey(artist_name, slug, profile_image_url)')
         .eq('is_published', true).or(orFilter)
-        .order('engagement_score', { ascending: false }).limit(10);
+        .order('engagement_score', { ascending: false }).limit(40);
       if (listenedIds.length > 0) query = query.not('id', 'in', `(${listenedIds.join(',')})`);
       const { data: recData } = await query;
-      setRecommended(limitPerArtist((recData || []).map(t => ({
+      setRecommended(diversify((recData || []).map(t => ({
         ...t, artist_name: t.artists?.artist_name || 'Unknown Artist',
         artist_slug: t.artists?.slug || null,
-      })), topArtists.length));
+      })), artistCount));
     } catch (err) { console.error('Recommendations error:', err); }
   };
 
@@ -432,71 +484,73 @@ export default function HomePage() {
     } catch {}
   };
 
-  const fetchSimilarArtists = async () => {
-    if (!user) return;
-    try {
-      // Get the user's top-played artists
-      const { data: streamData } = await supabase
-        .from('streams')
-        .select('track_id, tracks(artist_id, genre, artists!tracks_artist_id_fkey(id, artist_name, slug))')
-        .eq('user_id', user.id)
-        .limit(100);
-      if (!streamData?.length) return;
-
-      // Count plays per artist and collect genres
-      const artistCounts = {};
-      const genreSet = new Set();
-      const playedArtistIds = new Set();
-      streamData.forEach(s => {
-        const a = s.tracks?.artists;
-        const g = s.tracks?.genre;
-        if (a?.id) {
-          artistCounts[a.id] = (artistCounts[a.id] || 0) + 1;
-          playedArtistIds.add(a.id);
-        }
-        if (g) genreSet.add(g);
-      });
-
-      if (!genreSet.size) return;
-
-      // Find artists with matching genres that the user hasn't played yet
-      const genres = [...genreSet].slice(0, 3);
-      const orFilter = genres.map(g => `genre.eq.${g}`).join(',');
-      const { data: candidates } = await supabase
-        .from('artists')
-        .select('id, artist_name, slug, profile_image_url, is_verified, follower_count, genre')
-        .not('profile_image_url', 'is', null)
-        .neq('profile_image_url', '')
-        .or(orFilter)
-        .order('follower_count', { ascending: false })
-        .limit(30);
-
-      if (!candidates?.length) return;
-
-      // Filter out artists already played, prioritise unheard
-      const unheard = candidates.filter(a => !playedArtistIds.has(a.id));
-      setSimilarArtists(unheard.slice(0, 8));
-    } catch (err) { console.error('Similar artists error:', err); }
-  };
+  // fetchSimilarArtists() lived here. It ran two queries on every signed in
+  // load and wrote to similarArtists, which nothing on this page has
+  // rendered since the row was removed. Same for the featured tracks query.
+  // Both are gone: they were pure load time.
 
   useEffect(() => {
     fetchData();
   }, [user]);
 
-  // ── Fetch daily spotlight artist ──────────────────────────────────────────
+  // ── Artists of the Day ────────────────────────────────────────────────────
+  // Three now, not one. daily-spotlight.js writes up to SPOTLIGHT_PER_DAY rows
+  // per user per day (migration 136 widened the unique key to include
+  // artist_id, which is what previously made a second row impossible).
+  //
+  // The fallback matters as much as the picks. If the nightly function has not
+  // run for this user yet — a brand new account, or a listener outside the 60
+  // day active window — the row used to be simply absent. It now fills from the
+  // same pool the function draws from, so the section is never a blank.
   useEffect(() => {
     if (!user) return;
+    let cancelled = false;
+
     const fetchSpotlight = async () => {
       const today = new Date().toISOString().split('T')[0];
+
       const { data } = await supabase
         .from('daily_artist_spotlight')
         .select('artist_id, artists(id, artist_name, slug, profile_image_url, total_streams, follower_count, is_verified)')
         .eq('user_id', user.id)
         .eq('spotlight_date', today)
-        .maybeSingle();
-      if (data?.artists) setSpotlightArtist(data.artists);
+        .limit(SPOTLIGHT_PER_DAY);
+
+      const picked = (data || []).map(r => r.artists).filter(Boolean);
+      if (picked.length >= SPOTLIGHT_PER_DAY) {
+        if (!cancelled) setSpotlightArtists(picked.slice(0, SPOTLIGHT_PER_DAY));
+        return;
+      }
+
+      // Top up from the same eligibility rule the scheduled function uses:
+      // a real profile image, not suspended, at least one track. Rotated by
+      // date so it is stable for the whole day and different tomorrow.
+      const { data: pool } = await supabase
+        .from('artists')
+        .select('id, artist_name, slug, profile_image_url, total_streams, follower_count, is_verified')
+        .not('profile_image_url', 'is', null)
+        .neq('profile_image_url', '')
+        .eq('is_suspended', false)
+        .gt('track_count', 0)
+        .order('total_streams', { ascending: false })
+        .limit(60);
+
+      const already = new Set(picked.map(a => a.id));
+      const candidates = (pool || []).filter(a => !already.has(a.id));
+
+      if (candidates.length) {
+        const dayIndex = Math.floor(Date.parse(today) / 86400000);
+        const offset   = ((dayIndex % candidates.length) + candidates.length) % candidates.length;
+        for (let i = 0; picked.length < SPOTLIGHT_PER_DAY && i < candidates.length; i++) {
+          picked.push(candidates[(offset + i) % candidates.length]);
+        }
+      }
+
+      if (!cancelled) setSpotlightArtists(picked.slice(0, SPOTLIGHT_PER_DAY));
     };
+
     fetchSpotlight();
+    return () => { cancelled = true; };
   }, [user]);
 
   // ── Fetch "You haven't heard this yet" tracks ────────────────────────────
@@ -513,14 +567,14 @@ export default function HomePage() {
           .select('*, artists!tracks_artist_id_fkey(artist_name, slug, profile_image_url)')
           .eq('is_published', true)
           .order('engagement_score', { ascending: false })
-          .limit(heardIds.length > 0 ? 20 : 10);
+          .limit(heardIds.length > 0 ? 40 : 20);
 
         if (heardIds.length > 0) {
           query = query.not('id', 'in', `(${heardIds.join(',')})`);
         }
 
         const { data } = await query;
-        setUnheardTracks((data || []).slice(0, 10).map(t => ({
+        setUnheardTracks((data || []).slice(0, ROW_TARGET).map(t => ({
           ...t,
           artist_name: t.artists?.artist_name || 'Unknown Artist',
           artist_slug: t.artists?.slug || null,
@@ -837,38 +891,45 @@ export default function HomePage() {
         </Section>
       )}
 
-      {/* Artist of the Day — one undiscovered artist picked for this user */}
-      {user && spotlightArtist && (
+      {/* Artists of the Day — three undiscovered artists picked for this user */}
+      {user && spotlightArtists.length > 0 && (
         <div className="mx-6 mb-6">
           <div className="flex items-center space-x-2 mb-3">
             <Compass className="w-3.5 h-3.5 text-blue-400/60" />
-            <span className="section-label">Artist of the Day</span>
+            <span className="section-label">
+              {spotlightArtists.length > 1 ? 'Artists of the Day' : 'Artist of the Day'}
+            </span>
           </div>
-          <button
-            onClick={() => navigate(`/artist/${spotlightArtist.slug}`)}
-            className="w-full flex items-center space-x-4 p-4 rounded-2xl border border-blue-500/15 bg-gradient-to-r from-blue-500/8 to-transparent hover:border-blue-500/25 transition group"
-          >
-            <div className="w-16 h-16 rounded-2xl overflow-hidden bg-white/[0.06] flex-shrink-0">
-              {spotlightArtist.profile_image_url
-                ? <img src={spotlightArtist.profile_image_url} alt={spotlightArtist.artist_name || ''} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
-                : <div className="w-full h-full flex items-center justify-center"><Music className="w-6 h-6 text-white/20" /></div>
-              }
-            </div>
-            <div className="flex-1 min-w-0 text-left">
-              <div className="flex items-center space-x-1.5 mb-0.5">
-                <p className="text-base font-semibold text-white truncate">{spotlightArtist.artist_name}</p>
-                {spotlightArtist.is_verified && <VerifiedBadge size="md" />}
-              </div>
-              <p className="text-xs text-white/35">
-                {spotlightArtist.total_streams > 0
-                  ? `${formatNumber(spotlightArtist.total_streams)} streams · You haven't heard them yet`
-                  : 'An artist worth discovering'}
-              </p>
-              <span className="inline-block mt-2 text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-blue-500/15 text-blue-400">
-                Discover →
-              </span>
-            </div>
-          </button>
+          <div className="space-y-2">
+            {spotlightArtists.map(artist => (
+              <button
+                key={artist.id}
+                onClick={() => navigate(`/artist/${artist.slug}`)}
+                className="w-full flex items-center space-x-4 p-4 rounded-2xl border border-blue-500/15 bg-gradient-to-r from-blue-500/8 to-transparent hover:border-blue-500/25 transition group"
+              >
+                <div className="w-16 h-16 rounded-2xl overflow-hidden bg-white/[0.06] flex-shrink-0">
+                  {artist.profile_image_url
+                    ? <img src={artist.profile_image_url} alt={artist.artist_name || ''} loading="lazy" decoding="async" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                    : <div className="w-full h-full flex items-center justify-center"><Music className="w-6 h-6 text-white/20" /></div>
+                  }
+                </div>
+                <div className="flex-1 min-w-0 text-left">
+                  <div className="flex items-center space-x-1.5 mb-0.5">
+                    <p className="text-base font-semibold text-white truncate">{artist.artist_name}</p>
+                    {artist.is_verified && <VerifiedBadge size="md" />}
+                  </div>
+                  <p className="text-xs text-white/35">
+                    {artist.total_streams > 0
+                      ? `${formatNumber(artist.total_streams)} streams · You haven't heard them yet`
+                      : 'An artist worth discovering'}
+                  </p>
+                  <span className="inline-block mt-2 text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-blue-500/15 text-blue-400">
+                    Discover →
+                  </span>
+                </div>
+              </button>
+            ))}
+          </div>
         </div>
       )}
 

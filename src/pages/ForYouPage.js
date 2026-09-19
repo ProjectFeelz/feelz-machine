@@ -15,6 +15,7 @@ import { useNavigate } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 import ReactPlayer from 'react-player';
 import { supabase } from '../supabaseClient';
+import { resolveStreamSrc } from '../utils/streamUrl';
 import { sendNotification } from '../utils/notify';
 import TrackCommentSheet from '../components/TrackCommentSheet';
 import { useAuth } from '../contexts/AuthContext';
@@ -1432,9 +1433,15 @@ export default function ForYouPage() {
     const next = tracks[idx + 1];
     if (next?.file_url && !next.youtube_url && !preloadedRef.current.has(next.id)) {
       preloadedRef.current.add(next.id);
-      const audio = new Audio();
-      audio.preload = 'metadata';
-      audio.src = next.file_url;
+      // Resolved rather than read straight off the row, so this keeps working
+      // when feelz-samples goes private. With REACT_APP_PRIVATE_AUDIO unset it
+      // resolves to file_url synchronously enough to be the same preload.
+      resolveStreamSrc(next).then(src => {
+        if (!src) return;
+        const audio = new Audio();
+        audio.preload = 'metadata';
+        audio.src = src;
+      });
     }
   }, [idx, tracks]);
 

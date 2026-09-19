@@ -6,7 +6,7 @@ import { ArrowLeft } from 'lucide-react';
 
 const COMPANY      = 'Feelz Machine';
 const CONTACT      = 'privacy@feelzmachine.com';
-const LAST_UPDATED = 'May 2026';
+const LAST_UPDATED = 'September 2026';
 
 function Section({ title, children }) {
   return (
@@ -73,6 +73,7 @@ export default function PrivacyPolicy() {
           <p><strong className="text-white/70">Recommendation algorithm:</strong> Stream counts, engagement scores, follows, and listening history are used to personalise the For You feed for each user. The algorithm surfaces music from artists you follow and discovers new artists based on your listening patterns.</p>
           <p><strong className="text-white/70">Content discovery:</strong> Published tracks, albums, and artist profiles are indexed and made discoverable across the Platform including search, browse, and algorithmic feeds.</p>
           <p><strong className="text-white/70">Notifications:</strong> If you opt in to push notifications, we send you alerts about new releases from artists you follow, competition results, and platform activity relevant to your account.</p>
+          <p><strong className="text-white/70">Direct marketing:</strong> We email you about {COMPANY} — features, releases, competitions and announcements — and artists you follow may email you about their music. You are opted in to both by default when you create an account and when you follow an artist, and you may opt out of either at any time, free of charge, using the unsubscribe link in any message or under Email Preferences in your Hub. Our lawful basis is section 69(3) of POPIA, which permits direct marketing to a person whose details were obtained in the course of your relationship with us, for similar products and services, while an easy objection is available at collection and in every message. Section 14 of our Terms of Use sets this out in full.</p>
           <p><strong className="text-white/70">Security & fraud prevention:</strong> We analyse usage patterns to detect and prevent fake streams, bot activity, and account abuse.</p>
           <p><strong className="text-white/70">Legal compliance:</strong> We may process your data to comply with applicable laws or to respond to lawful requests from authorities.</p>
         </Section>
@@ -118,6 +119,7 @@ export default function PrivacyPolicy() {
         <Section title="10. Your Rights">
           <p>Depending on your location, you may have the right to: access the personal data we hold about you; request correction of inaccurate data; request deletion of your data; object to or restrict certain processing; and receive your data in a portable format.</p>
           <p>To exercise any of these rights, contact us at <strong className="text-white/70">{CONTACT}</strong>. We will respond within 30 days. We may need to verify your identity before processing your request.</p>
+          <p><strong className="text-white/70">Objecting to marketing specifically:</strong> You do not need to contact us and you do not need to give a reason. Use the unsubscribe link in any marketing email — it works without a password and takes effect immediately — or open Email Preferences in your Hub, where you can stop Platform emails, or stop a single artist, without stopping the rest. Objecting to marketing does not close your account and does not stop receipts, payout notices or security alerts, which are not marketing.</p>
           <p>You may delete your account and all associated data at any time from your profile settings.</p>
         </Section>
 

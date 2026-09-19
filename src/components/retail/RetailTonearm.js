@@ -1,45 +1,98 @@
 // src/components/retail/RetailTonearm.js
 //
-// The tonearm.
+// The tonearm, redrawn on the shape Steve sent.
 //
-// A record on its own is a black circle. The thing that makes a picture of a
-// record read as a RECORD PLAYER is the arm lying across it — and the arm is
-// also the one part of a deck that has obvious depth: a tube with a lit top
-// edge and a dark underside, a pivot you could put a finger on, a counterweight
-// hanging off the back, and a shadow falling on the vinyl underneath.
+// The previous version was my own invention: a straight tube lying almost
+// level across the record with a counterweight hanging off the back. He sent
+// the Vecteezy phonograph vector and said to use that shape instead and keep
+// the shading. So the SILHOUETTE here is traced from that file and the
+// MATERIAL is the same gradient work as before.
+//
+//
+// WHERE THE NUMBERS COME FROM
+//
+// Measured off the reference rather than eyeballed. The artwork is 1920x1622;
+// its disc is centred at (810, 810) with a radius of 805, so every landmark
+// below was read out of the image and divided by the disc's diameter. That is
+// why the arm sits where it does relative to the label and the rim: it is the
+// reference's own geometry, not a guess that looked close.
+//
+// Measured, in disc units (100 = the diameter):
+//
+//   bearing centre     (100.6, 25.2)
+//   arm leaves pivot   (102.8, 34.5)
+//   first bend         ( 93.0, 56.8)      steep run, about 66 degrees
+//   second bend        ( 81.2, 64.3)      shallow run, about 32 degrees
+//   into the headshell ( 73.0, 76.7)      steep again, about 67 degrees
+//
+// Two deliberate departures from those numbers, both stated rather than
+// silent:
+//
+//   1. The pivot is pulled in from 100.6 to 98. In the reference it sits just
+//      PAST the rim, which is correct for a deck photographed whole. This
+//      record is anchored into the bottom right corner of the page and bleeds
+//      off the right edge, so a pivot outside the rim would be cut off and the
+//      arm would appear to grow out of nothing.
+//   2. Everything downstream is shifted to follow it, so the bends keep the
+//      reference's angles and the arm still lands in the same place on the
+//      record.
+//
 //
 // HOW IT IS BUILT
 //
-// One SVG, drawn in the record's own coordinates: the viewBox is 0–100 on both
-// axes and 100 IS the diameter of the record, so the arm scales with it exactly
-// and cannot drift the way it would if it were sized in pixels next to
-// something sized in percentages. The pivot sits at x=110 — outside the box, to
-// the right of the record, where a real one sits beside the platter — which is
-// why the <svg> carries overflow:visible.
+// The arm is ONE polyline, stroked three times: a dark outline underneath, the
+// gradient tube over it, and a white hairline offset up and left for the
+// specular edge. That is exactly how the reference reads, and it means a bend
+// cannot come apart the way three separate rectangles meeting at a corner do.
+// round joins and caps, so the elbows are elbows.
 //
-// The depth is four things, none of them a bevel filter:
+// The gradient is userSpaceOnUse and runs top-left to bottom-right across the
+// whole assembly rather than along the tube. A gradient along a polyline would
+// shade the far end differently from the near end; across it is what makes a
+// flat stroke read as a cylinder, and one direction for the whole object is
+// what makes every part agree about where the light is.
 //
-//   1. A gradient ACROSS the tube rather than along it, running bright at the
-//      top edge through mid grey to near-black underneath. That is what makes a
-//      flat rectangle read as a cylinder.
-//   2. A specular hairline sitting just inside the top edge.
-//   3. The pivot as three stacked discs of decreasing size, each with its own
-//      off-centre radial highlight, so the assembly reads as a stepped machined
-//      column rather than a printed circle.
-//   4. A blurred, offset copy of the whole arm painted on the record first —
-//      the shadow is what puts the arm ABOVE the vinyl instead of on it.
-//
-// It moves once: when nothing is playing the arm is parked out to the right,
-// clear of the record. When the music starts it swings in and sets down. That
-// is the whole animation, it takes about a second, and it is the only thing on
-// this screen that moves other than the record turning.
+// It still moves once: parked clear of the record when nothing is playing,
+// swung in and set down when the music starts. About a second, and the only
+// thing on this screen that moves other than the record turning.
 
 import React from 'react';
+
+// The arm, in disc units. Read the block above before changing any of these.
+const PIVOT = { x: 98, y: 22 };
+const ARM   = [
+  [101.0, 29.0],   // leaves the pivot
+  [ 91.0, 53.0],   // first bend
+  [ 78.0, 61.5],   // second bend
+  [ 70.5, 74.0],   // into the headshell
+];
+const ARM_D = `M ${ARM.map(p => p.join(' ')).join(' L ')}`;
+
+// The headshell hangs off the last segment and follows its angle.
+const [bx, by] = ARM[2];
+const [cx, cy] = ARM[3];
+const SHELL_ANGLE = Math.atan2(cy - by, cx - bx) * 180 / Math.PI;
+const SHELL = { x: 67.4, y: 80.0 };
 
 export default function RetailTonearm({ playing = false, uid = 'a' }) {
   // Unique gradient ids — two players on one page would otherwise share, and
   // the second would inherit the first's fills.
   const g = (n) => `ta-${n}-${uid}`;
+
+  // The whole assembly, drawn once and reused for the shadow passes. Keeping
+  // the shadow as the SAME path rather than a hand-drawn approximation is
+  // what stops the shadow drifting out of agreement with the arm when the
+  // geometry above is adjusted.
+  const arm = (
+    <>
+      <path d={ARM_D} fill="none" stroke={`url(#${g('tube')})`} strokeWidth="4.0"
+        strokeLinecap="round" strokeLinejoin="round" />
+      {/* the lit edge: the same line, nudged up and left, thin and bright */}
+      <path d={ARM_D} fill="none" stroke="#FFFFFF" strokeWidth="0.62"
+        strokeLinecap="round" strokeLinejoin="round" opacity="0.62"
+        transform="translate(-0.78, -0.5)" />
+    </>
+  );
 
   return (
     <svg
@@ -50,19 +103,20 @@ export default function RetailTonearm({ playing = false, uid = 'a' }) {
       aria-hidden="true"
     >
       <defs>
-        {/* The tube, lit from above. Bright edge, fast falloff, dark belly. */}
-        <linearGradient id={g('tube')} x1="0" y1="0" x2="0" y2="1">
+        {/* Across the assembly, not along the tube. See the note above. */}
+        <linearGradient id={g('tube')} gradientUnits="userSpaceOnUse"
+          x1="108" y1="14" x2="62" y2="88">
           <stop offset="0%"   stopColor="#F4F7FF" />
-          <stop offset="16%"  stopColor="#D2D9E8" />
-          <stop offset="38%"  stopColor="#9AA3B6" />
-          <stop offset="62%"  stopColor="#5A6274" />
-          <stop offset="86%"  stopColor="#2E3440" />
-          <stop offset="100%" stopColor="#1B1F27" />
+          <stop offset="14%"  stopColor="#D2D9E8" />
+          <stop offset="40%"  stopColor="#9AA3B6" />
+          <stop offset="66%"  stopColor="#666E80" />
+          <stop offset="88%"  stopColor="#343A46" />
+          <stop offset="100%" stopColor="#242933" />
         </linearGradient>
 
-        {/* The machined column. Highlight off to the upper left, so every disc
-            in the stack agrees about where the light is. */}
-        <radialGradient id={g('pivot')} cx="34%" cy="28%" r="78%">
+        {/* The bearing housing. Highlight to the upper left, like everything
+            else on this object. */}
+        <radialGradient id={g('pivot')} cx="34%" cy="28%" r="80%">
           <stop offset="0%"   stopColor="#F2F5FD" />
           <stop offset="26%"  stopColor="#C2C9D8" />
           <stop offset="58%"  stopColor="#767E90" />
@@ -70,31 +124,16 @@ export default function RetailTonearm({ playing = false, uid = 'a' }) {
           <stop offset="100%" stopColor="#1D212B" />
         </radialGradient>
 
-        <radialGradient id={g('cap')} cx="36%" cy="26%" r="72%">
-          <stop offset="0%"   stopColor="#FFFFFF" />
-          <stop offset="34%"  stopColor="#D8DEEC" />
-          <stop offset="72%"  stopColor="#828A9C" />
-          <stop offset="100%" stopColor="#2A2F3A" />
-        </radialGradient>
-
-        {/* The counterweight — same light, heavier material. */}
-        <linearGradient id={g('weight')} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%"   stopColor="#C8CEDC" />
-          <stop offset="30%"  stopColor="#8A92A4" />
-          <stop offset="70%"  stopColor="#3C424F" />
-          <stop offset="100%" stopColor="#1A1E25" />
+        {/* The headshell is plastic, not chrome: flatter, warmer, less
+            specular. The reference draws it a plain dark grey; this is that
+            colour with the light put back on it. */}
+        <linearGradient id={g('shell')} gradientUnits="userSpaceOnUse"
+          x1="72" y1="74" x2="62" y2="88">
+          <stop offset="0%"   stopColor="#565062" />
+          <stop offset="40%"  stopColor="#33303C" />
+          <stop offset="100%" stopColor="#16141C" />
         </linearGradient>
 
-        {/* The headshell is plastic, not chrome: flatter, warmer, less specular. */}
-        <linearGradient id={g('shell')} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%"   stopColor="#4A4256" />
-          <stop offset="45%"  stopColor="#2A2634" />
-          <stop offset="100%" stopColor="#14121A" />
-        </linearGradient>
-
-        <filter id={g('soft')} x="-30%" y="-30%" width="160%" height="160%">
-          <feGaussianBlur stdDeviation="1.4" />
-        </filter>
         {/* Down: a hard little shadow right under the cartridge. */}
         <filter id={g('tight')} x="-80%" y="-200%" width="260%" height="500%">
           <feGaussianBlur stdDeviation="0.55" />
@@ -104,135 +143,139 @@ export default function RetailTonearm({ playing = false, uid = 'a' }) {
         <filter id={g('wide')} x="-80%" y="-200%" width="260%" height="500%">
           <feGaussianBlur stdDeviation="2.1" />
         </filter>
-        {/* The whole arm's shadow, lifted: further out and softer. */}
-        <filter id={g('softUp')} x="-40%" y="-40%" width="180%" height="180%">
-          <feGaussianBlur stdDeviation="3.1" />
+        <filter id={g('soft')} x="-40%" y="-40%" width="180%" height="180%">
+          <feGaussianBlur stdDeviation="1.5" />
+        </filter>
+        <filter id={g('softUp')} x="-50%" y="-50%" width="200%" height="200%">
+          <feGaussianBlur stdDeviation="3.2" />
         </filter>
       </defs>
 
-      {/* Everything pivots about the post at (110, 86). Parked out to the right
-          when silent, set down on the record when playing. */}
+      {/* Everything pivots about the bearing. Parked clear of the record when
+          silent, set down on it when playing. */}
       <g
         style={{
-          transform: playing ? 'rotate(0deg)' : 'rotate(7.5deg)',
-          transformOrigin: '103px 79px',
+          // NEGATIVE parks it. Positive is clockwise in SVG's y-down frame,
+          // which swings the headshell UP AND LEFT — in towards the label,
+          // which is the one place a parked arm must never be. Out and down,
+          // towards the rim where the rest is.
+          transform: playing ? 'rotate(0deg)' : 'rotate(-11deg)',
+          transformOrigin: `${PIVOT.x}px ${PIVOT.y}px`,
           transformBox: 'view-box',
           transition: 'transform 1.05s cubic-bezier(0.25, 0.9, 0.25, 1)',
         }}
       >
-        {/* 1. THE SHADOW, on the vinyl. Drawn first, offset down and left of
-               the light, blurred. This is the single element doing most of the
-               work of lifting the arm off the record. */}
-        {/* Down — close to the record, so the shadow sits almost under the arm
-            and keeps its edges. */}
+        {/* 1. THE SHADOW ON THE VINYL, drawn first.
+               Two copies crossfading rather than one being animated: blur
+               radius cannot be transitioned in CSS, so each state gets its
+               own and only the opacity changes. Close and sharp when the arm
+               is down, further and softer when it is lifted — nothing about
+               the arm changes size, and it still reads as rising off the
+               record. */}
         <g
           filter={`url(#${g('soft')})`}
-          transform="translate(-1.6, 3.2)"
-          style={{ opacity: playing ? 0.55 : 0, transition: 'opacity 0.9s ease' }}
+          transform="translate(-1.8, 3.4)"
+          style={{ opacity: playing ? 0.52 : 0, transition: 'opacity 0.9s ease' }}
         >
-          <rect x="33" y="74.2" width="71" height="3.8" rx="1.9" fill="#000" />
-          <circle cx="103" cy="79" r="9.4" fill="#000" />
-          <rect x="27" y="73.6" width="11" height="6.4" rx="1.6" fill="#000"
-            transform="rotate(-17, 33, 76.8)" />
+          <path d={ARM_D} fill="none" stroke="#000" strokeWidth="5.2"
+            strokeLinecap="round" strokeLinejoin="round" />
+          <circle cx={PIVOT.x} cy={PIVOT.y} r="12.4" fill="#000" />
         </g>
-        {/* Lifted — further from the record, so the same shadow throws further
-            and loses its edges. This pair is the whole trick: nothing about the
-            arm changes size, and it still reads as rising off the vinyl. */}
         <g
           filter={`url(#${g('softUp')})`}
-          transform="translate(-3.4, 7.0)"
-          style={{ opacity: playing ? 0 : 0.34, transition: 'opacity 0.9s ease' }}
+          transform="translate(-3.6, 7.2)"
+          style={{ opacity: playing ? 0 : 0.30, transition: 'opacity 0.9s ease' }}
         >
-          <rect x="33" y="74.2" width="71" height="4.6" rx="2.3" fill="#000" />
-          <circle cx="103" cy="79" r="10.2" fill="#000" />
-          <rect x="27" y="73.6" width="12" height="7.2" rx="1.8" fill="#000"
-            transform="rotate(-17, 33, 76.8)" />
+          <path d={ARM_D} fill="none" stroke="#000" strokeWidth="6.0"
+            strokeLinecap="round" strokeLinejoin="round" />
+          <circle cx={PIVOT.x} cy={PIVOT.y} r="13.2" fill="#000" />
         </g>
 
-        {/* 2. THE ARM. A straight tube from the pivot out over the record,
-               almost level — the angle is small on purpose: an arm drawn at a
-               dramatic diagonal stops looking like it is resting and starts
-               looking like it is falling. */}
-        <g transform="rotate(-2.3, 103, 79)">
-          <rect x="36" y="77.2" width="67" height="3.6" rx="1.8" fill={`url(#${g('tube')})`} />
-          {/* the lit edge */}
-          <rect x="38" y="77.7" width="62" height="0.8" rx="0.4" fill="#FFFFFF" opacity="0.52" />
-          {/* the seam where the tube meets its underside */}
-          <rect x="38" y="79.7" width="62" height="0.42" rx="0.21" fill="#000" opacity="0.35" />
-          {/* the collar where the arm enters the pivot */}
-          <rect x="94.4" y="76.4" width="4.6" height="5.2" rx="1.3" fill={`url(#${g('pivot')})`} />
+        {/* 2. THE ARM. Dark outline first, tube over it, hairline on top —
+               the reference's three-pass look, as one polyline so the bends
+               hold together. */}
+        <path d={ARM_D} fill="none" stroke="#1C1F27" strokeWidth="5.5"
+          strokeLinecap="round" strokeLinejoin="round" opacity="0.92" />
+        {arm}
+
+        {/* 3. THE HEADSHELL, on the end of the last segment and turned to
+               match it. A rounded block with its own lit edge, the two
+               fixing screws, and the cartridge under the front of it. */}
+        <g transform={`rotate(${SHELL_ANGLE - 90}, ${SHELL.x}, ${SHELL.y})`}>
+          {/* the collar where the arm enters the shell */}
+          <rect x={SHELL.x - 2.1} y={SHELL.y - 8.2} width="4.2" height="3.4" rx="1.1"
+            fill={`url(#${g('pivot')})`} stroke="#1C1F27" strokeWidth="0.5" />
+          <rect x={SHELL.x - 5.4} y={SHELL.y - 5.6} width="10.8" height="13.4" rx="2.6"
+            fill={`url(#${g('shell')})`} stroke="#15131B" strokeWidth="0.6" />
+          {/* the lit edge, up the left side the way the reference draws it */}
+          <rect x={SHELL.x - 4.4} y={SHELL.y - 4.6} width="1.15" height="10.6" rx="0.58"
+            fill="#FFFFFF" opacity="0.30" />
+          <rect x={SHELL.x - 4.6} y={SHELL.y - 5.0} width="8.6" height="0.55" rx="0.28"
+            fill="#E6EAF6" opacity="0.42" />
+          {/* fixing screws */}
+          <circle cx={SHELL.x - 2.6} cy={SHELL.y - 2.6} r="0.62" fill="#0C0B10" opacity="0.85" />
+          <circle cx={SHELL.x + 2.6} cy={SHELL.y - 2.6} r="0.62" fill="#0C0B10" opacity="0.85" />
+          {/* cartridge, with the platform's violet on its front lip */}
+          <rect x={SHELL.x - 3.5} y={SHELL.y + 4.4} width="7.0" height="3.0" rx="0.8" fill="#17141D" />
+          <rect x={SHELL.x - 3.5} y={SHELL.y + 4.4} width="7.0" height="0.75" rx="0.38"
+            fill="#8B5CF6" opacity="0.58" />
+
+          {/* NO DRAWN NEEDLE.
+              A white pin sticking out of the cartridge reads as a drawing of
+              a stylus rather than a stylus — at this size a real one is a few
+              thousandths of an inch and is simply not visible. What you see
+              on a deck is the shadow: tight and dark when the cartridge is
+              down, wide and soft when it is lifted. So the contact is drawn
+              as shadow alone, and the shadow is what moves. */}
+          <ellipse
+            cx={SHELL.x} cy={SHELL.y + 8.8} rx="2.0" ry="0.62" fill="#000"
+            filter={`url(#${g('tight')})`}
+            style={{ opacity: playing ? 0.72 : 0, transition: 'opacity 0.9s ease' }}
+          />
+          <ellipse
+            cx={SHELL.x + 0.7} cy={SHELL.y + 11.0} rx="4.2" ry="1.5" fill="#000"
+            filter={`url(#${g('wide')})`}
+            style={{ opacity: playing ? 0 : 0.36, transition: 'opacity 0.9s ease' }}
+          />
         </g>
 
-        {/* 3. THE HEADSHELL, angled off the end of the tube the way a real one
-               is, with the cartridge under it and the stylus touching down. */}
-        <g transform="rotate(-2.3, 103, 79)">
-          <g transform="rotate(-17, 36, 79)">
-            <rect x="25.6" y="75.4" width="12.6" height="7.2" rx="1.9" fill={`url(#${g('shell')})`} />
-            <rect x="26.9" y="76.1" width="9.8" height="1.25" rx="0.62" fill="#FFF" opacity="0.24" />
-            <rect x="26.2" y="75.6" width="11.4" height="0.55" rx="0.28" fill="#E6EAF6" opacity="0.45" />
-            {/* the two fixing screws */}
-            <circle cx="28.9" cy="80.6" r="0.68" fill="#0C0B10" opacity="0.85" />
-            <circle cx="34.4" cy="80.6" r="0.68" fill="#0C0B10" opacity="0.85" />
-            {/* cartridge body */}
-            <rect x="26.4" y="81.9" width="7.6" height="3.2" rx="0.8" fill="#17141D" />
-            <rect x="26.4" y="81.9" width="7.6" height="0.8" rx="0.4" fill="#8B5CF6" opacity="0.60" />
-            {/* NO DRAWN NEEDLE.
-                A white pin sticking out of the cartridge read as a drawing of a
-                stylus rather than a stylus — at this size a real one is a few
-                thousandths of an inch and is simply not visible. What you
-                actually see on a deck is the shadow: tight and dark when the
-                cartridge is down on the record, wide and soft when it is
-                lifted. So the contact is drawn as shadow alone, and the shadow
-                is what moves.
-
-                Two ellipses crossfading rather than one being animated: blur
-                radius cannot be transitioned in CSS, so each state gets its own
-                and only the opacity changes. */}
-            <ellipse
-              cx="28.9" cy="86.0" rx="2.0" ry="0.62" fill="#000"
-              filter={`url(#${g('tight')})`}
-              style={{ opacity: playing ? 0.72 : 0, transition: 'opacity 0.9s ease' }}
-            />
-            <ellipse
-              cx="29.6" cy="88.4" rx="4.2" ry="1.5" fill="#000"
-              filter={`url(#${g('wide')})`}
-              style={{ opacity: playing ? 0 : 0.38, transition: 'opacity 0.9s ease' }}
-            />
-          </g>
-        </g>
-
-        {/* 4. THE PIVOT, last so it sits on top of the arm it carries.
-               Drawn as a COLUMN rather than a circle: a wide flat base plate,
-               a short cylindrical wall with the same across-the-tube shading as
-               the arm, and a cap disc on top. A single radial-gradient circle
-               at this size reads as a ball bearing; three flattened ellipses
-               with a wall between them read as a machined post seen from
-               slightly above, which is what the rest of the drawing implies. */}
+        {/* 4. THE BEARING HOUSING, last so it sits on top of the arm it
+               carries. The reference draws it as a grey annulus with a dark
+               outline and a black well in the middle — not a ball bearing, a
+               ring you could put a finger through. Same here, with the light
+               put back on the ring. */}
         <g>
-          {/* the column wall first, then the base plate over its foot — that
-              order is what stops the rectangle's corners showing as a square
-              block sitting on a disc. */}
-          <rect x="96.4" y="77.2" width="13.2" height="4.6" fill={`url(#${g('tube')})`} />
-          {/* base plate on the plinth */}
-          <ellipse cx="103" cy="82.2" rx="8.8" ry="3.4" fill={`url(#${g('pivot')})`} />
-          <ellipse cx="103" cy="82.2" rx="8.8" ry="3.4" fill="none" stroke="#0E1117" strokeWidth="0.35" opacity="0.65" />
-          {/* cap */}
-          <ellipse cx="103" cy="77.2" rx="6.6" ry="2.8" fill={`url(#${g('cap')})`} />
-          <ellipse cx="103" cy="76.9" rx="3.4" ry="1.45" fill={`url(#${g('pivot')})`} />
-          <circle cx="103" cy="76.8" r="0.7" fill="#0B0E13" opacity="0.8" />
-          {/* the glint on the near shoulder of the column */}
-          <ellipse cx="99.4" cy="79.2" rx="1.5" ry="2.1" fill="#FFFFFF" opacity="0.20" />
-        </g>
+          {/* outer ring */}
+          <circle cx={PIVOT.x} cy={PIVOT.y} r="12.1" fill="none"
+            stroke={`url(#${g('pivot')})`} strokeWidth="3.6" />
+          <circle cx={PIVOT.x} cy={PIVOT.y} r="13.9" fill="none"
+            stroke="#1C1F27" strokeWidth="0.95" opacity="0.9" />
+          <circle cx={PIVOT.x} cy={PIVOT.y} r="10.3" fill="none"
+            stroke="#1C1F27" strokeWidth="0.9" opacity="0.9" />
+          {/* the well */}
+          <circle cx={PIVOT.x} cy={PIVOT.y} r="9.9" fill="#0A0A0E" />
+          <circle cx={PIVOT.x} cy={PIVOT.y} r="7.6" fill="none"
+            stroke="#3A4050" strokeWidth="0.7" opacity="0.65" />
+          {/* the glint on the upper left of the ring, so the housing agrees
+              with the tube about the light */}
+          <path
+            d={`M ${PIVOT.x - 9.6} ${PIVOT.y - 5.6} A 11 11 0 0 1 ${PIVOT.x - 4.2} ${PIVOT.y - 10.6}`}
+            fill="none" stroke="#FFFFFF" strokeWidth="1.5" strokeLinecap="round" opacity="0.40"
+          />
 
-
-        {/* 6. THE COUNTERWEIGHT, on the back of the arm. A short thick cylinder on a
-               stub, which is what balances a real arm and what tells the eye
-               this object has mass. */}
-        <g transform="rotate(-15, 103, 79)">
-          <rect x="99" y="77.8" width="14.5" height="2.6" rx="1.3" fill={`url(#${g('tube')})`} />
-          <rect x="108.6" y="73.4" width="11.4" height="11.4" rx="4.1" fill={`url(#${g('weight')})`} />
-          <rect x="110.3" y="74.7" width="7.8" height="1.6" rx="0.8" fill="#FFF" opacity="0.32" />
-          <rect x="112.7" y="73.4" width="1" height="11.4" fill="#000" opacity="0.30" />
+          {/* The counterweight stub, drawn LAST and overlapping the ring.
+              Drawn before it, the ring's outline cut across its root and the
+              stub read as a separate white pill floating beside the housing
+              rather than a part bolted to it. It also starts inside the ring's
+              outer edge for the same reason. The reference draws it in the
+              same place, at the same angle, in the same grey as the housing —
+              not the brighter tube grey, which is what made it jump out. */}
+          <g transform={`rotate(-42, ${PIVOT.x}, ${PIVOT.y})`}>
+            <rect x={PIVOT.x + 9.4} y={PIVOT.y - 2.2} width="7.6" height="4.4" rx="2.2"
+              fill={`url(#${g('pivot')})`} stroke="#1C1F27" strokeWidth="0.6" />
+            <rect x={PIVOT.x + 10.6} y={PIVOT.y - 1.35} width="4.6" height="1.0" rx="0.5"
+              fill="#FFFFFF" opacity="0.28" />
+          </g>
         </g>
 
       </g>

@@ -59,6 +59,7 @@
 
 const { createClient } = require('@supabase/supabase-js');
 const { sendMany } = require('../lib/email');
+const { unsubscribeUrl } = require('../lib/unsubscribeToken');
 const { buildNewsletterEmail } = require('../lib/newsletter-template');
 
 const supabase = createClient(
@@ -216,18 +217,26 @@ exports.handler = async (event) => {
   }
 
   // ── Send ────────────────────────────────────────────────────────────────
-  const unsubBase = `${SITE_URL}/contact-preferences`;
-
+  //
+  // The unsubscribe link no longer points at /contact-preferences.
+  //
+  // That page requires a sign-in, so the only way out of this mail was to
+  // remember a password. Feelz Machine opts people in by default and lets them
+  // opt out, which POPIA section 69 permits for people you already have a
+  // relationship with — but only while objecting stays free and easy, in every
+  // message. A password prompt is not easy, and it is the single thing that
+  // would have made the opt-out regime indefensible.
+  //
+  // Each recipient now gets their own signed token, so the link works with no
+  // account and no session, and oneClick can be claimed honestly: the POST
+  // branch of that function unsubscribes with no page and no interaction,
+  // which is what RFC 8058 requires of a List-Unsubscribe-Post URL.
   const outcome = await sendMany(
     todo.map(r => ({
       email: r.email,
       name: r.name || null,
-      // Points at the preferences page, which requires a sign-in. No
-      // List-Unsubscribe-Post is claimed, because a one-click header must
-      // resolve without authentication and this does not. See the note in
-      // netlify/lib/email.js.
-      unsubscribeUrl: unsubBase,
-      oneClick: false,
+      unsubscribeUrl: unsubscribeUrl(SITE_URL, r.email, 'platform'),
+      oneClick: true,
     })),
     (r) => buildNewsletterEmail(post, r, r.unsubscribeUrl, SITE_URL)
   );

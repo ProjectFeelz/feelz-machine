@@ -17,6 +17,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import useGoBack from '../hooks/useGoBack';
 import TipButton from '../components/TipButton';
 import { supabase } from '../supabaseClient';
+import { resolveStreamSrc, resolveStreamLater } from '../utils/streamUrl';
 import { useAuth } from '../contexts/AuthContext';
 import {
   Play, Pause, SkipForward, X, Users, Music, Radio,
@@ -866,8 +867,17 @@ export default function ListeningSessionPage() {
     if (!track?.file_url) return;
 
     const audio = audioRef.current;
-    if (audio.src !== track.file_url) {
+    // Compared by track id, not by URL.
+    //
+    // This used to be `audio.src !== track.file_url`, which stops being a
+    // stable comparison the moment the src is a short lived signed URL: the
+    // strings never match, so every sync tick would reassign the source and
+    // restart the song under everybody in the room. The id is the thing that
+    // actually identifies what is loaded.
+    if (audio.dataset.feelzTrackId !== String(track.id)) {
+      audio.dataset.feelzTrackId = String(track.id);
       audio.src = track.file_url;
+      resolveStreamLater(audio, track);
     }
 
     // Compute expected playback position with sub-second precision
@@ -899,9 +909,11 @@ export default function ListeningSessionPage() {
   const hostPlay = async () => {
     const currentTrack = queue.find(q => q.track_id === session.current_track_id)?.tracks;
     if (!currentTrack?.file_url) return;
-    // Always ensure src is set — may have been lost on re-mount
-    if (audioRef.current.src !== currentTrack.file_url) {
-      audioRef.current.src = currentTrack.file_url;
+    // Always ensure src is set — may have been lost on re-mount.
+    // Compared by id for the same reason as syncAudio above.
+    if (audioRef.current.dataset.feelzTrackId !== String(currentTrack.id)) {
+      audioRef.current.dataset.feelzTrackId = String(currentTrack.id);
+      audioRef.current.src = (await resolveStreamSrc(currentTrack)) || currentTrack.file_url;
     }
     await updateSession({ is_playing: true, started_at: new Date().toISOString() });
     audioRef.current.play().catch(() => {});
@@ -917,7 +929,8 @@ export default function ListeningSessionPage() {
     const currentIdx = queue.findIndex(q => q.track_id === session.current_track_id);
     const next = queue[currentIdx + 1];
     if (!next) return;
-    audioRef.current.src = next.tracks?.file_url || '';
+    audioRef.current.dataset.feelzTrackId = String(next.tracks?.id || '');
+    audioRef.current.src = (next.tracks ? await resolveStreamSrc(next.tracks) : null) || next.tracks?.file_url || '';
     await updateSession({ current_track_id: next.track_id, playback_pos: 0, is_playing: true, started_at: new Date().toISOString() });
     audioRef.current.play().catch(() => {});
   };
@@ -930,7 +943,8 @@ export default function ListeningSessionPage() {
     if (data) {
       setQueue(prev => [...prev, data]);
       if (!session.current_track_id) {
-        audioRef.current.src = track.file_url || '';
+        audioRef.current.dataset.feelzTrackId = String(track.id);
+        audioRef.current.src = (await resolveStreamSrc(track)) || track.file_url || '';
         await updateSession({ current_track_id: track.id, playback_pos: 0 });
       }
     }

@@ -196,10 +196,17 @@ export default function ArtistProfilePage() {
       const trackIds = (trackData || []).map(t => t.id);
       if (!trackIds.length) return;
 
+      // Capped. This had no limit at all: every stream row the artist has ever
+      // had, pulled into the browser to be counted in a loop. On a popular
+      // artist it was the heaviest request on the page by a wide margin.
+      // Newest first, so the top five reflect recent listening rather than
+      // whichever thousand rows the server happened to return.
       const { data: streamData } = await supabase
         .from('streams')
         .select('user_id')
-        .in('track_id', trackIds);
+        .in('track_id', trackIds)
+        .order('created_at', { ascending: false })
+        .limit(1000);
       if (!streamData?.length) return;
 
       // Count streams per user
@@ -305,10 +312,15 @@ export default function ArtistProfilePage() {
   // ── Weekly discovery count (how many new listeners this week) ────────────
   useEffect(() => {
     if (!artist?.id) return;
+    const ids = tracks.map(t => t.id).filter(Boolean);
+    // Fired once with an empty id list before tracks landed, and the count was
+    // requested WITHOUT head: true — so it downloaded every matching row and
+    // then counted them, to display one number.
+    if (!ids.length) { setWeeklyDiscoveries(0); return; }
     const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
     supabase.from('streams')
-      .select('user_id', { count: 'exact' })
-      .in('track_id', tracks.map(t => t.id).filter(Boolean))
+      .select('user_id', { count: 'exact', head: true })
+      .in('track_id', ids)
       .gte('created_at', weekAgo)
       .then(({ count }) => setWeeklyDiscoveries(count || 0));
   }, [artist?.id, tracks]);
@@ -363,9 +375,12 @@ export default function ArtistProfilePage() {
 supabase.from('follows').select('*', { count: 'exact', head: true })
   .eq('artist_id', artistData.id)
   .then(({ count }) => setFollowerCount(count || 0));
-      const { data: themeData } = await supabase
+      // The theme read does not depend on anything below it, and nothing below
+      // it depends on the theme, so it no longer blocks the track list. It is
+      // started here and awaited after the tracks land.
+      const themePromise = supabase
         .from('artist_themes').select('*').eq('artist_id', artistData.id).maybeSingle();
-      if (themeData) setTheme(themeData);
+
       let trackQuery = supabase
         .from('tracks')
         .select('*, albums(title, cover_artwork_url, price), pay_what_you_want, minimum_price, is_preorder, release_date')
@@ -387,10 +402,24 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
       // access is honoured by the gate rather than by hiding rows here.
       const { data: trackData } = await trackQuery;
       setTracks(trackData || []);
+
+      const { data: themeData } = await themePromise;
+      if (themeData) setTheme(themeData);
+
       if (user) {
-        const { data: likes } = await supabase.from('track_likes').select('track_id').eq('user_id', user.id);
+        // Scoped to THIS artist's tracks. It used to fetch the viewer's entire
+        // like history across the whole platform in order to tick hearts on
+        // one page — a list that grows forever and is thrown away on
+        // navigation, and which the 1000 row cap silently truncates, so a
+        // heavy liker's older likes stopped showing as liked.
+        const ids = (trackData || []).map(t => t.id).filter(Boolean);
         const likeMap = {};
-        (likes || []).forEach(l => { likeMap[l.track_id] = true; });
+        if (ids.length) {
+          const { data: likes } = await supabase
+            .from('track_likes').select('track_id')
+            .eq('user_id', user.id).in('track_id', ids);
+          (likes || []).forEach(l => { likeMap[l.track_id] = true; });
+        }
         setLikedTracks(likeMap);
       }
       // Fetch artist's own playlists + collaborative playlists
@@ -495,29 +524,17 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
       // viewer by RLS cannot leak its existence through a credit.
       .filter(col => col.tracks && col.tracks.is_published);
       setCollabs(uniqueCollabs);
-      if (user) {
-        const artistTrackIds = (trackData || []).map(t => t.id).filter(Boolean);
-        const { data: streamData } = artistTrackIds.length > 0
-          ? await supabase
-              .from('streams').select('track_id, tracks(genre, mood)')
-              .eq('user_id', user.id).in('track_id', artistTrackIds).limit(50)
-          : { data: [] };
-        if (streamData && streamData.length > 0) {
-          const tagCounts = {};
-          streamData.forEach(s => {
-            const g = s.tracks?.genre; const m = s.tracks?.mood;
-            if (g) tagCounts[g] = (tagCounts[g] || 0) + 1;
-            if (m) tagCounts[m] = (tagCounts[m] || 0) + 1;
-          });
-          // The Recommended For You block that lived here is gone with its
-          // row. It ran two extra queries on every profile load to build
-          // something nothing renders.
-        }
-      }
-      const { data: artistGenres } = await supabase
-        .from('tracks').select('genre, mood')
-        .eq('artist_id', artistData.id).eq('is_published', true).limit(20);
-      if (artistGenres && artistGenres.length > 0) {
+      // The streams read that used to sit here is gone. Its result was
+      // tallied into tagCounts and then discarded — the row that consumed it
+      // was deleted and the query outlived it. A blocking round trip on every
+      // signed in profile load, for nothing.
+
+      // Genres come from trackData, which is already in hand from the tracks
+      // read above. This used to be a SECOND read of the same table with the
+      // same filter, awaited in series, to get two columns that were already
+      // on the rows we had.
+      const artistGenres = (trackData || []).slice(0, 40);
+      if (artistGenres.length > 0) {
         const genres = [...new Set(artistGenres.map(t => t.genre).filter(Boolean))];
         const moods = [...new Set(artistGenres.map(t => t.mood).filter(Boolean))];
         const allTags = [...genres, ...moods];

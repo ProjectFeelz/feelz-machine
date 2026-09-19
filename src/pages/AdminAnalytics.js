@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
@@ -36,16 +36,28 @@ function pct(a, b) {
   return ((a / b) * 100).toFixed(1) + '%';
 }
 
-function dayRange(days) {
-  const map = {};
-  for (let i = days - 1; i >= 0; i--) {
-    const d = new Date(); d.setDate(d.getDate() - i);
-    const key = days <= 7
-      ? d.toLocaleDateString('en-US', { weekday: 'short' })
-      : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-    map[key] = 0;
-  }
-  return map;
+// dayRange() used to live here. It built an empty bucket map in the browser
+// and the fetchers then counted raw rows into it. Two things were wrong with
+// that and both showed up as "the numbers do not change when I toggle".
+//
+//   * The rows never all arrived. PostgREST caps a response at 1000 and the
+//     stream read was ordered ASCENDING, so a busy 30 day window handed the
+//     browser the OLDEST thousand events and the recent days came back empty.
+//   * The bucketing differed by range. At 7 days the key was a weekday name,
+//     so anything between 7 and 6 days ago landed on TODAY's name and inflated
+//     today. At 30 days the key was "Sep 18", so the same rows produced a key
+//     that was not in the map and were dropped. The two views were not the
+//     same measurement over different windows.
+//
+// Counting now happens in the database (migration 137) and comes back one row
+// per day, already bucketed. This only puts a label on it.
+function dayLabel(isoDate, days) {
+  // 'YYYY-MM-DD' parsed as UTC midnight shifts a day backwards west of
+  // Greenwich, so build it as local midnight instead.
+  const d = new Date(`${isoDate}T00:00:00`);
+  return days <= 7
+    ? d.toLocaleDateString('en-US', { weekday: 'short' })
+    : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
 // ── Sub-components ────────────────────────────────────────────────────────────
@@ -174,7 +186,21 @@ export default function AdminAnalytics({ embedded = false }) {
   const [contactStats, setContactStats]           = useState({});
   const [topContactedArtists, setTopContactedArtists] = useState([]);
 
+  // Last click wins, not last response.
+  //
+  // fetchAll is ~30 awaited round trips. Toggling 30d then 7d starts a second
+  // run while the first is still going, and both write every piece of state
+  // unconditionally — so the slower 30 day run can land after the 7 day run
+  // and repaint the page with 30 day numbers while the 7d button sits
+  // highlighted. That is indistinguishable, from the outside, from "analytics
+  // are not updating". A generation counter fixes it: a run that is no longer
+  // the newest writes nothing.
+  const runIdRef = useRef(0);
+
   const fetchAll = useCallback(async (isRefresh = false) => {
+    const runId   = ++runIdRef.current;
+    const current = () => runId === runIdRef.current;
+
     if (isRefresh) setRefreshing(true); else setLoading(true);
 
     try {
@@ -210,12 +236,21 @@ export default function AdminAnalytics({ embedded = false }) {
         supabase.from('listeners').select('*', { count: 'exact', head: true }).gte('last_seen_at', cutoff),
       ]);
 
-      // Total streams from tracks table
+      // Total streams.
+      //
+      // This was tracks.select('stream_count') summed in the browser, which the
+      // 1000 row cap turned into "the sum of the first thousand published
+      // tracks" — a figure that quietly stops moving once the catalogue passes
+      // a thousand and never says so. Summed in the database now.
       let totalStreams = 0;
       try {
-        const { data: ts } = await supabase.from('tracks').select('stream_count').eq('is_published', true);
-        totalStreams = (ts || []).reduce((s, t) => s + (t.stream_count || 0), 0);
-      } catch {}
+        const { data: totals } = await supabase.rpc('admin_platform_totals');
+        totalStreams = Number(totals?.catalogue_stream_count || 0);
+      } catch (err) {
+        console.error('[analytics] admin_platform_totals failed:', err?.message || err);
+      }
+
+      if (!current()) return;   // a newer range was picked while these were in flight
 
       const streamDelta = prevStreamCount > 0
         ? Math.round(((streamCount - prevStreamCount) / prevStreamCount) * 100) : null;
@@ -238,94 +273,85 @@ export default function AdminAnalytics({ embedded = false }) {
         artistDelta,
       });
 
-      // ── Stream timeline ───────────────────────────────────────────────────
-      const { data: streamRows } = await supabase
-        .from('streams').select('created_at').gte('created_at', cutoff).order('created_at');
-      const streamMap = dayRange(range);
-      (streamRows || []).forEach(s => {
-        const d = new Date(s.created_at);
-        const key = range <= 7
-          ? d.toLocaleDateString('en-US', { weekday: 'short' })
-          : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-        if (streamMap[key] !== undefined) streamMap[key]++;
-      });
-      setStreamTimeline(Object.entries(streamMap).map(([date, streams]) => ({ date, streams })));
+      // ── Timelines, counted server side ────────────────────────────────────
+      // One row per day each, so there is nothing left to truncate and the 7
+      // day and 30 day views are the same measurement over different windows.
+      const [
+        { data: streamDays,  error: streamDaysErr },
+        { data: signupDays,  error: signupDaysErr },
+        { data: uploadDays,  error: uploadDaysErr },
+      ] = await Promise.all([
+        supabase.rpc('admin_stream_timeline', { p_days: range }),
+        supabase.rpc('admin_signup_timeline', { p_days: range }),
+        supabase.rpc('admin_upload_timeline', { p_days: range }),
+      ]);
 
-      // ── Signup timeline ───────────────────────────────────────────────────
-      const { data: signupRows } = await supabase
-        .from('artists').select('created_at').gte('created_at', cutoff);
-      const signupMap = dayRange(range);
-      (signupRows || []).forEach(a => {
-        const key = range <= 7
-          ? new Date(a.created_at).toLocaleDateString('en-US', { weekday: 'short' })
-          : new Date(a.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-        if (signupMap[key] !== undefined) signupMap[key]++;
-      });
-      setSignupTimeline(Object.entries(signupMap).map(([date, artists]) => ({ date, artists })));
+      if (!current()) return;
+      if (streamDaysErr) console.error('[analytics] admin_stream_timeline:', streamDaysErr.message);
+      if (signupDaysErr) console.error('[analytics] admin_signup_timeline:', signupDaysErr.message);
+      if (uploadDaysErr) console.error('[analytics] admin_upload_timeline:', uploadDaysErr.message);
 
-      // ── Upload timeline ───────────────────────────────────────────────────
-      const { data: uploadRows } = await supabase
-        .from('tracks').select('created_at').gte('created_at', cutoff);
-      const uploadMap = dayRange(range);
-      (uploadRows || []).forEach(t => {
-        const key = range <= 7
-          ? new Date(t.created_at).toLocaleDateString('en-US', { weekday: 'short' })
-          : new Date(t.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-        if (uploadMap[key] !== undefined) uploadMap[key]++;
-      });
-      setUploadTimeline(Object.entries(uploadMap).map(([date, uploads]) => ({ date, uploads })));
+      setStreamTimeline((streamDays || []).map(r => ({
+        date: dayLabel(r.day, range), streams: Number(r.streams) || 0,
+      })));
+      setSignupTimeline((signupDays || []).map(r => ({
+        date: dayLabel(r.day, range), artists: Number(r.artists) || 0,
+      })));
+      setUploadTimeline((uploadDays || []).map(r => ({
+        date: dayLabel(r.day, range), uploads: Number(r.uploads) || 0,
+      })));
 
-      // ── Device split ──────────────────────────────────────────────────────
-      // Everything on the Behaviour tab is computed from this one read, and this
-      // read is RLS-scoped. `streams` has no admin policy: the SELECT policies
-      // are "Streams are viewable by owner" and "Artists can read streams of
-      // their tracks", so an admin querying with their own JWT gets the streams
-      // of their OWN tracks and nothing else. The completion rate, the average
-      // listen time, the sample size and the source and device splits were all
-      // presented as platform figures while describing one artist.
+      // ── Behaviour: device, source, completion ─────────────────────────────
       //
-      // `placeholders` exists because of the other half of the story. Until
-      // migration 107, log_stream wrote every row with duration_played = 30 and
-      // completed = true, and finalise_stream never ran on a skip. Those rows
-      // are still here, and they are what makes the average land on exactly
-      // 0:30 and the completion rate implausibly high — so the tab now says how
-      // many of its sample are still placeholders instead of averaging them in
-      // silently.
-      const { data: deviceRows, error: deviceErr } = await supabase
-        .from('streams').select('device_type, source, completed, duration_played').gte('created_at', cutoff).limit(10000);
-      if (deviceErr) console.error('[analytics] streams read failed:', deviceErr.code, deviceErr.message);
+      // Two separate faults lived in this block and both made it lie.
+      //
+      //   1. RLS. `streams` had no admin policy — only "Streams are viewable by
+      //      owner" and "Artists can read streams of their tracks" — so an
+      //      admin reading it with their own JWT got the streams of their OWN
+      //      tracks. Completion rate, average listen time, sample size and both
+      //      splits were one artist's numbers under a platform heading.
+      //      Migration 137 adds "Admins can read all streams".
+      //
+      //   2. The 1000 row cap, again. .limit(10000) does not raise it; the
+      //      server clamps it and says nothing.
+      //
+      // Both are gone: the aggregate is computed in the database over the whole
+      // window, by a function that checks the caller is an admin.
+      //
+      // `placeholders` stays, and still matters. Until migration 107 log_stream
+      // wrote every row with duration_played = 30 and completed = true, and
+      // finalise_stream never ran on a skip. Those rows are still here and they
+      // are what pins the average at exactly 0:30 — so the tab reports how many
+      // of its sample are placeholders rather than averaging them in silently.
+      const { data: behavior, error: behaviorErr } = await supabase
+        .rpc('admin_behavior_summary', { p_days: range });
+      if (!current()) return;
+      if (behaviorErr) console.error('[analytics] admin_behavior_summary:', behaviorErr.message);
+
+      const sample = Number(behavior?.sample || 0);
+      const pctOf  = (n) => (sample ? Math.round((Number(n) / sample) * 100) : 0);
+
       // 'venue' is a real third value, not a stray: retail plays record it.
-      // The live catalogue reports exactly three — desktop, mobile, venue — and
-      // the old `dc[s.device_type]++` turned every venue play into NaN on a new
-      // key that `total` never summed, so retail listening was missing from
-      // this split entirely rather than showing up anywhere.
+      // Anything outside the known set lands in Unknown rather than creating a
+      // key the total never reads.
       const dc = { mobile: 0, desktop: 0, venue: 0, unknown: 0 };
-      const sc = {}, completedCount = { yes: 0, no: 0 }, durAll = [];
-      let placeholders = 0;
-      (deviceRows || []).forEach(s => {
-        // Bucketed against the known set, so a value nobody anticipated lands
-        // in Unknown instead of writing NaN to a key the total never reads.
-        const bucket = Object.prototype.hasOwnProperty.call(dc, s.device_type)
-          ? s.device_type : 'unknown';
-        dc[bucket]++;
-        sc[s.source || 'unknown'] = (sc[s.source || 'unknown'] || 0) + 1;
-        if (s.completed) completedCount.yes++; else completedCount.no++;
-        if (s.duration_played > 0) durAll.push(s.duration_played);
-        // The pre-107 signature: exactly 30 seconds and completed true, which
-        // is what log_stream hardcoded rather than anything a listener did.
-        if (s.duration_played === 30 && s.completed === true) placeholders++;
+      Object.entries(behavior?.devices || {}).forEach(([k, v]) => {
+        const bucket = Object.prototype.hasOwnProperty.call(dc, k) ? k : 'unknown';
+        dc[bucket] += Number(v) || 0;
       });
-      const totalStreamsForPct = (deviceRows || []).length || 1;
-      setSourceSplit(Object.entries(sc).map(([name, count]) => ({
-        name: name.replace(/_/g,' ').replace(/\b\w/g, c => c.toUpperCase()),
-        value: count, pct: Math.round((count/totalStreamsForPct)*100),
-      })).sort((a,b) => b.value - a.value));
+
+      setSourceSplit(Object.entries(behavior?.sources || {}).map(([name, count]) => ({
+        name: name.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+        value: Number(count) || 0,
+        pct: pctOf(count),
+      })).sort((a, b) => b.value - a.value));
+
       setCompletionStats({
-        rate: Math.round((completedCount.yes / totalStreamsForPct) * 100),
-        avgDuration: durAll.length ? Math.round(durAll.reduce((a,b)=>a+b,0)/durAll.length) : 0,
-        total: (deviceRows || []).length,
-        placeholders,
-        scope: deviceErr ? 'error' : 'own',
+        rate: pctOf(behavior?.completed),
+        avgDuration: Math.round(Number(behavior?.avg_seconds || 0)),
+        total: sample,
+        placeholders: Number(behavior?.placeholders || 0),
+        scope: behaviorErr ? 'error' : 'platform',
       });
 
       // Sitewide listener demographics. Location and completion come from
@@ -380,6 +406,8 @@ export default function AdminAnalytics({ embedded = false }) {
         { name: 'Venue',   value: dc.venue,   pct: pct(dc.venue, total),   color: GREEN  },
         { name: 'Unknown', value: dc.unknown, pct: pct(dc.unknown, total), color: '#4b5563' },
       ].filter(d => d.value > 0 || d.name === 'Mobile' || d.name === 'Desktop'));
+
+      if (!current()) return;
 
       // ── Tier split ────────────────────────────────────────────────────────
       const { data: tierRows } = await supabase
@@ -697,6 +725,9 @@ export default function AdminAnalytics({ embedded = false }) {
       console.error('Analytics error:', err);
     }
 
+    // A superseded run must not clear the spinner either, or the newer run
+    // renders as finished while it is still fetching.
+    if (!current()) return;
     setLoading(false);
     setRefreshing(false);
   }, [range]);

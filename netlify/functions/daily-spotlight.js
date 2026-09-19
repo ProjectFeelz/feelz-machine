@@ -2,14 +2,22 @@
  * netlify/functions/daily-spotlight.js
  *
  * Runs daily at 00:05 UTC via netlify.toml schedule.
- * For every active listener, picks one artist they have NEVER streamed
- * and writes a row to daily_artist_spotlight so the home page can read it.
+ * For every active listener, picks SPOTLIGHT_PER_DAY artists they have NEVER
+ * streamed and writes a row each to daily_artist_spotlight so the home page
+ * can read them.
  *
  * Strategy:
  *   1. Get all artists the user has ever streamed
- *   2. From the remaining artists (published, with tracks), pick the one
- *      with the highest engagement_score they haven't seen as a spotlight before
- *   3. Upsert into daily_artist_spotlight (unique on user_id + spotlight_date)
+ *   2. From the remaining artists (published, with tracks), take the ones
+ *      with the highest total_streams they haven't seen as a spotlight before
+ *   3. Upsert into daily_artist_spotlight
+ *      (unique on user_id + spotlight_date + artist_id, migration 136)
+ *
+ * NOTE: migration 136 must be applied before deploying this. Until it is, the
+ * unique key is (user_id, spotlight_date) and the second and third rows would
+ * overwrite the first rather than sit beside it. The home page tops itself up
+ * client side either way, so a lagging migration shows three artists, just not
+ * the personalised ones.
  *
  * Required env vars:
  *   SUPABASE_URL
@@ -25,6 +33,9 @@ const supabase = createClient(
 
 const BATCH_SIZE = 100;
 const TODAY = new Date().toISOString().split('T')[0];
+
+// Must match SPOTLIGHT_PER_DAY in src/pages/HomePage.js.
+const SPOTLIGHT_PER_DAY = 3;
 
 exports.handler = async (event) => {
   const isManual = event.httpMethod === 'POST';
@@ -48,6 +59,8 @@ exports.handler = async (event) => {
       .select('id, artist_name, slug, profile_image_url, total_streams, follower_count')
       .not('profile_image_url', 'is', null)
       .neq('profile_image_url', '')
+      .eq('is_suspended', false)
+      .gt('track_count', 0)
       .order('total_streams', { ascending: false })
       .limit(500);
 
@@ -63,8 +76,15 @@ exports.handler = async (event) => {
       .eq('spotlight_date', TODAY)
       .in('user_id', userIds);
 
-    const alreadySet = new Set((alreadySpotlit || []).map(r => r.user_id));
-    const eligible = activeListeners.filter(l => !alreadySet.has(l.user_id));
+    // Count per user, not a bare set: a listener who already has one artist for
+    // today still needs the other two.
+    const haveToday = {};
+    (alreadySpotlit || []).forEach(r => {
+      haveToday[r.user_id] = (haveToday[r.user_id] || 0) + 1;
+    });
+    const eligible = activeListeners.filter(
+      l => (haveToday[l.user_id] || 0) < SPOTLIGHT_PER_DAY
+    );
 
     if (!eligible.length) {
       return { statusCode: 200, body: JSON.stringify({ skipped: true, reason: 'all users already have spotlight today' }) };
@@ -92,28 +112,59 @@ exports.handler = async (event) => {
           // Get artists this user has already seen as spotlight (avoid repeats)
           const { data: pastSpotlights } = await supabase
             .from('daily_artist_spotlight')
-            .select('artist_id')
+            .select('artist_id, spotlight_date')
             .eq('user_id', listener.user_id);
 
           const seenSpotlightIds = new Set((pastSpotlights || []).map(r => r.artist_id));
-
-          // Pick the highest-ranked undiscovered, unspotlighted artist
-          const pick = allArtists.find(a =>
-            !streamedArtistIds.has(a.id) && !seenSpotlightIds.has(a.id)
+          // Artists this user already has for TODAY, from a partial earlier run.
+          // Seeded into `taken` below so the looser passes cannot pick them
+          // again and report an assignment that was really a no-op upsert.
+          const todayIds = new Set(
+            (pastSpotlights || []).filter(r => r.spotlight_date === TODAY).map(r => r.artist_id)
           );
 
-          // Fallback: if they've heard everyone, pick least-recently spotlighted
-          const fallback = pick || allArtists.find(a => !streamedArtistIds.has(a.id)) || allArtists[0];
+          // Fill in three tiers of preference, best first, without repeating an
+          // artist inside the same day.
+          const need   = SPOTLIGHT_PER_DAY - (haveToday[listener.user_id] || 0);
+          const chosen = [];
+          const taken  = new Set(todayIds);
 
-          if (!fallback) continue;
+          const take = (predicate) => {
+            for (const a of allArtists) {
+              if (chosen.length >= need) return;
+              if (taken.has(a.id)) continue;
+              if (!predicate(a)) continue;
+              taken.add(a.id);
+              chosen.push(a);
+            }
+          };
 
-          await supabase.from('daily_artist_spotlight').upsert({
-            user_id: listener.user_id,
-            artist_id: fallback.id,
-            spotlight_date: TODAY,
-          }, { onConflict: 'user_id,spotlight_date' });
+          // 1. Never streamed and never spotlighted before.
+          take(a => !streamedArtistIds.has(a.id) && !seenSpotlightIds.has(a.id));
+          // 2. Never streamed, even if spotlighted before.
+          take(a => !streamedArtistIds.has(a.id));
+          // 3. Anyone, so the row still fills on a small catalogue.
+          take(() => true);
 
-          assigned++;
+          if (!chosen.length) continue;
+
+          const { error: upsertErr } = await supabase
+            .from('daily_artist_spotlight')
+            .upsert(
+              chosen.map(a => ({
+                user_id: listener.user_id,
+                artist_id: a.id,
+                spotlight_date: TODAY,
+              })),
+              { onConflict: 'user_id,spotlight_date,artist_id' }
+            );
+
+          if (upsertErr) {
+            console.error(`Spotlight upsert failed for ${listener.user_id}:`, upsertErr.message);
+            continue;
+          }
+
+          assigned += chosen.length;
         } catch (err) {
           console.error(`Spotlight error for user ${listener.user_id}:`, err.message);
         }

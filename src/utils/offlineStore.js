@@ -42,6 +42,8 @@
 // returns today. Without an expiry, one Fan Pro month would buy a permanent
 // library, which is a different product.
 
+import { cachedStreamSrc } from './streamUrl';
+
 const DB_NAME    = 'feelz-offline';
 const DB_VERSION = 1;
 
@@ -517,7 +519,15 @@ export function offlineSrcSync(trackId) {
 }
 
 export function playbackSrc(track) {
-  return offlineSrcSync(track?.id) || track?.file_url || null;
+  // Order matters, and it is: the copy on this device, then a signed
+  // streaming URL if one is already cached, then the stored file_url.
+  //
+  // cachedStreamSrc is a synchronous cache read and returns null unless
+  // REACT_APP_PRIVATE_AUDIO is on, so with the flag off this is byte for byte
+  // the old behaviour. With it on and the cache cold, file_url is still what
+  // gets assigned and PlayerContext swaps in the signed URL a moment later —
+  // which is why the bucket must stay public until that swap is proven.
+  return offlineSrcSync(track?.id) || cachedStreamSrc(track?.id) || track?.file_url || null;
 }
 
 export function isOfflineSrc(src) {

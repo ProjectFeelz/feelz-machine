@@ -601,12 +601,21 @@ export default function LoginPage() {
           )}
         </div>
 
-        {/* Terms */}
-        <p className="text-center text-[11px] text-white/20 mt-6">
+        {/* Terms, and the marketing notice.
+            POPIA section 69 lets Feelz Machine opt people in by default rather
+            than asking them to tick a box, but only where the person was given
+            a reasonable opportunity to object AT THE TIME their details were
+            collected — not only later, buried in a settings page. This line is
+            that opportunity. Terms section 14 is the detail; this is the
+            sentence the person actually reads, at the moment it applies. */}
+        <p className="text-center text-[11px] text-white/20 mt-6 leading-relaxed">
           By continuing, you agree to our{' '}
           <a href="/terms-of-use" className="text-white/30 hover:text-white/50 underline">Terms</a>
           {' '}and{' '}
           <a href="/privacy-policy" className="text-white/30 hover:text-white/50 underline">Privacy Policy</a>
+          , and to emails from Feelz Machine and from artists you follow.
+          You can stop them any time from the link in any email, or in{' '}
+          <a href="/contact-preferences" className="text-white/30 hover:text-white/50 underline">Email Preferences</a>.
         </p>
       </div>
     </div>

@@ -14,8 +14,7 @@ import {
   ChevronRight, Crown, Zap, Star, LayoutDashboard,
   User, LogOut, DollarSign, Radio, Mic2,
   Loader, X, Youtube, Info, Search,
-  Plus, MessageSquare, Check, Send, Store, Trophy, Sparkles, EyeOff, Bug, Newspaper,
-} from 'lucide-react';
+  Plus, MessageSquare, Check, Send, Store, Trophy, Sparkles, EyeOff, Bug, Newspaper, MailCheck} from 'lucide-react';
 import { sendNotification } from '../utils/notify';
 
 function LinkCard({ icon: Icon, label, description, path, color, onClick }) {
@@ -387,6 +386,13 @@ export default function HubPage() {
               <LinkCard icon={DollarSign} label="Payments" description="PayPal settings and earnings" path="/profile" color="bg-emerald-500/20" />
             )}
             <LinkCard icon={EyeOff} label="Hidden" description="Artists and tracks you took out of your feed" path="/hidden" color="bg-white/[0.06]" />
+            {/* /contact-preferences had a route and NO link, anywhere in the
+                app. The only way anyone reached it was by typing the URL or
+                following an unsubscribe link from an email they had already
+                been sent. A consent page nobody can find is not consent, and
+                POPIA section 11(3) requires the objection to be as easy to
+                make as it was to be signed up. This is that way in. */}
+            <LinkCard icon={MailCheck} label="Email Preferences" description="Choose what artists and the platform may send you" path="/contact-preferences" color="bg-white/[0.06]" />
             <LinkCard icon={Info} label="About" description="App info, plans, privacy and terms" path="/about" color="bg-white/[0.06]" />
             {/* The one deliberate way in.
                 The bug room is a pinned chat room, so it used to sit at the

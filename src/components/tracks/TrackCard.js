@@ -15,7 +15,11 @@ export default function TrackCard({ track, trackList = [], showArtwork = true, i
   const { currentTrack, isPlaying, playTrack, addToQueue } = usePlayer();
   const { user } = useAuth();
   const navigate = useNavigate();
-  const { tap, success, light } = useHaptics();
+  // heavy was used at line 115 and never destructured here, so handlePlay
+  // threw ReferenceError on every tap. This file is not imported anywhere, so
+  // the build never compiled it and the error never surfaced — but it would
+  // the moment anyone wired the component up.
+  const { tap, success, light, heavy } = useHaptics();
 
   const isCurrentTrack     = currentTrack?.id === track.id;
   const isCurrentAndPlaying = isCurrentTrack && isPlaying;

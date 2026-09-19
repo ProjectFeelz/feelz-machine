@@ -18,7 +18,7 @@
 // mouse or who does not know the card can be swiped.
 
 import React from 'react';
-import { Music, X, Bookmark, Play, Pause, RotateCcw, ChevronLeft } from 'lucide-react';
+import { Music, X, Bookmark, Play, Pause, RotateCcw, ChevronLeft, ChevronRight } from 'lucide-react';
 import { R } from './retailTheme';
 
 const SWIPE_COMMIT = 110;   // px past which a release counts as a decision
@@ -186,8 +186,27 @@ export default function RetailVibeDeck({
   // swiping quickly through five vibes fires one fetch at the end rather than
   // five, each of which would start a track nobody hears.
   const topId = top?.id;
+
+  // The first fire after mount is NOT a swipe.
+  //
+  // This is why coming back from the record stopped the music. "All vibes"
+  // only flips a view flag — it does not navigate and it does not touch the
+  // audio element — but it REMOUNTS this component, the effect below ran for
+  // whatever card happened to be on top, and onPreview() loads that playlist:
+  // pause, reset, fetch a different tracklist. The room went quiet because it
+  // was asked to preview something else, not because going back stops
+  // playback.
+  //
+  // A preview caused by actually swiping to a new card still fires, because
+  // that is the deck's whole purpose. Only the mount is skipped, and only
+  // while something is already playing.
+  const firstFireRef = React.useRef(true);
   React.useEffect(() => {
     if (!topId) return;
+    if (firstFireRef.current) {
+      firstFireRef.current = false;
+      if (isPreviewing) return;   // the room is playing; leave it alone
+    }
     const t = setTimeout(() => {
       onPreview?.(playlists.find(p => p.id === topId));
     }, 450);
@@ -292,6 +311,49 @@ export default function RetailVibeDeck({
         className="relative mx-auto"
         style={{ width: cardW, height: cardH }}
       >
+        {/* THE ARROWS, desktop only.
+            A swipe is a phone gesture. On a venue's PC the only way through
+            the deck was to drag the card with a mouse, which nobody does, or
+            to find the small round buttons underneath. These say which way
+            the deck moves, in the place the eye already is: beside the card.
+
+            Same commit() as a swipe, so a pass is still a pass and a keep is
+            still a keep — nothing here is a second code path that could
+            disagree with the gesture. Hidden below lg, where the gesture is
+            the natural thing and the screen has no room to spare.
+
+            Sitting just inside the card's edges rather than outside it, on
+            purpose: the fan of cards behind the front one reaches about 0.62
+            of a card-width past each side, and the deck sizes itself so that
+            fan exactly fills the column. There is no space outside it to put
+            anything, so an arrow placed out there would either land on the
+            fanned cards or off the edge of the screen. */}
+        <button
+          onClick={() => commit('left')}
+          title="Pass — not for this room"
+          aria-label="Pass this vibe"
+          className="hidden lg:flex absolute top-1/2 left-2 -translate-y-1/2 w-11 h-11
+                     rounded-full items-center justify-center transition
+                     hover:scale-110 active:scale-95 z-20 backdrop-blur-sm"
+          style={{ background: 'rgba(10,9,14,0.72)', border: `1px solid ${R.borderUp || R.border}`, color: R.text }}
+        >
+          <ChevronLeft className="w-5 h-5" />
+        </button>
+
+        <button
+          onClick={() => commit('right')}
+          title={saved ? 'Already in Your Vibes' : 'Keep — add to Your Vibes'}
+          aria-label="Keep this vibe"
+          className="hidden lg:flex absolute top-1/2 right-2 -translate-y-1/2 w-11 h-11
+                     rounded-full items-center justify-center transition
+                     hover:scale-110 active:scale-95 z-20 backdrop-blur-sm"
+          style={saved
+            ? { background: 'rgba(37,81,196,0.62)', border: '1px solid rgba(37,81,196,0.75)', color: '#DBEAFE' }
+            : { background: 'rgba(10,9,14,0.72)', border: `1px solid ${R.borderUp || R.border}`, color: R.text }}
+        >
+          <ChevronRight className="w-5 h-5" />
+        </button>
+
         {visible.slice().reverse().map((pl) => {
           const d = visible.indexOf(pl);
           const isFront = d === 0;

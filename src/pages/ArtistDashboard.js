@@ -498,20 +498,29 @@ export default function ArtistDashboard() {
   };
 
   // ── Analytics ────────────────────────────────────────────────────────────────
+  // Declared up here with the other hooks, NOT beside fetchTrackAnalytics.
+  // That function lives below the `if (!artist) return ...` early return, so a
+  // hook next to it would run on some renders and not others — the
+  // rules-of-hooks violation that fails the build.
+  const trackRunIdRef = useRef(0);
+
   const fetchStats = useCallback(async () => {
     if (!artist) return;
     setLoading(true);
     try {
+      // One read of tracks, not two.
+      //
+      // This used to select('id') and then, in a second awaited round trip,
+      // select('download_count') from the same table with the same filter —
+      // the same rows fetched twice, in series, to get two columns. On a
+      // connection where each round trip is 300ms that is 300ms of pure wait
+      // for nothing.
       const { data: artistTracks } = await supabase
-        .from('tracks').select('id').eq('artist_id', artist.id);
+        .from('tracks').select('id, download_count').eq('artist_id', artist.id);
       const trackIds = (artistTracks || []).map(t => t.id);
 
-      let streamCount = artist.total_streams || 0, dlCount = 0;
-      if (trackIds.length > 0) {
-        const { data: streamData } = await supabase
-          .from('tracks').select('download_count').eq('artist_id', artist.id);
-        dlCount = (streamData || []).reduce((s, t) => s + (t.download_count || 0), 0);
-      }
+      const streamCount = artist.total_streams || 0;
+      const dlCount = (artistTracks || []).reduce((s, t) => s + (t.download_count || 0), 0);
 
       // Run all counts in parallel for speed
       const [
@@ -558,10 +567,23 @@ export default function ArtistDashboard() {
         .limit(20);
 
       if (tracks?.length) {
-        const likeCounts = await Promise.all(tracks.map(t =>
-          supabase.from('track_likes').select('*', { count: 'exact', head: true }).eq('track_id', t.id)
-        ));
-        setTopTracks(tracks.map((t, i) => ({ ...t, like_count: likeCounts[i]?.count || 0 })));
+        // One query, not twenty.
+        //
+        // This fired a separate count query per track — twenty HTTP requests
+        // on every dashboard load, in parallel but all against the same
+        // connection pool, and it was the heaviest thing on the page. One read
+        // of the like rows for these tracks, tallied here, gives the same
+        // numbers. Capped, because a viral track should not be able to make
+        // the dashboard download a hundred thousand rows: past the cap the
+        // per-track figure is a floor rather than a lie, and the exact totals
+        // live in the stats block above.
+        const ids = tracks.map(t => t.id);
+        const { data: likeRows } = await supabase
+          .from('track_likes').select('track_id').in('track_id', ids).limit(1000);
+
+        const tally = {};
+        (likeRows || []).forEach(r => { tally[r.track_id] = (tally[r.track_id] || 0) + 1; });
+        setTopTracks(tracks.map(t => ({ ...t, like_count: tally[t.id] || 0 })));
       } else {
         setTopTracks([]);
       }
@@ -611,82 +633,97 @@ export default function ArtistDashboard() {
     );
   }
 
+  // Per track analytics.
+  //
+  // Everything here used to be counted in the browser from raw rows, and the
+  // rows never all arrived: PostgREST caps a response at 1000 and .limit(5000)
+  // does not raise that, the server clamps it silently. So a track with more
+  // than a thousand plays in the window reported exactly the cap, and STOPPED
+  // CHANGING between 14 days and 30 days — which is the "analytics are not
+  // updating" symptom, not a display bug.
+  //
+  // Counted in the database now (migration 137). The functions check that the
+  // track belongs to you before they answer.
+  //
+  // Completion still comes from listening_events where it exists: it records
+  // skips and abandonment as outcomes, and rows written before migration 79
+  // carry the old hardcoded streams.completed = true, which would read as 100
+  // percent completion for every early track.
   const fetchTrackAnalytics = async (trackId, days) => {
     if (!trackId) return;
+    const runId   = ++trackRunIdRef.current;
+    const current = () => runId === trackRunIdRef.current;
+
     setTrackAnalyticsLoading(true);
     try {
       const since = new Date(Date.now() - days * 86400000).toISOString();
-      const { data: streamData } = await supabase
-        .from('streams').select('created_at')
-        .eq('track_id', trackId).gte('created_at', since).order('created_at');
-      const { data: likeData } = await supabase
-        .from('track_likes').select('created_at')
-        .eq('track_id', trackId).gte('created_at', since).order('created_at');
 
-      // Build daily buckets
-      const streamMap = {}, likeMap = {};
-      for (let i = days - 1; i >= 0; i--) {
-        const d = new Date(Date.now() - i * 86400000);
-        const key = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-        streamMap[key] = 0; likeMap[key] = 0;
-      }
-      (streamData || []).forEach(s => {
-        const key = new Date(s.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-        if (streamMap[key] !== undefined) streamMap[key]++;
-      });
-      (likeData || []).forEach(l => {
-        const key = new Date(l.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-        if (likeMap[key] !== undefined) likeMap[key]++;
-      });
-      setTrackStreams(Object.entries(streamMap).map(([date, streams]) => ({ date, streams })));
-      setTrackLikes(Object.entries(likeMap).map(([date, likes]) => ({ date, likes })));
+      const [
+        { data: timeline, error: timelineErr },
+        { data: behavior, error: behaviorErr },
+        { data: eventData },
+      ] = await Promise.all([
+        supabase.rpc('artist_track_timeline', { p_track_id: trackId, p_days: days }),
+        supabase.rpc('artist_track_behavior', { p_track_id: trackId, p_days: days }),
+        supabase.from('listening_events')
+          .select('completion_pct, listened_seconds')
+          .eq('track_id', trackId).gte('created_at', since).limit(1000),
+      ]);
 
-      // Full analytics
-      const { data: demoData } = await supabase
-        .from('streams').select('user_id, device_type, completed, duration_played, source')
-        .eq('track_id', trackId).gte('created_at', since).limit(5000);
+      if (timelineErr) console.error('[dashboard] artist_track_timeline:', timelineErr.message);
+      if (behaviorErr) console.error('[dashboard] artist_track_behavior:', behaviorErr.message);
 
-      // Completion comes from listening_events, which remains the better
-      // source: it records skips and abandonment as outcomes in their own
-      // right, not just finished plays.
-      //
-      // streams.completed and duration_played used to be constants,
-      // hardcoded true and about 30 seconds, which made every track look
-      // 100 percent complete. Migration 79 fixed that at the source, so
-      // those columns are now real from that point forward. Rows written
-      // before it still carry the old constants, which is the other reason
-      // this reads listening_events rather than switching over.
-      const { data: eventData } = await supabase
-        .from('listening_events')
-        .select('completion_pct, listened_seconds')
-        .eq('track_id', trackId).gte('created_at', since).limit(5000);
-      if (demoData?.length) {
-        const total = demoData.length;
-        const unique = new Set(demoData.map(s => s.user_id).filter(Boolean)).size;
-        const repeatRate = total > 0 ? Math.round(((total - unique) / total) * 100) : 0;
-        // Null rather than 0 when there is not enough data yet, so the UI
-        // can show a dash instead of asserting "0 percent completion",
-        // which would be a different lie from the old one.
+      // Toggling 7d then 30d fires two runs; only the newest may write.
+      if (!current()) return;
+
+      const label = (isoDate) =>
+        new Date(`${isoDate}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+      setTrackStreams((timeline || []).map(r => ({ date: label(r.day), streams: Number(r.streams) || 0 })));
+      setTrackLikes((timeline || []).map(r => ({ date: label(r.day), likes: Number(r.likes) || 0 })));
+
+      const total = Number(behavior?.total || 0);
+
+      if (total > 0) {
+        const unique     = Number(behavior?.unique_users || 0);
+        const repeatRate = total > 0 ? Math.round((Number(behavior?.repeat_users || 0) / total) * 100) : 0;
+
+        // Null rather than 0 when there is not enough data yet, so the UI can
+        // show a dash instead of asserting "0 percent completion", which would
+        // be a different lie from the old one.
         const pcts = (eventData || []).map(e => e.completion_pct).filter(p => p !== null && p !== undefined);
         const completionRate = pcts.length >= 5
           ? Math.round(pcts.filter(p => p >= 80).length / pcts.length * 100)
           : null;
         const secs = (eventData || []).map(e => e.listened_seconds || 0).filter(d => d > 0);
         const avgDuration = secs.length >= 5
-          ? Math.round(secs.reduce((a,b) => a+b,0) / secs.length)
+          ? Math.round(secs.reduce((a, b) => a + b, 0) / secs.length)
           : null;
-        const dc = {}, sc = {};
-        demoData.forEach(s => {
-          const d = s.device_type || 'unknown'; dc[d] = (dc[d]||0)+1;
-          const src = s.source || 'unknown'; sc[src] = (sc[src]||0)+1;
+
+        const shape = (obj, pretty) => Object.entries(obj || {})
+          .map(([name, count]) => ({
+            name: pretty(name),
+            count: Number(count) || 0,
+            pct: Math.round((Number(count) / total) * 100),
+          }))
+          .sort((a, b) => b.count - a.count);
+
+        setDemographics({
+          totalStreams: total,
+          uniqueListeners: unique,
+          repeatRate,
+          completionRate,
+          avgDuration,
+          devices: shape(behavior?.devices, n => n.charAt(0).toUpperCase() + n.slice(1)),
+          sources: shape(behavior?.sources, n => n.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())),
         });
-        const devices = Object.entries(dc).map(([name,count]) => ({ name: name.charAt(0).toUpperCase()+name.slice(1), count, pct: Math.round((count/total)*100) })).sort((a,b)=>b.count-a.count);
-        const sources = Object.entries(sc).map(([name,count]) => ({ name: name.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase()), count, pct: Math.round((count/total)*100) })).sort((a,b)=>b.count-a.count);
-        setDemographics({ totalStreams: total, uniqueListeners: unique, repeatRate, completionRate, avgDuration, devices, sources });
       } else {
         setDemographics({ totalStreams: 0, uniqueListeners: 0, repeatRate: 0, completionRate: null, avgDuration: null, devices: [], sources: [] });
       }
-    } catch {}
+    } catch (err) {
+      console.error('[dashboard] track analytics failed:', err?.message || err);
+    }
+    if (!current()) return;
     setTrackAnalyticsLoading(false);
   };
 

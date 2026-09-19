@@ -21,6 +21,26 @@ const NEVER_CACHE_ORIGINS = [
 
 const NEVER_CACHE_PATHS = ['/.netlify/functions/', '/auth/'];
 
+// Paths that are NOT the single-page app, even though the browser asks for
+// them with req.mode === 'navigate'.
+//
+// The navigation handler below answers every navigation with the cached
+// index.html shell. Its comment claims that is always right because Netlify's
+// /* -> /index.html rule turns every path into the shell anyway. That is not
+// true: netlify.toml has force = true 200-rules serving real files for these
+// paths, and the worker was overriding all of them, then caching the HTML
+// shell under those keys. Typing /sitemap.xml loaded the app.
+//
+// Returning without calling respondWith() hands the request back to the
+// browser, which fetches it normally.
+const PASS_THROUGH_NAVIGATIONS = [
+  '/sitemap.xml',
+  '/robots.txt',
+  '/.well-known/',      // assetlinks.json for the Android app link
+  '/manifest.json',
+  '/service-worker.js',
+];
+
 // ── Offline listening ────────────────────────────────────────────────────────
 // Saved music lives in IndexedDB (see src/utils/offlineStore.js for why it is
 // not in a Cache bucket: the build rewrites CACHE_VERSION on every deploy and
@@ -231,6 +251,13 @@ self.addEventListener('fetch', e => {
 
   if (shouldNeverCache(url)) return;
 
+  // Not the app. Let the browser fetch it.
+  if (req.mode === 'navigate'
+      && url.origin === self.location.origin
+      && PASS_THROUGH_NAVIGATIONS.some(p => url.pathname === p || url.pathname.startsWith(p))) {
+    return;
+  }
+
   // Navigation: cached shell FIRST, network in the background.
   //
   // This was network-first with no timeout, and that is the single biggest
@@ -278,9 +305,19 @@ self.addEventListener('fetch', e => {
             // offline even if the install-time precache of /index.html missed,
             // which is exactly the hole a 503 on /admin/content falls through.
             cache.put(req, res.clone()).catch(() => {});
-            caches.open(STATIC_CACHE)
-              .then(c => c.put('/index.html', res.clone()))
-              .catch(() => {});
+
+            // Only seed the shell from something that actually IS the shell.
+            // The pass-through list above catches the paths we know about;
+            // this catches the next one somebody adds to netlify.toml without
+            // remembering this file exists. Caching a sitemap under
+            // /index.html would render XML as the whole app, offline, until
+            // the next deploy rotated the cache.
+            const type = res.headers.get('content-type') || '';
+            if (type.includes('text/html')) {
+              caches.open(STATIC_CACHE)
+                .then(c => c.put('/index.html', res.clone()))
+                .catch(() => {});
+            }
           }
           return res;
         })

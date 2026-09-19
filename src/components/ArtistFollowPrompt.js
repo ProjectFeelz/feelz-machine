@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '../supabaseClient';
+import { resolveStreamSrc } from '../utils/streamUrl';
 import { useAuth } from '../contexts/AuthContext';
 import { usePlayer } from '../contexts/PlayerContext';
 import { useHaptics } from '../hooks/useHaptics';
@@ -202,7 +203,8 @@ export default function ArtistFollowPrompt({ onDone }) {
     try {
       const audio      = new Audio();
       audioRef.current = audio;
-      audio.src        = artist.topTrack.file_url;
+      // Signed when the bucket is private; file_url otherwise.
+      audio.src        = (await resolveStreamSrc(artist.topTrack)) || artist.topTrack.file_url;
       audio.volume     = 0.8;
       audio.preload    = 'auto';
       await new Promise((resolve, reject) => {

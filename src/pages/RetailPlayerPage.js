@@ -14,6 +14,7 @@ import { useNavigate } from 'react-router-dom';
 import { Loader, Play, Pause, SkipForward, MapPin, Megaphone, Bell, User, LogOut, FileText, Shield, Menu, ChevronRight, TrendingUp } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../supabaseClient';
+import { resolveStreamLater } from '../utils/streamUrl';
 import RetailPlaylistComments from '../components/retail/RetailPlaylistComments';
 import RetailDeckView from '../components/retail/RetailDeckView';
 import RetailRecordSleeve from '../components/retail/RetailRecordSleeve';
@@ -413,19 +414,78 @@ export default function RetailPlayerPage() {
   // playlist. Saving puts the vibe in the venue's library and is also
   // what feeds get_venue_playlist_recommendations, so recommendations
   // are refetched afterwards, the RPC filters out anything already saved.
+  // Saving a vibe.
+  //
+  // WHY THIS APPEARED TO WORK ON THE DECK AND NOT ON THE RECORD
+  //
+  // It was failing in both places. On the deck you could not tell, because
+  // commit('right') animates the card away whether or not the write lands —
+  // so the gesture always LOOKED like it worked. On the record page the only
+  // feedback is the button turning into "Saved", and that only happens if the
+  // state update runs. The old code did `if (error) return;` and swallowed the
+  // error entirely: no console line, no message, nothing.
+  //
+  // Two changes. The write is now idempotent, because a row that already
+  // exists is not a failure — it is the desired end state, and a unique
+  // violation on (venue_id, playlist_id) was being treated as an error and
+  // silently dropping the save. And anything that really does fail now says
+  // so, on the screen and in the console, instead of pretending.
+  const [saveNotice, setSaveNotice] = React.useState('');
+  React.useEffect(() => {
+    if (!saveNotice) return;
+    const t = setTimeout(() => setSaveNotice(''), 4000);
+    return () => clearTimeout(t);
+  }, [saveNotice]);
+
   const toggleSave = async (playlist) => {
-    if (!venue || !playlist || isPreviewMode) return;
-    const isSaved = savedPlaylistIds.has(playlist.id);
-    if (isSaved) {
-      await supabase.from('retail_venue_saved_playlists')
+    if (!venue || !playlist?.id) return;
+    if (isPreviewMode) {
+      // An admin previewing somebody else's venue must not write to it. Said
+      // out loud, because a button that does nothing and explains nothing is
+      // exactly the bug being fixed here.
+      setSaveNotice('Preview mode: nothing is saved to this venue.');
+      return;
+    }
+
+    const wasSaved = savedPlaylistIds.has(playlist.id);
+
+    // Optimistic, then rolled back if the write fails, so the button responds
+    // to the tap on a slow connection instead of looking dead.
+    setSavedPlaylistIds(prev => {
+      const next = new Set(prev);
+      if (wasSaved) next.delete(playlist.id); else next.add(playlist.id);
+      return next;
+    });
+
+    let failed = null;
+
+    if (wasSaved) {
+      const { error } = await supabase.from('retail_venue_saved_playlists')
         .delete().eq('venue_id', venue.id).eq('playlist_id', playlist.id);
-      setSavedPlaylistIds(prev => { const next = new Set(prev); next.delete(playlist.id); return next; });
+      if (error) failed = error;
     } else {
       const { error } = await supabase.from('retail_venue_saved_playlists')
         .insert({ venue_id: venue.id, playlist_id: playlist.id });
-      if (error) return;
-      setSavedPlaylistIds(prev => new Set(prev).add(playlist.id));
+      // 23505 is a unique violation: the row is already there, which is what
+      // we wanted. Anything else is real.
+      if (error && error.code !== '23505') failed = error;
     }
+
+    if (failed) {
+      console.error('[retail] save failed:', failed.code, failed.message);
+      setSavedPlaylistIds(prev => {
+        const next = new Set(prev);
+        if (wasSaved) next.add(playlist.id); else next.delete(playlist.id);
+        return next;
+      });
+      setSaveNotice(
+        failed.code === '42501' || /row-level security/i.test(failed.message || '')
+          ? 'This venue does not allow saving from this account.'
+          : 'Could not save that vibe. Try again.'
+      );
+      return;
+    }
+
     supabase.rpc('get_venue_playlist_recommendations')
       .then(({ data, error }) => {
         if (error) { console.warn('[retail] recommendations failed:', error.message); return; }
@@ -603,6 +663,14 @@ export default function RetailPlayerPage() {
 
     a.src = desiredSrc;
     a.load();
+
+    // Swap in a signed URL once one is available, so this page keeps playing
+    // when feelz-samples goes private. No-op unless REACT_APP_PRIVATE_AUDIO is
+    // set, and never for an ad, whose audio_url is not a track.
+    if (mode !== 'ad' && currentTrack?.id) {
+      a.dataset.feelzTrackId = String(currentTrack.id);
+      resolveStreamLater(a, currentTrack);
+    }
 
     if (mode === 'ad') {
       logAdPlay(currentAd);
@@ -847,7 +915,20 @@ export default function RetailPlayerPage() {
   }
 
   return (
-    <div className="min-h-screen pb-16" style={{ background: pageBg, color: R.text }}>
+    /* WHY THE DECK PAGE WAS SCROLLING.
+       This carried a permanent pb-16 — 64px of padding left over from the
+       player bar that used to run across the bottom of every screen and is
+       now only there for adverts. The deck below sizes itself to
+       calc(100dvh - 76px) and the header is the other 76px, so the content
+       came to exactly one viewport and then 64px of empty padding pushed it
+       past that. The whole page scrolled to reveal nothing.
+
+       The padding is now only present when there is actually a bar to clear,
+       which is the advert bar, and the deck screen stands still. */
+    <div
+      className={`min-h-screen ${mode === 'ad' ? 'pb-16' : ''}`}
+      style={{ background: pageBg, color: R.text, overflowX: 'hidden' }}
+    >
       <Helmet>
         <title>Feelz Retail, {venue.business_name}</title>
         <meta name="robots" content="noindex, nofollow" />
@@ -1067,6 +1148,7 @@ export default function RetailPlayerPage() {
         storageKey="retail_install_prompt_dismissed"
         blurb="Install it on the venue tablet so it opens like an app and keeps playing."
         positionClass="fixed bottom-28 left-4 right-4 z-40"
+        manualFallback
       />
 
       {/* Account. There was no way to see who you were signed in as or to
@@ -1147,6 +1229,19 @@ export default function RetailPlayerPage() {
           >
             Tap to start playback — your browser needs one tap before it will play audio
           </button>
+        </div>
+      )}
+
+      {/* Why a save did or did not happen. The whole point of this fix is
+          that the old version said nothing at all. */}
+      {saveNotice && (
+        <div className="fixed bottom-24 left-0 right-0 z-30 px-4 pointer-events-none">
+          <div
+            className="mx-auto max-w-sm py-2.5 px-4 rounded-xl text-xs font-semibold text-center"
+            style={{ background: 'rgba(24,20,32,0.96)', border: `1px solid ${R.border}`, color: R.textDim }}
+          >
+            {saveNotice}
+          </div>
         </div>
       )}
 

@@ -238,12 +238,31 @@ async function rollupLearning() {
 
 // ── Main handler ───────────────────────────────────────────────────────────────
 exports.handler = async (event) => {
-  if (event.httpMethod !== 'GET' && event.httpMethod !== 'POST') {
+  // AUTH, and a bug this check was probably causing.
+  //
+  // As written this refused every POST without the secret and waved every GET
+  // through with none. Both halves are wrong:
+  //
+  //   * Netlify invokes a scheduled function as a POST carrying a JSON body
+  //     with a next_run property. So the scheduled run — the only invocation
+  //     this function is supposed to have — was being answered 401 by its own
+  //     auth check. That is the likeliest reason this job shows no output.
+  //   * A GET needing nothing at all was the actual open door, not the POST.
+  //
+  // Netlify does not allow a scheduled function to be invoked by URL at all
+  // ("you can't invoke them directly with a URL"), so the platform is the
+  // outer boundary here and a forged next_run body cannot reach this code.
+  // Inside that, the rule is now: a scheduled invocation, or the secret.
+  // Nothing else.
+  if (event.httpMethod && event.httpMethod !== 'GET' && event.httpMethod !== 'POST') {
     return { statusCode: 405, body: 'Method Not Allowed' };
   }
-  if (event.httpMethod === 'POST') {
-    const secret = event.headers['x-internal-secret'];
-    if (!secret || secret !== process.env.INTERNAL_FUNCTION_SECRET) {
+  {
+    const secret = event.headers?.['x-internal-secret'];
+    let scheduled = false;
+    try { scheduled = !!JSON.parse(event.body || '{}').next_run; } catch { /* not JSON */ }
+
+    if (!scheduled && (!secret || secret !== process.env.INTERNAL_FUNCTION_SECRET)) {
       return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized' }) };
     }
   }

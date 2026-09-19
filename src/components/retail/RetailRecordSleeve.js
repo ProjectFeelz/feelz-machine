@@ -86,19 +86,37 @@ export default function RetailRecordSleeve({
   // why it kept moving instead of landing: the fraction was of the wrong box,
   // so the gap underneath changed with every window.
   //
-  // The rule comes from the marked-up screenshots and is stated as a rule, so
-  // it holds at every size:
+  // THE RECORD COMES FROM THE BOTTOM RIGHT.
   //
-  //   the record is as tall as this area minus a gap of a tenth at the bottom
-  //   and a sliver at the top, it is anchored to THAT GAP, and it keeps a
-  //   margin on the right rather than running off the edge.
+  // It used to float: a tenth of the frame's height as a gap underneath, and a
+  // margin on the right, so the disc sat in the middle of the right-hand side
+  // with air all round it. Steve asked for it to come from the bottom right
+  // corner instead, so it now runs OFF the bottom edge and sits much closer to
+  // the right, and the part you can see is the top of a record that continues
+  // past the page.
   //
-  // At 1911×980 that puts a ~770px record between y≈124 and y≈891, right edge
-  // at x≈1750 — which is the circle drawn on the screenshot, within a few
-  // pixels, reached by measuring rather than by nudging a percentage until it
-  // looked close.
+  // Stated as a rule so it holds at every size:
+  //
+  //   the record bleeds a tenth of its own diameter below the bottom edge, its
+  //   top clears the header by a sliver, and the margin on the right is
+  //   whatever the tonearm needs and no more.
+  //
+  // THE RIGHT MARGIN IS NOT A TASTE DECISION. The tonearm's bearing sits just
+  // outside the rim — that is where it is on the reference vector and where it
+  // is on a real deck — and the housing, with the counterweight stub on the
+  // back of it, reaches about 13 percent of the disc's diameter past the right
+  // edge. A margin any smaller than that slices the pivot in half and the arm
+  // appears to grow out of the edge of the screen; 15 percent leaves a hair of
+  // clearance so a rounding difference cannot shave the stub.
+  // So the margin is derived from the disc, not from the window, and the
+  // window only gets to cap it so the tracklist is never squeezed.
+  //
+  // BLEED is 10 percent and not more for the same kind of reason: the stylus
+  // lands at about 88 percent of the way down the disc, so anything past a
+  // tenth starts cutting off the cartridge — the one part of this drawing that
+  // has to be visible for the picture to mean "playing".
   const frameRef = React.useRef(null);
-  const [geom, setGeom] = React.useState({ disc: 520, gap: 48, right: 60 });
+  const [geom, setGeom] = React.useState({ disc: 520, bleed: 52, right: 68 });
   React.useEffect(() => {
     const measure = () => {
       const el = frameRef.current;
@@ -107,21 +125,25 @@ export default function RetailRecordSleeve({
       const h = el?.clientHeight || (window.innerHeight - HEADER);
       const w = el?.clientWidth  || window.innerWidth;
 
-      const gapBelow = Math.round(h * 0.10);   // the breathing room underneath
       const gapAbove = Math.round(h * 0.04);   // just enough to clear the header
+      const BLEED    = 0.10;                   // of the disc, below the fold
 
-      let d = h - gapBelow - gapAbove;
+      // Solving top = gapAbove with bottom = -BLEED*d gives d = (h - gapAbove)
+      // / (1 - BLEED). Worth spelling out rather than tuning a number until it
+      // looked right, because it is what keeps the top edge steady while the
+      // bottom runs off.
+      let d = Math.round((h - gapAbove) / (1 - BLEED));
       // On a narrow desktop the height alone would hand the record the whole
       // column and leave the tracklist a sliver. The width gets a say.
       d = Math.min(d, Math.round(w * 0.66));
-      d = Math.max(280, Math.min(d, 980));
+      d = Math.max(280, Math.min(d, 1100));
 
-      // The margin on the right. Enough that the record reads as an object on
-      // the page and not a shape leaving it, and it shrinks on a narrow window
-      // rather than squeezing the tracklist.
-      const right = Math.max(16, Math.min(Math.round(w * 0.11), Math.round((w - d) * 0.42)));
+      const bleed = Math.round(d * BLEED);
 
-      setGeom({ disc: d, gap: gapBelow, right });
+      // Room for the pivot housing, capped so the tracklist keeps its column.
+      const right = Math.max(16, Math.min(Math.round(d * 0.15), Math.round((w - d) * 0.45)));
+
+      setGeom({ disc: d, bleed, right });
     };
     measure();
     window.addEventListener('resize', measure);
@@ -405,7 +427,7 @@ export default function RetailRecordSleeve({
               width: disc,
               height: disc,
               right: geom.right,
-              bottom: geom.gap,
+              bottom: -geom.bleed,
               zIndex: 1,
               // The shadow he asked for. Big, soft and offset down-right, so
               // the record sits ON the page rather than being printed into
@@ -436,7 +458,7 @@ export default function RetailRecordSleeve({
               width: disc,
               height: disc,
               right: geom.right,
-              bottom: geom.gap,
+              bottom: -geom.bleed,
               zIndex: 2,
               opacity: pulled ? 1 : 0,
               transition: 'opacity 0.8s ease 0.15s',

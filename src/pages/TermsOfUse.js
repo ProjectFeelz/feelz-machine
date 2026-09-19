@@ -6,7 +6,7 @@ import { ArrowLeft } from 'lucide-react';
 
 const COMPANY     = 'Feelz Machine';
 const CONTACT     = 'legal@feelzmachine.com';
-const LAST_UPDATED = 'May 2026';
+const LAST_UPDATED = 'September 2026';
 
 function Section({ title, children }) {
   return (
@@ -120,26 +120,54 @@ export default function TermsOfUse() {
           <p>We collect streaming data, device information, and engagement metrics to provide artists with analytics about their content's performance. This data is used to operate the Platform, power the recommendation algorithm, and provide per-track analytics to artists. See our Privacy Policy for full details.</p>
         </Section>
 
-        <Section title="14. Prohibited Uses">
+        {/* Steve's decision, stated in the product rather than left implied:
+            following an artist opts you in to hearing from them, and you opt
+            out whenever you like. POPIA section 69 permits exactly that for
+            people you already have a relationship with — but only while the
+            objection stays free and easy, at collection AND in every message.
+            So this section has to say three things, and each one is a promise
+            the code now actually keeps:
+
+              1. what a follow means             (the notice at collection)
+              2. that leaving is one click       (netlify/functions/unsubscribe.js)
+              3. that service mail is different  (so opting out is not scary)
+
+            If any of those three stops being true in the product, this clause
+            stops being a defence and becomes a misrepresentation. */}
+        <Section title="14. Emails & Direct Marketing">
+          <p><strong className="text-white/70">How you are subscribed.</strong> When you create an account, you are subscribed to Platform emails about {COMPANY} — new features, releases, competitions and announcements. When you follow an artist, you are added to that artist's contact list and may receive emails from that artist about their music. We do not ask you to tick a box for either; you are opted in by default and you may opt out at any time. This section is that notice.</p>
+
+          <p><strong className="text-white/70">How you opt out.</strong> Every marketing email we send carries an unsubscribe link that works immediately and needs no password and no account. You can also manage everything in one place, artist by artist, under Email Preferences in your Hub, at any time, for free. We act on an objection as soon as we receive it. If something is already in the process of sending, it may still arrive.</p>
+
+          <p><strong className="text-white/70">What opting out does not stop.</strong> Service messages are not marketing and are not covered by an unsubscribe: purchase receipts, download links, payout and earnings notices, collaboration requests, security and account alerts, and messages we are required to send you by law. You receive these for as long as you have an account.</p>
+
+          <p><strong className="text-white/70">Emails from artists.</strong> An artist on a paid plan may export the contact details of followers who have not opted out of hearing from them, and may email that list about their own music. Artists are not given the details of anyone who has opted out. Each exported contact carries its own unsubscribe link, and artists are required to include it in every message they send. An artist emailing their list is acting as the responsible party for that message: they must identify themselves, they must honour any objection immediately, and they may not sell, share or re-use the list for anything other than their own music. Breaching this is grounds for removal from the Platform.</p>
+
+          <p><strong className="text-white/70">What we never do.</strong> We do not sell your contact details. We do not share them with advertisers. We do not give artists the addresses of people who have opted out of their list, and we do not give any artist the Platform's full membership.</p>
+
+          <p><strong className="text-white/70">Your rights.</strong> You may object to direct marketing at any time, without giving a reason and without charge. You may also ask us what we hold about you, ask for it to be corrected, or ask for it to be deleted. Write to {CONTACT}. These rights are set out in the Protection of Personal Information Act 4 of 2013 and, where it applies to you, the General Data Protection Regulation. See our Privacy Policy for the full picture.</p>
+        </Section>
+
+        <Section title="15. Prohibited Uses">
           <p>You may not: (a) use bots, scripts, or automated tools to artificially inflate stream counts, follower counts, or engagement metrics; (b) attempt to gain unauthorised access to other accounts or Platform systems; (c) scrape or harvest Platform data without permission; (d) use the Platform to transmit spam; (e) attempt to reverse engineer the Platform.</p>
           <p>We use automated and manual systems to detect fraud. Accounts found manipulating metrics will be suspended and may have earnings reversed.</p>
         </Section>
 
-        <Section title="15. Termination">
+        <Section title="16. Termination">
           <p>We may suspend or terminate your account at any time for breach of these Terms. You may delete your account at any time from your profile settings. Upon deletion, your public profile and content will be removed from active circulation.</p>
         </Section>
 
-        <Section title="16. Disclaimers & Limitation of Liability">
+        <Section title="17. Disclaimers & Limitation of Liability">
           <p>The Platform is provided "as is" without warranties of any kind, express or implied. We do not warrant that the Platform will be uninterrupted, error-free, or that content will be preserved indefinitely.</p>
           <p>To the maximum extent permitted by applicable law, {COMPANY} shall not be liable for indirect, incidental, special, or consequential damages arising from your use of the Platform, including loss of revenue, data, or goodwill.</p>
           <p>Our total liability to you for any claim shall not exceed the amount you paid to us in the 12 months preceding the claim.</p>
         </Section>
 
-        <Section title="17. Governing Law">
+        <Section title="18. Governing Law">
           <p>These Terms are governed by applicable law. Disputes will be resolved through good faith negotiation where possible. If you are a consumer, nothing in these Terms affects your statutory rights under applicable consumer protection legislation.</p>
         </Section>
 
-        <Section title="18. Contact">
+        <Section title="19. Contact">
           <p>For legal notices, copyright takedown requests, or questions about these Terms, contact us at <strong className="text-white/70">{CONTACT}</strong>.</p>
         </Section>
       </div>

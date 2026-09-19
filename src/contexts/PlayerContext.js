@@ -3,6 +3,7 @@ import { supabase } from '../supabaseClient';
 import { getTrackAvailability } from '../utils/trackAccess';
 import { useMediaSession } from '../hooks/useMediaSession';
 import { playbackSrc, isSavedOfflineSync, offlineSrcFor } from '../utils/offlineStore';
+import { resolveStreamLater, warmStreamUrls } from '../utils/streamUrl';
 import { buildOfflinePlayRow, queueOfflinePlay, flushOfflinePlays } from '../utils/offlinePlayQueue';
 import { sendNotification, sendStreamDigest } from '../utils/notify';
 
@@ -231,6 +232,22 @@ export function PlayerProvider({ children }) {
   useEffect(() => { repeatRef.current = repeat; }, [repeat]);
   useEffect(() => { volumeRef.current = volume; }, [volume]);
 
+  // Sign ahead of the listener.
+  //
+  // A signed URL has to be fetched, and fetching it at the moment of a tap
+  // would put a round trip in front of every skip. So whenever the queue or
+  // the position in it changes, the current track and the next few are signed
+  // in one batched request. By the time anyone presses next, playbackSrc()
+  // already has the URL and the swap never happens.
+  //
+  // No-op unless REACT_APP_PRIVATE_AUDIO is set.
+  useEffect(() => {
+    if (!queue?.length) return;
+    const start = Math.max(0, queueIndex);
+    const ids = queue.slice(start, start + 4).map(t => t?.id).filter(Boolean);
+    if (ids.length) warmStreamUrls(ids);
+  }, [queue, queueIndex]);
+
   const fetchingSuggestionsRef = useRef(false);
 
   // When we reach the last 2 tracks in the queue, silently fetch similar tracks and append
@@ -336,6 +353,11 @@ export function PlayerProvider({ children }) {
       primaryAudio.src    = playbackSrc(nextTrack);
       primaryAudio.volume = 0;
       primaryAudio.load();
+      // No resolveStreamLater here, for the same reason as resolveLocalLater
+      // below: swapping src mid-crossfade restarts the incoming track under
+      // the fade. The queue warmer above has normally signed this track
+      // already, in which case playbackSrc returned the signed URL and there
+      // is nothing to swap.
       // Not resolveLocalLater here on purpose: swapping src mid-crossfade
       // would restart the incoming track under the fade. A saved track is
       // served through the worker synchronously anyway; the blob fallback
@@ -727,6 +749,10 @@ export function PlayerProvider({ children }) {
     audio.volume = 0;
     audio.load();
     resolveLocalLater(audio, track);
+    // Swaps in a short lived signed URL once one is available, so file_url
+    // stops being a permanent public link to the master audio. No-op unless
+    // REACT_APP_PRIVATE_AUDIO is set. See utils/streamUrl.js.
+    resolveStreamLater(audio, track);
     const playWhenReady = () => {
       audio.play().catch(() => {});
       // Fade in from silence to half the person's set volume. Never
@@ -832,6 +858,7 @@ export function PlayerProvider({ children }) {
       audioRef.current.volume = volumeRef.current;
       audioRef.current.load();
       resolveLocalLater(audioRef.current, prevTrack);
+      resolveStreamLater(audioRef.current, prevTrack);
       const playPrevWhenReady = () => {
         audioRef.current.play().catch(() => {});
         audioRef.current.removeEventListener('canplay', playPrevWhenReady);
@@ -938,6 +965,7 @@ export function PlayerProvider({ children }) {
     audio.src = playbackSrc(track);
     audio.volume = volumeRef.current;
     resolveLocalLater(audio, track);
+    resolveStreamLater(audio, track);
     audio.play().catch(() => {
       audio.load();
       const onReady = () => { audio.play().catch(() => {}); audio.removeEventListener('canplay', onReady); };

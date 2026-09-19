@@ -54,6 +54,9 @@
 // call, no ceiling.
 
 const https = require('https');
+const { unsubscribeUrl } = require('../lib/unsubscribeToken');
+
+const SITE_URL = process.env.URL || process.env.SITE_URL || 'https://www.feelzmachine.com';
 
 function supabaseRequest(path, method, body, key, supabaseUrl, bearerOverride) {
   return new Promise((resolve, reject) => {
@@ -165,8 +168,13 @@ function brandedPreamble({ artistName, count, generatedAt }) {
     [csvField('Contacts'), csvField(String(count))].join(','),
     [csvField('Consent basis'), csvField('Followers who have not opted out of contact from this artist')].join(','),
     [csvField('Your obligations'), csvField(
-      'Every message must identify you and offer a way to unsubscribe. Anyone who asks to be removed must be removed. ' +
+      'Every message must identify you and include that contact\'s unsubscribe_url from the column in this file. ' +
+      'Anyone who asks to be removed must be removed. ' +
       'Re-export before each send — this file is a snapshot and does not update when someone withdraws.'
+    )].join(','),
+    [csvField('unsubscribe_url'), csvField(
+      'One link per contact, specific to you. It needs no Feelz Machine account and it takes effect immediately. ' +
+      'Put it in every message you send to this list.'
     )].join(','),
     [csvField('Source'), csvField('feelzmachine.com')].join(','),
     '',
@@ -261,7 +269,7 @@ exports.handler = async (event) => {
       return {
         statusCode: 200,
         body: JSON.stringify({
-          csv: 'name,email\n',
+          csv: 'name,email,unsubscribe_url\n',
           count: 0,
           note: 'No followers have given permission to be contacted.',
         }),
@@ -329,6 +337,16 @@ exports.handler = async (event) => {
       rows.push({
         name: c.name || nameMap.get(c.user_id) || sub?.name || '',
         email,
+        // A WORKING opt-out, per person, for THIS artist.
+        //
+        // The preamble has always told artists that every message must offer a
+        // way to unsubscribe. It did not give them one, so the only thing they
+        // could put in their own mail-merge was "reply to be removed" — which
+        // is not free of unnecessary effort, does not scale, and puts the
+        // obligation on the artist to remember. This link is a real one: it
+        // needs no account, it writes opted_in = false for this artist, and
+        // the next export from this function will not include the person.
+        unsubscribe_url: unsubscribeUrl(SITE_URL, email, `artist:${artist_id}`),
       });
     }
 
@@ -336,8 +354,8 @@ exports.handler = async (event) => {
 
     const generatedAt = new Date().toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
     const dataBlock = [
-      'name,email',
-      ...rows.map(r => `${csvField(r.name)},${csvField(r.email)}`),
+      'name,email,unsubscribe_url',
+      ...rows.map(r => `${csvField(r.name)},${csvField(r.email)},${csvField(r.unsubscribe_url)}`),
     ];
 
     const csv = (
