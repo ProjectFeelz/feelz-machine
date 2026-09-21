@@ -74,8 +74,8 @@ exports.handler = async (event) => {
   // paypal-order.js only calls this when the capture landed in the platform
   // account. This checks the same thing independently, against the row that was
   // written for the sale, because this function SENDS MONEY and a caller that
-  // gets it wrong — a retry, a replay, a future caller written by someone who
-  // has not read this — spends real funds that never arrived.
+  // gets it wrong, a retry, a replay, a future caller written by someone who
+  // has not read this, spends real funds that never arrived.
   //
   // That is not hypothetical. tip-artist.js paid every tip twice for exactly
   // this reason: one path set a payee on the order, another forwarded the same
@@ -83,7 +83,7 @@ exports.handler = async (event) => {
   // other.
   //
   // A purchase recorded as anything other than 'platform' is not ours to
-  // forward. A row that cannot be found is left alone too — an unknown sale is
+  // forward. A row that cannot be found is left alone too, an unknown sale is
   // not a platform sale.
   if (transaction_id) {
     const { data: purchaseRow, error: routeErr } = await supabase
@@ -98,15 +98,15 @@ exports.handler = async (event) => {
       // continues rather than blocking payouts on a column that is not there.
       const columnMissing = routeErr.code === '42703' || routeErr.code === 'PGRST204';
       console.error('[split-payout] route check failed:', routeErr.code, routeErr.message,
-        columnMissing ? '— run migration 127; continuing on the pre-migration assumption.' : '');
+        columnMissing ? '- run migration 127; continuing on the pre-migration assumption.' : '');
       if (!columnMissing) {
         return {
           statusCode: 500,
-          body: JSON.stringify({ error: 'Could not verify where this sale was paid — no payout was made', transaction_id }),
+          body: JSON.stringify({ error: 'Could not verify where this sale was paid, no payout was made', transaction_id }),
         };
       }
     } else if (purchaseRow && purchaseRow.payout_route && purchaseRow.payout_route !== 'platform') {
-      console.warn('[split-payout] REFUSED — this sale was not captured into the platform account.',
+      console.warn('[split-payout] REFUSED, this sale was not captured into the platform account.',
         JSON.stringify({ transaction_id, route: purchaseRow.payout_route, payee: purchaseRow.payee_account }));
       return {
         statusCode: 200,
@@ -122,7 +122,7 @@ exports.handler = async (event) => {
 
   // What the splits are calculated from.
   //
-  // `total_amount` is the GROSS — what the buyer was charged. Splitting that
+  // `total_amount` is the GROSS, what the buyer was charged. Splitting that
   // meant paying out money the platform never received: PayPal's fee comes
   // off before anything lands, so a solo track paying the artist 100% of
   // gross left the account short by the fee on every single sale, before the
@@ -134,7 +134,7 @@ exports.handler = async (event) => {
   const receivedNet = parseFloat(net_amount ?? total_amount);
 
   // The platform's cut comes off BEFORE the artist split, and it comes off
-  // the NET — what actually landed — not the gross. Taking a percentage of
+  // the NET, what actually landed, not the gross. Taking a percentage of
   // money PayPal already kept would be charging the artist for a fee they
   // never saw.
   //
@@ -148,7 +148,7 @@ exports.handler = async (event) => {
     commissionPercent = Math.min(100, Math.max(0, parseFloat(rate ?? 0)));
   } catch (e) {
     // Falling back to 0 on purpose. If the rate cannot be read, the safe
-    // failure is to pay the artist everything and under-charge ourselves —
+    // failure is to pay the artist everything and under-charge ourselves -
     // not to guess a number and take money we cannot justify.
     console.error('[split-payout] could not read commission rate, taking 0%:', e.message);
     commissionPercent = 0;
@@ -174,8 +174,8 @@ exports.handler = async (event) => {
     // The `artists(id, artist_name)` embed that used to be on this select was
     // removed: nothing in this function ever read `track.artists`, and an
     // embed that is never used is a failure mode with no upside. If `tracks`
-    // ever carries a second foreign key to `artists` again — as it did when
-    // artists.top_pick_track_id was added — PostgREST answers HTTP 300 rather
+    // ever carries a second foreign key to `artists` again, as it did when
+    // artists.top_pick_track_id was added, PostgREST answers HTTP 300 rather
     // than rows, and this whole payout would 404 on a track that exists.
     const { data: track, error: trackErr } = await supabase
       .from('tracks')
@@ -199,7 +199,7 @@ exports.handler = async (event) => {
     // supabase-js does not throw, so a rejected query left `collabs` null,
     // `collaborators` empty, `totalCollabPercent` zero and therefore
     // `ownerPercent` 100. The track owner would be paid the entire sale and
-    // every credited collaborator would be paid nothing — and the function
+    // every credited collaborator would be paid nothing, and the function
     // would return success. No log, no retry, no way to tell it apart from a
     // solo track afterwards.
     //
@@ -208,20 +208,20 @@ exports.handler = async (event) => {
     // table is the likeliest place for a second FK to `artists` to exist.
     const { data: collabs, error: collabErr } = await supabase
       .from('collaborations')
-      .select('artist_id, split_percent, role')
+      .select('artist_id, split_percent, role, invited_by')
       .eq('track_id', track_id)
       .eq('status', 'accepted');
 
     if (collabErr) {
       // Refuse to pay rather than guess. An unknown split is not a zero split.
       console.error(
-        '[split-payout] ABORTED — could not read collaborations for track',
+        '[split-payout] ABORTED, could not read collaborations for track',
         track_id, ':', collabErr.code, collabErr.message, collabErr.details || ''
       );
       return {
         statusCode: 500,
         body: JSON.stringify({
-          error: 'Could not determine the payout split — no payout was made',
+          error: 'Could not determine the payout split, no payout was made',
           code: collabErr.code || null,
           track_id,
           transaction_id,
@@ -229,13 +229,26 @@ exports.handler = async (event) => {
       };
     }
 
-    const collaborators = collabs || [];
+    // Only collaborations the track OWNER created are paid. Until migration
+    // 143, RLS let any artist insert a collaboration on someone else's track
+    // with themselves as both inviter and collaborator, then accept it at any
+    // split. A row like that is ignored here, loudly, so it cannot be paid
+    // while it is being looked at. The owner keeps that share.
+    const collaborators = (collabs || []).filter(c => {
+      const ok = c.invited_by === track.artist_id;
+      if (!ok) {
+        console.error('[split-payout] IGNORING a collaboration not created by the track owner',
+          JSON.stringify({ track_id, collaborator: c.artist_id, invited_by: c.invited_by,
+                           owner: track.artist_id, split_percent: c.split_percent }));
+      }
+      return ok;
+    });
 
     // 3. Calculate splits
     // Guard: if collaborator percentages exceed 100, normalise proportionally
     const rawCollabTotal = collaborators.reduce((sum, c) => sum + (c.split_percent || 0), 0);
     if (rawCollabTotal > 100) {
-      console.warn(`Split overflow for track ${track_id}: ${rawCollabTotal}% — normalising`);
+      console.warn(`Split overflow for track ${track_id}: ${rawCollabTotal}%, normalising`);
       for (const c of collaborators) {
         c.split_percent = parseFloat(((c.split_percent / rawCollabTotal) * 100).toFixed(4));
       }
@@ -279,7 +292,7 @@ exports.handler = async (event) => {
     // 4. Insert all payout records
     //
     // Idempotent. PayPal retries, captures get replayed, and a double-tap on
-    // the pay button used to be enough to record a sale twice — which, once
+    // the pay button used to be enough to record a sale twice, which, once
     // payouts actually work, means paying it twice. Migration 119 adds a
     // unique index on (artist_id, transaction_id); this checks first so the
     // normal path is a clean no-op rather than a caught constraint error.
@@ -300,7 +313,7 @@ exports.handler = async (event) => {
 
     // This threw on every call before migration 119: payouts.transaction_id
     // was a uuid with a foreign key to archive.transactions, and the value
-    // passed is a PayPal capture id like 6AK057134J639484P — neither a uuid
+    // passed is a PayPal capture id like 6AK057134J639484P, neither a uuid
     // nor a row in a table nothing writes to. So this function has never
     // recorded a payout in its life; it threw here and returned 500.
     if (payoutErr) {
@@ -314,7 +327,7 @@ exports.handler = async (event) => {
         p_artist_id: record.artist_id,
         p_amount: record.amount,
       }).catch(() => {
-        // RPC may not exist yet — fail silently, payout record is the source of truth
+        // RPC may not exist yet, fail silently, payout record is the source of truth
       });
     }
 
@@ -339,14 +352,14 @@ exports.handler = async (event) => {
     }
 
     // ── Real PayPal Payouts ──────────────────────────────────────────────────────
-    // Send payouts to all artists — solo tracks pay the owner directly
+    // Send payouts to all artists, solo tracks pay the owner directly
     if (payoutRecords.length > 0) {
       try {
         // ── Where the payout email comes from ──────────────────────────
         //
-        // TWO tables hold one. PaymentSettings.js — the screen that says
+        // TWO tables hold one. PaymentSettings.js, the screen that says
         // "This is where you'll receive payouts from collaborations and
-        // sales" — writes artist_payment_profiles.paypal_email. Profile >
+        // sales", writes artist_payment_profiles.paypal_email. Profile >
         // Edit writes artists.paypal_email. This function read only the
         // second, so which screen an artist happened to use decided whether
         // they could be paid, and the screen that promised payouts was the
@@ -384,7 +397,7 @@ exports.handler = async (event) => {
         // a $3 payout costs nearly what a $30 one does.
         //
         // Now the money accumulates as `pending` payout rows, and an artist
-        // is paid when their TOTAL pending clears their threshold — at which
+        // is paid when their TOTAL pending clears their threshold, at which
         // point everything pending is sent in one item, not just this sale.
         // So a sale below the threshold is not lost, it is queued, and the
         // sale that tips them over releases the lot.
@@ -403,7 +416,7 @@ exports.handler = async (event) => {
         for (const record of payoutRecords) {
           const email = emailMap[record.artist_id];
           if (!email) {
-            console.warn(`[split-payout] no PayPal email for artist ${record.artist_id} — held, not lost`);
+            console.warn(`[split-payout] no PayPal email for artist ${record.artist_id}, held, not lost`);
             await supabase.from('payouts')
               .update({ status: 'no_paypal_email' })
               .eq('transaction_id', record.transaction_id)
@@ -412,21 +425,18 @@ exports.handler = async (event) => {
           }
           if (record.amount <= 0) continue;
 
-          const threshold = thresholdMap[record.artist_id] ?? 10;
+          // No threshold. It existed to save PayPal fees on money the platform
+          // was holding, and the platform no longer holds money: anything that
+          // still reaches this legacy route is sent at once, together with
+          // anything older still owed to the same artist.
           const owed = pendingTotals[record.artist_id] || record.amount;
 
-          if (owed < threshold) {
-            console.log(`[split-payout] artist ${record.artist_id}: $${owed.toFixed(2)} pending, `
-              + `threshold $${threshold.toFixed(2)} — holding.`);
-            continue;   // the row stays 'pending' and is swept later
-          }
-
-          // Over the line: send everything owed, not just this sale.
+          // Send everything owed, not just this sale.
           payoutItems.push({
             recipient_type: 'EMAIL',
             amount: { value: owed.toFixed(2), currency: record.currency },
             receiver: email,
-            note: `Royalties from Feelz Machine — including "${track.title}"`,
+            note: `Royalties from Feelz Machine, including "${track.title}"`,
             sender_item_id: `${record.transaction_id}_${record.artist_id}`,
           });
           // Kept beside the batch rather than decoded back out of
@@ -442,7 +452,7 @@ exports.handler = async (event) => {
           const payoutData = await sendPayPalPayout(accessToken, payoutItems, batchId);
           const paypalBatchId = payoutData.batch_header?.payout_batch_id || batchId;
 
-          // Mark EVERY pending row for the artists we just paid — not only
+          // Mark EVERY pending row for the artists we just paid, not only
           // this transaction's.
           //
           // The old line filtered on `.eq('transaction_id', transaction_id)`,
@@ -467,7 +477,7 @@ exports.handler = async (event) => {
             }).catch(e => console.error('[split-payout] settle failed:', e.message));
           }
         } else {
-          console.log('[split-payout] nothing sent — every artist is below their payout threshold.');
+          console.log('[split-payout] nothing sent, every artist is below their payout threshold.');
         }
       } catch (payoutErr) {
         console.error('PayPal payout error (records saved, manual retry possible):', payoutErr.message);
@@ -480,7 +490,7 @@ exports.handler = async (event) => {
             await reportNotify('admin_message (process-split-payout)', supabase.from('notifications').insert({
               user_id:    admin.user_id,
               type:       'admin_message',
-              title:      '⚠️ Payout failed — manual action required',
+              title:      '⚠️ Payout failed, manual action required',
               message:    `Split payout for "${track.title}" (tx: ${transaction_id}) failed: ${payoutErr.message}`,
               admin_only: true,
               metadata:   { transaction_id, track_id, error: payoutErr.message },

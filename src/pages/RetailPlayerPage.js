@@ -338,21 +338,68 @@ export default function RetailPlayerPage() {
       });
   }, [venue]);
 
+  // ── Favourites ─────────────────────────────────────────────────────────
+  //
+  // The heart here is the SAME favourite as the heart in the main app: a row
+  // in track_likes for the signed-in person. It used to write only
+  // retail_venue_likes, which nothing outside retail reads, and it returned
+  // early in admin preview, so in the place it was most often tested it did
+  // nothing at all while still showing a filled heart.
+  //
+  // retail_venue_likes is still written alongside, because the venue's
+  // recommendations score from it. That write is the venue's, so it is
+  // skipped in preview; the favourite itself is the person's own and works
+  // everywhere.
+  const trackIdsKey = React.useMemo(
+    () => tracks.map(t => t?.id).filter(Boolean).sort().join(','),
+    [tracks]
+  );
+
   React.useEffect(() => {
-    if (!venue) return;
-    supabase.from('retail_venue_likes').select('track_id').eq('venue_id', venue.id)
-      .then(({ data }) => setLikedTrackIds(new Set((data || []).map(l => l.track_id))));
-  }, [venue]);
+    if (!user?.id || !trackIdsKey) { setLikedTrackIds(new Set()); return; }
+    let cancelled = false;
+    supabase.from('track_likes').select('track_id')
+      .eq('user_id', user.id)
+      .in('track_id', trackIdsKey.split(','))
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        if (error) { console.error('[retail] favourites read failed:', error.code, error.message); return; }
+        setLikedTrackIds(new Set((data || []).map(l => l.track_id)));
+      });
+    return () => { cancelled = true; };
+  }, [user?.id, trackIdsKey]);
 
   const toggleLike = async (track) => {
-    if (!venue || !track || isPreviewMode) return;
+    if (!user?.id || !track?.id) return;
     const isLiked = likedTrackIds.has(track.id);
-    if (isLiked) {
-      await supabase.from('retail_venue_likes').delete().eq('venue_id', venue.id).eq('track_id', track.id);
-      setLikedTrackIds(prev => { const next = new Set(prev); next.delete(track.id); return next; });
-    } else {
-      const { error } = await supabase.from('retail_venue_likes').insert({ venue_id: venue.id, track_id: track.id });
-      if (!error) setLikedTrackIds(prev => new Set(prev).add(track.id));
+
+    // Optimistic, and put back if the database says no.
+    const apply = (liked) => setLikedTrackIds(prev => {
+      const next = new Set(prev);
+      if (liked) next.add(track.id); else next.delete(track.id);
+      return next;
+    });
+    apply(!isLiked);
+
+    const { error } = isLiked
+      ? await supabase.from('track_likes').delete().eq('track_id', track.id).eq('user_id', user.id)
+      : await supabase.from('track_likes').insert({ track_id: track.id, user_id: user.id, artist_id: track.artist_id || track.artist?.id || null });
+
+    // 23505 is a like that already exists, which is the state we wanted.
+    if (error && error.code !== '23505') {
+      console.error('[retail] favourite not saved:', error.code, error.message);
+      apply(isLiked);
+      setSaveNotice('Could not update your favourites. Try again.');
+      return;
+    }
+
+    if (venue && !isPreviewMode) {
+      const venueWrite = isLiked
+        ? supabase.from('retail_venue_likes').delete().eq('venue_id', venue.id).eq('track_id', track.id)
+        : supabase.from('retail_venue_likes').insert({ venue_id: venue.id, track_id: track.id });
+      venueWrite.then(({ error: vErr }) => {
+        if (vErr && vErr.code !== '23505') console.warn('[retail] venue like not recorded:', vErr.code, vErr.message);
+      });
     }
   };
 

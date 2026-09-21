@@ -1,6 +1,6 @@
 // netlify/functions/paypal-order.js
 // Creates and captures PayPal orders for track purchases.
-// Amount is ALWAYS read from the DB — never trusted from the client.
+// Amount is ALWAYS read from the DB, never trusted from the client.
 
 const https = require('https');
 const { createClient } = require('@supabase/supabase-js');
@@ -39,6 +39,42 @@ async function getPayPalAccessToken() {
     req.write(payload);
     req.end();
   });
+}
+
+// Tell an artist that a sale could not go through because of their payment
+// setup. At most once a day per artist, so a popular track with no PayPal does
+// not bury them in the same notification.
+async function tellArtistToSetUpPayments(adminClient, artistId, itemLabel, why) {
+  if (!artistId) return;
+  try {
+    const since = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
+    const { data: recent } = await adminClient.from('notifications')
+      .select('id').eq('artist_id', artistId)
+      .eq('metadata->>kind', 'payments_not_set_up')
+      .gte('created_at', since).limit(1);
+    if (recent && recent.length) return;
+
+    const { data: a } = await adminClient.from('artists')
+      .select('user_id').eq('id', artistId).maybeSingle();
+
+    const message = why === 'paypal_refused'
+      ? `Someone tried to buy "${itemLabel}" but PayPal would not accept payments to the address on your account. `
+        + 'Check it in Payment Settings: it must be a PayPal account that can receive payments.'
+      : `Someone tried to buy "${itemLabel}" but you have not added a PayPal email yet. `
+        + 'Add one in Payment Settings. Sales are paid straight into your PayPal.';
+
+    const { error } = await adminClient.from('notifications').insert({
+      artist_id: artistId,
+      user_id:   a?.user_id || null,
+      type:      'admin_message',
+      title:     'A sale could not go through',
+      message,
+      metadata:  { kind: 'payments_not_set_up', why, item: itemLabel },
+    });
+    if (error) console.error('[paypal-order] could not notify artist about payments:', error.code, error.message);
+  } catch (e) {
+    console.error('[paypal-order] notify artist failed:', e.message);
+  }
 }
 
 async function paypalRequest(method, path, body, accessToken, extraHeaders = {}) {
@@ -102,7 +138,7 @@ exports.handler = async (event) => {
     //   * an album page priced a track at album.price ÷ tracks and the order
     //     was refused, because the track itself had no price;
     //   * an artist page priced the same track at the WHOLE album price;
-    //   * a beat page sent the licence price — $99 for an exclusive — and the
+    //   * a beat page sent the licence price, $99 for an exclusive, and the
     //     buyer was charged the track's download price, while beat_purchases
     //     recorded the $99 that was never taken;
     //   * pay-what-you-want sent the amount the fan chose and it was thrown
@@ -154,7 +190,7 @@ exports.handler = async (event) => {
         const { data: track, error: trackErr } = await adminClient
           .from('tracks')
           // pwyw_minimum_price is gone from this select on purpose, and NOT
-          // because the column is missing — it exists, defaults to 0, and is
+          // because the column is missing, it exists, defaults to 0, and is
           // NOT NULL.
           //
           // It exists and nothing writes it. TrackUploadPanel.js sets
@@ -201,12 +237,12 @@ exports.handler = async (event) => {
             return { statusCode: 400, body: JSON.stringify({ error: 'That licence is not offered on this beat', reason: 'unknown_licence' }) };
           }
           price    = Number(lic.price) || 0;
-          label    = `${track.title} — ${lic.label || licenceId} licence`;
+          label    = `${track.title}, ${lic.label || licenceId} licence`;
           customId = `lic:${licenceId}:${track.id}`;
           source   = `beat_licence:${licenceId}`;
 
           if (price <= 0) {
-            return { statusCode: 400, body: JSON.stringify({ error: 'That licence is free — no payment needed', reason: 'free_licence' }) };
+            return { statusCode: 400, body: JSON.stringify({ error: 'That licence is free, no payment needed', reason: 'free_licence' }) };
           }
         }
 
@@ -287,7 +323,7 @@ exports.handler = async (event) => {
       const safeAmount  = q.buyerPays.toFixed(2);
 
       if (q.capped) {
-        console.error('[paypal-order] service fee hit the safety cap — check platform_settings.',
+        console.error('[paypal-order] service fee hit the safety cap, check platform_settings.',
           JSON.stringify({ trackId, albumId, artistPrice, serviceFee }));
       }
 
@@ -325,11 +361,31 @@ exports.handler = async (event) => {
           commissionPct,
         });
       } catch (e) {
-        // A failure to decide is a decision to change nothing. Never let a bug
-        // in the routing layer stop a sale or, worse, send it somewhere
-        // unintended.
-        console.error('[paypal-order] payee resolution threw, staying on the platform route:', e.message);
-        routing = { route: 'platform', payee: null, reason: 'resolver_threw', commissionPct };
+        // A failure to decide who gets paid stops the sale. It used to fall
+        // back to the platform account, which is the one outcome the platform
+        // has decided against: holding an artist's money. Nothing is charged.
+        console.error('[paypal-order] payee resolution threw, refusing the order:', e.message);
+        return {
+          statusCode: 503,
+          body: JSON.stringify({
+            error: 'Payments are briefly unavailable. Nothing was charged, please try again in a minute.',
+            code: 'routing_failed',
+          }),
+        };
+      }
+
+      // The seller has not set up payments. Refuse, tell the buyer why in
+      // words, and tell the artist so they can fix it.
+      if (routing.route === 'unavailable') {
+        await tellArtistToSetUpPayments(adminClient, sellerArtistId, label, 'no_paypal');
+        return {
+          statusCode: 409,
+          body: JSON.stringify({
+            error: `${artistName || 'This artist'} has not set up payments yet, so this can't be bought right now. `
+                 + 'Nothing was charged. We have let them know.',
+            code: 'seller_not_set_up',
+          }),
+        };
       }
 
       const { fragment: payeeFragment, headers: payeeHeaders } =
@@ -345,7 +401,7 @@ exports.handler = async (event) => {
 
       // The buyer sees what they are paying for. A total that is 43 cents more
       // than the price on the page, with no explanation, reads as a platform
-      // skimming — which is precisely the thing this change exists to stop.
+      // skimming, which is precisely the thing this change exists to stop.
       // Split into an item and a handling line, PayPal's own checkout shows
       // "Isandla Sami $2.00 / Handling $0.43 / Total $2.43" before they
       // authorise anything.
@@ -392,36 +448,27 @@ exports.handler = async (event) => {
 
       let result = await paypalRequest('POST', '/v2/checkout/orders', orderPayload, accessToken, payeeHeaders);
 
-      // ── If the payee is refused, sell it anyway ──────────────────────────
+      // ── If PayPal refuses the payee, refuse the sale ─────────────────────
       //
-      // PayPal rejects an order whose payee it will not accept — an address
-      // that is not a verified business account, a merchant id we have no
-      // permission for, a platform fee on an account that is not a partner.
-      // Those all read as a 4xx at create.
-      //
-      // A routing preference is not worth a lost sale. Retry once on the plain
-      // platform route, which is known to work, and log the reason loudly so
-      // the artist's setup can be fixed rather than quietly failing forever.
+      // PayPal rejects an order whose payee it will not accept: an address
+      // that cannot receive payments, a merchant id we have no permission for.
+      // This used to retry on the platform route so the sale went through,
+      // which parked the artist's money in the business account. It no longer
+      // does: the buyer is told plainly, nothing is charged, and the artist is
+      // told their PayPal needs attention.
       if (result.status !== 201 && routing.route !== 'platform') {
-        console.error('[paypal-order] PAYEE REFUSED by PayPal — falling back to the platform route.',
+        console.error('[paypal-order] PAYEE REFUSED by PayPal, order refused.',
           'route=', routing.route, 'artist=', sellerArtistId,
           'status=', result.status, 'body=', JSON.stringify(result.body));
-
-        routing = { route: 'platform', payee: null, reason: 'paypal_refused_payee', commissionPct };
-        // The amount, items and breakdown are carried over unchanged. Only the
-        // payee and the platform fee are dropped — the buyer is charged exactly
-        // the same total either way, because where the money goes is our
-        // problem and not theirs.
-        const fallbackPayload = {
-          ...orderPayload,
-          purchase_units: [{
-            amount:      orderPayload.purchase_units[0].amount,
-            items:       orderPayload.purchase_units[0].items,
-            description: orderPayload.purchase_units[0].description,
-            custom_id:   orderPayload.purchase_units[0].custom_id,
-          }],
+        await tellArtistToSetUpPayments(adminClient, sellerArtistId, label, 'paypal_refused');
+        return {
+          statusCode: 409,
+          body: JSON.stringify({
+            error: `${artistName || 'This artist'}'s PayPal can't receive payments right now, so this can't be bought yet. `
+                 + 'Nothing was charged. We have let them know.',
+            code: 'seller_paypal_refused',
+          }),
         };
-        result = await paypalRequest('POST', '/v2/checkout/orders', fallbackPayload, accessToken);
       }
 
       if (result.status !== 201) {
@@ -440,7 +487,7 @@ exports.handler = async (event) => {
         statusCode: 200,
         // The breakdown goes back to the client so a screen can show the same
         // three numbers PayPal will show, before the buyer ever leaves the
-        // page. `amount` keeps its old meaning — the total charged — so no
+        // page. `amount` keeps its old meaning, the total charged, so no
         // existing caller breaks by reading it.
         body: JSON.stringify({
           orderId:     result.body.id,
@@ -457,7 +504,7 @@ exports.handler = async (event) => {
     // can show "$2.00 + $0.43 fee = $2.43" before the buyer commits, rather
     // than showing one number and PayPal showing another.
     //
-    // It resolves the price through exactly the same code as `create` — a quote
+    // It resolves the price through exactly the same code as `create`, a quote
     // endpoint that computes the price a second way is a quote endpoint that
     // will eventually disagree with the checkout.
     if (action === 'quote') {
@@ -553,7 +600,7 @@ exports.handler = async (event) => {
       //
       // When money moves and the platform cannot account for it, the only
       // thing that settles the question is what PayPal said at the moment it
-      // happened — which account was paid, what the status was, and whether
+      // happened, which account was paid, what the status was, and whether
       // the funds were released or held. None of that was being written
       // anywhere, so the first time it mattered there was nothing to read.
       //
@@ -578,8 +625,8 @@ exports.handler = async (event) => {
       //
       // It read ONLY `result.body.purchase_units[0].custom_id`. In PayPal's
       // Orders v2 CAPTURE response the custom_id set at order creation is
-      // echoed on the CAPTURE object — purchase_units[0].payments.captures[0]
-      // .custom_id — and the purchase_unit itself often carries no custom_id
+      // echoed on the CAPTURE object, purchase_units[0].payments.captures[0]
+      // .custom_id, and the purchase_unit itself often carries no custom_id
       // at all. When that read came back undefined, the guard below it
       //
       //     if (captureTrackId && captureId && capturedAmount > 0)
@@ -591,14 +638,14 @@ exports.handler = async (event) => {
       // because the row that grants it had never been written.
       //
       // Now: check every place PayPal puts it, and if all of them are empty,
-      // GET the order back — that response definitely carries
+      // GET the order back, that response definitely carries
       // purchase_units[].custom_id, because it is the object we created.
       // Three chances to find a value we ourselves set minutes earlier.
       //
       // `reference_id` is NOT in this list on purpose. PayPal fills it with
       // the string "default" when you do not set one, so using it as a
       // fallback would hand a non-uuid to a uuid column and turn a missing
-      // record into a failed insert — a worse failure wearing a fix's
+      // record into a failed insert, a worse failure wearing a fix's
       // clothes.
       let captureTrackId =
             capture?.custom_id
@@ -616,10 +663,10 @@ exports.handler = async (event) => {
       }
 
       // Loud, because this is money. If we get here without a track id the
-      // payment has been taken and we cannot say what for — that has to be
+      // payment has been taken and we cannot say what for, that has to be
       // findable in the logs rather than shrugged off.
       if (!captureTrackId) {
-        console.error('[paypal-order] CAPTURED WITH NO TRACK ID — manual reconciliation needed.',
+        console.error('[paypal-order] CAPTURED WITH NO TRACK ID, manual reconciliation needed.',
           'orderId=', orderId, 'captureId=', captureId, 'amount=', capturedAmount);
       }
 
@@ -638,7 +685,7 @@ exports.handler = async (event) => {
       // The routing decision was made minutes ago at order creation, but a
       // decision is not evidence. PayPal's capture response names the payee,
       // and that is the only authority on the question. This is the exact
-      // mistake tip-artist.js was making — it set a payee on the order and then
+      // mistake tip-artist.js was making, it set a payee on the order and then
       // paid out anyway, on the strength of a comment that said the funds were
       // here when they were not, and paid artists twice for months.
       //
@@ -650,21 +697,21 @@ exports.handler = async (event) => {
       const capturePayee = result.body?.purchase_units?.[0]?.payee || {};
 
       if (landedHere !== true) {
-        console.log('[paypal-order] NOT FORWARDING — funds did not land in the platform account',
+        console.log('[paypal-order] NOT FORWARDING, funds did not land in the platform account',
           JSON.stringify({
             orderId, captureId,
             payeeEmail:    capturePayee.email_address || null,
             payeeMerchant: capturePayee.merchant_id || null,
             verdict: landedHere === null
-              ? 'UNVERIFIABLE — set PAYPAL_PLATFORM_MERCHANT_ID or PAYPAL_PLATFORM_EMAIL in Netlify'
+              ? 'UNVERIFIABLE, set PAYPAL_PLATFORM_MERCHANT_ID or PAYPAL_PLATFORM_EMAIL in Netlify'
               : 'paid direct to the seller',
           }));
       }
 
       if (captureTrackId && captureId && capturedAmount > 0) {
         // NOTE the `landedHere === true` on the payout trigger below, and NOT
-        // on this outer condition. The recording — the purchases row, the
-        // download grant, the receipts — must happen for every completed sale
+        // on this outer condition. The recording, the purchases row, the
+        // download grant, the receipts, must happen for every completed sale
         // whichever account the money went to. Only the forwarding of money is
         // conditional. Gating the whole block would mean a direct sale paid the
         // artist and left the buyer with no download, which is the original bug
@@ -680,9 +727,9 @@ exports.handler = async (event) => {
             body: JSON.stringify({
               track_id:       captureTrackId,
               transaction_id: captureId,
-              // GROSS — what the buyer was charged. Kept for the record.
+              // GROSS, what the buyer was charged. Kept for the record.
               total_amount:   capturedAmount,
-              // NET — what actually landed after PayPal's cut. This is what
+              // NET, what actually landed after PayPal's cut. This is what
               // the splits are calculated from now.
               //
               // Splits were being worked out from the gross, so on a solo
@@ -707,13 +754,13 @@ exports.handler = async (event) => {
         // Two changes beyond the track id.
         //
         // 1. THE ERRORS ARE READ. supabase-js returns { error }; it does not
-        //    throw. So `await insert(...)` inside a try/catch caught nothing —
+        //    throw. So `await insert(...)` inside a try/catch caught nothing -
         //    a row refused by RLS or a constraint was discarded in silence,
         //    which is a second, independent way for a paid-for track to leave
         //    no trace.
         //
         // 2. THE BUYER IS RESOLVED FROM PAYPAL, not only from the client.
-        //    buyerUserId arrived as `userId: user?.id` in the request body —
+        //    buyerUserId arrived as `userId: user?.id` in the request body -
         //    unverified, and `undefined` if the session had lapsed by the time
         //    the buyer finished paying. The old code skipped the downloads
         //    insert entirely when it was missing (`if (!albumId && buyerUserId)`),
@@ -803,7 +850,7 @@ exports.handler = async (event) => {
 
           // What the artist's price was on this order, read back from the
           // breakdown we sent. Recorded separately from `amount` so the books
-          // can tell the artist's price from the buyer's total — without it,
+          // can tell the artist's price from the buyer's total, without it,
           // every report would have to re-derive the fee from a rate that may
           // since have changed, which is how a figure becomes wrong the first
           // time someone edits a setting.
@@ -837,12 +884,12 @@ exports.handler = async (event) => {
 
           if (purchaseErr) {
             recordError = purchaseErr.message;
-            console.error('[paypal-order] PURCHASE ROW REFUSED — money taken, sale not recorded.',
+            console.error('[paypal-order] PURCHASE ROW REFUSED, money taken, sale not recorded.',
               'code=', purchaseErr.code, 'msg=', purchaseErr.message,
               'captureId=', captureId, 'trackId=', captureTrackId);
           }
 
-          // The download grant. Written even when the purchases row failed —
+          // The download grant. Written even when the purchases row failed -
           // the buyer paid, so the buyer gets the file; a bookkeeping problem
           // is ours to reconcile, not theirs to be punished for.
           if (!albumId && resolvedUserId) {
@@ -855,7 +902,7 @@ exports.handler = async (event) => {
             });
             if (dlErr) {
               recordError = recordError || dlErr.message;
-              console.error('[paypal-order] DOWNLOAD GRANT REFUSED — buyer paid and cannot download.',
+              console.error('[paypal-order] DOWNLOAD GRANT REFUSED, buyer paid and cannot download.',
                 'code=', dlErr.code, 'msg=', dlErr.message,
                 'user=', resolvedUserId, 'track=', captureTrackId);
             } else {
@@ -863,7 +910,7 @@ exports.handler = async (event) => {
             }
           } else if (!albumId && !resolvedUserId) {
             recordError = 'no_buyer_identified';
-            console.error('[paypal-order] NO BUYER IDENTIFIED — payment captured but no download granted.',
+            console.error('[paypal-order] NO BUYER IDENTIFIED, payment captured but no download granted.',
               'captureId=', captureId, 'payerEmail=', payerEmail);
           } else {
             recorded = !purchaseErr;
@@ -883,7 +930,7 @@ exports.handler = async (event) => {
           // locks, or the connection drops on the way back from PayPal.
           //
           // Both sides are told. Failure to write either is logged and
-          // otherwise ignored — a missing notification must never turn a
+          // otherwise ignored, a missing notification must never turn a
           // completed sale into an error.
           try {
             let what = 'Your purchase';
@@ -892,7 +939,7 @@ exports.handler = async (event) => {
 
             // The slugs are selected so the receipt can carry them. A receipt
             // that stores only an id forces whatever opens it to route by id,
-            // and /track/:slug resolved slugs only — so tapping a receipt for a
+            // and /track/:slug resolved slugs only, so tapping a receipt for a
             // track you had just paid for showed "Track not found".
             let trackSlug = null;
             let albumSlug = null;
@@ -966,11 +1013,101 @@ exports.handler = async (event) => {
                 console.error('[paypal-order] receipt notification refused (sale is fine, receipt is not):',
                   notifErr.code, notifErr.message,
                   notifErr.code === '23514'
-                    ? '— the type is not allowed yet; run migration 125.' : '');
+                    ? '- the type is not allowed yet; run migration 125.' : '');
               }
             }
           } catch (e) {
             console.error('[paypal-order] receipt write threw (sale is fine):', e.message);
+          }
+
+          // ── Collaborator splits on a direct sale ───────────────────────
+          //
+          // On the direct route the buyer paid the OWNER's PayPal, and the
+          // platform never held any of it, so it cannot pay collaborators out
+          // of it either. What it can do is say, in writing, what the agreed
+          // split means for this sale: one sale_splits row per collaborator,
+          // and a notification to each side. The owner pays their
+          // collaborators; the platform keeps the record.
+          //
+          // Only collaborations the owner created count (see migration 143).
+          // The share is of what the owner actually received after PayPal's
+          // fee, the same basis the old payout used.
+          if (landedHere !== true) {
+            try {
+              const ownerQ = albumId
+                ? adminClient.from('albums').select('artist_id, title').eq('id', albumId).maybeSingle()
+                : adminClient.from('tracks').select('artist_id, title').eq('id', captureTrackId).maybeSingle();
+              const { data: item } = await ownerQ;
+              const ownerId = item?.artist_id || null;
+
+              if (ownerId) {
+                const collabQ = adminClient.from('collaborations')
+                  .select('artist_id, split_percent, invited_by')
+                  .eq('status', 'accepted');
+                const { data: collabs, error: cErr } = albumId
+                  ? await collabQ.eq('album_id', albumId)
+                  : await collabQ.eq('track_id', captureTrackId);
+                if (cErr) throw cErr;
+
+                const owed = (collabs || [])
+                  .filter(c => c.invited_by === ownerId && c.artist_id !== ownerId && Number(c.split_percent) > 0);
+
+                if (owed.length) {
+                  const base = Number.isFinite(netLanded) ? netLanded : Number(capturedAmount);
+                  const rows = owed.map(c => ({
+                    capture_id:             captureId,
+                    track_id:               albumId ? null : captureTrackId,
+                    album_id:               albumId || null,
+                    owner_artist_id:        ownerId,
+                    collaborator_artist_id: c.artist_id,
+                    split_percent:          Number(c.split_percent),
+                    sale_net:               Number(base.toFixed(2)),
+                    amount_owed:            Number(((Number(c.split_percent) / 100) * base).toFixed(2)),
+                    currency:               'USD',
+                  }));
+
+                  const { error: sErr } = await adminClient.from('sale_splits')
+                    .upsert(rows, { onConflict: 'capture_id,collaborator_artist_id', ignoreDuplicates: true });
+                  if (sErr) {
+                    console.error('[paypal-order] sale_splits not written (sale is fine):', sErr.code, sErr.message,
+                      sErr.code === '42P01' ? 'run migration 144.' : '');
+                  }
+
+                  const ids = [ownerId, ...owed.map(c => c.artist_id)];
+                  const { data: people } = await adminClient.from('artists')
+                    .select('id, user_id, artist_name').in('id', ids);
+                  const byId = Object.fromEntries((people || []).map(a => [a.id, a]));
+                  const title = item?.title || 'your track';
+                  const ownerName = byId[ownerId]?.artist_name || 'the owner';
+
+                  const notes = rows.map(r => ({
+                    artist_id: r.collaborator_artist_id,
+                    user_id:   byId[r.collaborator_artist_id]?.user_id || null,
+                    type:      'sale',
+                    title:     `"${title}" sold`,
+                    message:   `Your ${r.split_percent}% share is $${r.amount_owed.toFixed(2)}. `
+                             + `The buyer paid ${ownerName} directly, and ${ownerName} pays your share to you.`,
+                    track_id:  r.track_id,
+                    metadata:  { kind: 'split_owed_to_you', capture_id: captureId, amount: r.amount_owed },
+                  }));
+                  notes.push({
+                    artist_id: ownerId,
+                    user_id:   byId[ownerId]?.user_id || null,
+                    type:      'sale',
+                    title:     `Collaborator shares for "${title}"`,
+                    message:   'This sale was paid straight to your PayPal. Under your splits you owe: '
+                             + rows.map(r => `${byId[r.collaborator_artist_id]?.artist_name || 'a collaborator'} $${r.amount_owed.toFixed(2)}`).join(', ')
+                             + '.',
+                    track_id:  albumId ? null : captureTrackId,
+                    metadata:  { kind: 'split_you_owe', capture_id: captureId },
+                  });
+                  const { error: nErr } = await adminClient.from('notifications').insert(notes);
+                  if (nErr) console.error('[paypal-order] split notifications refused:', nErr.code, nErr.message);
+                }
+              }
+            } catch (e) {
+              console.error('[paypal-order] split record threw (sale is fine):', e.message);
+            }
           }
         }
       }

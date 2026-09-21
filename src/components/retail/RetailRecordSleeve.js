@@ -32,6 +32,7 @@ import React from 'react';
 import { Music, Play, Pause, Bookmark, MessageCircle, ArrowLeft, Loader } from 'lucide-react';
 import VinylRecord from '../VinylRecord';
 import RetailTransport from './RetailTransport';
+import useArtworkColor from './useArtworkColor';
 import RetailTonearm from './RetailTonearm';
 import { R } from './retailTheme';
 
@@ -156,6 +157,9 @@ export default function RetailRecordSleeve({
   const heroArt    = hero?.cover_artwork_url || playlist?.cover_image_url || null;
   const heroArtist = hero?.artist?.artist_name || null;
   const credits    = splitCredits(heroTitle);
+  // The glow behind the record takes the colour of the cover that is on it.
+  const [gr, gg, gb] = useArtworkColor(heroArt);
+  const glowPlaying  = isCurrentPlaylist && isPlaying;
 
   return (
     <div className="fm-retail-record flex flex-col lg:flex-row">
@@ -409,6 +413,31 @@ export default function RetailRecordSleeve({
             edge, and that margin is what makes it read as an object on a
             surface rather than a shape leaving the screen. */}
         <div className="hidden lg:block absolute inset-0 pointer-events-none select-none z-0 overflow-hidden">
+          {/* Separation from the background. A shadow alone disappears on a
+              near-black page, because there is nothing darker for it to be.
+              So the record also gives off light: a soft glow in the colour of
+              the cover on it, sitting behind the disc and slightly up-left of
+              it, the opposite side to the shadow, so the edge reads from both
+              directions. It eases to the new colour when the track changes,
+              and brightens a little while the record is playing. */}
+          <div
+            aria-hidden="true"
+            className="absolute rounded-full"
+            style={{
+              width: disc * 1.32,
+              height: disc * 1.32,
+              right: geom.right - disc * 0.19,
+              bottom: geom.gap - disc * 0.13,
+              zIndex: 0,
+              background: `radial-gradient(circle at 50% 50%, `
+                + `rgba(${gr},${gg},${gb},${glowPlaying ? 0.42 : 0.30}) 0%, `
+                + `rgba(${gr},${gg},${gb},${glowPlaying ? 0.20 : 0.14}) 38%, `
+                + `rgba(${gr},${gg},${gb},0) 68%)`,
+              filter: 'blur(28px)',
+              opacity: pulled ? 1 : 0,
+              transition: 'background 1.4s ease, opacity 1.2s ease',
+            }}
+          />
           <div
             className="absolute"
             style={{
@@ -420,8 +449,11 @@ export default function RetailRecordSleeve({
               // The shadow he asked for. Big, soft and offset down-right, so
               // the record sits ON the page rather than being printed into
               // it, with a tighter second one underneath for contact.
-              filter: 'drop-shadow(26px 34px 60px rgba(0,0,0,0.85)) '
-                    + 'drop-shadow(6px 10px 18px rgba(0,0,0,0.55))',
+              // Plus a hairline of the cover colour right at the rim, which is
+              // what actually draws the edge against the dark page.
+              filter: 'drop-shadow(30px 40px 70px rgba(0,0,0,0.95)) '
+                    + 'drop-shadow(8px 12px 20px rgba(0,0,0,0.7)) '
+                    + `drop-shadow(0 0 1.5px rgba(${gr},${gg},${gb},0.55))`,
               transform: pulled ? 'scale(1)' : 'scale(0.965)',
               opacity: pulled ? 1 : 0,
               transition: 'transform 1.1s cubic-bezier(0.22,0.9,0.24,1), opacity 0.7s ease',

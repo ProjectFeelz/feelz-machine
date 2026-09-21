@@ -117,7 +117,7 @@ export default function PaymentSettings() {
       // There are two tables holding a payout email and two screens writing
       // them: this one saves artist_payment_profiles, Profile > Edit saves
       // artists. Which screen an artist happened to use decided whether the
-      // payout function could find them — and this is the screen that
+      // payout function could find them, and this is the screen that
       // promises "This is where you'll receive payouts", so it was the worst
       // one to be ignored.
       //
@@ -129,7 +129,7 @@ export default function PaymentSettings() {
         .update({ paypal_email: paypalEmail.trim() })
         .eq('id', artist.id);
       if (mirrorErr) {
-        // Not fatal — the payout function reads this table first. Worth
+        // Not fatal, the payout function reads this table first. Worth
         // knowing about, not worth failing a save the artist just made.
         console.error('[payments] could not mirror payout email to artists:', mirrorErr.message);
       }
@@ -219,7 +219,7 @@ export default function PaymentSettings() {
             className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none placeholder-white/20"
           />
           <p className="text-[10px] text-white/20 mt-1">
-            This is where you'll receive payouts from collaborations and sales
+            Buyers pay this PayPal directly when they buy your music
           </p>
         </div>
 
@@ -237,20 +237,9 @@ export default function PaymentSettings() {
           </p>
         </div>
 
-        <div>
-          <label className="block text-xs text-white/40 mb-1">Payout Threshold (minimum before auto-payout)</label>
-          <div className="flex items-center space-x-2">
-            <span className="text-white/40 text-sm">$</span>
-            <input
-              type="number"
-              min={1}
-              max={1000}
-              value={payoutThreshold}
-              onChange={(e) => setPayoutThreshold(Number(e.target.value))}
-              className="w-24 px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none"
-            />
-          </div>
-        </div>
+        {/* The payout threshold is gone. Sales are paid straight into your
+            PayPal at the moment of sale, so there is nothing for Feelz
+            Machine to hold and no minimum to wait for. */}
       </div>
 
       {/* Save button */}
@@ -264,9 +253,9 @@ export default function PaymentSettings() {
       <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] p-4">
         <h4 className="text-sm font-semibold text-white mb-2">How Royalty Splits Work</h4>
         <div className="space-y-2 text-xs text-white/40 leading-relaxed">
-          <p>When you collaborate on a track, each artist sets their split percentage. When that track earns money (through sales or future monetization), PayPal handles the automatic distribution.</p>
-          <p>Each collaborator must have a PayPal email linked to receive their share. Splits are logged transparently — every artist can see exactly what they earned and when.</p>
-          <p className="text-white/25">Feelz Machine does not take a cut of artist earnings. Your yearly subscription is the only platform fee.</p>
+          <p>Every sale is paid straight into the PayPal email above, the moment the buyer pays. Feelz Machine never holds your money, so there is no payout to wait for. Without a PayPal email your music can't be bought.</p>
+          <p>On a track with collaborators, the buyer pays the track owner. Feelz Machine records each collaborator's agreed share of every sale and tells both of you what it comes to. The owner then pays their collaborators directly.</p>
+          <p className="text-white/25">Feelz Machine does not take a cut of artist earnings. Your yearly subscription is the only platform fee. PayPal's own fee comes off each sale.</p>
         </div>
       </div>
 

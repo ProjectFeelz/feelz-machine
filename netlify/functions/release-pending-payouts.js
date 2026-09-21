@@ -4,8 +4,8 @@
 //
 // process-split-payout holds an artist's money as `pending` rows until their
 // balance clears their threshold, and releases it on the sale that tips them
-// over. That is the right behaviour — a $3 payout costs nearly as much in
-// PayPal fees as a $30 one — but on its own it has a trap in it: an artist
+// over. That is the right behaviour, a $3 payout costs nearly as much in
+// PayPal fees as a $30 one, but on its own it has a trap in it: an artist
 // who sells once for $4 and never sells again waits forever. Their money is
 // recorded, owed, and unreachable.
 //
@@ -15,7 +15,7 @@
 //      (a collaborator can cross it through someone else's sale, and nothing
 //      in that sale's own run would have checked them)
 //   2. anyone whose oldest pending row is older than MAX_HOLD_DAYS, whatever
-//      the amount — because "we are saving you the fee" stops being true the
+//      the amount, because "we are saving you the fee" stops being true the
 //      moment it becomes "we are keeping your money".
 //
 // Nobody has to ask for their money, and nothing sits indefinitely.
@@ -31,9 +31,9 @@ const supabase = createClient(
 const PAYPAL_BASE   = paypalEnv.baseApiM;
 const MAX_HOLD_DAYS = 60;
 // Below this, a payout costs more in fees than it delivers. Rows under it are
-// left pending and reported, rather than sent — and they are reported, so a
+// left pending and reported, rather than sent, and they are reported, so a
 // balance that can never be paid is visible instead of silently stuck.
-const MIN_VIABLE    = 1.00;
+const MIN_VIABLE    = 0;   // retired: everything owed is sent
 
 async function getPayPalAccessToken() {
   const credentials = Buffer.from(
@@ -154,18 +154,19 @@ exports.handler = async (event) => {
       const heldTooLong = info.oldest < cutoff;
 
       if (!email) { skipped.push({ artistId, amount, why: 'no_paypal_email' }); continue; }
-      if (amount < MIN_VIABLE) { skipped.push({ artistId, amount, why: 'below_minimum_viable' }); continue; }
-      if (amount < threshold && !heldTooLong) {
-        skipped.push({ artistId, amount, why: `under threshold ${threshold}` });
-        continue;
-      }
+      // No threshold any more, and no "too small to be worth sending". This
+      // money is the artist's, left over from the retired platform route, and
+      // the platform does not sit on it to save a fee. Anything owed goes out
+      // on the next run. (threshold and heldTooLong are kept only for the
+      // log line below.)
+      if (!(amount > 0)) { skipped.push({ artistId, amount, why: 'nothing_owed' }); continue; }
 
       items.push({
         recipient_type: 'EMAIL',
         amount: { value: amount.toFixed(2), currency: 'USD' },
         receiver: email,
         note: heldTooLong && amount < threshold
-          ? 'Your Feelz Machine royalties — released because they have been waiting a while.'
+          ? 'Your Feelz Machine royalties, released because they have been waiting a while.'
           : 'Your Feelz Machine royalties.',
         sender_item_id: `sweep_${artistId}`,
       });

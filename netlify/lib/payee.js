@@ -5,28 +5,31 @@
  *
  * Feelz Machine sells music three ways and, until now, all three captured into
  * the platform account and forwarded the artist's share later by PayPal
- * Payouts. Tips were the exception — tip-artist.js sets a payee on the order,
+ * Payouts. Tips were the exception, tip-artist.js sets a payee on the order,
  * so a tip goes straight to the artist. Two conventions, no shared code, and
  * the tip path ended up doing BOTH (payee AND a payout of the same amount),
  * which paid artists twice out of the business account until it was caught.
  *
  * This module is the single answer to "who is PayPal paying for this sale?",
- * used by the order creation and, crucially, by the capture — so nothing ever
+ * used by the order creation and, crucially, by the capture, so nothing ever
  * again forwards money that never arrived.
  *
  *
  * THE THREE ROUTES
  *
  *   'platform'   Capture into the business account, forward the artist's share
- *                afterwards with process-split-payout.js. The current, working
- *                behaviour. This is the ONLY route that can split a sale across
- *                collaborators, so a track with accepted collaborations always
- *                takes it.
+ *                afterwards with process-split-payout.js. RETIRED as of
+ *                September 2026: only reachable with PAYPAL_DIRECT_TO_ARTIST
+ *                set to 'false', as an emergency switch. The platform does not
+ *                hold artists' money.
+ *
+ *   'unavailable' The seller has no PayPal details. The sale is refused with a
+ *                message, rather than parked in the business account.
  *
  *   'direct'     payee.email_address on the purchase unit. PayPal puts the
  *                buyer's money straight into the seller's own PayPal. Works
  *                today with an ordinary PayPal business account and no approval
- *                from anyone — this is what tip-artist.js already does.
+ *                from anyone, this is what tip-artist.js already does.
  *                LIMITATION, and it is not a small one: the platform CANNOT
  *                take a commission at capture on this route. The money never
  *                touches the business account, so there is nothing to take it
@@ -49,15 +52,22 @@
  *                failing at PayPal with something cryptic.
  *
  *
- * WHY IT IS OFF BY DEFAULT
+ * WHY IT IS ON BY DEFAULT
  *
- * PAYPAL_DIRECT_TO_ARTIST must be 'true' before anything leaves the 'platform'
- * route. Changing where live money lands is not a change to make silently on a
- * site that is already taking payments — and if it goes wrong, the fix has to
- * be an environment variable and a redeploy, not a code change under pressure.
+ * The owner decided, September 2026: the platform handles only what is its
+ * own. Sales go straight to the seller, a track with collaborators pays the
+ * owner and records what they owe each collaborator (sale_splits), and a
+ * seller with no PayPal cannot sell until they add one. If it ever has to be
+ * undone in a hurry, PAYPAL_DIRECT_TO_ARTIST=false and a redeploy restores
+ * the old route without a code change.
  */
 
-const DIRECT_ENABLED = process.env.PAYPAL_DIRECT_TO_ARTIST === 'true';
+// ON unless explicitly switched off. Feelz Machine does not hold artists'
+// money: a sale is paid straight into the seller's own PayPal, and the
+// platform account only ever receives what is the platform's (subscriptions).
+// PAYPAL_DIRECT_TO_ARTIST=false is kept as an emergency switch back to the
+// old capture-then-payout route, and nothing else.
+const DIRECT_ENABLED = process.env.PAYPAL_DIRECT_TO_ARTIST !== 'false';
 const BN_CODE        = process.env.PAYPAL_PARTNER_BN_CODE || null;
 
 /**
@@ -77,7 +87,7 @@ function platformIdentityConfigured() {
  * Did this capture land in the platform account?
  *
  * Reads the payee off PayPal's own capture response, which is the only
- * authority on the question. Returns null — meaning "cannot tell" — when we do
+ * authority on the question. Returns null, meaning "cannot tell", when we do
  * not know our own identity, and every caller treats null as "do not forward
  * money", because failing to forward is recoverable by hand and double-paying
  * is not.
@@ -117,39 +127,31 @@ async function resolvePayee({ supabase, artistId, trackId, commissionPct = 0 }) 
   if (!DIRECT_ENABLED)  return stay('direct_routing_disabled');
   if (!artistId)        return stay('no_seller_on_the_item');
 
-  // ── Collaborators make direct routing impossible ──────────────────────────
+  // ── Collaborators ─────────────────────────────────────────────────────────
   //
-  // A direct payee sends the WHOLE payment to one account. On a track with an
-  // accepted collaboration that would pay the owner everything and the
-  // collaborators nothing, silently — the exact failure process-split-payout.js
-  // has a long comment about already. So the presence of collaborators, or any
-  // doubt about whether there are collaborators, keeps the sale on the platform
-  // route where it can be split properly.
+  // They used to force the sale onto the platform route, so the platform could
+  // split it. That meant holding the collaborators' money, which the platform
+  // no longer does. The buyer pays the OWNER directly, and the agreed split is
+  // recorded as what the owner owes each collaborator (sale_splits, written at
+  // capture). The count here is informational only: whether or not it can be
+  // read, the payee is the owner.
+  let collaboratorCount = 0;
   if (trackId) {
     const { data: collabs, error } = await supabase
       .from('collaborations')
-      .select('artist_id')
+      .select('artist_id, invited_by')
       .eq('track_id', trackId)
       .eq('status', 'accepted');
-
     if (error) {
-      // An unknown split is not a zero split.
-      console.error('[payee] could not read collaborations for', trackId,
-        '—', error.code, error.message, '— staying on the platform route.');
-      return stay('collaboration_check_failed');
+      console.error('[payee] could not count collaborators for', trackId, ':', error.code, error.message);
+    } else {
+      collaboratorCount = (collabs || []).filter(c => c.invited_by === artistId).length;
     }
-    if ((collabs || []).length > 0) {
-      return stay('has_collaborators', { collaboratorCount: collabs.length });
-    }
-  } else {
-    // An album is many tracks and any of them may be a collaboration. Not worth
-    // resolving per sale; albums stay on the splitting route.
-    return stay('album_sale');
   }
 
   // ── The seller's PayPal ───────────────────────────────────────────────────
   //
-  // Both places an address can live, in the order the payments UI owns them —
+  // Both places an address can live, in the order the payments UI owns them -
   // the same precedence process-split-payout.js and release-pending-payouts.js
   // use. artist_payment_profiles is what PaymentSettings writes; artists is
   // what Profile > Edit writes.
@@ -173,7 +175,7 @@ async function resolvePayee({ supabase, artistId, trackId, commissionPct = 0 }) 
       route: 'multiparty',
       payee: { merchant_id: sellerMerchantId },
       reason: 'seller_onboarded_to_platform',
-      collaboratorCount: 0,
+      collaboratorCount,
       commissionPct,
       sellerEmail,
       sellerMerchantId,
@@ -182,9 +184,9 @@ async function resolvePayee({ supabase, artistId, trackId, commissionPct = 0 }) 
 
   if (sellerMerchantId && !BN_CODE) {
     // The seller did the onboarding but we are not a PayPal partner, so the
-    // merchant id is not usable. Say so loudly — this is a business step that
+    // merchant id is not usable. Say so loudly, this is a business step that
     // is stuck, and it will otherwise look like the seller's problem.
-    console.warn('[payee] artist', artistId, 'has a PayPal merchant id but PAYPAL_PARTNER_BN_CODE is unset —',
+    console.warn('[payee] artist', artistId, 'has a PayPal merchant id but PAYPAL_PARTNER_BN_CODE is unset -',
       'Commerce Platform is not available, falling back.');
   }
 
@@ -198,14 +200,21 @@ async function resolvePayee({ supabase, artistId, trackId, commissionPct = 0 }) 
       // out of. The sale is recorded with the commission the platform WOULD
       // have taken, marked unpaid, so it is visible rather than forgotten.
       reason: 'seller_has_paypal_email',
-      collaboratorCount: 0,
+      collaboratorCount,
       commissionPct,
       sellerEmail,
       sellerMerchantId: null,
     };
   }
 
-  return stay('seller_has_no_paypal_details');
+  // No PayPal on file: the sale does NOT fall back to the platform account.
+  // Money that lands there is money the platform is holding for someone, which
+  // is exactly what this module exists to prevent. The order is refused with
+  // a message the buyer can read, and the artist is told to add their PayPal.
+  return {
+    route: 'unavailable', payee: null, reason: 'seller_has_no_paypal_details',
+    collaboratorCount, commissionPct, sellerEmail: null, sellerMerchantId: null,
+  };
 }
 
 /**
@@ -215,7 +224,7 @@ async function resolvePayee({ supabase, artistId, trackId, commissionPct = 0 }) 
  * permissions problem.
  */
 function purchaseUnitFor(decision, { grossValue, currency = 'USD' }) {
-  if (!decision || decision.route === 'platform') {
+  if (!decision || decision.route === 'platform' || decision.route === 'unavailable') {
     return { fragment: {}, headers: {} };
   }
 

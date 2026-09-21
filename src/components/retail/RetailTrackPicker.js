@@ -19,6 +19,14 @@
 // the set of music cleared for venues, and a playlist that can reach outside
 // it makes the clearing step decorative. Tracks get into the catalogue by
 // being approved in the Pitches tab.
+//
+// Only SUBMISSIONS are listed: catalogue rows that carry a pitch_id, meaning
+// an artist pitched the track to retail and it was approved. Rows with no
+// pitch_id were seeded straight into the catalogue and are the whole
+// platform's music, which is not what a venue playlist should be built from.
+//
+// Genre and mood chips filter on tracks.genre and tracks.mood, built from what
+// is actually in the list so there is never a chip that matches nothing.
 
 import React from 'react';
 import { Search, Music, Plus, Check, Play, Pause, Loader } from 'lucide-react';
@@ -35,6 +43,8 @@ export default function RetailTrackPicker({ existingTrackIds = [], onAdd, showTo
   const [loading, setLoading] = React.useState(true);
   const [query, setQuery] = React.useState('');
   const [adding, setAdding] = React.useState(null);
+  const [genre, setGenre] = React.useState(null);
+  const [mood, setMood] = React.useState(null);
 
   const already = React.useMemo(() => new Set(existingTrackIds), [existingTrackIds]);
 
@@ -51,11 +61,12 @@ export default function RetailTrackPicker({ existingTrackIds = [], onAdd, showTo
           added_at,
           track:tracks (
             id, title, file_url, cover_artwork_url, duration,
-            is_published, is_explicit, release_date,
+            is_published, is_explicit, release_date, genre, mood,
             artist:artists ( id, artist_name )
           )
         `)
         .eq('is_active', true)
+        .not('pitch_id', 'is', null)
         .order('added_at', { ascending: false });
 
       if (cancelled) return;
@@ -72,14 +83,35 @@ export default function RetailTrackPicker({ existingTrackIds = [], onAdd, showTo
     return () => { cancelled = true; };
   }, [showToast]);
 
+  // Tags are free text on tracks, so "Afro House" and "afro house " are the
+  // same tag. Compared lowercased and trimmed, shown as first written.
+  const norm = (v) => (v || '').trim().toLowerCase();
+
+  const tagCounts = React.useCallback((field) => {
+    const seen = new Map();
+    rows.forEach(r => {
+      const raw = (r.track[field] || '').trim();
+      if (!raw) return;
+      const key = raw.toLowerCase();
+      const hit = seen.get(key);
+      if (hit) hit.count += 1; else seen.set(key, { key, label: raw, count: 1 });
+    });
+    return [...seen.values()].sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
+  }, [rows]);
+
+  const genres = React.useMemo(() => tagCounts('genre'), [tagCounts]);
+  const moods  = React.useMemo(() => tagCounts('mood'),  [tagCounts]);
+
   const filtered = React.useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return rows;
-    return rows.filter(r =>
-      (r.track.title || '').toLowerCase().includes(q) ||
-      (r.track.artist?.artist_name || '').toLowerCase().includes(q)
-    );
-  }, [rows, query]);
+    return rows.filter(r => {
+      if (genre && norm(r.track.genre) !== genre) return false;
+      if (mood  && norm(r.track.mood)  !== mood)  return false;
+      if (!q) return true;
+      return (r.track.title || '').toLowerCase().includes(q) ||
+             (r.track.artist?.artist_name || '').toLowerCase().includes(q);
+    });
+  }, [rows, query, genre, mood]);
 
   const playableList = React.useMemo(() => filtered.map(r => r.track), [filtered]);
 
@@ -106,7 +138,7 @@ export default function RetailTrackPicker({ existingTrackIds = [], onAdd, showTo
       <div className="flex items-baseline justify-between mb-3 gap-3 flex-wrap">
         <p className="text-xs font-bold text-white/50 uppercase tracking-wide">Retail catalogue</p>
         <p className="text-[11px] text-white/25">
-          {loading ? 'loading…' : `${filtered.length} of ${rows.length} cleared tracks`}
+          {loading ? 'loading…' : `${filtered.length} of ${rows.length} approved submissions`}
         </p>
       </div>
 
@@ -120,18 +152,48 @@ export default function RetailTrackPicker({ existingTrackIds = [], onAdd, showTo
         />
       </div>
 
+      {[
+        { label: 'Genre', tags: genres, value: genre, set: setGenre },
+        { label: 'Mood',  tags: moods,  value: mood,  set: setMood  },
+      ].map(group => group.tags.length > 0 && (
+        <div key={group.label} className="mt-3 flex items-center gap-2 overflow-x-auto pb-1">
+          <span className="text-[10px] font-bold text-white/30 uppercase tracking-wide flex-shrink-0 w-12">
+            {group.label}
+          </span>
+          <button
+            onClick={() => group.set(null)}
+            className={`px-3 py-1 rounded-full text-xs font-semibold flex-shrink-0 transition ${
+              group.value === null ? 'bg-purple-500 text-white' : 'bg-white/[0.06] text-white/50 hover:text-white/80'
+            }`}
+          >
+            All
+          </button>
+          {group.tags.map(tag => (
+            <button
+              key={tag.key}
+              onClick={() => group.set(group.value === tag.key ? null : tag.key)}
+              className={`px-3 py-1 rounded-full text-xs font-semibold flex-shrink-0 transition whitespace-nowrap ${
+                group.value === tag.key ? 'bg-purple-500 text-white' : 'bg-white/[0.06] text-white/50 hover:text-white/80'
+              }`}
+            >
+              {tag.label} <span className="opacity-50">{tag.count}</span>
+            </button>
+          ))}
+        </div>
+      ))}
+
       {loading ? (
         <div className="flex justify-center py-10">
           <Loader className="w-5 h-5 text-white/30 animate-spin" />
         </div>
       ) : rows.length === 0 ? (
         <p className="text-sm text-white/30 py-8 text-center">
-          Nothing is cleared for retail yet. Approve a submission in the Pitches tab
-          and it will appear here.
+          No approved submissions yet. Approve one in the Pitches tab and it will
+          appear here.
         </p>
       ) : filtered.length === 0 ? (
         <p className="text-sm text-white/30 py-8 text-center">
-          Nothing in the catalogue matches “{query.trim()}”.
+          Nothing matches {query.trim() ? `“${query.trim()}”` : 'those tags'}.
         </p>
       ) : (
         <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2 max-h-[28rem] overflow-y-auto pr-1">
@@ -182,6 +244,11 @@ export default function RetailTrackPicker({ existingTrackIds = [], onAdd, showTo
                   </p>
                   <p className="text-xs text-white/40 truncate">
                     {t.artist?.artist_name || 'Unknown artist'}
+                    {(t.genre || t.mood) && (
+                      <span className="text-white/25">
+                        {' · '}{[t.genre, t.mood].filter(Boolean).map(v => v.trim()).join(' · ')}
+                      </span>
+                    )}
                   </p>
                 </div>
 
