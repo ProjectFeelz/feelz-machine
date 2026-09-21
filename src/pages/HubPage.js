@@ -107,7 +107,7 @@ export default function HubPage() {
   }, [user]);
 
   // Retail staff who are not platform admins. Before this they had access to
-  // /retail-admin and no way to reach it — the Hub only offered the panel to
+  // /retail-admin and no way to reach it, the Hub only offered the panel to
   // admins, so the only route in was a URL someone had to send them.
   useEffect(() => {
     if (!user) return;
@@ -202,7 +202,7 @@ export default function HubPage() {
         <link rel="icon" href="/favicon.ico" />
         <link rel="apple-touch-icon" href="/logo192.png" />
         <title>Hub · Feelz Machine</title>
-        <meta name="description" content="Your Feelz Machine control center — access your dashboard, library, community and settings." />
+        <meta name="description" content="Your Feelz Machine control center, access your dashboard, library, community and settings." />
         <link rel="canonical" href="https://www.feelzmachine.com/hub" />
         <meta property="og:title" content="Hub · Feelz Machine" />
         <meta property="og:url" content="https://www.feelzmachine.com/hub" />
@@ -278,12 +278,13 @@ export default function HubPage() {
               <LinkCard icon={Sparkles} label="Home Hero" description="Control the big slot at the top of Home" path="/admin/home-hero" color="bg-yellow-500/20" />
               <LinkCard icon={Star} label="Cold Start Picks" description="What a brand new listener hears first" path="/admin/cold-start" color="bg-yellow-500/20" />
               <LinkCard icon={Send} label="Newsletter" description="Compose updates for the app or retail venues" path="/newsletter/compose" color="bg-yellow-500/20" />
+              <LinkCard icon={Sparkles} label="Creator Deals and Instagram" description="Deals, and the Instagram add-on switch" path="/admin/deals" color="bg-yellow-500/20" />
             </Section>
 
             {/* Two cards, deliberately. Venue Invites, Retail Playlists and
                 Retail Staff were removed from here because they are tabs
-                INSIDE /retail-admin — Playlists, Venues and Staff in its own
-                tab bar — so they were five doors into two rooms. Nothing was
+                INSIDE /retail-admin, Playlists, Venues and Staff in its own
+                tab bar, so they were five doors into two rooms. Nothing was
                 orphaned; the panel still opens on Playlists by default and
                 every ?sub= link it used to point at still works if you have
                 one bookmarked. */}
@@ -299,14 +300,14 @@ export default function HubPage() {
             </>
           )}
 
-          {/* Newsletter editor — non-admin */}
+          {/* Newsletter editor, non-admin */}
           {!isAdmin && isNewsletterEditor && (
             <Section title="Newsletter" icon={Send}>
               <LinkCard icon={Send} label="Compose" description="Write an update for the app or retail venues" path="/newsletter/compose" color="bg-purple-500/20" />
             </Section>
           )}
 
-          {/* Retail staff — non-admin. An editor gets Playlists and Pitches
+          {/* Retail staff, non-admin. An editor gets Playlists and Pitches
               inside the panel; a manager gets Venues and Staff as well. The
               panel and the database both enforce that, so this card is the
               same door for both and the level decides what is behind it. */}
@@ -325,7 +326,7 @@ export default function HubPage() {
             </Section>
           )}
 
-          {/* School Sessions judge — non-admin. Admins already get this in
+          {/* School Sessions judge, non-admin. Admins already get this in
               the Admin section above, so this would otherwise double up. */}
           {!isAdmin && isSchoolSessionsJudge && (
             <Section title="School Sessions" icon={Trophy}>
@@ -348,10 +349,10 @@ export default function HubPage() {
               <LinkCard icon={Music}         label="Browse Music"     description="Find new tracks and artists"   path="/browse"             color="bg-purple-500/20" />
               <LinkCard icon={Mic2}          label="Discover Artists" description="Find and follow new artists"   path="/browse?tab=artists" color="bg-indigo-500/20" />
               <LinkCard icon={Users}         label="Following"        description="Artists you follow"            path="/library/following"  color="bg-cyan-500/20" />
-              {/* Was one card labelled "Community — Feed, posts and artist
+              {/* Was one card labelled "Community, Feed, posts and artist
                   updates" pointing at /community, which renders the CHAT ROOM
                   LIST, not the feed. Two different things wearing one name.
-                  Split, so each label matches where it goes — and this is now
+                  Split, so each label matches where it goes, and this is now
                   the only route to /feed anywhere in the app. */}
               <LinkCard icon={MessageCircle} label="Chat Rooms"      description="Talk to artists and other fans" path="/community"          color="bg-teal-500/20" />
               <LinkCard icon={Newspaper}     label="Feed"            description="Posts and artist updates"       path="/feed"               color="bg-sky-500/20" />
@@ -371,14 +372,14 @@ export default function HubPage() {
                   wrapped in {!isArtist}. The Chat button on an artist profile
                   is hidden on your OWN profile. So an artist who had never
                   joined a room could not reach the room list, and therefore
-                  could not create the room their fans are meant to find —
+                  could not create the room their fans are meant to find -
                   the same dead end that killed chat for listeners, rebuilt on
                   the artist side. */}
               <LinkCard icon={MessageCircle}  label="Your Fan Chat"  description="Talk to your fans, or start a room"     path="/community"               color="bg-teal-500/20" />
             </Section>
           )}
 
-          {/* Account — Privacy Policy and Terms moved to About page */}
+          {/* Account, Privacy Policy and Terms moved to About page */}
           <Section title="Account" icon={User}>
             <LinkCard icon={Palette}    label="Profile & Appearance" description="Edit bio, socials, and theme"   path="/profile"      color="bg-pink-500/20" />
             <LinkCard icon={Bell}       label="Notifications"         description="Collabs, followers, milestones" path="/notifications" color="bg-orange-500/20" />
@@ -396,7 +397,7 @@ export default function HubPage() {
             <LinkCard icon={Info} label="About" description="App info, plans, privacy and terms" path="/about" color="bg-white/[0.06]" />
             {/* The one deliberate way in.
                 The bug room is a pinned chat room, so it used to sit at the
-                top of Chat Rooms and anyone could wander into it — which is
+                top of Chat Rooms and anyone could wander into it, which is
                 how confused messages ended up buried in with real reports.
                 It is hidden from that list now and reached from here. */}
             <LinkCard icon={Bug} label="Report a Bug" description="Something broken? Tell us here" onClick={() => openBugRoom()} color="bg-red-500/15" />

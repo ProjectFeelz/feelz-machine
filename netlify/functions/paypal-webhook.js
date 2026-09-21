@@ -101,6 +101,28 @@ async function activateArtistSubscription(subscriptionId) {
   if (error) console.error('Activate subscription error:', error);
 }
 
+// ── Artist add-ons (Instagram add-on, migration 153) ──────────────────────
+// Matched on the PayPal subscription id; a subscription that is not an add-on
+// matches no row and nothing happens.
+async function addonEvent(subscriptionId, kind) {
+  if (!subscriptionId) return;
+  const now = new Date();
+  let patch;
+  if (kind === 'activated') patch = { status: 'active', activated_at: now.toISOString(), cancelled_at: null };
+  else if (kind === 'paid') {
+    // A payment covers the next month. PayPal's sale event does not carry the
+    // next billing date, so a month plus two days' slack is recorded.
+    patch = { status: 'active', current_period_end: new Date(now.getTime() + 33 * 86400000).toISOString(), cancelled_at: null };
+  } else if (kind === 'failed') patch = { status: 'past_due' };
+  else if (kind === 'cancelled') patch = { status: 'cancelled', cancelled_at: now.toISOString() };
+  else return;
+  patch.updated_at = now.toISOString();
+  let q = supabase.from('artist_addons').update(patch).eq('paypal_subscription_id', subscriptionId);
+  if (kind === 'failed') q = q.eq('status', 'active');
+  const { error } = await q;
+  if (error) console.error('[paypal-webhook] add-on update failed:', kind, subscriptionId, error.message);
+}
+
 // ── Retail venue subscriptions ──────────────────────────────────────────
 async function activateRetailSubscription(subscriptionId) {
   if (!subscriptionId) return;
@@ -260,6 +282,7 @@ exports.handler = async (event) => {
     const subscriptionId = resource?.id;
     await activateArtistSubscription(subscriptionId);
     await activateRetailSubscription(subscriptionId);
+    await addonEvent(subscriptionId, 'activated');
     // Also handle listener subscription activation
     const { data: listenerSub } = await supabase
       .from('listener_tier_subscriptions')
@@ -278,6 +301,7 @@ exports.handler = async (event) => {
     const subscriptionId = resource?.id;
     await cancelArtistSubscription(subscriptionId, 'user_cancelled');
     await cancelRetailSubscription(subscriptionId, 'user_cancelled');
+    await addonEvent(subscriptionId, 'cancelled');
     const { data: listenerSub } = await supabase.from('listener_tier_subscriptions')
       .update({ status: 'cancelled', cancelled_at: new Date().toISOString(), cancel_reason: 'user_cancelled' })
       .eq('paypal_subscription_id', subscriptionId)
@@ -307,6 +331,7 @@ exports.handler = async (event) => {
     console.warn('[paypal-webhook] subscription payment FAILED',
       { subscriptionId, attempts, nextRetry: resource?.next_payment_retry_time || null });
     if (subscriptionId) {
+      await addonEvent(subscriptionId, 'failed');
       const { error } = await supabase.from('retail_subscriptions')
         .update({ status: 'past_due' })
         .eq('paypal_subscription_id', subscriptionId)
@@ -326,6 +351,7 @@ exports.handler = async (event) => {
     const subscriptionId = resource?.id;
     await cancelArtistSubscription(subscriptionId, 'payment_failed');
     await cancelRetailSubscription(subscriptionId, 'payment_failed');
+    await addonEvent(subscriptionId, 'cancelled');
     const { data: listenerSub } = await supabase.from('listener_tier_subscriptions')
       .update({ status: 'cancelled', cancelled_at: new Date().toISOString(), cancel_reason: 'payment_failed' })
       .eq('paypal_subscription_id', subscriptionId)
@@ -340,6 +366,7 @@ exports.handler = async (event) => {
     const subscriptionId = resource?.id;
     await cancelArtistSubscription(subscriptionId, 'expired');
     await cancelRetailSubscription(subscriptionId, 'expired');
+    await addonEvent(subscriptionId, 'cancelled');
   }
 
   // ── Subscription payment completed (first payment AND every renewal) ─────
@@ -349,6 +376,7 @@ exports.handler = async (event) => {
       // Ensure status is active in case it was briefly suspended
       await activateArtistSubscription(subscriptionId);
       await activateRetailSubscription(subscriptionId);
+      await addonEvent(subscriptionId, 'paid');
 
       // Retail money in, for the artist pool. Throws if it cannot be saved,
       // which returns a 500 so PayPal delivers the event again.

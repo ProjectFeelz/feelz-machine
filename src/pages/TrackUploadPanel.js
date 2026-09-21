@@ -789,7 +789,9 @@ function AddTrackToAlbum({
   const [trackForm, setTrackForm]       = useState({
     ...BLANK_TRACK,
     track_number: String(existingTrackCount + 1),
-    is_published: true,
+    // Follows the album: a track added to a published album goes live with it,
+    // a track added to a draft album stays a draft.
+    is_published: album?.is_published !== false,
   });
   const [versionFiles, setVersionFiles] = useState([]);
   const [stemFiles, setStemFiles]       = useState([]);
@@ -808,7 +810,7 @@ function AddTrackToAlbum({
     e.preventDefault();
     if (!trackForm.audio_file) { showMessage('error', 'Audio file is required'); return; }
     if (!trackForm.title.trim()) { showMessage('error', 'Track title is required'); return; }
-    if (!trackForm.cover_file) { showMessage('error', 'Cover artwork is required'); return; }
+    if (!trackForm.cover_file && !album?.cover_artwork_url) { showMessage('error', 'Add artwork, or give the album a cover first'); return; }
 
     // Duplicate title check within this album
     const normTitle = trackForm.title.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -827,6 +829,8 @@ function AddTrackToAlbum({
         showMessage('info', 'Uploading cover artwork…');
         coverUrl = await uploadFile(trackForm.cover_file, 'covers/');
       }
+      // No artwork of its own: use the album cover.
+      if (!coverUrl) coverUrl = album?.cover_artwork_url || null;
       // tracks has a check constraint, require_artwork_to_publish, refusing
       // any published row with no cover_artwork_url. Without this check the
       // insert fails with 23514 and the artist sees nothing useful.
@@ -1030,7 +1034,7 @@ function AddTrackToAlbum({
           )}
         </div>
         <div>
-          <FieldLabel>Cover Artwork (.jpg, .png)</FieldLabel>
+          <FieldLabel>{album?.cover_artwork_url ? 'Track Artwork (optional, uses the album cover)' : 'Cover Artwork (.jpg, .png)'}</FieldLabel>
           <input type="file" accept=".jpg,.jpeg,.png,.webp"
             onChange={(e) => setTrackForm(prev => ({ ...prev, cover_file: e.target.files[0] }))}
             className="w-full text-sm text-white/60 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:bg-white/[0.06] file:text-white/60 file:text-sm hover:file:bg-white/[0.1]" />
@@ -1307,7 +1311,9 @@ export default function TrackUploadPanel() {
       cover_artwork_url: coverUrl,
       release_date:      release.album_release_date || null,
       release_type:      release.release_type,
-      is_published:      release.album_is_published,
+      // Created hidden. The album and all its tracks go live together when the
+      // artist presses Done, so fans never see half an album.
+      is_published:      false,
       price:             parseFloat(release.album_price) || 0,
     }]).select().single();
     if (error) {
@@ -1341,6 +1347,9 @@ export default function TrackUploadPanel() {
         } catch {}
       }
     }
+    // Every track on the album uses this artwork unless it has its own. This
+    // ref was read but never set, which is why each track asked for artwork.
+    albumCoverUrlRef.current = coverUrl;
     setSessionAlbumId(data.id);
     await fetchAlbums();
     return data.id;
@@ -1401,10 +1410,6 @@ export default function TrackUploadPanel() {
         return;
       }
     }
-    if (isAlbumRelease && !trackForm.cover_file && albumTrackQueue.length === 0) {
-      showMessage('error', 'Please add cover artwork for the first track.');
-      return;
-    }
 
     if (!schoolSessionsFormValid(schoolSessionsEnabled, schoolSessionsForm)) {
       showMessage('error', 'Please fill in the entrant name, email, TikTok handle and video link, school, the YouTube confirmation, and (if under 18) guardian consent for the School Sessions entry.');
@@ -1424,7 +1429,13 @@ export default function TrackUploadPanel() {
       }
       // Album tracks inherit the album's artwork, which is what a track on an
       // album should show anyway.
-      if (!coverUrl && isAlbumRelease) coverUrl = albumCoverUrlRef.current || null;
+      if (!coverUrl && isAlbumRelease) {
+        if (!albumCoverUrlRef.current && albumId) {
+          const { data: a } = await supabase.from('albums').select('cover_artwork_url').eq('id', albumId).maybeSingle();
+          albumCoverUrlRef.current = a?.cover_artwork_url || null;
+        }
+        coverUrl = albumCoverUrlRef.current || null;
+      }
 
       // tracks has a check constraint, require_artwork_to_publish, that
       // refuses any published row with no cover_artwork_url. Only the first
@@ -1450,7 +1461,9 @@ export default function TrackUploadPanel() {
         track_number:      parseInt(trackForm.track_number) || (albumTrackQueue.length + 1),
         is_explicit:       trackForm.is_explicit,
         is_downloadable:   trackForm.is_downloadable,
-        is_published:      trackForm.is_published,
+        // Album tracks are saved as drafts while the artist adds the rest, and
+        // all published together by finishAlbum().
+        is_published:      isAlbumRelease ? false : trackForm.is_published,
         is_premium:        trackForm.is_premium,
         download_price:    parseFloat(trackForm.download_price) || 0,
         featured:          trackForm.featured,
@@ -1559,7 +1572,7 @@ export default function TrackUploadPanel() {
         }
       }
 
-      if (trackForm.is_published) {
+      if (trackForm.is_published && !isAlbumRelease) {
         try {
           const { data: { session: authSession } } = await supabase.auth.getSession();
           fetch('/.netlify/functions/notify-new-track', {
@@ -1580,8 +1593,9 @@ export default function TrackUploadPanel() {
         setAlbumTrackQueue(prev => [...prev, {
           id: trackId, title: trackForm.title,
           cover_artwork_url: coverUrl, _uploaded: true,
+          _publish: trackForm.is_published,
         }]);
-        showMessage('success', `"${trackForm.title}" added!`);
+        showMessage('success', `"${trackForm.title}" added. Add the next one, or press Done when they are all in.`);
         setTrackForm({ ...BLANK_TRACK, track_number: String(albumTrackQueue.length + 2) });
         setVersionFiles([]); setCollaborators([]);
         setAddingAnother(false);
@@ -1613,14 +1627,62 @@ export default function TrackUploadPanel() {
     setSchoolSessionsEnabled(false); setSchoolSessionsForm(SCHOOL_SESSIONS_BLANK_FORM);
   };
 
-  const finishAlbum = () => {
+  const [finishing, setFinishing] = useState(false);
+
+  // Publishes the album and every track on it in one go, with the album
+  // artwork on any track that has none. Until now each track had to be
+  // undrafted and given artwork one by one.
+  const finishAlbum = async () => {
     const minTracks = ['ep', 'album', 'mixtape', 'live', 'compilation'].includes(release.release_type) ? 3 : 1;
     if (albumTrackQueue.length < minTracks) {
       showMessage('error', `A ${release.release_type} requires at least ${minTracks} tracks. You've added ${albumTrackQueue.length} so far.`);
       return;
     }
-    showMessage('success', `${release.release_type.toUpperCase()} published with ${albumTrackQueue.length} track${albumTrackQueue.length !== 1 ? 's' : ''}!`);
-    resetAll();
+    if (!sessionAlbumId) { resetAll(); return; }
+    setFinishing(true);
+    try {
+      const cover = albumCoverUrlRef.current;
+      const ids = albumTrackQueue.map(t => t.id);
+      if (cover) {
+        const { error: cErr } = await supabase.from('tracks')
+          .update({ cover_artwork_url: cover }).in('id', ids).is('cover_artwork_url', null);
+        if (cErr) throw cErr;
+      }
+      if (release.album_is_published) {
+        const toPublish = albumTrackQueue.filter(t => t._publish !== false).map(t => t.id);
+        if (toPublish.length) {
+          const { error: pErr } = await supabase.from('tracks').update({ is_published: true }).in('id', toPublish);
+          if (pErr) throw pErr;
+        }
+        const { error: aErr } = await supabase.from('albums').update({ is_published: true }).eq('id', sessionAlbumId);
+        if (aErr) throw aErr;
+
+        // One notice to followers for the release, not one per track.
+        if (toPublish.length) {
+          try {
+            const { data: { session: authSession } } = await supabase.auth.getSession();
+            const first = albumTrackQueue.find(t => t._publish !== false);
+            fetch('/.netlify/functions/notify-new-track', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                track_id: first.id, track_title: release.album_title || first.title,
+                artist_id: artist.id, artist_slug: artist.slug, token: authSession?.access_token,
+              }),
+            });
+          } catch {}
+        }
+        showMessage('success', `${release.release_type.toUpperCase()} published with ${albumTrackQueue.length} track${albumTrackQueue.length !== 1 ? 's' : ''}!`);
+      } else {
+        showMessage('success', `${release.release_type.toUpperCase()} saved as a draft. Publish it from Albums when you are ready.`);
+      }
+      resetAll();
+      fetchTracks(); fetchAlbums();
+    } catch (err) {
+      console.error('[upload] finishing album failed:', err);
+      showMessage('error', 'Could not publish: ' + describeError(err));
+    }
+    setFinishing(false);
   };
 
   const startEdit = async (track) => {
@@ -1757,13 +1819,19 @@ export default function TrackUploadPanel() {
     } finally { setUploading(false); }
   };
 
+  // Saving an album now carries its changes to every track on it:
+  //   new cover   -> tracks that had no artwork or the old album cover get the new one
+  //   published   -> every track on the album is published (drafts included)
+  //   unpublished -> every track on the album is hidden
+  // Tracks with their own unique artwork keep it.
   const saveAlbum = async (albumId) => {
     try {
+      const before = albums.find(a => a.id === albumId) || {};
       let coverUrl = editAlbumForm.cover_artwork_url || null;
       if (editAlbumCoverFile) {
         coverUrl = await uploadFile(editAlbumCoverFile, 'album-covers/');
       }
-      await supabase.from('albums').update({
+      const { error: aErr } = await supabase.from('albums').update({
         title:             editAlbumForm.title,
         description:       editAlbumForm.description || null,
         release_type:      editAlbumForm.release_type,
@@ -1772,12 +1840,46 @@ export default function TrackUploadPanel() {
         is_published:      editAlbumForm.is_published,
         cover_artwork_url: coverUrl,
       }).eq('id', albumId);
+      if (aErr) throw aErr;
+
+      if (coverUrl) {
+        // Tracks with no artwork always take the album cover.
+        const { error: e1 } = await supabase.from('tracks')
+          .update({ cover_artwork_url: coverUrl }).eq('album_id', albumId).is('cover_artwork_url', null);
+        if (e1) throw e1;
+        // Tracks still showing the OLD album cover follow it to the new one.
+        if (before.cover_artwork_url && before.cover_artwork_url !== coverUrl) {
+          const { error: e2 } = await supabase.from('tracks')
+            .update({ cover_artwork_url: coverUrl }).eq('album_id', albumId).eq('cover_artwork_url', before.cover_artwork_url);
+          if (e2) throw e2;
+        }
+      }
+
+      // Published album: every track on it is published on save, which also
+      // clears any tracks left as drafts. Hidden album: every track hidden, but
+      // only when the album is being switched off, so nothing else changes.
+      if (editAlbumForm.is_published || before.is_published) {
+        if (editAlbumForm.is_published && !coverUrl) {
+          const { count } = await supabase.from('tracks').select('id', { count: 'exact', head: true })
+            .eq('album_id', albumId).is('cover_artwork_url', null);
+          if (count) throw new Error('Add an album cover first, some tracks have no artwork.');
+        }
+        const { error: e3 } = await supabase.from('tracks')
+          .update({ is_published: !!editAlbumForm.is_published }).eq('album_id', albumId);
+        if (e3) throw e3;
+      }
+
       setEditingAlbumId(null);
       setEditAlbumCoverFile(null);
       fetchAlbums();
-      showMessage('success', 'Album updated');
+      fetchTracks();
+      if (editingAlbumId === albumId || albumTracks.length) reloadAlbumTracks(albumId);
+      showMessage('success', editAlbumForm.is_published !== before.is_published
+        ? (editAlbumForm.is_published ? 'Album and all its tracks are live' : 'Album and all its tracks are hidden')
+        : 'Album updated');
     } catch (err) {
-      showMessage('error', 'Failed to update album');
+      console.error('[upload] album save failed:', err);
+      showMessage('error', 'Failed to update album: ' + describeError(err));
     }
   };
 
@@ -2068,10 +2170,15 @@ export default function TrackUploadPanel() {
                   {release.release_type.toUpperCase()} requires at least 3 tracks, {3 - albumTrackQueue.length} more needed
                 </p>
               )}
-              <button type="button" onClick={finishAlbum}
-                className="w-full py-3 bg-white text-black font-semibold rounded-lg hover:bg-white/90 transition">
-                Done, Publish {release.release_type.toUpperCase()}
+              <button type="button" onClick={finishAlbum} disabled={finishing}
+                className="w-full py-3 bg-white text-black font-semibold rounded-lg hover:bg-white/90 transition disabled:opacity-50">
+                {finishing ? 'Publishing…' : release.album_is_published
+                  ? `Done, publish ${release.release_type.toUpperCase()} and all ${albumTrackQueue.length} tracks`
+                  : `Done, save ${release.release_type.toUpperCase()} as draft`}
               </button>
+              <p className="text-[11px] text-white/30 text-center">
+                Nothing goes live until you press Done. Tracks without their own artwork use the album cover.
+              </p>
             </div>
           ) : (
             <div className="bg-white/[0.03] rounded-xl p-5 border border-white/[0.06] space-y-4">
@@ -2195,7 +2302,7 @@ export default function TrackUploadPanel() {
                   )}
                 </div>
                 <div>
-                  <FieldLabel>Cover Artwork (.jpg, .png)</FieldLabel>
+                  <FieldLabel>{isAlbumRelease ? 'Track Artwork (optional, uses the album cover)' : 'Cover Artwork (.jpg, .png)'}</FieldLabel>
                   <input type="file" accept=".jpg,.jpeg,.png,.webp"
                     onChange={(e) => setTrackForm(prev => ({ ...prev, cover_file: e.target.files[0] }))}
                     className="w-full text-sm text-white/60 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:bg-white/[0.06] file:text-white/60 file:text-sm hover:file:bg-white/[0.1]" />
@@ -2521,7 +2628,7 @@ export default function TrackUploadPanel() {
                         <input type="checkbox" checked={editAlbumForm.is_published}
                           onChange={(e) => setEditAlbumForm({ ...editAlbumForm, is_published: e.target.checked })}
                           className="rounded border-white/20" />
-                        <span className="text-xs text-white/50">Published</span>
+                        <span className="text-xs text-white/50">Published (applies to every track on it)</span>
                       </label>
                       <div className="flex space-x-2 pt-1">
                         <button type="button" onClick={() => saveAlbum(album.id)}

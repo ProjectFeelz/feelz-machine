@@ -4,9 +4,109 @@
 // Everything is checked again in the database by submit_distribution_request()
 // (migration 151); this sheet only collects it clearly.
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { X, Loader, Plus, Trash2, Check } from 'lucide-react';
 import { supabase } from '../supabaseClient';
+
+const PAYPAL_CLIENT_ID = process.env.REACT_APP_PAYPAL_CLIENT_ID;
+
+async function addonCall(action, extra = {}) {
+  const { data: { session } } = await supabase.auth.getSession();
+  const res = await fetch('/.netlify/functions/addon-subscription', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}) },
+    body: JSON.stringify({ action, ...extra }),
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(json.error || 'Request failed');
+  return json;
+}
+
+// Can this artist send this track? (Same rule as artist_can_use_instagram in
+// migration 153, which is what actually decides.)
+function entitled(addon, inDeal) {
+  if (inDeal) return true;
+  const mine = addon?.mine;
+  if (!mine) return false;
+  if (!addon.live) return true; // on the waitlist
+  const end = mine.current_period_end ? new Date(mine.current_period_end) : null;
+  if (mine.status === 'active' || mine.status === 'past_due') return !end || end > new Date(Date.now() - 3 * 86400000);
+  if (mine.status === 'cancelled') return !!end && end > new Date();
+  return false;
+}
+
+function AddonGate({ addon, onUnlocked }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [sdkReady, setSdkReady] = useState(!!window.paypalAddon);
+
+  useEffect(() => {
+    if (!addon.live || window.paypalAddon) return;
+    const script = document.createElement('script');
+    script.src = `https://www.paypal.com/sdk/js?client-id=${PAYPAL_CLIENT_ID}&vault=true&intent=subscription&currency=USD`;
+    script.setAttribute('data-namespace', 'paypalAddon');
+    script.async = true;
+    script.onload = () => setSdkReady(true);
+    script.onerror = () => setError('PayPal did not load. Refresh and try again.');
+    document.head.appendChild(script);
+  }, [addon.live]);
+
+  useEffect(() => {
+    if (!addon.live || !sdkReady || !window.paypalAddon) return;
+    const el = document.getElementById('paypal-addon-container');
+    if (!el) return;
+    el.innerHTML = '';
+    window.paypalAddon.Buttons({
+      style: { layout: 'vertical', color: 'gold', shape: 'rect', label: 'subscribe' },
+      createSubscription: async (data, actions) => {
+        setError('');
+        const { planId } = await addonCall('plan');
+        return actions.subscription.create({ plan_id: planId });
+      },
+      onApprove: async (data) => {
+        try { await addonCall('link', { subscriptionID: data.subscriptionID }); onUnlocked(); }
+        catch (e) { setError(e.message); }
+      },
+      onError: () => setError('The payment did not go through. Nothing was charged.'),
+    }).render(el).catch(() => {});
+  }, [addon.live, sdkReady, onUnlocked]);
+
+  const join = async () => {
+    setBusy(true); setError('');
+    const { error: e } = await supabase.rpc('join_addon_waitlist', { p_addon: 'instagram' });
+    setBusy(false);
+    if (e) setError(e.message); else onUnlocked();
+  };
+
+  const price = addon.priceUsd ? `$${addon.priceUsd.toFixed(2)} a month` : '';
+  return (
+    <div className="rounded-2xl p-4 space-y-3" style={{ background: 'rgba(236,72,153,0.08)', border: '1px solid rgba(236,72,153,0.25)' }}>
+      <p className="text-sm font-bold text-white">Instagram add-on{price ? `, ${price}` : ''}</p>
+      <p className="text-xs text-white/55 leading-relaxed">
+        Your tracks in Instagram and Facebook's music picker, so anyone can use them in Stories and Reels.
+        Meta pays per use. You keep what your tracks earn after the distributor's share.
+      </p>
+      {addon.live ? (
+        <>
+          <p className="text-[11px] text-white/40">Cancel any time in PayPal. You keep it until the end of the month you paid for.</p>
+          <div id="paypal-addon-container" />
+        </>
+      ) : (
+        <>
+          <p className="text-xs text-white/55">
+            It switches on when {addon.target} artists join the waitlist. {addon.waitlistCount} of {addon.target} so far.
+            Joining is free and nobody is charged until it opens.
+          </p>
+          <button onClick={join} disabled={busy}
+            className="w-full py-2.5 rounded-xl bg-pink-500 text-white font-bold text-sm disabled:opacity-50 flex items-center justify-center">
+            {busy ? <Loader className="w-4 h-4 animate-spin" /> : 'Join the waitlist, free'}
+          </button>
+        </>
+      )}
+      {error && <p className="text-xs text-red-400">{error}</p>}
+    </div>
+  );
+}
 
 const STATEMENTS = [
   { key: 'own_recording',        text: 'I own this recording, or have the right to release it.' },
@@ -21,6 +121,21 @@ export default function InstagramRequestSheet({ track, onClose, onSent }) {
   const [isrc, setIsrc]       = useState(track?.isrc || '');
   const [busy, setBusy]       = useState(false);
   const [error, setError]     = useState('');
+  const [addon, setAddon]     = useState(null);   // add-on status from the server
+  const [inDeal, setInDeal]   = useState(false);  // track is in a signed Creator deal
+
+  const loadAddon = useCallback(async () => {
+    try {
+      const [st, deal] = await Promise.all([
+        addonCall('status'),
+        supabase.from('creator_deal_tracks').select('deal:creator_deals(status)').eq('track_id', track.id),
+      ]);
+      setAddon(st);
+      setInDeal((deal.data || []).some(r => ['signed', 'completed'].includes(r.deal?.status)));
+    } catch (e) { setError(e.message); setAddon({ live: false, mine: null, waitlistCount: 0, target: 0 }); }
+  }, [track.id]);
+
+  useEffect(() => { loadAddon(); }, [loadAddon]);
 
   const total = writers.reduce((s, w) => s + (Number(w.share) || 0), 0);
   const allTicked = STATEMENTS.every(s => ticks[s.key]);
@@ -56,6 +171,14 @@ export default function InstagramRequestSheet({ track, onClose, onSent }) {
           <button onClick={onClose} className="p-1 text-white/30 hover:text-white"><X className="w-4 h-4" /></button>
         </div>
 
+        {!addon ? (
+          <div className="flex justify-center py-6"><Loader className="w-5 h-5 text-white/30 animate-spin" /></div>
+        ) : !entitled(addon, inDeal) ? (
+          <AddonGate addon={addon} onUnlocked={loadAddon} />
+        ) : (<>
+        {!addon.live && !inDeal && (
+          <p className="text-[11px] text-pink-200/70">You are on the waitlist. Your track is queued and goes out once the add-on opens.</p>
+        )}
         <div className="space-y-2">
           <p className="text-[10px] uppercase tracking-widest text-white/30 font-semibold">Confirm</p>
           {STATEMENTS.map(s => (
@@ -108,6 +231,7 @@ export default function InstagramRequestSheet({ track, onClose, onSent }) {
         <p className="text-[11px] text-white/30 text-center leading-relaxed">
           We check it, then send it to Meta. Songs with type beats, loops or uncleared samples get the whole release refused.
         </p>
+        </>)}
       </div>
     </div>
   );
