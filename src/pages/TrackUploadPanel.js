@@ -13,6 +13,7 @@ import { useAudioConverter } from '../hooks/useAudioConverter';
 import UploadHelpPanel from '../components/UploadHelpPanel';
 import { notifyCollabRequest } from '../components/notificationTriggers';
 import RetailSubmitGate from '../components/legal/RetailSubmitGate';
+import InstagramRequestSheet from '../components/InstagramRequestSheet';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -52,7 +53,7 @@ const BEAT_KEYS = [
 ];
 const BEAT_SCALES = ['Major','Minor','Harmonic Minor','Melodic Minor'];
 
-// Standard beat licences — beat makers only set the price, terms are fixed
+// Standard beat licences, beat makers only set the price, terms are fixed
 const BEAT_LICENCES = [
   {
     id: 'free',
@@ -343,7 +344,7 @@ function BeatLicenceSelector({ beatEnabled, beatPrices, allowedLicences, onChang
                     <span className="text-sm font-semibold text-white">{lic.label}</span>
                   </div>
                 </div>
-                {/* Price input — shown when enabled and not free */}
+                {/* Price input, shown when enabled and not free */}
                 {isEnabled && !isLocked && !isFree && (
                   <div className="flex items-center space-x-1.5 flex-shrink-0" onClick={e => e.stopPropagation()}>
                     <span className="text-xs text-white/40">$</span>
@@ -472,8 +473,8 @@ function StemsUploader({ stems, setStems, uploadFile, showMessage }) {
 
 // ─── LRC Lyrics Sync Editor ───────────────────────────────────────────────────
 // Two modes:
-//   "paste" — plain textarea, artist pastes raw lyrics
-//   "sync"  — plays the audio file, artist taps a button at the start of each
+//   "paste", plain textarea, artist pastes raw lyrics
+//   "sync" , plays the audio file, artist taps a button at the start of each
 //             line to stamp [mm:ss.xx] timestamps → outputs LRC format
 //
 // The result is saved to trackForm.lyrics as either plain text or LRC.
@@ -899,7 +900,7 @@ function AddTrackToAlbum({
         await saveCollaborations(trackId, collaborators);
       }
 
-      // No per-track notification for album tracks — album release sends its own
+      // No per-track notification for album tracks, album release sends its own
       showMessage('success', `"${trackForm.title}" added to album!`);
       onTrackAdded(data[0]);
 
@@ -1238,7 +1239,7 @@ export default function TrackUploadPanel() {
     const fileExt  = file.name.split('.').pop();
     const fileName = `${folder}${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
     for (let attempt = 1; attempt <= retries; attempt++) {
-      // cacheControl: 1 year — safe because each upload gets a unique
+      // cacheControl: 1 year, safe because each upload gets a unique
       // timestamped filename and is never overwritten, so there's no
       // staleness risk. Without this, Supabase defaults to a 1-hour cache,
       // meaning every play of every track re-fetches the full file from
@@ -1640,7 +1641,7 @@ export default function TrackUploadPanel() {
     // Read collaborations and artists separately rather than as a PostgREST
     // embed. `collaborations` joins two artists by nature, so if that table
     // carries more than one foreign key to `artists` the embed cannot be
-    // resolved and answers HTTP 300 — which here would silently open the edit
+    // resolved and answers HTTP 300, which here would silently open the edit
     // form with an empty collaborator list. Saving from that state would wipe
     // the track's splits. See the note at the top of TrackCredits.js.
     const { data: collabRows, error: collabErr } = await supabase
@@ -1649,7 +1650,7 @@ export default function TrackUploadPanel() {
       .eq('track_id', track.id);
 
     if (collabErr) {
-      // Do not open the form with a false empty list — the next save would
+      // Do not open the form with a false empty list, the next save would
       // delete splits that exist.
       console.error('[upload] could not read collaborations for track', track.id, ':',
         collabErr.code, collabErr.message);
@@ -1793,7 +1794,7 @@ export default function TrackUploadPanel() {
   const [retailPitchedIds, setRetailPitchedIds] = useState([]);
 
   // Pitching used to be a window.prompt for a note followed by a direct insert
-  // into retail_pitches — no terms shown, nothing agreed, nothing recorded.
+  // into retail_pitches, no terms shown, nothing agreed, nothing recorded.
   // It now opens the agreement gate, and the gate is what submits: it calls
   // submit_retail_pitch(), which writes the pitch and the artist's acceptance
   // of both documents in a single transaction. There is deliberately no path
@@ -1803,6 +1804,35 @@ export default function TrackUploadPanel() {
   const submitToRetail = (track) => {
     if (!artist?.id) return;
     setRetailGateTrack(track);
+  };
+
+  // Instagram (Meta music library) requests, migration 151. Keyed by track id.
+  const [instagramStatus, setInstagramStatus] = useState({});
+  const [instagramTrack, setInstagramTrack]   = useState(null);
+
+  // What was already pitched to Retail or sent to Instagram, read back from the
+  // database so the buttons are right after a reload, not only in this session.
+  useEffect(() => {
+    const ids = tracks.map(t => t.id);
+    if (!artist?.id || ids.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      const [pitches, requests] = await Promise.all([
+        supabase.from('retail_pitches').select('track_id').eq('artist_id', artist.id),
+        supabase.from('distribution_requests').select('track_id, status').eq('artist_id', artist.id).eq('target', 'meta'),
+      ]);
+      if (cancelled) return;
+      if (!pitches.error) setRetailPitchedIds((pitches.data || []).map(r => r.track_id));
+      if (!requests.error) {
+        setInstagramStatus(Object.fromEntries((requests.data || []).map(r => [r.track_id, r.status])));
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [artist?.id, tracks]);
+
+  const INSTAGRAM_LABEL = {
+    submitted: 'Instagram: in review', approved: 'Instagram: approved', delivered: 'Instagram: sent',
+    live: 'On Instagram', taken_down: 'Instagram: removed',
   };
 
   const deleteAlbum = async (album) => {
@@ -2766,6 +2796,18 @@ export default function TrackUploadPanel() {
                                   </button>
                                 )
                               )}
+                              {track.is_published && !track.is_beat && (
+                                INSTAGRAM_LABEL[instagramStatus[track.id]] ? (
+                                  <span className="text-[10px] px-2 py-1.5 bg-white/[0.04] text-white/30 rounded-lg whitespace-nowrap">
+                                    {INSTAGRAM_LABEL[instagramStatus[track.id]]}
+                                  </span>
+                                ) : (
+                                  <button type="button" onClick={() => setInstagramTrack(track)}
+                                    className="text-[10px] px-2 py-1.5 bg-pink-500/10 text-pink-300 rounded-lg hover:bg-pink-500/20 transition whitespace-nowrap">
+                                    {instagramStatus[track.id] === 'rejected' ? 'Instagram: resend' : 'Put on Instagram'}
+                                  </button>
+                                )
+                              )}
                               <button type="button" onClick={() => startEdit(track)}
                                 className="p-2 bg-white/[0.04] rounded-lg hover:bg-white/[0.08] transition">
                                 <Edit className="w-4 h-4 text-white/40" />
@@ -2962,6 +3004,18 @@ export default function TrackUploadPanel() {
             </div>
           )}
         </div>
+      )}
+
+      {instagramTrack && (
+        <InstagramRequestSheet
+          track={instagramTrack}
+          onClose={() => setInstagramTrack(null)}
+          onSent={() => {
+            setInstagramStatus(prev => ({ ...prev, [instagramTrack.id]: 'submitted' }));
+            setInstagramTrack(null);
+            showMessage('success', 'Sent for review. We will let you know once it is on Instagram.');
+          }}
+        />
       )}
 
       {retailGateTrack && (

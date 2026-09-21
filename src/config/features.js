@@ -5,7 +5,12 @@
 
 // ── Merch ──────────────────────────────────────────────────────────────────
 //
-// PARKED, September 2026.
+// REOPENED 21 September 2026. Connecting failed because the code checked keys
+// against a Printful address that does not exist and never sent the store id;
+// checkout never charged the buyer. Both fixed: printful-proxy.js and
+// merch-order.js (buyer pays the artist's PayPal first, then Printful prints).
+//
+// Previously PARKED, September 2026.
 //
 // The Printful integration is written and works against the API; what does not
 // work is authenticating with it. The store connection refuses the API secret
@@ -17,7 +22,7 @@
 // MerchOrdersPage, MerchConnectSheet and every merch row in the database are
 // untouched. Any artist who connected a store stays connected. Flip this to
 // false and the whole feature comes back exactly as it was.
-export const MERCH_PARKED = true;
+export const MERCH_PARKED = false;
 
 // What people are told, in one place, so the shop page, the create menu and
 // the tier list cannot end up saying three different things.
@@ -25,6 +30,6 @@ export const MERCH_PARKED_HEADLINE = 'Merch is paused';
 export const MERCH_PARKED_BODY =
   'Our print partner’s connection is not working reliably at our end, and we would rather '
   + 'have the shop off than have somebody pay for a t-shirt we cannot be certain will ship. '
-  + 'Nothing has been deleted — any store you have connected stays connected, and your '
+  + 'Nothing has been deleted, any store you have connected stays connected, and your '
   + 'products are still there. We will turn it back on once it is solid, and you will get a '
   + 'notification when we do.';

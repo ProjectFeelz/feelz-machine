@@ -1,10 +1,13 @@
 /**
- * MerchCheckoutPage.js
- * Collects shipping details, shows live shipping rates from Printful,
- * creates order, shows confirmation with order number.
+ * src/pages/MerchCheckoutPage.js
+ * Shipping details, live shipping options with the full price, then PayPal.
+ *
+ * The buyer pays the artist's own PayPal first (netlify/functions/merch-order.js),
+ * and only once PayPal confirms the payment does the order go to Printful for
+ * printing. The old page sent the order to Printful without taking any payment.
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import useGoBack from '../hooks/useGoBack';
 import { Helmet } from 'react-helmet-async';
@@ -30,15 +33,20 @@ const COUNTRIES = [
   { code: 'BR', name: 'Brazil' },
 ];
 
-async function proxyRequest(action, artistId, params = {}, authToken = null) {
+const PAYPAL_CLIENT_ID = process.env.REACT_APP_PAYPAL_CLIENT_ID;
+
+async function merchRequest(action, params = {}) {
   const headers = { 'Content-Type': 'application/json' };
-  if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
-  const res = await fetch('/.netlify/functions/printful-proxy', {
-    method: 'POST', headers,
-    body: JSON.stringify({ action, artist_id: artistId, ...params }),
+  try {
+    const { supabase } = await import('../supabaseClient');
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.access_token) headers.Authorization = `Bearer ${session.access_token}`;
+  } catch { /* signed out is fine */ }
+  const res = await fetch('/.netlify/functions/merch-order', {
+    method: 'POST', headers, body: JSON.stringify({ action, ...params }),
   });
-  const json = await res.json();
-  if (!json.ok) throw new Error(json.error || 'Request failed');
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok || json.ok === false) throw new Error(json.error || 'Request failed');
   return json;
 }
 
@@ -64,7 +72,7 @@ export default function MerchCheckoutPage() {
   const [selectedRate,     setSelectedRate]     = useState(null);
   const [ratesLoading,     setRatesLoading]     = useState(false);
   const [ratesError,       setRatesError]       = useState('');
-  const [submitting,       setSubmitting]       = useState(false);
+  const [paypalReady,      setPaypalReady]      = useState(false);
   const [orderConfirmed,   setOrderConfirmed]   = useState(null); // order object
   const [error,            setError]            = useState('');
 
@@ -79,7 +87,10 @@ export default function MerchCheckoutPage() {
     setShippingRates([]);
     setSelectedRate(null);
     try {
-      const { rates } = await proxyRequest('get_shipping_rates', artist.id, {
+      const { rates } = await merchRequest('rates', {
+        artist_id: artist.id,
+        variant_id: variant.id,
+        quantity,
         shipping_address: {
           name:         form.name,
           address1:     form.address1,
@@ -88,43 +99,77 @@ export default function MerchCheckoutPage() {
           country_code: form.country_code,
           zip:          form.zip,
         },
-        items: [{ variant_id: variant.id, quantity }],
       });
       setShippingRates(rates || []);
       if (rates?.length) setSelectedRate(rates[0]);
     } catch (err) {
-      setRatesError('Could not estimate shipping — you can still place the order.');
+      setRatesError(err.message || 'Could not get shipping options for that address.');
     }
     setRatesLoading(false);
   };
 
-  const handleSubmit = async () => {
-    if (!form.name || !form.email || !form.address1 || !form.city || !form.zip) {
-      setError('Please fill in all required fields.'); return;
-    }
-    setSubmitting(true); setError('');
-    try {
-      const { data: { session } } = await (await import('../supabaseClient')).supabase.auth.getSession();
-      const result = await proxyRequest('create_order', artist.id, {
-        email: form.email,
-        shipping_address: {
-          name:         form.name,
-          phone:        form.phone || undefined,
-          address1:     form.address1,
-          address2:     form.address2 || undefined,
-          city:         form.city,
-          state_code:   form.state_code || undefined,
-          country_code: form.country_code,
-          zip:          form.zip,
-        },
-        items: [{ variant_id: variant.id, quantity }],
-      }, session?.access_token);
-      setOrderConfirmed(result.order);
-    } catch (err) {
-      setError(err.message);
-    }
-    setSubmitting(false);
-  };
+  // PayPal: load once.
+  useEffect(() => {
+    if (window.paypal) { setPaypalReady(true); return; }
+    const existing = document.getElementById('paypal-sdk-merch');
+    if (existing) { existing.addEventListener('load', () => setPaypalReady(true)); return; }
+    const script = document.createElement('script');
+    script.id = 'paypal-sdk-merch';
+    script.src = `https://www.paypal.com/sdk/js?client-id=${PAYPAL_CLIENT_ID}&currency=USD&intent=capture`;
+    script.async = true;
+    script.onload = () => setPaypalReady(true);
+    script.onerror = () => setError('PayPal did not load. Refresh and try again.');
+    document.head.appendChild(script);
+  }, []);
+
+  // PayPal buttons appear once there is an address and a shipping option,
+  // and are rebuilt if either changes so the order always matches the screen.
+  const canPay = addressComplete && !!selectedRate;
+  useEffect(() => {
+    if (!paypalReady || !canPay || !window.paypal || !artist || !variant) return;
+    const container = document.getElementById('paypal-merch-container');
+    if (!container) return;
+    container.innerHTML = '';
+    let cancelled = false;
+
+    window.paypal.Buttons({
+      style: { layout: 'vertical', color: 'gold', shape: 'rect', label: 'pay' },
+      createOrder: async () => {
+        setError('');
+        try {
+          const res = await merchRequest('create', {
+            artist_id: artist.id,
+            variant_id: variant.id,
+            quantity,
+            shipping_method: selectedRate.id,
+            email: form.email,
+            shipping_address: {
+              name: form.name, phone: form.phone || undefined,
+              address1: form.address1, address2: form.address2 || undefined,
+              city: form.city, state_code: form.state_code || undefined,
+              country_code: form.country_code, zip: form.zip,
+            },
+          });
+          return res.orderID;
+        } catch (err) {
+          setError(err.message);
+          throw err;
+        }
+      },
+      onApprove: async (data) => {
+        try {
+          const res = await merchRequest('capture', { orderID: data.orderID });
+          if (!cancelled) setOrderConfirmed(res.order || { id: null });
+        } catch (err) {
+          setError(err.message);
+        }
+      },
+      onError: () => setError('The payment did not go through. Nothing was charged.'),
+    }).render(container).catch(() => {});
+
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paypalReady, canPay, selectedRate?.id, form.email, form.name, form.address1, form.address2, form.city, form.state_code, form.country_code, form.zip, quantity]);
 
   // ── Order confirmed screen ──────────────────────────────────────────────────
   if (orderConfirmed) {
@@ -139,11 +184,10 @@ export default function MerchCheckoutPage() {
           <Check className="w-8 h-8 text-green-400" />
         </div>
         <h2 className="text-2xl font-bold text-white mb-2">Order placed!</h2>
-        {orderConfirmed.id && (
-          <p className="text-sm text-white/40 mb-1">Order #{orderConfirmed.id}</p>
-        )}
         <p className="text-sm text-white/40 mb-6">
-          A confirmation has been sent to <span className="text-white/60">{form.email}</span>
+          {orderConfirmed.status === 'in_production'
+            ? 'Paid and sent to print. The artist has been paid directly.'
+            : 'Paid. The artist has been paid directly and is getting your order to print.'}
         </p>
 
         {/* Order summary */}
@@ -161,25 +205,21 @@ export default function MerchCheckoutPage() {
               </p>
               {selectedRate && (
                 <p className="text-xs text-white/30 mt-0.5">
-                  Shipping: {selectedRate.name} — ${parseFloat(selectedRate.rate).toFixed(2)}
+                  Shipping: {selectedRate.name}, ${Number(selectedRate.shippingCost).toFixed(2)}
                 </p>
               )}
             </div>
           </div>
           <div className="mt-3 pt-3 border-t border-white/[0.06] flex justify-between">
-            <span className="text-xs text-white/40">Estimated total</span>
+            <span className="text-xs text-white/40">Paid</span>
             <span className="text-sm font-bold text-white">
-              ${(
-                parseFloat(variant?.retail_price || 0) * quantity +
-                parseFloat(selectedRate?.rate || 0)
-              ).toFixed(2)}
+              ${Number(selectedRate?.buyerPays || 0).toFixed(2)}
             </span>
           </div>
         </div>
 
         <div className="flex flex-col items-center space-y-2 text-xs text-white/30">
-          <p>Printful will send tracking updates to your email</p>
-          <p>Typical delivery: 5–10 business days</p>
+          <p>Order #{orderConfirmed.id ? String(orderConfirmed.id).slice(0, 8) : ''}. Keep this for any questions.</p>
         </div>
 
         <button onClick={() => navigate(`/artist/${artist?.slug}/merch`)}
@@ -200,8 +240,9 @@ export default function MerchCheckoutPage() {
 
   const productName = product?.sync_product?.name || product?.name;
   const itemTotal   = parseFloat(variant.retail_price || 0) * quantity;
-  const shippingCost = selectedRate ? parseFloat(selectedRate.rate) : null;
-  const grandTotal   = shippingCost !== null ? itemTotal + shippingCost : null;
+  const shippingCost = selectedRate ? Number(selectedRate.shippingCost) : null;
+  const serviceFee   = selectedRate ? Number(selectedRate.serviceFee) : null;
+  const grandTotal   = selectedRate ? Number(selectedRate.buyerPays) : null;
 
   return (
     <div className="min-h-screen bg-black text-white pb-32">
@@ -279,7 +320,7 @@ export default function MerchCheckoutPage() {
             className="w-full py-2.5 rounded-xl bg-white/[0.05] border border-white/[0.08] text-sm text-white/60 hover:bg-white/[0.08] transition disabled:opacity-40 flex items-center justify-center space-x-2"
           >
             {ratesLoading
-              ? <><Loader className="w-4 h-4 animate-spin" /><span>Getting rates…</span></>
+              ? <><Loader className="w-4 h-4 animate-spin" /><span>Getting shipping options</span></>
               : <><Truck className="w-4 h-4" /><span>Estimate shipping</span></>}
           </button>
 
@@ -305,7 +346,7 @@ export default function MerchCheckoutPage() {
                     </p>
                   </div>
                   <div className="flex items-center space-x-2">
-                    <span className="text-sm font-bold text-white">${parseFloat(rate.rate).toFixed(2)}</span>
+                    <span className="text-sm font-bold text-white">${Number(rate.shippingCost).toFixed(2)}</span>
                     {selectedRate?.id === rate.id && <Check className="w-4 h-4 text-green-400" />}
                   </div>
                 </button>
@@ -323,9 +364,15 @@ export default function MerchCheckoutPage() {
           <div className="flex justify-between text-sm">
             <span className="text-white/40">Shipping</span>
             <span className="text-white font-medium">
-              {shippingCost !== null ? `$${shippingCost.toFixed(2)}` : '—'}
+              {shippingCost !== null ? `$${shippingCost.toFixed(2)}` : 'Choose an option'}
             </span>
           </div>
+          {serviceFee !== null && serviceFee > 0 && (
+            <div className="flex justify-between text-sm">
+              <span className="text-white/40">Payment processing (PayPal)</span>
+              <span className="text-white font-medium">${serviceFee.toFixed(2)}</span>
+            </div>
+          )}
           <div className="flex justify-between text-sm border-t border-white/[0.06] pt-2">
             <span className="text-white font-semibold">Total</span>
             <span className="text-white font-bold text-base">
@@ -340,17 +387,25 @@ export default function MerchCheckoutPage() {
           </div>
         )}
 
-        {/* Place order */}
-        <button onClick={handleSubmit} disabled={submitting || !form.name || !form.email}
-          className="w-full py-4 rounded-2xl text-sm font-bold text-white transition active:scale-[0.98] disabled:opacity-40 flex items-center justify-center space-x-2"
-          style={{ background: 'linear-gradient(135deg, #a78bfa, #7c3aed)' }}>
-          {submitting
-            ? <><Loader className="w-4 h-4 animate-spin" /><span>Placing order…</span></>
-            : <><Package className="w-4 h-4" /><span>Place Order{grandTotal !== null ? ` · $${grandTotal.toFixed(2)}` : ''}</span></>}
-        </button>
+        {/* Pay: straight to the artist's PayPal, card or PayPal account */}
+        {canPay ? (
+          <div className="space-y-2">
+            {!paypalReady && (
+              <div className="flex items-center justify-center py-4 text-white/40 text-sm">
+                <Loader className="w-4 h-4 animate-spin mr-2" />Loading payment
+              </div>
+            )}
+            <div id="paypal-merch-container" />
+          </div>
+        ) : (
+          <div className="w-full py-4 rounded-2xl text-sm font-semibold text-white/40 bg-white/[0.04] flex items-center justify-center space-x-2">
+            <Package className="w-4 h-4" /><span>Add your address and pick shipping to pay</span>
+          </div>
+        )}
 
-        <p className="text-[10px] text-white/20 text-center">
-          By ordering you agree to Printful's terms. Orders are non-refundable once in production.
+        <p className="text-[10px] text-white/25 text-center leading-relaxed">
+          You pay the artist directly. Your order goes to print only after the payment clears,
+          and it cannot be changed once it is in production.
         </p>
       </div>
 

@@ -26,12 +26,23 @@ const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SER
 async function settings() {
   const { data } = await supabase.from('platform_settings')
     .select('key, value')
-    .in('key', ['retail_standard_monthly_usd', 'retail_trial_days']);
+    .in('key', ['retail_standard_monthly_usd', 'retail_trial_days', 'retail_min_playable_tracks']);
   const map = Object.fromEntries((data || []).map(r => [r.key, r.value]));
   const price = parseFloat(map.retail_standard_monthly_usd);
   const trial = parseInt(map.retail_trial_days, 10);
+  const minTracks = parseInt(map.retail_min_playable_tracks, 10);
+
+  // Nobody pays for an empty player: signup stays shut (null price, so the
+  // landing page shows "get in touch") until there are enough approved
+  // submissions to play (migration 150). If the count cannot be read, shut is
+  // the safe answer.
+  const { data: playable, error: countErr } = await supabase.rpc('retail_playable_track_count');
+  if (countErr) console.error('[retail-signup] playable count failed:', countErr.message);
+  const needed = Number.isFinite(minTracks) && minTracks > 0 ? minTracks : 30;
+  const enoughMusic = !countErr && Number(playable) >= needed;
+
   return {
-    priceUsd:  Number.isFinite(price) && price > 0 ? Math.round(price * 100) / 100 : null,
+    priceUsd:  enoughMusic && Number.isFinite(price) && price > 0 ? Math.round(price * 100) / 100 : null,
     trialDays: Number.isFinite(trial) && trial > 0 && trial <= 90 ? trial : 0,
   };
 }

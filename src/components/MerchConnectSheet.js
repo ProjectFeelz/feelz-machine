@@ -1,11 +1,13 @@
 /**
- * MerchConnectSheet.js
- * API key flow — no OAuth, no redirect URLs, no platform fees.
- * Artist pastes their Printful API key, it's stored on their artist row.
- * Printful bills them directly for all orders.
+ * src/components/MerchConnectSheet.js
+ * Artist pastes a Printful token. It is stored server side only
+ * (artist_printful_credentials, migration 149), never on the public profile.
+ * Fans pay the artist's PayPal; Printful bills the artist its cost.
+ * Also lists the artist's recent merch orders, with Retry for any that were
+ * paid but that Printful refused to start.
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../supabaseClient';
 import { ExternalLink, Check, X, Loader, AlertCircle, Store, Unlink, Key, Eye, EyeOff } from 'lucide-react';
 
@@ -22,7 +24,7 @@ async function printfulProxy(action, artistId, params = {}) {
   const json = await res.json().catch(() => ({}));
   if (!json.ok) {
     // The proxy now sends a `hint` when the failure is something the artist
-    // can actually fix — a token missing scopes, most often. Showing the raw
+    // can actually fix, a token missing scopes, most often. Showing the raw
     // Printful sentence alone ("This endpoint requires any of the following
     // scopes granted: stores_list/read!") tells you nothing about what to do
     // next, so the hint is appended when there is one.
@@ -39,6 +41,38 @@ export default function MerchConnectSheet({ artist, onClose, onConnected }) {
   const [showKey, setShowKey] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError]     = useState('');
+  const [orders, setOrders]   = useState([]);
+  const [retrying, setRetrying] = useState(null);
+
+  const loadOrders = useCallback(async () => {
+    if (!artist?.id) return;
+    const { data, error: e } = await supabase.from('merch_orders')
+      .select('id, product_name, quantity, artist_receives, status, failure_reason, paid_at')
+      .eq('artist_id', artist.id)
+      .in('status', ['paid', 'in_production', 'paid_not_fulfilled', 'payment_mismatch'])
+      .order('paid_at', { ascending: false })
+      .limit(10);
+    if (!e) setOrders(data || []);
+  }, [artist?.id]);
+
+  useEffect(() => { if (step === 'connected') loadOrders(); }, [step, loadOrders]);
+
+  const retryOrder = async (id) => {
+    setRetrying(id);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch('/.netlify/functions/merch-order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
+        body: JSON.stringify({ action: 'retry', merch_order_id: id }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) setError(json.error || 'Printful still refused it.');
+    } finally {
+      setRetrying(null);
+      loadOrders();
+    }
+  };
 
   const handleConnect = async () => {
     if (!apiKey.trim()) { setError('Paste your Printful API key first'); return; }
@@ -129,16 +163,17 @@ export default function MerchConnectSheet({ artist, onClose, onConnected }) {
                 style={{ background: 'rgba(139,92,246,0.08)', border: '1px solid rgba(139,92,246,0.2)' }}>
                 <p className="text-sm font-semibold text-white">How it works</p>
                 <p className="text-xs text-white/50 leading-relaxed">
-                  You set up your products on Printful. Fans order from your profile.
-                  Printful prints and ships everything — you keep the profit margin.
-                  No platform fees from us.
+                  You set up your products on Printful. Fans order from your profile and pay
+                  straight into your PayPal. Then Printful prints and ships, and charges you
+                  its cost. The difference is yours. No platform fees from us.
                 </p>
                 <div className="space-y-1.5 pt-1">
                   {[
                     'Create a free Printful account',
                     'Design your products (tees, hoodies, etc)',
                     'Add billing details in Printful',
-                    'Generate an API key and paste it below',
+                    'Add your PayPal email in Payment Settings here',
+                    'Create a Printful token and paste it below',
                   ].map((s, i) => (
                     <div key={i} className="flex items-center space-x-2">
                       <div className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 text-[10px] font-bold"
@@ -152,14 +187,16 @@ export default function MerchConnectSheet({ artist, onClose, onConnected }) {
               {/* API key instructions */}
               <div className="rounded-xl p-3 space-y-1"
                 style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                <p className="text-xs font-semibold text-white/60">Where to get your API key</p>
+                <p className="text-xs font-semibold text-white/60">Where to get your token</p>
                 <p className="text-xs text-white/35 leading-relaxed">
-                  Printful dashboard → Settings → Stores → select your store → API → Generate token
+                  Printful Developers, Tokens, Add new token. Set Access level to "A single store" and
+                  pick your merch store. Tick: View and manage orders, View and manage store products,
+                  View store files. Copy the key it shows you once.
                 </p>
-                <a href="https://www.printful.com/dashboard/settings" target="_blank" rel="noopener noreferrer"
+                <a href="https://developers.printful.com/tokens" target="_blank" rel="noopener noreferrer"
                   className="inline-flex items-center space-x-1 text-xs text-purple-400 hover:text-purple-300 transition mt-1">
                   <ExternalLink className="w-3 h-3" />
-                  <span>Open Printful Settings →</span>
+                  <span>Open Printful tokens</span>
                 </a>
               </div>
 
@@ -219,8 +256,8 @@ export default function MerchConnectSheet({ artist, onClose, onConnected }) {
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-white">Store connected</p>
                   <p className="text-xs text-white/50 mt-0.5 leading-relaxed">
-                    Your merch is live on your profile. Fans can browse and order directly.
-                    Printful handles fulfilment — no fees from us.
+                    Your merch is live on your profile. Fans pay straight into your PayPal, then
+                    Printful prints and ships. No fees from us.
                   </p>
                   {artist?.printful_store_id && (
                     <p className="text-[10px] text-white/25 mt-1 font-mono">Store ID: {artist.printful_store_id}</p>
@@ -239,6 +276,37 @@ export default function MerchConnectSheet({ artist, onClose, onConnected }) {
                     className="w-full py-2.5 rounded-xl text-xs font-semibold text-white/60 border border-white/[0.08] hover:bg-white/[0.04] transition disabled:opacity-40 flex items-center justify-center space-x-1.5">
                     {loading ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <><Check className="w-3.5 h-3.5" /><span>Re-validate store</span></>}
                   </button>
+                </div>
+              )}
+
+              {orders.length > 0 && (
+                <div className="space-y-1.5">
+                  <p className="text-[10px] uppercase tracking-widest text-white/30 font-semibold">Recent orders</p>
+                  {orders.map(o => (
+                    <div key={o.id} className="rounded-xl px-3 py-2 bg-white/[0.03] text-xs">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-white/70 truncate">{o.product_name || 'Merch'} x{o.quantity}</span>
+                        <span className="text-white/50 flex-shrink-0">${Number(o.artist_receives).toFixed(2)}</span>
+                      </div>
+                      <div className="flex items-center justify-between gap-2 mt-1">
+                        <span className={o.status === 'paid_not_fulfilled' || o.status === 'payment_mismatch' ? 'text-amber-300' : 'text-emerald-300/80'}>
+                          {o.status === 'in_production' ? 'Paid, printing'
+                            : o.status === 'paid_not_fulfilled' ? 'Paid, Printful refused'
+                            : o.status === 'payment_mismatch' ? 'Paid, being checked'
+                            : 'Paid'}
+                        </span>
+                        {o.status === 'paid_not_fulfilled' && (
+                          <button onClick={() => retryOrder(o.id)} disabled={retrying === o.id}
+                            className="px-2 py-0.5 rounded-md bg-purple-500 text-white font-semibold disabled:opacity-50">
+                            {retrying === o.id ? 'Retrying' : 'Retry'}
+                          </button>
+                        )}
+                      </div>
+                      {o.status === 'paid_not_fulfilled' && o.failure_reason && (
+                        <p className="text-[11px] text-white/35 mt-1">{o.failure_reason}</p>
+                      )}
+                    </div>
+                  ))}
                 </div>
               )}
 

@@ -7,12 +7,23 @@
  * POST body: { action, artist_id, ...params }
  *
  * actions:
- *   connect_oauth   — exchange OAuth code for access token, store in artists table
- *   validate_store  — check billing configured + has products
- *   get_products    — list store products with variants
- *   get_product     — single product detail
- *   create_order    — create a Printful order
- *   disconnect      — remove printful credentials from artists table
+ *   connect_api_key    save the artist's Printful private token (server side only)
+ *   validate_store     check the token works and the store has products
+ *   get_products       list store products with variants
+ *   get_product        single product detail
+ *   get_shipping_rates shipping estimate
+ *   get_orders         the signed-in buyer's orders
+ *   create_order       OFF until merch checkout takes payment (see below)
+ *   disconnect         remove the saved token
+ *
+ * Why connecting never worked (fixed 21 Sept 2026):
+ *   1. It checked the key with GET /store. That is not a Printful endpoint
+ *      (the store endpoints are GET /stores and /store/products etc.), so every
+ *      key failed, however it was pasted.
+ *   2. Store calls need the X-PF-Store-Id header when the token is an
+ *      account-level token. It was never sent.
+ * Keys live in artist_printful_credentials (migration 149), which only this
+ * function can read. They used to sit on the public artists row.
  */
 
 const { createClient } = require('@supabase/supabase-js');
@@ -23,7 +34,7 @@ const supabase = createClient(
 );
 
 const PRINTFUL_API = 'https://api.printful.com';
-// OAuth credentials removed — using direct API key flow
+// OAuth credentials removed, using direct API key flow
 
 const cors = {
   'Access-Control-Allow-Origin':  '*',
@@ -36,7 +47,7 @@ const cors = {
 //
 // A 500 says "the server broke". Printful answering
 // "This endpoint requires any of the following scopes granted: stores_list/read"
-// is not the server breaking — it is a correct, specific answer that the key
+// is not the server breaking, it is a correct, specific answer that the key
 // the artist pasted was created without the permissions this needs. Reported
 // as a 500 it looked like an outage and the actual instruction (go back to
 // Printful and tick the boxes) was nowhere in the response.
@@ -61,17 +72,19 @@ function tokenHint(message, status) {
   return null;
 }
 
-async function printfulFetch(path, accessToken, options = {}) {
+async function printfulFetch(path, accessToken, options = {}, storeId = null) {
   const res = await fetch(`${PRINTFUL_API}${path}`, {
     ...options,
     headers: {
       'Authorization': `Bearer ${accessToken}`,
       'Content-Type':  'application/json',
+      // Required for account-level tokens, ignored for single-store ones.
+      ...(storeId ? { 'X-PF-Store-Id': String(storeId) } : {}),
       ...(options.headers || {}),
     },
   });
 
-  // Printful does not always answer JSON — an edge/gateway error is HTML, and
+  // Printful does not always answer JSON, an edge/gateway error is HTML, and
   // res.json() on that throws a SyntaxError that buries the real status.
   let json = null;
   try { json = await res.json(); } catch { /* handled below */ }
@@ -92,18 +105,40 @@ async function verifyUser(authHeader) {
   return user.id;
 }
 
-// Get artist's Printful access token (server-side only)
+// The artist's saved Printful token and store, from the private table.
+async function getCredentials(artistId) {
+  const { data } = await supabase
+    .from('artist_printful_credentials')
+    .select('access_token, store_id')
+    .eq('artist_id', artistId)
+    .maybeSingle();
+  return data || null;
+}
+
+// Owner-only access to the token (validate_store).
 async function getArtistToken(artistId, userId) {
   const { data, error } = await supabase
     .from('artists')
-    .select('id, user_id, printful_access_token, printful_store_id, merch_enabled')
+    .select('id, user_id, merch_enabled')
     .eq('id', artistId)
     .maybeSingle();
   if (error || !data) throw new Error('Artist not found');
   if (data.user_id !== userId) throw new Error('Forbidden');
-  if (!data.printful_access_token) throw new Error('Printful not connected');
-  return data;
+  const creds = await getCredentials(artistId);
+  if (!creds) throw new Error('Printful not connected');
+  return { ...data, printful_access_token: creds.access_token, printful_store_id: creds.store_id };
 }
+
+// Public actions: merch must be switched on and a token saved.
+async function getShopToken(artistId) {
+  const { data: artist } = await supabase
+    .from('artists').select('merch_enabled').eq('id', artistId).maybeSingle();
+  if (!artist?.merch_enabled) return null;
+  const creds = await getCredentials(artistId);
+  return creds ? { printful_access_token: creds.access_token, printful_store_id: creds.store_id } : null;
+}
+
+const merchUnavailable = { statusCode: 403, headers: cors, body: JSON.stringify({ error: 'Merch not available' }) };
 
 exports.handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers: cors };
@@ -120,22 +155,39 @@ exports.handler = async (event) => {
       const { api_key } = body;
       if (!api_key) throw new Error('API key required');
 
-      // Verify the key works by fetching store info
-      const storeData = await printfulFetch('/store', api_key);
-      const storeId   = storeData.result?.id;
-      if (!storeId) throw new Error('Could not retrieve store — check your API key');
-
-      // Verify artist ownership
+      // Ownership first, so a stranger's request never reaches Printful.
       const { data: artist } = await supabase
         .from('artists').select('id, user_id').eq('id', artist_id).maybeSingle();
       if (!artist || artist.user_id !== userId) throw new Error('Forbidden');
 
-      // Store API key as the access token — same field, same proxy usage
+      // GET /stores answers for both token types: one store for a
+      // single-store token, every store for an account-level token.
+      const storesData = await printfulFetch('/stores', api_key);
+      const stores = Array.isArray(storesData.result) ? storesData.result : [];
+      if (stores.length === 0) {
+        return { statusCode: 400, headers: cors, body: JSON.stringify({ ok: false, error: 'That key has no Printful store attached.' }) };
+      }
+      if (stores.length > 1) {
+        return { statusCode: 400, headers: cors, body: JSON.stringify({
+          ok: false,
+          error: 'That key opens more than one Printful store, so we cannot tell which one is your shop.',
+          hint: 'In Printful create a token with Access level set to "A single store" and pick your merch store.',
+        }) };
+      }
+      const storeId = String(stores[0].id);
+
+      const { error: credErr } = await supabase.from('artist_printful_credentials').upsert({
+        artist_id:    artist_id,
+        access_token: api_key,
+        store_id:     storeId,
+        updated_at:   new Date().toISOString(),
+      });
+      if (credErr) throw new Error('Could not save your Printful connection');
+
       await supabase.from('artists').update({
-        printful_access_token: api_key,
-        printful_store_id:     String(storeId),
-        merch_enabled:         false, // validate_store enables it
-        updated_at:            new Date().toISOString(),
+        printful_store_id: storeId,
+        merch_enabled:     false, // validate_store enables it
+        updated_at:        new Date().toISOString(),
       }).eq('id', artist_id);
 
       return { statusCode: 200, headers: cors, body: JSON.stringify({ ok: true, store_id: storeId }) };
@@ -151,14 +203,13 @@ exports.handler = async (event) => {
       const userId  = await verifyUser(authHeader);
       const artist  = await getArtistToken(artist_id, userId);
 
-      const [storeRes, productsRes] = await Promise.all([
-        printfulFetch('/store', artist.printful_access_token),
-        printfulFetch('/store/products?limit=1', artist.printful_access_token),
-      ]);
+      const productsRes = await printfulFetch('/store/products?limit=1', artist.printful_access_token, {}, artist.printful_store_id);
 
-      const billingOk  = storeRes.result?.billing_address !== null;
+      // Printful's API does not expose whether billing is set up. Printful
+      // itself refuses to confirm an order without it, so it is enforced there.
+      const billingOk  = true;
       const hasProducts = (productsRes.result?.length || 0) > 0;
-      const valid = billingOk && hasProducts;
+      const valid = hasProducts;
 
       if (valid && !artist.merch_enabled) {
         await supabase.from('artists').update({ merch_enabled: true, updated_at: new Date().toISOString() }).eq('id', artist_id);
@@ -167,23 +218,17 @@ exports.handler = async (event) => {
       return { statusCode: 200, headers: cors, body: JSON.stringify({ ok: true, valid, billingOk, hasProducts }) };
     }
 
-    // ── Get products (public — no auth required, but artist must have merch_enabled) ──
+    // ── Get products (public, no auth required, but artist must have merch_enabled) ──
     if (action === 'get_products') {
-      const { data: artist } = await supabase
-        .from('artists')
-        .select('printful_access_token, merch_enabled')
-        .eq('id', artist_id)
-        .maybeSingle();
-      if (!artist?.merch_enabled || !artist.printful_access_token) {
-        return { statusCode: 403, headers: cors, body: JSON.stringify({ error: 'Merch not available' }) };
-      }
+      const artist = await getShopToken(artist_id);
+      if (!artist) return merchUnavailable;
 
-      const data = await printfulFetch('/store/products', artist.printful_access_token);
+      const data = await printfulFetch('/store/products', artist.printful_access_token, {}, artist.printful_store_id);
       // For each product, get variant details
       const products = await Promise.all(
         (data.result || []).slice(0, 30).map(async (p) => {
           try {
-            const detail = await printfulFetch(`/store/products/${p.id}`, artist.printful_access_token);
+            const detail = await printfulFetch(`/store/products/${p.id}`, artist.printful_access_token, {}, artist.printful_store_id);
             return detail.result;
           } catch { return p; }
         })
@@ -195,72 +240,31 @@ exports.handler = async (event) => {
     // ── Get single product ────────────────────────────────────────────────────
     if (action === 'get_product') {
       const { product_id } = body;
-      const { data: artist } = await supabase
-        .from('artists').select('printful_access_token, merch_enabled').eq('id', artist_id).maybeSingle();
-      if (!artist?.merch_enabled || !artist.printful_access_token) {
-        return { statusCode: 403, headers: cors, body: JSON.stringify({ error: 'Merch not available' }) };
-      }
-      const data = await printfulFetch(`/store/products/${product_id}`, artist.printful_access_token);
+      const artist = await getShopToken(artist_id);
+      if (!artist) return merchUnavailable;
+      const data = await printfulFetch(`/store/products/${encodeURIComponent(product_id)}`, artist.printful_access_token, {}, artist.printful_store_id);
       return { statusCode: 200, headers: cors, body: JSON.stringify({ ok: true, product: data.result }) };
     }
 
-    // ── Create order ──────────────────────────────────────────────────────────
+    // ── Create order: OFF ────────────────────────────────────────────────────
+    // The checkout never took payment. It created a Printful order and
+    // confirmed it straight to production, billed to the ARTIST's Printful
+    // account, and the buyer paid nothing. So a connected artist would have
+    // paid for every t-shirt out of pocket. It stays off until the checkout
+    // takes the buyer's payment first (straight to the artist's PayPal, like
+    // track sales) and this function checks that capture before confirming.
     if (action === 'create_order') {
-      // verifyUser was missing here and present on every other mutating
-      // action in this file. This one places a Printful order and then
-      // CONFIRMS it to production a few lines below — real fulfilment against
-      // the artist's own Printful account, billed to them — from a body an
-      // anonymous caller supplies. It is the most expensive unauthenticated
-      // endpoint in the repo.
-      //
-      // Note what this does and does not fix: it now requires a signed-in
-      // caller, so orders are attributable and rate-limitable. It still does
-      // NOT verify that anybody paid — nothing in this file checks a purchase
-      // or a PayPal capture before confirming to production. That needs a
-      // decision about where merch payment is taken, so it is flagged rather
-      // than guessed at.
-      await verifyUser(event.headers.authorization);
-
-      const { shipping_address, items, email } = body;
-      if (!shipping_address || !Array.isArray(items) || items.length === 0) {
-        return { statusCode: 400, headers: cors, body: JSON.stringify({ error: 'shipping_address and items required' }) };
-      }
-
-      const { data: artist } = await supabase
-        .from('artists').select('printful_access_token, merch_enabled, artist_name').eq('id', artist_id).maybeSingle();
-      if (!artist?.merch_enabled || !artist.printful_access_token) {
-        return { statusCode: 403, headers: cors, body: JSON.stringify({ error: 'Merch not available' }) };
-      }
-
-      const orderPayload = {
-        recipient: { ...shipping_address, email },
-        items: items.map(i => ({ sync_variant_id: i.variant_id, quantity: i.quantity })),
-        retail_costs: { currency: 'USD' },
-      };
-
-      const data = await printfulFetch('/orders', artist.printful_access_token, {
-        method: 'POST',
-        body: JSON.stringify(orderPayload),
-      });
-
-      // Confirm order (sends to production)
-      const confirmed = await printfulFetch(
-        `/orders/${data.result.id}/confirm`,
-        artist.printful_access_token,
-        { method: 'POST' }
-      );
-
-      return { statusCode: 200, headers: cors, body: JSON.stringify({ ok: true, order: confirmed.result }) };
+      return { statusCode: 503, headers: cors, body: JSON.stringify({ ok: false, error: 'Merch checkout is not open yet.' }) };
     }
 
     // ── Shipping rates ────────────────────────────────────────────────────────
     if (action === 'get_shipping_rates') {
       const { shipping_address, items } = body;
-      const { data: artist } = await supabase
-        .from('artists').select('printful_access_token, merch_enabled').eq('id', artist_id).maybeSingle();
-      if (!artist?.merch_enabled || !artist.printful_access_token) {
-        return { statusCode: 403, headers: cors, body: JSON.stringify({ error: 'Merch not available' }) };
+      if (!shipping_address || !Array.isArray(items) || items.length === 0) {
+        return { statusCode: 400, headers: cors, body: JSON.stringify({ error: 'shipping_address and items required' }) };
       }
+      const artist = await getShopToken(artist_id);
+      if (!artist) return merchUnavailable;
 
       const payload = {
         recipient: shipping_address,
@@ -272,7 +276,7 @@ exports.handler = async (event) => {
       const data = await printfulFetch('/shipping/rates', artist.printful_access_token, {
         method: 'POST',
         body: JSON.stringify(payload),
-      });
+      }, artist.printful_store_id);
 
       return { statusCode: 200, headers: cors, body: JSON.stringify({ ok: true, rates: data.result || [] }) };
     }
@@ -280,18 +284,15 @@ exports.handler = async (event) => {
     // ── Get order history by email ──────────────────────────────────────────
     if (action === 'get_orders') {
       const userId = await verifyUser(authHeader);
-      const { data: artist } = await supabase
-        .from('artists').select('printful_access_token, merch_enabled').eq('id', artist_id).maybeSingle();
-      if (!artist?.merch_enabled || !artist.printful_access_token) {
-        return { statusCode: 403, headers: cors, body: JSON.stringify({ error: 'Merch not available' }) };
-      }
+      const artist = await getShopToken(artist_id);
+      if (!artist) return merchUnavailable;
 
       // Get user's email
       const { data: authUser } = await supabase.auth.admin.getUserById(userId);
       const email = authUser?.user?.email;
       if (!email) return { statusCode: 200, headers: cors, body: JSON.stringify({ ok: true, orders: [] }) };
 
-      const data = await printfulFetch('/orders?limit=20', artist.printful_access_token);
+      const data = await printfulFetch('/orders?limit=20', artist.printful_access_token, {}, artist.printful_store_id);
       // Filter orders by recipient email
       const orders = (data.result || []).filter(o =>
         o.recipient?.email?.toLowerCase() === email.toLowerCase()
@@ -306,8 +307,8 @@ exports.handler = async (event) => {
       const { data: artist } = await supabase
         .from('artists').select('id, user_id').eq('id', artist_id).maybeSingle();
       if (!artist || artist.user_id !== userId) throw new Error('Forbidden');
+      await supabase.from('artist_printful_credentials').delete().eq('artist_id', artist_id);
       await supabase.from('artists').update({
-        printful_access_token: null,
         printful_store_id:     null,
         merch_enabled:         false,
         updated_at:            new Date().toISOString(),
@@ -334,6 +335,6 @@ exports.handler = async (event) => {
       return { statusCode: 403, headers: cors, body: JSON.stringify({ ok: false, error: err.message }) };
     }
 
-    return { statusCode: 500, headers: cors, body: JSON.stringify({ ok: false, error: err.message }) };
+    return { statusCode: 500, headers: cors, body: JSON.stringify({ ok: false, error: 'Something went wrong talking to Printful. Try again shortly.' }) };
   }
 };

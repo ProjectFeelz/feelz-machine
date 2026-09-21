@@ -1,9 +1,10 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { Download, Share2, X, Loader, Link, Check, Film, Image } from 'lucide-react';
+import { buildStoryMp4, MEDIARECORDER_MP4_TYPES } from '../utils/storyMp4';
 
-// ── Helper functions — all defined as hoisted function declarations ──────────
+// ── Helper functions, all defined as hoisted function declarations ──────────
 
-// roundRect first — used by drawFMLogo below
+// roundRect first, used by drawFMLogo below
 function roundRect(ctx, x, y, w, h, r) {
   ctx.beginPath();
   ctx.moveTo(x + r, y);
@@ -31,7 +32,7 @@ function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
   ctx.fillText(line.trim(), x, lineY);
 }
 
-// Load ffmpeg.wasm v0.11 via CDN script tag — avoids bundler issues
+// Load ffmpeg.wasm v0.11 via CDN script tag, avoids bundler issues
 let _ffmpegLoaded = false;
 function loadFFmpegScript() {
   return new Promise((resolve, reject) => {
@@ -95,8 +96,8 @@ function drawFMLogo(ctx, x, y, size) {
 /**
  * ShareCard
  *
- * Tab 1 — Image: 1080×1080 canvas card (existing behaviour)
- * Tab 2 — Video: 1080×1920 Stories video with spinning vinyl + audio (30s)
+ * Tab 1, Image: 1080×1080 canvas card (existing behaviour)
+ * Tab 2, Video: 1080×1920 Stories video with spinning vinyl + audio (30s)
  *
  * Props:
  *   track    - track object (title, artist_name, cover_artwork_url, file_url)
@@ -147,7 +148,7 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
     ctx.fillRect(0, 0, W, H);
 
     if (artworkUrl) {
-      // Subtle artwork bleed for depth — matches app aesthetic
+      // Subtle artwork bleed for depth, matches app aesthetic
       try {
         const bgImg = await loadImage(artworkUrl);
         ctx.save();
@@ -202,10 +203,10 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
     ctx.font = '40px -apple-system, BlinkMacSystemFont, sans-serif';
     const subtitleLines = Math.ceil(title.length / 20);
     ctx.fillText(subtitle, W / 2, titleY + subtitleLines * 76);
-    // FM logo — top left
+    // FM logo, top left
     await drawFMLogo(ctx, 60, 60, 100);
 
-    // Feelzmachine.com wordmark — subtle, bottom centre
+    // Feelzmachine.com wordmark, subtle, bottom centre
     ctx.fillStyle = 'rgba(255,255,255,0.2)';
     ctx.font = '28px -apple-system, BlinkMacSystemFont, sans-serif';
     ctx.textAlign = 'center';
@@ -325,13 +326,13 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
   const drawVideoFrame = useCallback(async (ctx, artImg, vinylImg, angle, bgOverride) => {
     const W = 1080, H = 1920;
 
-    // Background — user selected colour with subtle artwork bleed
+    // Background, user selected colour with subtle artwork bleed
     const baseBg = bgOverride || '#0d0d0d';
     ctx.fillStyle = baseBg;
     ctx.fillRect(0, 0, W, H);
 
     if (artImg) {
-      // Very subtle blurred artwork at low opacity — just enough to add depth
+      // Very subtle blurred artwork at low opacity, just enough to add depth
       ctx.save();
       ctx.globalAlpha = 0.15;
       ctx.filter = 'blur(120px)';
@@ -341,7 +342,7 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
       ctx.restore();
     }
 
-    // Purple ambient glow at top — matches app's header glow
+    // Purple ambient glow at top, matches app's header glow
     const topGlow = ctx.createRadialGradient(W/2, 0, 0, W/2, 0, H * 0.5);
     topGlow.addColorStop(0,   'rgba(88,28,220,0.18)');
     topGlow.addColorStop(0.5, 'rgba(88,28,220,0.06)');
@@ -356,13 +357,13 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
     ctx.fillStyle = bottomFade;
     ctx.fillRect(0, 0, W, H);
 
-    // ── Vinyl disc — moved up from centre for better composition ───────────────
+    // ── Vinyl disc, moved up from centre for better composition ───────────────
     const vinylSize = 840;
     const cx = W / 2;
     const cy = H / 2 - 180; // moved up
     const r  = vinylSize / 2;
 
-    // Outer glow ring — separates vinyl from background
+    // Outer glow ring, separates vinyl from background
     const glowGrad = ctx.createRadialGradient(cx, cy, r * 0.85, cx, cy, r * 1.15);
     glowGrad.addColorStop(0,   'rgba(100,60,200,0.0)');
     glowGrad.addColorStop(0.6, 'rgba(80,40,160,0.25)');
@@ -389,7 +390,7 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
       ctx.restore();
     }
 
-    // Subtle rim light — top edge catches light to separate from bg
+    // Subtle rim light, top edge catches light to separate from bg
     ctx.save();
     ctx.beginPath();
     ctx.arc(cx, cy, r - 1, 0, Math.PI * 2);
@@ -414,10 +415,10 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
     ctx.font = '48px -apple-system, BlinkMacSystemFont, sans-serif';
     ctx.fillText(subtitle, W / 2, textY + titleLines * 88);
 
-    // FM logo — top left corner
+    // FM logo, top left corner
     await drawFMLogo(ctx, 60, 80, 120);
 
-    // Wordmark only — no track URL
+    // Wordmark only, no track URL
     ctx.fillStyle = 'rgba(255,255,255,0.2)';
     ctx.font = '34px -apple-system, BlinkMacSystemFont, sans-serif';
     ctx.textAlign = 'center';
@@ -467,7 +468,7 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
       try { artImg = await loadImage(artworkUrl); } catch {}
     }
 
-    // Build the vinyl SVG image once — reused every frame
+    // Build the vinyl SVG image once, reused every frame
     const vinylImg = await buildVinylImage(artImg, 840);
 
     const DURATION = 30; // seconds
@@ -475,7 +476,30 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
     // Match VinylRecord.js: one full rotation every 2.4s
     const radsPerFrame = (2 * Math.PI / 2.4) / FPS;
 
-    // Audio — start from user-selected time offset
+    // ── 1. Real MP4 in the browser (Instagram-ready) ──────────────────────────
+    // Chrome, Edge and Safari on most phones and computers. See
+    // src/utils/storyMp4.js. Falls through to the recorder below if this
+    // browser cannot encode H.264 + AAC.
+    try {
+      setVideoFormat('MP4');
+      const mp4 = await buildStoryMp4({
+        canvas, fps: FPS, seconds: DURATION, audioUrl, startTime,
+        drawFrame: (i) => drawVideoFrame(ctx, artImg, vinylImg, i * radsPerFrame, bgColor),
+        onProgress: setVideoProgress,
+      });
+      if (mp4) {
+        mp4._ext = 'mp4';
+        setVideoBlob(mp4);
+        setVideoFormat('MP4');
+        setRecording(false);
+        setVideoProgress(100);
+        return;
+      }
+    } catch (e) {
+      console.warn('[share] in-browser MP4 failed, using the recorder:', e?.message || e);
+    }
+
+    // Audio, start from user-selected time offset
     let audioStream = null;
     let audioCtx    = null;
     let sourceNode  = null;
@@ -503,14 +527,15 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
     if (audioStream) combinedTracks.push(...audioStream.getTracks());
     const combined = new MediaStream(combinedTracks);
 
-    // Pick best supported codec
-    // WebM with VP9+Opus — universally supported by Chrome on all platforms
+    // ── 2. Recorder: MP4 if this browser can record it, WebM otherwise ─────────
     const mimeType = [
+      ...MEDIARECORDER_MP4_TYPES,
       'video/webm;codecs=vp9,opus',
       'video/webm;codecs=vp8,opus',
       'video/webm',
     ].find(t => window.MediaRecorder && window.MediaRecorder.isTypeSupported(t)) || 'video/webm';
-    const fileExt = 'webm';
+    const recordsMp4 = mimeType.startsWith('video/mp4');
+    const fileExt = recordsMp4 ? 'mp4' : 'webm';
 
     const recorder = new window.MediaRecorder(combined, { mimeType, videoBitsPerSecond: 8000000 });
     recorderRef.current = recorder;
@@ -520,18 +545,27 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
     recorder.onstop = async () => {
       const webmBlob = new window.Blob(chunksRef.current, { type: mimeType });
       setRecording(false);
-      setVideoFormat('CONVERTING');
-      setConverting(true);
 
       if (sourceNode) try { sourceNode.stop(); } catch {}
       if (audioCtx)   try { audioCtx.close();  } catch {}
 
-      // Skip ffmpeg.wasm — requires SharedArrayBuffer which needs COOP/COEP headers
+      if (recordsMp4) {
+        webmBlob._ext = 'mp4';
+        setVideoBlob(webmBlob);
+        setVideoFormat('MP4');
+        setVideoProgress(100);
+        return;
+      }
+
+      setVideoFormat('CONVERTING');
+      setConverting(true);
+
+      // Skip ffmpeg.wasm, requires SharedArrayBuffer which needs COOP/COEP headers
       // that Netlify doesn't send. Go straight to server-side conversion.
       //
       // FIXED: this previously awaited res.json() on the background
       // function's own response, expecting { mp4 } directly. Background
-      // functions always return an immediate 202 with no result body —
+      // functions always return an immediate 202 with no result body -
       // that mismatch is why MP4 conversion has never actually worked,
       // it silently fell back to WebM every single time. The real
       // conversion takes ~30+ seconds for a 30-second story video, which
@@ -550,7 +584,7 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
           ? window.crypto.randomUUID()
           : `job-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
-        // Fire the conversion — the response here is just Netlify's
+        // Fire the conversion, the response here is just Netlify's
         // "accepted" acknowledgment, not the actual result
         await fetch('/.netlify/functions/convert-to-mp4-background', {
           method: 'POST',
@@ -558,7 +592,7 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
           body: JSON.stringify({ video: base64, jobId }),
         });
 
-        // Poll for the real result — conversion typically takes ~30-35s
+        // Poll for the real result, conversion typically takes ~30-35s
         // for a full-length story video, so this polls for up to 90s
         // before giving up and falling back to WebM
         const pollIntervalMs = 3000;
@@ -584,7 +618,7 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
         setVideoFormat('MP4');
       } catch (err) {
         console.error('MP4 conversion failed:', err.message);
-        // Fallback — WebM works on Android Chrome and can still be shared/downloaded
+        // Fallback, WebM works on Android Chrome and can still be shared/downloaded
         webmBlob._ext = 'webm';
         setVideoBlob(webmBlob);
         setVideoFormat('WEBM');
@@ -619,7 +653,7 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
       animFrameRef.current = setTimeout(animate, delay);
     };
     animate();
-  }, [audioUrl, artworkUrl, drawVideoFrame, startTime]);
+  }, [audioUrl, artworkUrl, drawVideoFrame, startTime, buildVinylImage, bgColor]);
 
   const stopRecording = () => {
     if (animFrameRef.current) clearTimeout(animFrameRef.current);
@@ -687,11 +721,11 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
         await navigator.share(shareData);
       } else {
-        // Desktop or unsupported — download instead
+        // Desktop or unsupported, download instead
         handleDownloadVideo();
       }
     } catch (e) {
-      // User cancelled or share failed — fall back to download
+      // User cancelled or share failed, fall back to download
       if (e.name !== 'AbortError') handleDownloadVideo();
     }
     setSharing(false);
@@ -760,7 +794,7 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
               {/* Hidden recording canvas */}
               <canvas ref={videoRef} className="hidden" />
 
-              {/* Preview — shows a static frame of how the video will look */}
+              {/* Preview, shows a static frame of how the video will look */}
               <div className="rounded-2xl bg-black aspect-[9/16] relative overflow-hidden flex items-center justify-center">
                 <canvas ref={previewRef} className="w-full h-full object-contain" />
                 {(recording || converting) && (
@@ -847,7 +881,7 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
               )}
 
               {!audioUrl && (
-                <p className="text-[10px] text-amber-400/60 text-center">No audio — video will be visual only</p>
+                <p className="text-[10px] text-amber-400/60 text-center">No audio, video will be visual only</p>
               )}
             </div>
           )}
