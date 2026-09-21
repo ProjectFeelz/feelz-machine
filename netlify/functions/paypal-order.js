@@ -41,6 +41,55 @@ async function getPayPalAccessToken() {
   });
 }
 
+// The price of one licence on a beat, read from the track exactly the way
+// src/pages/BeatDetailPage.js reads it, so the buyer is charged the price the
+// page showed.
+//
+// tracks.beat_licence has been stored in three shapes over time, and the page
+// understands all three:
+//   1. { enabled: { basic: true, ... }, prices: { basic: "3", ... } }  (current)
+//   2. a plain licence id string such as "basic"; price is download_price
+//   3. nothing; a downloadable beat offers "basic" at download_price
+// This function used to understand only an array of { id, price } (or
+// { licences: [...] }), a shape the upload form does not write, so every beat
+// quoted $0.00 and every order was refused as "licence not offered".
+// Returns { price, label } or null when the licence is not offered.
+function resolveLicence(track, licenceId) {
+  const want = String(licenceId || '');
+  const titleCase = (id) => id.charAt(0).toUpperCase() + id.slice(1);
+  let raw = track?.beat_licence ?? null;
+
+  if (typeof raw === 'string') {
+    const t = raw.trim();
+    if (t.startsWith('{') || t.startsWith('[')) {
+      try { raw = JSON.parse(t); } catch { raw = null; }
+    } else {
+      // Shape 2: a bare licence id.
+      return want === (t || 'basic')
+        ? { price: Number(track.download_price) || 0, label: titleCase(want) }
+        : null;
+    }
+  }
+
+  if (raw && typeof raw === 'object') {
+    const list = Array.isArray(raw) ? raw : (Array.isArray(raw.licences) ? raw.licences : null);
+    if (list) {
+      const lic = list.find(l => String(l.id) === want);
+      return lic ? { price: Number(lic.price) || 0, label: lic.label || titleCase(want) } : null;
+    }
+    if (raw.enabled && raw.prices) {
+      if (!raw.enabled[want]) return null;
+      return { price: parseFloat(raw.prices[want]) || 0, label: titleCase(want) };
+    }
+  }
+
+  // Shape 3, or JSON the page could not use either: the page falls back to a
+  // single "basic" licence at download_price, so the server does too.
+  return want === 'basic'
+    ? { price: Number(track.download_price) || 0, label: 'Basic' }
+    : null;
+}
+
 // Tell an artist that a sale could not go through because of their payment
 // setup. At most once a day per artist, so a popular track with no PayPal does
 // not bury them in the same notification.
@@ -221,17 +270,7 @@ exports.handler = async (event) => {
         // The licences live on the track as JSON, so the price can be read
         // here rather than taken on trust from the page that rendered it.
         if (licenceId) {
-          let licences = [];
-          try {
-            const raw = typeof track.beat_licence === 'string'
-              ? JSON.parse(track.beat_licence)
-              : track.beat_licence;
-            licences = Array.isArray(raw) ? raw : (raw?.licences || []);
-          } catch {
-            licences = [];
-          }
-
-          const lic = licences.find(l => String(l.id) === String(licenceId));
+          const lic = resolveLicence(track, licenceId);
           if (!lic) {
             console.warn('[paypal-order] refused: licence', licenceId, 'not found on track', trackId);
             return { statusCode: 400, body: JSON.stringify({ error: 'That licence is not offered on this beat', reason: 'unknown_licence' }) };
@@ -528,13 +567,7 @@ exports.handler = async (event) => {
         if (!track) return { statusCode: 404, body: JSON.stringify({ error: 'Track not found' }) };
 
         if (licenceId) {
-          let licences = [];
-          try {
-            const raw = typeof track.beat_licence === 'string'
-              ? JSON.parse(track.beat_licence) : track.beat_licence;
-            licences = Array.isArray(raw) ? raw : (raw?.licences || []);
-          } catch { licences = []; }
-          base = Number(licences.find(l => String(l.id) === String(licenceId))?.price) || 0;
+          base = Number(resolveLicence(track, licenceId)?.price) || 0;
         } else if (track.pay_what_you_want) {
           const floor = Math.max(Number(track.minimum_price) || 0, 0.50);
           base = Math.max(floor, Math.round((Number(offered) || 0) * 100) / 100);

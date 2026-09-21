@@ -148,7 +148,7 @@ export default function TrackActionSheet({ track, artist, onClose }) {
                     if (!captureData.success) throw new Error('Payment capture failed');
 
                     // `success` only ever meant "PayPal took the money". It did
-                    // NOT mean the sale was recorded or the download granted —
+                    // NOT mean the sale was recorded or the download granted -
                     // and when the recording step silently did nothing, this
                     // showed a green tick to somebody who had just paid for a
                     // file they were then refused. The function now reports
@@ -157,7 +157,7 @@ export default function TrackActionSheet({ track, artist, onClose }) {
                       setPurchasing(false);
                       setPurchaseError(
                         'Your payment went through, but we could not unlock the download automatically. '
-                        + 'Nothing further is owed — contact us with this reference and we will send it straight over: '
+                        + 'Nothing further is owed, contact us with this reference and we will send it straight over: '
                         + (captureData.captureId || 'no reference')
                       );
                       console.error('[purchase] paid but not recorded:',
@@ -191,7 +191,7 @@ export default function TrackActionSheet({ track, artist, onClose }) {
                             await downloadTrack(track.id, track.title, session?.access_token);
                             onClose();
                         } catch (dlErr) {
-                            // `catch {}` — the download failing right after a
+                            // `catch {}`, the download failing right after a
                             // successful payment was the single most important
                             // error in this file to surface, and it was the one
                             // being thrown away. The sheet now stays open and
@@ -201,7 +201,7 @@ export default function TrackActionSheet({ track, artist, onClose }) {
                             setPurchaseSuccess(false);
                             setPurchaseError(
                               'Payment received, but the download did not start. '
-                              + 'It is saved to your account — open Library \u2192 Downloads to get it.'
+                              + 'It is saved to your account, open Library \u2192 Downloads to get it.'
                             );
                         }
                     }, 1500);
@@ -323,7 +323,7 @@ export default function TrackActionSheet({ track, artist, onClose }) {
             onClose();
         } catch (err) {
             if (err.message === 'purchase_required') {
-                // Free track — backend may not have a purchase record yet.
+                // Free track, backend may not have a purchase record yet.
                 // Insert one then retry once before showing purchase view.
                 if (effectivePrice <= 0 && !isPWYW) {
                     try {
@@ -336,11 +336,28 @@ export default function TrackActionSheet({ track, artist, onClose }) {
                         onClose();
                         return;
                     } catch {
-                        // retry failed — fall through to purchase view as last resort
+                        // retry failed, fall through to purchase view as last resort
                     }
                 }
                 setDownloading(false);
                 setView('purchase');
+                return;
+            }
+            if (err.message === 'insufficient_payment') {
+                // They have a download record for this track, but for less
+                // than its price (a free download before it was priced, or a
+                // price that went up). That is "you need to buy it", not a
+                // failure: show the purchase view, same as purchase_required.
+                setDownloading(false);
+                setView('purchase');
+                return;
+            }
+            if (err.message === 'artists_cannot_download') {
+                // Your own track: there is nothing to buy, and the server
+                // refuses self-downloads so they cannot inflate the count.
+                // Say that, rather than "Download failed. Please try again."
+                setDownloading(false);
+                setDownloadError('This is your own track, so it can\'t be bought or downloaded from your account.');
                 return;
             }
             if (err.message === 'not_released_yet') {
@@ -628,7 +645,7 @@ export default function TrackActionSheet({ track, artist, onClose }) {
                                 different things and the wording has to make that obvious:
                                 Download hands your phone an .mp3 outside the app, Offline
                                 keeps the track inside Feelz Machine so it plays with no
-                                signal. It also shows for tracks that are NOT downloadable —
+                                signal. It also shows for tracks that are NOT downloadable -
                                 an artist withholding the file is not the same as
                                 withholding offline listening. */}
                             <OfflineSaveButton track={track} variant="row" onNavigate={onClose} />
@@ -719,7 +736,7 @@ export default function TrackActionSheet({ track, artist, onClose }) {
 
         </div>
 
-        {/* ShareCard outside sheet — avoids overflow-hidden clipping, matches FullPlayer pattern */}
+        {/* ShareCard outside sheet, avoids overflow-hidden clipping, matches FullPlayer pattern */}
         {showShareCard && (
             <ShareCard
                 track={track}
