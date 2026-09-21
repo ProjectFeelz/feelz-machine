@@ -356,7 +356,8 @@ exports.handler = async (event) => {
         .update(subUpdate)
         .eq('id', venueSub.id);
       if (error) {
-        return { statusCode: 500, body: JSON.stringify({ error: error.message }) };
+        console.error('[retail-paypal-subscription] subscription update failed:', error.message);
+        return { statusCode: 500, body: JSON.stringify({ error: 'Could not save your subscription. Try again shortly.' }) };
       }
 
       // Flip the venue itself active too, no reason to make the venue
@@ -379,7 +380,7 @@ exports.handler = async (event) => {
           console.error('[retail-paypal-subscription] venue activation failed:', venueErr.message);
           return {
             statusCode: 500,
-            body: JSON.stringify({ error: 'subscription_linked_but_venue_not_activated', detail: venueErr.message }),
+            body: JSON.stringify({ error: 'Your payment went through but your player did not switch on. Refresh the page, and if it still does not play, contact us.' }),
           };
         }
       }
@@ -391,6 +392,6 @@ exports.handler = async (event) => {
 
   } catch (err) {
     console.error('Retail PayPal subscription error:', err);
-    return { statusCode: 500, body: JSON.stringify({ error: err.message }) };
+    return { statusCode: 500, body: JSON.stringify({ error: 'Billing could not be set up right now. Try again shortly.' }) };
   }
 };

@@ -51,8 +51,32 @@ export default function RetailLandingPage() {
     );
   }
 
+  const features = [
+    { icon: Music, title: 'Real playlists', body: 'Pick a mood and hit play. We build and maintain them so you never think about it again.' },
+    { icon: Users, title: 'Supports real artists', body: 'Half of what we receive from subscriptions, after payment fees, is split every month between the artists whose music plays in your space.' },
+    { icon: Store, title: 'Ten minute setup', body: 'Works in any browser, or install it as an app. No hardware, no installation visit.' },
+  ];
+
+  const steps = selfServe ? [
+    'Create a login and add your business name.',
+    trialDays
+      ? `Add PayPal or a card. Nothing is charged for ${trialDays} days, and you can cancel before then.`
+      : 'Add PayPal or a card to start your subscription.',
+    'Pick a mood playlist, hit play, and get on with your day.',
+  ] : [
+    'Get in touch and we agree a monthly rate that fits your venue.',
+    'We set you up and send you a link to create your login.',
+    'Pick a mood playlist, hit play, and get on with your day.',
+  ];
+
+  // Phones scroll as one column. From tablet width up the page is exactly one
+  // screen tall with two columns: the pitch and the button on the left, what
+  // you get and how it works on the right. The page is at least one screen
+  // tall rather than exactly one, so on a very short laptop window it scrolls a
+  // little instead of the footer landing on top of the content. The headline
+  // size follows the window height as well as the width for the same reason.
   return (
-    <div className="min-h-screen bg-black text-white">
+    <div className="min-h-[100dvh] bg-black text-white flex flex-col">
 
       {/* Without these, this page inherited index.html's canonical, which points
           at the homepage, so the sitemap submitted the page for indexing while
@@ -73,133 +97,122 @@ export default function RetailLandingPage() {
         <meta name="twitter:description" content="Curated background music for stores, cafes and pubs, built entirely from independent South African artists. Half of what we receive goes back to the artists whose music plays." />
       </Helmet>
 
-      <div className="max-w-4xl mx-auto px-6 pt-16 pb-24">
-        {/* Hero */}
-        <div className="flex items-center space-x-2.5 mb-6">
-          <div className="w-9 h-9 rounded-lg border border-purple-400 flex items-center justify-center">
-            <span className="text-purple-400 font-bold text-sm">FM</span>
-          </div>
-          <div>
-            <p className="text-sm font-bold">Feelz Machine</p>
-            <p className="text-[10px] text-white/30 tracking-wider">MUSIC PLATFORM</p>
-          </div>
-        </div>
+      <main className="flex-1 min-h-0 w-full max-w-6xl mx-auto px-6 md:px-10 pt-12 pb-10 md:py-6 md:grid md:grid-cols-2 md:gap-10 lg:gap-16 md:items-center">
 
-        <p className="text-purple-400 text-xs font-bold tracking-[0.2em] uppercase mb-3">Feelz Retail</p>
-        <h1 className="text-4xl sm:text-5xl font-black leading-tight mb-5">
-          Background music<br />for your venue,<br />
-          <span className="text-purple-400">done properly.</span>
-        </h1>
-        <p className="text-white/50 text-base leading-relaxed max-w-xl mb-10">
-          Curated, mood-matched playlists built entirely from independent South African artists.
-          Streams to whatever device you already have behind the counter. No new hardware,
-          no long contract.
-        </p>
-
-        {/* What you get */}
-        <div className="grid sm:grid-cols-3 gap-4 mb-12">
-          {[
-            { icon: Music, title: 'Real playlists', body: 'Pick a mood and hit play. We build and maintain them so you never think about it again.' },
-            { icon: Users, title: 'Supports real artists', body: 'Half of what we receive from subscriptions, after payment fees, is split every month between the artists whose music plays in your space.' },
-            { icon: Store, title: 'Ten minute setup', body: 'Works in any browser, or install it as an app. No hardware, no installation visit.' },
-          ].map(({ icon: Icon, title, body }) => (
-            <div key={title} className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-5">
-              <Icon className="w-5 h-5 text-purple-400 mb-3" />
-              <p className="font-semibold text-sm mb-1.5">{title}</p>
-              <p className="text-xs text-white/40 leading-relaxed">{body}</p>
+        {/* Left: the pitch and the way in */}
+        <div>
+          <div className="flex items-center space-x-2.5 mb-6 md:mb-4">
+            <div className="w-9 h-9 rounded-lg border border-purple-400 flex items-center justify-center">
+              <span className="text-purple-400 font-bold text-sm">FM</span>
             </div>
-          ))}
+            <div>
+              <p className="text-sm font-bold">Feelz Machine</p>
+              <p className="text-[10px] text-white/30 tracking-wider">MUSIC PLATFORM</p>
+            </div>
+          </div>
+
+          <p className="text-purple-400 text-xs font-bold tracking-[0.2em] uppercase mb-3">Feelz Retail</p>
+          <h1 className="text-4xl sm:text-5xl md:text-[clamp(1.6rem,min(3.4vw,6.5vh),3.1rem)] md:whitespace-nowrap font-black leading-tight mb-4">
+            Background music<br />for your venue,<br />
+            <span className="text-purple-400">done properly.</span>
+          </h1>
+          <p className="text-white/50 text-base md:text-sm lg:text-base leading-relaxed max-w-xl mb-8 md:mb-5">
+            Curated, mood-matched playlists built entirely from independent South African artists.
+            Streams to whatever device you already have behind the counter. No new hardware,
+            no long contract.
+          </p>
+
+          <div className="rounded-2xl border border-purple-500/20 bg-purple-500/[0.06] p-6 md:p-5 mb-12 md:mb-0">
+            {selfServe ? (
+              <>
+                <h2 className="text-xl font-bold mb-1.5">{trialDays ? `Try it free for ${trialDays} days` : 'Start today'}</h2>
+                <p className="text-sm text-white/50 mb-4">
+                  Then ${pricing.priceUsd.toFixed(2)} a month. Cancel any time and the music keeps playing
+                  until the end of the month you've paid for.
+                </p>
+                <button onClick={() => navigate('/retail/start')}
+                  className="inline-flex items-center space-x-2 px-5 py-3 rounded-xl bg-purple-500 text-white font-bold text-sm hover:bg-purple-400 transition">
+                  <span>{trialDays ? 'Start my free trial' : 'Get started'}</span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+              </>
+            ) : (
+              <>
+                <h2 className="text-xl font-bold mb-1.5">Interested in your venue?</h2>
+                <p className="text-sm text-white/50 mb-4">
+                  Get in touch and we'll tell you what it costs for your venue.
+                </p>
+                <a href="mailto:jane@projectfeelz.com?subject=Feelz%20Retail%20enquiry"
+                  className="inline-flex items-center space-x-2 px-5 py-3 rounded-xl bg-purple-500 text-white font-bold text-sm hover:bg-purple-400 transition">
+                  <span>Get in touch</span>
+                  <ArrowRight className="w-4 h-4" />
+                </a>
+              </>
+            )}
+          </div>
         </div>
 
-        {/* How it works */}
-        <p className="text-[10px] uppercase tracking-widest text-white/25 font-semibold mb-4">How it works</p>
-        <div className="space-y-3 mb-12">
-          {(selfServe ? [
-            'Create a login and add your business name.',
-            trialDays
-              ? `Add PayPal or a card. Nothing is charged for ${trialDays} days, and you can cancel before then.`
-              : 'Add PayPal or a card to start your subscription.',
-            'Pick a mood playlist, hit play, and get on with your day.',
-          ] : [
-            'Get in touch and we agree a monthly rate that fits your venue.',
-            'We set you up and send you a link to create your login.',
-            'Pick a mood playlist, hit play, and get on with your day.',
-          ]).map((step, i) => (
-            <div key={i} className="flex items-start space-x-3">
-              <div className="w-6 h-6 rounded-full bg-purple-500/15 text-purple-300 text-xs font-bold flex items-center justify-center flex-shrink-0 mt-0.5">
-                {i + 1}
+        {/* Right: what you get, how it works */}
+        <div>
+          <div className="space-y-3 mb-10 md:mb-8">
+            {features.map(({ icon: Icon, title, body }) => (
+              <div key={title} className="flex items-start space-x-4 rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4 lg:p-5">
+                <Icon className="w-5 h-5 text-purple-400 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-semibold text-sm mb-1">{title}</p>
+                  <p className="text-xs text-white/40 leading-relaxed">{body}</p>
+                </div>
               </div>
-              <p className="text-sm text-white/60 leading-relaxed">{step}</p>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
 
-        {/* CTA */}
-        <div className="rounded-2xl border border-purple-500/20 bg-purple-500/[0.06] p-6 sm:p-8">
-          {selfServe ? (
-            <>
-              <h2 className="text-xl font-bold mb-2">{trialDays ? `Try it free for ${trialDays} days` : 'Start today'}</h2>
-              <p className="text-sm text-white/50 mb-5 max-w-lg">
-                Then ${pricing.priceUsd.toFixed(2)} a month. Cancel any time and the music keeps playing
-                until the end of the month you've paid for.
-              </p>
-              <button onClick={() => navigate('/retail/start')}
-                className="inline-flex items-center space-x-2 px-5 py-3 rounded-xl bg-purple-500 text-white font-bold text-sm hover:bg-purple-400 transition">
-                <span>{trialDays ? 'Start my free trial' : 'Get started'}</span>
-                <ArrowRight className="w-4 h-4" />
-              </button>
-            </>
-          ) : (
-            <>
-              <h2 className="text-xl font-bold mb-2">Interested in your venue?</h2>
-              <p className="text-sm text-white/50 mb-5 max-w-lg">
-                Get in touch and we'll tell you what it costs for your venue.
-              </p>
-              <a href="mailto:jane@projectfeelz.com?subject=Feelz%20Retail%20enquiry"
-                className="inline-flex items-center space-x-2 px-5 py-3 rounded-xl bg-purple-500 text-white font-bold text-sm hover:bg-purple-400 transition">
-                <span>Get in touch</span>
-                <ArrowRight className="w-4 h-4" />
-              </a>
-            </>
-          )}
+          <p className="text-[10px] uppercase tracking-widest text-white/25 font-semibold mb-3">How it works</p>
+          <div className="space-y-2.5">
+            {steps.map((step, i) => (
+              <div key={i} className="flex items-start space-x-3">
+                <div className="w-6 h-6 rounded-full bg-purple-500/15 text-purple-300 text-xs font-bold flex items-center justify-center flex-shrink-0">
+                  {i + 1}
+                </div>
+                <p className="text-sm text-white/60 leading-relaxed">{step}</p>
+              </div>
+            ))}
+          </div>
         </div>
+      </main>
 
-        {/* Legal */}
-        <div className="mt-10 pt-6 border-t border-white/[0.06] flex items-center space-x-4">
-          <button onClick={() => navigate('/retail/terms')} className="text-xs text-white/30 hover:text-white/60 transition underline">Terms of Service</button>
-          <button onClick={() => navigate('/retail/privacy')} className="text-xs text-white/30 hover:text-white/60 transition underline">Privacy Notice</button>
+      {/* Footer: legal links and the way back in for existing venues */}
+      <footer className="w-full max-w-6xl mx-auto px-6 md:px-10 py-5 md:py-4 border-t border-white/[0.06] flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+        <div className="flex items-center space-x-4">
+          <button onClick={() => navigate('/retail/terms')} className="text-xs text-white/30 hover:text-white/60 transition underline whitespace-nowrap">Terms of Service</button>
+          <button onClick={() => navigate('/retail/privacy')} className="text-xs text-white/30 hover:text-white/60 transition underline whitespace-nowrap">Privacy Notice</button>
         </div>
-
-        {/* Already a venue */}
-        <div className="mt-6 pt-6 border-t border-white/[0.06]">
-          {user ? (
-            <div className="flex items-start space-x-2.5">
-              <Check className="w-4 h-4 text-white/25 flex-shrink-0 mt-0.5" />
-              <p className="text-xs text-white/35 leading-relaxed">
-                You're signed in, but this account isn't linked to a venue yet. If you've been set up
-                already, use the invite link that was sent to you.{selfServe ? ' Otherwise start your venue above.' : " Or get in touch and we'll sort it out."}
-                {isAdmin && (
-                  <>
-                    {' '}
-                    <button onClick={() => navigate('/retail/player')} className="text-purple-400 hover:text-purple-300 underline">
-                      Open the player as an admin
-                    </button>
-                    .
-                  </>
-                )}
-              </p>
-            </div>
-          ) : (
-            <p className="text-xs text-white/35">
-              Already set up as a venue?{' '}
-              <button onClick={() => navigate('/login?redirect=/retail')} className="text-purple-400 hover:text-purple-300 underline">
-                Sign in
-              </button>
-              .
-            </p>
-          )}
-        </div>
-      </div>
+        {user ? (
+          <p className="text-xs text-white/35 leading-relaxed flex items-start md:max-w-xl">
+            <Check className="w-3.5 h-3.5 text-white/25 flex-shrink-0 mt-0.5 mr-2" />
+            <span>
+              This account isn't linked to a venue yet. Been set up already? Use your invite link.
+              {selfServe ? ' Otherwise start your trial above.' : " Or get in touch and we'll sort it out."}
+              {isAdmin && (
+                <>
+                  {' '}
+                  <button onClick={() => navigate('/retail/player')} className="text-purple-400 hover:text-purple-300 underline">
+                    Open the player as an admin
+                  </button>
+                  .
+                </>
+              )}
+            </span>
+          </p>
+        ) : (
+          <p className="text-xs text-white/35">
+            Already set up as a venue?{' '}
+            <button onClick={() => navigate('/login?redirect=/retail')} className="text-purple-400 hover:text-purple-300 underline">
+              Sign in
+            </button>
+            .
+          </p>
+        )}
+      </footer>
     </div>
   );
 }

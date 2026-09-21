@@ -47,6 +47,11 @@ const AUDIENCE = {
   },
 };
 
+// Newsletters go out in-app only for now. Email to lists costs more than it is
+// worth at this size, so the "Email this" button is switched off for everyone.
+// Set to true to bring it back; nothing else needs to change.
+const EMAIL_NEWSLETTERS = false;
+
 const inputCls = "w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none focus:bg-white/[0.1] transition";
 
 export default function NewsletterComposePage() {
@@ -530,7 +535,7 @@ export default function NewsletterComposePage() {
                 {/* Emailing needs admins or newsletter_senders.
                     newsletter_editors can publish in-app but not mail a list,
                     a bigger action than posting. */}
-                {canEmail && (
+                {EMAIL_NEWSLETTERS && canEmail && (
                   <div className="flex items-center flex-wrap gap-2">
                     {(!st || st.phase === 'error' || st.phase === 'done') && (
                       <button

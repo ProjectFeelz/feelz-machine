@@ -5,7 +5,7 @@
 // The submit side has existed for a while: TrackUploadPanel writes a row to
 // retail_pitches when an artist pitches a track. Nothing has ever read that
 // table. The Pitches tab was listed as not built, so a submission went into
-// the database and stopped there — no queue, no decision, no reply. Nobody
+// the database and stopped there, no queue, no decision, no reply. Nobody
 // has pitched yet, so nothing was lost, but the first artist who tried would
 // have been submitting into a void.
 //
@@ -43,7 +43,7 @@ export default function RetailPitchesTab({ showToast }) {
     // behind it (migration 123 left it unconstrained so it could be written
     // before a pitch row existed). PostgREST builds its embeds from foreign
     // keys, so asking for `acceptances:legal_acceptances(...)` inside this
-    // select is a 400 — PGRST200, "could not find a relationship" — and it
+    // select is a 400, PGRST200, "could not find a relationship", and it
     // fails the WHOLE query, which is why the tab showed nothing at all
     // rather than showing submissions without their paperwork.
     //
@@ -108,14 +108,15 @@ export default function RetailPitchesTab({ showToast }) {
     setBusy(row.id);
     try {
       // Catalogue first. If this fails the pitch stays in the queue, which is
-      // the recoverable order — the opposite would mark it approved with the
+      // the recoverable order, the opposite would mark it approved with the
       // track never reaching a playlist, and nothing would show that.
       const { error: catErr } = await supabase
         .from('retail_catalog')
         .insert({ track_id: row.track.id, pitch_id: row.id, added_by: user?.id || null });
 
-      // 23505 is the track already being in the catalogue, which is a fine
-      // state to end up in — approve the pitch and move on.
+      // 23505 is the track already being in the catalogue. Fine: marking the
+      // pitch approved below fires a database trigger (migration 148) that
+      // links the existing catalogue row to this pitch and switches it on.
       if (catErr && catErr.code !== '23505') {
         showToast?.('Could not add it to the catalogue: ' + catErr.message);
         return;
@@ -137,7 +138,7 @@ export default function RetailPitchesTab({ showToast }) {
 
   const decline = async (row) => {
     const reason = window.prompt(
-      `Decline "${row.track.title}"? A short reason helps the artist — they see this.`,
+      `Decline "${row.track.title}"? A short reason helps the artist, they see this.`,
       ''
     );
     if (reason === null) return;
@@ -246,7 +247,7 @@ export default function RetailPitchesTab({ showToast }) {
                   {/* Whether the terms were actually agreed to, and which
                       version. A reviewer should never have to take that on
                       trust, and a pitch from before the gate existed has no
-                      acceptance on file — which is worth seeing rather than
+                      acceptance on file, which is worth seeing rather than
                       hiding behind a default tick. */}
                   {(() => {
                     const lic = (row.acceptances || []).find(a => a.document?.slug === 'retail-licence');
@@ -263,14 +264,14 @@ export default function RetailPitchesTab({ showToast }) {
                     return (
                       <p className="text-[11px] text-amber-300/80 mt-1.5 flex items-center gap-1">
                         <ShieldCheck className="w-3 h-3 flex-shrink-0" />
-                        Submitted before the terms gate existed — no agreement on file
+                        Submitted before the terms gate existed, no agreement on file
                       </p>
                     );
                   })()}
 
                   {t.is_explicit && (
                     <p className="text-[11px] text-amber-300/90 mt-1.5">
-                      Marked explicit — retail playlists refuse explicit tracks, so approving this
+                      Marked explicit, retail playlists refuse explicit tracks, so approving this
                       puts it in the catalogue but it still cannot be added to a playlist.
                     </p>
                   )}
@@ -285,7 +286,7 @@ export default function RetailPitchesTab({ showToast }) {
                     <button
                       onClick={() => approve(row)}
                       disabled={isBusy}
-                      title="Approve — adds it to the retail catalogue"
+                      title="Approve, adds it to the retail catalogue"
                       className="w-9 h-9 flex items-center justify-center rounded-lg bg-emerald-500/15 hover:bg-emerald-500/30 transition disabled:opacity-40"
                     >
                       {isBusy
