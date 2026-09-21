@@ -171,7 +171,7 @@ export default function TrackActionSheet({ track, artist, onClose }) {
                       kind: 'purchase',
                       title: track.title,
                       subtitle: artist?.artist_name,
-                      amount: effectivePrice,
+                      amount: captureData.amount ?? (effectivePrice),
                       ...(isPreorder && isNotYetReleased
                         ? { heading: 'Pre-order placed',
                             note: 'You will get the download the moment it is released. '
@@ -389,7 +389,7 @@ export default function TrackActionSheet({ track, artist, onClose }) {
         <div className="fixed inset-0 z-[100] flex items-end justify-center" onClick={onClose}>
             <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
             <div
-                className="relative w-full max-w-lg rounded-t-2xl overflow-hidden animate-slide-up"
+                className="relative w-full max-w-lg rounded-t-2xl overflow-x-hidden overflow-y-auto overscroll-contain max-h-[92dvh] animate-slide-up"
                 style={{ backgroundColor: '#111', border: '1px solid rgba(255,255,255,0.08)', borderBottom: 'none' }}
                 onClick={(e) => e.stopPropagation()}
             >

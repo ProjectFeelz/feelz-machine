@@ -530,6 +530,11 @@ exports.handler = async (event) => {
         // existing caller breaks by reading it.
         body: JSON.stringify({
           orderId:     result.body.id,
+          // Where this order will pay: 'direct' (the artist's own PayPal),
+          // 'multiparty', or 'platform' (only with the emergency switch on).
+          // No address is exposed, only the route, so a sale can be checked
+          // from the browser without reading server logs.
+          route:       routing.route,
           amount:      safeAmount,
           artistPrice: artistPrice.toFixed(2),
           serviceFee:  serviceFee.toFixed(2),

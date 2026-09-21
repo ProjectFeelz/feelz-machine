@@ -127,7 +127,7 @@ export default function PaidPlayGate({ track, artist, onClose, onPurchaseComplet
             kind: 'purchase',
             title: track.title,
             subtitle: artist?.artist_name,
-            amount: track.download_price,
+            amount: captureData.amount ?? (track.download_price),
           });
           setTimeout(() => { onPurchaseComplete?.(track); }, 1500);
         } catch (e) { setError(e.message); setPurchasing(false); }

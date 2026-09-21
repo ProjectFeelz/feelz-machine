@@ -25,20 +25,20 @@ export default function TermsOfUse() {
   return (
     <div className="min-h-screen bg-black text-white">
 
-      {/* Without these, this page inherited index.html's canonical — which points
-          at the homepage — so the sitemap submitted the page for indexing while
+      {/* Without these, this page inherited index.html's canonical, which points
+          at the homepage, so the sitemap submitted the page for indexing while
           the page itself told Google it WAS the homepage. Google settles that by
           dropping the page: "Alternate page with proper canonical tag". */}
       <Helmet>
         <title>Terms of Use · Feelz Machine</title>
-        <meta name="description" content="The terms covering use of Feelz Machine — accounts, uploads, royalties, downloads and payouts." />
+        <meta name="description" content="The terms covering use of Feelz Machine: accounts, uploads, royalties, downloads and payouts." />
         <link rel="canonical" href="https://www.feelzmachine.com/terms-of-use" />
         <meta property="og:type" content="website" />
         <meta property="og:url" content="https://www.feelzmachine.com/terms-of-use" />
         <meta property="og:title" content="Terms of Use · Feelz Machine" />
-        <meta property="og:description" content="The terms covering use of Feelz Machine — accounts, uploads, royalties, downloads and payouts." />
+        <meta property="og:description" content="The terms covering use of Feelz Machine: accounts, uploads, royalties, downloads and payouts." />
         <meta name="twitter:title" content="Terms of Use · Feelz Machine" />
-        <meta name="twitter:description" content="The terms covering use of Feelz Machine — accounts, uploads, royalties, downloads and payouts." />
+        <meta name="twitter:description" content="The terms covering use of Feelz Machine: accounts, uploads, royalties, downloads and payouts." />
       </Helmet>
       <div className="sticky top-0 z-10 bg-black/95 backdrop-blur-xl border-b border-white/[0.05] px-4 py-4 flex items-center space-x-3">
         <button onClick={() => goBack()} className="p-1.5 hover:bg-white/[0.06] rounded-lg transition">
@@ -65,7 +65,7 @@ export default function TermsOfUse() {
           <p>You agree to provide accurate information when registering and to keep it updated. Accounts using false information may be suspended.</p>
         </Section>
 
-        <Section title="4. Content You Upload — Artist Rights & Licence">
+        <Section title="4. Content You Upload: Artist Rights & Licence">
           <p><strong className="text-white/70">You retain ownership</strong> of all music, videos, images, lyrics, artwork, and other content ("Your Content") that you upload to the Platform. We do not claim ownership of Your Content.</p>
           <p><strong className="text-white/70">Licence to us:</strong> By uploading content, you grant {COMPANY} a worldwide, non-exclusive, royalty-free, sublicensable licence to host, store, reproduce, distribute, display, stream, and promote Your Content solely for the purpose of operating and improving the Platform. This includes displaying your content in our algorithmic For You discovery feed, search results, featured sections, and promotional materials about the Platform.</p>
           <p><strong className="text-white/70">You warrant that:</strong> (a) you own or have all necessary rights, licences, and permissions for Your Content; (b) Your Content does not infringe any third party's intellectual property, privacy, or other rights; (c) any music videos, story videos, or audiovisual content you upload do not include samples, compositions, or recordings owned by third parties without the appropriate synchronisation and master licences.</p>
@@ -74,7 +74,7 @@ export default function TermsOfUse() {
           <p><strong className="text-white/70">Removal:</strong> You may delete Your Content at any time from your dashboard. Upon deletion, we will remove it from active distribution, though residual copies in backups may persist for a limited period.</p>
         </Section>
 
-        <Section title="5. Content You Upload — Prohibited Content">
+        <Section title="5. Content You Upload: Prohibited Content">
           <p>You may not upload content that: (a) infringes any third party's intellectual property rights; (b) contains illegal material, including child sexual abuse material; (c) promotes violence, hatred, or discrimination; (d) contains malware or harmful code; (e) violates any applicable law or regulation.</p>
           <p>We reserve the right to remove any content that violates these Terms or our community standards without notice.</p>
         </Section>
@@ -88,12 +88,15 @@ export default function TermsOfUse() {
         <Section title="7. Streaming, Downloads & Purchases">
           <p>Free-tier music may be streamed an unlimited number of times by any user, for as long as the artist keeps it designated as free.</p>
           <p>Music designated as paid or download-only may be previewed up to <strong className="text-white/70">5 times</strong> per track before a purchase prompt appears. To continue listening after 5 plays, the listener must purchase the track or album at the price set by the artist.</p>
-          <p>All purchases are final. We do not offer refunds for digital content once it has been downloaded or streamed beyond the preview limit. Exceptions may be made at our discretion for technical failures.</p>
+          <p>All purchases are final. Refunds are not offered for digital content once it has been downloaded or streamed beyond the preview limit. If a purchase fails for a technical reason, contact us and we will sort out access; a refund of the payment itself is made by the artist who received it (see Section 8).</p>
         </Section>
 
-        <Section title="8. Revenue, Splits & Payouts">
-          <p>Artists set their own prices for downloadable content. {COMPANY} processes payments via PayPal and retains a platform fee as disclosed at the time of transaction.</p>
-          <p><strong className="text-white/70">Revenue Splits:</strong> Where an artist designates collaborators with agreed split percentages, the Platform processes revenue splits automatically at the time of purchase. Split payments are disbursed directly to each collaborator's PayPal account. {COMPANY} is not responsible for incorrect PayPal details, failed disbursements due to inactive accounts, or disputes between collaborating artists regarding agreed splits.</p>
+        <Section title="8. Sales, Splits & Payments">
+          <p><strong className="text-white/70">Paid directly.</strong> Artists set their own prices. When a fan buys a track, album or beat licence, the payment goes straight into the selling artist's own PayPal account at the moment of purchase. {COMPANY} does not receive, hold or forward the money from a sale and takes no commission on it.</p>
+          <p><strong className="text-white/70">Processing fee.</strong> PayPal charges a fee on every payment. A processing charge is added at checkout so that the artist receives the price they set, and the buyer sees the artist's price and the processing charge separately before paying. {COMPANY} keeps none of it.</p>
+          <p><strong className="text-white/70">PayPal required to sell.</strong> An artist must add a PayPal email in Payment Settings before their music can be bought. Until then, purchases are declined and no one is charged. Artists are responsible for keeping those details correct and for any account restrictions PayPal applies.</p>
+          <p><strong className="text-white/70">Collaborator splits.</strong> On a track or album with accepted collaborators, the buyer pays the owner of the track or album. {COMPANY} records each collaborator's agreed share of every sale, calculated on what the owner actually received after PayPal's fee, and notifies both artists. The owner is responsible for paying their collaborators. {COMPANY} is not a party to that payment and is not responsible for disputes between collaborators. Only the owner can add a collaborator, and a split only applies once the collaborator has accepted it; if the owner changes an accepted split, the collaborator must accept it again.</p>
+          <p><strong className="text-white/70">Refunds and disputes.</strong> Because the artist receives the payment, a refund, chargeback or PayPal dispute is between the buyer, PayPal and the artist. We will help where we can with records of the sale.</p>
           <p>Artists are responsible for their own tax obligations arising from income earned through the Platform.</p>
         </Section>
 
@@ -112,7 +115,7 @@ export default function TermsOfUse() {
           <p>Stories expire after 24 hours. We are not responsible for any content in stories that violates third-party rights.</p>
         </Section>
 
-        <Section title="12. User-Generated Content — Listeners">
+        <Section title="12. User-Generated Content: Listeners">
           <p>Listeners may post comments on tracks and interact with artists. Comments must not contain harassment, hate speech, spam, or illegal content. We may remove comments and suspend accounts that violate these standards.</p>
         </Section>
 
@@ -123,7 +126,7 @@ export default function TermsOfUse() {
         {/* Steve's decision, stated in the product rather than left implied:
             following an artist opts you in to hearing from them, and you opt
             out whenever you like. POPIA section 69 permits exactly that for
-            people you already have a relationship with — but only while the
+            people you already have a relationship with, but only while the
             objection stays free and easy, at collection AND in every message.
             So this section has to say three things, and each one is a promise
             the code now actually keeps:
@@ -135,7 +138,7 @@ export default function TermsOfUse() {
             If any of those three stops being true in the product, this clause
             stops being a defence and becomes a misrepresentation. */}
         <Section title="14. Emails & Direct Marketing">
-          <p><strong className="text-white/70">How you are subscribed.</strong> When you create an account, you are subscribed to Platform emails about {COMPANY} — new features, releases, competitions and announcements. When you follow an artist, you are added to that artist's contact list and may receive emails from that artist about their music. We do not ask you to tick a box for either; you are opted in by default and you may opt out at any time. This section is that notice.</p>
+          <p><strong className="text-white/70">How you are subscribed.</strong> When you create an account, you are subscribed to Platform emails about {COMPANY}: new features, releases, competitions and announcements. When you follow an artist, you are added to that artist's contact list and may receive emails from that artist about their music. We do not ask you to tick a box for either; you are opted in by default and you may opt out at any time. This section is that notice.</p>
 
           <p><strong className="text-white/70">How you opt out.</strong> Every marketing email we send carries an unsubscribe link that works immediately and needs no password and no account. You can also manage everything in one place, artist by artist, under Email Preferences in your Hub, at any time, for free. We act on an objection as soon as we receive it. If something is already in the process of sending, it may still arrive.</p>
 

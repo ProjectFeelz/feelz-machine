@@ -108,13 +108,25 @@ function RetailPayPalButton({ venueId, onSubscribed }) {
             );
             return;
           }
+          // success with status APPROVED means PayPal has the approval but
+          // not the first payment. The server leaves the venue pending until
+          // the webhook confirms it, so switching the player on here showed an
+          // empty player. Only a genuinely ACTIVE subscription unlocks it.
+          if (linked.status !== 'ACTIVE') {
+            setError('Approved. Your player switches on by itself as soon as PayPal confirms the first payment, '
+              + 'usually within a few minutes. Refresh this page then.');
+            return;
+          }
         } catch {
           setError('Payment went through but we could not reach the server to activate the venue. Contact us.');
           return;
         }
         onSubscribed();
       },
-      onError: () => setError('Payment failed. Try again.'),
+      onError: (err) => {
+        console.error('[retail] PayPal button error:', err);
+        setError('PayPal could not complete that. Nothing was charged. Refresh the page to try again.');
+      },
     }).render(buttonRef.current);
   }, [ready, planId, venueId, onSubscribed]);
 
@@ -976,9 +988,12 @@ export default function RetailPlayerPage() {
           <p className="text-sm text-white/50 max-w-xs">
             {venue.status === 'pending'
               ? 'Set up billing to activate your Feelz Retail player.'
-              : 'This account is currently suspended. Contact us if that seems wrong.'}
+              : 'Your subscription has ended. Subscribe again below to switch the player back on.'}
           </p>
-          {venue.status === 'pending' && (
+          {/* Suspended venues can pay again too. The server accepts it, but
+              only a pending venue used to be shown the button, so a lapsed
+              venue had no way back without us editing the database. */}
+          {(venue.status === 'pending' || venue.status === 'suspended') && (
             <RetailPayPalButton venueId={venue.id} onSubscribed={() => setVenue(v => ({ ...v, status: 'active' }))} />
           )}
         </div>

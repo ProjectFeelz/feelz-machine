@@ -192,7 +192,7 @@ export default function AlbumDetailPage() {
             kind: 'purchase',
             title: purchaseTarget.label,
             subtitle: artist?.artist_name,
-            amount: purchaseTarget.price,
+            amount: captureData.amount ?? (purchaseTarget.price),
           });
           setTimeout(async () => {
             if (purchaseTarget.type === 'album') { await triggerAlbumDownload(); }

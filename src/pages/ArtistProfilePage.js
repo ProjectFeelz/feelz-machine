@@ -644,7 +644,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
             kind: 'purchase',
             title: purchaseTrack?.title,
             subtitle: artist?.artist_name,
-            amount: purchaseTrack?.download_price,
+            amount: captureData.amount ?? (purchaseTrack?.download_price),
           });
           setTimeout(async () => { await triggerDownload(purchaseTrack); setPurchaseTrack(null); setPurchaseSuccess(false); }, 1500);
         } catch (err) { setPurchaseError(err.message); setPurchasing(false); }
@@ -2166,7 +2166,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
                               kind: 'purchase',
                               title: pwywTrack?.title,
                               subtitle: artist?.artist_name,
-                              amount: parseFloat(pwywFanPrice) || 0,
+                              amount: captureData.amount ?? (parseFloat(pwywFanPrice) || 0),
                             });
                             setTimeout(async () => {
                               await triggerDownload(pwywTrack);

@@ -14,6 +14,7 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import useNotifications from '../contexts/useNotifications';
+import { downloadTrack } from '../utils/downloadTrack';
 import WrappedCard from '../components/WrappedCard';
 
 // ─── Type config ──────────────────────────────────────────────────────────────
@@ -48,7 +49,7 @@ const TYPE_CONFIG = {
   first_listener:     { icon: Heart,         color: 'text-yellow-400', bg: 'bg-yellow-500/10',  label: 'First! 🎯' },
   tip:                { icon: DollarSign,    color: 'text-green-400',  bg: 'bg-green-500/10',   label: 'Tip Received' },
   // Receipts. A purchase or a subscription that tells you nothing afterwards
-  // is how somebody ends up unsure whether they were charged at all — these
+  // is how somebody ends up unsure whether they were charged at all, these
   // are the durable half of the confirmation sheet, written by the server so
   // they survive a closed tab.
   purchase:           { icon: Download,      color: 'text-green-400',  bg: 'bg-green-500/10',   label: 'Purchase' },
@@ -202,7 +203,7 @@ function CollabActions({ notif, onActioned }) {
       // Notify the requester
       // Nothing here on purpose. The status change written above fires
       // notify_collab_event (migration 96), which sends this from inside the
-      // database. This insert was a duplicate and a 403 — it is addressed to
+      // database. This insert was a duplicate and a 403, it is addressed to
       // the requesting artist, which the INSERT policy does not permit.
       setDone(action);
       // Update the notification type so it no longer shows action buttons after refetch
@@ -250,6 +251,53 @@ function CollabActions({ notif, onActioned }) {
 }
 
 // ─── Follow back button ────────────────────────────────────────────────────────
+// A receipt for a track you bought should let you download it from the
+// receipt. Having to find the track, open its menu and press Buy & Download
+// again for something you have already paid for is a chore, and it reads as
+// though the purchase did not stick. Same server check as everywhere else:
+// get-download-url confirms the purchase before handing out the file.
+function PurchaseDownloadButton({ trackId, title }) {
+  const [state, setState] = useState('idle');   // idle | busy | done | error
+  const [msg, setMsg] = useState('');
+
+  const go = async (e) => {
+    e.stopPropagation();
+    if (state === 'busy') return;
+    setState('busy'); setMsg('');
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      await downloadTrack(trackId, title, session?.access_token);
+      setState('done');
+    } catch (err) {
+      const m = err?.message || '';
+      setState('error');
+      setMsg(
+        m === 'not_released_yet'        ? 'Not released yet. It will download on release day.'
+        : m === 'artists_cannot_download' ? 'This is your own track.'
+        : m === 'purchase_required' || m === 'insufficient_payment'
+          ? 'We could not find this purchase on your account. Contact us with the receipt.'
+        : 'Download failed. Try again in a moment.'
+      );
+    }
+  };
+
+  return (
+    <div className="mt-2" onClick={e => e.stopPropagation()}>
+      <button
+        onClick={go}
+        disabled={state === 'busy'}
+        className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold bg-green-500/15 text-green-300 border border-green-500/25 hover:bg-green-500/25 transition disabled:opacity-60"
+      >
+        {state === 'busy'
+          ? <Loader className="w-3.5 h-3.5 animate-spin" />
+          : state === 'done' ? <Check className="w-3.5 h-3.5" /> : <Download className="w-3.5 h-3.5" />}
+        {state === 'busy' ? 'Downloading' : state === 'done' ? 'Downloaded' : 'Download'}
+      </button>
+      {state === 'error' && <p className="text-[11px] text-red-300/80 mt-1">{msg}</p>}
+    </div>
+  );
+}
+
 function FollowBackButton({ artistId }) {
   const { user } = useAuth();
   const [following, setFollowing]   = useState(false);
@@ -333,7 +381,7 @@ export default function NotificationsPage() {
   // grey music note on the other.
   //
   // Resolved here rather than fixed at each producer, because that would
-  // only help notifications sent from now on — every one already in
+  // only help notifications sent from now on, every one already in
   // somebody's list would stay blank. One query per page covers both.
   const withTrackArtwork = async (rows) => {
     const needing = rows.filter(n => {
@@ -349,7 +397,7 @@ export default function NotificationsPage() {
       .in('id', ids);
 
     // Read, not swallowed: without artwork the pill still renders with its
-    // placeholder, so a failure here is cosmetic — but silent cosmetic bugs
+    // placeholder, so a failure here is cosmetic, but silent cosmetic bugs
     // are how this one survived in the first place.
     if (error) {
       console.error('[notifications] artwork lookup failed:', error.code, error.message);
@@ -452,7 +500,7 @@ export default function NotificationsPage() {
   // A type in here marks itself read and goes nowhere.
   //
   // weekly_report and monthly_wrapped were in this set AND had navigate()
-  // branches further down that could never run — the early return beat them
+  // branches further down that could never run, the early return beat them
   // to it. So tapping "Your week: 55 streams" did nothing at all, which
   // reads as a dead app rather than a deliberate choice. Both now fall
   // through to their pages.
@@ -472,7 +520,7 @@ export default function NotificationsPage() {
   //
   // metadata is a snapshot taken when the notification was created. file_url
   // is copied into it, so once a notification existed the track played from
-  // that URL forever — including after the artist unpublished it to hide it
+  // that URL forever, including after the artist unpublished it to hide it
   // from fans. The database was never consulted, so RLS never got a say.
   //
   // Going through the tracks table fixes it properly rather than adding a
@@ -527,7 +575,7 @@ export default function NotificationsPage() {
     }
 
     if (type === 'new_stream') {
-      // new_stream is sent to the track's artist — take them to their own track
+      // new_stream is sent to the track's artist, take them to their own track
       const streamTrackId = meta.track_id || notif.track_id;
       if (meta.track_slug) { navigate(`/track/${meta.track_slug}`); return; }
       if (streamTrackId) { navigate(`/track/${streamTrackId}`); return; }
@@ -556,7 +604,7 @@ export default function NotificationsPage() {
     }
 
     if (type === 'track_liked') {
-      // For story likes — no track involved
+      // For story likes, no track involved
       if (meta.story_id) { navigate(`/artist/${notif.from_artist?.slug || meta.from_artist_slug || ''}`); return; }
       // Use notification row track_id as fallback (most reliable)
       const likedTrackId = meta.track_id || notif.track_id;
@@ -572,7 +620,7 @@ export default function NotificationsPage() {
     if (type === 'new_follower') {
       if (meta.from_artist_slug) { navigate('/artist/' + meta.from_artist_slug); return; }
       if (notif.from_artist?.slug) { navigate('/artist/' + notif.from_artist.slug); return; }
-      // A LISTENER followed you, so there is no artist page to open — and
+      // A LISTENER followed you, so there is no artist page to open, and
       // there is no public listener page either: UserProfilePage is mounted
       // at /profile/edit, which is the viewer's OWN edit screen.
       //
@@ -596,7 +644,7 @@ export default function NotificationsPage() {
           .eq('is_published', true)
           .maybeSingle();
 
-        if (!liveTrack?.file_url) return; // track deleted or unpublished — bail silently
+        if (!liveTrack?.file_url) return; // track deleted or unpublished, bail silently
 
         const seedTrack = {
           id:                liveTrack.id,
@@ -643,11 +691,11 @@ export default function NotificationsPage() {
 
     if (type === 'tier_granted')                         { navigate('/profile'); return; }
     // A receipt opens the thing it is a receipt FOR where there is one, and
-    // the library otherwise — a dead-end receipt is barely better than none.
+    // the library otherwise, a dead-end receipt is barely better than none.
     // `/track/:slug` is resolved by TrackPage, which queried tracks by SLUG and
     // nothing else. A track id is not a slug, so this sent every purchase
     // receipt to a page that found no row and rendered "Track not found" on
-    // black — which on a phone reads as a blank page, and is exactly what a
+    // black, which on a phone reads as a blank page, and is exactly what a
     // buyer saw when she tapped the receipt for a track she had just paid for.
     //
     // Every other branch in this handler already tries meta.track_slug first.
@@ -949,6 +997,14 @@ export default function NotificationsPage() {
                               <Play className="w-3.5 h-3.5 text-white/60 ml-0.5" />
                             </div>
                           </div>
+                        )}
+
+                        {/* Download what you just bought */}
+                        {notif.type === 'purchase' && notif.track_id && !meta.album_id && (
+                          <PurchaseDownloadButton
+                            trackId={notif.track_id}
+                            title={(notif.title || '').replace(/^You bought "(.*)"$/, '$1') || 'track'}
+                          />
                         )}
 
                         {/* Follow back button */}

@@ -328,7 +328,7 @@ export default function BeatDetailPage() {
             kind: 'purchase',
             title: `${track.title} \u2014 ${lic.label} lease`,
             subtitle: artist?.artist_name,
-            amount: lic.price,
+            amount: captureData.amount ?? (lic.price),
             note: 'Your files are downloading. The licence terms are in your notifications '
                 + 'along with this receipt, and PayPal has emailed you one too.',
           });

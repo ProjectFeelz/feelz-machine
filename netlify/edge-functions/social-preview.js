@@ -9,7 +9,7 @@
 // the per-page meta tags react-helmet-async sets are invisible to a crawler
 // that never executes the JS that sets them.
 
-const CRAWLER_PATTERN = /facebookexternalhit|Facebot|Twitterbot|WhatsApp|Slackbot|Discordbot|LinkedInBot|TelegramBot|Pinterest|redditbot|vkShare|SkypeUriPreview|W3C_Validator|Googlebot/i;
+const CRAWLER_PATTERN = /facebookexternalhit|Facebot|Twitterbot|WhatsApp|Slackbot|Discordbot|LinkedInBot|TelegramBot|Pinterest|redditbot|vkShare|SkypeUriPreview|W3C_Validator/i;
 
 const ROUTE_PATTERNS = [
   { re: /^\/artist\/([^/]+)\/?$/, type: 'artist' },
