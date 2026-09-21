@@ -40,6 +40,7 @@ export default function AdminDeals() {
   const [busy, setBusy] = React.useState(false);
   const [msg, setMsg] = React.useState('');
   const [ig, setIg] = React.useState(null); // Instagram add-on: live, price, waitlist, queue
+  const [igTarget, setIgTarget] = React.useState('');
 
   const loadIg = React.useCallback(async () => {
     const [{ data: st }, { data: count }, { count: queued }, { count: subs }] = await Promise.all([
@@ -55,7 +56,17 @@ export default function AdminDeals() {
       price: m.addon_instagram_monthly_usd, target: m.addon_instagram_waitlist_target,
       waitlist: Number(count) || 0, queued: queued || 0, active: subs || 0,
     });
+    setIgTarget(m.addon_instagram_waitlist_target || '');
   }, []);
+
+  const saveIgTarget = async () => {
+    const n = parseInt(igTarget, 10);
+    if (!Number.isFinite(n) || n < 1 || n > 10000) { setMsg('Enter a target between 1 and 10000.'); return; }
+    const { error } = await supabase.from('platform_settings')
+      .upsert({ key: 'addon_instagram_waitlist_target', value: String(n), updated_at: new Date().toISOString() });
+    setMsg(error ? 'Could not save the target: ' + error.message : `Waitlist target is now ${n}.`);
+    loadIg();
+  };
 
   const toggleIg = async () => {
     const turningOn = !ig.live;
@@ -172,6 +183,14 @@ export default function AdminDeals() {
                   <p className="text-[10px] text-white/40 uppercase tracking-wide">{k}</p>
                 </div>
               ))}
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-white/50 flex-shrink-0">Waitlist target</span>
+              <input value={igTarget} onChange={e => setIgTarget(e.target.value.replace(/[^0-9]/g, ''))} inputMode="numeric"
+                className="w-20 px-2 py-1.5 bg-black/30 rounded-lg text-white text-sm outline-none text-center" />
+              <button onClick={saveIgTarget} disabled={String(igTarget) === String(ig.target)}
+                className="px-3 py-1.5 rounded-lg bg-white/[0.08] text-xs disabled:opacity-40">Save</button>
+              <span className="text-[11px] text-white/30">Artists see "X of target" on the waitlist.</span>
             </div>
             {!ig.live && ig.waitlist >= Number(ig.target || 0) && Number(ig.target) > 0 && (
               <p className="text-xs text-emerald-300">Target reached. Set up LabelGrid, then switch it on.</p>

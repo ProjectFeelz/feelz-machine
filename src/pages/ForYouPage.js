@@ -32,9 +32,18 @@ import {
   Sparkles, Volume2, VolumeX, Info, EyeOff,
 } from 'lucide-react';
 
+// True when this page is running inside the phone on the sign-in page.
+const IN_PHONE_PREVIEW = typeof window !== 'undefined' && (
+  (() => { try { return window.self !== window.top; } catch { return true; } })()
+  || new URLSearchParams(window.location.search).get('preview') === 'phone'
+);
+
+// Search engines and link previews must still see the feed at "/".
+const IS_BOT = typeof navigator !== 'undefined' && /bot|crawl|spider|slurp|facebookexternalhit|lighthouse|headless|preview/i.test(navigator.userAgent || '');
+
 // Every listener_feedback write in this file was fire-and-forget: no await, no
 // .then, no error read. So the 400 they have all been returning was invisible,
-// and Hide *looked* like it worked — the card slid away, the row was never
+// and Hide *looked* like it worked, the card slid away, the row was never
 // written, and the track came back next session. Same for the skip and
 // deep-listen signals the recommender is supposed to be learning from.
 //
@@ -167,7 +176,7 @@ function LyricsCaption({ lyrics, currentTime, isActive }) {
   const lrcLines = parseLRC(lyrics);
 
   if (lrcLines) {
-    // Timestamped LRC — show active line
+    // Timestamped LRC, show active line
     const activeIdx = lrcLines.reduce((best, line, i) =>
       line.time <= currentTime ? i : best, -1);
     const activeLine = activeIdx >= 0 ? lrcLines[activeIdx] : null;
@@ -191,7 +200,7 @@ function LyricsCaption({ lyrics, currentTime, isActive }) {
     );
   }
 
-  // Plain text — show lines based on time position
+  // Plain text, show lines based on time position
   const lines = lyrics.split('\n').map(l => l.trim()).filter(Boolean);
   if (!lines.length) return null;
   const totalLines = lines.length;
@@ -261,7 +270,7 @@ function FloatingHearts({ trackId, isActive }) {
       const likers = likersRef.current;
       const count  = likers.length;
 
-      // Hearts — 2 to 4 at a time
+      // Hearts, 2 to 4 at a time
       const n = 2 + Math.floor(Math.random() * 3);
       const newHearts = Array.from({ length: n }, (_, i) => ({
         id:    Date.now() + i + Math.random(),
@@ -273,7 +282,7 @@ function FloatingHearts({ trackId, isActive }) {
       setHearts(prev => [...prev, ...newHearts]);
       setTimeout(() => setHearts(prev => prev.filter(h => !newHearts.find(n => n.id === h.id))), 3000);
 
-      // Name pill — cycle through likers
+      // Name pill, cycle through likers
       if (count > 0) {
         const liker = likers[burstIdx.current % count];
         burstIdx.current++;
@@ -358,7 +367,7 @@ function FloatingHearts({ trackId, isActive }) {
         </div>
       ))}
 
-      {/* Listener name pills — float upward alongside hearts */}
+      {/* Listener name pills, float upward alongside hearts */}
       {bubbles.map(b => (
         <div key={b.id}
           className="absolute flex items-center space-x-1.5 rounded-full px-2.5 py-1.5"
@@ -552,7 +561,7 @@ function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare, onN
               .maybeSingle();
 
             if (recent) {
-              // Update existing notification — group it
+              // Update existing notification, group it
               const count = (recent.metadata?.like_count || 1) + 1;
               const firstLiker = recent.metadata?.first_liker_name || likerName;
               await supabase.from('notifications').update({
@@ -562,7 +571,7 @@ function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare, onN
                 updated_at: new Date().toISOString(),
               }).eq('id', recent.id);
             } else {
-              // Migration 106 — see TrackDetailPage for the same conversion.
+              // Migration 106, see TrackDetailPage for the same conversion.
               await sendNotification(supabase, 'track_liked (for you)', {
                 type:     'track_liked',
                 artistId: track.artist_id,
@@ -621,7 +630,7 @@ function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare, onN
 
   const goToArtist = () => {
     // Guarded. Without a slug this navigated to /artist/null, which renders
-    // the "artist not found" page — so a track whose artist row is missing a
+    // the "artist not found" page, so a track whose artist row is missing a
     // slug gave the credit the look of a working link and the behaviour of a
     // dead end.
     if (!track.artist_slug) return;
@@ -631,7 +640,7 @@ function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare, onN
 
   // What the credit on the card actually says.
   //
-  // This used to be `@{track.artist_slug || track.artist_name}` — slug FIRST,
+  // This used to be `@{track.artist_slug || track.artist_name}`, slug FIRST,
   // so the card showed a database key in preference to the name the artist
   // typed in. On any account created during the old signup race that key is
   // something like `eon-jams-mooqa3lj`, a real name with a random suffix
@@ -659,7 +668,7 @@ function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare, onN
   const fmt = n => n >= 1000 ? (n / 1000).toFixed(1) + 'K' : String(n);
   const videoRef = React.useRef(null);
 
-  // Sync video to audio player state — start/stop together
+  // Sync video to audio player state, start/stop together
   React.useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
@@ -684,7 +693,7 @@ function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare, onN
             className="w-full h-full object-cover"
             style={{ filter: 'blur(48px) brightness(0.3) saturate(1.4)', transform: 'scale(1.2)' }} />
         )}
-        {/* Color tint overlay — pulls the dominant color through */}
+        {/* Color tint overlay, pulls the dominant color through */}
         <div className="absolute inset-0" style={{
           background: `linear-gradient(180deg,
             rgba(${dominantColor},0.45) 0%,
@@ -697,7 +706,7 @@ function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare, onN
       {hasVideo && isActive && (
         <div className="absolute inset-0 z-10">
           {isUploadedVideo ? (
-            /* Native video for Supabase-hosted MP4s — synced to audio player */
+            /* Native video for Supabase-hosted MP4s, synced to audio player */
             <video
               ref={videoRef}
               src={track.youtube_url}
@@ -733,7 +742,7 @@ function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare, onN
         </div>
       )}
 
-      {/* Vinyl — positioned in upper 55% of screen */}
+      {/* Vinyl, positioned in upper 55% of screen */}
       {!hasVideo && (
         <div className="relative z-10 flex items-center justify-center" style={{ marginTop: '-12vh' }}>
           <VinylRecord coverUrl={track.cover_artwork_url} isPlaying={playing} size={vinylSize} />
@@ -746,7 +755,7 @@ function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare, onN
         <LyricsCaption lyrics={track.lyrics} currentTime={currentTime} isActive={isActive} />
       )}
 
-      {/* Floating hearts — only on active card */}
+      {/* Floating hearts, only on active card */}
       {isActive && isThisOne && <FloatingHearts trackId={track.id} isActive={isActive} />}
 
       {/* Right action bar */}
@@ -803,7 +812,7 @@ function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare, onN
 
       </div>
 
-      {/* Undo hide toast — fixed centered above nav */}
+      {/* Undo hide toast, fixed centered above nav */}
       {justHid && (
         <div
           style={{
@@ -854,13 +863,13 @@ function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare, onN
       <div className="absolute bottom-24 left-4 right-16 z-20" onClick={e => e.stopPropagation()}>
         {/* min-w-0 on the row, so the credit pill below is allowed to shrink.
             A flex child will not go narrower than its content unless it can,
-            and without this the long-name truncation never engages — the pill
+            and without this the long-name truncation never engages, the pill
             just pushes Follow and the hide button off the right edge. */}
         <div className="flex items-center space-x-2 mb-1 min-w-0">
           {/* The credit, as a pill.
               Deliberately the QUIET one. Follow beside it is the action and
               keeps the loud red treatment; identity should not compete with
-              it, so this is neutral glass — it reads as a pill and as
+              it, so this is neutral glass, it reads as a pill and as
               tappable without pulling the eye off the button that matters.
               No max-width on purpose: `min-w-0` plus `truncate` lets flex give
               the pill whatever the row has left after Follow and the hide
@@ -869,7 +878,7 @@ function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare, onN
               "EON Jams Collective" on a phone that had room for all of it.
               The full name stays available on long-press via `title`. */}
           <button onClick={goToArtist}
-            title={hasStory ? `${artistLabel} — story running now` : artistLabel}
+            title={hasStory ? `${artistLabel}, story running now` : artistLabel}
             className={`min-w-0 truncate px-2.5 py-0.5 rounded-full
                        text-[12px] font-bold text-left transition active:scale-95
                        ${hasStory ? 'text-white' : 'text-white/75 hover:text-white hover:bg-white/[0.14]'}`}
@@ -997,7 +1006,7 @@ function CommentSheetOverlay({ track, user, onClose }) {
         alignItems: 'flex-end',
         justifyContent: 'center',
         background: 'rgba(0,0,0,0.5)',
-        // Isolate this layer — prevent iOS from reflowing the page beneath
+        // Isolate this layer, prevent iOS from reflowing the page beneath
         transform: 'translateZ(0)',
         WebkitTransform: 'translateZ(0)',
       }}
@@ -1018,7 +1027,7 @@ function CommentSheetOverlay({ track, user, onClose }) {
           background: 'rgba(10,10,10,0.98)',
           borderTop: '1px solid rgba(255,255,255,0.08)',
           borderRadius: '24px 24px 0 0',
-          // No marginBottom here — TrackCommentSheet's fixed input handles keyboard
+          // No marginBottom here, TrackCommentSheet's fixed input handles keyboard
           transform: 'translateZ(0)',
           WebkitTransform: 'translateZ(0)',
         }}>
@@ -1029,9 +1038,19 @@ function CommentSheetOverlay({ track, user, onClose }) {
 }
 
 export default function ForYouPage() {
-  const { user, isBeatmaker } = useAuth();
+  const { user, isBeatmaker, loading: authLoading } = useAuth();
   const navigate    = useNavigate();
   const { playTrack, setIsMinimized } = usePlayer();
+
+  // On a computer, signed-out visitors get the sign-in page with the app
+  // running in a phone beside it, instead of the feed under a sign-in banner.
+  // Phones keep the feed. Never inside the preview itself, never for bots.
+  React.useEffect(() => {
+    if (authLoading || user || IN_PHONE_PREVIEW || IS_BOT) return;
+    if (window.matchMedia && window.matchMedia('(min-width: 1024px)').matches) {
+      navigate('/login', { replace: true });
+    }
+  }, [authLoading, user, navigate]);
 
 
 
@@ -1083,7 +1102,7 @@ export default function ForYouPage() {
     return () => { cancelled = true; };
   }, []);
 
-  // Deep-link support — notifications land here with ?openComments=<trackId>
+  // Deep-link support, notifications land here with ?openComments=<trackId>
   // or ?openCommentsSlug=<slug> instead of going to the separate track page
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -1130,7 +1149,7 @@ export default function ForYouPage() {
   const [dragOffset, setDragOffset]   = useState(0);
   const [loadError, setLoadError]     = useState('');
 
-  // Persistent hidden IDs ref — survives across loadTracks calls and page re-renders
+  // Persistent hidden IDs ref, survives across loadTracks calls and page re-renders
   const hiddenIdsRef = React.useRef(new Set());
 
   const loadTracks = useCallback(async (offset = 0) => {
@@ -1333,7 +1352,7 @@ export default function ForYouPage() {
         }))];
       }
 
-      // Fetch stories from followed artists — inject every 5 tracks
+      // Fetch stories from followed artists, inject every 5 tracks
       if (offset === 0 && user) {
         try {
           const { data: follows } = await supabase
@@ -1445,7 +1464,7 @@ export default function ForYouPage() {
     }
   }, [idx, tracks]);
 
-  // Single source of truth for playback — fires when idx changes
+  // Single source of truth for playback, fires when idx changes
   const lastPlayedIdx = React.useRef(-1);
   // Reset lastPlayedIdx when the track at current idx changes (e.g. after hide)
   const currentTrackId = filteredTracks[idx]?.id;
@@ -1506,7 +1525,7 @@ export default function ForYouPage() {
       const pct = Math.min(100, Math.round((elapsed / duration) * 100));
       // Log as implicit signal: < 10% = skip, > 70% = deep listen
       if (pct < 10 && elapsed < 15) {
-        // Quick skip — negative signal, record in listener_feedback
+        // Quick skip, negative signal, record in listener_feedback
         reportFeedbackWrite('skip', supabase.from('listener_feedback').upsert({
           user_id:    user.id,
           track_id:   currentItem.id,
@@ -1516,7 +1535,7 @@ export default function ForYouPage() {
           updated_at: new Date().toISOString(),
         }, { onConflict: 'user_id,track_id' }));
       } else if (pct >= 70) {
-        // Deep listen — positive signal
+        // Deep listen, positive signal
         reportFeedbackWrite('deep listen', supabase.from('listener_feedback').upsert({
           user_id:    user.id,
           track_id:   currentItem.id,
@@ -1568,7 +1587,7 @@ export default function ForYouPage() {
     lastY.current = e.touches[0].clientY;
     touchStartT.current = now;
     dragYRef.current = dy;
-    // Clamp at boundaries — resist pulling past first/last card
+    // Clamp at boundaries, resist pulling past first/last card
     let clamped = dy;
     if (idx === 0 && dy > 0) clamped = dy * 0.12; // rubber band top
     if (idx >= filteredTracks.length - 1 && dy < 0) clamped = dy * 0.12; // rubber band bottom
@@ -1608,7 +1627,7 @@ export default function ForYouPage() {
       wheelLocked.current = true;
       if (e.deltaY > 30)       goTo(idx + 1); // scroll down = next
       else if (e.deltaY < -30) goTo(idx - 1); // scroll up = prev
-      // Debounce — prevent rapid firing on trackpad momentum
+      // Debounce, prevent rapid firing on trackpad momentum
       setTimeout(() => { wheelLocked.current = false; }, 600);
     };
     window.addEventListener('wheel', onWheel, { passive: false });
@@ -1664,7 +1683,7 @@ export default function ForYouPage() {
         className="relative w-full h-full"
         style={{
           transform: `translateY(${-idx * vh + dragOffset}px)`,
-          // Snappy spring — 0.2s feels instant, still smooth
+          // Snappy spring, 0.2s feels instant, still smooth
           transition: dragging.current ? 'none' : 'transform 0.2s cubic-bezier(0.32,0.72,0,1)',
           willChange: 'transform',
         }}
@@ -1713,7 +1732,7 @@ export default function ForYouPage() {
                       // THIS is the 400 in the console.
                       //
                       // It sent `created_at`, and listener_feedback has no such
-                      // column — verified against the live API: every other
+                      // column, verified against the live API: every other
                       // column returns 200, created_at returns
                       // 42703 "column listener_feedback.created_at does not
                       // exist". The table's timestamp is updated_at, which is
@@ -1721,7 +1740,7 @@ export default function ForYouPage() {
                       //
                       // It was hidden twice over: an awaited Supabase call
                       // returns { error } rather than throwing, so the empty
-                      // `catch {}` never even ran — the error was simply
+                      // `catch {}` never even ran, the error was simply
                       // discarded. Hiding a track from this card therefore
                       // never persisted, and the track returned next session.
                       //
@@ -1770,7 +1789,7 @@ export default function ForYouPage() {
       <div className="absolute top-0 inset-x-0 h-20 pointer-events-none z-30"
         style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,0.5), transparent)' }} />
 
-      {/* Feed filter tabs — fixed so they never move. Centered on the
+      {/* Feed filter tabs, fixed so they never move. Centered on the
           content column, not the full viewport: on mobile there's no
           sidebar so those are the same thing, but on desktop the sidebar
           eats 256px off the left, so viewport-center and content-center
@@ -1796,8 +1815,10 @@ export default function ForYouPage() {
         ))}
       </div>
 
-      {/* Sign-in nudge for unauthenticated users */}
-      {!user && (
+      {/* Sign-in nudge for unauthenticated users. Not shown inside the phone
+          preview on the sign-in page (src/pages/LoginPage.js), where the
+          sign-in form is right next to it. */}
+      {!user && !IN_PHONE_PREVIEW && (
         <div className="absolute inset-0 z-40 flex items-center justify-center px-6 pointer-events-none">
           <div className="w-full max-w-sm rounded-2xl overflow-hidden pointer-events-auto"
             style={{ background: 'rgba(10,10,10,0.85)', backdropFilter: 'blur(20px)', border: '1px solid rgba(255,255,255,0.1)' }}>
@@ -1822,7 +1843,7 @@ export default function ForYouPage() {
         </div>
       )}
 
-      {/* Comment sheet — keyboard-aware wrapper component */}
+      {/* Comment sheet, keyboard-aware wrapper component */}
       {activeSheet?.type === 'comments' && (
         <CommentSheetOverlay
           key={activeSheet.track?.id}
@@ -1832,7 +1853,7 @@ export default function ForYouPage() {
         />
       )}
 
-      {/* Playlist sheet — fixed overlay */}
+      {/* Playlist sheet, fixed overlay */}
       {activeSheet?.type === 'playlist' && (
         <div className="fixed inset-0 z-[800] flex items-end justify-center"
           style={{ background: 'rgba(0,0,0,0.5)' }}
@@ -1864,7 +1885,7 @@ export default function ForYouPage() {
         />
       )}
 
-      {/* Full-screen story viewer — rendered at root level so fixed inset-0 takes full screen */}
+      {/* Full-screen story viewer, rendered at root level so fixed inset-0 takes full screen */}
       {viewingStory && (
         <ArtistStoryView
           stories={viewingStory.stories}
@@ -1873,7 +1894,7 @@ export default function ForYouPage() {
         />
       )}
 
-      {/* iOS tap-to-play — positioned over the vinyl area (~center of screen minus 12vh) */}
+      {/* iOS tap-to-play, positioned over the vinyl area (~center of screen minus 12vh) */}
       {showTapToPlay && (
         <div
           className="fixed inset-0 z-[900]"

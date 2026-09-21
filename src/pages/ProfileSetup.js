@@ -22,7 +22,7 @@ import { getListenerFeature } from '../contexts/useTier';
 import ProfileCompletionBanner from '../components/ProfileCompletionBanner';
 import { useStreakContext } from '../contexts/StreakContext';
 
-// Extracted from both this file and its twin — the block was byte-identical in
+// Extracted from both this file and its twin, the block was byte-identical in
 // the two (bar one stray comment). PillSelect and TikTokIcon are deliberately
 // not imported: both were defined in both files and rendered in neither.
 import {
@@ -195,7 +195,7 @@ export default function ProfilePage() {
     const ext  = file.name.split('.').pop();
     const name = `${folder}${Date.now()}-${Math.random().toString(36).substring(7)}.${ext}`;
       // No upsert. The filename above is Date.now() plus a random suffix,
-      // so it cannot collide — and `upsert: true` turns the insert into
+      // so it cannot collide, and `upsert: true` turns the insert into
       // INSERT ... ON CONFLICT DO UPDATE, which Postgres will only run if
       // it can READ the conflicting row. artist-images had no SELECT policy,
       // so every profile-image upload was refused with
@@ -222,7 +222,7 @@ export default function ProfilePage() {
         genre:        form.genre || null,
         mood:         form.mood  || null,
         social_links: sl,
-        // Mirrored into artist_payment_profiles below — see the note there.
+        // Mirrored into artist_payment_profiles below, see the note there.
         paypal_email: form.paypal_email?.trim() || null,
         updated_at:   new Date().toISOString(),
       };
@@ -543,7 +543,7 @@ export default function ProfilePage() {
                 </div>
               )}
 
-              {/* Artist Info card — includes genre + mood */}
+              {/* Artist Info card, includes genre + mood */}
               <div className="rounded-2xl border border-white/[0.06] overflow-hidden mb-4"
                 style={{ background: 'rgba(255,255,255,0.02)' }}>
                 <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.05]">
@@ -579,7 +579,7 @@ export default function ProfilePage() {
                 </div>
               </div>
 
-              {/* Thought of the Day removed — it posted to artist_thoughts
+              {/* Thought of the Day removed, it posted to artist_thoughts
                   and surfaced in one place only, so almost nobody made one
                   and almost nobody saw one. Story and Voice Memo cover the
                   same intent and both actually reach followers. */}
@@ -847,7 +847,7 @@ export default function ProfilePage() {
                 </button>}
           </div>
 
-          {/* Theme picker — Pro only */}
+          {/* Theme picker, Pro only */}
           {listenerTheme && (
             <div className="p-4">
               <p className="text-xs text-white/40 mb-3 font-semibold uppercase tracking-wider">App Theme</p>
@@ -924,6 +924,14 @@ export default function ProfilePage() {
           {viewAs && <p className="text-[10px] text-yellow-400/50 mt-2">Viewing as {viewAs}</p>}
         </div>
       )}
+
+      {/* ── Password: lets people who only ever used email links (most iPhone
+          users) sign in with a password instead. Same account. ── */}
+      <button onClick={() => nav('/reset-password')}
+        className="w-full py-3 rounded-2xl font-medium text-sm flex items-center justify-center space-x-2
+          bg-white/[0.04] text-white/70 border border-white/[0.06] hover:bg-white/[0.07] transition active:scale-[0.98] mb-3">
+        <Shield className="w-4 h-4" /><span>Set or change password</span>
+      </button>
 
       {/* ── Sign out ── */}
       <button onClick={handleSignOut}

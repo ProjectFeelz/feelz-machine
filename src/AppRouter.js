@@ -24,6 +24,7 @@ const ComparisonPage = React.lazy(() => import('./pages/ComparisonPage'));
 const HomePage = React.lazy(() => import('./pages/HomePage'));
 const BrowsePage = React.lazy(() => import('./pages/BrowsePage'));
 const LoginPage = React.lazy(() => import('./pages/LoginPage'));
+const ResetPasswordPage = React.lazy(() => import('./pages/ResetPasswordPage'));
 const LibraryPage = React.lazy(() => import('./pages/LibraryPage'));
 const LikedSongsPage = React.lazy(() => import('./pages/LikedSongsPage'));
 const DownloadsPage = React.lazy(() => import('./pages/DownloadsPage'));
@@ -216,7 +217,7 @@ function AffiliateTracker() {
 function OnboardingGuard({ children }) {
   const { user, artist, listener, loading } = useAuth();
   const location = useLocation();
-  const skipPaths = ['/setup', '/login', '/about', '/terms-of-use', '/privacy-policy', '/artist/', '/@', '/schoolsessions'];
+  const skipPaths = ['/setup', '/login', '/reset-password', '/about', '/terms-of-use', '/privacy-policy', '/artist/', '/@', '/schoolsessions'];
 
   // Public paths always render immediately, regardless of auth loading state.
   // This matters specifically for the /@slug -> /artist/slug redirect: the URL
@@ -300,6 +301,7 @@ export default function AppRouter() {
               <Route path="/terms" element={<Navigate to="/terms-of-use" replace />} />
 
               <Route path="/login" element={<LoginPage />} />
+              <Route path="/reset-password" element={<ResetPasswordPage />} />
               <Route path="/chat/:roomId" element={<ChatRoomView />} />
               <Route path="/competition/:competitionId" element={<CompetitionRoomPage />} />
               <Route path="/session/:sessionId" element={<ListeningSessionPage />} />

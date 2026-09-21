@@ -173,10 +173,10 @@ export default function AppLayout() {
   // Load and apply saved listener theme on startup
   useAppThemeInit();
 
-  // Daily streak — fires ONCE here; all other components read from StreakContext
+  // Daily streak, fires ONCE here; all other components read from StreakContext
   const streakValue = useStreak(user);
 
-  // Tour — fires once per account type after first sign-up
+  // Tour, fires once per account type after first sign-up
   const { show: showTour, dismiss: dismissTour } = useTourState(isArtist, !loading);
 
   // Splash: wait for auth, then small buffer to avoid flash
@@ -190,7 +190,7 @@ export default function AppLayout() {
   // Auth guard
   useEffect(() => {
     if (loading) return;
-    const publicPaths = ['/login', '/setup', '/privacy-policy', '/terms-of-use', '/terms'];
+    const publicPaths = ['/login', '/reset-password', '/setup', '/privacy-policy', '/terms-of-use', '/terms'];
     if (user && !hasProfile && !publicPaths.includes(location.pathname)) {
       navigate('/setup');
     }
@@ -202,7 +202,7 @@ export default function AppLayout() {
     document.title = title ? `${title} · ${BASE_TITLE}` : BASE_TITLE;
   }, [location.pathname]);
 
-  // Push notifications — auto-subscribe on load if permission already granted,
+  // Push notifications, auto-subscribe on load if permission already granted,
   // or prompt if this user follows artists but hasn't granted permission yet.
   const { supported, subscribed, subscribe } = usePushNotifications(user);
   useEffect(() => {
@@ -211,7 +211,7 @@ export default function AppLayout() {
       if (typeof Notification === 'undefined') return;
 
       if (Notification.permission === 'granted') {
-        // Already granted — re-upsert existing sub in case it went stale
+        // Already granted, re-upsert existing sub in case it went stale
         navigator.serviceWorker.ready.then(reg =>
           reg.pushManager.getSubscription()
         ).then(async (existingSub) => {
@@ -245,7 +245,7 @@ export default function AppLayout() {
     <ListenerThemeProvider>
     <StreakContext.Provider value={streakValue}>
       <div className="min-h-screen bg-black text-white">
-        {/* Offline detection — fixed banner, renders above everything */}
+        {/* Offline detection, fixed banner, renders above everything */}
         <OfflineBanner />
 
         {/* Listener mode banner */}
@@ -296,7 +296,7 @@ export default function AppLayout() {
         {location.pathname !== "/" && <MiniPlayer />}
         <MobileNav onOpenCreateMenu={() => setShowCreateMenu(true)} />
 
-        {/* Rendered as a sibling of MobileNav, not a child — MobileNav
+        {/* Rendered as a sibling of MobileNav, not a child, MobileNav
             unmounts itself when the on-screen keyboard opens (sensible for
             a bottom nav bar on its own), which was taking this modal down
             with it the instant someone tried to type into it. */}
