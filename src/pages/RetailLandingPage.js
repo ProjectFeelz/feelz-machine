@@ -20,6 +20,16 @@ export default function RetailLandingPage() {
   const navigate = useNavigate();
   const { user, isAdmin } = useAuth();
   const [checking, setChecking] = React.useState(true);
+  // { priceUsd, trialDays } from retail-signup. A null price means self-serve
+  // is off and the page falls back to "get in touch".
+  const [pricing, setPricing] = React.useState(null);
+
+  React.useEffect(() => {
+    fetch('/.netlify/functions/retail-signup', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'pricing' }),
+    }).then(r => r.json()).then(setPricing).catch(() => setPricing({ priceUsd: null, trialDays: 0 }));
+  }, []);
 
   React.useEffect(() => {
     if (!user) { setChecking(false); return; }
@@ -29,6 +39,9 @@ export default function RetailLandingPage() {
         setChecking(false);
       });
   }, [user, navigate]);
+
+  const selfServe = !!pricing?.priceUsd;
+  const trialDays = pricing?.trialDays || 0;
 
   if (checking) {
     return (
@@ -41,23 +54,23 @@ export default function RetailLandingPage() {
   return (
     <div className="min-h-screen bg-black text-white">
 
-      {/* Without these, this page inherited index.html's canonical — which points
-          at the homepage — so the sitemap submitted the page for indexing while
+      {/* Without these, this page inherited index.html's canonical, which points
+          at the homepage, so the sitemap submitted the page for indexing while
           the page itself told Google it WAS the homepage. Google settles that by
           dropping the page: "Alternate page with proper canonical tag". */}
-      {/* One Helmet, not two. This page already had a title and description —
-          kept, because that wording is better than anything I'd substitute —
+      {/* One Helmet, not two. This page already had a title and description,
+          kept because that wording is better than anything I'd substitute,
           and what it was missing was the canonical. */}
       <Helmet>
         <title>Feelz Retail, background music for your venue</title>
-        <meta name="description" content="Curated background music for stores, cafes and pubs, built entirely from independent South African artists. Half of what you pay goes back to the artists whose music plays." />
+        <meta name="description" content="Curated background music for stores, cafes and pubs, built entirely from independent South African artists. Half of what we receive goes back to the artists whose music plays." />
         <link rel="canonical" href="https://www.feelzmachine.com/retail" />
         <meta property="og:type" content="website" />
         <meta property="og:url" content="https://www.feelzmachine.com/retail" />
         <meta property="og:title" content="Feelz Retail, background music for your venue" />
-        <meta property="og:description" content="Curated background music for stores, cafes and pubs, built entirely from independent South African artists. Half of what you pay goes back to the artists whose music plays." />
+        <meta property="og:description" content="Curated background music for stores, cafes and pubs, built entirely from independent South African artists. Half of what we receive goes back to the artists whose music plays." />
         <meta name="twitter:title" content="Feelz Retail, background music for your venue" />
-        <meta name="twitter:description" content="Curated background music for stores, cafes and pubs, built entirely from independent South African artists. Half of what you pay goes back to the artists whose music plays." />
+        <meta name="twitter:description" content="Curated background music for stores, cafes and pubs, built entirely from independent South African artists. Half of what we receive goes back to the artists whose music plays." />
       </Helmet>
 
       <div className="max-w-4xl mx-auto px-6 pt-16 pb-24">
@@ -87,7 +100,7 @@ export default function RetailLandingPage() {
         <div className="grid sm:grid-cols-3 gap-4 mb-12">
           {[
             { icon: Music, title: 'Real playlists', body: 'Pick a mood and hit play. We build and maintain them so you never think about it again.' },
-            { icon: Users, title: 'Supports real artists', body: 'Half of what you pay is pooled and split with the artists whose music actually plays in your space.' },
+            { icon: Users, title: 'Supports real artists', body: 'Half of what we receive from subscriptions, after payment fees, is split every month between the artists whose music plays in your space.' },
             { icon: Store, title: 'Ten minute setup', body: 'Works in any browser, or install it as an app. No hardware, no installation visit.' },
           ].map(({ icon: Icon, title, body }) => (
             <div key={title} className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-5">
@@ -101,11 +114,17 @@ export default function RetailLandingPage() {
         {/* How it works */}
         <p className="text-[10px] uppercase tracking-widest text-white/25 font-semibold mb-4">How it works</p>
         <div className="space-y-3 mb-12">
-          {[
+          {(selfServe ? [
+            'Create a login and add your business name.',
+            trialDays
+              ? `Add PayPal or a card. Nothing is charged for ${trialDays} days, and you can cancel before then.`
+              : 'Add PayPal or a card to start your subscription.',
+            'Pick a mood playlist, hit play, and get on with your day.',
+          ] : [
             'Get in touch and we agree a monthly rate that fits your venue.',
             'We set you up and send you a link to create your login.',
             'Pick a mood playlist, hit play, and get on with your day.',
-          ].map((step, i) => (
+          ]).map((step, i) => (
             <div key={i} className="flex items-start space-x-3">
               <div className="w-6 h-6 rounded-full bg-purple-500/15 text-purple-300 text-xs font-bold flex items-center justify-center flex-shrink-0 mt-0.5">
                 {i + 1}
@@ -117,16 +136,32 @@ export default function RetailLandingPage() {
 
         {/* CTA */}
         <div className="rounded-2xl border border-purple-500/20 bg-purple-500/[0.06] p-6 sm:p-8">
-          <h2 className="text-xl font-bold mb-2">Interested in your venue?</h2>
-          <p className="text-sm text-white/50 mb-5 max-w-lg">
-            Pricing is worked out per venue rather than a fixed rate card, so the quickest way to
-            find out what it'd cost you is just to ask.
-          </p>
-          <a href="mailto:jane@projectfeelz.com?subject=Feelz%20Retail%20enquiry"
-            className="inline-flex items-center space-x-2 px-5 py-3 rounded-xl bg-purple-500 text-white font-bold text-sm hover:bg-purple-400 transition">
-            <span>Get in touch</span>
-            <ArrowRight className="w-4 h-4" />
-          </a>
+          {selfServe ? (
+            <>
+              <h2 className="text-xl font-bold mb-2">{trialDays ? `Try it free for ${trialDays} days` : 'Start today'}</h2>
+              <p className="text-sm text-white/50 mb-5 max-w-lg">
+                Then ${pricing.priceUsd.toFixed(2)} a month. Cancel any time and the music keeps playing
+                until the end of the month you've paid for.
+              </p>
+              <button onClick={() => navigate('/retail/start')}
+                className="inline-flex items-center space-x-2 px-5 py-3 rounded-xl bg-purple-500 text-white font-bold text-sm hover:bg-purple-400 transition">
+                <span>{trialDays ? 'Start my free trial' : 'Get started'}</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            </>
+          ) : (
+            <>
+              <h2 className="text-xl font-bold mb-2">Interested in your venue?</h2>
+              <p className="text-sm text-white/50 mb-5 max-w-lg">
+                Get in touch and we'll tell you what it costs for your venue.
+              </p>
+              <a href="mailto:jane@projectfeelz.com?subject=Feelz%20Retail%20enquiry"
+                className="inline-flex items-center space-x-2 px-5 py-3 rounded-xl bg-purple-500 text-white font-bold text-sm hover:bg-purple-400 transition">
+                <span>Get in touch</span>
+                <ArrowRight className="w-4 h-4" />
+              </a>
+            </>
+          )}
         </div>
 
         {/* Legal */}
@@ -142,7 +177,7 @@ export default function RetailLandingPage() {
               <Check className="w-4 h-4 text-white/25 flex-shrink-0 mt-0.5" />
               <p className="text-xs text-white/35 leading-relaxed">
                 You're signed in, but this account isn't linked to a venue yet. If you've been set up
-                already, use the invite link that was sent to you, or get in touch and we'll sort it out.
+                already, use the invite link that was sent to you.{selfServe ? ' Otherwise start your venue above.' : " Or get in touch and we'll sort it out."}
                 {isAdmin && (
                   <>
                     {' '}

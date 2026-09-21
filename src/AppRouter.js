@@ -15,7 +15,7 @@ import MerchParked from './components/MerchParked';
 import { MERCH_PARKED } from './config/features';
 // The offline library. A static import, not React.lazy, on purpose: it is the
 // one page that has to render with no network, and a lazy chunk that was never
-// fetched cannot be loaded offline — the person would tap Offline and sit on
+// fetched cannot be loaded offline, the person would tap Offline and sit on
 // the Suspense fallback forever. A few KB in the main bundle is the difference
 // between the feature working on a plane and not.
 import OfflinePage from './pages/OfflinePage';
@@ -92,6 +92,7 @@ const LegalDocumentPage = React.lazy(() => import('./pages/LegalDocumentPage'));
 const VipCardPrintPage = React.lazy(() => import('./pages/VipCardPrintPage'));
 const RetailJoinPage = React.lazy(() => import('./pages/RetailJoinPage'));
 const RetailLandingPage = React.lazy(() => import('./pages/RetailLandingPage'));
+const RetailStartPage = React.lazy(() => import('./pages/RetailStartPage'));
 const AdminHomeHero = React.lazy(() => import('./pages/AdminHomeHero'));
 const AdminColdStart = React.lazy(() => import('./pages/AdminColdStart'));
 const HiddenPage = React.lazy(() => import('./pages/HiddenPage'));
@@ -105,7 +106,7 @@ const RetailTermsPage = React.lazy(() => import('./pages/RetailTermsPage'));
 const RetailPrivacyPage = React.lazy(() => import('./pages/RetailPrivacyPage'));
 const RetailAdminPage = React.lazy(() => import('./pages/RetailAdminPage'));
 
-// ── Session keepalive — refreshes token + listens for activity ───────────────
+// ── Session keepalive, refreshes token + listens for activity ───────────────
 function SessionManager() {
   useSessionRefresh();
   useActivityPing();
@@ -131,7 +132,7 @@ function PageTitle({ title, children }) {
 }
 
 // Wildcard fallback for anything no other route matches. Also handles
-// /@username short URLs here specifically — React Router's pattern syntax
+// /@username short URLs here specifically, React Router's pattern syntax
 // can't express "@" immediately followed by a splat with no separating
 // slash (confirmed: /@:slug never matches because the colon isn't right
 // after a slash, and /@* isn't allowed because * must always follow a
@@ -153,8 +154,8 @@ function NotFoundRedirect() {
     return <Navigate to={`/track/${vanityTrack[2]}`} replace />;
   }
   // This one was the worst of the three, because it is the SHARE link.
-  // /@handle/album/<slug> redirected to /album/<handle>/<slug> — two segments
-  // against a one-segment route — so it came straight back to this same
+  // /@handle/album/<slug> redirected to /album/<handle>/<slug>, two segments
+  // against a one-segment route, so it came straight back to this same
   // catch-all and then fell through to "/". Every album link anyone has ever
   // shared has landed on For You. The handle is not part of the destination;
   // AlbumDetailPage looks the album up by slug.
@@ -174,7 +175,7 @@ function NotFoundRedirect() {
   return <Navigate to="/" replace />;
 }
 
-// Handles Printful OAuth redirect — passes code back to artist profile
+// Handles Printful OAuth redirect, passes code back to artist profile
 function MerchConnectCallback() {
   const navigate = useNavigate();
   React.useEffect(() => {
@@ -218,14 +219,14 @@ function OnboardingGuard({ children }) {
   // Public paths always render immediately, regardless of auth loading state.
   // This matters specifically for the /@slug -> /artist/slug redirect: the URL
   // changes before auth finishes resolving, and without this check the
-  // /artist/ skip only applied once loading was false — leaving a blank
+  // /artist/ skip only applied once loading was false, leaving a blank
   // render in between that looked like the page just wasn't going anywhere.
   if (skipPaths.some(p => location.pathname.startsWith(p))) return children;
 
   if (loading) return null;
   if (!user) return children;
 
-  // New user — has auth but no profile
+  // New user, has auth but no profile
   if (user && !artist && !listener) {
     return <Navigate to="/setup" replace />;
   }
@@ -293,7 +294,7 @@ export default function AppRouter() {
               <Route path="/player" element={<Navigate to="/" replace />} />
               <Route path="/player/*" element={<Navigate to="/" replace />} />
 
-              {/* Fix: /terms was broken — redirect to correct route */}
+              {/* Fix: /terms was broken, redirect to correct route */}
               <Route path="/terms" element={<Navigate to="/terms-of-use" replace />} />
 
               <Route path="/login" element={<LoginPage />} />
@@ -302,7 +303,7 @@ export default function AppRouter() {
               <Route path="/session/:sessionId" element={<ListeningSessionPage />} />
               <Route path="/merch-connect-callback" element={<MerchConnectCallback />} />
 
-              {/* Legal pages — fixed titles */}
+              {/* Legal pages, fixed titles */}
               <Route path="/privacy-policy" element={
                 <PageTitle title="Privacy Policy">
                   <PrivacyPolicy />
@@ -330,6 +331,7 @@ export default function AppRouter() {
                   VipCardPrintPage, RetailJoinPage, RetailTermsPage and
                   RetailPrivacyPage were moved out previously. */}
               <Route path="/retail" element={<RetailLandingPage />} />
+              <Route path="/retail/start" element={<RetailStartPage />} />
               <Route path="/retail/player" element={<RetailPlayerPage />} />
               <Route path="/retail-admin" element={<RetailAdminPage />} />
               <Route path="/retail/join/:token" element={<RetailJoinPage />} />
@@ -386,12 +388,12 @@ export default function AppRouter() {
                 <Route path="/admin/growth"       element={<AdminGrowth />} />
                 <Route path="/beat/:slug" element={<BeatDetailPage />} />
                 <Route path="/artist/:slug" element={<ArtistProfilePage />} />
-                {/* Merch is parked — src/config/features.js.
+                {/* Merch is parked, src/config/features.js.
                     The switch is HERE, at the route, and not inside the three
                     pages: an early return above a component's hooks changes
                     the number of hooks React sees between renders, which the
                     build refuses outright (rules-of-hooks). At the route there
-                    is no component to half-render — the parked notice is
+                    is no component to half-render, the parked notice is
                     simply what the URL resolves to, so a bookmarked shop link
                     gets the explanation instead of a checkout, and the pages
                     themselves stay exactly as they were for when it comes

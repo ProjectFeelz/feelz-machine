@@ -58,9 +58,10 @@ export default function RetailTermsPage() {
         </Section>
 
         <Section title="2. Your subscription">
-          <p>Your monthly rate is agreed with us directly rather than set by a public price list, because it depends on your venue.</p>
-          <p>Billing is processed through PayPal and charged in US dollars. We may quote you a rand figure for convenience, but the transaction itself is in USD, so the exact rand amount you see on your statement can vary slightly with the exchange rate. You do not need a PayPal account; a card works directly.</p>
-          <p>Subscriptions renew monthly until cancelled. You can cancel at any time and will retain access until the end of the period you have paid for. We do not refund part-months.</p>
+          <p>If you sign up online, you pay the standard monthly price shown when you sign up. If we set your venue up directly, you pay the rate we agreed with you.</p>
+          <p><span className="text-white/80 font-semibold">Free trial.</span> A new venue signing up online gets a free trial of the length shown when you sign up (currently 14 days). You add PayPal or a card at the start, nothing is charged during the trial, and the first monthly payment is taken when the trial ends unless you cancel before then. One free trial per venue and per account.</p>
+          <p>Billing is processed through PayPal and charged in US dollars. The rand amount on your statement depends on your bank's exchange rate. You do not need a PayPal account; a card works directly.</p>
+          <p>Subscriptions renew monthly until cancelled. You can cancel at any time from your PayPal account, or by contacting us. You keep access until the end of the month you have paid for, or until the end of your trial if you cancel during it. We do not refund part-months.</p>
         </Section>
 
         <Section title="3. What you can do">
@@ -81,8 +82,9 @@ export default function RetailTermsPage() {
         </Section>
 
         <Section title="6. How artists are paid">
-          <p>We pool a share of subscription and advertising revenue and distribute it to artists in proportion to how much their music actually played across the service. A play counts once at least 30 seconds have been heard.</p>
-          <p>This means your subscription genuinely reaches the artists whose music plays in your venue.</p>
+          <p>Every month, half of the subscription money we actually receive (after PayPal's fees), plus 30% of any advertising revenue, goes into an artist pool. The pool is split between artists in proportion to how often their music played in paying venues that month.</p>
+          <p>A play counts once at least 30 seconds have been heard. Plays during a free trial, or from a venue whose payment was refunded or reversed, do not count.</p>
+          <p>We wait 14 days after the month ends before paying out, so refunds can be accounted for. Payments go to each artist's PayPal. An artist who has not added a PayPal email keeps their share on record until they do.</p>
         </Section>
 
         <Section title="7. Availability">
@@ -91,8 +93,8 @@ export default function RetailTermsPage() {
         </Section>
 
         <Section title="8. Suspension and termination">
-          <p>We may suspend or terminate your access if payment fails, if these terms are breached, or if the service is being used in a way that risks the rights of our artists.</p>
-          <p>You may cancel at any time by contacting us.</p>
+          <p>We may suspend or terminate your access if payment fails, if these terms are breached, or if the service is being used in a way that risks the rights of our artists. If payment fails, access returns once a payment goes through.</p>
+          <p>You may cancel at any time, as set out in section 2.</p>
         </Section>
 
         <Section title="9. Liability">

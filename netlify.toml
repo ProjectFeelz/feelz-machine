@@ -16,7 +16,7 @@
 [functions."engagement-drip-background"]
   timeout = 860
   # Merged into the existing table rather than added as a second
-  # [functions."engagement-drip-background"] block — TOML forbids defining the
+  # [functions."engagement-drip-background"] block, TOML forbids defining the
   # same table twice, and the whole file would fail to parse.
   schedule = "0 8 * * 1,4"
 
@@ -30,7 +30,7 @@
 # which is what /artist/stevecsa was returning.
 #
 # The declaration now lives in one place: netlify/edge-functions/social-preview.js.
-# Do not add [[edge_functions]] blocks for it back here — change the paths in
+# Do not add [[edge_functions]] blocks for it back here, change the paths in
 # the function's config instead, so there is only ever one source of truth.
 
 # ── Cache headers ─────────────────────────────────────────────────────────────
@@ -79,7 +79,7 @@
 # Netlify ignores configuration keys it does not recognise rather than failing
 # the build. So nineteen declarations sat in this file looking entirely
 # correct, every build went green, and not one function was ever registered as
-# scheduled. That is why all of them show no output — the engagement drip since
+# scheduled. That is why all of them show no output, the engagement drip since
 # 3 July, and recs_last_run and prune_events_last_run never written at all.
 #
 # The only other way to schedule one is in the function's own code:
@@ -94,19 +94,19 @@
 # HOW TO CONFIRM, after deploying this:
 #   Netlify → Functions. A scheduled function is labelled Scheduled and shows
 #   its next run time. If none of them carry that label, the schedule is still
-#   not being read — tell me rather than waiting a day to see.
+#   not being read, tell me rather than waiting a day to see.
 #
 # All nineteen names were checked against netlify/functions/: every one
 # resolves to a real file, so nothing here points at a function that is gone.
 #
 # engagement-drip-background is scheduled in its [functions."..."] table above,
-# merged with its 860s timeout — Mon and Thu 08:00.
+# merged with its 860s timeout, Mon and Thu 08:00.
 
 # daily 02:00
 [functions."update-engagement-scores"]
   schedule = "0 2 * * *"
 
-# daily 03:00 — writes listener_behavior_profiles
+# daily 03:00, writes listener_behavior_profiles
 [functions."compute-behavior-profiles"]
   schedule = "0 3 * * *"
 
@@ -114,11 +114,11 @@
 [functions."score-engagement-outcomes"]
   schedule = "30 3 * * *"
 
-# twice daily — must follow the behaviour profiles above; feeds ForYouPage
+# twice daily, must follow the behaviour profiles above; feeds ForYouPage
 [functions."compute-recommendations"]
   schedule = "30 3,15 * * *"
 
-# daily 04:00 — calls prune_listening_events(); nothing else does
+# daily 04:00, calls prune_listening_events(); nothing else does
 [functions."prune-listening-events"]
   schedule = "0 4 * * *"
 
@@ -150,11 +150,11 @@
 [functions."weekly-artist-report"]
   schedule = "0 8 * * 1"
 
-# Sun 09:00 — new challenge
+# Sun 09:00, new challenge
 [functions."weekly-wheel-spin"]
   schedule = "0 9 * * 0"
 
-# Sun 09:00 — internal check
+# Sun 09:00, internal check
 [functions."paid-collab-reminder"]
   schedule = "0 9 * * 0"
 
@@ -162,7 +162,7 @@
 [functions."weekly-listener-recap"]
   schedule = "0 18 * * 0"
 
-# Sun 23:59 — crowns the winner, pays out, notifies
+# Sun 23:59, crowns the winner, pays out, notifies
 [functions."close-wheel-competition"]
   schedule = "59 23 * * 0"
 
@@ -170,13 +170,13 @@
 [functions."monthly-wrapped"]
   schedule = "0 9 1 * *"
 
-# 01:00 daily — end subscriptions whose expiry has passed, paid and granted
+# 01:00 daily, end subscriptions whose expiry has passed, paid and granted
 # alike. useTier already refuses an expired tier at read time; this is what
 # writes it down, so the row, the tier column and the admin counts agree.
 [functions."expire-subscriptions"]
   schedule = "0 1 * * *"
 
-# Monday 07:00 — release royalties that have built up past an artist's
+# Monday 07:00, release royalties that have built up past an artist's
 # threshold, plus anything that has been waiting more than 60 days whatever
 # the amount. Without this, an artist who sells once below their threshold
 # and never sells again waits forever: the money is recorded, owed, and
@@ -185,8 +185,15 @@
 [functions."release-pending-payouts"]
   schedule = "0 7 * * 1"
 
+# Feelz Retail artist pool (migration 145). Daily: suspends venues whose paid
+# period has ended, closes last month once its 14 day refund window is over,
+# reconciles earlier payout batches with PayPal, and pays pending shares.
+# Every step is idempotent, so running daily is safe.
+[functions."retail-artist-payouts"]
+  schedule = "0 6 * * *"
+
 # feature-education-drip is deliberately NOT scheduled. Its schedule was
-# already commented out here — "platform tips not landing" — and switching it
+# already commented out here, "platform tips not landing", and switching it
 # on as a side effect of a syntax fix would start sending something that was
 # turned off on purpose. Uncomment when you want it back:
 #
@@ -266,7 +273,7 @@
 
 # ── retail.feelzmachine.com → straight to the retail player ─────────────────
 # Only takes effect once the subdomain is added as a domain alias in Netlify
-# and its DNS points here — the redirect itself is harmless until then.
+# and its DNS points here, the redirect itself is harmless until then.
 [[redirects]]
   from = "/"
   to = "/retail"

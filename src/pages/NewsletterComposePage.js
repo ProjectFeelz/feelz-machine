@@ -9,14 +9,14 @@
 import React from 'react';
 import { Helmet } from 'react-helmet-async';
 import { useNavigate } from 'react-router-dom';
-import { Loader, Send, Users, Store, Headphones, Plus, X, ArrowLeft, Mail, Check, AlertTriangle } from 'lucide-react';
+import { Loader, Send, Users, Store, Headphones, Plus, X, ArrowLeft, Mail, Check, AlertTriangle, FileText, Save } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../supabaseClient';
 import { WysiwygEditor } from '../components/admin/WysiwygEditor';
 
 // One table for the three audiences. Every place that needed to know about an
 // audience was a ternary that read "retail ? ... : ..." and silently treated
-// anything that was not retail as main_app — which is exactly how a third
+// anything that was not retail as main_app, which is exactly how a third
 // audience gets announced as "the main app" in the confirmation dialog and the
 // toast. Adding a fourth now means adding a row here and nothing else.
 const AUDIENCE = {
@@ -68,6 +68,14 @@ export default function NewsletterComposePage() {
   const [newEditorName, setNewEditorName] = React.useState('');
   const [toast, setToast] = React.useState('');
 
+  // Drafts (migration 146). A batch is seeded into newsletter_drafts and an
+  // editor opens one here, edits it, adds images, and sends. activeDraft is the
+  // draft currently loaded into the composer, or null for a fresh post.
+  const [drafts, setDrafts] = React.useState([]);
+  const [activeDraft, setActiveDraft] = React.useState(null); // { id, note }
+  const [savingDraft, setSavingDraft] = React.useState(false);
+  const [deleteArmed, setDeleteArmed] = React.useState(null);
+
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(''), 2500); };
 
   React.useEffect(() => {
@@ -85,7 +93,7 @@ export default function NewsletterComposePage() {
 
   // May this person actually EMAIL a post, as opposed to publish one?
   // admins can; so can anyone in newsletter_senders (migration 98). Editors
-  // cannot — composing and mailing a list are different-sized actions.
+  // cannot, composing and mailing a list are different-sized actions.
   const [canEmail, setCanEmail] = React.useState(false);
 
   React.useEffect(() => {
@@ -95,10 +103,10 @@ export default function NewsletterComposePage() {
     supabase.from('newsletter_senders').select('user_id').eq('user_id', user.id).maybeSingle()
       .then(({ data, error }) => {
         if (cancelled) return;
-        // A missing table means migration 98 has not run — not a permission
+        // A missing table means migration 98 has not run, not a permission
         // problem, and worth saying so rather than silently hiding the button.
         if (error && (error.code === '42P01' || error.code === 'PGRST205')) {
-          console.warn('[newsletter] newsletter_senders does not exist yet — run migration 98');
+          console.warn('[newsletter] newsletter_senders does not exist yet, run migration 98');
         } else if (error) {
           console.error('[newsletter] sender check failed:', error.code, error.message);
         }
@@ -155,7 +163,7 @@ export default function NewsletterComposePage() {
    * cannot be recalled, so a single-click send of a list of 154 people is not
    * a control worth building.
    *
-   * The send itself is paged — the function returns next_offset and this keeps
+   * The send itself is paged, the function returns next_offset and this keeps
    * calling until done, because a list of thousands will not go out in one
    * invocation.
    */
@@ -167,14 +175,14 @@ export default function NewsletterComposePage() {
       const { data: sess } = await supabase.auth.getSession();
       const token = sess?.session?.access_token;
       if (!token) {
-        setEmailing(prev => ({ ...prev, [key]: { phase: 'error', message: 'Session expired — sign in again' } }));
+        setEmailing(prev => ({ ...prev, [key]: { phase: 'error', message: 'Session expired. Sign in again' } }));
         return;
       }
 
       let offset = 0, totalSent = 0, totalFailed = 0, pages = 0;
 
       for (;;) {
-        if (++pages > 200) throw new Error('Stopped after 200 pages — something is looping');
+        if (++pages > 200) throw new Error('Stopped after 200 pages, something is looping');
 
         const res = await fetch('/.netlify/functions/send-newsletter-email', {
           method: 'POST',
@@ -231,6 +239,64 @@ export default function NewsletterComposePage() {
 
   React.useEffect(() => { if (authorized) loadPosts(); }, [authorized, loadPosts]);
 
+  const loadDrafts = React.useCallback(async () => {
+    const { data, error } = await supabase
+      .from('newsletter_drafts').select('*').is('sent_at', null)
+      .order('created_at', { ascending: true });
+    if (error) {
+      if (error.code === '42P01' || error.code === 'PGRST205') {
+        console.warn('[newsletter] newsletter_drafts does not exist yet, run migration 146');
+      } else {
+        console.error('[newsletter] could not list drafts:', error.code, error.message);
+      }
+      return;
+    }
+    setDrafts(data || []);
+  }, []);
+
+  React.useEffect(() => { if (authorized) loadDrafts(); }, [authorized, loadDrafts]);
+
+  const openDraft = (d) => {
+    setTitle(d.title || '');
+    setExcerpt(d.excerpt || '');
+    setBody(d.body || '');
+    setYoutubeUrl(d.youtube_url || '');
+    setAudience(d.audience || null);
+    setActiveDraft({ id: d.id, note: d.note || '' });
+    setEditorResetKey(k => k + 1);   // remounts the editor with this draft's body
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const clearComposer = () => {
+    setTitle(''); setExcerpt(''); setBody(''); setYoutubeUrl(''); setAudience(null);
+    setActiveDraft(null);
+    setEditorResetKey(k => k + 1);
+  };
+
+  const saveDraft = async () => {
+    setSavingDraft(true);
+    const fields = {
+      title: title.trim(), excerpt: excerpt.trim(), body: body.trim(),
+      audience, youtube_url: youtubeUrl.trim() || null,
+    };
+    const { data, error } = activeDraft
+      ? await supabase.from('newsletter_drafts').update(fields).eq('id', activeDraft.id).select('id, note').single()
+      : await supabase.from('newsletter_drafts').insert({ ...fields, created_by: user.id }).select('id, note').single();
+    setSavingDraft(false);
+    if (error) { showToast('Could not save: ' + error.message); return; }
+    setActiveDraft({ id: data.id, note: data.note || '' });
+    showToast('Draft saved');
+    loadDrafts();
+  };
+
+  const deleteDraft = async (id) => {
+    const { error } = await supabase.from('newsletter_drafts').delete().eq('id', id);
+    setDeleteArmed(null);
+    if (error) { showToast('Could not delete: ' + error.message); return; }
+    if (activeDraft?.id === id) clearComposer();
+    loadDrafts();
+  };
+
   React.useEffect(() => {
     if (authorized && isAdmin) {
       supabase.from('newsletter_editors').select('*').order('created_at', { ascending: false })
@@ -240,17 +306,27 @@ export default function NewsletterComposePage() {
 
   const send = async () => {
     setSending(true);
-    const { error } = await supabase.rpc('send_newsletter', {
+    const { data, error } = await supabase.rpc('send_newsletter', {
       p_title: title.trim(), p_excerpt: excerpt.trim(), p_body: body.trim(), p_audience: audience,
       p_youtube_url: youtubeUrl.trim() || null,
     });
     setSending(false);
     setConfirmOpen(false);
     if (error) { showToast('Error: ' + error.message); return; }
+    // Stamp the draft with the post it became so it leaves the drafts list.
+    // The post is already out at this point, so a failure here only means the
+    // draft lingers; say so rather than pretend the send failed.
+    if (activeDraft) {
+      const postId = Array.isArray(data) ? data[0]?.post_id : data?.post_id;
+      const { error: stampErr } = await supabase.from('newsletter_drafts')
+        .update({ sent_post_id: postId || null, sent_at: new Date().toISOString() })
+        .eq('id', activeDraft.id);
+      if (stampErr) console.error('[newsletter] sent, but draft not marked sent:', stampErr.message);
+    }
     showToast(`Sent to ${AUDIENCE[audience]?.sent || audience}`);
-    setTitle(''); setExcerpt(''); setBody(''); setYoutubeUrl(''); setAudience(null);
-    setEditorResetKey(k => k + 1);
+    clearComposer();
     loadPosts();
+    loadDrafts();
   };
 
   const addEditor = async () => {
@@ -322,6 +398,45 @@ export default function NewsletterComposePage() {
         </div>
         </div>
 
+        {drafts.length > 0 && (
+          <div className="space-y-2">
+            <p className="text-xs font-bold text-white/50 uppercase tracking-wide">Drafts ready for you ({drafts.length})</p>
+            {drafts.map(d => (
+              <div key={d.id}
+                className={`px-3 py-2.5 rounded-lg text-sm space-y-1 border ${activeDraft?.id === d.id ? 'bg-purple-500/10 border-purple-500/40' : 'bg-white/[0.03] border-transparent'}`}>
+                <div className="flex items-center justify-between gap-2">
+                  <button onClick={() => openDraft(d)} className="flex items-center min-w-0 text-left text-white/80 hover:text-white">
+                    <FileText className="w-3.5 h-3.5 mr-1.5 flex-shrink-0 text-purple-300" />
+                    <span className="truncate">{d.title || 'Untitled'}</span>
+                  </button>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    {d.audience && (
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${AUDIENCE[d.audience]?.badge || 'bg-white/10 text-white/50'}`}>
+                        {AUDIENCE[d.audience]?.label || d.audience}
+                      </span>
+                    )}
+                    {deleteArmed === d.id ? (
+                      <button onClick={() => deleteDraft(d.id)} className="text-[11px] text-red-400 font-semibold">Delete?</button>
+                    ) : (
+                      <button onClick={() => setDeleteArmed(d.id)} className="text-white/20 hover:text-red-400" title="Delete draft">
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+                {d.note && <p className={`text-[11px] ${/^hold/i.test(d.note) ? 'text-amber-300' : 'text-white/40'}`}>{d.note}</p>}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {activeDraft && (
+          <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-purple-500/10 text-xs">
+            <span className="text-purple-200">Editing a draft. Use the picture button in the editor to add an image.</span>
+            <button onClick={clearComposer} className="text-white/50 hover:text-white ml-2 flex-shrink-0">Close</button>
+          </div>
+        )}
+
         <div className="space-y-3">
           <p className="text-xs font-bold text-white/50 uppercase tracking-wide">Who's this going to?</p>
           <div className="grid grid-cols-3 gap-2">
@@ -359,10 +474,17 @@ export default function NewsletterComposePage() {
             onChange={e => setYoutubeUrl(e.target.value)} />
         </div>
 
-        <button onClick={() => setConfirmOpen(true)} disabled={!canSend}
-          className="w-full py-3 rounded-xl bg-purple-500 text-white font-bold hover:bg-purple-400 transition disabled:opacity-30 flex items-center justify-center space-x-2">
-          <Send className="w-4 h-4" /><span>Send</span>
-        </button>
+        <div className="flex gap-2">
+          <button onClick={saveDraft} disabled={savingDraft || !(title.trim() || body.trim())}
+            className="px-4 py-3 rounded-xl bg-white/[0.06] text-white/80 font-semibold hover:bg-white/[0.1] transition disabled:opacity-30 flex items-center justify-center space-x-2">
+            {savingDraft ? <Loader className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+            <span>{activeDraft ? 'Save' : 'Save draft'}</span>
+          </button>
+          <button onClick={() => setConfirmOpen(true)} disabled={!canSend}
+            className="flex-1 py-3 rounded-xl bg-purple-500 text-white font-bold hover:bg-purple-400 transition disabled:opacity-30 flex items-center justify-center space-x-2">
+            <Send className="w-4 h-4" /><span>Send</span>
+          </button>
+        </div>
 
         {confirmOpen && (
           <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center px-6" onClick={() => setConfirmOpen(false)}>
@@ -406,7 +528,7 @@ export default function NewsletterComposePage() {
                 </div>
 
                 {/* Emailing needs admins or newsletter_senders.
-                    newsletter_editors can publish in-app but not mail a list —
+                    newsletter_editors can publish in-app but not mail a list,
                     a bigger action than posting. */}
                 {canEmail && (
                   <div className="flex items-center flex-wrap gap-2">
@@ -430,7 +552,7 @@ export default function NewsletterComposePage() {
                     {st && st.phase === 'confirm' && (
                       st.would === 0 ? (
                         <span className="text-[11px] text-white/50">
-                          Nobody left to email{st.already > 0 ? ` — all ${st.already} already received it` : ''}.
+                          Nobody left to email{st.already > 0 ? `, all ${st.already} already received it` : ''}.
                         </span>
                       ) : (
                         <>

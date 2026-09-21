@@ -122,15 +122,15 @@ async function activateRetailSubscription(subscriptionId) {
   // THE FILTER WAS `.eq('status', 'pending')`, AND THAT IS THE HOLE.
   //
   // A venue suspended for non-payment has status 'suspended', not 'pending'.
-  // So the one case this function exists to handle — they missed a payment,
+  // So the one case this function exists to handle, they missed a payment,
   // the player went dark, they paid, PayPal charged them again and sent this
-  // event — matched no rows and did nothing. The venue stayed suspended while
+  // event, matched no rows and did nothing. The venue stayed suspended while
   // the money kept arriving every month, and the only way back was an admin
   // noticing and flipping it by hand. "Access follows payment in both
   // directions" was true in one direction.
   //
   // `in` rather than no filter at all, so this can never resurrect a venue an
-  // admin deliberately closed or a row in some other terminal state — it only
+  // admin deliberately closed or a row in some other terminal state, it only
   // reverses the two states billing itself is allowed to have caused.
   if (sub?.venue_id) {
     const { data: reinstated, error: venueErr } = await supabase.from('retail_venues')
@@ -148,18 +148,76 @@ async function activateRetailSubscription(subscriptionId) {
 
 async function cancelRetailSubscription(subscriptionId, reason) {
   if (!subscriptionId) return;
+  // Billing has stopped (cancelled by the venue, or suspended by PayPal after
+  // failed payments). The venue keeps the music until the end of the period it
+  // has already paid for, or the end of its free trial, as the retail terms
+  // promise. retail-artist-payouts.js sweeps venues whose paid period has run
+  // out every day. Only a venue with nothing paid ahead is suspended now.
+  const { data: sub, error: subErr } = await supabase
+    .from('retail_subscriptions')
+    .update({ status: 'cancelled', cancelled_at: new Date().toISOString() })
+    .eq('paypal_subscription_id', subscriptionId)
+    .select('venue_id, current_period_end')
+    .maybeSingle();
+  if (subErr) {
+    console.error('[paypal-webhook] retail cancel failed:', subErr.message, subscriptionId, reason);
+    return;
+  }
+  if (!sub?.venue_id) return;
+
+  const paidUntil = sub.current_period_end ? new Date(sub.current_period_end) : null;
+  if (paidUntil && paidUntil > new Date()) {
+    console.log('[paypal-webhook] retail venue', sub.venue_id, 'cancelled (' + reason + '), keeps access until',
+      paidUntil.toISOString());
+    return;
+  }
+  const { error: venueErr } = await supabase.from('retail_venues')
+    .update({ status: 'suspended' })
+    .eq('id', sub.venue_id)
+    .eq('status', 'active');
+  if (venueErr) console.error('[paypal-webhook] retail venue suspend failed:', venueErr.message, sub.venue_id);
+}
+
+// Every completed retail subscription payment, as PayPal reports it: the gross,
+// PayPal's fee and the net that actually landed. This is the ONLY source the
+// monthly artist pool is built from (see migration 145), so it is written from
+// PayPal's own numbers, keyed on PayPal's sale id so a repeated webhook cannot
+// count a payment twice.
+async function recordRetailPayment(resource, subscriptionId) {
+  const saleId = resource?.id;
+  if (!saleId || !subscriptionId) return;
+
   const { data: sub } = await supabase
     .from('retail_subscriptions')
-    .update({ status: 'cancelled' })
-    .eq('paypal_subscription_id', subscriptionId)
     .select('venue_id')
+    .eq('paypal_subscription_id', subscriptionId)
     .maybeSingle();
-  // Access follows payment — if billing stopped, the player stops too.
-  if (sub?.venue_id) {
-    await supabase.from('retail_venues')
-      .update({ status: 'suspended' })
-      .eq('id', sub.venue_id)
-      .eq('status', 'active');
+  if (!sub) return;                                   // not a retail subscription
+
+  const gross = Math.round(parseFloat(resource?.amount?.total) * 100) / 100;
+  const fee   = Math.round(parseFloat(resource?.transaction_fee?.value || 0) * 100) / 100;
+  if (!Number.isFinite(gross) || gross <= 0 || !Number.isFinite(fee) || fee < 0) {
+    console.error('[paypal-webhook] RETAIL PAYMENT NOT RECORDED: unusable amounts',
+      JSON.stringify({ saleId, subscriptionId, amount: resource?.amount, fee: resource?.transaction_fee }));
+    return;
+  }
+
+  const { error } = await supabase.from('retail_payments').upsert({
+    paypal_sale_id:         saleId,
+    paypal_subscription_id: subscriptionId,
+    venue_id:               sub.venue_id,
+    gross,
+    fee,
+    net:                    Math.round((gross - fee) * 100) / 100,
+    currency:               resource?.amount?.currency || 'USD',
+    paid_at:                resource?.create_time || new Date().toISOString(),
+  }, { onConflict: 'paypal_sale_id', ignoreDuplicates: true });
+
+  if (error) {
+    // Loud: a retail payment that is not recorded is money the artist pool
+    // never sees. Returning an error makes PayPal retry the webhook.
+    console.error('[paypal-webhook] RETAIL PAYMENT NOT RECORDED:', error.code, error.message, saleId);
+    throw new Error('retail_payment_not_recorded');
   }
 }
 
@@ -183,7 +241,7 @@ exports.handler = async (event) => {
       await supabase.from('payouts').update({ status: 'paid' }).eq('paypal_payout_id', captureId);
       // paypal-order.js writes the CAPTURE id into purchases.paypal_transaction_id.
       // This matched it against the ORDER id, so it has never updated a single
-      // row. Harmless only because the row is already inserted as 'completed' —
+      // row. Harmless only because the row is already inserted as 'completed',
       // but it means this line was not doing the job it appears to do, and a
       // capture that completes later (a pending, bank-funded payment) was never
       // marked. Match on the capture id, with the order id kept as a fallback
@@ -234,7 +292,7 @@ exports.handler = async (event) => {
   // This event was not handled at all, which is why "a failed payment suspends
   // the venue" was not true. PayPal sends BILLING.SUBSCRIPTION.PAYMENT.FAILED
   // on each failed attempt and only sends SUSPENDED once the plan's
-  // payment_failure_threshold is reached — 2, in the retail plans this codebase
+  // payment_failure_threshold is reached, 2, in the retail plans this codebase
   // creates. So one failed payment produced no event this function looked at,
   // and nothing anywhere recorded that billing was in trouble.
   //
@@ -258,7 +316,7 @@ exports.handler = async (event) => {
       // webhook, so PayPal still gets its 200 and does not retry forever.
       if (error) {
         console.error('[paypal-webhook] could not mark retail subscription past_due:',
-          error.code, error.message, '— if this is a check-constraint violation, add past_due to the allowed statuses.');
+          error.code, error.message, ',  if this is a check-constraint violation, add past_due to the allowed statuses.');
       }
     }
   }
@@ -292,13 +350,21 @@ exports.handler = async (event) => {
       await activateArtistSubscription(subscriptionId);
       await activateRetailSubscription(subscriptionId);
 
+      // Retail money in, for the artist pool. Throws if it cannot be saved,
+      // which returns a 500 so PayPal delivers the event again.
+      try {
+        await recordRetailPayment(resource, subscriptionId);
+      } catch (e) {
+        return { statusCode: 500, body: JSON.stringify({ error: 'retail payment not recorded, retry' }) };
+      }
+
       // ── Push the expiry out by one billing period ──────────────────────
       //
       // This was missing, and it is the reason a paying subscriber loses
       // access. ListenerUpgradePage sets expires_at to signup + 30 days;
       // nothing ever moved it again. useTier.js reads it and treats an
       // expired row as free. So on day 31 PayPal charges them, this handler
-      // fires, the affiliate gets paid — and the subscriber drops to Free
+      // fires, the affiliate gets paid, and the subscriber drops to Free
       // while the money keeps leaving their account every month.
       //
       // All three extend functions (migrations 120 and 124) work the same
@@ -309,7 +375,7 @@ exports.handler = async (event) => {
       // on the sale id, so a webhook PayPal delivers twice does not hand out
       // two periods.
       //
-      // ALL THREE ARE CALLED. Only one of them will find a row — the other
+      // ALL THREE ARE CALLED. Only one of them will find a row, the other
       // two return nothing, which is why no row found is not an error here.
       // Calling only the listener one is exactly how artists came to lose
       // Pro on their renewal date while still paying for it.
@@ -334,7 +400,7 @@ exports.handler = async (event) => {
             console.log(`[paypal-webhook] ${kind} subscription extended to`, until,
               'for', row.user_id || row.artist_id || row.venue_id);
 
-            // Tell them it renewed — but only when it IS a renewal.
+            // Tell them it renewed, but only when it IS a renewal.
             //
             // The first payment of a subscription fires this event too, and
             // the welcome receipt for that one is written by
@@ -385,7 +451,7 @@ exports.handler = async (event) => {
       // paying.
       //
       // 20% of the payment, identical for artist, beatmaker and listener
-      // affiliates — see migration 105 for why that rate and not a flat
+      // affiliates, see migration 105 for why that rate and not a flat
       // per-signup bounty.
       //
       // PayPal retries webhooks, and a double-paid commission leaves your
@@ -407,7 +473,7 @@ exports.handler = async (event) => {
             });
 
           // Logged either way. An unread error here is an affiliate quietly
-          // not being paid, which is the single worst way for this to fail —
+          // not being paid, which is the single worst way for this to fail,
           // nobody notices until somebody asks why their balance is zero.
           if (commissionError) {
             console.error('[paypal-webhook] commission RPC failed:', commissionError.message, { subscriptionId, saleId });
@@ -421,7 +487,7 @@ exports.handler = async (event) => {
           console.error('[paypal-webhook] commission threw:', err?.message, { subscriptionId, saleId });
         }
       } else {
-        console.warn('[paypal-webhook] PAYMENT.SALE.COMPLETED with no usable amount/sale id — no commission awarded', { subscriptionId, saleId, amount, currency });
+        console.warn('[paypal-webhook] PAYMENT.SALE.COMPLETED with no usable amount/sale id, no commission awarded', { subscriptionId, saleId, amount, currency });
       }
     }
   }
@@ -429,7 +495,7 @@ exports.handler = async (event) => {
   // ── Payment reversed / refunded ───────────────────────────────────────────
   if (eventType === 'PAYMENT.CAPTURE.REFUNDED' || eventType === 'PAYMENT.CAPTURE.REVERSED') {
     // Order matters, and it was the wrong way round. On a REFUNDED event
-    // `resource.id` is the REFUND's id, not the capture's — the capture is in
+    // `resource.id` is the REFUND's id, not the capture's, the capture is in
     // supplementary_data.related_ids.capture_id. Reading resource.id first
     // meant every refund matched nothing: the purchase was never marked
     // refunded and the payout was never flagged for claw-back, so a refunded
@@ -447,7 +513,33 @@ exports.handler = async (event) => {
     }
   }
 
-  // ── Dispute opened — flag for admin review ────────────────────────────────
+  // ── A retail subscription payment refunded or reversed ───────────────────
+  // Subscription payments are SALES, not captures, so they arrive as
+  // PAYMENT.SALE.*. A refund's own id is not the sale's: the sale is in
+  // resource.sale_id. The payment is marked reversed, which takes it out of the
+  // artist pool for its month. Months are only closed 14 days after they end,
+  // so a refund inside that window never reaches an artist's share.
+  if (eventType === 'PAYMENT.SALE.REFUNDED' || eventType === 'PAYMENT.SALE.REVERSED') {
+    const saleId = resource?.sale_id || resource?.id;
+    if (saleId) {
+      const { data: hit, error } = await supabase.from('retail_payments')
+        .update({ reversed_at: new Date().toISOString(), reversal_reason: eventType })
+        .eq('paypal_sale_id', saleId)
+        .is('reversed_at', null)
+        .select('paid_at');
+      if (error) console.error('[paypal-webhook] retail reversal not recorded:', error.message, saleId);
+      else if (hit?.length) {
+        const paidAt = new Date(hit[0].paid_at);
+        const monthEnd = new Date(Date.UTC(paidAt.getUTCFullYear(), paidAt.getUTCMonth() + 1, 1));
+        if (Date.now() > monthEnd.getTime() + 14 * 86400000) {
+          console.error('[paypal-webhook] RETAIL REFUND AFTER THE MONTH CLOSED: sale', saleId,
+            'was already counted in a paid pool. Adjust by hand.');
+        }
+      }
+    }
+  }
+
+  // ── Dispute opened, flag for admin review ────────────────────────────────
   if (eventType === 'CUSTOMER.DISPUTE.CREATED') {
     const disputeId = resource?.dispute_id;
     const captureId = resource?.disputed_transactions?.[0]?.seller_transaction_id;

@@ -128,7 +128,7 @@ exports.handler = async (event) => {
     if (action === 'get-plan') {
       const { data: sub, error: subErr } = await supabase
         .from('retail_subscriptions')
-        .select('id, venue_id, monthly_fee, paypal_plan_id, paypal_product_id, paypal_billed_usd, paypal_plan_fee_zar, retail_venues(business_name)')
+        .select('id, venue_id, monthly_fee, paypal_plan_id, paypal_product_id, paypal_billed_usd, paypal_plan_fee_zar, paypal_plan_trial_days, retail_venues(business_name, trial_used_at)')
         .eq('venue_id', venueId)
         .order('created_at', { ascending: false })
         .limit(1)
@@ -159,8 +159,25 @@ exports.handler = async (event) => {
       const planFeeOnRecord = billedOnRecord;
       const feeMatches      = billedOnRecord != null && Math.abs(billedOnRecord - currentFee) < 0.005;
 
-      if (sub.paypal_plan_id && feeMatches) {
-        return { statusCode: 200, body: JSON.stringify({ planId: sub.paypal_plan_id, usdAmount: Number(sub.paypal_billed_usd).toFixed(2) }) };
+      // ── The free trial ─────────────────────────────────────────────────
+      // One trial per venue. A venue that has never had one gets a plan whose
+      // first cycle is N free days (platform_settings.retail_trial_days); a
+      // venue that has had one, or is resubscribing, gets a plan with none.
+      // The trial is part of the PayPal plan itself, so PayPal starts charging
+      // on day N+1 without anything on our side having to remember to.
+      let trialDays = 0;
+      if (!sub.retail_venues?.trial_used_at) {
+        const { data: setting } = await supabase.from('platform_settings')
+          .select('value').eq('key', 'retail_trial_days').maybeSingle();
+        const n = parseInt(setting?.value, 10);
+        trialDays = Number.isFinite(n) && n > 0 && n <= 90 ? n : 0;
+      }
+      const trialMatches = (sub.paypal_plan_trial_days || 0) === trialDays;
+
+      if (sub.paypal_plan_id && feeMatches && trialMatches) {
+        return { statusCode: 200, body: JSON.stringify({
+          planId: sub.paypal_plan_id, usdAmount: Number(sub.paypal_billed_usd).toFixed(2), trialDays,
+        }) };
       }
 
       if (sub.paypal_plan_id) {
@@ -196,13 +213,22 @@ exports.handler = async (event) => {
       const planResult = await paypalRequest('POST', '/v1/billing/plans', {
         product_id: productId,
         name: `Feelz Retail Monthly, ${venueName}`,
-        billing_cycles: [{
-          frequency: { interval_unit: 'MONTH', interval_count: 1 },
-          tenure_type: 'REGULAR',
-          sequence: 1,
-          total_cycles: 0,
-          pricing_scheme: { fixed_price: { value: safeAmount, currency_code: 'USD' } },
-        }],
+        billing_cycles: [
+          ...(trialDays > 0 ? [{
+            // Free: a trial cycle with no pricing_scheme costs nothing.
+            frequency: { interval_unit: 'DAY', interval_count: trialDays },
+            tenure_type: 'TRIAL',
+            sequence: 1,
+            total_cycles: 1,
+          }] : []),
+          {
+            frequency: { interval_unit: 'MONTH', interval_count: 1 },
+            tenure_type: 'REGULAR',
+            sequence: trialDays > 0 ? 2 : 1,
+            total_cycles: 0,
+            pricing_scheme: { fixed_price: { value: safeAmount, currency_code: 'USD' } },
+          },
+        ],
         payment_preferences: {
           auto_bill_outstanding: true,
           payment_failure_threshold: 2,
@@ -222,6 +248,7 @@ exports.handler = async (event) => {
           // The fee the plan was built from. The column name is historical
           // (it once held rand); it now holds the same USD figure.
           paypal_plan_fee_zar: currentFee,
+          paypal_plan_trial_days: trialDays,
         })
         .eq('id', sub.id);
       // Read, not discarded. If this write fails the plan exists at PayPal and
@@ -232,7 +259,7 @@ exports.handler = async (event) => {
           planSaveErr.message, 'planId=', planResult.body.id, 'venue=', venueId);
       }
 
-      return { statusCode: 200, body: JSON.stringify({ planId: planResult.body.id, usdAmount: safeAmount }) };
+      return { statusCode: 200, body: JSON.stringify({ planId: planResult.body.id, usdAmount: safeAmount, trialDays }) };
     }
 
     // ========== LINK APPROVED SUBSCRIPTION ==========
@@ -256,7 +283,7 @@ exports.handler = async (event) => {
       // the plan built for this venue, and must not already belong to another.
       const { data: venueSub } = await supabase
         .from('retail_subscriptions')
-        .select('id, paypal_plan_id, paypal_subscription_id')
+        .select('id, paypal_plan_id, paypal_subscription_id, paypal_plan_trial_days')
         .eq('venue_id', venueId)
         .order('created_at', { ascending: false })
         .limit(1)
@@ -302,8 +329,31 @@ exports.handler = async (event) => {
 
       // By row id, not venue_id: a venue with more than one subscription row
       // would have had the same PayPal id written to all of them.
+      // A plan with a trial goes ACTIVE at approval with nothing charged. The
+      // trial is recorded here: the venue is marked as having used its one
+      // trial, and its paid-up-until date is the end of the trial, which is
+      // what the daily sweep and "keep access until the end of the period"
+      // both read. The first real payment then extends it by a month.
+      const trialDays = venueSub.paypal_plan_trial_days || 0;
+      const now = new Date();
+      const subUpdate = {
+        paypal_subscription_id: subscriptionId,
+        status:                 mappedStatus,
+        paypal_payer_email:     verify.body.subscriber?.email_address || null,
+      };
+      if (trialDays > 0 && mappedStatus === 'active') {
+        const trialEnd = new Date(now.getTime() + trialDays * 86400000).toISOString();
+        subUpdate.trial_ends_at      = trialEnd;
+        subUpdate.current_period_end = trialEnd;
+        const { error: trialErr } = await supabase.from('retail_venues')
+          .update({ trial_used_at: now.toISOString() })
+          .eq('id', venueId)
+          .is('trial_used_at', null);
+        if (trialErr) console.error('[retail-paypal-subscription] trial not recorded:', trialErr.message, venueId);
+      }
+
       const { error } = await supabase.from('retail_subscriptions')
-        .update({ paypal_subscription_id: subscriptionId, status: mappedStatus })
+        .update(subUpdate)
         .eq('id', venueSub.id);
       if (error) {
         return { statusCode: 500, body: JSON.stringify({ error: error.message }) };
