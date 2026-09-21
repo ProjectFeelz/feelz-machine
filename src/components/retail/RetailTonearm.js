@@ -74,8 +74,53 @@ const [cx, cy] = ARM[3];
 const SHELL_ANGLE = Math.atan2(cy - by, cx - bx) * 180 / Math.PI;
 const SHELL = { x: 67.4, y: 80.0 };
 
+// ── WHERE THE ARM SITS ON THE PAGE ──────────────────────────────────────────
+//
+// Everything above is the arm's DESIGN and is not to be edited to move it.
+// This block is the only thing that places it. One outer transform scales the
+// whole assembly about its own bearing and puts that bearing somewhere else,
+// which is exactly "resize and move it, do not change the design": every
+// curve, highlight and shadow keeps its proportions because nothing inside the
+// drawing is touched.
+//
+// Steve's notes on the first version: "beautiful, just too big", the bearing
+// "sitting directly on the disc", and "move up the spindle to where I circled
+// it". All three are answered by these three numbers, in disc units (100 is
+// the record's diameter, the rim is 50 from the centre):
+//
+//   PIVOT (108.1, 14.1)  where he drew the circle. MEASURED, not estimated:
+//          the circle's centre is at (1758, 264) on his 1907x1002 screenshot,
+//          and the disc in that screenshot is centred at (1296.5, 626.5) with
+//          radius 469.5, derived from the layout formula and confirmed against
+//          the label, which measured x centre 1298, radius about 473. Mapped
+//          onto the restored disc, that point is 68.3 from the centre: 18 units
+//          outside the rim. So the spot he chose gives the separation by
+//          itself, and nothing had to be forced to get it.
+//   SCALE 0.85  the housing goes from 27.8 to 23.6 percent of the record's
+//          width. Combined with the disc going back to its original size,
+//          that is about a third smaller on screen than the version he said
+//          was too big. 0.78 was tried and the arm looked stubby; 1.0 is the
+//          size he said was too big.
+//   ANGLE 0     no rotation at all. From that pivot, the arm as designed lands
+//          its stylus at (79.2, 68.5): 34.6 from the centre, on the grooves
+//          (the label ends at 15), about four o'clock. Nothing about the sweep
+//          he approved has changed.
+//
+// The housing's outer edge is 6.5 disc units clear of the rim, about 49px on
+// his screen. A tonearm base sits on the plinth beside the platter, never on
+// it; that gap is what makes it read as two objects instead of one.
+const FIT = {
+  scale: 0.85,
+  gap:   6.5,          // housing edge to record rim, disc units (documentation)
+  pivot: { x: 108.1, y: 14.1 },
+  angle: 0,            // degrees about the new pivot
+};
+const FIT_TRANSFORM =
+  `translate(${FIT.pivot.x} ${FIT.pivot.y}) rotate(${FIT.angle}) ` +
+  `scale(${FIT.scale}) translate(${-PIVOT.x} ${-PIVOT.y})`;
+
 export default function RetailTonearm({ playing = false, uid = 'a' }) {
-  // Unique gradient ids — two players on one page would otherwise share, and
+  // Unique gradient ids, two players on one page would otherwise share, and
   // the second would inherit the first's fills.
   const g = (n) => `ta-${n}-${uid}`;
 
@@ -151,12 +196,15 @@ export default function RetailTonearm({ playing = false, uid = 'a' }) {
         </filter>
       </defs>
 
+      {/* Placement. See FIT above: this is the only thing that moves the arm. */}
+      <g transform={FIT_TRANSFORM}>
+
       {/* Everything pivots about the bearing. Parked clear of the record when
           silent, set down on it when playing. */}
       <g
         style={{
           // NEGATIVE parks it. Positive is clockwise in SVG's y-down frame,
-          // which swings the headshell UP AND LEFT — in towards the label,
+          // which swings the headshell UP AND LEFT, in towards the label,
           // which is the one place a parked arm must never be. Out and down,
           // towards the rim where the rest is.
           transform: playing ? 'rotate(0deg)' : 'rotate(-11deg)',
@@ -169,7 +217,7 @@ export default function RetailTonearm({ playing = false, uid = 'a' }) {
                Two copies crossfading rather than one being animated: blur
                radius cannot be transitioned in CSS, so each state gets its
                own and only the opacity changes. Close and sharp when the arm
-               is down, further and softer when it is lifted — nothing about
+               is down, further and softer when it is lifted, nothing about
                the arm changes size, and it still reads as rising off the
                record. */}
         <g
@@ -191,7 +239,7 @@ export default function RetailTonearm({ playing = false, uid = 'a' }) {
           <circle cx={PIVOT.x} cy={PIVOT.y} r="13.2" fill="#000" />
         </g>
 
-        {/* 2. THE ARM. Dark outline first, tube over it, hairline on top —
+        {/* 2. THE ARM. Dark outline first, tube over it, hairline on top -
                the reference's three-pass look, as one polyline so the bends
                hold together. */}
         <path d={ARM_D} fill="none" stroke="#1C1F27" strokeWidth="5.5"
@@ -222,7 +270,7 @@ export default function RetailTonearm({ playing = false, uid = 'a' }) {
 
           {/* NO DRAWN NEEDLE.
               A white pin sticking out of the cartridge reads as a drawing of
-              a stylus rather than a stylus — at this size a real one is a few
+              a stylus rather than a stylus, at this size a real one is a few
               thousandths of an inch and is simply not visible. What you see
               on a deck is the shadow: tight and dark when the cartridge is
               down, wide and soft when it is lifted. So the contact is drawn
@@ -241,7 +289,7 @@ export default function RetailTonearm({ playing = false, uid = 'a' }) {
 
         {/* 4. THE BEARING HOUSING, last so it sits on top of the arm it
                carries. The reference draws it as a grey annulus with a dark
-               outline and a black well in the middle — not a ball bearing, a
+               outline and a black well in the middle, not a ball bearing, a
                ring you could put a finger through. Same here, with the light
                put back on the ring. */}
         <g>
@@ -268,7 +316,7 @@ export default function RetailTonearm({ playing = false, uid = 'a' }) {
               stub read as a separate white pill floating beside the housing
               rather than a part bolted to it. It also starts inside the ring's
               outer edge for the same reason. The reference draws it in the
-              same place, at the same angle, in the same grey as the housing —
+              same place, at the same angle, in the same grey as the housing -
               not the brighter tube grey, which is what made it jump out. */}
           <g transform={`rotate(-42, ${PIVOT.x}, ${PIVOT.y})`}>
             <rect x={PIVOT.x + 9.4} y={PIVOT.y - 2.2} width="7.6" height="4.4" rx="2.2"
@@ -278,6 +326,7 @@ export default function RetailTonearm({ playing = false, uid = 'a' }) {
           </g>
         </g>
 
+      </g>
       </g>
     </svg>
   );

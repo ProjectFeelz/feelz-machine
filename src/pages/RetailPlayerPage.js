@@ -46,7 +46,7 @@ function RetailPayPalButton({ venueId, onSubscribed }) {
     if (existing) { existing.addEventListener('load', () => setReady(true)); return; }
     const script = document.createElement('script');
     // USD, not ZAR. The plan this button subscribes to is created in USD by
-    // retail-paypal-subscription.js — deliberately, because ZAR billing plans
+    // retail-paypal-subscription.js, deliberately, because ZAR billing plans
     // did not work on this PayPal account. Loading the SDK under a different
     // currency to the plan is a mismatch PayPal is entitled to reject, and the
     // ZAR figure is a display figure only. The line under the button already
@@ -86,7 +86,7 @@ function RetailPayPalButton({ venueId, onSubscribed }) {
       onApprove: async (data) => {
         const { data: { session: linkSession } } = await supabase.auth.getSession();
         // The response was thrown away and onSubscribed() called regardless, so
-        // a link that came back 402 subscription_not_paid — or failed outright —
+        // a link that came back 402 subscription_not_paid, or failed outright -
         // still showed the venue a working, subscribed player that the server
         // had not switched on. Read it.
         try {
@@ -103,7 +103,7 @@ function RetailPayPalButton({ venueId, onSubscribed }) {
             setError(
               linked.error === 'subscription_not_paid'
                 ? 'PayPal has approved this but the first payment has not settled yet. '
-                  + 'Your player switches on by itself as soon as it does — usually within a few minutes.'
+                  + 'Your player switches on by itself as soon as it does, usually within a few minutes.'
                 : 'Payment went through but we could not activate this venue. Contact us and we will sort it out.'
             );
             return;
@@ -148,15 +148,15 @@ export default function RetailPlayerPage() {
   const [showInbox, setShowInbox] = React.useState(false);
   const [loadingPlaylists, setLoadingPlaylists] = React.useState(false);
   const [selectedPlaylist, setSelectedPlaylist] = React.useState(null);
-  // 'deck'   — the jukebox, one vibe at a time, previewing itself
-  // 'record' — that vibe opened up as a record out of its sleeve
+  // 'deck'  , the jukebox, one vibe at a time, previewing itself
+  // 'record', that vibe opened up as a record out of its sleeve
   const [view, setView] = React.useState('deck');
   const [tracks, setTracks] = React.useState([]);
   const [loadingTracks, setLoadingTracks] = React.useState(false);
   const [currentIndex, setCurrentIndex] = React.useState(0);
   const [isPlaying, setIsPlaying] = React.useState(false);
 
-  // Bumped when playback of the ALREADY-SELECTED source is requested again —
+  // Bumped when playback of the ALREADY-SELECTED source is requested again -
   // pressing play after a pause, or repeat-one. It is no longer load-bearing
   // for starting a new track: the transport effect keys on isPlaying and the
   // source effect keys on the URL, so forgetting to bump it can no longer
@@ -188,7 +188,7 @@ export default function RetailPlayerPage() {
   // Vibes this venue has turned down. Held here rather than in the deck
   // because the deck is unmounted and remounted every time the venue opens a
   // record and comes back, and a decision that lives in a component's state
-  // lasts exactly as long as that component does — which is the bug.
+  // lasts exactly as long as that component does, which is the bug.
   const [passedPlaylistIds, setPassedPlaylistIds] = React.useState(new Set());
   // Both decision sets have come back from the database. The deck waits for
   // this before it seeds itself, otherwise a fast playlist query and a slow
@@ -251,7 +251,7 @@ export default function RetailPlayerPage() {
     [playlists, savedPlaylistIds]
   );
 
-  // The deck offers what this venue has not decided about yet — but it is
+  // The deck offers what this venue has not decided about yet, but it is
   // SEEDED ONCE rather than recomputed as they swipe.
   //
   // The obvious version of this is a useMemo over saved and passed. It is
@@ -390,14 +390,14 @@ export default function RetailPlayerPage() {
     if (isPreviewMode) return;                                       // an admin preview writes nothing
     const { error } = await supabase.from('retail_venue_passed_playlists')
       .insert({ venue_id: venue.id, playlist_id: playlist.id });
-    // 23505 is the unique index doing its job on a double tap — not an error.
+    // 23505 is the unique index doing its job on a double tap, not an error.
     if (error && error.code !== '23505') {
       console.error('[retail] could not record the pass:', error.code, error.message);
     }
   };
 
   // "Start again" on the end-of-deck screen. Clears the passes so the whole
-  // catalogue comes back — the one way out of having turned everything down.
+  // catalogue comes back, the one way out of having turned everything down.
   const resetPasses = async () => {
     if (!venue) return;
     setPassedPlaylistIds(new Set());
@@ -419,14 +419,14 @@ export default function RetailPlayerPage() {
   // WHY THIS APPEARED TO WORK ON THE DECK AND NOT ON THE RECORD
   //
   // It was failing in both places. On the deck you could not tell, because
-  // commit('right') animates the card away whether or not the write lands —
+  // commit('right') animates the card away whether or not the write lands -
   // so the gesture always LOOKED like it worked. On the record page the only
   // feedback is the button turning into "Saved", and that only happens if the
   // state update runs. The old code did `if (error) return;` and swallowed the
   // error entirely: no console line, no message, nothing.
   //
   // Two changes. The write is now idempotent, because a row that already
-  // exists is not a failure — it is the desired end state, and a unique
+  // exists is not a failure, it is the desired end state, and a unique
   // violation on (venue_id, playlist_id) was being treated as an error and
   // silently dropping the save. And anything that really does fail now says
   // so, on the screen and in the console, instead of pretending.
@@ -437,14 +437,16 @@ export default function RetailPlayerPage() {
     return () => clearTimeout(t);
   }, [saveNotice]);
 
+  // Returns true when the change was written, false when it was refused or
+  // skipped, so a caller can react only to a change that actually happened.
   const toggleSave = async (playlist) => {
-    if (!venue || !playlist?.id) return;
+    if (!venue || !playlist?.id) return false;
     if (isPreviewMode) {
       // An admin previewing somebody else's venue must not write to it. Said
       // out loud, because a button that does nothing and explains nothing is
       // exactly the bug being fixed here.
       setSaveNotice('Preview mode: nothing is saved to this venue.');
-      return;
+      return false;
     }
 
     const wasSaved = savedPlaylistIds.has(playlist.id);
@@ -483,7 +485,7 @@ export default function RetailPlayerPage() {
           ? 'This venue does not allow saving from this account.'
           : 'Could not save that vibe. Try again.'
       );
-      return;
+      return false;
     }
 
     supabase.rpc('get_venue_playlist_recommendations')
@@ -491,12 +493,35 @@ export default function RetailPlayerPage() {
         if (error) { console.warn('[retail] recommendations failed:', error.message); return; }
         setRecommended(data || []);
       });
+    return true;
+  };
+
+  // Taking a vibe out of Your Vibes.
+  //
+  // There was no way to do this at all. Saving was one tap and permanent: the
+  // saved list had nothing on it but "open", and the deck's keep button only
+  // ever adds. So a venue that kept a vibe by mistake, or outgrew one, was
+  // stuck with it.
+  //
+  // The removed vibe goes back into the deck, at the END. The deck is seeded
+  // once per load on purpose, so swipes never reshuffle what is on top; left
+  // alone, a removed vibe would vanish from both lists until the next reload.
+  // Appending keeps it findable this session without moving the card the
+  // venue is looking at.
+  const removeSaved = async (playlist) => {
+    if (!playlist?.id) return;
+    const ok = await toggleSave(playlist);
+    if (!ok) return;
+    setDeckPlaylists(prev =>
+      prev.some(p => p.id === playlist.id) ? prev : [...prev, playlist]
+    );
+    setSaveNotice(`Removed "${playlist.title || 'that vibe'}" from Your Vibes.`);
   };
 
   // Loading a vibe and OPENING it are now two different things.
   //
-  // The deck previews whatever card is on top — the music starts while you are
-  // still deciding, which is the whole point of a jukebox — but you are still
+  // The deck previews whatever card is on top, the music starts while you are
+  // still deciding, which is the whole point of a jukebox, but you are still
   // on the deck, not inside the record. `open` is what moves the screen.
   //
   // selectedPlaylist therefore means "the vibe that is playing", not "the
@@ -506,7 +531,7 @@ export default function RetailPlayerPage() {
   const loadPlaylist = async (playlist, { open }) => {
     if (open) setView('record');
     if (selectedPlaylist?.id === playlist.id && tracks.length > 0) {
-      // Already loaded and playing — opening it should not restart the room.
+      // Already loaded and playing, opening it should not restart the room.
       return;
     }
     audioRef.current?.pause();
@@ -529,7 +554,7 @@ export default function RetailPlayerPage() {
     // currentIndex was already 0, so no dependency of the old single playback
     // effect changed and the audio element was never given a src. It works now
     // because setTracks changes the resolved URL, and the URL is what the
-    // source effect watches — there is no token to remember here.
+    // source effect watches, there is no token to remember here.
     setNeedsGesture(false);
     if (loaded.length > 0) setIsPlaying(true);
   };
@@ -617,8 +642,8 @@ export default function RetailPlayerPage() {
   //
   // "The first song never plays" has now been reported three times, and each
   // previous attempt fixed the path in front of it rather than the reason. The
-  // reason is that one effect was doing two unrelated jobs — deciding WHAT to
-  // load and deciding WHETHER to play — off a hand-written dependency list
+  // reason is that one effect was doing two unrelated jobs, deciding WHAT to
+  // load and deciding WHETHER to play, off a hand-written dependency list
   // that deliberately excluded isPlaying. Every new call site then had to
   // remember to bump playToken by hand, and openPlaylist did not:
   //
@@ -633,7 +658,7 @@ export default function RetailPlayerPage() {
   // index twice, which is exactly why that always appeared to work.
   //
   // The fix is to stop depending on a token somebody has to remember. The real
-  // input is the URL, and the URL genuinely changes when the tracks arrive —
+  // input is the URL, and the URL genuinely changes when the tracks arrive -
   // so effect one keys on the URL and needs no token at all. Effect two then
   // does nothing but make the element agree with isPlaying, which means
   // "playing" is a state of the app rather than a side effect somebody has to
@@ -687,11 +712,11 @@ export default function RetailPlayerPage() {
   //    treated both as "stop", which is how the button ended up showing Play
   //    over a track that was about to start:
   //
-  //      AbortError    — a new load interrupted this play(). Normal and
+  //      AbortError   , a new load interrupted this play(). Normal and
   //                      self-correcting: the new src's own play() is already
   //                      queued behind it. Setting isPlaying(false) here was
   //                      cancelling playback that was working.
-  //      NotAllowedError — the browser wants a gesture. Real, and the person
+  //      NotAllowedError, the browser wants a gesture. Real, and the person
   //                      needs telling, so it surfaces a message rather than
   //                      quietly flipping the button back.
   React.useEffect(() => {
@@ -762,7 +787,7 @@ export default function RetailPlayerPage() {
       return;
     }
 
-    // Repeat-one applies to a track finishing, not to a deliberate skip —
+    // Repeat-one applies to a track finishing, not to a deliberate skip -
     // a staff member pressing next wants the next song, not the same one
     // again. onEnded passes no event argument we can rely on, so this is
     // handled by handleEnded below instead.
@@ -781,7 +806,7 @@ export default function RetailPlayerPage() {
   // Natural end of a track. This is where repeat-one lives.
   const handleEnded = () => {
     if (mode === 'track' && repeat === 'one') {
-      // Same URL, so there is nothing for the source effect to reload —
+      // Same URL, so there is nothing for the source effect to reload -
       // repeat-one is a seek, not a load. Reassigning src would work but
       // re-downloads the file to play the same audio again.
       const a = audioRef.current;
@@ -828,7 +853,7 @@ export default function RetailPlayerPage() {
     setCurrentIndex(index);
     setMode('track');
     setIsPlaying(true);
-    setPlayToken(t => t + 1);   // required when index is unchanged — see the source effect
+    setPlayToken(t => t + 1);   // required when index is unchanged, see the source effect
   };
 
   // Records intent and nothing else. The transport effect is what touches the
@@ -916,7 +941,7 @@ export default function RetailPlayerPage() {
 
   return (
     /* WHY THE DECK PAGE WAS SCROLLING.
-       This carried a permanent pb-16 — 64px of padding left over from the
+       This carried a permanent pb-16, 64px of padding left over from the
        player bar that used to run across the bottom of every screen and is
        now only there for adverts. The deck below sizes itself to
        calc(100dvh - 76px) and the header is the other 76px, so the content
@@ -945,11 +970,11 @@ export default function RetailPlayerPage() {
       <audio ref={audioRef} onEnded={handleEnded} onTimeUpdate={handleTimeUpdate} />
 
       {/* The lid. Decorative, inert, and above everything except the sheets
-          you open on purpose — see RetailGlass.js. */}
+          you open on purpose, see RetailGlass.js. */}
       <RetailGlass />
 
       {/* The header was the same translucent gradient as the cards under it,
-          so the two ran together and the page had no top. It is now opaque —
+          so the two ran together and the page had no top. It is now opaque -
           still a gradient, but of solid colours, sitting on a lit edge and a
           real shadow so the content reads as passing underneath it. */}
       <div className="sticky top-0 z-10 px-4 py-4"
@@ -1087,6 +1112,7 @@ export default function RetailPlayerPage() {
             impact={impact}
             loadingPlaylists={loadingPlaylists}
             onSave={toggleSave}
+            onRemoveSaved={removeSaved}
             onPass={passPlaylist}
             onReset={resetPasses}
             onOpen={(pl) => openPlaylist(pl)}
@@ -1095,7 +1121,7 @@ export default function RetailPlayerPage() {
             isPreviewing={isPlaying && mode === 'track'}
             previewLabel={
               tracks[currentIndex]
-                ? `${tracks[currentIndex].artist?.artist_name || 'Unknown'} — ${tracks[currentIndex].title}`
+                ? `${tracks[currentIndex].artist?.artist_name || 'Unknown'}, ${tracks[currentIndex].title}`
                 : null
             }
           />
@@ -1122,7 +1148,7 @@ export default function RetailPlayerPage() {
             onComments={() => setShowComments(true)}
             featuredArtists={featuredArtists}
             distinctArtistCount={distinctArtistCount}
-            /* The transport lives in the left column of the record now — the
+            /* The transport lives in the left column of the record now, the
                bar across the bottom of the window is gone. */
             audioRef={audioRef}
             onNext={advance}
@@ -1227,7 +1253,7 @@ export default function RetailPlayerPage() {
             className="w-full py-3 rounded-xl text-xs font-semibold text-center transition active:scale-[0.99]"
             style={{ background: 'rgba(167,139,250,0.18)', border: '1px solid rgba(167,139,250,0.35)', color: '#ddd6fe' }}
           >
-            Tap to start playback — your browser needs one tap before it will play audio
+            Tap to start playback, your browser needs one tap before it will play audio
           </button>
         </div>
       )}

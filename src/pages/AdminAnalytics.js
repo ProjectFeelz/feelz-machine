@@ -184,6 +184,8 @@ export default function AdminAnalytics({ embedded = false }) {
   const [platformSignals, setPlatformSignals]     = useState([]);
   const [trendingGenres, setTrendingGenres]       = useState([]);
   const [contactStats, setContactStats]           = useState({});
+  // Admin functions the page called that the database does not have yet.
+  const [missingFns, setMissingFns]               = useState([]);
   const [topContactedArtists, setTopContactedArtists] = useState([]);
 
   // Last click wins, not last response.
@@ -243,10 +245,16 @@ export default function AdminAnalytics({ embedded = false }) {
       // tracks" — a figure that quietly stops moving once the catalogue passes
       // a thousand and never says so. Summed in the database now.
       let totalStreams = 0;
+      let totalsErr = null;
       try {
-        const { data: totals } = await supabase.rpc('admin_platform_totals');
+        const { data: totals, error } = await supabase.rpc('admin_platform_totals');
+        if (error) {
+          totalsErr = error;
+          console.error('[analytics] admin_platform_totals:', error.message);
+        }
         totalStreams = Number(totals?.catalogue_stream_count || 0);
       } catch (err) {
+        totalsErr = err;
         console.error('[analytics] admin_platform_totals failed:', err?.message || err);
       }
 
@@ -327,6 +335,19 @@ export default function AdminAnalytics({ embedded = false }) {
         .rpc('admin_behavior_summary', { p_days: range });
       if (!current()) return;
       if (behaviorErr) console.error('[analytics] admin_behavior_summary:', behaviorErr.message);
+
+      // A missing function reads as a zero on every card, which looks like
+      // "nobody listened" rather than "the database is missing a migration".
+      // Name them on the page instead.
+      const isMissing = (err) => !!err && (err.code === 'PGRST202'
+        || /could not find the function/i.test(err.message || ''));
+      setMissingFns([
+        ['admin_platform_totals',  totalsErr],
+        ['admin_stream_timeline',  streamDaysErr],
+        ['admin_signup_timeline',  signupDaysErr],
+        ['admin_upload_timeline',  uploadDaysErr],
+        ['admin_behavior_summary', behaviorErr],
+      ].filter(([, err]) => isMissing(err)).map(([name]) => name));
 
       const sample = Number(behavior?.sample || 0);
       const pctOf  = (n) => (sample ? Math.round((Number(n) / sample) * 100) : 0);
@@ -907,6 +928,18 @@ export default function AdminAnalytics({ embedded = false }) {
       ) : (
         <div className="px-4 pt-5">
 
+          {missingFns.length > 0 && (
+            <div className="mb-4 rounded-2xl p-4 border border-red-500/25 bg-red-500/[0.07]">
+              <p className="text-xs font-bold text-red-300 mb-1">
+                Some figures read 0 because the database is missing {missingFns.length === 1 ? 'a function' : `${missingFns.length} functions`}.
+              </p>
+              <p className="text-[11px] text-red-200/60 leading-relaxed">
+                Run supabase/migrations/137_admin_analytics_reads.sql in the SQL editor.
+                Missing: <code>{missingFns.join(', ')}</code>
+              </p>
+            </div>
+          )}
+
           {/* ── OVERVIEW ─────────────────────────────────────────────────── */}
           {tab === 'overview' && (
             <>
@@ -1186,17 +1219,10 @@ export default function AdminAnalytics({ embedded = false }) {
           {/* ── BEHAVIOUR ─────────────────────────────────────────────── */}
           {tab === 'behaviour' && (
             <div className="space-y-4">
-              {/* Two disclosures, because without them every figure on this tab
-                  reads as something it is not: platform-wide, and measured. */}
-              <div className="rounded-2xl p-4 border border-amber-500/25 bg-amber-500/[0.07]">
-                <p className="text-xs font-bold text-amber-300 mb-1">Scope: your own tracks.</p>
-                <p className="text-[11px] text-amber-200/60 leading-relaxed">
-                  <code>streams</code> has no admin read policy — only "viewable by owner"
-                  and "artists can read streams of their tracks" — and this page queries as
-                  your signed-in user rather than the service role. Every figure below is
-                  computed from streams on tracks you own, not the platform's.
-                </p>
-              </div>
+              {/* The old "Scope: your own tracks" notice is gone: migration 137
+                  gives admins a read on streams and computes this tab in the
+                  database, so the figures are platform-wide. If 137 has not run,
+                  the missing-functions notice at the top of the page says so. */}
               {completionStats.placeholders > 0 && (
                 <div className="rounded-2xl p-4 border border-red-500/25 bg-red-500/[0.07]">
                   <p className="text-xs font-bold text-red-300 mb-1">

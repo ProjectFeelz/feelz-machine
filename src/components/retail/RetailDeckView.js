@@ -9,7 +9,7 @@
 // eye had nowhere obvious to land.
 //
 // Now the deck owns the first screen and nothing competes with it. Everything
-// else — what this room has played, what it has kept, what it might like —
+// else, what this room has played, what it has kept, what it might like -
 // moves to a quiet rail on the right, at a size that says "look at this after
 // you have decided", because that is when a venue actually reads it.
 //
@@ -17,7 +17,7 @@
 // reason: the decision first, the context second.
 
 import React from 'react';
-import { Music, Loader, TrendingUp, ChevronDown } from 'lucide-react';
+import { Music, Loader, TrendingUp, ChevronDown, X } from 'lucide-react';
 import RetailVibeDeck from './RetailVibeDeck';
 import { R } from './retailTheme';
 
@@ -33,7 +33,7 @@ function Stat({ value, label }) {
 }
 
 export default function RetailDeckView({
-  playlists,          // the UNDECIDED ones — the page filters out saved and passed
+  playlists,          // the UNDECIDED ones, the page filters out saved and passed
   allPlaylists = [],  // everything, for the counts in the rail
   savedIds,
   savedPlaylists = [],
@@ -41,6 +41,7 @@ export default function RetailDeckView({
   impact,
   loadingPlaylists,
   onSave,
+  onRemoveSaved,      // (playlist) => void, takes it out of Your Vibes
   onPass,
   onReset,
   onOpen,
@@ -59,7 +60,7 @@ export default function RetailDeckView({
         /* The page does not scroll. dvh rather than vh so a phone's address
            bar is subtracted and nothing is cut off at the bottom. The only
            thing that scrolls on this screen is the saved-vibes list in the
-           rail, once the collection outgrows it — and its bar is hidden by
+           rail, once the collection outgrows it, and its bar is hidden by
            the global rule in index.css. */
         .fm-retail-deckpage {
           height: calc(100vh - ${HEADER}px);
@@ -74,8 +75,8 @@ export default function RetailDeckView({
       {/* ── The deck, centred, and nothing else ───────────────────────────
           On a phone it takes a FIXED share of the frame rather than flex-1.
           Sharing the frame with a rail that could grow meant the rail won and
-          the deck was squeezed — the cut-off card at the top of the phone
-          screenshots. 64% here — the deck measures this box and fits itself
+          the deck was squeezed, the cut-off card at the top of the phone
+          screenshots. 64% here, the deck measures this box and fits itself
           to it, so this number decides how the screen is split and nothing
           else has to agree with it. The rail scrolls in what is left. */}
       <div className="h-[64%] lg:h-auto flex-shrink-0 lg:flex-1 min-w-0 min-h-0 flex flex-col items-center justify-center px-5 py-4">
@@ -114,7 +115,7 @@ export default function RetailDeckView({
       >
 
         {/* What the room has actually done. Kept, because it is the only place
-            a venue sees what their subscription bought — but no longer the
+            a venue sees what their subscription bought, but no longer the
             first thing on the page, because it is not a decision.
             ON A PHONE IT IS FOLDED AWAY. Four stat rows, two "most played"
             lines and a paragraph about the artist pool is most of a phone
@@ -186,24 +187,51 @@ export default function RetailDeckView({
                 pushing the page taller it scrolls inside the rail. */}
             <div className="space-y-1 lg:overflow-y-auto min-h-0 lg:flex-1 -mr-2 pr-2">
               {savedPlaylists.map(pl => (
-                <button
+                // A row, not a button, because it now holds TWO actions, open
+                // and remove, and a button inside a button is invalid HTML
+                // that browsers resolve by firing both. The hover background
+                // lives on the row so the whole line still reads as one item.
+                <div
                   key={pl.id}
-                  onClick={() => onOpen(pl)}
-                  className="w-full flex items-center gap-3 p-2 rounded-lg text-left transition"
+                  className="group w-full flex items-center gap-1 rounded-lg transition"
                   onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.045)'; }}
                   onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
                 >
-                  <div className="w-10 h-10 rounded overflow-hidden flex-shrink-0 flex items-center justify-center"
-                    style={{ background: R.surface2, border: `1px solid ${R.border}` }}>
-                    {pl.cover_image_url
-                      ? <img src={pl.cover_image_url} alt="" className="w-full h-full object-cover" />
-                      : <Music className="w-4 h-4" style={{ color: R.textGhost }} />}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[15px] truncate" style={{ color: R.text }}>{pl.title}</p>
-                    {pl.mood && <p className="text-xs truncate" style={{ color: R.textFaint }}>{pl.mood}</p>}
-                  </div>
-                </button>
+                  <button
+                    onClick={() => onOpen(pl)}
+                    className="flex-1 min-w-0 flex items-center gap-3 p-2 text-left"
+                  >
+                    <div className="w-10 h-10 rounded overflow-hidden flex-shrink-0 flex items-center justify-center"
+                      style={{ background: R.surface2, border: `1px solid ${R.border}` }}>
+                      {pl.cover_image_url
+                        ? <img src={pl.cover_image_url} alt="" className="w-full h-full object-cover" />
+                        : <Music className="w-4 h-4" style={{ color: R.textGhost }} />}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[15px] truncate" style={{ color: R.text }}>{pl.title}</p>
+                      {pl.mood && <p className="text-xs truncate" style={{ color: R.textFaint }}>{pl.mood}</p>}
+                    </div>
+                  </button>
+
+                  {/* Remove. Always visible rather than hover-only, because
+                      the device this runs on all day is a tablet, and a tablet
+                      has no hover: a control that only appears on hover is a
+                      control a venue can never reach. It is quiet until you
+                      point at the row, then it lights up. */}
+                  {onRemoveSaved && (
+                    <button
+                      onClick={() => onRemoveSaved(pl)}
+                      title={`Remove "${pl.title}" from Your Vibes`}
+                      aria-label={`Remove ${pl.title} from Your Vibes`}
+                      className="flex-shrink-0 w-9 h-9 mr-1 rounded-full flex items-center justify-center
+                                 transition opacity-40 group-hover:opacity-100 focus:opacity-100
+                                 hover:bg-white/[0.08]"
+                      style={{ color: R.textDim }}
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
               ))}
             </div>
           </div>

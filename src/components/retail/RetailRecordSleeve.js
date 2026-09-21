@@ -11,7 +11,7 @@
 //      frame and spilled out. Everything is one measured number now.
 //
 //   2. The record was a garnish on the right. It is now the largest object on
-//      the page — big enough to be what a wall-mounted screen shows while the
+//      the page, big enough to be what a wall-mounted screen shows while the
 //      music runs.
 //
 //   3. It pulled outward, off the edge of the screen, which is the one
@@ -86,37 +86,25 @@ export default function RetailRecordSleeve({
   // why it kept moving instead of landing: the fraction was of the wrong box,
   // so the gap underneath changed with every window.
   //
-  // THE RECORD COMES FROM THE BOTTOM RIGHT.
+  // The rule comes from the marked-up screenshots and is stated as a rule, so
+  // it holds at every size:
   //
-  // It used to float: a tenth of the frame's height as a gap underneath, and a
-  // margin on the right, so the disc sat in the middle of the right-hand side
-  // with air all round it. Steve asked for it to come from the bottom right
-  // corner instead, so it now runs OFF the bottom edge and sits much closer to
-  // the right, and the part you can see is the top of a record that continues
-  // past the page.
+  //   the record is as tall as this area minus a gap of a tenth at the bottom
+  //   and a sliver at the top, it is anchored to THAT GAP, and it keeps a
+  //   margin on the right rather than running off the edge.
   //
-  // Stated as a rule so it holds at every size:
+  // At 1911×980 that puts a ~770px record between y≈124 and y≈891, right edge
+  // at x≈1750, which is the circle drawn on the screenshot, within a few
+  // pixels, reached by measuring rather than by nudging a percentage until it
+  // looked close.
   //
-  //   the record bleeds a tenth of its own diameter below the bottom edge, its
-  //   top clears the header by a sliver, and the margin on the right is
-  //   whatever the tonearm needs and no more.
-  //
-  // THE RIGHT MARGIN IS NOT A TASTE DECISION. The tonearm's bearing sits just
-  // outside the rim — that is where it is on the reference vector and where it
-  // is on a real deck — and the housing, with the counterweight stub on the
-  // back of it, reaches about 13 percent of the disc's diameter past the right
-  // edge. A margin any smaller than that slices the pivot in half and the arm
-  // appears to grow out of the edge of the screen; 15 percent leaves a hair of
-  // clearance so a rounding difference cannot shave the stub.
-  // So the margin is derived from the disc, not from the window, and the
-  // window only gets to cap it so the tracklist is never squeezed.
-  //
-  // BLEED is 10 percent and not more for the same kind of reason: the stylus
-  // lands at about 88 percent of the way down the disc, so anything past a
-  // tenth starts cutting off the cartridge — the one part of this drawing that
-  // has to be visible for the picture to mean "playing".
+  // RESTORED. For one deploy this bled the record off the bottom of the page
+  // and made it bigger. Steve's words: "I asked you to change the tone arm not
+  // the size of the vinyl, I loved how it was." So the disc is back exactly as
+  // it was, and the tonearm was resized to fit it instead. If a future change
+  // touches these numbers, it is changing a thing that was signed off.
   const frameRef = React.useRef(null);
-  const [geom, setGeom] = React.useState({ disc: 520, bleed: 52, right: 68 });
+  const [geom, setGeom] = React.useState({ disc: 520, gap: 48, right: 60 });
   React.useEffect(() => {
     const measure = () => {
       const el = frameRef.current;
@@ -125,25 +113,21 @@ export default function RetailRecordSleeve({
       const h = el?.clientHeight || (window.innerHeight - HEADER);
       const w = el?.clientWidth  || window.innerWidth;
 
+      const gapBelow = Math.round(h * 0.10);   // the breathing room underneath
       const gapAbove = Math.round(h * 0.04);   // just enough to clear the header
-      const BLEED    = 0.10;                   // of the disc, below the fold
 
-      // Solving top = gapAbove with bottom = -BLEED*d gives d = (h - gapAbove)
-      // / (1 - BLEED). Worth spelling out rather than tuning a number until it
-      // looked right, because it is what keeps the top edge steady while the
-      // bottom runs off.
-      let d = Math.round((h - gapAbove) / (1 - BLEED));
+      let d = h - gapBelow - gapAbove;
       // On a narrow desktop the height alone would hand the record the whole
       // column and leave the tracklist a sliver. The width gets a say.
       d = Math.min(d, Math.round(w * 0.66));
-      d = Math.max(280, Math.min(d, 1100));
+      d = Math.max(280, Math.min(d, 980));
 
-      const bleed = Math.round(d * BLEED);
+      // The margin on the right. Enough that the record reads as an object on
+      // the page and not a shape leaving it, and it shrinks on a narrow window
+      // rather than squeezing the tracklist.
+      const right = Math.max(16, Math.min(Math.round(w * 0.11), Math.round((w - d) * 0.42)));
 
-      // Room for the pivot housing, capped so the tracklist keeps its column.
-      const right = Math.max(16, Math.min(Math.round(d * 0.15), Math.round((w - d) * 0.45)));
-
-      setGeom({ disc: d, bleed, right });
+      setGeom({ disc: d, gap: gapBelow, right });
     };
     measure();
     window.addEventListener('resize', measure);
@@ -195,7 +179,7 @@ export default function RetailRecordSleeve({
         <style>{`
           /* The page does not scroll. It is a fixed frame the height of the
              viewport, and the tracklist is the only thing inside it that
-             moves — which is why the frame is sized in dvh rather than vh:
+             moves, which is why the frame is sized in dvh rather than vh:
              on a phone, vh does not subtract the address bar, so a "fixed"
              page would still be taller than the screen and the bottom of it
              would be cut off. dvh is the visible height, address bar and all.
@@ -203,7 +187,7 @@ export default function RetailRecordSleeve({
              Scrollbars stay hidden globally (index.css), so the scrolling
              tracklist shows no bar. */
           /* PHONE: one column that scrolls.
-             The fixed frame is a DESKTOP rule and was never right on a phone —
+             The fixed frame is a DESKTOP rule and was never right on a phone -
              the panel, the record, the details and the transport cannot fit in
              one screen at that width, so a frame with overflow:hidden simply
              cut the bottom off, which is what the phone screenshots show. Here
@@ -243,7 +227,7 @@ export default function RetailRecordSleeve({
                 bottom edge. Tapping it plays and pauses.
 
                 Clipped by the wrapper, which is why the record itself is drawn
-                with shadow={false} — a soft drop shadow inside a clipping box
+                with shadow={false}, a soft drop shadow inside a clipping box
                 reads as a grey rectangle rather than a shadow. */}
             <div className="lg:hidden">
               <div
@@ -350,6 +334,10 @@ export default function RetailRecordSleeve({
             <div className="flex items-center gap-2 mt-4 flex-wrap">
               <button
                 onClick={onToggleSave}
+                // It always toggled, so tapping "Saved" did remove the vibe.
+                // Nothing said so, which on a button labelled with a finished
+                // state reads as "nothing to do here".
+                title={isSaved ? 'Tap to remove from Your Vibes' : 'Save to Your Vibes'}
                 className="flex items-center gap-1.5 text-xs font-semibold px-3.5 py-2.5 rounded-full transition"
                 style={{
                   background: isSaved ? R.violetSoft : 'rgba(255,255,255,0.045)',
@@ -372,7 +360,7 @@ export default function RetailRecordSleeve({
           </div>
 
           {/* Pinned to the floor of the panel on a desktop, and to the bottom
-              of the viewport on a phone — the same promise on a screen that
+              of the viewport on a phone, the same promise on a screen that
               has no second column. */}
           <div
             className="flex-shrink-0 px-4 pt-3 pb-4 z-20"
@@ -405,7 +393,7 @@ export default function RetailRecordSleeve({
 
             It was never working: a flat jacket with the playlist artwork on
             it sat beside a disc that was mostly hidden behind it, and the two
-            objects fought each other for the same corner of the screen —
+            objects fought each other for the same corner of the screen -
             neither one large enough to be the thing you look at. One record,
             at the size the sleeve used to be, in the position marked on the
             screenshot, is what the page was reaching for.
@@ -417,7 +405,7 @@ export default function RetailRecordSleeve({
             Placed by the same rule as before, so it cannot drift: the gap
             underneath is a tenth of this area's height and the record is
             anchored to it, with a margin on the right rather than bleeding
-            off the edge — the circle on the screenshot stops short of the
+            off the edge, the circle on the screenshot stops short of the
             edge, and that margin is what makes it read as an object on a
             surface rather than a shape leaving the screen. */}
         <div className="hidden lg:block absolute inset-0 pointer-events-none select-none z-0 overflow-hidden">
@@ -427,11 +415,11 @@ export default function RetailRecordSleeve({
               width: disc,
               height: disc,
               right: geom.right,
-              bottom: -geom.bleed,
+              bottom: geom.gap,
               zIndex: 1,
               // The shadow he asked for. Big, soft and offset down-right, so
               // the record sits ON the page rather than being printed into
-              // it — with a tighter second one underneath for contact.
+              // it, with a tighter second one underneath for contact.
               filter: 'drop-shadow(26px 34px 60px rgba(0,0,0,0.85)) '
                     + 'drop-shadow(6px 10px 18px rgba(0,0,0,0.55))',
               transform: pulled ? 'scale(1)' : 'scale(0.965)',
@@ -450,7 +438,7 @@ export default function RetailRecordSleeve({
           {/* The arm, in its own box on exactly the same geometry.
               NOT inside the record's div, because that div carries the record's
               drop-shadow filter and a filter applies to everything underneath
-              it — the arm would have been given the record's shadow on top of
+              it, the arm would have been given the record's shadow on top of
               its own. Same width, same anchors, one layer up. */}
           <div
             className="absolute"
@@ -458,7 +446,7 @@ export default function RetailRecordSleeve({
               width: disc,
               height: disc,
               right: geom.right,
-              bottom: -geom.bleed,
+              bottom: geom.gap,
               zIndex: 2,
               opacity: pulled ? 1 : 0,
               transition: 'opacity 0.8s ease 0.15s',
