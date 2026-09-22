@@ -946,6 +946,18 @@ function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare, onN
               {track.genre}
             </span>
           )}
+          {(() => {
+            // AI label, same rule as Browse and the track page: an admin
+            // override wins over what the artist declared.
+            const ai = track.ai_content_admin_override || track.ai_content;
+            if (!ai || ai === 'human') return null;
+            return (
+              <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full"
+                style={{ background: 'rgba(236,72,153,0.15)', color: '#f9a8d4', border: '1px solid rgba(236,72,153,0.3)' }}>
+                {ai === 'ai_generated' ? 'AI generated' : 'AI assisted'}
+              </span>
+            );
+          })()}
           {track.reason && !['coldstart','recommended'].includes(track.reason) && (
             <span className="text-[10px] text-white/30 font-medium">
               {track.reason === 'from_following' ? '· Following'
@@ -1051,6 +1063,35 @@ export default function ForYouPage() {
       navigate('/login', { replace: true });
     }
   }, [authLoading, user, navigate]);
+
+  // Inside the phone on the sign-in page the feed is look-only: swipe and
+  // scroll to move between tracks, but taps and clicks do nothing. Only for
+  // the preview URL the sign-in page loads, so the real app is never affected.
+  React.useEffect(() => {
+    if (new URLSearchParams(window.location.search).get('preview') !== 'phone') return;
+    let startX = 0, startY = 0, moved = false;
+    const block = (e) => { e.preventDefault(); e.stopPropagation(); };
+    const onStart = (e) => { const t = e.touches[0]; startX = t.clientX; startY = t.clientY; moved = false; };
+    const onMove  = (e) => { const t = e.touches[0]; if (Math.abs(t.clientY - startY) > 8 || Math.abs(t.clientX - startX) > 8) moved = true; };
+    // A tap (no movement) is swallowed; a swipe carries on to the feed.
+    const onEnd   = (e) => { if (!moved) block(e); };
+    const onKey   = (e) => { if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') block(e); };
+    const opts = { capture: true, passive: false };
+    const clickTypes = ['click', 'dblclick', 'auxclick', 'contextmenu', 'mousedown', 'mouseup', 'pointerup'];
+    clickTypes.forEach(t => window.addEventListener(t, block, opts));
+    window.addEventListener('touchstart', onStart, { capture: true, passive: true });
+    window.addEventListener('touchmove', onMove, { capture: true, passive: true });
+    window.addEventListener('touchend', onEnd, opts);
+    window.addEventListener('keydown', onKey, opts);
+    document.documentElement.style.cursor = 'default';
+    return () => {
+      clickTypes.forEach(t => window.removeEventListener(t, block, opts));
+      window.removeEventListener('touchstart', onStart, { capture: true });
+      window.removeEventListener('touchmove', onMove, { capture: true });
+      window.removeEventListener('touchend', onEnd, opts);
+      window.removeEventListener('keydown', onKey, opts);
+    };
+  }, []);
 
 
 
@@ -1195,7 +1236,7 @@ export default function ForYouPage() {
           const idList = rankedIds.map(r => r.id);
           const { data: rankedTracks, error: rankedErr } = await supabase
             .from('tracks')
-            .select('id, title, slug, genre, mood, cover_artwork_url, file_url, youtube_url, duration, lyrics, artist_id, is_beat, stream_count, like_count, bpm, beat_key, beat_scale, download_price, engagement_score, is_published, is_preorder, release_date, artists!tracks_artist_id_fkey(artist_name, slug, profile_image_url)')
+            .select('id, title, slug, genre, mood, cover_artwork_url, file_url, youtube_url, duration, lyrics, artist_id, is_beat, stream_count, like_count, bpm, beat_key, beat_scale, download_price, engagement_score, is_published, is_preorder, release_date, ai_content, ai_content_admin_override, artists!tracks_artist_id_fkey(artist_name, slug, profile_image_url)')
             .in('id', idList);
 
           if (rankedErr) console.error('[ForYou] ranked tracks query failed:', rankedErr.code, rankedErr.message, rankedErr.hint || '');
@@ -1232,7 +1273,7 @@ export default function ForYouPage() {
 
         let recQuery = supabase
           .from('listener_recommendations')
-          .select('score, reason, tracks(id, title, slug, genre, mood, cover_artwork_url, file_url, youtube_url, duration, lyrics, artist_id, is_beat, stream_count, like_count, bpm, beat_key, beat_scale, download_price, engagement_score, is_published, is_preorder, release_date, artists!tracks_artist_id_fkey(artist_name, slug, profile_image_url))')
+          .select('score, reason, tracks(id, title, slug, genre, mood, cover_artwork_url, file_url, youtube_url, duration, lyrics, artist_id, is_beat, stream_count, like_count, bpm, beat_key, beat_scale, download_price, engagement_score, is_published, is_preorder, release_date, ai_content, ai_content_admin_override, artists!tracks_artist_id_fkey(artist_name, slug, profile_image_url))')
           .eq('user_id', user.id)
           .order('score', { ascending: false })
           .range(offset, offset + PAGE_SIZE - 1);
@@ -1274,7 +1315,7 @@ export default function ForYouPage() {
       if (offset === 0 && fetched.length === 0) {
         const { data: picks, error: picksErr } = await supabase
           .from('cold_start_picks')
-          .select('position, tracks(id, title, slug, genre, mood, cover_artwork_url, file_url, youtube_url, duration, lyrics, artist_id, is_beat, stream_count, like_count, bpm, beat_key, beat_scale, download_price, engagement_score, is_published, is_preorder, release_date, artists!tracks_artist_id_fkey(artist_name, slug, profile_image_url))')
+          .select('position, tracks(id, title, slug, genre, mood, cover_artwork_url, file_url, youtube_url, duration, lyrics, artist_id, is_beat, stream_count, like_count, bpm, beat_key, beat_scale, download_price, engagement_score, is_published, is_preorder, release_date, ai_content, ai_content_admin_override, artists!tracks_artist_id_fkey(artist_name, slug, profile_image_url))')
           .eq('is_active', true)
           .order('position');
 
@@ -1305,7 +1346,7 @@ export default function ForYouPage() {
         const existingIdsStr = allExcludeIds.length > 0 ? `(${allExcludeIds.join(',')})` : null;
 
         let recentQuery = supabase.from('tracks')
-          .select('id, title, slug, genre, mood, cover_artwork_url, file_url, youtube_url, duration, lyrics, artist_id, is_beat, stream_count, like_count, bpm, beat_key, beat_scale, download_price, engagement_score, is_published, is_preorder, release_date, artists!tracks_artist_id_fkey(artist_name, slug, profile_image_url)')
+          .select('id, title, slug, genre, mood, cover_artwork_url, file_url, youtube_url, duration, lyrics, artist_id, is_beat, stream_count, like_count, bpm, beat_key, beat_scale, download_price, engagement_score, is_published, is_preorder, release_date, ai_content, ai_content_admin_override, artists!tracks_artist_id_fkey(artist_name, slug, profile_image_url)')
           .eq('is_published', true)
           .order('created_at', { ascending: false })
           .limit(halfPage);
@@ -1319,7 +1360,7 @@ export default function ForYouPage() {
         // longer, stream_count ignores likes, comments and downloads entirely.
         // stream_count stays as the tiebreak for tracks not yet scored.
         let topQuery = supabase.from('tracks')
-          .select('id, title, slug, genre, mood, cover_artwork_url, file_url, youtube_url, duration, lyrics, artist_id, is_beat, stream_count, like_count, bpm, beat_key, beat_scale, download_price, engagement_score, is_published, is_preorder, release_date, artists!tracks_artist_id_fkey(artist_name, slug, profile_image_url)')
+          .select('id, title, slug, genre, mood, cover_artwork_url, file_url, youtube_url, duration, lyrics, artist_id, is_beat, stream_count, like_count, bpm, beat_key, beat_scale, download_price, engagement_score, is_published, is_preorder, release_date, ai_content, ai_content_admin_override, artists!tracks_artist_id_fkey(artist_name, slug, profile_image_url)')
           .eq('is_published', true)
           .order('engagement_score', { ascending: false, nullsFirst: false })
           .order('stream_count', { ascending: false })
@@ -1426,7 +1467,7 @@ export default function ForYouPage() {
     (async () => {
       const { data } = await supabase
         .from('tracks')
-        .select('id, title, slug, genre, mood, cover_artwork_url, file_url, youtube_url, duration, lyrics, artist_id, is_beat, stream_count, like_count, bpm, beat_key, beat_scale, download_price, engagement_score, is_published, is_preorder, release_date, artists!tracks_artist_id_fkey(artist_name, slug, profile_image_url)')
+        .select('id, title, slug, genre, mood, cover_artwork_url, file_url, youtube_url, duration, lyrics, artist_id, is_beat, stream_count, like_count, bpm, beat_key, beat_scale, download_price, engagement_score, is_published, is_preorder, release_date, ai_content, ai_content_admin_override, artists!tracks_artist_id_fkey(artist_name, slug, profile_image_url)')
         .eq('is_published', true)
         .order('created_at', { ascending: false })
         .limit(30);

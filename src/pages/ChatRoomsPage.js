@@ -147,6 +147,7 @@ export default function ChatRoomsPage() {
   const [loading, setLoading]           = useState(true);
   const [lastMessages, setLastMessages] = useState({});
   const [unreadCounts, setUnreadCounts] = useState({});
+  const [myRoomIds, setMyRoomIds]       = useState([]);
   const [query, setQuery]               = useState('');
   const [error, setError]               = useState('');
 
@@ -194,6 +195,7 @@ export default function ChatRoomsPage() {
         .eq('user_id', user.id)
         .in('room_id', roomIds);
       if (!memberships?.length) return;
+      setMyRoomIds(memberships.map(m => m.room_id));
 
       const counts = {};
       await Promise.all(memberships.map(async (m) => {
@@ -347,6 +349,16 @@ export default function ChatRoomsPage() {
       )
     : regularRooms;
 
+  // The circles along the top: rooms this person is in, the busiest for
+  // them first (unread messages, then most recent activity). Never the bug
+  // room.
+  const myRooms = visibleRooms
+    .filter(r => myRoomIds.includes(r.id))
+    .sort((a, b) =>
+      (unreadCounts[b.id] || 0) - (unreadCounts[a.id] || 0)
+      || new Date(lastMessages[b.id]?.created_at || 0) - new Date(lastMessages[a.id]?.created_at || 0))
+    .slice(0, 20);
+
   const filteredPinned = query.trim()
     ? pinnedRooms.filter(r => r.name?.toLowerCase().includes(query.toLowerCase()))
     : pinnedRooms;
@@ -480,7 +492,41 @@ export default function ChatRoomsPage() {
         </div>
       )}
 
-{/* Pinned rooms */}
+{/* Your chats, as circles */}
+      {!query.trim() && myRooms.length > 0 && (
+        <div className="mb-5">
+          <p className="text-[10px] uppercase tracking-widest text-white/30 font-semibold mb-2.5">Your chats</p>
+          <div className="flex space-x-4 overflow-x-auto scrollbar-hide -mx-6 px-6 md:mx-0 md:px-0 pb-1">
+            {myRooms.map(room => {
+              const unread = unreadCounts[room.id] || 0;
+              const color = room.accent_color || '#7c3aed';
+              return (
+                <button key={room.id} onClick={() => navigate(`/chat/${room.id}`)}
+                  className="flex-shrink-0 w-16 flex flex-col items-center active:scale-95 transition">
+                  <div className="relative">
+                    <div className="w-14 h-14 rounded-full p-[2px]"
+                      style={{ background: unread ? `linear-gradient(135deg, ${color}, #ec4899)` : 'rgba(255,255,255,0.1)' }}>
+                      <div className="w-full h-full rounded-full overflow-hidden bg-black flex items-center justify-center border-2 border-black">
+                        {room.artists?.profile_image_url
+                          ? <img src={room.artists.profile_image_url} alt="" className="w-full h-full object-cover" />
+                          : <span className="text-base font-bold" style={{ color }}>{(room.name || '?')[0].toUpperCase()}</span>}
+                      </div>
+                    </div>
+                    {unread > 0 && (
+                      <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-pink-500 text-[10px] font-bold text-white flex items-center justify-center border-2 border-black">
+                        {unread > 9 ? '9+' : unread}
+                      </span>
+                    )}
+                  </div>
+                  <span className="text-[10px] text-white/60 mt-1.5 w-full truncate text-center">{room.name}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Pinned rooms */}
       {filteredPinned.length > 0 && (
         <div>
           {filteredPinned.map(room => (

@@ -940,7 +940,11 @@ export default function RetailPlayerPage() {
   if (!user) {
     return (
       <div className="min-h-screen bg-black text-white flex items-center justify-center px-6 text-center">
-        <p className="text-sm text-white/50">Log in to access your Feelz Retail player.</p>
+        <div className="space-y-4">
+          <p className="text-sm text-white/50">Log in to access your Feelz Retail player.</p>
+          <button onClick={() => navigate('/login?redirect=/retail/player')}
+            className="px-6 py-2.5 rounded-xl bg-white text-black text-sm font-bold">Sign in</button>
+        </div>
       </div>
     );
   }

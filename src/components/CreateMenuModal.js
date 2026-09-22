@@ -267,6 +267,7 @@ export default function CreateMenuModal({ artist, user, onClose, primaryColor = 
               {[
                 { id: 'upload', icon: '🎵', label: 'Upload Track', sub: 'Add new music to your profile', color: 'yellow' },
                 { id: 'story', icon: '📸', label: 'Add Story', sub: 'Share a 24hr clip with fans', color: 'purple' },
+                { id: 'chats', icon: '💬', label: 'Chats', sub: 'Your rooms and artist chats', color: 'purple' },
                 // 'Thought of the Day' removed. It wrote to artist_thoughts
                 // and rendered in exactly one place — the artist's own
                 // profile — so the entry sat in the create menu offering a
@@ -300,6 +301,7 @@ export default function CreateMenuModal({ artist, user, onClose, primaryColor = 
                     else if (id === 'merch') { setShowMerchConnect(true); }
                     else if (id === 'merch_locked') { close(); navigate('/upgrade'); }
                     else if (id === 'newsletter') { close(); navigate('/newsletter/compose'); }
+                    else if (id === 'chats') { close(); navigate('/community'); }
                     else setCreateTab(id);
                   }}
                   className="w-full flex items-center space-x-3 p-4 rounded-2xl border transition active:scale-[0.98] text-left"

@@ -19,12 +19,14 @@ export default function PaymentSettings() {
   const [hasProfile, setHasProfile] = useState(false);
   const [currentTier, setCurrentTier] = useState(null);
   const [recentPayouts, setRecentPayouts] = useState([]);
+  const [earnings, setEarnings] = useState(null);
 
   useEffect(() => {
     if (artist) {
       fetchPaymentProfile();
       fetchCurrentTier();
       fetchRecentPayouts();
+      fetchEarnings();
     }
   }, [artist]);
 
@@ -80,6 +82,14 @@ export default function PaymentSettings() {
       .order('created_at', { ascending: false })
       .limit(10);
     setRecentPayouts(data || []);
+  };
+
+  // Real totals from sales, tips, retail and collaborator shares
+  // (migration 155). The old counters on the payment profile stopped moving
+  // when sales started going straight to the artist's PayPal.
+  const fetchEarnings = async () => {
+    const { data, error } = await supabase.rpc('artist_earnings_summary', { p_artist_id: artist.id });
+    if (!error && data) setEarnings(data);
   };
 
   const handleSave = async () => {
@@ -190,20 +200,25 @@ export default function PaymentSettings() {
       <div className="grid grid-cols-3 gap-3">
         <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] p-3 text-center">
           <DollarSign className="w-4 h-4 text-green-400 mx-auto mb-1" />
-          <p className="text-lg font-bold text-white">${(profile?.total_earnings || 0).toFixed(2)}</p>
+          <p className="text-lg font-bold text-green-400">${Number(earnings?.earned ?? 0).toFixed(2)}</p>
           <p className="text-[10px] text-white/30">Total Earned</p>
         </div>
         <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] p-3 text-center">
           <TrendingUp className="w-4 h-4 text-yellow-400 mx-auto mb-1" />
-          <p className="text-lg font-bold text-white">${(profile?.pending_balance || 0).toFixed(2)}</p>
-          <p className="text-[10px] text-white/30">Pending</p>
+          <p className="text-lg font-bold text-white">${Number(earnings?.owed ?? 0).toFixed(2)}</p>
+          <p className="text-[10px] text-white/30">Owed to You</p>
         </div>
         <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] p-3 text-center">
           <Check className="w-4 h-4 text-blue-400 mx-auto mb-1" />
-          <p className="text-lg font-bold text-white">${(profile?.total_paid_out || 0).toFixed(2)}</p>
-          <p className="text-[10px] text-white/30">Paid Out</p>
+          <p className="text-lg font-bold text-white">${Number(earnings?.you_owe ?? 0).toFixed(2)}</p>
+          <p className="text-[10px] text-white/30">You Owe Collabs</p>
         </div>
       </div>
+      {earnings && (
+        <p className="text-[11px] text-white/30 -mt-2 text-center">
+          Sales ${Number(earnings.sales).toFixed(2)} · Tips ${Number(earnings.tips).toFixed(2)}{Number(earnings.retail) > 0 ? ` · Retail $${Number(earnings.retail).toFixed(2)}` : ''}
+        </p>
+      )}
 
       {/* PayPal settings */}
       <div className="space-y-3">
@@ -267,18 +282,18 @@ export default function PaymentSettings() {
             {recentPayouts.map(payout => (
               <div key={payout.id} className="flex items-center justify-between p-3 rounded-lg bg-white/[0.03] border border-white/[0.04]">
                 <div>
-                  <p className="text-sm text-white font-medium">${payout.amount?.toFixed(2)}</p>
+                  <p className="text-sm text-white font-medium">${Number(payout.amount || 0).toFixed(2)}</p>
                   <p className="text-[10px] text-white/30">
                     {new Date(payout.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                     {payout.split_percentage && ` · ${payout.split_percentage}% split`}
                   </p>
                 </div>
                 <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
-                  payout.status === 'completed' ? 'bg-green-500/10 text-green-400'
-                  : payout.status === 'pending' ? 'bg-yellow-500/10 text-yellow-400'
+                  ['paid', 'completed'].includes(payout.status) ? 'bg-green-500/10 text-green-400'
+                  : ['pending', 'processing'].includes(payout.status) ? 'bg-yellow-500/10 text-yellow-400'
                   : 'bg-red-500/10 text-red-400'
                 }`}>
-                  {payout.status}
+                  {String(payout.status || '').replace(/_/g, ' ')}
                 </span>
               </div>
             ))}

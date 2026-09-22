@@ -1223,20 +1223,6 @@ export default function AdminAnalytics({ embedded = false }) {
                   gives admins a read on streams and computes this tab in the
                   database, so the figures are platform-wide. If 137 has not run,
                   the missing-functions notice at the top of the page says so. */}
-              {completionStats.placeholders > 0 && (
-                <div className="rounded-2xl p-4 border border-red-500/25 bg-red-500/[0.07]">
-                  <p className="text-xs font-bold text-red-300 mb-1">
-                    {completionStats.placeholders} of {completionStats.total || 0} sampled streams are placeholders.
-                  </p>
-                  <p className="text-[11px] text-red-200/60 leading-relaxed">
-                    Before migration 107, <code>log_stream</code> wrote every row with
-                    duration 30s and completed=true, and <code>finalise_stream</code> never
-                    ran when a listener skipped. Those rows are what pull the average to
-                    0:30 and inflate the completion rate. Both numbers become real as new
-                    streams accumulate; they cannot be repaired retrospectively.
-                  </p>
-                </div>
-              )}
 
               {/* Completion funnel */}
               <div className="rounded-2xl p-4 bg-white/[0.02] border border-white/[0.05]">

@@ -6,7 +6,7 @@ import { useAuth } from '../contexts/AuthContext';
 import {
   BarChart3, Download, Music, Loader, DollarSign,
   Upload, ChevronLeft, ChevronRight, Headphones, Heart, TrendingUp,
-  Users, Trophy, Zap, MessageCircle, ArrowUp, ArrowDown, Minus
+  Users, Trophy, Zap, MessageCircle, ArrowUp, ArrowDown, Minus, Bug
 } from 'lucide-react';
 import TrackUploadPanel from './TrackUploadPanel';
 import CollabRequests, { CollabBadge } from '../components/CollabRequests';
@@ -446,6 +446,19 @@ export default function ArtistDashboard() {
     new URLSearchParams(window.location.search).get('section') || null
   );
 
+  // Analytics sub-tabs (same pill row as admin analytics), so each topic is
+  // one short screen instead of one long scroll. Deep links pick the tab.
+  const SECTION_TAB = {
+    stats: 'overview', streams: 'tracks', tracks: 'tracks', followers: 'contacts',
+    earnings: 'earnings', tips: 'earnings', download: 'earnings', downloads: 'earnings',
+  };
+  const [analyticsTab, setAnalyticsTab] = useState(
+    SECTION_TAB[new URLSearchParams(window.location.search).get('section')] || 'overview'
+  );
+  useEffect(() => {
+    if (highlightSection && SECTION_TAB[highlightSection]) setAnalyticsTab(SECTION_TAB[highlightSection]);
+  }, [highlightSection]); // eslint-disable-line
+
   // Section refs for deep-link scroll targeting
   const sectionRefs = {
     stats:     useRef(null),
@@ -748,7 +761,7 @@ export default function ArtistDashboard() {
 
   return (
     <div className="min-h-screen bg-black text-white">
-      <div className="px-6 py-8 pb-32">
+      <div className="px-4 sm:px-6 py-6 sm:py-8 pb-32">
 
         {/* ── Header ── */}
         <div className="flex items-center space-x-3 mb-6">
@@ -771,6 +784,17 @@ export default function ArtistDashboard() {
               {artist.artist_name} {isMaster ? '(Master)' : ''}
             </p>
           </div>
+          {/* The bug room is kept out of the chat lobby on purpose. This and
+              the Hub are the ways in. Found by name, like the Hub does. */}
+          <button
+            onClick={async () => {
+              const { data } = await supabase.from('chat_rooms').select('id')
+                .ilike('name', '%bug%').eq('is_active', true).limit(1).maybeSingle();
+              navigate(data?.id ? `/chat/${data.id}` : '/hub');
+            }}
+            className="flex items-center space-x-1.5 px-3 py-2 rounded-full bg-red-500/10 border border-red-500/20 text-red-300 text-xs font-semibold hover:bg-red-500/15 transition">
+            <Bug className="w-3.5 h-3.5" /><span className="hidden sm:inline">Report a bug</span>
+          </button>
         </div>
 
         {/* ── Tab Bar ── */}
@@ -815,36 +839,61 @@ export default function ArtistDashboard() {
         {/* ── Analytics Tab ── */}
         {activeTab === 'analytics' && (
           <TierGate feature="analytics">
-            <div className="space-y-6">
+            <div className="space-y-4 sm:space-y-6">
               {loading ? (
                 <div className="flex justify-center py-16">
                   <Loader className="w-6 h-6 animate-spin text-white/30" />
                 </div>
               ) : (
                 <>
+                  {/* Sub-tabs */}
+                  <div className="flex space-x-1 overflow-x-auto scrollbar-hide -mx-1 px-1 pb-1 border-b border-white/[0.04]">
+                    {[
+                      { key: 'overview', label: 'Overview' },
+                      { key: 'listeners', label: 'Listeners' },
+                      { key: 'tracks', label: 'Tracks' },
+                      { key: 'earnings', label: 'Earnings' },
+                      { key: 'contacts', label: 'Contacts' },
+                    ].map(t => (
+                      <button key={t.key} onClick={() => setAnalyticsTab(t.key)}
+                        className={`px-4 py-2 rounded-xl text-sm font-semibold transition whitespace-nowrap ${
+                          analyticsTab === t.key ? 'bg-white text-black' : 'text-white/40 hover:text-white/70'
+                        }`}>
+                        {t.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {analyticsTab === 'overview' && (<>
                   {/* Stat cards */}
                   <div
                     ref={sectionRefs.stats}
-                    className={`grid grid-cols-2 sm:grid-cols-3 gap-3 ${highlightSection === 'stats' ? 'transition-all duration-700 rounded-xl ring-2 ring-purple-500/40 ring-offset-2 ring-offset-black' : ''}`}
+                    className={`grid grid-cols-3 gap-2 sm:gap-3 ${highlightSection === 'stats' ? 'transition-all duration-700 rounded-xl ring-2 ring-purple-500/40 ring-offset-2 ring-offset-black' : ''}`}
                   >
                     {statCards.map(({ icon: Icon, label, value, color, section, isText }) => (
                       <div
                         key={label}
                         onClick={() => section && setHighlightSection(section)}
-                        className={`bg-white/[0.03] rounded-xl p-4 border border-white/[0.06] ${section ? 'cursor-pointer hover:bg-white/[0.05] hover:border-white/[0.1] transition-all active:scale-[0.98]' : ''}`}
+                        className={`bg-white/[0.03] rounded-xl p-3 sm:p-4 border border-white/[0.06] ${section ? 'cursor-pointer hover:bg-white/[0.05] hover:border-white/[0.1] transition-all active:scale-[0.98]' : ''}`}
                       >
                         <div className="flex items-center justify-between mb-2">
-                          <Icon className={`w-5 h-5 ${color}`} />
+                          <Icon className={`w-4 h-4 sm:w-5 sm:h-5 ${color}`} />
                           {section && <ChevronRight className="w-3.5 h-3.5 text-white/15" />}
                         </div>
-                        <p className="text-2xl font-black text-white leading-none mb-1">
+                        <p className="text-lg sm:text-2xl font-black text-white leading-none mb-1 truncate">
                           {isText ? value : (typeof value === 'number' ? value.toLocaleString() : value)}
                         </p>
-                        <p className="text-xs text-white/35">{label}</p>
+                        <p className="text-[10px] sm:text-xs text-white/35 truncate">{label}</p>
                       </div>
                     ))}
                   </div>
 
+                  {/* Growth snapshot — streams this week vs last week */}
+                  <GrowthSnapshot artist={artist} />
+
+                  </>)}
+
+                  {analyticsTab === 'listeners' && (<>
                   {/* Listener stats: where people are and how far they get.
                       Sits with the rest of analytics rather than on its own
                       page, so there is one place to look for artist stats. */}
@@ -852,29 +901,9 @@ export default function ArtistDashboard() {
                     <ArtistListenerStats artistId={artist?.id} artistName={artist?.artist_name} />
                   </div>
 
-                  {/* Growth snapshot — streams this week vs last week */}
-                  <GrowthSnapshot artist={artist} />
+                  </>)}
 
-                  {/* Contact Export — Premium only */}
-                  <TierGate feature="advanced_analytics" inline>
-                    <div
-                      ref={sectionRefs.followers}
-                      className={`bg-white/[0.03] rounded-xl p-4 border ${
-                        highlightSection === 'followers'
-                          ? 'border-purple-500/40 ring-1 ring-purple-500/20'
-                          : 'border-white/[0.06]'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-sm font-semibold text-white">Follower Contacts</p>
-                          <p className="text-xs text-white/30 mt-0.5">Name, email, follow date, genre, stream count of your music</p>
-                        </div>
-                        <ExportButton artist={artist} exportType="followers" label="Export CSV" />
-                      </div>
-                    </div>
-                  </TierGate>
-
+                  {analyticsTab === 'tracks' && (<>
                   {/* Per-track analytics */}
                   <div
                     ref={sectionRefs.tracks}
@@ -1054,13 +1083,38 @@ export default function ArtistDashboard() {
                       {topTracks.length === 0 && <p className="text-center text-white/20 text-sm py-4">No tracks yet</p>}
                     </div>
                   </div>
+                  </>)}
+
+                  {analyticsTab === 'contacts' && (<>
+                  {/* Contact Export — Premium only */}
+                  <TierGate feature="advanced_analytics" inline>
+                    <div
+                      ref={sectionRefs.followers}
+                      className={`bg-white/[0.03] rounded-xl p-4 border ${
+                        highlightSection === 'followers'
+                          ? 'border-purple-500/40 ring-1 ring-purple-500/20'
+                          : 'border-white/[0.06]'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-semibold text-white">Follower Contacts</p>
+                          <p className="text-xs text-white/30 mt-0.5">Name, email, follow date, genre, stream count of your music</p>
+                        </div>
+                        <ExportButton artist={artist} exportType="followers" label="Export CSV" />
+                      </div>
+                    </div>
+                  </TierGate>
+
+                  </>)}
+
                   {/* ── Earnings ── */}
-                  <EarningsSection
+                  {analyticsTab === 'earnings' && <EarningsSection
                     artist={artist}
                     sectionRef={sectionRefs.earnings}
                     downloadsRef={sectionRefs.downloads}
                     highlight={highlightSection}
-                  />
+                  />}
 
                 </>
               )}

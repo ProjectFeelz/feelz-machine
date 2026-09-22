@@ -241,6 +241,9 @@ export default function LibraryPage() {
     { icon: ListMusic, label: 'Playlists',            path: '/library/playlists',   iconColor: 'text-purple-400/70', count: stats.playlists, accent: 'bg-purple-500/10' },
     { icon: Users,     label: 'Following',            path: '/library/following',   iconColor: 'text-blue-400/70',   count: stats.following, accent: 'bg-blue-500/10' },
     { icon: TrendingUp,label: 'Recently Discovered',  path: '/library/discovered',  iconColor: 'text-orange-400/70', count: null,            accent: 'bg-orange-500/10' },
+    // One door into every chat. The bug room is not counted; it is reached
+    // from Hub and the dashboard on purpose.
+    { icon: MessageCircle, label: 'Chats',            path: '/community',           iconColor: 'text-pink-400/70',   count: myRooms.filter(r => !/report\s*a?\s*bug/i.test(r.name || '')).length || null, accent: 'bg-pink-500/10', sub: 'Artist rooms and fans' },
   ];
 
   return (
@@ -257,41 +260,9 @@ export default function LibraryPage() {
         <h1 className="text-2xl font-bold text-white">Your Library</h1>
       </div>
 
-      {/* ── Your chats ── */}
-      {myRooms.length > 0 && (
-        <div className="mb-5">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center space-x-2">
-              <MessageCircle className="w-3.5 h-3.5 text-purple-400/70" />
-              <span className="section-label">Your Chats</span>
-            </div>
-            <button onClick={() => navigate('/community')}
-              className="text-[11px] text-white/30 hover:text-white/60 transition">
-              Browse all →
-            </button>
-          </div>
-          <div className="space-y-2">
-            {myRooms.map(room => (
-              <button key={room.id}
-                onClick={() => navigate(`/chat/${room.id}`)}
-                className="w-full flex items-center gap-3 p-2.5 rounded-xl bg-white/[0.03] border border-white/[0.05] hover:bg-white/[0.06] transition active:scale-[0.99] text-left">
-                <div className="w-10 h-10 rounded-xl overflow-hidden flex-shrink-0 flex items-center justify-center bg-purple-500/15">
-                  {room.artists?.profile_image_url
-                    ? <img src={room.artists.profile_image_url} alt="" className="w-full h-full object-cover" />
-                    : <MessageCircle className="w-4 h-4 text-purple-400/70" />}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-white truncate">{room.name}</p>
-                  <p className="text-[11px] text-white/30 truncate">
-                    {room.artists?.artist_name || 'Artist'} · {room.member_count || 0} members
-                  </p>
-                </div>
-                <ChevronRight className="w-4 h-4 text-white/20 flex-shrink-0" />
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
+      {/* Chats used to be listed here one by one, which fills the Library as
+          soon as someone joins a few rooms. They are one card in the grid now
+          (below), leading to the chat lobby. */}
 
       {/* ── Listener stats snapshot ── */}
       {!isArtist && stats.totalStreams > 0 && (

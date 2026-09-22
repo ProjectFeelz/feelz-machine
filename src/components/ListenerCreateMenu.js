@@ -12,6 +12,7 @@ export default function ListenerCreateMenu({ onClose }) {
   const isPro = isListenerPro;
 
   const options = [
+    { id: 'chats',    icon: '💬', label: 'Chats',           sub: 'Your rooms and artist chats', action: () => { onClose(); navigate('/community'); } },
     { id: 'playlist', icon: '🎵', label: 'Create Playlist', sub: 'Start a new playlist', action: () => { onClose(); navigate('/library/playlists?create=1'); } },
     { id: 'edit',     icon: '✏️', label: 'Edit Profile',    sub: 'Update your photo and details', action: () => { onClose(); navigate('/profile/edit'); } },
     isPro

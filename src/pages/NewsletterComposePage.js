@@ -9,7 +9,7 @@
 import React from 'react';
 import { Helmet } from 'react-helmet-async';
 import { useNavigate } from 'react-router-dom';
-import { Loader, Send, Users, Store, Headphones, Plus, X, ArrowLeft, Mail, Check, AlertTriangle, FileText, Save } from 'lucide-react';
+import { Loader, Send, Users, Store, Headphones, Plus, X, ArrowLeft, Mail, Check, AlertTriangle, FileText, Save, Clock } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../supabaseClient';
 import { WysiwygEditor } from '../components/admin/WysiwygEditor';
@@ -52,6 +52,24 @@ const AUDIENCE = {
 // Set to true to bring it back; nothing else needs to change.
 const EMAIL_NEWSLETTERS = false;
 
+// "Tue 22 Sep, 09:00" in the viewer's own time zone.
+const fmtWhen = (iso) => iso
+  ? new Date(iso).toLocaleString(undefined, { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+  : '';
+
+// A value for <input type="datetime-local">, in local time.
+const toLocalInput = (d) => {
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
+
+// One hour from now, on the next quarter hour.
+const defaultWhen = () => {
+  const d = new Date(Date.now() + 60 * 60 * 1000);
+  d.setMinutes(Math.ceil(d.getMinutes() / 15) * 15, 0, 0);
+  return toLocalInput(d);
+};
+
 const inputCls = "w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none focus:bg-white/[0.1] transition";
 
 export default function NewsletterComposePage() {
@@ -80,6 +98,12 @@ export default function NewsletterComposePage() {
   const [activeDraft, setActiveDraft] = React.useState(null); // { id, note }
   const [savingDraft, setSavingDraft] = React.useState(false);
   const [deleteArmed, setDeleteArmed] = React.useState(null);
+
+  // Scheduling (migration 157). The draft is saved, then given a send time;
+  // a server job publishes it when the time comes.
+  const [scheduleOpen, setScheduleOpen] = React.useState(false);
+  const [scheduleAt, setScheduleAt]     = React.useState('');
+  const [scheduling, setScheduling]     = React.useState(false);
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(''), 2500); };
 
@@ -248,6 +272,10 @@ export default function NewsletterComposePage() {
     const { data, error } = await supabase
       .from('newsletter_drafts').select('*').is('sent_at', null)
       .order('created_at', { ascending: true });
+    // Scheduled ones first, soonest at the top; the rest in the order written.
+    if (data) data.sort((a, b) =>
+      (a.scheduled_at ? 0 : 1) - (b.scheduled_at ? 0 : 1)
+      || (a.scheduled_at && b.scheduled_at ? new Date(a.scheduled_at) - new Date(b.scheduled_at) : 0));
     if (error) {
       if (error.code === '42P01' || error.code === 'PGRST205') {
         console.warn('[newsletter] newsletter_drafts does not exist yet, run migration 146');
@@ -267,7 +295,7 @@ export default function NewsletterComposePage() {
     setBody(d.body || '');
     setYoutubeUrl(d.youtube_url || '');
     setAudience(d.audience || null);
-    setActiveDraft({ id: d.id, note: d.note || '' });
+    setActiveDraft({ id: d.id, note: d.note || '', scheduled_at: d.scheduled_at || null, send_error: d.send_error || null });
     setEditorResetKey(k => k + 1);   // remounts the editor with this draft's body
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -278,19 +306,38 @@ export default function NewsletterComposePage() {
     setEditorResetKey(k => k + 1);
   };
 
-  const saveDraft = async () => {
+  // Returns the draft id, or null if the save failed. `quiet` skips the toast
+  // when saving is only the first step of scheduling.
+  const saveDraft = async (quiet = false) => {
     setSavingDraft(true);
     const fields = {
       title: title.trim(), excerpt: excerpt.trim(), body: body.trim(),
       audience, youtube_url: youtubeUrl.trim() || null,
     };
+    const cols = 'id, note, scheduled_at, send_error';
     const { data, error } = activeDraft
-      ? await supabase.from('newsletter_drafts').update(fields).eq('id', activeDraft.id).select('id, note').single()
-      : await supabase.from('newsletter_drafts').insert({ ...fields, created_by: user.id }).select('id, note').single();
+      ? await supabase.from('newsletter_drafts').update(fields).eq('id', activeDraft.id).select(cols).single()
+      : await supabase.from('newsletter_drafts').insert({ ...fields, created_by: user.id }).select(cols).single();
     setSavingDraft(false);
-    if (error) { showToast('Could not save: ' + error.message); return; }
-    setActiveDraft({ id: data.id, note: data.note || '' });
-    showToast('Draft saved');
+    if (error) { showToast('Could not save: ' + error.message); return null; }
+    setActiveDraft({ id: data.id, note: data.note || '', scheduled_at: data.scheduled_at || null, send_error: data.send_error || null });
+    if (!quiet) showToast(data.scheduled_at ? `Saved. Still going out ${fmtWhen(data.scheduled_at)}` : 'Draft saved');
+    loadDrafts();
+    return data.id;
+  };
+
+  // Save what is on screen, then give it a send time. at = null cancels.
+  const scheduleDraft = async (atLocal) => {
+    setScheduling(true);
+    const id = atLocal ? await saveDraft(true) : activeDraft?.id;
+    if (!id) { setScheduling(false); return; }
+    const atIso = atLocal ? new Date(atLocal).toISOString() : null;
+    const { error } = await supabase.rpc('schedule_newsletter_draft', { p_draft_id: id, p_at: atIso });
+    setScheduling(false);
+    if (error) { showToast(error.message); return; }
+    setScheduleOpen(false);
+    setActiveDraft(a => (a ? { ...a, scheduled_at: atIso, send_error: null } : a));
+    showToast(atIso ? `Scheduled for ${fmtWhen(atIso)}` : 'Schedule cancelled. It is a draft again.');
     loadDrafts();
   };
 
@@ -324,7 +371,7 @@ export default function NewsletterComposePage() {
     if (activeDraft) {
       const postId = Array.isArray(data) ? data[0]?.post_id : data?.post_id;
       const { error: stampErr } = await supabase.from('newsletter_drafts')
-        .update({ sent_post_id: postId || null, sent_at: new Date().toISOString() })
+        .update({ sent_post_id: postId || null, sent_at: new Date().toISOString(), scheduled_at: null })
         .eq('id', activeDraft.id);
       if (stampErr) console.error('[newsletter] sent, but draft not marked sent:', stampErr.message);
     }
@@ -405,7 +452,10 @@ export default function NewsletterComposePage() {
 
         {drafts.length > 0 && (
           <div className="space-y-2">
-            <p className="text-xs font-bold text-white/50 uppercase tracking-wide">Drafts ready for you ({drafts.length})</p>
+            <p className="text-xs font-bold text-white/50 uppercase tracking-wide">
+              Drafts ready for you ({drafts.length})
+              {drafts.some(d => d.scheduled_at) && <span className="normal-case font-semibold text-sky-300/80"> · {drafts.filter(d => d.scheduled_at).length} scheduled</span>}
+            </p>
             {drafts.map(d => (
               <div key={d.id}
                 className={`px-3 py-2.5 rounded-lg text-sm space-y-1 border ${activeDraft?.id === d.id ? 'bg-purple-500/10 border-purple-500/40' : 'bg-white/[0.03] border-transparent'}`}>
@@ -429,7 +479,13 @@ export default function NewsletterComposePage() {
                     )}
                   </div>
                 </div>
+                {d.scheduled_at && (
+                  <p className="text-[11px] font-semibold text-sky-300 flex items-center">
+                    <Clock className="w-3 h-3 mr-1" />Goes out {fmtWhen(d.scheduled_at)}
+                  </p>
+                )}
                 {d.note && <p className={`text-[11px] ${/^hold/i.test(d.note) ? 'text-amber-300' : 'text-white/40'}`}>{d.note}</p>}
+                {d.send_error && <p className="text-[11px] text-red-300">{d.send_error}</p>}
               </div>
             ))}
           </div>
@@ -439,6 +495,21 @@ export default function NewsletterComposePage() {
           <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-purple-500/10 text-xs">
             <span className="text-purple-200">Editing a draft. Use the picture button in the editor to add an image.</span>
             <button onClick={clearComposer} className="text-white/50 hover:text-white ml-2 flex-shrink-0">Close</button>
+          </div>
+        )}
+
+        {activeDraft?.scheduled_at && (
+          <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-sky-500/10 text-xs">
+            <span className="text-sky-200 flex items-center min-w-0">
+              <Clock className="w-3.5 h-3.5 mr-1.5 flex-shrink-0" />
+              <span>Goes out {fmtWhen(activeDraft.scheduled_at)}. Changes you save before then go out with it.</span>
+            </span>
+            <span className="flex items-center gap-3 flex-shrink-0">
+              <button onClick={() => { setScheduleAt(toLocalInput(new Date(activeDraft.scheduled_at))); setScheduleOpen(true); }}
+                className="text-sky-200 font-semibold hover:text-white">Change</button>
+              <button onClick={() => scheduleDraft(null)} disabled={scheduling}
+                className="text-white/50 hover:text-red-300 disabled:opacity-40">Cancel</button>
+            </span>
           </div>
         )}
 
@@ -479,17 +550,44 @@ export default function NewsletterComposePage() {
             onChange={e => setYoutubeUrl(e.target.value)} />
         </div>
 
-        <div className="flex gap-2">
-          <button onClick={saveDraft} disabled={savingDraft || !(title.trim() || body.trim())}
+        <div className="grid grid-cols-2 sm:flex gap-2">
+          <button onClick={() => saveDraft()} disabled={savingDraft || !(title.trim() || body.trim())}
             className="px-4 py-3 rounded-xl bg-white/[0.06] text-white/80 font-semibold hover:bg-white/[0.1] transition disabled:opacity-30 flex items-center justify-center space-x-2">
             {savingDraft ? <Loader className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
             <span>{activeDraft ? 'Save' : 'Save draft'}</span>
           </button>
+          <button onClick={() => { setScheduleAt(activeDraft?.scheduled_at ? toLocalInput(new Date(activeDraft.scheduled_at)) : defaultWhen()); setScheduleOpen(true); }}
+            disabled={!canSend}
+            className="px-4 py-3 rounded-xl bg-sky-500/15 text-sky-200 font-semibold hover:bg-sky-500/25 transition disabled:opacity-30 flex items-center justify-center space-x-2">
+            <Clock className="w-4 h-4" /><span>{activeDraft?.scheduled_at ? 'Reschedule' : 'Schedule'}</span>
+          </button>
           <button onClick={() => setConfirmOpen(true)} disabled={!canSend}
-            className="flex-1 py-3 rounded-xl bg-purple-500 text-white font-bold hover:bg-purple-400 transition disabled:opacity-30 flex items-center justify-center space-x-2">
-            <Send className="w-4 h-4" /><span>Send</span>
+            className="col-span-2 sm:flex-1 py-3 rounded-xl bg-purple-500 text-white font-bold hover:bg-purple-400 transition disabled:opacity-30 flex items-center justify-center space-x-2">
+            <Send className="w-4 h-4" /><span>Send now</span>
           </button>
         </div>
+
+        {scheduleOpen && (
+          <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center px-6" onClick={() => setScheduleOpen(false)}>
+            <div className="bg-black border border-white/10 rounded-2xl p-5 max-w-sm w-full space-y-3" onClick={e => e.stopPropagation()}>
+              <p className="text-sm font-bold text-white">Schedule for {AUDIENCE[audience]?.confirm || audience}</p>
+              <input type="datetime-local" value={scheduleAt} min={toLocalInput(new Date(Date.now() + 5 * 60 * 1000))}
+                onChange={e => setScheduleAt(e.target.value)}
+                className={`${inputCls} [color-scheme:dark]`} />
+              <p className="text-[11px] text-white/40 leading-relaxed">
+                {scheduleAt ? `Goes out ${fmtWhen(new Date(scheduleAt).toISOString())}, within 5 minutes of that time. ` : ''}
+                In-app only. You can edit it, change the time or cancel it until then.
+              </p>
+              <div className="flex space-x-2">
+                <button onClick={() => setScheduleOpen(false)} className="flex-1 py-2.5 rounded-lg bg-white/[0.06] text-white/60 text-sm font-semibold">Back</button>
+                <button onClick={() => scheduleDraft(scheduleAt)} disabled={!scheduleAt || scheduling}
+                  className="flex-1 py-2.5 rounded-lg bg-sky-500 text-white text-sm font-bold disabled:opacity-40">
+                  {scheduling ? 'Scheduling...' : 'Schedule'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {confirmOpen && (
           <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center px-6" onClick={() => setConfirmOpen(false)}>

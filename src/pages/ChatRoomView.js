@@ -1182,7 +1182,7 @@ export default function ChatRoomView() {
                 <p className="text-sm font-semibold" style={isBugRoom ? { color: accentColor } : { color: '#fff' }}>{room.name}</p>
                 {room.is_subscribers_only && <Lock className="w-3 h-3 text-yellow-400" />}
               </div>
-              <p className="text-[10px] text-white/30">{room.artists?.artist_name} · {room.member_count} members</p>
+              <p className="text-[10px] text-white/30">{isBugRoom ? 'Tell us what broke' : room.artists?.artist_name} · {room.member_count} {room.member_count === 1 ? 'member' : 'members'}</p>
             </div>
           </button>
         </div>

@@ -127,14 +127,29 @@ exports.handler = async (event) => {
   })();
 
   if (effectivePrice > 0 && !isOwnTrack) {
-    const { data: purchase } = await admin
+    // Same rule as get-download-url.js. A completed purchase of the track or
+    // its album is the authority, at whatever the price is now. The grant
+    // row is read with limit(1), not maybeSingle: someone with two rows for
+    // one track (a free grant then a purchase) made maybeSingle fail, which
+    // came back as "Buy this track" for a buyer, the 403 in the console.
+    let lookup = admin.from('purchases').select('id')
+      .eq('user_id', user.id).eq('status', 'completed');
+    lookup = track.album_id
+      ? lookup.or(`track_id.eq.${trackId},album_id.eq.${track.album_id}`)
+      : lookup.eq('track_id', trackId);
+    const { data: paidRows } = await lookup.limit(1);
+
+    const { data: grants } = await admin
       .from('downloads')
       .select('id, amount_paid')
       .eq('user_id', user.id)
       .eq('track_id', trackId)
-      .maybeSingle();
+      .order('amount_paid', { ascending: false })
+      .limit(1);
+    const purchase = grants?.[0] || null;
+    const bought = (paidRows?.length || 0) > 0 || Number(purchase?.amount_paid) > 0;
 
-    if (!purchase || Number(purchase.amount_paid) < effectivePrice) {
+    if (!bought) {
       return json(403, {
         error: 'purchase_required',
         minimum: effectivePrice,

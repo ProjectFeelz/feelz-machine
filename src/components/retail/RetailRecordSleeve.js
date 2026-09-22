@@ -423,17 +423,24 @@ export default function RetailRecordSleeve({
           <div
             aria-hidden="true"
             className="absolute rounded-full"
+            // A thin ring of light just outside the rim, sitting under the
+            // record, rather than a wide splash. Centred on the disc, only a
+            // little bigger than it, transparent across the middle (the
+            // record covers that anyway) and fading out a short way past
+            // the edge.
             style={{
-              width: disc * 1.32,
-              height: disc * 1.32,
-              right: geom.right - disc * 0.19,
-              bottom: geom.gap - disc * 0.13,
+              width: disc * 1.1,
+              height: disc * 1.1,
+              right: geom.right - disc * 0.05,
+              bottom: geom.gap - disc * 0.05,
               zIndex: 0,
-              background: `radial-gradient(circle at 50% 50%, `
-                + `rgba(${gr},${gg},${gb},${glowPlaying ? 0.42 : 0.30}) 0%, `
-                + `rgba(${gr},${gg},${gb},${glowPlaying ? 0.20 : 0.14}) 38%, `
-                + `rgba(${gr},${gg},${gb},0) 68%)`,
-              filter: 'blur(28px)',
+              // closest-side, so 100% is this box's edge. The rim is at 91%.
+              background: `radial-gradient(circle closest-side at 50% 50%, `
+                + `rgba(${gr},${gg},${gb},0) 86%, `
+                + `rgba(${gr},${gg},${gb},${glowPlaying ? 0.6 : 0.45}) 92%, `
+                + `rgba(${gr},${gg},${gb},${glowPlaying ? 0.2 : 0.14}) 96%, `
+                + `rgba(${gr},${gg},${gb},0) 100%)`,
+              filter: 'blur(6px)',
               opacity: pulled ? 1 : 0,
               transition: 'background 1.4s ease, opacity 1.2s ease',
             }}

@@ -192,6 +192,11 @@
 [functions."retail-artist-payouts"]
   schedule = "0 6 * * *"
 
+# Scheduled newsletters (migration 157). Every 5 minutes, publishes any draft
+# whose send time has passed. In-app only. Safe to run as often as it likes.
+[functions."send-scheduled-newsletters"]
+  schedule = "*/5 * * * *"
+
 # feature-education-drip is deliberately NOT scheduled. Its schedule was
 # already commented out here, "platform tips not landing", and switching it
 # on as a side effect of a syntax fix would start sending something that was

@@ -25,6 +25,8 @@ import { Helmet } from 'react-helmet-async';
 import { Mail, Lock, Eye, EyeOff, Loader, ArrowLeft } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
+import VinylRecord from '../components/VinylRecord';
+import RetailTonearm from '../components/retail/RetailTonearm';
 
 const field = 'w-full pl-10 pr-4 py-3 bg-white/[0.06] rounded-xl text-sm text-white placeholder-white/30 outline-none border border-white/[0.06] focus:border-white/25 transition';
 
@@ -68,11 +70,44 @@ function PhonePreview() {
   );
 }
 
+// Retail sign-in (tablet and computer): a record turning under its tonearm.
+// Purely a picture. Nothing in it can be clicked or touched, and there is no
+// audio anywhere on this page.
+function RecordPreview() {
+  const [size, setSize] = useState(420);
+  useEffect(() => {
+    const fit = () => setSize(Math.max(260, Math.min(560, window.innerHeight - 200, window.innerWidth * 0.4)));
+    fit();
+    window.addEventListener('resize', fit);
+    return () => window.removeEventListener('resize', fit);
+  }, []);
+  return (
+    <div className="relative flex-shrink-0 select-none pointer-events-none" aria-hidden="true"
+      style={{ width: size * 1.12, height: size * 1.08 }}>
+      {/* A thin ring of light under the rim, not a splash. */}
+      <div className="absolute rounded-full"
+        style={{ width: size * 1.1, height: size * 1.1, left: -size * 0.05, bottom: -size * 0.05,
+          background: 'radial-gradient(circle closest-side, rgba(167,139,250,0) 86%, rgba(167,139,250,0.5) 92%, rgba(167,139,250,0.14) 96%, rgba(167,139,250,0) 100%)',
+          filter: 'blur(6px)' }} />
+      <div className="absolute" style={{ width: size, height: size, left: 0, bottom: 0,
+        filter: 'drop-shadow(26px 36px 60px rgba(0,0,0,0.9)) drop-shadow(6px 10px 18px rgba(0,0,0,0.7))' }}>
+        <VinylRecord coverUrl="/retail-icon-512.png" isPlaying size={size} shadow={false} />
+      </div>
+      <div className="absolute" style={{ width: size, height: size, left: 0, bottom: 0 }}>
+        <RetailTonearm playing uid="login" />
+      </div>
+    </div>
+  );
+}
+
 export default function LoginPage() {
   const { signInWithGoogle, signInWithEmail, signUpWithEmail, signInWithMagicLink, user } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const redirectTo = searchParams.get('redirect') || null;
+  // Venues arrive from Retail with ?redirect=/retail...; they get the Retail
+  // look (record instead of phone) and are sent back there afterwards.
+  const isRetail = /^\/retail/.test(redirectTo || '') || searchParams.get('app') === 'retail';
 
   // signin | signup | link | forgot
   const [mode, setMode]                 = useState(searchParams.get('mode') === 'signup' ? 'signup' : 'signin');
@@ -189,7 +224,12 @@ export default function LoginPage() {
     window.location.href = `https://www.projectfeelz.com/api/auth-bridge/start?state=${encodeURIComponent(state)}`;
   };
 
-  const TITLES = {
+  const TITLES = isRetail ? {
+    signin: ['Welcome back', 'Sign in to run the music in your venue.'],
+    signup: ['Set up Feelz Retail', 'Licensed independent music for your shop, bar or salon.'],
+    link:   ['Email me a link', 'No password. We send a link that signs you in.'],
+    forgot: ['Set or reset your password', 'We email you a link to choose a new password.'],
+  } : {
     signin: ['Welcome back', 'Sign in to keep listening.'],
     signup: ['Join Feelz Machine', 'Independent music, straight from the artists. Free to listen.'],
     link:   ['Email me a link', 'No password. We send a link that signs you in.'],
@@ -198,14 +238,19 @@ export default function LoginPage() {
 
   const form = (
     <div className="w-full max-w-sm">
-      <button onClick={() => navigate('/')} className="lg:hidden mb-6 text-sm text-white/45 hover:text-white flex items-center">
-        <ArrowLeft className="w-4 h-4 mr-1" /> Back to the music
+      <button onClick={() => navigate(isRetail ? '/retail' : '/')}
+        className={`${isRetail ? 'md:hidden' : 'lg:hidden'} mb-6 text-sm text-white/45 hover:text-white flex items-center`}>
+        <ArrowLeft className="w-4 h-4 mr-1" /> {isRetail ? 'Back to Retail' : 'Back to the music'}
       </button>
       <div className="flex items-center space-x-2.5 mb-6 lg:mb-5">
-        <div className="w-9 h-9 rounded-lg border border-[#8CAB2E] flex items-center justify-center">
-          <span className="text-[#8CAB2E] font-bold text-sm">FM</span>
-        </div>
-        <p className="text-sm font-bold text-white">Feelz Machine</p>
+        {isRetail ? (
+          <img src="/retail-icon-192.png" alt="" className="w-9 h-9 rounded-lg" />
+        ) : (
+          <div className="w-9 h-9 rounded-lg border border-[#8CAB2E] flex items-center justify-center">
+            <span className="text-[#8CAB2E] font-bold text-sm">FM</span>
+          </div>
+        )}
+        <p className="text-sm font-bold text-white">{isRetail ? 'Feelz Machine Retail' : 'Feelz Machine'}</p>
       </div>
 
       <h1 className="text-3xl font-black text-white leading-tight">{TITLES[mode][0]}</h1>
@@ -297,16 +342,16 @@ export default function LoginPage() {
                   className="w-full py-3 bg-white/[0.05] border border-white/[0.08] text-white/80 rounded-xl text-sm font-semibold hover:bg-white/[0.08] transition flex items-center justify-center space-x-3 disabled:opacity-40">
                   <GoogleIcon /><span>Continue with Google</span>
                 </button>
-                <div className="grid grid-cols-2 gap-2">
-                  <button onClick={() => { setMode('link'); setError(''); }}
-                    className="py-2.5 rounded-xl text-xs font-semibold text-white/60 bg-white/[0.03] border border-white/[0.06] hover:bg-white/[0.06] transition">
-                    Email me a link
-                  </button>
-                  <button onClick={handlePluginGallery} disabled={bridgeVerifying}
-                    className="py-2.5 rounded-xl text-xs font-semibold text-white/60 bg-white/[0.03] border border-white/[0.06] hover:bg-white/[0.06] transition disabled:opacity-40">
-                    {bridgeVerifying ? 'Connecting…' : 'Plugin Gallery'}
-                  </button>
-                </div>
+                <button onClick={handlePluginGallery} disabled={loading || bridgeVerifying}
+                  className="w-full py-3 rounded-xl text-sm font-semibold text-white disabled:opacity-40 transition hover:opacity-90 flex items-center justify-center space-x-3"
+                  style={{ background: 'linear-gradient(90deg, #00f0ff, #a855f7)' }}>
+                  <img src="https://www.projectfeelz.com/logo.png" alt="" className="w-5 h-5 rounded" />
+                  <span>{bridgeVerifying ? 'Connecting...' : 'Continue with Plugin Gallery'}</span>
+                </button>
+                <button onClick={() => { setMode('link'); setError(''); }}
+                  className="w-full py-2 rounded-xl text-xs font-semibold text-white/50 hover:text-white/80 transition">
+                  Email me a sign-in link instead
+                </button>
               </div>
             </>
           )}
@@ -333,14 +378,23 @@ export default function LoginPage() {
   return (
     // At least one screen tall, not exactly one: on a short laptop window the
     // create-account form would otherwise be cut off rather than scroll a little.
-    <div className="min-h-[100dvh] bg-black text-white flex">
-      <Helmet><title>Sign in · Feelz Machine</title></Helmet>
-      <div className="w-full max-w-6xl mx-auto px-6 lg:px-10 py-10 lg:py-6 flex items-center justify-center lg:justify-between gap-12">
-        <div className="flex-1 flex justify-center lg:justify-start">{form}</div>
-        <div className="hidden lg:flex flex-1 justify-center items-center">
-          <PhonePreview />
+    <div className={`min-h-[100dvh] bg-black text-white flex ${isRetail ? 'overflow-hidden' : ''}`}>
+      <Helmet><title>{isRetail ? 'Sign in · Feelz Machine Retail' : 'Sign in · Feelz Machine'}</title></Helmet>
+      {isRetail ? (
+        <div className="w-full max-w-6xl mx-auto px-6 md:px-10 py-10 md:py-6 flex items-center justify-center md:justify-between gap-8 lg:gap-12">
+          <div className="flex-1 flex justify-center md:justify-start">{form}</div>
+          <div className="hidden md:flex flex-1 justify-center items-center">
+            <RecordPreview />
+          </div>
         </div>
-      </div>
+      ) : (
+        <div className="w-full max-w-6xl mx-auto px-6 lg:px-10 py-10 lg:py-6 flex items-center justify-center lg:justify-between gap-12">
+          <div className="flex-1 flex justify-center lg:justify-start">{form}</div>
+          <div className="hidden lg:flex flex-1 justify-center items-center">
+            <PhonePreview />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
