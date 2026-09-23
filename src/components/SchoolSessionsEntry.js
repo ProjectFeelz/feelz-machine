@@ -1,6 +1,6 @@
 // src/components/SchoolSessionsEntry.js
 // Toggle + form shown inside the main track upload flow. Renders nothing at
-// all — not just hidden — unless School Sessions is switched on AND this
+// all, not just hidden, unless School Sessions is switched on AND this
 // visitor passes the region/school gate, so people not taking part never
 // see it in the page source.
 //
@@ -11,6 +11,7 @@
 import React, { useState, useEffect } from 'react';
 import { GraduationCap, Plus, X } from 'lucide-react';
 import { supabase } from '../supabaseClient';
+import BeatDownloadButton from './BeatDownloadButton';
 import useSchoolSessions from '../hooks/useSchoolSessions';
 
 // All confirmed real. feelz.machineza is the main channel (required);
@@ -101,7 +102,7 @@ export default function SchoolSessionsEntry({ enabled, setEnabled, form, setForm
     const compId = gate.config?.competition?.id;
     if (compId) {
       supabase.from('school_sessions_shortlist_songs')
-        .select('id, title, reference_url, reference_track:tracks(slug)')
+        .select('id, title, reference_url, beat_url, beat_filename, beat_size_bytes, reference_track:tracks(slug)')
         .eq('competition_id', compId)
         .eq('is_active', true)
         .order('display_order')
@@ -119,7 +120,7 @@ export default function SchoolSessionsEntry({ enabled, setEnabled, form, setForm
   const addMember = () => set('groupMembers', [...form.groupMembers, '']);
   const removeMember = (i) => set('groupMembers', form.groupMembers.filter((_, idx) => idx !== i));
 
-  // Nothing to see here — literally nothing rendered — if it's off or this
+  // Nothing to see here, literally nothing rendered, if it's off or this
   // visitor doesn't pass the gate.
   if (gate.loading || !gate.enabled || !gate.allowed) return null;
 
@@ -151,16 +152,22 @@ export default function SchoolSessionsEntry({ enabled, setEnabled, form, setForm
               {songs.map(s => <option key={s.id} value={s.id}>{s.title}</option>)}
             </select>
             {songs.length === 0 && (
-              <p className="text-[11px] text-white/30 mt-1">Shortlist isn't loaded yet — check back shortly.</p>
+              <p className="text-[11px] text-white/30 mt-1">Shortlist isn't loaded yet, check back shortly.</p>
             )}
             {(() => {
               const selected = songs.find(s => s.id === form.songId);
               if (!selected) return null;
               const href = selected.reference_track?.slug ? `/track/${selected.reference_track.slug}` : selected.reference_url;
-              if (!href) return null;
               return (
-                <a href={href} target="_blank" rel="noopener noreferrer"
-                  className="text-[11px] text-lime-400/70 mt-1 inline-block">Listen to the original (opens in a new tab)</a>
+                <div className="flex items-center gap-3 mt-1.5 flex-wrap">
+                  {href && (
+                    <a href={href} target="_blank" rel="noopener noreferrer"
+                      className="text-[11px] text-lime-400/70">Listen to the original (opens in a new tab)</a>
+                  )}
+                  {/* The beat saves straight to the device. Nothing opens, so
+                      a half-filled entry form is never lost to a new tab. */}
+                  <BeatDownloadButton song={selected} label="Download the beat" showSize />
+                </div>
               );
             })()}
           </div>
@@ -171,7 +178,7 @@ export default function SchoolSessionsEntry({ enabled, setEnabled, form, setForm
               onChange={e => set('verificationCode', e.target.value.toUpperCase())}
               placeholder="From the introduction event or school reception" />
             <p className="text-[11px] text-white/30 mt-1">
-              Handed out in person, not by email — ask at school reception if you missed the introduction.
+              Handed out in person, not by email, ask at school reception if you missed the introduction.
             </p>
           </div>
 
@@ -195,7 +202,7 @@ export default function SchoolSessionsEntry({ enabled, setEnabled, form, setForm
               onChange={e => set('tiktokHandle', e.target.value.replace(/^@/, ''))}
               placeholder="username (without the @)" />
             <p className="text-[11px] text-white/30 mt-1">
-              Part of entering — post about your cover. Judges pick the winner; the public vote adds a People's Choice pick.
+              Part of entering, post about your cover. Judges pick the winner; the public vote adds a People's Choice pick.
             </p>
           </div>
 
@@ -205,7 +212,7 @@ export default function SchoolSessionsEntry({ enabled, setEnabled, form, setForm
               onChange={e => set('tiktokVideoUrl', e.target.value)}
               placeholder="Paste the link to your posted video" />
             <p className="text-[11px] text-white/30 mt-1">
-              Post a video of your cover to TikTok and paste the link here — this is how we track and verify real entries.
+              Post a video of your cover to TikTok and paste the link here, this is how we track and verify real entries.
             </p>
           </div>
 
@@ -307,7 +314,7 @@ export default function SchoolSessionsEntry({ enabled, setEnabled, form, setForm
           {form.isMinor && (
             <div className="space-y-3 p-3 rounded-lg bg-white/[0.03] border border-white/[0.06]">
               <p className="text-[11px] text-white/40">
-                Required for entrants under 18 — this stays private and is never shown publicly.
+                Required for entrants under 18, this stays private and is never shown publicly.
               </p>
               <div>
                 <Label>Parent/guardian name</Label>

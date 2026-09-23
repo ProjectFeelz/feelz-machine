@@ -21,6 +21,7 @@ import {
 import { useAuth } from '../contexts/AuthContext';
 import useSchoolSessions from '../hooks/useSchoolSessions';
 import DistrictNomination from '../components/DistrictNomination';
+import BeatDownloadButton from '../components/BeatDownloadButton';
 import { supabase } from '../supabaseClient';
 
 // Prominent hero countdown, ticks every second, shown as separate
@@ -163,7 +164,7 @@ export default function SchoolSessionsPage() {
   React.useEffect(() => {
     if (!compId) return;
     supabase.from('school_sessions_shortlist_songs')
-      .select('id, title, reference_url, reference_track:tracks(slug)')
+      .select('id, title, reference_url, beat_url, beat_filename, beat_size_bytes, reference_track:tracks(slug)')
       .eq('competition_id', compId)
       .eq('is_active', true)
       .order('display_order')
@@ -290,6 +291,7 @@ export default function SchoolSessionsPage() {
                 <div key={s.id} className="flex items-center space-x-3 rounded-xl bg-white/[0.03] border border-white/[0.06] px-3.5 py-2.5 lg:py-3">
                   <Music className="w-3.5 h-3.5 text-lime-400 flex-shrink-0" />
                   <span className="text-sm text-white flex-1 truncate">{s.title}</span>
+                  {s.beat_url && <BeatDownloadButton song={s} label="Beat" />}
                   {s.reference_track?.slug ? (
                     <Link to={`/track/${s.reference_track.slug}`}
                       className="text-[11px] text-lime-400/70 flex-shrink-0">Listen</Link>

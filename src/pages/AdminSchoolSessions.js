@@ -1,5 +1,5 @@
 // src/pages/AdminSchoolSessions.js
-// /admin/school-sessions — toggle the whole feature on/off, edit dates and
+// /admin/school-sessions, toggle the whole feature on/off, edit dates and
 // prize copy, manage the shortlist of songs entrants can cover, manage the
 // participating-school allow-list, mark finalists and the judges' winner,
 // and see/export entries.
@@ -11,7 +11,20 @@ import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import {
   GraduationCap, ArrowLeft, Loader, Plus, X, Download, Check, Trophy, Music,
+  Pencil, Save, Upload, Trash2, ChevronUp, ChevronDown,
 } from 'lucide-react';
+
+// The instrumentals live with the rest of the audio. Public, like the songs
+// themselves: entrants are not signed in while they browse the shortlist.
+const BEAT_BUCKET = 'feelz-samples';
+const BEAT_FOLDER = 'school-sessions/beats';
+const MAX_BEAT_MB = 60;
+
+const prettySize = (bytes) => {
+  if (!bytes) return '';
+  const mb = bytes / 1024 / 1024;
+  return mb >= 1 ? `${mb.toFixed(1)} MB` : `${Math.round(bytes / 1024)} KB`;
+};
 
 const CONFIG_ID = '00000000-0000-0000-0000-000000000001';
 
@@ -52,6 +65,11 @@ export default function AdminSchoolSessions({ embedded = false }) {
   const [newSchool, setNewSchool] = useState('');
   const [songs, setSongs] = useState([]);
   const [newSong, setNewSong] = useState({ title: '', referenceUrl: '', referenceTrackId: '', referenceTrackTitle: '' });
+  // Editing an existing shortlist song, and uploading its beat.
+  const [editSongId, setEditSongId] = useState(null);
+  const [editSong, setEditSong]     = useState({ title: '', referenceUrl: '' });
+  const [savingSong, setSavingSong] = useState(false);
+  const [beatBusy, setBeatBusy]     = useState(null); // song id being uploaded
   const [trackSearch, setTrackSearch] = useState('');
   const [trackResults, setTrackResults] = useState([]);
   const [trackSearching, setTrackSearching] = useState(false);
@@ -346,6 +364,90 @@ export default function AdminSchoolSessions({ embedded = false }) {
     setSongs(prev => prev.filter(s => s.id !== id));
   };
 
+  const startEditSong = (song) => {
+    setEditSongId(song.id);
+    setEditSong({ title: song.title || '', referenceUrl: song.reference_url || '' });
+  };
+
+  const saveSong = async (song) => {
+    const title = editSong.title.trim();
+    if (!title) { showToast('A song needs a title'); return; }
+    setSavingSong(true);
+    const patch = { title, reference_url: editSong.referenceUrl.trim() || null };
+    const { error } = await supabase.from('school_sessions_shortlist_songs').update(patch).eq('id', song.id);
+    setSavingSong(false);
+    if (error) { showToast('Error: ' + error.message); return; }
+    setSongs(prev => prev.map(s => s.id === song.id ? { ...s, ...patch } : s));
+    setEditSongId(null);
+    showToast('Song updated');
+  };
+
+  // Link a track to a song that already exists, not only to a new one.
+  const linkTrackToSong = async (song, track) => {
+    const { error } = await supabase.from('school_sessions_shortlist_songs')
+      .update({ reference_track_id: track.id }).eq('id', song.id);
+    if (error) { showToast('Error: ' + error.message); return; }
+    setSongs(prev => prev.map(s => s.id === song.id
+      ? { ...s, reference_track_id: track.id, reference_track: { id: track.id, title: track.title, slug: track.slug } }
+      : s));
+    setTrackSearch(''); setTrackResults([]);
+    showToast('Track linked');
+  };
+
+  // Order is what entrants see, so it is worth being able to change it.
+  const moveSong = async (song, delta) => {
+    const ordered = [...songs];
+    const i = ordered.findIndex(s => s.id === song.id);
+    const j = i + delta;
+    if (i < 0 || j < 0 || j >= ordered.length) return;
+    [ordered[i], ordered[j]] = [ordered[j], ordered[i]];
+    const renumbered = ordered.map((s, idx) => ({ ...s, display_order: idx }));
+    setSongs(renumbered);
+    await Promise.all(renumbered.map(s =>
+      supabase.from('school_sessions_shortlist_songs').update({ display_order: s.display_order }).eq('id', s.id)));
+  };
+
+  // The beat itself. Uploaded here, downloaded inside the app by entrants.
+  const uploadBeat = async (song, file) => {
+    if (!file) return;
+    if (file.size > MAX_BEAT_MB * 1024 * 1024) {
+      showToast(`That file is over ${MAX_BEAT_MB}MB. Export a smaller MP3.`);
+      return;
+    }
+    setBeatBusy(song.id);
+    const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const path = `${BEAT_FOLDER}/${song.id}-${Date.now()}-${safe}`;
+    const { error: upErr } = await supabase.storage.from(BEAT_BUCKET)
+      .upload(path, file, { cacheControl: '31536000', contentType: file.type || 'audio/mpeg' });
+    if (upErr) {
+      setBeatBusy(null);
+      showToast('Upload failed: ' + upErr.message);
+      return;
+    }
+    const { data: { publicUrl } } = supabase.storage.from(BEAT_BUCKET).getPublicUrl(path);
+    const patch = {
+      beat_url: publicUrl,
+      beat_filename: safe,
+      beat_size_bytes: file.size,
+      beat_uploaded_at: new Date().toISOString(),
+    };
+    const { error } = await supabase.from('school_sessions_shortlist_songs').update(patch).eq('id', song.id);
+    setBeatBusy(null);
+    if (error) { showToast('Saved the file but could not attach it: ' + error.message); return; }
+    setSongs(prev => prev.map(s => s.id === song.id ? { ...s, ...patch } : s));
+    showToast('Beat added');
+  };
+
+  // The row is cleared, the file is left in storage. Deleting it would break
+  // the download for anyone who is mid-download, and it costs nothing to keep.
+  const removeBeat = async (song) => {
+    const patch = { beat_url: null, beat_filename: null, beat_size_bytes: null, beat_uploaded_at: null };
+    const { error } = await supabase.from('school_sessions_shortlist_songs').update(patch).eq('id', song.id);
+    if (error) { showToast('Error: ' + error.message); return; }
+    setSongs(prev => prev.map(s => s.id === song.id ? { ...s, ...patch } : s));
+    showToast('Beat removed');
+  };
+
   const exportCsv = () => {
     const rows = [
       ['Entrant', 'Email', 'TikTok', 'Song Covered', 'Group?', 'Group Members', 'School', 'Candidate Card #', 'Finalist', 'Winner', 'Track', 'Artist Profile', 'Submitted'],
@@ -405,10 +507,10 @@ export default function AdminSchoolSessions({ embedded = false }) {
         <div className="flex items-center justify-between rounded-xl border border-lime-400/20 bg-lime-400/[0.04] p-4">
           <div>
             <p className="text-sm font-semibold text-white">
-              {config?.is_enabled ? 'Live — visible in the app' : 'Off — hidden everywhere'}
+              {config?.is_enabled ? 'Live, visible in the app' : 'Off, hidden everywhere'}
             </p>
             <p className="text-xs text-white/40 mt-0.5">
-              Controls the upload-flow section, the /schoolsessions landing page, and the entry gate — all at once.
+              Controls the upload-flow section, the /schoolsessions landing page, and the entry gate, all at once.
             </p>
           </div>
           <Toggle value={config?.is_enabled} onChange={() => saveConfig({ is_enabled: !config?.is_enabled })} />
@@ -432,7 +534,7 @@ export default function AdminSchoolSessions({ embedded = false }) {
         {/* Timeline: awareness → submissions → voting */}
         {competition && (
           <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4 space-y-4">
-            <p className="text-xs font-bold text-white/50 uppercase tracking-wide">Timeline — one month each</p>
+            <p className="text-xs font-bold text-white/50 uppercase tracking-wide">Timeline, one month each</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Field label="Awareness starts" hint="Courses + promo go live">
                 <input type="datetime-local" className={inputCls}
@@ -482,7 +584,7 @@ export default function AdminSchoolSessions({ embedded = false }) {
               onBlur={e => saveConfig({ viral_course_url: e.target.value || null })}
               placeholder="https://projectfeelz.com/courses/..." />
           </Field>
-          <Field label="YouTube playlist URL" hint="Shown as a clickable link on the School Sessions page — the shortlist songs or entry compilation, whichever you're linking">
+          <Field label="YouTube playlist URL" hint="Shown as a clickable link on the School Sessions page, the shortlist songs or entry compilation, whichever you're linking">
             <input className={inputCls} value={config?.youtube_playlist_url || ''}
               onChange={e => setConfig({ ...config, youtube_playlist_url: e.target.value })}
               onBlur={e => saveConfig({ youtube_playlist_url: e.target.value || null })}
@@ -515,7 +617,7 @@ export default function AdminSchoolSessions({ embedded = false }) {
         {/* Song shortlist */}
         <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4 space-y-3">
           <p className="text-xs font-bold text-white/50 uppercase tracking-wide">Song shortlist ({songs.length})</p>
-          <p className="text-[11px] text-white/30">The songs entrants can choose to cover. Link an uploaded track so students can listen right here in the app, or fall back to an external link.</p>
+          <p className="text-[11px] text-white/30">The songs entrants can choose to cover. Link an uploaded track so students can listen right here in the app, and add the beat so they can download the instrumental to sing over without leaving Feelz Machine. Tap the pencil to change a song after you have added it.</p>
           <div className="space-y-2">
             <input className={inputCls} placeholder="Song title" value={newSong.title}
               onChange={e => setNewSong({ ...newSong, title: e.target.value })} />
@@ -545,7 +647,7 @@ export default function AdminSchoolSessions({ embedded = false }) {
                       </button>
                     ))}
                     {!trackSearching && trackResults.length === 0 && (
-                      <p className="text-xs text-white/30 px-3 py-2">No matching tracks — upload the original first, or use an external link below.</p>
+                      <p className="text-xs text-white/30 px-3 py-2">No matching tracks, upload the original first, or use an external link below.</p>
                     )}
                   </div>
                 )}
@@ -561,37 +663,122 @@ export default function AdminSchoolSessions({ embedded = false }) {
               </button>
             </div>
           </div>
-          <div className="max-h-64 overflow-y-auto space-y-1.5">
-            {songs.map(s => (
-              <div key={s.id} className="px-3 py-2 rounded-lg bg-white/[0.03]">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-2 min-w-0">
-                    <button onClick={() => toggleSongActive(s)}
+          <div className="max-h-[420px] overflow-y-auto space-y-1.5">
+            {songs.map((s, i) => {
+              const editing = editSongId === s.id;
+              return (
+              <div key={s.id} className={`px-3 py-2.5 rounded-lg space-y-2 ${editing ? 'bg-white/[0.06] border border-lime-400/30' : 'bg-white/[0.03]'}`}>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center space-x-2 min-w-0 flex-1">
+                    <button onClick={() => toggleSongActive(s)} title={s.is_active ? 'Showing to entrants' : 'Hidden from entrants'}
                       className={`w-4 h-4 rounded flex items-center justify-center border flex-shrink-0 ${s.is_active ? 'bg-lime-400 border-lime-400' : 'border-white/20'}`}>
                       {s.is_active && <Check className="w-3 h-3 text-black" />}
                     </button>
                     <Music className="w-3.5 h-3.5 text-white/20 flex-shrink-0" />
-                    <span className={`text-sm truncate ${s.is_active ? 'text-white' : 'text-white/30 line-through'}`}>{s.title}</span>
+                    {editing ? (
+                      <input className={inputCls} value={editSong.title} autoFocus
+                        onChange={e => setEditSong({ ...editSong, title: e.target.value })}
+                        onKeyDown={e => e.key === 'Enter' && saveSong(s)} />
+                    ) : (
+                      <span className={`text-sm truncate ${s.is_active ? 'text-white' : 'text-white/30 line-through'}`}>{s.title}</span>
+                    )}
                   </div>
-                  <button onClick={() => removeSong(s.id)} className="text-white/20 hover:text-red-400 flex-shrink-0 ml-2">
-                    <X className="w-3.5 h-3.5" />
-                  </button>
+                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                    <button onClick={() => moveSong(s, -1)} disabled={i === 0}
+                      className="text-white/20 hover:text-white/60 disabled:opacity-20" title="Move up"><ChevronUp className="w-3.5 h-3.5" /></button>
+                    <button onClick={() => moveSong(s, 1)} disabled={i === songs.length - 1}
+                      className="text-white/20 hover:text-white/60 disabled:opacity-20" title="Move down"><ChevronDown className="w-3.5 h-3.5" /></button>
+                    {editing ? (
+                      <>
+                        <button onClick={() => saveSong(s)} disabled={savingSong}
+                          className="text-lime-400 hover:text-lime-300 disabled:opacity-40" title="Save">
+                          {savingSong ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                        </button>
+                        <button onClick={() => setEditSongId(null)} className="text-white/30 hover:text-white" title="Cancel">
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button onClick={() => startEditSong(s)} className="text-white/30 hover:text-white" title="Edit">
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                        <button onClick={() => removeSong(s.id)} className="text-white/20 hover:text-red-400" title="Delete">
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </>
+                    )}
+                  </div>
                 </div>
-                <div className="flex items-center justify-between mt-1 pl-6">
+
+                {/* The original, to listen to */}
+                <div className="pl-6 space-y-1.5">
                   {s.reference_track?.id ? (
                     <div className="flex items-center space-x-1.5">
-                      <span className="text-[11px] text-lime-400/70">Listenable in-app: {s.reference_track.title}</span>
-                      <button onClick={() => unlinkSongTrack(s)} className="text-[11px] text-white/20 hover:text-red-400">Unlink</button>
+                      <span className="text-[11px] text-lime-400/70 truncate">Listenable in-app: {s.reference_track.title}</span>
+                      <button onClick={() => unlinkSongTrack(s)} className="text-[11px] text-white/20 hover:text-red-400 flex-shrink-0">Unlink</button>
+                    </div>
+                  ) : editing ? (
+                    <div className="relative">
+                      <input className={inputCls} placeholder="Search your tracks to link the original..." value={trackSearch}
+                        onChange={e => searchTracks(e.target.value)} />
+                      {trackSearch && (trackSearching || trackResults.length > 0) && (
+                        <div className="absolute z-10 mt-1 w-full rounded-lg bg-[#161616] border border-white/10 max-h-48 overflow-y-auto shadow-lg">
+                          {trackSearching && <p className="text-xs text-white/30 px-3 py-2">Searching...</p>}
+                          {!trackSearching && trackResults.map(t => (
+                            <button key={t.id} onClick={() => linkTrackToSong(s, t)}
+                              className="w-full text-left px-3 py-2 hover:bg-white/[0.06] flex items-center justify-between">
+                              <span className="text-sm text-white truncate">{t.title}</span>
+                              <span className="text-[11px] text-white/30 ml-2 flex-shrink-0">{t.artist?.artist_name}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   ) : s.reference_url ? (
-                    <a href={s.reference_url} target="_blank" rel="noopener noreferrer" className="text-[11px] text-white/30 hover:text-white/50 truncate">External link only</a>
+                    <a href={s.reference_url} target="_blank" rel="noopener noreferrer" className="text-[11px] text-white/30 hover:text-white/50 truncate block">External link only</a>
                   ) : (
                     <span className="text-[11px] text-white/20">No listening link yet</span>
                   )}
+
+                  {editing && (
+                    <input className={inputCls} placeholder="External link (used if no track is linked)" value={editSong.referenceUrl}
+                      onChange={e => setEditSong({ ...editSong, referenceUrl: e.target.value })} />
+                  )}
+
+                  {/* The beat, to sing over */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {s.beat_url ? (
+                      <>
+                        <span className="text-[11px] text-sky-300 flex items-center min-w-0">
+                          <Download className="w-3 h-3 mr-1 flex-shrink-0" />
+                          <span className="truncate">Beat: {s.beat_filename}</span>
+                          {s.beat_size_bytes ? <span className="text-white/25 ml-1.5 flex-shrink-0">{prettySize(s.beat_size_bytes)}</span> : null}
+                        </span>
+                        <label className="text-[11px] text-white/40 hover:text-white cursor-pointer">
+                          Replace
+                          <input type="file" accept="audio/*" className="hidden"
+                            onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; uploadBeat(s, f); }} />
+                        </label>
+                        <button onClick={() => removeBeat(s)} className="text-[11px] text-white/20 hover:text-red-400 flex items-center">
+                          <Trash2 className="w-3 h-3 mr-0.5" />Remove
+                        </button>
+                      </>
+                    ) : (
+                      <label className="text-[11px] text-sky-300/80 hover:text-sky-200 cursor-pointer flex items-center">
+                        {beatBusy === s.id ? <Loader className="w-3 h-3 mr-1 animate-spin" /> : <Upload className="w-3 h-3 mr-1" />}
+                        {beatBusy === s.id ? 'Uploading...' : 'Add the beat (MP3 or WAV)'}
+                        <input type="file" accept="audio/*" className="hidden" disabled={beatBusy === s.id}
+                          onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; uploadBeat(s, f); }} />
+                      </label>
+                    )}
+                    {beatBusy === s.id && s.beat_url && <Loader className="w-3 h-3 animate-spin text-white/40" />}
+                  </div>
                 </div>
               </div>
-            ))}
-            {songs.length === 0 && <p className="text-xs text-white/30 py-2">No songs added yet — entrants won't see anything to choose from until you add some.</p>}
+              );
+            })}
+            {songs.length === 0 && <p className="text-xs text-white/30 py-2">No songs added yet, entrants won't see anything to choose from until you add some.</p>}
           </div>
         </div>
 
@@ -629,7 +816,7 @@ export default function AdminSchoolSessions({ embedded = false }) {
         <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4 space-y-3">
           <p className="text-xs font-bold text-white/50 uppercase tracking-wide">Judges ({judges.length})</p>
           <p className="text-[11px] text-white/30">
-            Add someone by the email on their Feelz Machine account. They'll get access to a judge panel that only lets them mark finalists and pick the winner — nothing else on the platform.
+            Add someone by the email on their Feelz Machine account. They'll get access to a judge panel that only lets them mark finalists and pick the winner, nothing else on the platform.
           </p>
           <div className="flex space-x-2">
             <input className={inputCls} placeholder="Judge's email…" value={newJudgeEmail}
@@ -653,7 +840,7 @@ export default function AdminSchoolSessions({ embedded = false }) {
                 </button>
               </div>
             ))}
-            {!judgesLoading && judges.length === 0 && <p className="text-xs text-white/30 py-2">No judges added yet — you're the only one who can mark finalists and winners until you add some.</p>}
+            {!judgesLoading && judges.length === 0 && <p className="text-xs text-white/30 py-2">No judges added yet, you're the only one who can mark finalists and winners until you add some.</p>}
           </div>
         </div>
 
@@ -663,7 +850,7 @@ export default function AdminSchoolSessions({ embedded = false }) {
             Verification codes ({codeStats.used} used / {codeStats.total} generated)
           </p>
           <p className="text-[11px] text-white/30">
-            Hand these out in person — at the introduction event, or from school reception afterward. No email needed; having a real, unused code is the verification. Each one works exactly once.
+            Hand these out in person, at the introduction event, or from school reception afterward. No email needed; having a real, unused code is the verification. Each one works exactly once.
           </p>
           <div className="flex space-x-2">
             <input type="number" min="1" max="500" className={inputCls} placeholder="How many?" value={genCount}
@@ -680,7 +867,7 @@ export default function AdminSchoolSessions({ embedded = false }) {
           {generatedCodes && (
             <div className="rounded-lg bg-white/[0.04] p-3 space-y-2">
               <div className="flex items-center justify-between">
-                <p className="text-[11px] text-white/40">{generatedCodes.length} new codes — copy or write these down now, they aren't shown again here.</p>
+                <p className="text-[11px] text-white/40">{generatedCodes.length} new codes, copy or write these down now, they aren't shown again here.</p>
                 <button onClick={() => { navigator.clipboard.writeText(generatedCodes.join('\n')); showToast('Copied'); }}
                   className="text-[10px] font-bold px-2 py-1 rounded-full bg-white/[0.08] text-white/60 hover:bg-white/[0.12] transition flex-shrink-0">Copy all</button>
               </div>
@@ -699,7 +886,7 @@ export default function AdminSchoolSessions({ embedded = false }) {
             VIP candidate cards ({vipCandidates.length}{config?.vip_candidate_cap ? ` / ${config.vip_candidate_cap}` : ''})
           </p>
           <p className="text-[11px] text-white/30">
-            For real, qualified entrants only — submitted an entry, signed up as an affiliate, and got at least one referral. Numbers are sequential and permanent once issued.
+            For real, qualified entrants only, submitted an entry, signed up as an affiliate, and got at least one referral. Numbers are sequential and permanent once issued.
           </p>
           <div className="flex space-x-2">
             <input className={inputCls} placeholder="Full name" value={newVip.name}
@@ -812,7 +999,7 @@ export default function AdminSchoolSessions({ embedded = false }) {
             Next-season district nominations ({nominations.filter(n => !n.is_approved).length} pending)
           </p>
           <p className="text-[11px] text-white/30">
-            Submitted from the always-open section on the public landing page — approve to show them for voting.
+            Submitted from the always-open section on the public landing page, approve to show them for voting.
           </p>
           {nominationsLoading ? (
             <Loader className="w-4 h-4 text-white/30 animate-spin" />
