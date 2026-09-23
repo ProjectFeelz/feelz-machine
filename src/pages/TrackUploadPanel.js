@@ -3,7 +3,7 @@ import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import {
   Upload, Trash2, Loader, Plus, Save, Music,
-  Edit, Search, X, Zap, Disc, AlertCircle, Youtube, HelpCircle,
+  Edit, Search, X, Zap, Disc, AlertCircle, Youtube, HelpCircle, GripVertical,
 } from 'lucide-react';
 import CollaboratorSearch from '../components/CollaboratorSearch';
 import SchoolSessionsEntry, { schoolSessionsFormValid, SCHOOL_SESSIONS_BLANK_FORM } from '../components/SchoolSessionsEntry';
@@ -11,6 +11,7 @@ import TierGate from '../components/TierGate';
 import { useTier } from '../contexts/useTier';
 import { useAudioConverter } from '../hooks/useAudioConverter';
 import UploadHelpPanel from '../components/UploadHelpPanel';
+import DragList from '../components/DragList';
 import { notifyCollabRequest } from '../components/notificationTriggers';
 import RetailSubmitGate from '../components/legal/RetailSubmitGate';
 import InstagramRequestSheet from '../components/InstagramRequestSheet';
@@ -1959,6 +1960,30 @@ export default function TrackUploadPanel() {
     } catch (err) { showMessage('error', 'Delete failed: ' + err.message); }
   };
 
+  // Drag to reorder. The order on screen becomes track_number 1..n, written
+  // in one go. The list is already in the new order locally, so a failed write
+  // is the only thing worth saying anything about.
+  const saveTrackOrder = async (ordered) => {
+    const changed = ordered.filter((t, i) => (t.track_number || 0) !== i + 1);
+    if (changed.length === 0) return;
+    const { error } = await Promise.all(
+      ordered.map((t, i) => supabase.from('tracks').update({ track_number: i + 1 }).eq('id', t.id))
+    ).then(results => ({ error: results.find(r => r.error)?.error || null }));
+    if (error) { showMessage('error', 'Could not save the new order: ' + error.message); return; }
+    showMessage('success', 'Track order saved');
+  };
+
+  const reorderAlbumTracks = (ordered) => {
+    setAlbumTracks(ordered.map((t, i) => ({ ...t, track_number: i + 1 })));
+    saveTrackOrder(ordered);
+    fetchTracks();
+  };
+
+  const reorderQueue = (ordered) => {
+    setAlbumTrackQueue(ordered.map((t, i) => ({ ...t, track_number: i + 1 })));
+    saveTrackOrder(ordered);
+  };
+
   // Helper: reload tracks for an open album
   const reloadAlbumTracks = async (albumId) => {
     setAlbumTracksLoading(true);
@@ -2140,18 +2165,26 @@ export default function TrackUploadPanel() {
                 </div>
                 <span className="text-xs text-white/30">{albumTrackQueue.length} track{albumTrackQueue.length !== 1 ? 's' : ''}</span>
               </div>
-              {albumTrackQueue.map((t, i) => (
-                <div key={t.id} className="flex items-center space-x-3 p-2 bg-white/[0.03] rounded-lg">
-                  <span className="text-xs text-white/20 w-4 text-center">{i + 1}</span>
-                  <div className="w-7 h-7 rounded-md overflow-hidden bg-white/10 flex-shrink-0">
-                    {t.cover_artwork_url
-                      ? <img src={t.cover_artwork_url} alt="" className="w-full h-full object-cover" />
-                      : <div className="w-full h-full flex items-center justify-center"><Music className="w-3 h-3 text-white/20" /></div>}
+              {albumTrackQueue.length > 1 && (
+                <p className="text-[10px] text-white/25">Drag the handle to set the running order.</p>
+              )}
+              <DragList items={albumTrackQueue} getKey={t => t.id} onReorder={reorderQueue} className="space-y-2">
+                {(t, { index, dragging, handleProps }) => (
+                  <div className={`flex items-center space-x-3 p-2 rounded-lg border ${dragging ? 'bg-white/[0.08] border-white/20' : 'bg-white/[0.03] border-transparent'}`}>
+                    <button type="button" {...handleProps} className="p-1 -m-1 text-white/25 hover:text-white/60 flex-shrink-0">
+                      <GripVertical className="w-4 h-4" />
+                    </button>
+                    <span className="text-xs text-white/20 w-4 text-center">{index + 1}</span>
+                    <div className="w-7 h-7 rounded-md overflow-hidden bg-white/10 flex-shrink-0">
+                      {t.cover_artwork_url
+                        ? <img src={t.cover_artwork_url} alt="" className="w-full h-full object-cover" />
+                        : <div className="w-full h-full flex items-center justify-center"><Music className="w-3 h-3 text-white/20" /></div>}
+                    </div>
+                    <p className="text-sm text-white flex-1 truncate">{t.title}</p>
+                    <span className="text-[10px] text-green-400">OK</span>
                   </div>
-                  <p className="text-sm text-white flex-1 truncate">{t.title}</p>
-                  <span className="text-[10px] text-green-400">✓</span>
-                </div>
-              ))}
+                )}
+              </DragList>
             </div>
           )}
 
@@ -2704,10 +2737,20 @@ export default function TrackUploadPanel() {
                           </div>
                         ) : albumTracks.length === 0 ? (
                           <p className="text-xs text-white/20 text-center py-4">No tracks in this album yet</p>
-                        ) : albumTracks.map(track => (
-                          <div key={track.id} className="bg-white/[0.02] rounded-xl border border-white/[0.04] overflow-hidden">
+                        ) : (
+                          <>
+                          {albumTracks.length > 1 && (
+                            <p className="text-[10px] text-white/25 pb-1">Drag the handle to change the running order. It saves as you drop.</p>
+                          )}
+                          <DragList items={albumTracks} getKey={t => t.id} onReorder={reorderAlbumTracks} className="space-y-2" disabled={!!editingId}>
+                          {(track, { dragging, handleProps }) => (
+                          <div className={`bg-white/[0.02] rounded-xl border overflow-hidden ${dragging ? 'border-white/25 bg-white/[0.06]' : 'border-white/[0.04]'}`}>
                             {editingId !== track.id ? (
-                              <div className="flex items-center space-x-3 p-3">
+                              <div className="flex items-center space-x-2.5 p-3">
+                                <button type="button" {...handleProps}
+                                  className="p-1 -ml-1 text-white/20 hover:text-white/60 flex-shrink-0">
+                                  <GripVertical className="w-4 h-4" />
+                                </button>
                                 {track.cover_artwork_url
                                   ? <img src={track.cover_artwork_url} alt="" className="w-10 h-10 rounded-lg object-cover flex-shrink-0" />
                                   : <div className="w-10 h-10 rounded-lg bg-white/[0.06] flex items-center justify-center flex-shrink-0"><Music className="w-4 h-4 text-white/20" /></div>}
@@ -2842,7 +2885,10 @@ export default function TrackUploadPanel() {
                               </div>
                             )}
                           </div>
-                        ))}
+                          )}
+                          </DragList>
+                          </>
+                        )}
                       </div>
                     </div>
                   )}
