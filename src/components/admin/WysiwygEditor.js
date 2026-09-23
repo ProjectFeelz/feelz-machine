@@ -70,12 +70,29 @@ export function WysiwygEditor({ value, onChange, placeholder = 'Start writing...
   const insertImage = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    // Caught here rather than by the server: the bucket refuses anything over
+    // 25MB, and "row-level security policy" is not a useful way to be told a
+    // photo is too big.
+    if (file.size > 25 * 1024 * 1024) {
+      window.alert('That image is larger than 25MB. Save it smaller and try again.');
+      e.target.value = '';
+      return;
+    }
     setUploadingImage(true);
     const path = `newsletter/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.]/g, '_')}`;
     const { error: upErr } = await supabase.storage.from('covers').upload(path, file, { cacheControl: '31536000' });
     setUploadingImage(false);
     e.target.value = '';
-    if (upErr) { window.alert('Image upload failed: ' + upErr.message); return; }
+    if (upErr) {
+      // A policy refusal means this account is not allowed to upload, which is
+      // worth saying plainly instead of quoting the database at an editor.
+      const msg = /row-level security|violates/i.test(upErr.message || '')
+        ? 'This account is not allowed to upload images yet. Ask Steve to run migration 158.'
+        : upErr.message;
+      console.error('[newsletter] image upload failed:', upErr.message);
+      window.alert('Image upload failed: ' + msg);
+      return;
+    }
     const { data: { publicUrl } } = supabase.storage.from('covers').getPublicUrl(path);
     editor.chain().focus().setImage({ src: publicUrl }).run();
   };
