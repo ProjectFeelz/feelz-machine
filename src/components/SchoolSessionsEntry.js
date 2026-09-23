@@ -11,7 +11,7 @@
 import React, { useState, useEffect } from 'react';
 import { GraduationCap, Plus, X } from 'lucide-react';
 import { supabase } from '../supabaseClient';
-import BeatDownloadButton from './BeatDownloadButton';
+import ShortlistSongs from './ShortlistSongs';
 import useSchoolSessions from '../hooks/useSchoolSessions';
 
 // All confirmed real. feelz.machineza is the main channel (required);
@@ -102,7 +102,7 @@ export default function SchoolSessionsEntry({ enabled, setEnabled, form, setForm
     const compId = gate.config?.competition?.id;
     if (compId) {
       supabase.from('school_sessions_shortlist_songs')
-        .select('id, title, reference_url, beat_url, beat_filename, beat_size_bytes, reference_track:tracks(slug)')
+        .select('id, title, reference_url, lyrics, beat_url, beat_filename, beat_size_bytes, reference_track:tracks(id, title, slug, file_url, cover_artwork_url, duration, artist_id, is_published, is_preorder, release_date, artists!tracks_artist_id_fkey(artist_name, slug))')
         .eq('competition_id', compId)
         .eq('is_active', true)
         .order('display_order')
@@ -154,22 +154,14 @@ export default function SchoolSessionsEntry({ enabled, setEnabled, form, setForm
             {songs.length === 0 && (
               <p className="text-[11px] text-white/30 mt-1">Shortlist isn't loaded yet, check back shortly.</p>
             )}
-            {(() => {
-              const selected = songs.find(s => s.id === form.songId);
-              if (!selected) return null;
-              const href = selected.reference_track?.slug ? `/track/${selected.reference_track.slug}` : selected.reference_url;
-              return (
-                <div className="flex items-center gap-3 mt-1.5 flex-wrap">
-                  {href && (
-                    <a href={href} target="_blank" rel="noopener noreferrer"
-                      className="text-[11px] text-lime-400/70">Listen to the original (opens in a new tab)</a>
-                  )}
-                  {/* The beat saves straight to the device. Nothing opens, so
-                      a half-filled entry form is never lost to a new tab. */}
-                  <BeatDownloadButton song={selected} label="Download the beat" showSize />
-                </div>
-              );
-            })()}
+            {/* Play, lyrics and the beat, right here. Tapping one plays the
+                whole shortlist, and nothing navigates, so a half-filled entry
+                form is never lost. */}
+            {songs.length > 0 && (
+              <div className="mt-2">
+                <ShortlistSongs songs={songs} compact />
+              </div>
+            )}
           </div>
 
           <div>

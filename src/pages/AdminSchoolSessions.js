@@ -67,7 +67,7 @@ export default function AdminSchoolSessions({ embedded = false }) {
   const [newSong, setNewSong] = useState({ title: '', referenceUrl: '', referenceTrackId: '', referenceTrackTitle: '' });
   // Editing an existing shortlist song, and uploading its beat.
   const [editSongId, setEditSongId] = useState(null);
-  const [editSong, setEditSong]     = useState({ title: '', referenceUrl: '' });
+  const [editSong, setEditSong]     = useState({ title: '', referenceUrl: '', lyrics: '' });
   const [savingSong, setSavingSong] = useState(false);
   const [beatBusy, setBeatBusy]     = useState(null); // song id being uploaded
   const [trackSearch, setTrackSearch] = useState('');
@@ -366,14 +366,18 @@ export default function AdminSchoolSessions({ embedded = false }) {
 
   const startEditSong = (song) => {
     setEditSongId(song.id);
-    setEditSong({ title: song.title || '', referenceUrl: song.reference_url || '' });
+    setEditSong({ title: song.title || '', referenceUrl: song.reference_url || '', lyrics: song.lyrics || '' });
   };
 
   const saveSong = async (song) => {
     const title = editSong.title.trim();
     if (!title) { showToast('A song needs a title'); return; }
     setSavingSong(true);
-    const patch = { title, reference_url: editSong.referenceUrl.trim() || null };
+    const patch = {
+      title,
+      reference_url: editSong.referenceUrl.trim() || null,
+      lyrics: editSong.lyrics.trim() || null,
+    };
     const { error } = await supabase.from('school_sessions_shortlist_songs').update(patch).eq('id', song.id);
     setSavingSong(false);
     if (error) { showToast('Error: ' + error.message); return; }
@@ -742,8 +746,19 @@ export default function AdminSchoolSessions({ embedded = false }) {
                   )}
 
                   {editing && (
-                    <input className={inputCls} placeholder="External link (used if no track is linked)" value={editSong.referenceUrl}
-                      onChange={e => setEditSong({ ...editSong, referenceUrl: e.target.value })} />
+                    <>
+                      <input className={inputCls} placeholder="External link (used if no track is linked)" value={editSong.referenceUrl}
+                        onChange={e => setEditSong({ ...editSong, referenceUrl: e.target.value })} />
+                      <textarea className={inputCls} rows={6} placeholder="Lyrics, one line per line. Entrants read these while the song plays."
+                        value={editSong.lyrics}
+                        onChange={e => setEditSong({ ...editSong, lyrics: e.target.value })} />
+                    </>
+                  )}
+
+                  {!editing && (
+                    <span className={`text-[11px] ${s.lyrics ? 'text-white/40' : 'text-white/20'}`}>
+                      {s.lyrics ? `Lyrics added, ${s.lyrics.split('\n').filter(Boolean).length} lines` : 'No lyrics yet'}
+                    </span>
                   )}
 
                   {/* The beat, to sing over */}

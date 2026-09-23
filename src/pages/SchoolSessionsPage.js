@@ -13,7 +13,7 @@
 
 import React from 'react';
 import { Helmet } from 'react-helmet-async';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import {
   Loader, ArrowRight, Megaphone,
   Upload as UploadIcon, ThumbsUp, PlayCircle, BookOpen, Music,
@@ -21,7 +21,7 @@ import {
 import { useAuth } from '../contexts/AuthContext';
 import useSchoolSessions from '../hooks/useSchoolSessions';
 import DistrictNomination from '../components/DistrictNomination';
-import BeatDownloadButton from '../components/BeatDownloadButton';
+import ShortlistSongs from '../components/ShortlistSongs';
 import { supabase } from '../supabaseClient';
 
 // Prominent hero countdown, ticks every second, shown as separate
@@ -164,7 +164,7 @@ export default function SchoolSessionsPage() {
   React.useEffect(() => {
     if (!compId) return;
     supabase.from('school_sessions_shortlist_songs')
-      .select('id, title, reference_url, beat_url, beat_filename, beat_size_bytes, reference_track:tracks(slug)')
+      .select('id, title, reference_url, lyrics, beat_url, beat_filename, beat_size_bytes, reference_track:tracks(id, title, slug, file_url, cover_artwork_url, duration, artist_id, is_published, is_preorder, release_date, artists!tracks_artist_id_fkey(artist_name, slug))')
       .eq('competition_id', compId)
       .eq('is_active', true)
       .order('display_order')
@@ -282,26 +282,12 @@ export default function SchoolSessionsPage() {
           <span className="text-white font-semibold">Pick a song from the shortlist and cover it</span>, your own vocal performance over the original track. Solo or as a group; if your group wins, the R5,000 student prize splits evenly across everyone listed.
         </p>
 
-        {/* Song shortlist */}
+        {/* Song shortlist. Tapping one plays the whole shortlist in the app
+            player, so nobody leaves this page half way through entering. */}
         {songs.length > 0 && (
           <div className="space-y-2.5 lg:space-y-3">
             <p className="text-lime-400 text-xs lg:text-sm font-bold tracking-widest uppercase">Songs up for grabs</p>
-            <div className="grid lg:grid-cols-2 gap-1.5 lg:gap-2.5">
-              {songs.map(s => (
-                <div key={s.id} className="flex items-center space-x-3 rounded-xl bg-white/[0.03] border border-white/[0.06] px-3.5 py-2.5 lg:py-3">
-                  <Music className="w-3.5 h-3.5 text-lime-400 flex-shrink-0" />
-                  <span className="text-sm text-white flex-1 truncate">{s.title}</span>
-                  {s.beat_url && <BeatDownloadButton song={s} label="Beat" />}
-                  {s.reference_track?.slug ? (
-                    <Link to={`/track/${s.reference_track.slug}`}
-                      className="text-[11px] text-lime-400/70 flex-shrink-0">Listen</Link>
-                  ) : s.reference_url ? (
-                    <a href={s.reference_url} target="_blank" rel="noopener noreferrer"
-                      className="text-[11px] text-lime-400/70 flex-shrink-0">Listen</a>
-                  ) : null}
-                </div>
-              ))}
-            </div>
+            <ShortlistSongs songs={songs} />
           </div>
         )}
 
