@@ -17,7 +17,7 @@ export default function TrackCard({ track, trackList = [], showArtwork = true, i
   const navigate = useNavigate();
   // heavy was used at line 115 and never destructured here, so handlePlay
   // threw ReferenceError on every tap. This file is not imported anywhere, so
-  // the build never compiled it and the error never surfaced — but it would
+  // the build never compiled it and the error never surfaced, but it would
   // the moment anyone wired the component up.
   const { tap, success, light, heavy } = useHaptics();
 
@@ -46,7 +46,7 @@ export default function TrackCard({ track, trackList = [], showArtwork = true, i
         .eq('track_id', track.id).eq('user_id', user.id)
         .maybeSingle().then(({ data }) => setLiked(!!data));
     }
-    // Fetch comment count — lazy, non-blocking
+    // Fetch comment count, lazy, non-blocking
     if (commentCount === null) {
       supabase.from('track_comments')
         .select('*', { count: 'exact', head: true })
@@ -81,7 +81,7 @@ export default function TrackCard({ track, trackList = [], showArtwork = true, i
 
     // Only handle horizontal swipes
     if (!swiping.current) {
-      if (Math.abs(dy) > Math.abs(dx)) return; // vertical — let scroll handle it
+      if (Math.abs(dy) > Math.abs(dx)) return; // vertical, let scroll handle it
       swiping.current = true;
     }
 
@@ -129,7 +129,11 @@ export default function TrackCard({ track, trackList = [], showArtwork = true, i
     if (liked) {
       await supabase.from('track_likes').delete().eq('track_id', track.id).eq('user_id', user.id);
     } else {
-      await supabase.from('track_likes').insert({ track_id: track.id, user_id: user.id, artist_id: track.artist_id || null });
+      // artist_id is not a column on track_likes. Sending it made PostgREST
+      // refuse the whole row with PGRST204, and nothing here read the error,
+      // so the heart filled in and the like was never written. Those are the
+      // repeated 400s on /rest/v1/track_likes in the console.
+      await supabase.from('track_likes').insert({ track_id: track.id, user_id: user.id });
     }
     closeSwipe();
   };

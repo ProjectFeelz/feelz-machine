@@ -189,7 +189,11 @@ export default function TrackDetailPage() {
     if (downloading) return;
     setDownloading(true);
     try {
-      try { await supabase.from('downloads').upsert({ user_id: user.id, track_id: track.id }, { onConflict: 'user_id,track_id', ignoreDuplicates: true }); } catch {}
+      // No downloads row is written from here. get-download-url writes the
+      // grant itself, with the service role, after it has decided the
+      // download is allowed. Writing one from the browser first put a row
+      // into the table the server trusts, from the one place that cannot be
+      // trusted. Migration 175 takes that insert policy away.
       const { data: { session } } = await supabase.auth.getSession();
       await downloadTrack(track.id, track.title, session?.access_token);
     } catch (err) {

@@ -278,6 +278,8 @@ export default function HubPage() {
               <LinkCard icon={Sparkles} label="Home Hero" description="Control the big slot at the top of Home" path="/admin/home-hero" color="bg-yellow-500/20" />
               <LinkCard icon={Star} label="Cold Start Picks" description="What a brand new listener hears first" path="/admin/cold-start" color="bg-yellow-500/20" />
               <LinkCard icon={Send} label="Newsletter" description="Compose updates for the app or retail venues" path="/newsletter/compose" color="bg-yellow-500/20" />
+              <LinkCard icon={Shield} label="Guardian Consents" description="Under 18 artists waiting on a parent to be confirmed" path="/admin/guardian-consents" color="bg-yellow-500/20" />
+              <LinkCard icon={Users} label="Seed Personas" description="Platform artists that fill the catalogue and earn nothing" path="/admin/personas" color="bg-yellow-500/20" />
               <LinkCard icon={Sparkles} label="Creator Deals and Instagram" description="Deals, and the Instagram add-on switch" path="/admin/deals" color="bg-yellow-500/20" />
             </Section>
 

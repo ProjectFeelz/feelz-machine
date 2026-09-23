@@ -10,8 +10,10 @@ import PriceBreakdown, { useQuote } from './PriceBreakdown';
 import {
     X, Share2, ListMusic, Download, Heart, Play, Music, Loader, Check,
     ChevronLeft, ShoppingCart, Lock, PlusCircle, DollarSign, Clock, Info,
+    MessageCircle,
 } from 'lucide-react';
 import ShareCard from './ShareCard';
+import { TrackCommentsOverlay } from './TrackComments';
 
 const PAYPAL_CLIENT_ID = process.env.REACT_APP_PAYPAL_CLIENT_ID;
 
@@ -26,6 +28,8 @@ export default function TrackActionSheet({ track, artist, onClose }) {
     const { user } = useAuth();
     const { addToQueue, playTrack } = usePlayer();
     const [view, setView] = useState('main');
+    const [showComments, setShowComments] = useState(false);
+    const [commentCount, setCommentCount] = useState(0);
     const [playlists, setPlaylists] = useState([]);
     const [addingTo, setAddingTo] = useState(null);
     const [addedTo, setAddedTo] = useState({});
@@ -48,25 +52,55 @@ export default function TrackActionSheet({ track, artist, onClose }) {
     const isPWYW = track?.pay_what_you_want === true;
     const minimumPrice = track?.minimum_price != null ? parseFloat(track.minimum_price) : 0;
 
-    const basePrice = track?.download_price > 0
-        ? track.download_price
-        : (track?.albums?.price || track?.album_price || 0);
-
     const [fanPrice, setFanPrice] = useState('');
     const [fanPriceError, setFanPriceError] = useState('');
 
-    const effectivePrice = isPWYW ? (parseFloat(fanPrice) || 0) : basePrice;
+    // WHAT THIS TRACK COSTS, AND WHY THE SERVER DECIDES IT
+    //
+    // This used to be worked out here:
+    //
+    //   track.download_price > 0 ? track.download_price
+    //                            : (track.albums?.price || track.album_price || 0)
+    //
+    // Two things wrong with it, and together they produced "Purchase to
+    // download  $0.00" with a Download Free button under it on a track that
+    // is for sale, which then 403s from get-download-url because the server
+    // knows it is not free.
+    //
+    //   1. A track on a priced album usually has no download_price of its own.
+    //      Its price is the ALBUM price divided by the number of published
+    //      tracks, which is what paypal-order and get-download-url both work
+    //      out. The line above used the whole album price when it had it,
+    //      which is a different (and too high) number.
+    //   2. The action sheet is opened from the player and from rows that
+    //      select tracks without the albums embed, so `track.albums` is
+    //      usually undefined and the fallback landed on 0.
+    //
+    // So the price comes from the server, through the same quote endpoint
+    // every other purchase screen uses, and resolved by the same code the
+    // checkout uses. The track's own download_price is the only local value
+    // still trusted, and only as something to show while the quote is in
+    // flight. See the note at the top of src/components/PriceBreakdown.js.
+    const localPrice = Number(track?.download_price) > 0 ? Number(track.download_price) : 0;
 
-    // What the buyer is charged, from the server. effectivePrice above is the
-    // ARTIST's price; the processing line is added on top so the artist keeps
-    // what they set. Debounced on a pay-what-you-want amount because the buyer
-    // is typing it.
-    const { quote } = useQuote(
-        track?.id && effectivePrice > 0 && view === 'purchase'
-            ? (isPWYW ? { trackId: track.id, amount: effectivePrice } : { trackId: track.id })
-            : null,
+    const { quote, loading: quoteLoading, refresh: refreshQuote } = useQuote(
+        track?.id && view === 'purchase' && !isPWYW
+            ? { trackId: track.id }
+            : (track?.id && view === 'purchase' && isPWYW && parseFloat(fanPrice) > 0
+                ? { trackId: track.id, amount: parseFloat(fanPrice) }
+                : null),
         isPWYW ? 400 : 0
     );
+
+    const quotedPrice = quote?.artistPrice != null ? Number(quote.artistPrice) : null;
+    const basePrice   = quotedPrice != null ? quotedPrice : localPrice;
+
+    const effectivePrice = isPWYW ? (parseFloat(fanPrice) || 0) : basePrice;
+
+    // True while we genuinely do not know yet. Without this the sheet shows a
+    // Download Free button for the moment before the quote lands, which is the
+    // button that 403s.
+    const priceUnknown = !isPWYW && quotedPrice == null && (quoteLoading || localPrice <= 0);
 
     const isPreorder = track?.is_preorder === true;
     const releaseDate = track?.release_date || null;
@@ -83,7 +117,20 @@ export default function TrackActionSheet({ track, artist, onClose }) {
             const suggested = Math.max(basePrice, minimumPrice);
             setFanPrice(suggested > 0 ? suggested.toFixed(2) : '');
         }
+        loadCommentCount();
     }, [track?.id]);
+
+    // The number beside Comments. Read again when the sheet closes so leaving
+    // a comment updates it without a round trip on every render.
+    const loadCommentCount = async () => {
+        if (!track?.id) return;
+        const { count, error } = await supabase
+            .from('track_comments')
+            .select('id', { count: 'exact', head: true })
+            .eq('track_id', track.id);
+        if (error) { console.error('[TrackActionSheet] comment count failed:', error.code, error.message); return; }
+        setCommentCount(count || 0);
+    };
 
     useEffect(() => {
         if (view !== 'purchase' || !track) return;
@@ -323,22 +370,17 @@ export default function TrackActionSheet({ track, artist, onClose }) {
             onClose();
         } catch (err) {
             if (err.message === 'purchase_required') {
-                // Free track, backend may not have a purchase record yet.
-                // Insert one then retry once before showing purchase view.
-                if (effectivePrice <= 0 && !isPWYW) {
-                    try {
-                        await supabase.from('downloads')
-                            .insert({ user_id: user.id, track_id: track.id, amount_paid: 0 })
-                            .catch(() => {});
-                        const { data: { session: s2 } } = await supabase.auth.getSession();
-                        await downloadTrack(track.id, track.title, s2?.access_token);
-                        setDownloading(false);
-                        onClose();
-                        return;
-                    } catch {
-                        // retry failed, fall through to purchase view as last resort
-                    }
-                }
+                // This used to insert a downloads row from the browser with
+                // amount_paid 0 and retry, "in case the backend has no record
+                // for a free track". It never helped: the free branch of
+                // get-download-url writes its own grant with the service role,
+                // and the paid branch compares amount_paid against the price,
+                // so a forged 0 row is refused anyway. What it did do was
+                // write a row into the table the server trusts, from the one
+                // place that cannot be trusted. Migration 175 takes the
+                // insert policy away; this goes with it.
+                //
+                // purchase_required now means what it says: show the price.
                 setDownloading(false);
                 setView('purchase');
                 return;
@@ -583,7 +625,9 @@ export default function TrackActionSheet({ track, artist, onClose }) {
                                                         {isPreorder && isNotYetReleased ? 'Pre-order to reserve your copy' : 'Purchase to download'}
                                                     </p>
                                                 </div>
-                                                <p className="text-lg font-bold text-white">${effectivePrice.toFixed(2)}</p>
+                                                <p className="text-lg font-bold text-white">
+                                                    {priceUnknown ? ', ' : `$${effectivePrice.toFixed(2)}`}
+                                                </p>
                                             </div>
                                             <PriceBreakdown quote={quote} sellerName={artist?.artist_name} />
                                             <p className="text-xs text-white/30 text-center">
@@ -592,7 +636,21 @@ export default function TrackActionSheet({ track, artist, onClose }) {
                                                     : 'High-quality MP3 delivered instantly after payment'}
                                             </p>
                                             {purchaseError && <p className="text-xs text-red-400 text-center">{purchaseError}</p>}
-                                            {effectivePrice <= 0 ? (
+                                            {/* While the price is genuinely unknown, neither button is
+                                                offered. Showing Download Free here is what handed out a
+                                                button that 403s on a track that is for sale. */}
+                                            {priceUnknown ? (
+                                                quoteLoading ? (
+                                                    <div className="flex justify-center py-3">
+                                                        <Loader className="w-5 h-5 animate-spin text-white/30" />
+                                                    </div>
+                                                ) : (
+                                                    <button onClick={() => refreshQuote()}
+                                                        className="w-full py-3 bg-white/[0.06] text-white/60 text-sm font-semibold rounded-xl">
+                                                        Could not check the price. Tap to try again.
+                                                    </button>
+                                                )
+                                            ) : effectivePrice <= 0 ? (
                                                 <button onClick={async () => {
                                                     try {
                                                         const { data: { session } } = await supabase.auth.getSession();
@@ -626,6 +684,16 @@ export default function TrackActionSheet({ track, artist, onClose }) {
                             <button onClick={handleLike} className="w-full flex items-center space-x-4 px-5 py-3.5 active:bg-white/[0.04] transition">
                                 <Heart className="w-5 h-5" fill={liked ? '#ef4444' : 'none'} color={liked ? '#ef4444' : 'rgba(255,255,255,0.4)'} />
                                 <span className="text-sm text-white/70">{liked ? 'Unlike' : 'Like'}</span>
+                            </button>
+                            {/* Comments. Same thread as the track page, the
+                                album page and For You: one track_comments
+                                thread per track_id, opened from everywhere. */}
+                            <button onClick={() => setShowComments(true)} className="w-full flex items-center space-x-4 px-5 py-3.5 active:bg-white/[0.04] transition">
+                                <MessageCircle className="w-5 h-5 text-white/40" />
+                                <span className="text-sm text-white/70">Comments</span>
+                                {commentCount > 0 && (
+                                    <span className="text-xs text-white/30 ml-auto">{commentCount}</span>
+                                )}
                             </button>
                             <button onClick={handleQueue} className="w-full flex items-center space-x-4 px-5 py-3.5 active:bg-white/[0.04] transition">
                                 <Play className="w-5 h-5 text-white/40" />
@@ -742,6 +810,17 @@ export default function TrackActionSheet({ track, artist, onClose }) {
                 track={track}
                 shareUrl={`https://www.feelzmachine.com/track/${track?.slug || track?.id}`}
                 onClose={() => setShowShareCard(false)}
+            />
+        )}
+
+        {/* Comments, outside the sheet for the same reason ShareCard is: the
+            sheet clips its overflow, and the composer is position:fixed. */}
+        {showComments && (
+            <TrackCommentsOverlay
+                track={{ ...track, artist_name: track?.artist_name || artist?.artist_name }}
+                user={user}
+                routePrefix={track?.is_beat ? 'beat' : 'track'}
+                onClose={() => { setShowComments(false); loadCommentCount(); }}
             />
         )}
         </>

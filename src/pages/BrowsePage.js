@@ -157,7 +157,7 @@ export default function BrowsePage() {
   };
 
 
-  // Search effect — save history when searching
+  // Search effect, save history when searching
   useEffect(() => {
     if (query.trim().length >= 2) {
       searchAll(query.trim());
@@ -196,7 +196,7 @@ export default function BrowsePage() {
           .select('*, artists(artist_name, slug)')
           .eq('is_published', true).order('release_date', { ascending: false }).limit(50),
         supabase.from('artists')
-          .select('id, artist_name, slug, profile_image_url, is_verified, follower_count, total_streams, tier')
+          .select('id, artist_name, slug, profile_image_url, is_verified, follower_count, display_follower_count, total_streams, tier')
           .order('total_streams', { ascending: false }).limit(50),
       ]);
 
@@ -304,7 +304,7 @@ export default function BrowsePage() {
 
       {/* ── Sticky header ── */}
       <div className="sticky top-0 z-20 bg-black/95 backdrop-blur-xl pt-14 md:pt-4 pb-3 px-6 md:px-0 border-b border-white/[0.04] md:bg-transparent md:backdrop-blur-none md:border-none">
-        {/* Search — pr on mobile reserves space for fixed bell bar (streak+bell+avatar = ~152px incl padding) */}
+        {/* Search, pr on mobile reserves space for fixed bell bar (streak+bell+avatar = ~152px incl padding) */}
         <div className="relative mb-3 md:pr-0 pr-[152px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
           <input
@@ -367,7 +367,7 @@ export default function BrowsePage() {
 
         {/* Stories, on a page mobile can actually reach.
             The rail lived only on HomePage, and /home is in the desktop
-            sidebar and NOT in the mobile tab bar — so on a phone there was no
+            sidebar and NOT in the mobile tab bar, so on a phone there was no
             route to it at all. Stories were being uploaded into a screen that
             half the audience could not open. Hidden while searching, because
             a search result page should be search results. */}
@@ -682,7 +682,7 @@ export default function BrowsePage() {
                       <p className="text-sm font-medium text-white truncate">{a.artist_name}</p>
                       {a.is_verified && <VerifiedBadge size="sm" />}
                     </div>
-                    <p className="text-[10px] text-white/25">{formatNumber(a.follower_count)} followers</p>
+                    <p className="text-[10px] text-white/25">{formatNumber(a.display_follower_count ?? a.follower_count)} followers</p>
                   </button>
                 ))}
               </div>

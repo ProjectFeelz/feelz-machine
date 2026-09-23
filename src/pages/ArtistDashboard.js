@@ -13,12 +13,13 @@ import CollabRequests, { CollabBadge } from '../components/CollabRequests';
 import TierGate, { UploadGate, TierBadge } from '../components/TierGate';
 import ArtistListenerStats from '../components/artist/ArtistListenerStats';
 import { VoiceMemoCard, VoiceMemoUpload } from '../components/VoiceMemo';
+import GuardianConsentBanner from '../components/GuardianConsentBanner';
 
 function ContactExportButton({ artist }) {
   const [exporting, setExporting] = React.useState(false);
 
   // This never worked. It read the session purely to put session.user.id in the
-  // request body — which export-contacts ignores, because a user_id in a body
+  // request body, which export-contacts ignores, because a user_id in a body
   // is just a claim from the client. The function authenticates from the
   // Authorization header, and this request never sent one, so every export
   // came back 401 "Not signed in" and the alert on the next line showed it.
@@ -78,7 +79,7 @@ function ContactExportButton({ artist }) {
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch (err) {
       console.error('[export-contacts] threw:', err);
-      alert('Could not export contacts — check your connection and try again.');
+      alert('Could not export contacts, check your connection and try again.');
     }
     setExporting(false);
   };
@@ -281,6 +282,7 @@ function GrowthSnapshot({ artist }) {
 // ─── Earnings Section ─────────────────────────────────────────────────────────
 function EarningsSection({ artist, sectionRef, downloadsRef, highlight }) {
   const [tips,          setTips]          = React.useState([]);
+  const [sales,         setSales]         = React.useState([]);
   const [downloads,     setDownloads]     = React.useState([]);
   const [failedPayouts, setFailedPayouts] = React.useState([]);
   const [loading,       setLoading]       = React.useState(true);
@@ -288,7 +290,7 @@ function EarningsSection({ artist, sectionRef, downloadsRef, highlight }) {
   React.useEffect(() => {
     if (!artist?.id) return;
     const load = async () => {
-      const [{ data: tipsData }, { data: dlData }, { data: failedPayouts }] = await Promise.all([
+      const [{ data: tipsData }, { data: dlData }, { data: failedPayouts }, { data: salesData, error: salesErr }] = await Promise.all([
         supabase.from('tips')
           .select('id, amount, currency, message, created_at, from_user_id')
           .eq('artist_id', artist.id)
@@ -306,7 +308,15 @@ function EarningsSection({ artist, sectionRef, downloadsRef, highlight }) {
           .in('status', ['payout_failed', 'no_paypal_email'])
           .order('created_at', { ascending: false })
           .limit(5),
+        // Every sale of this artist's music: what, when, who and how it was
+        // paid (migration 167). purchases itself is readable only by the
+        // buyer, so this goes through a function.
+        supabase.rpc('artist_sales_detail', { p_artist_id: artist.id, p_limit: 25 }),
       ]);
+      if (salesErr && salesErr.code !== 'PGRST202') {
+        console.error('[dashboard] sales read failed:', salesErr.code, salesErr.message);
+      }
+      setSales(salesData || []);
       setTips(tipsData || []);
       setDownloads(dlData || []);
       setFailedPayouts(failedPayouts || []);
@@ -316,6 +326,7 @@ function EarningsSection({ artist, sectionRef, downloadsRef, highlight }) {
   }, [artist?.id]);
 
   const tipTotal     = tips.reduce((s, t) => s + (t.amount || 0), 0);
+  const salesTotal   = sales.reduce((s, r) => s + Number(r.amount || 0), 0);
   const downloadTotal = downloads.reduce((s, d) => s + (d.amount_paid || 0), 0);
 
   return (
@@ -340,7 +351,11 @@ function EarningsSection({ artist, sectionRef, downloadsRef, highlight }) {
       ) : (
         <>
           {/* Totals row */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-3 gap-2 sm:gap-3">
+            <div className="bg-white/[0.03] rounded-xl p-3.5 border border-white/[0.05] text-center">
+              <p className="text-xl font-black text-white">${salesTotal.toFixed(2)}</p>
+              <p className="text-[11px] text-white/30 mt-0.5">Music sales</p>
+            </div>
             <div className="bg-white/[0.03] rounded-xl p-3.5 border border-white/[0.05] text-center">
               <p className="text-xl font-black text-green-400">${tipTotal.toFixed(2)}</p>
               <p className="text-[11px] text-white/30 mt-0.5">Tips received</p>
@@ -357,6 +372,33 @@ function EarningsSection({ artist, sectionRef, downloadsRef, highlight }) {
               <p className="text-[11px] text-white/30 mt-0.5">Paid downloads</p>
             </div>
           </div>
+
+          {/* Every sale: what, when, who, and where the money went */}
+          {sales.length > 0 && (
+            <div>
+              <p className="text-[10px] uppercase tracking-wider text-white/20 font-semibold mb-2">Sales</p>
+              <div className="space-y-2">
+                {sales.map((sale, i) => (
+                  <div key={`${sale.sold_at}-${i}`} className="flex items-start justify-between py-2 border-b border-white/[0.04] last:border-0">
+                    <div className="flex-1 min-w-0 pr-3">
+                      <p className="text-sm text-white/80 truncate">
+                        {sale.item_title}
+                        {sale.item_type === 'album' && <span className="text-[10px] text-white/30 ml-1.5">album</span>}
+                      </p>
+                      <p className="text-[11px] text-white/25 mt-0.5 truncate">
+                        {new Date(sale.sold_at).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' })}
+                        {' · '}{sale.buyer_name}
+                        {' · '}{sale.route}
+                      </p>
+                    </div>
+                    <span className="text-sm font-bold text-green-400 flex-shrink-0">
+                      +${Number(sale.amount).toFixed(2)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Recent tips */}
           {tips.length > 0 && (
@@ -426,7 +468,7 @@ function EarningsSection({ artist, sectionRef, downloadsRef, highlight }) {
             </div>
           )}
 
-          {tips.length === 0 && downloads.length === 0 && failedPayouts.length === 0 && (
+          {tips.length === 0 && sales.length === 0 && downloads.length === 0 && failedPayouts.length === 0 && (
             <p className="text-center text-white/20 text-sm py-4">No earnings yet, share your music to start earning</p>
           )}
         </>
@@ -513,7 +555,7 @@ export default function ArtistDashboard() {
   // ── Analytics ────────────────────────────────────────────────────────────────
   // Declared up here with the other hooks, NOT beside fetchTrackAnalytics.
   // That function lives below the `if (!artist) return ...` early return, so a
-  // hook next to it would run on some renders and not others — the
+  // hook next to it would run on some renders and not others, the
   // rules-of-hooks violation that fails the build.
   const trackRunIdRef = useRef(0);
 
@@ -524,7 +566,7 @@ export default function ArtistDashboard() {
       // One read of tracks, not two.
       //
       // This used to select('id') and then, in a second awaited round trip,
-      // select('download_count') from the same table with the same filter —
+      // select('download_count') from the same table with the same filter ,
       // the same rows fetched twice, in series, to get two columns. On a
       // connection where each round trip is 300ms that is 300ms of pure wait
       // for nothing.
@@ -582,7 +624,7 @@ export default function ArtistDashboard() {
       if (tracks?.length) {
         // One query, not twenty.
         //
-        // This fired a separate count query per track — twenty HTTP requests
+        // This fired a separate count query per track, twenty HTTP requests
         // on every dashboard load, in parallel but all against the same
         // connection pool, and it was the heaviest thing on the page. One read
         // of the like rows for these tracks, tallied here, gives the same
@@ -652,7 +694,7 @@ export default function ArtistDashboard() {
   // rows never all arrived: PostgREST caps a response at 1000 and .limit(5000)
   // does not raise that, the server clamps it silently. So a track with more
   // than a thousand plays in the window reported exactly the cap, and STOPPED
-  // CHANGING between 14 days and 30 days — which is the "analytics are not
+  // CHANGING between 14 days and 30 days, which is the "analytics are not
   // updating" symptom, not a display bug.
   //
   // Counted in the database now (migration 137). The functions check that the
@@ -797,6 +839,10 @@ export default function ArtistDashboard() {
           </button>
         </div>
 
+        {/* Under 18 and no verified guardian consent. Renders nothing for
+            everyone else, including accounts with no date of birth on file. */}
+        <GuardianConsentBanner artistId={artist?.id} />
+
         {/* ── Tab Bar ── */}
         <div className="flex space-x-1 bg-white/[0.03] rounded-lg p-1 mb-6">
           {tabs.map(({ key, label, icon: Icon, hasBadge }) => (
@@ -888,7 +934,7 @@ export default function ArtistDashboard() {
                     ))}
                   </div>
 
-                  {/* Growth snapshot — streams this week vs last week */}
+                  {/* Growth snapshot, streams this week vs last week */}
                   <GrowthSnapshot artist={artist} />
 
                   </>)}
@@ -1086,7 +1132,7 @@ export default function ArtistDashboard() {
                   </>)}
 
                   {analyticsTab === 'contacts' && (<>
-                  {/* Contact Export — Premium only */}
+                  {/* Contact Export, Premium only */}
                   <TierGate feature="advanced_analytics" inline>
                     <div
                       ref={sectionRefs.followers}

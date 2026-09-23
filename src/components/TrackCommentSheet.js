@@ -6,27 +6,65 @@ import { Loader, X, Send, CornerDownRight, Smile } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import { sendNotification } from '../utils/notify';
 import { useLocation } from 'react-router-dom';
+import useKeyboardInset, { useKeyboardOpen } from '../hooks/useKeyboardInset';
 
 const REACTIONS = ['🔥','❤️','😤','🎯','💯','🙌'];
 
-// ── Keyboard offset ───────────────────────────────────────────────────────────
-function useKeyboardOffset() {
-  const [offset, setOffset] = React.useState(0);
-  React.useEffect(() => {
-    if (!window.visualViewport) return;
-    const update = () => {
-      const kh = window.innerHeight - window.visualViewport.height - window.visualViewport.offsetTop;
-      setOffset(Math.max(0, kh));
-    };
-    window.visualViewport.addEventListener('resize', update);
-    window.visualViewport.addEventListener('scroll', update);
-    return () => {
-      window.visualViewport.removeEventListener('resize', update);
-      window.visualViewport.removeEventListener('scroll', update);
-    };
-  }, []);
-  return offset;
+// ── The black bar above the keyboard ──────────────────────────────────────────
+//
+// The composer used to sit at `calc(64px + safe-area)` whenever the measured
+// keyboard inset was 0, leaving room for the bottom nav. That was right when
+// the keyboard was closed and wrong when it was open, and since
+// public/index.html asks for `interactive-widget=resizes-content` the inset
+// IS 0 with the keyboard open: Chrome shrinks the layout viewport itself, so
+// there is nothing left to compensate for. MobileNav hides at the same moment.
+//
+// So the composer reserved 64px plus the safe area for a nav that was not
+// there, and that empty reserved strip is the black bar between the text field
+// and the keyboard.
+//
+// Two measurements answer it, and they are different questions:
+//
+//   useKeyboardOpen   is the keyboard up at all. True in both viewport modes.
+//   useKeyboardInset  how much is covered that the layout does NOT already
+//                     know about. 0 under resizes-content, the keyboard height
+//                     under resizes-visual (older Chrome, Android WebView,
+//                     every iOS version).
+//
+// Open  -> bottom = inset. 0 under resizes-content, which is already the top
+//          of the keyboard, and the keyboard height otherwise. No nav gap,
+//          because there is no nav.
+// Closed -> bottom = nav height + safe area, as before.
+//
+// Both are in src/hooks/useKeyboardInset.js, which is the same pair the chat
+// room composer uses. This file's private copy of the measurement was the one
+// that could not tell the two cases apart.
+function useComposerBottom() {
+  const inset = useKeyboardInset();
+  const open  = useKeyboardOpen();
+  return open ? `${inset}px` : 'calc(64px + env(safe-area-inset-bottom, 0px))';
 }
+
+// Keeps the keyboard's own suggestion strip off the top of the keyboard.
+//
+// Android Chrome offers saved passwords ("Key") and cards ("Card") above the
+// keyboard for any text field it cannot rule out, and that strip pushes the
+// keyboard down and the composer with it. A comment box is never either, so it
+// says so. The data- attributes are the opt-outs the common password managers
+// read; they cost nothing and stop the same strip from other sources.
+export const NO_AUTOFILL = {
+  autoComplete:   'off',
+  autoCorrect:    'on',
+  autoCapitalize: 'sentences',
+  spellCheck:     true,
+  inputMode:      'text',
+  enterKeyHint:   'send',
+  name:           'feelz-comment',
+  'data-form-type':  'other',
+  'data-lpignore':   'true',
+  'data-1p-ignore':  'true',
+  'data-bwignore':   'true',
+};
 
 // ── Reaction bar ──────────────────────────────────────────────────────────────
 function ReactionBar({ commentId, userId }) {
@@ -106,7 +144,7 @@ function ReactionBar({ commentId, userId }) {
 
 // ── Main component ────────────────────────────────────────────────────────────
 export default function TrackCommentSheet({ track, user, onClose, routePrefix = 'track' }) {
-  const keyboardOffset = useKeyboardOffset();
+  const composerBottom = useComposerBottom();
   const [comments,   setComments]   = useState([]);
   const [text,       setText]       = useState('');
   const [posting,    setPosting]    = useState(false);
@@ -200,7 +238,7 @@ export default function TrackCommentSheet({ track, user, onClose, routePrefix = 
             return next;
           }
         }
-        // Top-level comment — prepend
+        // Top-level comment, prepend
         return [enriched, ...prev];
       });
       try {
@@ -212,7 +250,7 @@ export default function TrackCommentSheet({ track, user, onClose, routePrefix = 
           const name = commenterArtist?.artist_name || user.__profile?.name || 'Someone';
           // Through the RPC, not a direct insert: this notification is
           // addressed to the ARTIST by a commenter, and the INSERT policy on
-          // notifications only permits self-addressed rows — so this has been
+          // notifications only permits self-addressed rows, so this has been
           // 403ing on every comment. See migration 106.
           await sendNotification(supabase, 'track_commented (comment sheet)', {
             type:      'track_commented',
@@ -311,9 +349,6 @@ export default function TrackCommentSheet({ track, user, onClose, routePrefix = 
     );
   };
 
-  // Fixed bottom position — accounts for keyboard on all platforms
-  const inputBarBottom = keyboardOffset > 0 ? keyboardOffset : 0;
-
   return (
     <div className="flex flex-col w-full h-full" onClick={e => e.stopPropagation()}>
       {/* Header */}
@@ -346,7 +381,7 @@ export default function TrackCommentSheet({ track, user, onClose, routePrefix = 
           <div className="flex justify-center py-8"><Loader className="w-5 h-5 animate-spin text-white/20" /></div>
         ) : topLevel.length === 0 ? (
           <div className="flex flex-col items-center py-8 space-y-2">
-            <p className="text-center text-white/30 text-sm">No comments yet — be first.</p>
+            <p className="text-center text-white/30 text-sm">No comments yet, be first.</p>
             <p className="text-[11px] text-white/15">Type below and tap send ↓</p>
           </div>
         ) : (
@@ -359,19 +394,17 @@ export default function TrackCommentSheet({ track, user, onClose, routePrefix = 
         )}
       </div>
 
-      {/* Input bar — fixed to bottom, moves up with keyboard on all platforms */}
+      {/* Input bar, fixed to bottom, moves up with keyboard on all platforms */}
       <div
         className="border-t border-white/[0.06] bg-black"
         style={{
           position: 'fixed',
           left: 0,
           right: 0,
-          // Sit above nav (64px) + safe area when keyboard is closed,
-          // or above keyboard when it's open (keyboard already pushes above nav)
-          bottom: inputBarBottom > 0
-            ? `${inputBarBottom}px`
-            : 'calc(64px + env(safe-area-inset-bottom, 0px))',
-          paddingBottom: inputBarBottom > 0 ? '8px' : '8px',
+          // Top of the keyboard while it is open, above the nav while it is
+          // closed. See useComposerBottom at the top of this file.
+          bottom: composerBottom,
+          paddingBottom: '8px',
           transition: 'bottom 0.12s ease',
           zIndex: 900,
         }}
@@ -402,6 +435,7 @@ export default function TrackCommentSheet({ track, user, onClose, routePrefix = 
             onKeyDown={e => e.key === 'Enter' && !e.shiftKey && post()}
             placeholder={replyingTo ? `Reply to ${replyingTo.authorName}…` : 'Add a comment…'}
             maxLength={300}
+            {...NO_AUTOFILL}
             className="flex-1 min-w-0 bg-white/[0.06] rounded-xl px-3 py-2.5 text-sm text-white placeholder-white/25 outline-none border border-white/[0.06] focus:border-white/20"
           />
           <button

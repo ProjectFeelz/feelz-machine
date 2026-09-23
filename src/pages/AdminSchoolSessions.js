@@ -11,7 +11,7 @@ import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import {
   GraduationCap, ArrowLeft, Loader, Plus, X, Download, Check, Trophy, Music,
-  Pencil, Save, Upload, Trash2, ChevronUp, ChevronDown,
+  Pencil, Save, Upload, Trash2, ChevronUp, ChevronDown, Banknote,
 } from 'lucide-react';
 
 // The instrumentals live with the rest of the audio. Public, like the songs
@@ -73,6 +73,9 @@ export default function AdminSchoolSessions({ embedded = false }) {
   const [trackSearch, setTrackSearch] = useState('');
   const [trackResults, setTrackResults] = useState([]);
   const [trackSearching, setTrackSearching] = useState(false);
+  const [prizes, setPrizes] = useState([]);
+  const [prizesLoading, setPrizesLoading] = useState(false);
+  const [newPrize, setNewPrize] = useState({ entryId: '', recipientType: 'student', recipientName: '', amount: '', method: 'eft', guardian: '', reference: '', note: '' });
   const [entries, setEntries] = useState([]);
   const [entriesLoading, setEntriesLoading] = useState(false);
   const [judges, setJudges] = useState([]);
@@ -362,6 +365,72 @@ export default function AdminSchoolSessions({ embedded = false }) {
   const removeSong = async (id) => {
     await supabase.from('school_sessions_shortlist_songs').delete().eq('id', id);
     setSongs(prev => prev.filter(s => s.id !== id));
+  };
+
+  // Prize money (migration 168). Nothing here moves money. It is the record of
+  // what was owed, how it was paid and the proof, because School Sessions
+  // prizes go out by EFT to a school and to a guardian, not through PayPal.
+  const loadPrizes = useCallback(async () => {
+    if (!config?.competition_id) return;
+    setPrizesLoading(true);
+    const { data, error } = await supabase
+      .from('school_sessions_prizes')
+      .select('*, entry:school_sessions_entries(entrant_full_name)')
+      .eq('competition_id', config.competition_id)
+      .order('created_at', { ascending: false });
+    if (error && error.code !== '42P01' && error.code !== 'PGRST205') {
+      console.error('[school sessions] prizes read failed:', error.code, error.message);
+    }
+    setPrizes(data || []);
+    setPrizesLoading(false);
+  }, [config?.competition_id]);
+
+  useEffect(() => { loadPrizes(); }, [loadPrizes]);
+
+  const addPrize = async () => {
+    const amount = parseFloat(newPrize.amount);
+    if (!newPrize.recipientName.trim() || !(amount > 0)) {
+      showToast('A prize needs a recipient and an amount');
+      return;
+    }
+    const { data, error } = await supabase.from('school_sessions_prizes').insert({
+      competition_id: config.competition_id,
+      entry_id: newPrize.entryId || null,
+      recipient_type: newPrize.recipientType,
+      recipient_name: newPrize.recipientName.trim(),
+      amount_zar: amount,
+      method: newPrize.method,
+      guardian_name: newPrize.guardian.trim() || null,
+      reference: newPrize.reference.trim() || null,
+      note: newPrize.note.trim() || null,
+    }).select('*, entry:school_sessions_entries(entrant_full_name)').single();
+    if (error) { showToast('Error: ' + error.message); return; }
+    setPrizes(prev => [data, ...prev]);
+    setNewPrize({ entryId: '', recipientType: 'student', recipientName: '', amount: '', method: 'eft', guardian: '', reference: '', note: '' });
+    showToast('Prize recorded as owed');
+  };
+
+  const markPrizePaid = async (prize, paid) => {
+    const { data, error } = await supabase.from('school_sessions_prizes')
+      .update({ status: paid ? 'paid' : 'owed' })
+      .eq('id', prize.id)
+      .select('*, entry:school_sessions_entries(entrant_full_name)').single();
+    if (error) { showToast('Error: ' + error.message); return; }
+    setPrizes(prev => prev.map(p => p.id === prize.id ? data : p));
+  };
+
+  const savePrizeReference = async (prize, reference) => {
+    if ((prize.reference || '') === reference) return;
+    const { error } = await supabase.from('school_sessions_prizes')
+      .update({ reference: reference.trim() || null }).eq('id', prize.id);
+    if (error) { showToast('Error: ' + error.message); return; }
+    setPrizes(prev => prev.map(p => p.id === prize.id ? { ...p, reference } : p));
+  };
+
+  const removePrize = async (id) => {
+    const { error } = await supabase.from('school_sessions_prizes').delete().eq('id', id);
+    if (error) { showToast('Error: ' + error.message); return; }
+    setPrizes(prev => prev.filter(p => p.id !== id));
   };
 
   const startEditSong = (song) => {
@@ -824,6 +893,99 @@ export default function AdminSchoolSessions({ embedded = false }) {
               </div>
             ))}
             {schools.length === 0 && <p className="text-xs text-white/30 py-2">No schools added yet.</p>}
+          </div>
+        </div>
+
+        {/* Prize money. Nothing here pays anybody: it is the record of what
+            was owed and how it was actually sent. */}
+        <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4 space-y-3">
+          <div className="flex items-center space-x-2">
+            <Banknote className="w-4 h-4 text-lime-400" />
+            <p className="text-xs font-bold text-white/50 uppercase tracking-wide">Prize money ({prizes.length})</p>
+          </div>
+          <p className="text-[11px] text-white/30">
+            School Sessions prizes are not paid by the platform. The school prize goes to an institution and the student prize usually goes to a minor, so neither can take a PayPal payout. Pay them by EFT and record it here: who, how much, the proof of payment reference, and the guardian who received it for a minor.
+          </p>
+
+          {entries.filter(e => e.is_winner).length > 0 && (
+            <p className="text-[11px] text-lime-300/70">
+              Marked as winner: {entries.filter(e => e.is_winner).map(e => e.entrant_full_name).join(', ')}
+            </p>
+          )}
+
+          <div className="grid grid-cols-2 gap-2">
+            <select className={inputCls} value={newPrize.recipientType}
+              onChange={e => setNewPrize({ ...newPrize, recipientType: e.target.value })}>
+              <option value="student">Student</option>
+              <option value="school">School</option>
+              <option value="group_member">Group member</option>
+              <option value="beatmaker">Beatmaker</option>
+              <option value="other">Other</option>
+            </select>
+            <select className={inputCls} value={newPrize.method}
+              onChange={e => setNewPrize({ ...newPrize, method: e.target.value })}>
+              <option value="eft">EFT</option>
+              <option value="cash">Cash</option>
+              <option value="voucher">Voucher</option>
+              <option value="paypal">PayPal</option>
+              <option value="other">Other</option>
+            </select>
+            <input className={inputCls} placeholder="Who is being paid" value={newPrize.recipientName}
+              onChange={e => setNewPrize({ ...newPrize, recipientName: e.target.value })} />
+            <input className={inputCls} type="number" min="0" placeholder="Amount in rand" value={newPrize.amount}
+              onChange={e => setNewPrize({ ...newPrize, amount: e.target.value })} />
+            <select className={inputCls} value={newPrize.entryId}
+              onChange={e => setNewPrize({ ...newPrize, entryId: e.target.value })}>
+              <option value="">Not linked to an entry</option>
+              {entries.map(e => (
+                <option key={e.id} value={e.id}>{e.entrant_full_name}{e.is_winner ? ' (winner)' : ''}</option>
+              ))}
+            </select>
+            <input className={inputCls} placeholder="Guardian, if a minor" value={newPrize.guardian}
+              onChange={e => setNewPrize({ ...newPrize, guardian: e.target.value })} />
+            <input className={inputCls} placeholder="Payment reference" value={newPrize.reference}
+              onChange={e => setNewPrize({ ...newPrize, reference: e.target.value })} />
+            <button onClick={addPrize} className="px-3.5 py-2.5 rounded-lg bg-lime-400 text-black font-semibold text-sm">
+              Record prize
+            </button>
+          </div>
+
+          <div className="space-y-1.5 max-h-72 overflow-y-auto">
+            {prizesLoading ? (
+              <div className="flex justify-center py-4"><Loader className="w-4 h-4 text-white/30 animate-spin" /></div>
+            ) : prizes.map(p => (
+              <div key={p.id} className="px-3 py-2.5 rounded-lg bg-white/[0.03] space-y-1.5">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="text-sm text-white truncate">
+                      {p.recipient_name}
+                      <span className="text-[10px] text-white/30 ml-1.5 capitalize">{String(p.recipient_type).replace('_', ' ')}</span>
+                    </p>
+                    <p className="text-[11px] text-white/30">
+                      R{Number(p.amount_zar).toFixed(2)} by {String(p.method).toUpperCase()}
+                      {p.guardian_name ? ` · received by ${p.guardian_name}` : ''}
+                      {p.entry?.entrant_full_name ? ` · ${p.entry.entrant_full_name}` : ''}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <button onClick={() => markPrizePaid(p, p.status !== 'paid')}
+                      className={`text-[11px] font-bold px-2.5 py-1 rounded-full ${
+                        p.status === 'paid' ? 'bg-green-500/15 text-green-400' : 'bg-amber-500/15 text-amber-300'
+                      }`}>
+                      {p.status === 'paid' ? `Paid ${p.paid_at ? new Date(p.paid_at).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short' }) : ''}` : 'Mark paid'}
+                    </button>
+                    <button onClick={() => removePrize(p.id)} className="text-white/20 hover:text-red-400">
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+                <input className={inputCls} defaultValue={p.reference || ''} placeholder="Proof of payment reference"
+                  onBlur={e => savePrizeReference(p, e.target.value)} />
+              </div>
+            ))}
+            {!prizesLoading && prizes.length === 0 && (
+              <p className="text-xs text-white/30 py-2">Nothing recorded yet. Add a row when you pay a winner.</p>
+            )}
           </div>
         </div>
 

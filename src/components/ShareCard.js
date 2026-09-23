@@ -1,5 +1,6 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { Download, Share2, X, Loader, Link, Check, Film, Image } from 'lucide-react';
+import { supabase } from '../supabaseClient';
 import { buildStoryMp4, MEDIARECORDER_MP4_TYPES } from '../utils/storyMp4';
 
 // ── Helper functions, all defined as hoisted function declarations ──────────
@@ -48,6 +49,71 @@ function loadFFmpegScript() {
 
 function proxyUrl(src) {
   return '/.netlify/functions/image-proxy?url=' + encodeURIComponent(src);
+}
+
+// Lyrics for the video. Timestamped [mm:ss.xx] lines are followed exactly;
+// plain words are spread evenly across the song so they at least move with it.
+function parseLrcForVideo(raw) {
+  if (!raw) return null;
+  const out = [];
+  raw.split('\n').forEach(line => {
+    const m = line.match(/^\[(\d{1,2}):(\d{2})(?:[.:](\d{1,3}))?\]\s*(.*)$/);
+    if (!m) return;
+    const ms = m[3] ? parseInt(m[3].padEnd(3, '0'), 10) : 0;
+    out.push({ time: parseInt(m[1], 10) * 60 + parseInt(m[2], 10) + ms / 1000, text: m[4].trim() });
+  });
+  return out.length >= 2 ? out.sort((a, b) => a.time - b.time) : null;
+}
+
+function lyricLinesAt(lyrics, t, songLength) {
+  if (!lyrics) return null;
+  const lrc = parseLrcForVideo(lyrics);
+  if (lrc) {
+    let idx = -1;
+    lrc.forEach((l, i) => { if (l.time <= t) idx = i; });
+    if (idx < 0) return { index: 0, line: '', next: lrc[0]?.text || '' };
+    return { index: idx, line: lrc[idx].text, next: lrc[idx + 1]?.text || '' };
+  }
+  const lines = lyrics.split('\n').map(l => l.trim()).filter(Boolean);
+  if (!lines.length) return null;
+  const LEAD_IN = 2;
+  const span    = Math.max((songLength || lines.length * 4) - LEAD_IN, lines.length);
+  const perLine = span / lines.length;
+  const idx     = t < LEAD_IN ? 0 : Math.min(Math.floor((t - LEAD_IN) / perLine), lines.length - 1);
+  return { index: idx, line: lines[idx], next: lines[idx + 1] || '' };
+}
+
+// One line of lyric, in colour. The gradient shifts with the line number so
+// consecutive lines are never the same colour, and it is drawn over a dark
+// glow so it stays readable on artwork of any brightness.
+function drawLyricLine(ctx, text, x, y, maxWidth, index, t) {
+  if (!text) return y;
+  const hue = (index * 47 + t * 18) % 360;
+  const grad = ctx.createLinearGradient(x - maxWidth / 2, y, x + maxWidth / 2, y + 60);
+  grad.addColorStop(0,   `hsl(${hue}, 95%, 72%)`);
+  grad.addColorStop(0.5, `hsl(${(hue + 40) % 360}, 95%, 82%)`);
+  grad.addColorStop(1,   `hsl(${(hue + 80) % 360}, 95%, 70%)`);
+
+  const words = String(text).split(' ');
+  const lines = [];
+  let line = '';
+  words.forEach(w => {
+    const test = line ? `${line} ${w}` : w;
+    if (ctx.measureText(test).width > maxWidth && line) { lines.push(line); line = w; }
+    else line = test;
+  });
+  if (line) lines.push(line);
+
+  lines.slice(0, 3).forEach((l, i) => {
+    const ly = y + i * 74;
+    ctx.save();
+    ctx.shadowColor = 'rgba(0,0,0,0.85)';
+    ctx.shadowBlur  = 26;
+    ctx.fillStyle   = grad;
+    ctx.fillText(l, x, ly);
+    ctx.restore();
+  });
+  return y + Math.min(lines.length, 3) * 74;
 }
 
 function loadImage(src) {
@@ -119,6 +185,8 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
   const [videoFormat, setVideoFormat]   = useState('');
   const [converting, setConverting]     = useState(false);
   const [bgColor, setBgColor]           = useState('#0d0d0d');
+  const [lyrics, setLyrics]             = useState(track?.lyrics || null);
+  const [showLyrics, setShowLyrics]     = useState(true);
 
   const canvasRef    = useRef(null);
   const videoRef     = useRef(null);
@@ -134,6 +202,17 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
   const displayUrl = shareUrl
     ? shareUrl.replace('https://www.', '').replace('https://', '')
     : 'feelzmachine.com';
+
+  // Lyrics are on the track object almost everywhere (For You, the player).
+  // Share can also be opened from places that select fewer columns, so fetch
+  // them once if they are missing rather than silently dropping them.
+  useEffect(() => {
+    if (lyrics !== null || !track?.id) return;
+    let cancelled = false;
+    supabase.from('tracks').select('lyrics').eq('id', track.id).maybeSingle()
+      .then(({ data }) => { if (!cancelled) setLyrics(data?.lyrics || ''); });
+    return () => { cancelled = true; };
+  }, [track?.id, lyrics]);
 
   // ── Image card ───────────────────────────────────────────────────────────────
   const drawImageCard = useCallback(async () => {
@@ -323,7 +402,7 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
   }, []);
 
   // ── Video frame draw ────────────────────────────────────────────────────────
-  const drawVideoFrame = useCallback(async (ctx, artImg, vinylImg, angle, bgOverride) => {
+  const drawVideoFrame = useCallback(async (ctx, artImg, vinylImg, angle, bgOverride, songTime = 0) => {
     const W = 1080, H = 1920;
 
     // Background, user selected colour with subtle artwork bleed
@@ -404,16 +483,41 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
     ctx.restore();
 
     // ── Text ───────────────────────────────────────────────────────────────────
-    const textY = cy + r + 80;
+    const words = showLyrics ? lyricLinesAt(lyrics, songTime, track?.duration || 0) : null;
+    const hasWords = !!words?.line;
+
+    // With lyrics on the frame the title sits tighter so the words get room.
+    const textY = cy + r + (hasWords ? 54 : 80);
     ctx.fillStyle = '#fff';
-    ctx.font = 'bold 72px -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.font = `bold ${hasWords ? 60 : 72}px -apple-system, BlinkMacSystemFont, sans-serif`;
     ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-    wrapText(ctx, title, W / 2, textY, W - 120, 84);
+    wrapText(ctx, title, W / 2, textY, W - 120, hasWords ? 72 : 84);
 
     const titleLines = Math.max(1, Math.ceil(title.length / 18));
+    const subY = textY + titleLines * (hasWords ? 76 : 88);
     ctx.fillStyle = 'rgba(255,255,255,0.45)';
-    ctx.font = '48px -apple-system, BlinkMacSystemFont, sans-serif';
-    ctx.fillText(subtitle, W / 2, textY + titleLines * 88);
+    ctx.font = `${hasWords ? 40 : 48}px -apple-system, BlinkMacSystemFont, sans-serif`;
+    ctx.fillText(subtitle, W / 2, subY);
+
+    // ── Lyrics, in colour, moving with the song ──────────────────────────────
+    if (hasWords) {
+      const lyricY = subY + (hasWords ? 86 : 0);
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+      ctx.font = 'bold 62px -apple-system, BlinkMacSystemFont, sans-serif';
+      const afterY = drawLyricLine(ctx, words.line, W / 2, lyricY, W - 160, words.index, songTime);
+
+      if (words.next) {
+        ctx.save();
+        ctx.font = '44px -apple-system, BlinkMacSystemFont, sans-serif';
+        ctx.fillStyle = 'rgba(255,255,255,0.32)';
+        ctx.shadowColor = 'rgba(0,0,0,0.8)';
+        ctx.shadowBlur = 18;
+        const next = String(words.next);
+        ctx.fillText(next.length > 38 ? `${next.slice(0, 37)}...` : next, W / 2, afterY + 14);
+        ctx.restore();
+      }
+    }
 
     // FM logo, top left corner
     await drawFMLogo(ctx, 60, 80, 120);
@@ -426,7 +530,7 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
     ctx.fillStyle = 'rgba(140,171,46,0.6)';
     ctx.beginPath(); ctx.arc(W/2 - 220, H - 54, 5, 0, Math.PI*2); ctx.fill();
     ctx.beginPath(); ctx.arc(W/2 + 220, H - 54, 5, 0, Math.PI*2); ctx.fill();
-  }, [title, subtitle, artworkUrl, displayUrl, bgColor]);
+  }, [title, subtitle, artworkUrl, displayUrl, bgColor, lyrics, showLyrics, track?.duration]);
 
   // Render a static preview frame when on video tab
   useEffect(() => {
@@ -443,10 +547,10 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
       if (cancelled) return;
       const vinylImg = await buildVinylImage(artImg, 840);
       if (cancelled) return;
-      await drawVideoFrame(ctx, artImg, vinylImg, 0, bgColor);
+      await drawVideoFrame(ctx, artImg, vinylImg, 0, bgColor, startTime);
     })();
     return () => { cancelled = true; };
-  }, [tab, artworkUrl, recording, buildVinylImage, drawVideoFrame]);
+  }, [tab, artworkUrl, recording, buildVinylImage, drawVideoFrame, startTime]);
 
   // ── Record video ─────────────────────────────────────────────────────────────
   const recordVideo = useCallback(async () => {
@@ -484,7 +588,7 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
       setVideoFormat('MP4');
       const mp4 = await buildStoryMp4({
         canvas, fps: FPS, seconds: DURATION, audioUrl, startTime,
-        drawFrame: (i) => drawVideoFrame(ctx, artImg, vinylImg, i * radsPerFrame, bgColor),
+        drawFrame: (i) => drawVideoFrame(ctx, artImg, vinylImg, i * radsPerFrame, bgColor, startTime + i / FPS),
         onProgress: setVideoProgress,
       });
       if (mp4) {
@@ -642,7 +746,7 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
         return;
       }
       const frameStart = performance.now();
-      await drawVideoFrame(ctx, artImg, vinylImg, angle, bgColor);
+      await drawVideoFrame(ctx, artImg, vinylImg, angle, bgColor, startTime + frame / FPS);
       angle += radsPerFrame;
       frame++;
       setVideoProgress(Math.round((frame / totalFrames) * 95));
@@ -830,6 +934,18 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
                   </div>
                 )}
               </div>
+
+              {/* Lyrics on the video */}
+              {!recording && lyrics && (
+                <button
+                  onClick={() => { setShowLyrics(v => !v); setVideoBlob(null); setVideoProgress(0); }}
+                  className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl bg-white/[0.04] border border-white/[0.06]">
+                  <span className="text-xs text-white/70">Show the lyrics on the video</span>
+                  <span className={`w-9 h-5 rounded-full transition-colors flex items-center px-0.5 ${showLyrics ? 'bg-purple-500' : 'bg-white/[0.12]'}`}>
+                    <span className={`w-4 h-4 rounded-full bg-white transition-transform ${showLyrics ? 'translate-x-4' : 'translate-x-0'}`} />
+                  </span>
+                </button>
+              )}
 
               {/* Background colour picker */}
               {!recording && (

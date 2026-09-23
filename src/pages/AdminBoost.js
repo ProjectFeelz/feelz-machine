@@ -248,8 +248,8 @@ export default function AdminBoost({ embedded = false }) {
     setIsLoading(true);
     const q = supabase
       .from('artists')
-      .select('id, artist_name, slug, profile_image_url, is_verified, tier, follower_count, total_streams')
-      .order('follower_count', { ascending: false })
+      .select('id, artist_name, slug, profile_image_url, is_verified, tier, follower_count, follower_boost, display_follower_count, total_streams')
+      .order('display_follower_count', { ascending: false })
       .limit(30);
     if (artistQuery.trim()) q.ilike('artist_name', `%${artistQuery}%`);
     const { data } = await q;
@@ -276,16 +276,24 @@ export default function AdminBoost({ embedded = false }) {
     setSaving(p => ({ ...p, [`${artist.id}-${field}`]: false }));
   };
 
-  const handleFollowerBoost = async (artist, value) => {
+  // The boost is its own column now (migration 170). follower_count is the
+  // real number, written only by the follows recount trigger, and it used to
+  // be what this screen overwrote, so every boost was wiped by the next
+  // follow. The number shown on Home and Browse is the two added together.
+  const handleFollowerBoost = async (artist, boost) => {
     setSaving(p => ({ ...p, [`${artist.id}-followers`]: true }));
     try {
-      await supabase.from('artists').update({
-        follower_count: value,
-        total_streams: Math.max(artist.total_streams || 0, value * 5),
-        updated_at: new Date().toISOString(),
-      }).eq('id', artist.id);
-      setArtists(prev => prev.map(a => a.id === artist.id ? { ...a, follower_count: value } : a));
-      showToast(`Followers set to ${value}`);
+      const { error } = await supabase.rpc('admin_set_follower_boost', {
+        p_artist_id: artist.id,
+        p_boost: Math.max(0, parseInt(boost, 10) || 0),
+      });
+      if (error) throw error;
+      setArtists(prev => prev.map(a => a.id === artist.id
+        ? { ...a, follower_boost: boost, display_follower_count: (a.follower_count || 0) + boost }
+        : a));
+      showToast(boost > 0
+        ? `Boost set to +${boost}, showing ${(artist.follower_count || 0) + boost}`
+        : 'Boost cleared, showing the real number');
     } catch (err) {
       showToast(err.message, 'error');
     }
@@ -476,7 +484,7 @@ export default function AdminBoost({ embedded = false }) {
                   ))}
                 </div>
 
-                {/* ── Stream Boost (RPC — works for ALL artists) ── */}
+                {/* ── Stream Boost (RPC, works for ALL artists) ── */}
                 <StreamBoostRow
                   track={track}
                   onBoost={handleStreamBoost}
@@ -599,19 +607,24 @@ export default function AdminBoost({ embedded = false }) {
                 <div className="flex items-center justify-between px-3 py-2.5 bg-white/[0.03] rounded-lg">
                   <div className="flex items-center space-x-2">
                     <Users className="w-3.5 h-3.5 text-pink-400" />
-                    <span className="text-xs text-white/60">Follower Count</span>
+                    <span className="text-xs text-white/60">
+                      Follower boost
+                      <span className="text-white/25 ml-1.5">
+                        {artist.follower_count || 0} real, showing {(artist.follower_count || 0) + (artist.follower_boost || 0)}
+                      </span>
+                    </span>
                   </div>
                   <div className="flex items-center space-x-2">
                     <input
                       type="number" min="0"
-                      value={artist.follower_count || 0}
+                      value={artist.follower_boost || 0}
                       onChange={(e) => setArtists(prev => prev.map(a =>
-                        a.id === artist.id ? { ...a, follower_count: parseInt(e.target.value) || 0 } : a
+                        a.id === artist.id ? { ...a, follower_boost: parseInt(e.target.value) || 0 } : a
                       ))}
                       className="w-20 px-2 py-1 bg-white/[0.06] rounded-lg text-xs text-white text-right outline-none border border-white/[0.06] focus:border-white/20"
                     />
                     <button
-                      onClick={() => handleFollowerBoost(artist, artist.follower_count)}
+                      onClick={() => handleFollowerBoost(artist, artist.follower_boost || 0)}
                       disabled={saving[`${artist.id}-followers`]}
                       className="px-2.5 py-1 bg-pink-500/20 text-pink-400 text-xs rounded-lg hover:bg-pink-500/30 transition disabled:opacity-40">
                       {saving[`${artist.id}-followers`] ? <Loader className="w-3 h-3 animate-spin" /> : 'Set'}
@@ -624,14 +637,14 @@ export default function AdminBoost({ embedded = false }) {
                   <span className="text-[10px] text-white/20">Quick:</span>
                   {[
                     { label: 'Reset', value: 0 },
-                    { label: '1K', value: 1000 },
-                    { label: '10K', value: 10000 },
-                    { label: '100K', value: 100000 },
+                    { label: '+1K', value: 1000 },
+                    { label: '+10K', value: 10000 },
+                    { label: '+100K', value: 100000 },
                   ].map(({ label, value }) => (
                     <button key={label}
                       onClick={() => {
-                        setArtists(prev => prev.map(a => a.id === artist.id ? { ...a, follower_count: value } : a));
-                        handleFollowerBoost({ ...artist, follower_count: value }, value);
+                        setArtists(prev => prev.map(a => a.id === artist.id ? { ...a, follower_boost: value } : a));
+                        handleFollowerBoost(artist, value);
                       }}
                       className="px-2 py-1 rounded-lg text-[10px] font-semibold bg-white/[0.04] text-white/30 hover:bg-white/[0.08] hover:text-white/50 transition">
                       {label}

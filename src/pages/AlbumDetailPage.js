@@ -18,6 +18,7 @@ import {
 import ShareCard from '../components/ShareCard';
 import { showReceipt } from '../components/PurchaseReceipt';
 import PriceBreakdown, { useQuote } from '../components/PriceBreakdown';
+import { CommentButton } from '../components/TrackComments';
 
 const PAYPAL_CLIENT_ID = process.env.REACT_APP_PAYPAL_CLIENT_ID;
 const BASE_URL = 'https://www.feelzmachine.com';
@@ -72,7 +73,7 @@ export default function AlbumDetailPage() {
   // purchaseTarget is either the whole album or one track off it, so the quote
   // follows whichever is open rather than assuming the album price.
   //
-  // Its shape is { type: 'album' | 'track', track?, price, label } — read off
+  // Its shape is { type: 'album' | 'track', track?, price, label }, read off
   // the three setPurchaseTarget calls below rather than assumed, because the
   // album id is NOT on this object and a guess at `.id` would have quoted
   // undefined and silently shown nothing.
@@ -111,6 +112,29 @@ export default function AlbumDetailPage() {
   useEffect(() => { fetchAlbum(); }, [id]);
   useEffect(() => { if (user && showAddToPlaylist) fetchPlaylists(); }, [showAddToPlaylist, user]);
 
+  // Which of these tracks the signed in listener has liked. Its own effect, so
+  // it runs again when auth resolves after a refresh rather than once, too
+  // early, inside fetchAlbum. Scoped to the tracks on this page instead of
+  // reading the listener's entire like history, which was the whole table for
+  // anyone who has been here a while.
+  useEffect(() => {
+    if (!user || tracks.length === 0) { setLikedTracks({}); return; }
+    let cancelled = false;
+    (async () => {
+      const { data: likes, error } = await supabase
+        .from('track_likes')
+        .select('track_id')
+        .eq('user_id', user.id)
+        .in('track_id', tracks.map(t => t.id));
+      if (error) { console.error('[Album] likes read failed:', error.code, error.message); return; }
+      if (cancelled) return;
+      const likeMap = {};
+      (likes || []).forEach(l => { likeMap[l.track_id] = true; });
+      setLikedTracks(likeMap);
+    })();
+    return () => { cancelled = true; };
+  }, [user?.id, tracks]); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     if (!purchaseTarget) return;
     if (!purchaseTarget.price || purchaseTarget.price <= 0) return;
@@ -143,7 +167,7 @@ export default function AlbumDetailPage() {
               action: 'create',
               // An album purchase names the album; a track purchase names the
               // track. It used to send `trackId: null` for a whole album,
-              // which the server refused outright — so buying an album has
+              // which the server refused outright, so buying an album has
               // never worked. The price is resolved server-side either way;
               // `amount` is sent for the logs only and is ignored there.
               ...(purchaseTarget.type === 'album'
@@ -230,12 +254,11 @@ export default function AlbumDetailPage() {
         .eq('album_id', albumData.id).eq('is_published', true)
         .order('track_number', { ascending: true });
       setTracks(trackData || []);
-      if (user) {
-        const { data: likes } = await supabase.from('track_likes').select('track_id').eq('user_id', user.id);
-        const likeMap = {};
-        (likes || []).forEach(l => { likeMap[l.track_id] = true; });
-        setLikedTracks(likeMap);
-      }
+      // The likes read used to be here, inside a fetch that only runs on [id].
+      // On a refresh the session has not been restored yet, `user` is null,
+      // the branch is skipped and no later effect reads it, so every heart on
+      // the album comes back grey on a page the listener has liked tracks on.
+      // It now has its own effect below, keyed on the user and the track list.
     } catch (err) { console.error(err); }
     finally { setLoading(false); }
   };
@@ -264,7 +287,7 @@ export default function AlbumDetailPage() {
     );
   };
 
-  // Autoplay, but only when asked for with ?play=1 — which is what the Home
+  // Autoplay, but only when asked for with ?play=1, which is what the Home
   // Hero picker writes when "start playing when opened" is ticked. Deliberately
   // opt-in: someone browsing to an album page has not asked for audio, and a
   // page that hijacks the speakers on arrival is the kind of thing people
@@ -287,9 +310,25 @@ export default function AlbumDetailPage() {
     const isLiked = likedTracks[track.id];
     setLikedTracks(prev => ({ ...prev, [track.id]: !isLiked }));
     if (isLiked) {
-      await supabase.from('track_likes').delete().eq('track_id', track.id).eq('user_id', user.id);
+      const { error } = await supabase.from('track_likes')
+        .delete().eq('track_id', track.id).eq('user_id', user.id);
+      if (error) {
+        console.error('[Album] unlike failed:', error.code, error.message);
+        setLikedTracks(prev => ({ ...prev, [track.id]: true }));   // put the heart back
+      }
     } else {
-      await supabase.from('track_likes').insert({ track_id: track.id, user_id: user.id, artist_id: artist?.id });
+      // artist_id used to be sent with this insert. track_likes has no such
+      // column, so PostgREST refused the whole row with PGRST204 and, because
+      // nothing here read the error, the heart filled in and the like was
+      // never written. Every other like in the app inserts these two columns
+      // and only these two.
+      const { error } = await supabase.from('track_likes')
+        .insert({ track_id: track.id, user_id: user.id });
+      // 23505 is the unique (track_id, user_id) index: already liked. Fine.
+      if (error && error.code !== '23505') {
+        console.error('[Album] like failed:', error.code, error.message);
+        setLikedTracks(prev => ({ ...prev, [track.id]: false }));
+      }
     }
   };
 
@@ -298,7 +337,7 @@ export default function AlbumDetailPage() {
   };
 
   // The album-price fallback is what puts a "$1.43" on a track that has no
-  // price of its own — the album's price split across its tracks.
+  // price of its own, the album's price split across its tracks.
   //
   // A track marked NOT downloadable is excluded now. It used to get a price
   // and a buy button from this fallback, the server refused the order because
@@ -484,7 +523,7 @@ export default function AlbumDetailPage() {
         )}
       </div>
 
-      {/* Who made this record — up here, where the track page puts it, and in
+      {/* Who made this record, up here, where the track page puts it, and in
           the same shape: one row of pills, not a stack of cards.
 
           It used to render a full Credits card per track that had any. On an
@@ -534,6 +573,16 @@ export default function AlbumDetailPage() {
                   <button onClick={(e) => handleLike(track, e)} className="w-8 h-8 flex items-center justify-center rounded-lg transition active:scale-90">
                     <Heart className="w-4 h-4" fill={likedTracks[track.id] ? '#ef4444' : 'none'} color={likedTracks[track.id] ? '#ef4444' : 'rgba(255,255,255,0.25)'} />
                   </button>
+                  {/* Comments, per track, not per album. The same thread the
+                      track page, For You and the three dot menu open. */}
+                  <CommentButton
+                    track={{ ...track, artist_name: artist?.artist_name }}
+                    user={user}
+                    routePrefix="track"
+                    variant="badge"
+                    iconClassName="w-4 h-4"
+                    className="w-8 h-8 flex items-center justify-center rounded-lg transition active:scale-90 relative"
+                  />
                   <button onClick={(e) => { e.stopPropagation(); setShowAddToPlaylist(showAddToPlaylist === track.id ? null : track.id); }}
                     className="w-8 h-8 flex items-center justify-center rounded-lg transition active:scale-90">
                     <ListMusic className="w-4 h-4 text-white/25 hover:text-white/60 transition" />
@@ -603,7 +652,7 @@ export default function AlbumDetailPage() {
                     </button>
                   )}
                   {playlists.length === 0 && !showNewPlaylist ? (
-                    <div className="px-4 py-3"><p className="text-xs text-white/30">No playlists yet — create one above</p></div>
+                    <div className="px-4 py-3"><p className="text-xs text-white/30">No playlists yet, create one above</p></div>
                   ) : playlists.map(pl => {
                     const key = `${pl.id}-${track.id}`;
                     return (
@@ -625,7 +674,7 @@ export default function AlbumDetailPage() {
           They used to render here, after the whole track list: one card per
           track, every one headed just "Credits", with nothing saying which
           track it belonged to. On a two-track album that is two identical
-          cards stacked at the very bottom — you could see that somebody had a
+          cards stacked at the very bottom, you could see that somebody had a
           50% split without being able to tell of what.
           They are now near the top, under the action bar, in the same place
           the track detail page puts Featuring, and each one names its track.

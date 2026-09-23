@@ -395,7 +395,10 @@ export default function RetailPlayerPage() {
 
     const { error } = isLiked
       ? await supabase.from('track_likes').delete().eq('track_id', track.id).eq('user_id', user.id)
-      : await supabase.from('track_likes').insert({ track_id: track.id, user_id: user.id, artist_id: track.artist_id || track.artist?.id || null });
+      // artist_id is not a column on track_likes. Sending it made PostgREST
+      // refuse the row with PGRST204, so every venue favourite here was lost
+      // on refresh and every one of them is a 400 in the console.
+      : await supabase.from('track_likes').insert({ track_id: track.id, user_id: user.id });
 
     // 23505 is a like that already exists, which is the state we wanted.
     if (error && error.code !== '23505') {

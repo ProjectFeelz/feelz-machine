@@ -383,6 +383,40 @@ exports.handler = async (event) => {
         ? (await adminClient.from('albums').select('artist_id').eq('id', albumId).maybeSingle()).data?.artist_id || null
         : (await adminClient.from('tracks').select('artist_id').eq('id', trackId).maybeSingle()).data?.artist_id || null;
 
+      // ── An artist under 18 with no verified guardian consent ──────────────
+      //
+      // Migration 174. artist_can_sell is false only for an artist whose own
+      // stated date of birth puts them under 18 AND who has no guardian
+      // consent an admin has verified. Everyone else, including every account
+      // that has not given a date of birth, is true.
+      //
+      // Checked at the point the order is opened, which is the last place the
+      // platform can decline before money moves. The artist is told well
+      // before they get here, by GuardianConsentBanner on their dashboard,
+      // but a rule like this cannot live in the browser.
+      //
+      // A failure to read it does NOT block the sale: an unreachable check
+      // must not close the shop for every artist on the platform. It is
+      // logged loudly instead.
+      if (sellerArtistId) {
+        const { data: canSell, error: sellErr } =
+          await adminClient.rpc('artist_can_sell', { p_artist_id: sellerArtistId });
+        if (sellErr) {
+          console.error('[paypal-order] artist_can_sell unreadable, allowing the sale:',
+            sellErr.code, sellErr.message);
+        } else if (canSell === false) {
+          console.warn('[paypal-order] refused: artist', sellerArtistId,
+            'is under 18 with no verified guardian consent');
+          return {
+            statusCode: 403,
+            body: JSON.stringify({
+              error: 'This music is not for sale yet. The artist is under 18 and we are waiting on their parent or guardian. Nothing was charged.',
+              reason: 'guardian_consent_required',
+            }),
+          };
+        }
+      }
+
       let commissionPct = 0;
       try {
         const { data: r } = await adminClient.rpc('platform_commission_percent');

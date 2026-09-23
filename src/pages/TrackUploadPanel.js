@@ -49,6 +49,13 @@ const VERSION_TYPES = [
 
 const ALBUM_TYPES = ['ep', 'album', 'mixtape', 'live', 'compilation'];
 
+// How many tracks a release has to have to be called what it is called.
+// The database enforces the same floors (migration 169) and quietly turns a
+// three track "album" into an EP, so this is here to say so up front rather
+// than let someone find out after they publish.
+const MIN_TRACKS = { ep: 2, album: 6, mixtape: 6, live: 6, compilation: 6 };
+const minTracksFor = (type) => MIN_TRACKS[type] || 1;
+
 const BEAT_KEYS = [
   'C','C#/Db','D','D#/Eb','E','F','F#/Gb','G','G#/Ab','A','A#/Bb','B',
 ];
@@ -1634,7 +1641,7 @@ export default function TrackUploadPanel() {
   // artwork on any track that has none. Until now each track had to be
   // undrafted and given artwork one by one.
   const finishAlbum = async () => {
-    const minTracks = ['ep', 'album', 'mixtape', 'live', 'compilation'].includes(release.release_type) ? 3 : 1;
+    const minTracks = minTracksFor(release.release_type);
     if (albumTrackQueue.length < minTracks) {
       showMessage('error', `A ${release.release_type} requires at least ${minTracks} tracks. You've added ${albumTrackQueue.length} so far.`);
       return;
@@ -2081,9 +2088,12 @@ export default function TrackUploadPanel() {
             {/* Said up front. This requirement existed but was only shown
                 after the first track had been uploaded, so the first anyone
                 heard of it was being refused at the end. */}
-            {['ep', 'album', 'mixtape', 'live', 'compilation'].includes(release.release_type) && (
+            {ALBUM_TYPES.includes(release.release_type) && (
               <p className="text-xs text-white/40">
-                An {release.release_type} needs at least 3 tracks, uploaded one at a time.
+                An {release.release_type} needs at least {minTracksFor(release.release_type)} tracks, uploaded one at a time.
+                {['album', 'mixtape', 'live', 'compilation'].includes(release.release_type)
+                  ? ' Fewer than 6 and it is published as an EP.'
+                  : ' Fewer than 2 and it is published as a single.'}
                 Cover artwork is required, and each track will use the {release.release_type} artwork
                 unless you give it its own.
               </p>
@@ -2198,9 +2208,9 @@ export default function TrackUploadPanel() {
                 className="w-full py-3 bg-white/[0.06] text-white/70 font-medium rounded-lg hover:bg-white/[0.1] transition flex items-center justify-center space-x-2">
                 <Plus className="w-4 h-4" /><span>Add Another Track</span>
               </button>
-              {['ep', 'album', 'mixtape', 'live', 'compilation'].includes(release.release_type) && albumTrackQueue.length < 3 && (
+              {ALBUM_TYPES.includes(release.release_type) && albumTrackQueue.length < minTracksFor(release.release_type) && (
                 <p className="text-xs text-yellow-400/70 text-center">
-                  {release.release_type.toUpperCase()} requires at least 3 tracks, {3 - albumTrackQueue.length} more needed
+                  {release.release_type.toUpperCase()} requires at least {minTracksFor(release.release_type)} tracks, {minTracksFor(release.release_type) - albumTrackQueue.length} more needed
                 </p>
               )}
               <button type="button" onClick={finishAlbum} disabled={finishing}

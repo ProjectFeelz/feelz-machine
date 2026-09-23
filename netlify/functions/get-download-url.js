@@ -34,7 +34,7 @@ exports.handler = async (event) => {
   const { data: track, error: trackError } = await adminClient
     .from('tracks')
     // is_downloadable HAS to be here. The quota gate below reads it, and
-    // without it in the select it was always undefined — so `trackIsFree &&
+    // without it in the select it was always undefined, so `trackIsFree &&
     // track.is_downloadable` was always false, the whole Fan Pro check and the
     // 3-per-month quota were skipped, and every signed-in listener could
     // download every free track without limit. One missing column, and the
@@ -42,14 +42,14 @@ exports.handler = async (event) => {
     // pay_what_you_want / minimum_price HAVE to be here too, for the same
     // reason is_downloadable did. This function priced every track at
     // download_price and knew nothing about PWYW, so a buyer who paid a
-    // pay-what-you-want price BELOW the listed download_price — which is the
-    // entire point of pay-what-you-want — was refused her own purchase with
+    // pay-what-you-want price BELOW the listed download_price, which is the
+    // entire point of pay-what-you-want, was refused her own purchase with
     // "Insufficient payment", and one who paid on a PWYW track with
     // download_price = 0 was handed the file free through the quota path.
     // Same missing-column shape, both directions, on the money path.
     //
     // NOT pwyw_minimum_price. That column is in schema_dump.sql but not in the
-    // database — see the note in paypal-order.js. Selecting it here would take
+    // database, see the note in paypal-order.js. Selecting it here would take
     // out every download on the platform, not just the PWYW ones.
     .select('file_url, title, slug, is_preorder, release_date, download_price, is_downloadable, artist_id, album_id, pay_what_you_want, minimum_price')
     .eq('id', trackId)
@@ -117,12 +117,12 @@ exports.handler = async (event) => {
 
   // ── Listener download quota check ───────────────────────────────────────────
   // Free listeners cannot download. Pro listeners get 3 free downloads/month.
-  // Paid downloads (download_price > 0) bypass the quota — they already paid.
+  // Paid downloads (download_price > 0) bypass the quota, they already paid.
   // `!== false` rather than a truthy check, deliberately. is_downloadable is
   // nullable and older rows have it null; a truthy check would let every one of
   // those straight past the quota, which is the same hole in a smaller shape.
   // An artist who has explicitly turned downloads off is handled separately
-  // below — this gate is about who may spend a free download, not whether the
+  // below, this gate is about who may spend a free download, not whether the
   // track offers one.
   if (trackIsFree && track.is_downloadable !== false) {
     // Check if user is an artist (artists bypass listener quota)
@@ -130,13 +130,13 @@ exports.handler = async (event) => {
       .from('artists').select('id').eq('user_id', user.id).maybeSingle();
 
     if (!artistCheck) {
-      // This is a listener — check their tier.
+      // This is a listener, check their tier.
       //
       // BOTH sources, in the order they are authoritative. This function used
       // to read only listener_tier_subscriptions, which is the older path.
       // listeners.tier is what the PayPal webhook writes on activation and
       // what an admin grant sets, and it is what useTier checks first on the
-      // client — so a listener whose Pro came from there was shown Fan Pro
+      // client, so a listener whose Pro came from there was shown Fan Pro
       // everywhere in the app and then told to upgrade the moment they tried
       // to download. get-offline-url.js checks both; now so does this.
       let isPro = false;
@@ -178,7 +178,7 @@ exports.handler = async (event) => {
       // As written, a listener who was NOT Fan Pro got a flat 403 and could
       // never download anything, and a listener who WAS Fan Pro got a cap of
       // three a month. So the paid tier was the restricted one and the free
-      // tier was locked out entirely — the opposite of what Fan Pro is sold
+      // tier was locked out entirely, the opposite of what Fan Pro is sold
       // as, and the reason Davu (genuinely Fan Pro, correctly recognised)
       // was refused after her third download.
       //
@@ -201,7 +201,7 @@ exports.handler = async (event) => {
           .gte('created_at', monthStart.toISOString());
 
         // Read, not discarded. A failed count used to come back undefined,
-        // which `(monthlyCount || 0) >= FREE_MONTHLY_QUOTA` reads as 0 — so a
+        // which `(monthlyCount || 0) >= FREE_MONTHLY_QUOTA` reads as 0, so a
         // broken count silently handed out unlimited downloads to everyone.
         if (quotaErr) {
           console.error('[get-download-url] quota count failed:', quotaErr.message);
@@ -220,7 +220,7 @@ exports.handler = async (event) => {
             statusCode: 403,
             body: JSON.stringify({
               error: 'monthly_quota_exceeded',
-              message: `You have used your ${FREE_MONTHLY_QUOTA} free downloads this month. They reset on the 1st — or go Fan Pro for unlimited downloads.`,
+              message: `You have used your ${FREE_MONTHLY_QUOTA} free downloads this month. They reset on the 1st, or go Fan Pro for unlimited downloads.`,
               quota: FREE_MONTHLY_QUOTA,
               used: monthlyCount,
               upgrade: true,
@@ -301,7 +301,7 @@ exports.handler = async (event) => {
     // The grant row. `maybeSingle` is deliberately not used: a buyer can
     // legitimately end up with more than one downloads row for a track (a free
     // grant followed by a purchase, or a re-purchase), and maybeSingle raises
-    // PGRST116 on two rows — which the old code turned into a flat "Purchase
+    // PGRST116 on two rows, which the old code turned into a flat "Purchase
     // required" for somebody who had paid twice. Take the highest amount_paid.
     const { data: grants, error: grantErr } = await adminClient
       .from('downloads')
@@ -319,7 +319,7 @@ exports.handler = async (event) => {
     const purchase = grants?.[0] || null;
 
     if (boughtIt) {
-      // Paid for, so it is theirs. Backfill the grant if it is missing — an
+      // Paid for, so it is theirs. Backfill the grant if it is missing, an
       // album buyer never had one, and a capture that failed to write one left
       // the buyer stranded. Non-fatal: the download proceeds either way.
       if (!purchase) {
@@ -340,7 +340,7 @@ exports.handler = async (event) => {
       }
     } else {
       // No purchase behind it. Now the grant has to stand on its own, and the
-      // amount check applies — this is where a hand-written or legacy row would
+      // amount check applies, this is where a hand-written or legacy row would
       // otherwise hand out a paid track for nothing.
       if (!purchase) {
         return { statusCode: 403, body: JSON.stringify({ error: 'Purchase required' }) };
@@ -358,7 +358,13 @@ exports.handler = async (event) => {
         };
       }
     }
-    // Increment download_count for paid track
+    // Increment download_count for paid track.
+    //
+    // Left counting every transfer on purpose. The free branch above counts
+    // grants instead, because a free grant is the event there. Here the grant
+    // row is written by paypal-order.js at the moment of capture, before this
+    // function is ever called, so "first time we see no grant" is never true
+    // for a paid track and guarding on it would stop the counter entirely.
     try {
       await adminClient.rpc('increment_download_count', { track_id: trackId });
     } catch {
@@ -367,29 +373,64 @@ exports.handler = async (event) => {
     }
   }
 
-  // Notify artist of download — non-fatal
+  // ── Telling the artist, once ────────────────────────────────────────────
+  //
+  // One purchase was arriving in the artist's notifications as two identical
+  // lines. There were three writers for one event: this one, TrackPage's
+  // handleDownload and ArtistProfilePage's triggerDownload. The two client
+  // ones have been removed (see the notes there), because only this one runs
+  // after the file has actually been handed over and only this one knows what
+  // was really paid.
+  //
+  // That leaves the other half of it: this function is called again every time
+  // the buyer downloads the same file, from the Downloads page, on a second
+  // device, or after a failed transfer, and the artist was told again each
+  // time. The check below makes the notification a fact about the SALE rather
+  // than about the transfer, so a repeat download is silent.
   try {
     const { data: artistUser } = await adminClient
       .from('artists').select('user_id, artist_name').eq('id', track.artist_id).maybeSingle();
-    const { data: downloaderArtist } = await adminClient
-      .from('artists').select('id, artist_name, profile_image_url').eq('user_id', user.id).maybeSingle();
-    const downloaderName = downloaderArtist?.artist_name || 'Someone';
+
     if (artistUser?.user_id && artistUser.user_id !== user.id) {
-      await adminClient.from('notifications').insert({
-        artist_id:      track.artist_id,
-        user_id:        artistUser.user_id,
-        type:           'download',
-        title:          `${downloaderName} downloaded ${track.title}`,
-        message:        trackIsFree ? 'Free download' : `Paid download · $${effectivePrice.toFixed(2)}`,
-        from_artist_id: downloaderArtist?.id || null,
-        metadata: {
-          track_id:          trackId,
-          track_title:       track.title,
-          from_artist_name:  downloaderName,
-          from_artist_image: downloaderArtist?.profile_image_url || null,
-          amount_paid:       trackIsFree ? 0 : effectivePrice,
-        },
-      });
+      // Has this person already been announced for this track?
+      const { data: told, error: toldErr } = await adminClient
+        .from('notifications')
+        .select('id')
+        .eq('user_id', artistUser.user_id)
+        .eq('type', 'download')
+        .contains('metadata', { track_id: trackId, downloader_user_id: user.id })
+        .limit(1);
+
+      // A failed read must not silence the notification: a missing one is
+      // worse than a repeated one, so an error here falls through and sends.
+      if (toldErr) {
+        console.error('[get-download-url] duplicate check failed (sending anyway):',
+          toldErr.code, toldErr.message);
+      }
+
+      if (toldErr || !told?.length) {
+        const { data: downloaderArtist } = await adminClient
+          .from('artists').select('id, artist_name, profile_image_url').eq('user_id', user.id).maybeSingle();
+        const downloaderName = downloaderArtist?.artist_name || 'Someone';
+        await adminClient.from('notifications').insert({
+          artist_id:      track.artist_id,
+          user_id:        artistUser.user_id,
+          type:           'download',
+          title:          `${downloaderName} downloaded ${track.title}`,
+          message:        trackIsFree ? 'Free download' : `Paid download · $${effectivePrice.toFixed(2)}`,
+          from_artist_id: downloaderArtist?.id || null,
+          metadata: {
+            track_id:           trackId,
+            track_title:        track.title,
+            // Stamped so the check above can find it next time. Without this
+            // there is nothing on the row tying it to who downloaded.
+            downloader_user_id: user.id,
+            from_artist_name:   downloaderName,
+            from_artist_image:  downloaderArtist?.profile_image_url || null,
+            amount_paid:        trackIsFree ? 0 : effectivePrice,
+          },
+        });
+      }
     }
   } catch { /* non-fatal */ }
 

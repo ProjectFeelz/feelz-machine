@@ -68,6 +68,9 @@ const AdminUserBehaviorPage = React.lazy(() => import('./pages/AdminUserBehavior
 const TrackPage = React.lazy(() => import('./pages/TrackPage'));
 const CollabRadarPage = React.lazy(() => import('./pages/CollabRadarPage'));
 const AdminDuplicates = React.lazy(() => import('./pages/AdminDuplicates'));
+const GuardianConsentPage = React.lazy(() => import('./pages/GuardianConsentPage'));
+const AdminGuardianConsents = React.lazy(() => import('./pages/AdminGuardianConsents'));
+const AdminPersonas = React.lazy(() => import('./pages/AdminPersonas'));
 const CompetitionRoomPage = React.lazy(() => import('./pages/CompetitionRoomPage'));
 const WheelRevealPage = React.lazy(() => import('./pages/WheelRevealPage'));
 const ForYouPage = React.lazy(() => import('./pages/ForYouPage'));
@@ -436,6 +439,9 @@ export default function AppRouter() {
                 <Route path="/legal/:slug" element={<LegalDocumentPage />} />
                 <Route path="/admin/home-hero" element={<AdminHomeHero />} />
                 <Route path="/admin/cold-start" element={<AdminColdStart />} />
+                <Route path="/admin/guardian-consents" element={<AdminGuardianConsents />} />
+                <Route path="/admin/personas" element={<AdminPersonas />} />
+                <Route path="/guardian-consent" element={<GuardianConsentPage />} />
                 <Route path="/hidden" element={<HiddenPage />} />
                 <Route path="/contact-preferences" element={<ContactPreferencesPage />} />
                 <Route path="/admin/retail-staff" element={<Navigate to="/retail-admin?sub=staff" replace />} />

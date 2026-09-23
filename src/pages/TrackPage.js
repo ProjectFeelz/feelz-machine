@@ -14,8 +14,8 @@ import {
   Heart, Share2, Check, MoreHorizontal, Disc, ExternalLink
 } from 'lucide-react';
 import VerifiedBadge from '../components/VerifiedBadge';
-import { sendNotification } from '../utils/notify';
 import { fetchTrackCredits } from '../components/TrackCredits';
+import { CommentButton } from '../components/TrackComments';
 
 const BASE_URL = 'https://www.feelzmachine.com';
 
@@ -81,12 +81,34 @@ export default function TrackPage() {
 
   useEffect(() => { if (slug) fetchTrack(); }, [slug]);
 
+  // Everything that depends on WHO is looking, re-read whenever the signed in
+  // user or the track changes. Separate from fetchTrack on purpose: see the
+  // note where these two reads used to sit.
+  useEffect(() => {
+    if (!track?.id) return;
+    if (!user) { setLiked(false); setAlreadyPurchased(false); return; }
+    let cancelled = false;
+    (async () => {
+      const { data: likeData, error: likeErr } = await supabase
+        .from('track_likes')
+        .select('id')
+        .eq('track_id', track.id)
+        .eq('user_id', user.id)
+        .maybeSingle();
+      if (likeErr) console.error('[TrackPage] like read failed:', likeErr.code, likeErr.message);
+      if (!cancelled) setLiked(!!likeData);
+      await checkExistingPurchase(track.id);
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, track?.id]);
+
   const fetchTrack = async () => {
     setLoading(true);
     autoPlayedRef.current = false;
     setDataReady(false);
     try {
-      // Fetch track by slug — then, failing that, by id.
+      // Fetch track by slug, then, failing that, by id.
       //
       // The id fallback is not decoration. This route is reached with a raw
       // track id from several places that only have one to hand, the purchase
@@ -130,7 +152,7 @@ export default function TrackPage() {
       // agreed to.
       //
       // Reads through fetchTrackCredits rather than a PostgREST embed. The
-      // embed that was here — artists(...) from collaborations — cannot be
+      // embed that was here, artists(...) from collaborations, cannot be
       // resolved if that table carries a second foreign key to artists, and
       // this call site destructured only `data`, so a failure showed as a
       // track with no features. See the note at the top of TrackCredits.js.
@@ -142,17 +164,16 @@ export default function TrackPage() {
       setArtist(trackData.artists);
       setAlbum(trackData.albums || null);
 
-      // Check if user liked this track
-      if (user) {
-        const { data: likeData } = await supabase
-          .from('track_likes')
-          .select('id')
-          .eq('track_id', trackData.id)
-          .eq('user_id', user.id)
-          .maybeSingle();
-        setLiked(!!likeData);
-      await checkExistingPurchase(trackData.id);
-      }
+      // The like state and the purchase check used to be read here, inside
+      // `if (user)`, in a fetch that only runs on [slug]. On a refresh the
+      // session has not been restored yet when this runs, so `user` is null,
+      // the branch is skipped, and nothing ever reads it again: the heart
+      // comes back empty on a track the listener has liked, and a buyer is
+      // shown the buy button for something they already own. The like was
+      // written correctly all along, it was just never read back.
+      //
+      // They now live in their own effect below, keyed on the user and the
+      // track, so they run again the moment auth resolves.
 
       // Fetch full artist discography for queue
       const { data: discData } = await supabase
@@ -186,7 +207,7 @@ export default function TrackPage() {
   };
 
   // Autoplay once the track (and its discography, for the up-next queue) has
-  // loaded — fires once per page load, and skips if this track is already
+  // loaded, fires once per page load, and skips if this track is already
   // the one currently loaded in the player (e.g. navigated back to it).
   useEffect(() => {
     if (dataReady && track && !autoPlayedRef.current) {
@@ -197,14 +218,25 @@ export default function TrackPage() {
     }
   }, [dataReady]); // eslint-disable-line
 
+  // The heart is set from what the database actually did, not from the tap.
+  // Both of these writes used to be unchecked, so a refused insert left the
+  // heart red until the next refresh and looked exactly like the bug above.
   const handleLike = async () => {
-    if (!user) { navigate('/login'); return; }
+    if (!user || !track) { if (!user) navigate('/login'); return; }
     if (liked) {
-      await supabase.from('track_likes').delete()
+      const { error } = await supabase.from('track_likes').delete()
         .eq('track_id', track.id).eq('user_id', user.id);
+      if (error) { console.error('[TrackPage] unlike failed:', error.code, error.message); return; }
       setLiked(false);
     } else {
-      await supabase.from('track_likes').insert({ track_id: track.id, user_id: user.id });
+      const { error } = await supabase.from('track_likes')
+        .insert({ track_id: track.id, user_id: user.id });
+      // 23505 is the unique (track_id, user_id) index: already liked in
+      // another tab. That is the state we wanted, not a failure.
+      if (error && error.code !== '23505') {
+        console.error('[TrackPage] like failed:', error.code, error.message);
+        return;
+      }
       setLiked(true);
     }
   };
@@ -229,25 +261,15 @@ export default function TrackPage() {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       await downloadTrack(track.id, track.title, session?.access_token);
-      // Notify the artist that someone downloaded their track
-      if (artist?.user_id && artist?.id) {
-        const { data: myProfile } = await supabase.from('artists').select('id, artist_name').eq('user_id', user.id).maybeSingle();
-        // Migration 106. reportNotify was doing its job — logging
-        // "blocked by row level security" on every download — but the write
-        // itself could never succeed from the client.
-        await sendNotification(supabase, 'download (TrackPage)', {
-          type:     'download',
-          artistId: artist.id,
-          title:    `${myProfile?.artist_name || 'Someone'} downloaded ${track.title}`,
-          message:  `${myProfile?.artist_name || 'Someone'} downloaded your track "${track.title}"`,
-          trackId:  track.id,
-          metadata: {
-            download:       true,
-            purchase_price: track.download_price || 0,
-            from_artist_id: myProfile?.id || null,
-          },
-        });
-      }
+      // The artist is NOT notified from here.
+      //
+      // netlify/functions/get-download-url.js already writes exactly one
+      // `download` notification, and it is the only place that can write a
+      // true one: it knows whether the file was actually handed over, whether
+      // the download was free or paid, and what was really paid. This page
+      // sent a second one with the same title, which is why one purchase
+      // arrived as two identical lines in the artist's notifications. The same
+      // duplicate has been removed from ArtistProfilePage.
     } catch (err) {
       // The backend's 403s are deliberate rules with real messages. Logging
       // them and showing nothing made a working rule look like a dead button.
@@ -435,9 +457,9 @@ export default function TrackPage() {
       </div>
 
       {/* Action bar
-          `space-x-3` with no wrap was the whole bug. Four children — Play,
+          `space-x-3` with no wrap was the whole bug. Four children, Play,
           Like, a Download that grows a text label once you own the track, and
-          Artist — add up to about 443px of content that cannot shrink,
+          Artist, add up to about 443px of content that cannot shrink,
           against a 360px phone. Flex does not wrap by default and a labelled
           button will not go below its text, so the row simply made the page
           wider than the screen.
@@ -467,6 +489,16 @@ export default function TrackPage() {
             color={liked ? '#ef4444' : 'rgba(255,255,255,0.4)'}
           />
         </button>
+
+        {/* Comments. The same thread as For You, the album page and the three
+            dot menu: they are all track_comments on this track_id. */}
+        <CommentButton
+          track={{ ...track, artist_name: artist?.artist_name }}
+          user={user}
+          routePrefix="track"
+          variant="badge"
+          className="w-11 h-11 flex items-center justify-center rounded-full bg-white/[0.06] transition active:scale-90 relative"
+        />
 
         {/* Download */}
         {track.is_downloadable && (
@@ -538,7 +570,7 @@ export default function TrackPage() {
                 /* max-w + min-w-0 so ONE pill cannot be wider than the
                    screen. The row already wraps between pills, but wrapping
                    cannot help when a single pill with a long artist name is
-                   itself too wide — and the avatar needs flex-shrink-0 or it
+                   itself too wide, and the avatar needs flex-shrink-0 or it
                    squashes into an oval instead of letting the text give. */
                 className="flex items-center gap-2 pl-1 pr-3 py-1 rounded-full bg-white/[0.05] border border-white/[0.08] hover:bg-white/[0.1] transition max-w-full min-w-0">
                 {cr.artists.profile_image_url
@@ -571,7 +603,7 @@ export default function TrackPage() {
       {/* LYRICS
           Fetched by select('*') since this page was written and never
           rendered, so a track's lyrics were only ever visible inside the
-          expanded player — you had to be playing the track to read them, and
+          expanded player, you had to be playing the track to read them, and
           they were invisible to search engines on a page that has its own
           crawler meta.
 

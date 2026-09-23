@@ -53,7 +53,15 @@ export default function RetailLandingPage() {
 
   const features = [
     { icon: Music, title: 'Real playlists', body: 'Pick a mood and hit play. We build and maintain them so you never think about it again.' },
-    { icon: Users, title: 'Supports real artists', body: 'Half of what we receive from subscriptions, after payment fees, is split every month between the artists whose music plays in your space.' },
+    // The second sentence is the promise being kept, not marketing. The
+    // playlists are seeded with music Feelz Machine owns, so without this
+    // withholding, most of the "half that goes to artists" would come straight
+    // back to us and the first sentence would be true on paper and false in
+    // spirit. Enforced in the database, not by good intentions: see
+    // supabase/migrations/171_retail_platform_owned_pool.sql, which counts our
+    // plays towards the total so a real artist's share is their true share of
+    // the month, and then withholds ours instead of paying it out.
+    { icon: Users, title: 'Supports real artists', body: 'Half of what we receive from subscriptions, after payment fees, is split every month between the artists whose music plays in your space. Music we own ourselves earns nothing from that pool. Its share stays in the pool for other artists and competitions.' },
     { icon: Store, title: 'Ten minute setup', body: 'Works in any browser, or install it as an app. No hardware, no installation visit.' },
   ];
 
@@ -95,6 +103,38 @@ export default function RetailLandingPage() {
         <meta property="og:description" content="Curated background music for stores, cafes and pubs, built entirely from independent South African artists. Half of what we receive goes back to the artists whose music plays." />
         <meta name="twitter:title" content="Feelz Retail, background music for your venue" />
         <meta name="twitter:description" content="Curated background music for stores, cafes and pubs, built entirely from independent South African artists. Half of what we receive goes back to the artists whose music plays." />
+        <meta property="og:image" content="https://www.feelzmachine.com/og-default.png" />
+        <meta property="og:site_name" content="Feelz Machine" />
+        <meta property="og:locale" content="en_ZA" />
+        {/* What this actually is, in the form search engines read. The price is
+            only stated when self-serve signup is open, because quoting a price
+            nobody can pay yet is worse than quoting none. */}
+        <script type="application/ld+json">{JSON.stringify({
+          '@context': 'https://schema.org',
+          '@type': 'Service',
+          name: 'Feelz Retail',
+          serviceType: 'Background music for business',
+          description: 'Curated background music for shops, cafes, bars, salons and other venues, built entirely from independent South African artists. Half of subscription income, after payment fees, is paid to the artists whose music plays.',
+          url: 'https://www.feelzmachine.com/retail',
+          areaServed: { '@type': 'Country', name: 'South Africa' },
+          audience: { '@type': 'BusinessAudience', name: 'Shops, cafes, restaurants, bars, pubs, salons and gyms' },
+          provider: {
+            '@type': 'Organization',
+            name: 'Feelz Machine',
+            url: 'https://www.feelzmachine.com',
+            logo: 'https://www.feelzmachine.com/logo.png',
+          },
+          ...(selfServe ? {
+            offers: {
+              '@type': 'Offer',
+              price: pricing.priceUsd.toFixed(2),
+              priceCurrency: 'USD',
+              url: 'https://www.feelzmachine.com/retail',
+              availability: 'https://schema.org/InStock',
+              ...(trialDays ? { description: `${trialDays} day free trial, then $${pricing.priceUsd.toFixed(2)} a month` } : {}),
+            },
+          } : {}),
+        })}</script>
       </Helmet>
 
       <main className="flex-1 min-h-0 w-full max-w-6xl mx-auto px-6 md:px-10 pt-12 pb-10 md:py-6 md:grid md:grid-cols-2 md:gap-10 lg:gap-16 md:items-center">

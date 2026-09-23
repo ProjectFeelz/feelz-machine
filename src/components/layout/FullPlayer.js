@@ -104,7 +104,7 @@ function CassetteVisualizer({ isPlaying, currentTime, duration, coverUrl }) {
     };
     img.onerror = () => { imgRef.current = null; };
     img.src = coverUrl;
-    // Already cached — complete fires before onload in some browsers
+    // Already cached, complete fires before onload in some browsers
     if (img.complete && img.naturalWidth > 0) {
       imgRef.current = img;
       imgOpacity.current = 1;
@@ -168,7 +168,7 @@ function CassetteVisualizer({ isPlaying, currentTime, duration, coverUrl }) {
       ctx.beginPath(); ctx.arc(cx, cy, tapeR, 0, Math.PI * 2);
       ctx.fillStyle = tapeG; ctx.fill();
 
-      // concentric ring texture — real tape has layered wind lines
+      // concentric ring texture, real tape has layered wind lines
       ctx.save();
       ctx.beginPath(); ctx.arc(cx, cy, tapeR, 0, Math.PI * 2); ctx.clip();
       const ringCount = Math.floor((tapeR - inner) / 2.2);
@@ -282,7 +282,7 @@ function CassetteVisualizer({ isPlaying, currentTime, duration, coverUrl }) {
       ctx.fillStyle = gloss; ctx.fillRect(BX, BY, BW, BH);
       ctx.restore();
 
-      // ── label — black base, art fades in (block 2 mechanic kept) ──
+      // ── label, black base, art fades in (block 2 mechanic kept) ──
       const LX = 46, LY = 27, LW = 228, LH = 100, LR = 5;
       ctx.save();
       ctx.beginPath(); ctx.roundRect(LX, LY, LW, LH, LR); ctx.clip();
@@ -360,7 +360,7 @@ function CassetteVisualizer({ isPlaying, currentTime, duration, coverUrl }) {
         ctx.strokeStyle = '#777'; ctx.lineWidth = 0.6; ctx.stroke();
       });
 
-      // reels drawn larger so edges bleed past window bounds — only visible portion shows through
+      // reels drawn larger so edges bleed past window bounds, only visible portion shows through
       if (isPlaying) angleRef.current += 0.038;
       reel(LCX, reelCY, 34, 1 - tapeRef.current, -angleRef.current);
       reel(RCX, reelCY, 34,     tapeRef.current,   angleRef.current);
@@ -375,7 +375,7 @@ function CassetteVisualizer({ isPlaying, currentTime, duration, coverUrl }) {
       ctx.save();
       ctx.beginPath(); ctx.roundRect(WX, WY, WW, WH, WR); ctx.clip();
 
-      // recessed inner shadow — top and left edges feel sunken
+      // recessed inner shadow, top and left edges feel sunken
       const recessTop = ctx.createLinearGradient(WX, WY, WX, WY + 18);
       recessTop.addColorStop(0, 'rgba(0,0,0,0.85)');
       recessTop.addColorStop(1, 'rgba(0,0,0,0)');
@@ -386,11 +386,11 @@ function CassetteVisualizer({ isPlaying, currentTime, duration, coverUrl }) {
       recessLeft.addColorStop(1, 'rgba(0,0,0,0)');
       ctx.fillStyle = recessLeft; ctx.fillRect(WX, WY, WW, WH);
 
-      // broad glass body tint — slightly blue-tinted like real smoked plastic
+      // broad glass body tint, slightly blue-tinted like real smoked plastic
       ctx.fillStyle = 'rgba(180,210,255,0.04)';
       ctx.fillRect(WX, WY, WW, WH);
 
-      // primary gloss sweep — curved highlight across top half
+      // primary gloss sweep, curved highlight across top half
       const glassSweep = ctx.createLinearGradient(WX, WY, WX, WY + WH * 0.55);
       glassSweep.addColorStop(0,    'rgba(255,255,255,0.32)');
       glassSweep.addColorStop(0.25, 'rgba(255,255,255,0.10)');
@@ -398,13 +398,13 @@ function CassetteVisualizer({ isPlaying, currentTime, duration, coverUrl }) {
       glassSweep.addColorStop(1,    'rgba(255,255,255,0)');
       ctx.fillStyle = glassSweep; ctx.fillRect(WX, WY, WW, WH);
 
-      // sharp top-edge specular line — the brightest point of the glass
+      // sharp top-edge specular line, the brightest point of the glass
       const topSpec = ctx.createLinearGradient(WX, WY, WX, WY + 3);
       topSpec.addColorStop(0, 'rgba(255,255,255,0.75)');
       topSpec.addColorStop(1, 'rgba(255,255,255,0)');
       ctx.fillStyle = topSpec; ctx.fillRect(WX + WR, WY, WW - WR * 2, 3);
 
-      // diagonal streak — off-centre so it looks like a curved surface catch
+      // diagonal streak, off-centre so it looks like a curved surface catch
       ctx.save();
       ctx.translate(WX + WW * 0.15, WY);
       ctx.rotate(0.18);
@@ -416,7 +416,7 @@ function CassetteVisualizer({ isPlaying, currentTime, duration, coverUrl }) {
       ctx.fillRect(0, 0, WW * 0.45, WH * 1.4);
       ctx.restore();
 
-      // bottom inner glow — light bouncing back off the cassette body
+      // bottom inner glow, light bouncing back off the cassette body
       const bottomBounce = ctx.createLinearGradient(WX, WY + WH, WX, WY + WH - 10);
       bottomBounce.addColorStop(0, 'rgba(255,255,255,0.06)');
       bottomBounce.addColorStop(1, 'rgba(255,255,255,0)');
@@ -424,7 +424,7 @@ function CassetteVisualizer({ isPlaying, currentTime, duration, coverUrl }) {
 
       ctx.restore();
 
-      // ── outer window bezel — drawn last so it frames everything ──
+      // ── outer window bezel, drawn last so it frames everything ──
       ctx.beginPath(); ctx.roundRect(WX, WY, WW, WH, WR);
       ctx.strokeStyle = 'rgba(255,255,255,0.18)'; ctx.lineWidth = 1; ctx.stroke();
       ctx.beginPath(); ctx.roundRect(WX + 1, WY + 1, WW - 2, WH - 2, WR - 1);
@@ -568,7 +568,7 @@ function LyricsDisplay({ lyrics, currentTime, duration, isPlaying }) {
         style={{ scrollBehavior: 'smooth' }}
       >
         {isLRC ? (
-          // LRC mode — line by line with highlight
+          // LRC mode, line by line with highlight
           <div className="space-y-5 pb-32">
             {lrcLines.map((line, i) => {
               const isActive  = i === activeLine;
@@ -654,6 +654,10 @@ export default function FullPlayer() {
   const [showActionSheet, setShowActionSheet] = useState(false);
   const [displayMode, setDisplayMode]         = useState('artwork');
   const [lyrics, setLyrics]                   = useState(null);
+  // The uploaded video used to autoplay and loop on its own clock, so it was
+  // wherever it happened to be when you opened the player rather than where
+  // the song is. This keeps it on the song's clock.
+  const videoElRef = useRef(null);
   const [lyricsLoading, setLyricsLoading]     = useState(false);
   const [isDesktop, setIsDesktop] = useState(() => typeof window !== 'undefined' && window.innerWidth >= 768);
 
@@ -733,6 +737,25 @@ export default function FullPlayer() {
   const isUploadedVideo = hasVideo && currentTrack.youtube_url.includes('supabase');
   const hasLyrics  = !!lyrics;
 
+  // Video on the song's clock: it starts where the song starts, stops when the
+  // song stops, and a clip shorter than the song simply repeats in step rather
+  // than running away on its own.
+  useEffect(() => {
+    const v = videoElRef.current;
+    if (!v) return undefined;
+    const align = () => {
+      const len = v.duration;
+      if (!len || !isFinite(len)) return;
+      const want = currentTime % len;
+      if (Math.abs(v.currentTime - want) > 0.3) {
+        try { v.currentTime = want; } catch {}
+      }
+    };
+    if (isPlaying) { align(); v.play().catch(() => {}); } else { v.pause(); }
+    return undefined;
+  }, [isPlaying, currentTime, currentTrack?.id]);
+
+
   // Reset video mode if track has no video
   useEffect(() => {
     if (!hasVideo && displayMode === 'video') setDisplayMode('artwork');
@@ -741,7 +764,7 @@ export default function FullPlayer() {
   // Fetch lyrics when track changes or lyrics mode is entered
   useEffect(() => {
     if (!currentTrack?.id) { setLyrics(null); return; }
-    // Fetch lyrics — only if the track object doesn't already have them
+    // Fetch lyrics, only if the track object doesn't already have them
     if (currentTrack.lyrics !== undefined) {
       setLyrics(currentTrack.lyrics || null);
       return;
@@ -885,7 +908,7 @@ export default function FullPlayer() {
                     ${isActive ? 'opacity-100' : 'opacity-70 hover:opacity-100'}
                     ${isDragging ? 'opacity-30 scale-95' : ''}
                     ${isDragOver && !isActive ? 'border-t-2 border-t-purple-400' : ''}`}>
-                  {/* Drag handle — hidden for current track */}
+                  {/* Drag handle, hidden for current track */}
                   {!isActive && (
                     <div className="flex flex-col space-y-0.5 flex-shrink-0 cursor-grab active:cursor-grabbing px-0.5">
                       {[0,1,2].map(j => (
@@ -922,7 +945,7 @@ export default function FullPlayer() {
 
         ) : (
           <>
-            {/* ── Lyrics mode — full height scrollable ── */}
+            {/* ── Lyrics mode, full height scrollable ── */}
             {isLyricsMode ? (
               <LyricsDisplay
                 lyrics={lyrics}
@@ -940,8 +963,8 @@ export default function FullPlayer() {
                     {isUploadedVideo ? (
                       <video
                         key={currentTrack.youtube_url}
+                        ref={videoElRef}
                         src={currentTrack.youtube_url}
-                        autoPlay={isPlaying}
                         loop
                         muted
                         playsInline
@@ -1013,7 +1036,7 @@ export default function FullPlayer() {
                   </div>
                 )}
 
-                {/* Mode toggle — only shown in non-lyrics modes */}
+                {/* Mode toggle, only shown in non-lyrics modes */}
                 <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center bg-black/60 backdrop-blur-xl rounded-full border border-white/[0.08] overflow-hidden">
                   {[
                     { key: 'artwork',  Icon: IconImage,   label: 'Art'     },
@@ -1046,7 +1069,7 @@ export default function FullPlayer() {
             {/* ── Track info + controls (shared between all modes) ── */}
             <div className="flex-shrink-0" style={{ paddingBottom: 'max(40px, calc(env(safe-area-inset-bottom) + 24px))' }}>
 
-              {/* Mode toggle for lyrics mode — shown above track info */}
+              {/* Mode toggle for lyrics mode, shown above track info */}
               {isLyricsMode && (
                 <div className="flex justify-center mb-3 px-8">
                   <div className="flex items-center bg-black/60 backdrop-blur-xl rounded-full border border-white/[0.08] overflow-hidden">
@@ -1148,7 +1171,7 @@ export default function FullPlayer() {
                   </button>
                 </div>
 
-                {/* Volume — desktop only */}
+                {/* Volume, desktop only */}
                 <div className="hidden md:flex items-center space-x-3 mt-4 px-2">
                   <button onClick={() => setVolumeLevel(volume > 0 ? 0 : 1)} className="text-white/40">
                     {volume === 0 ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
@@ -1221,7 +1244,7 @@ export default function FullPlayer() {
         )}
       </motion.div>
 
-      {/* ShareCard — rendered outside the player motion div to avoid z-index conflicts */}
+      {/* ShareCard, rendered outside the player motion div to avoid z-index conflicts */}
       {showShareCard && (
         <ShareCard
           track={currentTrack}

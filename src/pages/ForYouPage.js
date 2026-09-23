@@ -41,6 +41,41 @@ const IN_PHONE_PREVIEW = typeof window !== 'undefined' && (
 // Search engines and link previews must still see the feed at "/".
 const IS_BOT = typeof navigator !== 'undefined' && /bot|crawl|spider|slurp|facebookexternalhit|lighthouse|headless|preview/i.test(navigator.userAgent || '');
 
+// No artist gets the feed to themselves.
+//
+// One account uploading a lot can take over For You: the ranking reads
+// engagement, and a burst of new tracks from one artist scores as a burst of
+// new tracks. This deals the page out like cards instead, one track per
+// artist per round, in the order the ranking put them.
+//
+// Nothing is dropped and nothing is reordered within an artist. An artist with
+// nine tracks in a page still has all nine, spaced out, with everyone else's
+// music in between.
+function spreadByArtist(list) {
+  if (!Array.isArray(list) || list.length < 3) return list || [];
+
+  const buckets = new Map();   // artist -> their tracks, in ranking order
+  list.forEach(t => {
+    const key = t.artist_id || t.artist_name || 'unknown';
+    if (!buckets.has(key)) buckets.set(key, []);
+    buckets.get(key).push(t);
+  });
+  if (buckets.size === 1) return list;
+
+  const queues = [...buckets.values()];
+  const out = [];
+  while (out.length < list.length) {
+    let placedThisRound = false;
+    for (const q of queues) {
+      if (!q.length) continue;
+      out.push(q.shift());
+      placedThisRound = true;
+    }
+    if (!placedThisRound) break;   // belt and braces, never loop forever
+  }
+  return out;
+}
+
 // Every listener_feedback write in this file was fire-and-forget: no await, no
 // .then, no error read. So the 400 they have all been returning was invisible,
 // and Hide *looked* like it worked, the card slid away, the row was never
@@ -65,6 +100,10 @@ function reportFeedbackWrite(label, promise) {
 const SWIPE_THRESHOLD = 60;
 const PRELOAD_AHEAD   = 2;
 const PAGE_SIZE       = 20;
+// How many curated picks lead the first page for a listener who already has
+// recommendations. Small enough that their own feed still starts near the top,
+// big enough that the list in /admin/cold-start is actually seen.
+const LEAD_PICKS      = 4;
 
 // ── Comment sheet ─────────────────────────────────────────────────────────────
 
@@ -169,7 +208,7 @@ function parseLRC(raw) {
 }
 
 // ── Caption overlay ───────────────────────────────────────────────────────────
-function LyricsCaption({ lyrics, currentTime, isActive }) {
+function LyricsCaption({ lyrics, currentTime, isActive, duration }) {
   const [visible, setVisible] = React.useState(true);
   if (!lyrics || !isActive) return null;
 
@@ -200,12 +239,19 @@ function LyricsCaption({ lyrics, currentTime, isActive }) {
     );
   }
 
-  // Plain text, show lines based on time position
+  // Plain text, no timestamps. Spread the words across the song itself rather
+  // than a fixed four seconds a line: a two minute song with forty lines used
+  // to run out of lyrics after two and a half minutes of nothing, and a short
+  // one finished its words long before the music did.
   const lines = lyrics.split('\n').map(l => l.trim()).filter(Boolean);
   if (!lines.length) return null;
   const totalLines = lines.length;
-  // Rough estimate: show one line every 4 seconds
-  const lineIdx = Math.min(Math.floor(currentTime / 4), totalLines - 1);
+  const LEAD_IN = 2;                       // most songs have an intro
+  const span    = Math.max((duration || totalLines * 4) - LEAD_IN, totalLines);
+  const perLine = span / totalLines;
+  const lineIdx = currentTime < LEAD_IN
+    ? 0
+    : Math.min(Math.floor((currentTime - LEAD_IN) / perLine), totalLines - 1);
   const line = lines[lineIdx];
   if (!line) return null;
   return (
@@ -668,14 +714,26 @@ function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare, onN
   const fmt = n => n >= 1000 ? (n / 1000).toFixed(1) + 'K' : String(n);
   const videoRef = React.useRef(null);
 
-  // Sync video to audio player state, start/stop together
+  // The video starts where the song starts.
+  //
+  // It used to be left wherever it was and only nudged once it had drifted
+  // more than half a second, so a card you came back to carried on from the
+  // middle of the clip while the song started from the top. This puts it back
+  // to the song's position the moment this card becomes the playing one, and
+  // again whenever the track changes.
+  React.useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    try { video.currentTime = isThisOne ? (currentTime || 0) : 0; } catch {}
+  }, [track.id, isThisOne]); // eslint-disable-line
+
+  // Then keep the two together while they run.
   React.useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
     if (playing) {
-      // Seek to match audio currentTime so they stay in sync
-      if (Math.abs(video.currentTime - currentTime) > 0.5) {
-        video.currentTime = currentTime;
+      if (Math.abs(video.currentTime - currentTime) > 0.3) {
+        try { video.currentTime = currentTime; } catch {}
       }
       video.play().catch(() => {});
     } else {
@@ -752,7 +810,8 @@ function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare, onN
 
       {/* Lyrics captions */}
       {isThisOne && track.lyrics && (
-        <LyricsCaption lyrics={track.lyrics} currentTime={currentTime} isActive={isActive} />
+        <LyricsCaption lyrics={track.lyrics} currentTime={currentTime} isActive={isActive}
+          duration={track.duration || 0} />
       )}
 
       {/* Floating hearts, only on active card */}
@@ -1305,14 +1364,27 @@ export default function ForYouPage() {
         }
       }
 
-      // Cold start. A listener with no recommendation rows at all is either
-      // brand new or has never been scored, and this is their first
-      // impression of the app. compute-recommendations cannot help here,
-      // there is no history to learn from, so curated picks lead instead.
-      // Only on the first page, and only when the recommender returned
-      // nothing, so an established listener who simply reached the end of
-      // their list never sees these.
-      if (offset === 0 && fetched.length === 0) {
+      // The curated opening.
+      //
+      // This used to run only when the recommender returned nothing at all,
+      // which in practice meant only a brand new listener ever saw it. Anyone
+      // with a single recommendation row, which is everyone the nightly job
+      // has ever scored, skipped it entirely, so the list built in
+      // /admin/cold-start was invisible on the platform.
+      //
+      // Now it always leads the first page. Two cases:
+      //
+      //   no recommendations   the curated list fills the page, as before.
+      //   recommendations      the first LEAD_PICKS picks lead, in the order
+      //                        they were put in, and the recommender fills
+      //                        the rest of the page behind them.
+      //
+      // The leading picks are held apart in `leadPicks` rather than pushed
+      // into `fetched`, because `fetched` is shuffled and dealt out by artist
+      // further down and the curated order is the whole point of this list.
+      // They are re-joined at the very end.
+      let leadPicks = [];
+      if (offset === 0) {
         const { data: picks, error: picksErr } = await supabase
           .from('cold_start_picks')
           .select('position, tracks(id, title, slug, genre, mood, cover_artwork_url, file_url, youtube_url, duration, lyrics, artist_id, is_beat, stream_count, like_count, bpm, beat_key, beat_scale, download_price, engagement_score, is_published, is_preorder, release_date, ai_content, ai_content_admin_override, artists!tracks_artist_id_fkey(artist_name, slug, profile_image_url))')
@@ -1323,10 +1395,8 @@ export default function ForYouPage() {
 
         const pickTracks = (picks || [])
           .map(p => p.tracks)
-          .filter(t => t && !hiddenIdsRef.current.has(t.id));
-
-        if (pickTracks.length > 0) {
-          fetched = pickTracks.slice(0, PAGE_SIZE).map(t => ({
+          .filter(t => t && t.is_published && !hiddenIdsRef.current.has(t.id))
+          .map(t => ({
             ...t,
             artist_name:  t.artists?.artist_name || 'Unknown',
             artist_slug:  t.artists?.slug || null,
@@ -1334,15 +1404,33 @@ export default function ForYouPage() {
             reason:       'editors_pick',
             reason_label: "Editor's pick",
           }));
+
+        if (pickTracks.length > 0) {
+          if (fetched.length === 0) {
+            // Nothing from the recommender: the curated list is the feed.
+            fetched = pickTracks.slice(0, PAGE_SIZE);
+          } else {
+            leadPicks = pickTracks.slice(0, LEAD_PICKS);
+            // A pick the recommender also chose must not appear twice, and the
+            // curated position wins.
+            const leadIds = new Set(leadPicks.map(t => t.id));
+            fetched = fetched.filter(t => !leadIds.has(t.id));
+          }
         }
       }
 
-      if (fetched.length < PAGE_SIZE) {
+      // The curated picks already count towards the page, so the top-up asks
+      // for what is left after them. Without this the first page would come
+      // back LEAD_PICKS cards longer than every other page.
+      const pageRoom = PAGE_SIZE - leadPicks.length;
+
+      if (fetched.length < pageRoom) {
         const existingIds = fetched.map(t => t.id);
-        // Combine with hidden IDs so fallback query also excludes them
-        const allExcludeIds = [...new Set([...existingIds, ...hiddenIds])];
+        // Combine with hidden IDs, and the leading picks, so the fallback
+        // query cannot hand back a track that is already on the page.
+        const allExcludeIds = [...new Set([...existingIds, ...leadPicks.map(t => t.id), ...hiddenIds])];
         // Mix: half by engagement, half by recency so new releases get exposure
-        const halfPage = Math.ceil((PAGE_SIZE - fetched.length) / 2);
+        const halfPage = Math.ceil((pageRoom - fetched.length) / 2);
         const existingIdsStr = allExcludeIds.length > 0 ? `(${allExcludeIds.join(',')})` : null;
 
         let recentQuery = supabase.from('tracks')
@@ -1364,7 +1452,7 @@ export default function ForYouPage() {
           .eq('is_published', true)
           .order('engagement_score', { ascending: false, nullsFirst: false })
           .order('stream_count', { ascending: false })
-          .limit(PAGE_SIZE - fetched.length);
+          .limit(pageRoom - fetched.length);
 
         const [{ data: recentTracks, error: recentErr }, { data: topTracks, error: topErr }] =
           await Promise.all([recentQuery, topQuery]);
@@ -1382,7 +1470,7 @@ export default function ForYouPage() {
           if (!seen.has(t.id)) { seen.add(t.id); merged.push(t); }
         }
 
-        let query = { then: (fn) => fn({ data: merged.slice(0, PAGE_SIZE - fetched.length) }) };
+        let query = { then: (fn) => fn({ data: merged.slice(0, pageRoom - fetched.length) }) };
         const { data: trending } = await query;
         fetched = [...fetched, ...(trending || []).map(t => ({
           ...t,
@@ -1441,9 +1529,16 @@ export default function ForYouPage() {
         }
       }
 
-      if (offset === 0 && fetched.length > 0) fetched[0]._isFirst = true;
-      if (offset === 0) setTracks(fetched);
-      else setTracks(prev => [...prev, ...fetched]);
+      // Spread first, then put the curated picks back on the front in the
+      // order they were chosen, then mark the swipe hint, so the hint lands on
+      // whatever card actually ends up first. The picks are deliberately not
+      // shuffled and not dealt out by artist: an ordered opening is the point.
+      const spread = leadPicks.length > 0
+        ? [...leadPicks, ...spreadByArtist(fetched)]
+        : spreadByArtist(fetched);
+      if (offset === 0 && spread.length > 0) spread[0]._isFirst = true;
+      if (offset === 0) setTracks(spread);
+      else setTracks(prev => [...prev, ...spread]);
     } catch (err) {
       // This catch used to swallow everything and leave the feed empty, so a
       // thrown query looked exactly like "no music available". Every other

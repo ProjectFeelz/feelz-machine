@@ -314,7 +314,7 @@ export default function ArtistProfilePage() {
     if (!artist?.id) return;
     const ids = tracks.map(t => t.id).filter(Boolean);
     // Fired once with an empty id list before tracks landed, and the count was
-    // requested WITHOUT head: true — so it downloaded every matching row and
+    // requested WITHOUT head: true, so it downloaded every matching row and
     // then counted them, to display one number.
     if (!ids.length) { setWeeklyDiscoveries(0); return; }
     const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
@@ -371,7 +371,7 @@ export default function ArtistProfilePage() {
       } else {
         setTopPick(null);
       }
-      // Live follower count — avoids stale cached column
+      // Live follower count, avoids stale cached column
 supabase.from('follows').select('*', { count: 'exact', head: true })
   .eq('artist_id', artistData.id)
   .then(({ count }) => setFollowerCount(count || 0));
@@ -409,7 +409,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
       if (user) {
         // Scoped to THIS artist's tracks. It used to fetch the viewer's entire
         // like history across the whole platform in order to tick hearts on
-        // one page — a list that grows forever and is thrown away on
+        // one page, a list that grows forever and is thrown away on
         // navigation, and which the 1000 row cap silently truncates, so a
         // heavy liker's older likes stopped showing as liked.
         const ids = (trackData || []).map(t => t.id).filter(Boolean);
@@ -455,8 +455,8 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
       // The collaborating artist's name is selected as well as the track.
       //
       // The relationship MUST be named. `collaborations` has two foreign keys
-      // to `artists` — collaborations_artist_id_fkey and
-      // collaborations_invited_by_fkey — so a bare `artists(...)` embed is
+      // to `artists`, collaborations_artist_id_fkey and
+      // collaborations_invited_by_fkey, so a bare `artists(...)` embed is
       // ambiguous and PostgREST answers PGRST201 as HTTP 300. That is the exact
       // failure that emptied For You and Browse on 2026-09-08, and an
       // unqualified embed here would have taken this rail down the same way.
@@ -490,14 +490,14 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
       //
       // The two queries mean OPPOSITE things and the merge used to lose that.
       //
-      //   asCollaborator — artist_id = me. I am the guest on someone else's
+      //   asCollaborator, artist_id = me. I am the guest on someone else's
       //                    track, and `role` is MY role. "Featured" is right.
-      //   onOwnTracks    — the track is mine and artist_id is somebody ELSE.
+      //   onOwnTracks   , the track is mine and artist_id is somebody ELSE.
       //                    `role` is THEIR role, not mine.
       //
       // The card rendered `collab.role` either way with no name attached, so
       // every guest credited on this artist's own songs came out reading
-      // "featured" — as if they were featured on their own track. Tagging the
+      // "featured", as if they were featured on their own track. Tagging the
       // direction here is what lets the card say whose role it is.
       const allCollabs = [
         ...(asCollaborator || []).map(c => ({ ...c, direction: 'guest' })),
@@ -525,7 +525,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
       .filter(col => col.tracks && col.tracks.is_published);
       setCollabs(uniqueCollabs);
       // The streams read that used to sit here is gone. Its result was
-      // tallied into tagCounts and then discarded — the row that consumed it
+      // tallied into tagCounts and then discarded, the row that consumed it
       // was deleted and the query outlived it. A blocking round trip on every
       // signed in profile load, for nothing.
 
@@ -756,7 +756,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
     setStartingSession(false);
   };
 
-  // Open — or, on the first fan who ever asks, create — this artist's room.
+  // Open, or, on the first fan who ever asks, create, this artist's room.
   //
   // The room is made by ensure_artist_chat_room (migration 117), a
   // SECURITY DEFINER function, because chat_rooms' only write policy is
@@ -767,7 +767,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
   //
   // Fan Pro is NOT checked here on purpose. Getting to the room and being
   // able to speak in it are different questions, and ChatRoomView already
-  // answers the second one — sending an unsubscribed listener to a locked
+  // answers the second one, sending an unsubscribed listener to a locked
   // door they can see through is a better sell than a button that refuses to
   // move.
   const openArtistChat = async () => {
@@ -874,7 +874,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
         // That comment was wrong: send-push auth was NOT user-token based, it
         // compared 'x-internal-secret' against a server-only env var, so this
         // call returned 401 on every send and no follower ever got the push.
-        // It is user-token based now — and the token has to actually be sent.
+        // It is user-token based now, and the token has to actually be sent.
         fetch('/.netlify/functions/send-push', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -900,27 +900,17 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
     if (track.download_price > 0 && !purchasedTracks[track.id]) { alert('Purchase required to download.'); return; }
     setDownloading(track.id);
     try {
-      try { await supabase.from('downloads').upsert({ user_id: user.id, track_id: track.id }, { onConflict: 'user_id,track_id', ignoreDuplicates: true }); } catch {}
-      const { data: myProfile } = await supabase.from('artists').select('id, artist_name, profile_image_url, slug').eq('user_id', user.id).maybeSingle();
-      try {
-        await sendNotification(supabase, 'download (ArtistProfilePage)', {
-          type:     'download',
-          artistId: artist.id,
-          title:    `${myProfile?.artist_name || 'Someone'} downloaded ${track.title}`,
-          message:  '',
-          trackId:  track.id,
-          metadata: {
-            from_artist_id: myProfile?.id || null,
-            download: true,
-            purchase_price:    track.download_price || 0,
-            track_id:          track.id,
-            track_title:       track.title,
-            track_slug:        track.slug || null,
-            from_artist_name:  myProfile?.artist_name || null,
-            from_artist_image: myProfile?.profile_image_url || null
-          },
-        });
-      } catch {}
+      // No downloads row is written from here. get-download-url writes the
+      // grant itself, with the service role, after it has decided the
+      // download is allowed. Writing one from the browser first put a row
+      // into the table the server trusts, from the one place that cannot be
+      // trusted. Migration 175 takes that insert policy away.
+      // The artist is NOT notified from here. get-download-url writes the one
+      // `download` notification, once, from the server, where the real price
+      // and the real outcome are known. This call sent a second one with the
+      // same title before the file had even been requested, so a download that
+      // was then refused still told the artist it had happened, and a download
+      // that succeeded told them twice.
       const { data: { session } } = await supabase.auth.getSession();
       await downloadTrack(track.id, track.title, session?.access_token);
     } catch (err) {
@@ -1164,7 +1154,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
       <div className="lg:flex lg:items-end lg:gap-7 lg:px-8 pb-4 lg:pb-5 lg:relative">
       {/* MOBILE BANNER HEIGHT
           220px put roughly 155px of empty green above the avatar and pushed
-          Popular below the fold — on a phone you landed on a wall of colour
+          Popular below the fold, on a phone you landed on a wall of colour
           and had to scroll before seeing a single track. 132px keeps enough
           banner for the gradient to read while lifting everything under it by
           88px, which is what brings the Popular rail into the first screen.
@@ -1199,7 +1189,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
             now (160px, was 128px), so it needs to hang further past the banner
             to keep breaking the edge rather than sitting inside it. */}
         <div className="absolute -bottom-20 left-1/2 -translate-x-1/2 z-10 lg:static lg:translate-x-0 lg:flex-shrink-0">
-          {/* Story ring — clickable if artist has active stories */}
+          {/* Story ring, clickable if artist has active stories */}
           <div
             className="relative"
             onClick={stories.length > 0 ? () => setViewingStory(true) : undefined}
@@ -1223,7 +1213,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
               )}
             </div>
                       </div>
-            {/* Quick-create button — own profile only */}
+            {/* Quick-create button, own profile only */}
             {isProfileOwner && (
               <div className="absolute -bottom-1 -right-1 flex flex-col space-y-1">
                 <button
@@ -1251,7 +1241,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
           <div className="flex items-center space-x-2">
             <h1 className="text-3xl font-bold" style={{ fontFamily: `"${headingFont}", sans-serif`, color: textColor }}>{artist.artist_name}</h1>
             {/* The tick was drawn in `bgColor` inside a circle of
-                `accentColor` — theme colours the artist picks. On a theme
+                `accentColor`, theme colours the artist picks. On a theme
                 where those two are close, the badge was a solid dot with an
                 invisible tick in it. Gold on its own, shadowed, so it reads
                 the same on every theme and matches the badge everywhere
@@ -1345,7 +1335,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
           {/* Chat.
               This is the whole entry point to the chat feature, and until now
               there wasn't one. The Chat Rooms page was reachable from a button
-              on /feed — a page nothing in the app links to — and from a
+              on /feed, a page nothing in the app links to, and from a
               Community modal on THIS page whose `showCommunity` flag was
               declared, rendered, and never once set to true. So chat was
               reachable by typing a URL and no other way, which is the real
@@ -1353,7 +1343,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
 
               It sits here because this is where the intent is: you are looking
               at an artist and you want to talk to them. Deliberately the
-              listener's move — nothing pushes an artist at a fan. */}
+              listener's move, nothing pushes an artist at a fan. */}
           {!isProfileOwner && (
             <button onClick={openArtistChat} disabled={chatOpening}
               className="flex items-center space-x-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all active:scale-95 disabled:opacity-40"
@@ -1393,8 +1383,8 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
         </div>
 
         {/* Said out loud rather than logged. The Chat button calls a function
-            that can legitimately refuse — an unclaimed artist has nobody on
-            the other end — and a button that does nothing with the reason in
+            that can legitimately refuse, an unclaimed artist has nobody on
+            the other end, and a button that does nothing with the reason in
             the console is indistinguishable from a broken one. */}
         {chatError && (
           <p className="mt-2 text-xs px-1" style={{ color: '#f87171' }}>{chatError}</p>
@@ -1410,7 +1400,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
           />
         )}
 
-        {/* Merch is parked — this is the explanation, not a store. */}
+        {/* Merch is parked, this is the explanation, not a store. */}
         {showMerchParked && (
           <div className="fixed inset-0 z-[210] bg-black/85 backdrop-blur-sm flex items-center justify-center px-5"
             onClick={() => setShowMerchParked(false)}>
@@ -1494,7 +1484,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
         )}
       </div>
 
-      {/* 🔴 LIVE NOW BANNER — rendered here, below the profile image */}
+      {/* 🔴 LIVE NOW BANNER, rendered here, below the profile image */}
       {liveSession && (
         <div className="mx-6 mb-4 w-[calc(100%-3rem)] flex items-center space-x-2">
           <button
@@ -1654,7 +1644,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
           on an artist's own profile a row of other people's music is the
           platform talking over the artist. */}
 
-      {/* ── New Music row — artist's latest drops ── */}
+      {/* ── New Music row, artist's latest drops ── */}
       {tracks.length > 0 && (() => {
         const recent = [...tracks]
           .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
@@ -1721,7 +1711,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
                 the first item in it.
 
                 Two previous attempts both kept it inside the horizontal flow
-                — first as a wider card in the same scroller, then pinned
+               , first as a wider card in the same scroller, then pinned
                 beside it. Side by side it still read as "the big one in the
                 row", and being a flex sibling of the scroller is what let it
                 collide with the section heading. Stacking it is the only
@@ -1832,7 +1822,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
                   <div key={album.id} className="cursor-pointer group"
                     /* `/album/:id` is a ONE-segment route (AppRouter.js:364). This
                        built a TWO-segment path, so it matched no route, fell through
-                       to the catch-all, and the catch-all redirects to "/" — which is
+                       to the catch-all, and the catch-all redirects to "/", which is
                        why tapping an album threw you onto For You and looked like the
                        app had reloaded. AlbumDetailPage resolves an id OR a slug, so
                        the artist handle was never needed here. */
@@ -1892,7 +1882,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
         </div>
       )}
 
-      {/* Collaborations — a sideways rail of square cards, like Popular but
+      {/* Collaborations, a sideways rail of square cards, like Popular but
           deliberately not the same card.
 
           Popular is a ranked top ten: numbered badge, play counts, the
@@ -1901,7 +1891,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
           say the wrong thing. What matters here is WHO and IN WHAT ROLE.
 
           So: same square artwork and the same rail mechanics for
-          consistency, then three differences — a heavier rounded-2xl frame
+          consistency, then three differences, a heavier rounded-2xl frame
           with a hairline in the collab accent, the role sitting ON the
           artwork as a chip rather than a rank badge, and the role as the
           secondary line instead of plays.
@@ -1918,7 +1908,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
               // Whose role is this?
               //
               // 'host' means the track belongs to THIS artist and the
-              // collaboration row describes somebody else on it — so the chip
+              // collaboration row describes somebody else on it, so the chip
               // has to credit that person by name. Rendering the bare role
               // here is what made this artist's own songs read "featured":
               // true of the guest, nonsense about the owner.
@@ -1933,7 +1923,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
               //
               // It said "Featured Artist credit" or "On this track: Ian Sani",
               // which is the SAME fact as the chip on the artwork, written
-              // twice in two different shapes — and neither of them is where
+              // twice in two different shapes, and neither of them is where
               // the full picture lives. The track page has the whole credit
               // list: every collaborator, every role, in one place. So the
               // card now carries the chip for the glance and an ⓘ for the
@@ -1984,7 +1974,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
                       {collab.tracks?.title}
                     </p>
                     {/* Full credits, on the page that owns them. Rendered only
-                        when the track actually has a slug — without one this
+                        when the track actually has a slug, without one this
                         would link to /track/undefined, which is the "not
                         found" page wearing a working link's clothes. */}
                     {trackPath && (
@@ -2005,7 +1995,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
 
           {collabs.length > 6 && (
             <p className="mt-3 px-6 text-sm" style={{ color: `${textColor}40` }}>
-              {collabs.length} collaborations — scroll for more
+              {collabs.length} collaborations, scroll for more
             </p>
           )}
         </div>
@@ -2134,7 +2124,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
                               // above). This one did not, so paypal-order fell back to
                               // matching the PayPal payer email against user_profiles.
                               // When a buyer's PayPal email differs from the email she
-                              // signed up with — the normal case, not the exception —
+                              // signed up with, the normal case, not the exception , 
                               // nothing matched, resolvedUserId stayed null, and the
                               // downloads row that grants the file was never written.
                               // The money was taken, `success: true` came back, this
@@ -2155,7 +2145,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
                             if (captureData.recorded === false) {
                               setPwywPurchaseError(
                                 'Your payment went through, but we could not attach the download to your account. '
-                                + 'Nothing further will be charged — contact support with this reference: '
+                                + 'Nothing further will be charged, contact support with this reference: '
                                 + (captureData.captureId || 'unknown')
                               );
                               return;
@@ -2446,7 +2436,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
                     { id: 'story',   icon: '📸', label: 'Add Story',           sub: 'Share a 24hr clip with fans',           color: 'purple' },
                     { id: 'edit',    icon: '✏️', label: 'Edit Profile',        sub: 'Update your bio, photo and links',      color: 'gray' },
                     MERCH_PARKED
-                      ? { id: 'merch_parked', icon: '🛍️', label: 'Merch Store',    sub: 'Paused — tap to see why',             color: 'gray'   }
+                      ? { id: 'merch_parked', icon: '🛍️', label: 'Merch Store',    sub: 'Paused, tap to see why',             color: 'gray'   }
                       : isPremium
                         ? { id: 'merch',        icon: '🛍️', label: 'Merch Store',    sub: 'Connect Printful · sell to your fans', color: 'purple' }
                         : { id: 'merch_locked', icon: '🛍️', label: 'Merch Store',    sub: 'Premium only, upgrade to unlock',     color: 'gray'   },

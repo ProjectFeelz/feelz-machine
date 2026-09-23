@@ -126,7 +126,7 @@ export default function BeatDetailPage() {
             setLicences(enabled);
             setSelectedLicence(enabled[0]?.id || null);
           } else {
-            // Old format — single licence string
+            // Old format, single licence string
             const id = typeof t.beat_licence === 'string' && !t.beat_licence.startsWith('{') ? t.beat_licence : 'basic';
             const meta = LICENCE_META[id] || LICENCE_META.basic;
             setLicences([{ id, price: t.download_price || 0, ...meta }]);
@@ -185,7 +185,11 @@ export default function BeatDetailPage() {
     if (downloading) return;
     setDownloading(true);
     try {
-      try { await supabase.from('downloads').upsert({ user_id: user.id, track_id: track.id }, { onConflict: 'user_id,track_id', ignoreDuplicates: true }); } catch {}
+      // No downloads row is written from here. get-download-url writes the
+      // grant itself, with the service role, after it has decided the
+      // download is allowed. Writing one from the browser first put a row
+      // into the table the server trusts, from the one place that cannot be
+      // trusted. Migration 175 takes that insert policy away.
       const { data: { session } } = await supabase.auth.getSession();
       await downloadTrack(track.id, track.title, session?.access_token);
     } catch (err) {
@@ -239,7 +243,7 @@ export default function BeatDetailPage() {
       navigator.share({ title: track.title, text, url });
     } else {
       navigator.clipboard.writeText(`${text}\n${url}`);
-      // Show brief toast — use existing purchaseError state repurposed
+      // Show brief toast, use existing purchaseError state repurposed
       setPurchaseError('Link copied!');
       setTimeout(() => setPurchaseError(''), 2000);
     }
@@ -252,7 +256,7 @@ export default function BeatDetailPage() {
   const handleBuy = async (lic) => {
     if (!user) { navigate('/login'); return; }
     if (lic.price === 0) {
-      // Free licence — record purchase then use signed URL (not raw public file_url)
+      // Free licence, record purchase then use signed URL (not raw public file_url)
       try { await supabase.from('beat_purchases').insert({
         track_id: track.id, buyer_user_id: user.id,
         licence_type: lic.id, amount_paid: 0, status: 'completed',
@@ -277,7 +281,7 @@ export default function BeatDetailPage() {
             // licence off the beat itself. Sending only `amount` meant a $99
             // exclusive was charged at the track's download price while
             // beat_purchases recorded the $99 that was never taken.
-            body: JSON.stringify({ action: 'create', trackId: track.id, licenceId: lic.id, amount: lic.price, trackTitle: `${track.title} — ${lic.label} Lease`, artistName: artist?.artist_name }),
+            body: JSON.stringify({ action: 'create', trackId: track.id, licenceId: lic.id, amount: lic.price, trackTitle: `${track.title}, ${lic.label} Lease`, artistName: artist?.artist_name }),
           });
           const { orderId, error } = await res.json();
           if (error || !orderId) throw new Error(error || 'Failed to create order');
@@ -321,7 +325,7 @@ export default function BeatDetailPage() {
           // the moment the capture is recorded, and it knows what actually
           // landed after PayPal's cut rather than only the sticker price.
           // Sending one from here as well would put two notifications about
-          // one sale in the producer's list — and this one went missing
+          // one sale in the producer's list, and this one went missing
           // whenever the buyer closed the tab before it fired.
           setAlreadyPurchased(true); setPurchaseSuccess(true); setPurchasing(false);
           showReceipt({
@@ -362,9 +366,9 @@ export default function BeatDetailPage() {
 
   const BASE_URL   = 'https://www.feelzmachine.com';
   const pageUrl     = `${BASE_URL}/beat/${slug}`;
-  const pageTitle   = `${track.title} — beat by ${artist?.artist_name} · Feelz Machine`;
+  const pageTitle   = `${track.title}, beat by ${artist?.artist_name} · Feelz Machine`;
   const pageDesc    = track.bpm
-    ? `${track.bpm} BPM${track.beat_key ? ` · ${track.beat_key}` : ''} — license "${track.title}" by ${artist?.artist_name} on Feelz Machine.`
+    ? `${track.bpm} BPM${track.beat_key ? ` · ${track.beat_key}` : ''}, license "${track.title}" by ${artist?.artist_name} on Feelz Machine.`
     : `License "${track.title}" by ${artist?.artist_name} on Feelz Machine.`;
   const ogImage     = track.cover_artwork_url || `${BASE_URL}/og-default.png`;
 
@@ -565,7 +569,7 @@ export default function BeatDetailPage() {
                       <Check className="w-5 h-5 text-green-400" />
                     </div>
                     <p className="text-sm font-bold text-green-400">{purchaseSuccess ? 'Purchase complete!' : 'Already purchased'}</p>
-                    <p className="text-[11px] text-white/30">{selectedLic.label} licence — download starting</p>
+                    <p className="text-[11px] text-white/30">{selectedLic.label} licence, download starting</p>
                     <button onClick={triggerDownload} disabled={downloading}
                         className="text-xs text-purple-400 hover:text-purple-300 transition mt-1 disabled:opacity-40">
                         {downloading ? 'Downloading…' : 'Download again →'}
@@ -590,7 +594,7 @@ export default function BeatDetailPage() {
                           className="w-full py-3.5 rounded-xl font-bold text-sm transition active:scale-[0.98] flex items-center justify-center space-x-2"
                           style={{ background: selectedLic.bg, border: `1px solid ${selectedLic.border}`, color: selectedLic.color }}>
                           <ShoppingBag className="w-4 h-4" />
-                          <span>Buy — ${selectedLic.price}</span>
+                          <span>Buy, ${selectedLic.price}</span>
                         </button>
                     )}
                     {!user && <p className="text-[10px] text-white/20 text-center mt-2">Sign in to purchase</p>}

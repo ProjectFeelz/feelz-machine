@@ -16,6 +16,9 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Loader, X, Send, MessageCircle, Heart, CornerDownRight } from 'lucide-react';
 import { supabase } from '../../supabaseClient';
+// Shared with the main app's comment sheet: the attributes that keep Android
+// Chrome's saved-password and saved-card chips off the top of the keyboard.
+import { NO_AUTOFILL } from '../TrackCommentSheet';
 
 function useKeyboardOffset() {
   const [offset, setOffset] = useState(0);
@@ -274,6 +277,7 @@ export default function RetailPlaylistComments({ playlist, venue, isPreviewMode 
               onKeyDown={e => e.key === 'Enter' && !e.shiftKey && post()}
               placeholder={replyTo ? "Write a reply…" : "Add a comment…"}
               maxLength={500}
+              {...NO_AUTOFILL}
               className="flex-1 min-w-0 bg-white/[0.06] rounded-xl px-3 py-2.5 text-sm text-white placeholder-white/25 outline-none border border-white/[0.06] focus:border-purple-400/40"
             />
             <button

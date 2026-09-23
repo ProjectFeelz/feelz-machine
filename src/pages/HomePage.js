@@ -140,7 +140,7 @@ function SquareCard({ item, itemList = [], isAlbum = false, showNew = false, onP
         className="aspect-square rounded-xl overflow-hidden bg-white/[0.06] mb-2 relative"
         onClick={() => isAlbum ? navigate(`/album/${item.slug || item.id}`) : onPlay(item, itemList)}
       >
-        {/* One placement covers every rail on this page — Featured, New,
+        {/* One placement covers every rail on this page, Featured, New,
             Trending and the rest all render through this card. */}
         {!isAlbum && <PreorderTag track={item} />}
         {item.cover_artwork_url ? (
@@ -261,10 +261,17 @@ export default function HomePage() {
           .select('*, albums(title, cover_artwork_url, price), artists!tracks_artist_id_fkey(artist_name, slug, profile_image_url, is_verified, tier)')
           .eq('is_published', true).order('engagement_score', { ascending: false }).limit(60),
         supabase.from('artists')
-          .select('id, artist_name, slug, profile_image_url, is_verified, follower_count, total_streams, tier')
+          .select('id, artist_name, slug, profile_image_url, is_verified, follower_count, display_follower_count, total_streams, tier')
           .not('profile_image_url', 'is', null)
           .neq('profile_image_url', '')
-          .order('follower_count', { ascending: false }).limit(24),
+          // Seed personas being wound down stop appearing here first, which is
+          // the "gradual" in gradually decommissioning them: they keep playing
+          // and stay in the Feelz Retail playlists, they just stop being
+          // promoted as artists to follow. seed_status is NOT NULL with a
+          // default of 'active' (migration 177), so this never drops a real
+          // artist.
+          .eq('seed_status', 'active')
+          .order('display_follower_count', { ascending: false }).limit(24),
         // The tuning number for the spread. It used to be the LENGTH of the
         // query above, which is capped at 24, so a 200 artist platform was
         // being tuned as if it had 24 artists.
@@ -283,7 +290,7 @@ export default function HomePage() {
         artist_slug: a.artists?.slug || null, _isAlbum: true,
       }));
 
-      // Albums get their own dedicated row — no longer merged with singles
+      // Albums get their own dedicated row, no longer merged with singles
       const albumList = normAlbum(recentAlbums);
 
       // New Releases = tracks only, sorted by date. No slice here: diversify()
@@ -304,7 +311,19 @@ export default function HomePage() {
 
       const artistCount = publishedArtistCount || (artists || []).length;
       setNewReleases(diversify(trackList, artistCount));
-      setNewAlbums(diversify(albumList, artistCount));
+      // "Albums & EPs" means albums and EPs. Every release lives in the albums
+      // table whatever it is called, and since the release type floors
+      // (migrations 169 and 173) a two track release, or six versions of one
+      // song, is correctly labelled a single. So this row was showing cards
+      // with a SINGLE badge on them under a heading saying otherwise. Singles
+      // have their own rows above this one.
+      //
+      // Filtered here rather than in the query on purpose: `not.in` in
+      // PostgREST drops rows where release_type is null as well, and a release
+      // with no type set should still show up as an album.
+      setNewAlbums(diversify(
+        albumList.filter(a => !['single', 'beat'].includes(a.release_type)),
+        artistCount));
       setTrending(diversify(trendingBoosted, artistCount));
       setTopArtists(artists || []);
 
@@ -335,7 +354,7 @@ export default function HomePage() {
         .eq('status', 'live')
         .limit(8);
 
-      // RLS policy may block the query — fail silently so the rest of the page loads
+      // RLS policy may block the query, fail silently so the rest of the page loads
       if (sessErr) {
         console.warn('Live sessions unavailable:', sessErr.message);
         setLiveSessions([]);
@@ -499,8 +518,8 @@ export default function HomePage() {
   // artist_id, which is what previously made a second row impossible).
   //
   // The fallback matters as much as the picks. If the nightly function has not
-  // run for this user yet — a brand new account, or a listener outside the 60
-  // day active window — the row used to be simply absent. It now fills from the
+  // run for this user yet, a brand new account, or a listener outside the 60
+  // day active window, the row used to be simply absent. It now fills from the
   // same pool the function draws from, so the section is never a blank.
   useEffect(() => {
     if (!user) return;
@@ -648,7 +667,7 @@ export default function HomePage() {
   const handlePlay = async (track, _list) => {
     if (currentTrack?.id === track.id) { togglePlay(); return; }
     // Start playback immediately with a single-track queue as a placeholder,
-    // then patch the queue once the async radio fetch resolves — without
+    // then patch the queue once the async radio fetch resolves, without
     // calling playTrack a second time (which would hit the same-track guard
     // and toggle pause instead of updating the queue).
     playTrack(track, [track]);
@@ -656,7 +675,7 @@ export default function HomePage() {
     const idx = radioQueue.findIndex(t => t.id === track.id);
     replaceQueue(radioQueue, idx >= 0 ? idx : 0);
 
-    // Check if this is a new artist for the user — if so, record discovery
+    // Check if this is a new artist for the user, if so, record discovery
     if (user && track.artist_id) {
       try {
         const { data: prior } = await supabase
@@ -823,12 +842,12 @@ export default function HomePage() {
         </p>
       </div>
 
-      {/* Stories rail — followed artists' 24hr clips */}
+      {/* Stories rail, followed artists' 24hr clips */}
       <StoriesRail userId={user?.id} />
 
       {/* Collaborations get their own row. They existed only at the bottom of
           an artist's own profile before this, which meant the platform's own
-          argument — that artists here work together — was the thing hardest
+          argument, that artists here work together, was the thing hardest
           to see. */}
       <CollabRail limit={12} />
 
@@ -878,7 +897,7 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* From artists you follow — personal pull, logged-in users only */}
+      {/* From artists you follow, personal pull, logged-in users only */}
       {followedReleases.length > 0 && (
         <Section title="From Artists You Follow" icon={Users} gradient="rose" onSeeAll={() => navigate('/browse?tab=new')}>
           <div className="flex space-x-3 overflow-x-auto px-6 scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
@@ -891,7 +910,7 @@ export default function HomePage() {
         </Section>
       )}
 
-      {/* Artists of the Day — three undiscovered artists picked for this user */}
+      {/* Artists of the Day, three undiscovered artists picked for this user */}
       {user && spotlightArtists.length > 0 && (
         <div className="mx-6 mb-6">
           <div className="flex items-center space-x-2 mb-3">
@@ -946,7 +965,7 @@ export default function HomePage() {
         </Section>
       )}
 
-      {/* 🔴 Live Now — artists currently streaming */}
+      {/* 🔴 Live Now, artists currently streaming */}
       {liveSessions.length > 0 && (
         <div className="mb-6">
           <div className="flex items-center justify-between mb-3 px-6">
@@ -990,7 +1009,7 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* Trending — highest social proof, works for every visitor */}
+      {/* Trending, highest social proof, works for every visitor */}
       {trending.length > 0 && (
         <Section title="Trending" icon={Flame} gradient="teal" onSeeAll={() => navigate('/browse?tab=trending')}>
           <div className="flex space-x-3 overflow-x-auto px-6 scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
@@ -1003,7 +1022,7 @@ export default function HomePage() {
         </Section>
       )}
 
-      {/* New Releases — tracks only, with NEW badge + date */}
+      {/* New Releases, tracks only, with NEW badge + date */}
       {newReleases.length > 0 && (
         <Section title="New Singles" gradient="purple" onSeeAll={() => navigate('/browse?tab=new')}>
           <div className="flex space-x-3 overflow-x-auto px-6 scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
@@ -1018,7 +1037,7 @@ export default function HomePage() {
         </Section>
       )}
 
-      {/* Albums — dedicated row so they don't drown in singles */}
+      {/* Albums, dedicated row so they don't drown in singles */}
       {newAlbums.length > 0 && (
         <Section title="Albums & EPs" onSeeAll={() => navigate('/browse?tab=new')}>
           <div className="flex space-x-3 overflow-x-auto px-6 scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
@@ -1104,7 +1123,7 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* On This Day — resurface a track from exactly 1 year ago */}
+      {/* On This Day, resurface a track from exactly 1 year ago */}
       <OnThisDay user={user} />
 
       {/* Artists to Follow */}
@@ -1123,7 +1142,7 @@ export default function HomePage() {
                   <p className="text-sm font-medium text-white truncate max-w-[140px]">{a.artist_name}</p>
                   {a.is_verified && <VerifiedBadge size="sm" />}
                 </div>
-                <p className="text-xs text-white/30 mt-0.5">{formatNumber(a.follower_count)} followers</p>
+                <p className="text-xs text-white/30 mt-0.5">{formatNumber(a.display_follower_count ?? a.follower_count)} followers</p>
               </button>
             ))}
           </div>
