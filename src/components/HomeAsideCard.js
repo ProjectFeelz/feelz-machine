@@ -298,7 +298,10 @@ export function useHomeCardData({ creatorCount = 3 } = {}) {
           .eq('is_published', true)
           .order('pinned',       { ascending: false })
           .order('published_at', { ascending: false })
-          .limit(8),
+          // Room for the evergreen guides AND a run of update posts. At 8 a
+          // busy week of updates pushed "How you get paid here" off the end,
+          // which is the wrong thing to lose.
+          .limit(16),
         supabase
           .from('tracks')
           .select('id, title, slug, file_url, cover_artwork_url, stream_count, is_published, artists!tracks_artist_id_fkey(artist_name, slug)')
