@@ -13,6 +13,7 @@
 
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
+import useGoBack from '../hooks/useGoBack';
 import { Helmet } from 'react-helmet-async';
 import {
   ArrowLeft, Loader, ShieldCheck, Clock, XCircle, Mail, Phone, Copy,
@@ -114,6 +115,9 @@ function Row({ c, onVerify, busy }) {
 
 export default function AdminGuardianConsents() {
   const navigate = useNavigate();
+  // Back to wherever you came from, which is the Hub for anyone who tapped
+  // the card there, not a hardcoded /admin.
+  const goBack = useGoBack('/hub');
   const { isAdmin } = useAuth();
 
   const [tab, setTab]         = React.useState('pending');
@@ -159,21 +163,21 @@ export default function AdminGuardianConsents() {
         </div>
       )}
 
-      <div className="flex items-center space-x-3 px-5 pt-6 pb-2">
-        <button onClick={() => navigate('/admin')}
+      <div className="flex items-center space-x-3 px-5 pt-6 pb-2 max-w-5xl mx-auto w-full">
+        <button onClick={goBack}
           className="w-8 h-8 rounded-full bg-white/[0.06] flex items-center justify-center">
           <ArrowLeft className="w-4 h-4 text-white/60" />
         </button>
         <h1 className="text-lg font-black">Guardian consents</h1>
       </div>
 
-      <p className="px-5 text-[11px] text-white/30 leading-relaxed max-w-lg mb-4">
+      <p className="px-5 text-[11px] text-white/30 leading-relaxed max-w-3xl mx-auto w-full mb-4">
         An artist under 18 cannot sell until a parent or guardian has consented and someone here
         has confirmed it. Contact the guardian on the details below, then mark it. Nothing else
         about their account is affected either way.
       </p>
 
-      <div className="flex space-x-2 px-5 mb-4">
+      <div className="flex space-x-2 px-5 mb-4 max-w-5xl mx-auto w-full">
         {TABS.map(t => (
           <button key={t.key} onClick={() => setTab(t.key)}
             className={`px-3 py-1.5 rounded-full text-[11px] font-semibold transition ${
@@ -183,7 +187,7 @@ export default function AdminGuardianConsents() {
         ))}
       </div>
 
-      <div className="px-5 space-y-3 max-w-lg">
+      <div className="px-5 max-w-5xl mx-auto w-full grid grid-cols-1 lg:grid-cols-2 gap-3 items-start">
         {loading ? (
           <div className="flex justify-center py-10"><Loader className="w-5 h-5 animate-spin text-white/20" /></div>
         ) : rows.length === 0 ? (

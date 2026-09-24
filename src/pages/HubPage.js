@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useStreakContext } from '../contexts/StreakContext';
 import { useTier } from '../contexts/useTier';
 import { supabase } from '../supabaseClient';
+import FollowUs from '../components/FollowUs';
 import CollabThread from '../components/CollabThread';
 import ProfileCompletionBanner from '../components/ProfileCompletionBanner';
 import RoleConfirmationPrompt from '../components/RoleConfirmationPrompt';
@@ -269,6 +270,11 @@ export default function HubPage() {
               <ChevronRight className="w-4 h-4 text-white/20" />
             </button>
           )}
+
+          {/* The platform's own channels. Sits above the admin block so it is
+              the same position for everybody, and below the plan card so it
+              never gets between somebody and their subscription. */}
+          <FollowUs className="mt-2" />
 
           {/* Admin */}
           {isAdmin && (

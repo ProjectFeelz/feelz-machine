@@ -2928,7 +2928,18 @@ export default function TrackUploadPanel() {
                   {filteredTracks.map(track => (
                     <div key={track.id} className="bg-white/[0.03] rounded-xl border border-white/[0.06] overflow-hidden">
                       {editingId !== track.id ? (
-                        <div className="flex items-center space-x-3 p-3">
+                        // TITLES WERE RENDERING AS "T..".
+                        // This was one flex row: a 48px cover, the title block,
+                        // and a right hand group holding Submit for Retail, Put
+                        // on Instagram, edit and delete, all whitespace-nowrap
+                        // and flex-shrink-0. That group is about 260px that
+                        // cannot shrink, so on a 360px phone the title had
+                        // almost nothing left and every row read "T.." over
+                        // "R..". The buttons now sit on their own line
+                        // underneath on a phone and go back to the right hand
+                        // side from `sm` up.
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-3 p-3">
+                          <div className="flex items-center space-x-3 min-w-0">
                           {track.cover_artwork_url
                             ? <img src={track.cover_artwork_url} alt="" className="w-12 h-12 rounded-lg object-cover flex-shrink-0" />
                             : <div className="w-12 h-12 rounded-lg bg-white/[0.06] flex items-center justify-center flex-shrink-0"><Music className="w-5 h-5 text-white/20" /></div>}
@@ -2947,8 +2958,9 @@ export default function TrackUploadPanel() {
                               <span className="text-[10px] text-white/20">{track.stream_count || 0} streams</span>
                             </div>
                           </div>
-                          <div className="flex flex-col items-end space-y-1 flex-shrink-0">
-                            <div className="flex items-center space-x-1">
+                          </div>
+                          <div className="flex sm:flex-col sm:items-end space-y-0 sm:space-y-1 flex-shrink-0 sm:ml-auto">
+                            <div className="flex items-center gap-1 flex-wrap">
                               {track.is_published && (
                                 retailPitchedIds.includes(track.id) ? (
                                   <span className="text-[10px] px-2 py-1.5 bg-white/[0.04] text-white/30 rounded-lg">Pitched</span>

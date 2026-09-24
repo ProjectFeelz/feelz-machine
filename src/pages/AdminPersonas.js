@@ -25,7 +25,7 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 import {
-  ArrowLeft, Loader, Plus, Search, Music, UserPlus,
+  ArrowLeft, Loader, Plus, Search, Music, UserPlus, ImagePlus, Store, Check,
   Pause, Play, Archive, X, ExternalLink,
 } from 'lucide-react';
 import { supabase } from '../supabaseClient';
@@ -63,11 +63,38 @@ export default function AdminPersonas() {
 
   const [showNew, setShowNew] = React.useState(false);
   const [nu, setNu] = React.useState({ name: '', lane: LANES[0], genre: '', mood: '', bio: '', image: '' });
+  const [uploading, setUploading] = React.useState(false);
+  const fileRef = React.useRef(null);
+
+  // Pick a face from the device instead of pasting a URL. Same bucket and the
+  // same shape of call the newsletter editor already uses for its images, so
+  // there is no new storage policy to add.
+  const pickImage = async (file) => {
+    if (!file) return;
+    if (!file.type.startsWith('image/')) { setError('That is not an image.'); return; }
+    if (file.size > 5 * 1024 * 1024) { setError('Keep it under 5MB.'); return; }
+    setError(''); setUploading(true);
+    const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
+    const path = `personas/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+    const { error: upErr } = await supabase.storage.from('covers')
+      .upload(path, file, { cacheControl: '31536000', contentType: file.type });
+    if (upErr) {
+      setUploading(false);
+      console.error('[personas] image upload failed:', upErr.message);
+      setError('That image did not upload: ' + upErr.message);
+      return;
+    }
+    const { data: { publicUrl } } = supabase.storage.from('covers').getPublicUrl(path);
+    setNu(v => ({ ...v, image: publicUrl }));
+    setUploading(false);
+  };
 
   const [assignFor, setAssignFor] = React.useState(null);   // persona row
   const [query, setQuery]         = React.useState('');
   const [results, setResults]     = React.useState([]);
   const [searching, setSearching] = React.useState(false);
+  // Loading a persona means twenty tracks, not one, so the picker ticks.
+  const [picked, setPicked]       = React.useState([]);
 
   React.useEffect(() => { if (!isAdmin) navigate('/hub'); }, [isAdmin, navigate]);
 
@@ -87,7 +114,7 @@ export default function AdminPersonas() {
     setError('');
     if (!nu.name.trim()) { setError('A persona needs a name.'); return; }
     setBusy(true);
-    const { error: e } = await supabase.rpc('admin_create_seed_persona', {
+    const { data: newId, error: e } = await supabase.rpc('admin_create_seed_persona', {
       p_artist_name: nu.name.trim(),
       p_lane:        nu.lane || null,
       p_bio:         nu.bio.trim() || null,
@@ -95,6 +122,12 @@ export default function AdminPersonas() {
       p_mood:        nu.mood.trim() || null,
       p_image_url:   nu.image.trim() || null,
     });
+    if (!e && newId) {
+      // Every persona points at the platform's own channels, because that is
+      // whose music it is. Set at creation so nobody has to remember.
+      const { error: sErr } = await supabase.rpc('admin_set_persona_socials', { p_artist_id: newId });
+      if (sErr) console.error('[personas] socials failed:', sErr.code, sErr.message);
+    }
     setBusy(false);
     if (e) { setError(readableError(e)); return; }
     setNu({ name: '', lane: nu.lane, genre: '', mood: '', bio: '', image: '' });
@@ -136,17 +169,47 @@ export default function AdminPersonas() {
     return () => { cancelled = true; clearTimeout(t); };
   }, [query, assignFor]);
 
-  const assign = async (track) => {
+  const togglePick = (id) =>
+    setPicked(p => (p.includes(id) ? p.filter(x => x !== id) : [...p, id]));
+
+  const assignPicked = async () => {
+    if (picked.length === 0) return;
     setBusy(true);
-    const { error: e } = await supabase.rpc('admin_assign_track_to_persona', {
-      p_track_id: track.id, p_artist_id: assignFor.id,
+    const { data: n, error: e } = await supabase.rpc('admin_assign_tracks_to_persona', {
+      p_track_ids: picked, p_artist_id: assignFor.id,
     });
     setBusy(false);
     if (e) { setError(readableError(e)); return; }
-    say(`"${track.title}" is now ${assignFor.artist_name}.`);
-    setResults(rs => rs.map(r => (r.id === track.id
-      ? { ...r, artist_id: assignFor.id, artist_name: assignFor.artist_name }
-      : r)));
+    say(`${n} track${n === 1 ? '' : 's'} moved to ${assignFor.artist_name}. Blank genres and moods took the persona's.`);
+    setPicked([]);
+    setAssignFor(null);
+    load();
+  };
+
+  // Whole catalogue into Feelz Retail, or back out of it.
+  const pitchAll = async (row) => {
+    setBusy(true);
+    const { data, error: e } = await supabase.rpc('admin_pitch_persona_catalogue', { p_artist_id: row.id });
+    setBusy(false);
+    if (e) { setError(readableError(e)); return; }
+    const sk = data?.skipped || {};
+    const why = [
+      sk.unpublished ? `${sk.unpublished} draft` : null,
+      sk.explicit    ? `${sk.explicit} explicit` : null,
+      sk.beats       ? `${sk.beats} beats` : null,
+      sk.no_audio    ? `${sk.no_audio} with no audio` : null,
+      sk.already_in  ? `${sk.already_in} already pitched` : null,
+    ].filter(Boolean).join(', ');
+    say(`${data?.added ?? 0} of ${row.artist_name}'s tracks are now in Retail${why ? `. Skipped: ${why}.` : '.'}`);
+    load();
+  };
+
+  const unpitchAll = async (row) => {
+    setBusy(true);
+    const { data: n, error: e } = await supabase.rpc('admin_unpitch_persona_catalogue', { p_artist_id: row.id });
+    setBusy(false);
+    if (e) { setError(readableError(e)); return; }
+    say(`${n} of ${row.artist_name}'s tracks switched off in Retail. Nothing was deleted.`);
     load();
   };
 
@@ -173,7 +236,7 @@ export default function AdminPersonas() {
         </div>
       )}
 
-      <div className="flex items-center space-x-3 px-5 pt-6 pb-2">
+      <div className="flex items-center space-x-3 px-5 pt-6 pb-2 max-w-6xl mx-auto w-full">
         <button onClick={() => navigate('/hub')}
           className="w-8 h-8 rounded-full bg-white/[0.06] flex items-center justify-center">
           <ArrowLeft className="w-4 h-4 text-white/60" />
@@ -185,14 +248,14 @@ export default function AdminPersonas() {
         </button>
       </div>
 
-      <p className="px-5 text-[11px] text-white/30 leading-relaxed max-w-lg mb-4">
+      <p className="px-5 text-[11px] text-white/30 leading-relaxed max-w-3xl mx-auto w-full mb-4">
         Platform-owned accounts that fill the catalogue and the Feelz Retail playlists.
         None of them can sell anything or be paid anything, by design. Target is about 30,
         in 10 lanes of 3, roughly 20 tracks each: three per lane is what stops every
         playlist repeating one name.
       </p>
 
-      <div className="px-5 mb-5 grid grid-cols-4 gap-2 max-w-lg">
+      <div className="px-5 mb-5 grid grid-cols-2 sm:grid-cols-4 gap-2 max-w-6xl mx-auto w-full">
         {[
           ['Personas', counts.total], ['Active', counts.active],
           ['Tracks', counts.tracks], ['In Retail', counts.retail],
@@ -205,14 +268,14 @@ export default function AdminPersonas() {
       </div>
 
       {error && (
-        <div className="mx-5 mb-4 p-3 rounded-xl bg-red-500/10 border border-red-500/20 max-w-lg">
+        <div className="mx-auto mb-4 p-3 rounded-xl bg-red-500/10 border border-red-500/20 max-w-6xl w-full px-5">
           <p className="text-[11px] text-red-300 leading-relaxed">{error}</p>
         </div>
       )}
 
       {/* New persona */}
       {showNew && (
-        <div className="mx-5 mb-5 p-4 rounded-2xl bg-white/[0.03] border border-white/[0.06] space-y-3 max-w-lg">
+        <div className="mx-auto mb-5 p-4 rounded-2xl bg-white/[0.03] border border-white/[0.06] space-y-3 max-w-2xl w-full">
           <input className={inputCls} placeholder="Artist name" value={nu.name}
             onChange={e => setNu(v => ({ ...v, name: e.target.value }))} />
           <div className="flex space-x-2">
@@ -225,8 +288,28 @@ export default function AdminPersonas() {
           </div>
           <input className={inputCls} placeholder="Mood" value={nu.mood}
             onChange={e => setNu(v => ({ ...v, mood: e.target.value }))} />
-          <input className={inputCls} placeholder="Profile image URL" value={nu.image}
-            onChange={e => setNu(v => ({ ...v, image: e.target.value }))} />
+          <div className="flex items-center space-x-3">
+            <button type="button" onClick={() => fileRef.current?.click()} disabled={uploading}
+              className="w-16 h-16 rounded-xl bg-white/[0.06] border border-white/[0.08] flex items-center justify-center overflow-hidden flex-shrink-0 disabled:opacity-40">
+              {uploading
+                ? <Loader className="w-4 h-4 animate-spin text-white/40" />
+                : nu.image
+                  ? <img src={nu.image} alt="" className="w-full h-full object-cover" />
+                  : <ImagePlus className="w-5 h-5 text-white/30" />}
+            </button>
+            <div className="min-w-0">
+              <p className="text-[11px] text-white/50 font-semibold">
+                {nu.image ? 'Face added' : 'Give them a face'}
+              </p>
+              <p className="text-[10px] text-white/25">Tap the square. JPG or PNG, under 5MB.</p>
+              {nu.image && (
+                <button type="button" onClick={() => setNu(v => ({ ...v, image: '' }))}
+                  className="text-[10px] text-white/30 underline mt-0.5">Remove</button>
+              )}
+            </div>
+          </div>
+          <input ref={fileRef} type="file" accept="image/*" className="hidden"
+            onChange={e => pickImage(e.target.files?.[0])} />
           <textarea className={`${inputCls} h-20 resize-none`} placeholder="Bio"
             value={nu.bio} onChange={e => setNu(v => ({ ...v, bio: e.target.value }))} />
           <button onClick={create} disabled={busy}
@@ -241,7 +324,7 @@ export default function AdminPersonas() {
       )}
 
       {/* Roster */}
-      <div className="px-5 space-y-5 max-w-lg">
+      <div className="px-5 space-y-6 max-w-6xl mx-auto w-full">
         {loading ? (
           <div className="flex justify-center py-10"><Loader className="w-5 h-5 animate-spin text-white/20" /></div>
         ) : roster.length === 0 ? (
@@ -258,7 +341,7 @@ export default function AdminPersonas() {
                   {rows.length} of 3
                 </p>
               </div>
-              <div className="space-y-2">
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2 items-start">
                 {rows.map(r => (
                   <div key={r.id} className="p-3.5 rounded-2xl bg-white/[0.03] border border-white/[0.06]">
                     <div className="flex items-start justify-between mb-2">
@@ -274,10 +357,25 @@ export default function AdminPersonas() {
                     </div>
 
                     <div className="flex flex-wrap gap-1.5">
-                      <button onClick={() => { setAssignFor(r); setQuery(''); setError(''); }}
+                      <button onClick={() => { setAssignFor(r); setQuery(''); setPicked([]); setError(''); }}
                         className="flex items-center space-x-1 px-2.5 py-1.5 rounded-lg bg-white/[0.06] text-[11px] text-white/60">
-                        <Music className="w-3 h-3" /><span>Assign a track</span>
+                        <Music className="w-3 h-3" /><span>Assign tracks</span>
                       </button>
+                      {r.tracks > 0 && (
+                        r.retail_tracks > 0 ? (
+                          <button disabled={busy} onClick={() => unpitchAll(r)}
+                            className="flex items-center space-x-1 px-2.5 py-1.5 rounded-lg bg-white/[0.06] text-[11px] text-white/50 disabled:opacity-30"
+                            title="Switch their tracks off in Retail. Nothing is deleted.">
+                            <Store className="w-3 h-3" /><span>Out of Retail</span>
+                          </button>
+                        ) : (
+                          <button disabled={busy} onClick={() => pitchAll(r)}
+                            className="flex items-center space-x-1 px-2.5 py-1.5 rounded-lg bg-purple-500/15 text-[11px] text-purple-300 disabled:opacity-30"
+                            title="Approve their whole published catalogue into Feelz Retail">
+                            <Store className="w-3 h-3" /><span>Into Retail</span>
+                          </button>
+                        )
+                      )}
                       <a href={`/artist/${r.slug}`} target="_blank" rel="noreferrer"
                         className="flex items-center space-x-1 px-2.5 py-1.5 rounded-lg bg-white/[0.06] text-[11px] text-white/60">
                         <ExternalLink className="w-3 h-3" /><span>View</span>
@@ -324,7 +422,11 @@ export default function AdminPersonas() {
             <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.06]">
               <div>
                 <p className="text-sm font-bold">Assign to {assignFor.artist_name}</p>
-                <p className="text-[10px] text-white/30 mt-0.5">The release moves with the track.</p>
+                <p className="text-[10px] text-white/30 mt-0.5">
+                  The release moves too, and a blank genre or mood becomes
+                  {assignFor.genre ? ` ${assignFor.genre}` : ' the persona\'s'}
+                  {assignFor.mood ? ` / ${assignFor.mood}` : ''}.
+                </p>
               </div>
               <button onClick={() => setAssignFor(null)}
                 className="w-7 h-7 rounded-full bg-white/[0.06] flex items-center justify-center">
@@ -346,10 +448,16 @@ export default function AdminPersonas() {
               ) : results.map(t => {
                 const mine = t.artist_id === assignFor.id;
                 return (
-                  <button key={t.id} disabled={mine || busy} onClick={() => assign(t)}
-                    className={`w-full text-left p-3 rounded-xl border transition ${
+                  <button key={t.id} disabled={mine || busy} onClick={() => togglePick(t.id)}
+                    className={`w-full text-left p-3 rounded-xl border transition flex items-start gap-2.5 ${
                       mine ? 'bg-white/[0.02] border-white/[0.04] opacity-50'
-                           : 'bg-white/[0.04] border-white/[0.06] hover:bg-white/[0.07]'}`}>
+                           : picked.includes(t.id) ? 'bg-purple-500/15 border-purple-400/40'
+                                                   : 'bg-white/[0.04] border-white/[0.06] hover:bg-white/[0.07]'}`}>
+                    <span className={`w-4 h-4 rounded flex-shrink-0 mt-0.5 flex items-center justify-center border ${
+                      picked.includes(t.id) ? 'bg-purple-400 border-purple-400' : 'border-white/20'}`}>
+                      {picked.includes(t.id) && <Check className="w-3 h-3 text-black" />}
+                    </span>
+                    <div className="min-w-0 flex-1">
                     <p className="text-sm text-white/90 truncate">{t.title}</p>
                     <p className="text-[10px] text-white/30 mt-0.5 truncate">
                       {t.artist_name || 'No artist'}
@@ -357,9 +465,24 @@ export default function AdminPersonas() {
                       {t.is_published ? '' : ' · draft'}
                       {mine ? ' · already theirs' : ''}
                     </p>
+                    </div>
                   </button>
                 );
               })}
+            </div>
+
+            {/* One confirm for the whole selection. */}
+            <div className="px-4 py-3 border-t border-white/[0.06] flex items-center gap-2">
+              <p className="text-[11px] text-white/35 flex-1">
+                {picked.length === 0 ? 'Tick the tracks to move.' : `${picked.length} selected`}
+              </p>
+              {picked.length > 0 && (
+                <button onClick={() => setPicked([])} className="text-[11px] text-white/30 px-2 py-2">Clear</button>
+              )}
+              <button onClick={assignPicked} disabled={picked.length === 0 || busy}
+                className="px-4 py-2.5 rounded-xl bg-white text-black text-xs font-bold disabled:opacity-30">
+                {busy ? 'Moving…' : `Move to ${assignFor.artist_name}`}
+              </button>
             </div>
           </div>
         </div>

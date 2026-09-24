@@ -296,8 +296,14 @@ function EarningsSection({ artist, sectionRef, downloadsRef, highlight }) {
           .eq('artist_id', artist.id)
           .order('created_at', { ascending: false })
           .limit(5),
+        // tracks!inner, not tracks. Without !inner PostgREST applies
+        // `tracks.artist_id` to the EMBED and not to the rows, so this
+        // returned every paid download the signed-in person could read,
+        // including their own purchases of other artists' music, and added
+        // them up as this artist's earnings. That is the $3.49 sitting under
+        // "Paid downloads" next to "Music sales $0.00".
         supabase.from('downloads')
-          .select('id, amount_paid, created_at, track_id, tracks(title)')
+          .select('id, amount_paid, created_at, track_id, tracks!inner(title, artist_id)')
           .eq('tracks.artist_id', artist.id)
           .gt('amount_paid', 0)
           .order('created_at', { ascending: false })

@@ -150,7 +150,12 @@ export default function AdminDeals() {
   return (
     <div className="min-h-screen bg-black text-white pb-24">
       <Helmet><title>Creator Deals</title><meta name="robots" content="noindex, nofollow" /></Helmet>
-      <div className="max-w-3xl mx-auto px-5 pt-8 space-y-8">
+      {/* max-w-3xl centred on a black page leaves two empty columns on a
+          desktop and reads as a different app from the rest of admin, which
+          is what "the design language is missed" was about. The other admin
+          screens use the width. Company details and the deals list sit side
+          by side from `lg` up rather than stacking down a narrow column. */}
+      <div className="max-w-6xl mx-auto px-5 pt-8 space-y-8">
         <div className="flex items-center space-x-3">
           <button onClick={() => navigate('/hub')} className="w-9 h-9 flex items-center justify-center rounded-full bg-white/[0.06]"><ArrowLeft className="w-4 h-4" /></button>
           <div>
@@ -198,10 +203,12 @@ export default function AdminDeals() {
           </section>
         )}
 
-        {/* Company details go into every agreement */}
-        <section className="space-y-2">
+        {/* Company details go into every agreement.
+            Wrapped in a panel like every other block on this page, instead of
+            four naked inputs floating on black. */}
+        <section className="space-y-2 rounded-2xl p-4 bg-white/[0.03] border border-white/[0.06]">
           <p className="text-xs font-bold text-white/50 uppercase tracking-wide">Company details (used in every agreement)</p>
-          <div className="grid sm:grid-cols-2 gap-2">
+          <div className="grid sm:grid-cols-2 gap-2 pt-1">
             {[
               ['company_legal_name', 'Registered company name'], ['company_reg_no', 'Registration number'],
               ['company_address', 'Registered address'], ['company_contact_email', 'Contact email for notices'],
@@ -213,7 +220,7 @@ export default function AdminDeals() {
         </section>
 
         {/* New offer */}
-        <section className="space-y-3">
+        <section className="space-y-3 rounded-2xl p-4 bg-white/[0.03] border border-white/[0.06]">
           <p className="text-xs font-bold text-white/50 uppercase tracking-wide">New offer</p>
           {!artist ? (
             <div>

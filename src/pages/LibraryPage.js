@@ -19,7 +19,7 @@ const THEMES = [
   { key: 'deep_navy', label: 'Deep Navy',   bg: '#060c1a', surface: 'rgba(59,130,246,0.07)',   surface2: 'rgba(59,130,246,0.12)',  border: 'rgba(59,130,246,0.18)',  accent: '#3B82F6' },
   { key: 'forest',    label: 'Forest Dark', bg: '#040f07', surface: 'rgba(34,197,94,0.06)',    surface2: 'rgba(34,197,94,0.10)',   border: 'rgba(34,197,94,0.16)',   accent: '#22C55E' },
   { key: 'warm_dark', label: 'Warm Dark',   bg: '#120800', surface: 'rgba(249,115,22,0.06)',   surface2: 'rgba(249,115,22,0.10)',  border: 'rgba(249,115,22,0.16)',  accent: '#F97316' },
-  // Requested by listeners — pink/sparkle palette
+  // Requested by listeners, pink/sparkle palette
   { key: 'bubblegum', label: 'Bubblegum',   bg: '#1F0313', surface: 'rgba(236,72,153,0.06)',   surface2: 'rgba(236,72,153,0.10)',  border: 'rgba(236,72,153,0.16)',  accent: '#EC4899' },
   { key: 'blush',     label: 'Blush',       bg: '#1A0A10', surface: 'rgba(240,168,188,0.06)',  surface2: 'rgba(240,168,188,0.10)', border: 'rgba(240,168,188,0.16)', accent: '#F0A8BC' },
   { key: 'sparkle',   label: 'Sparkle',     bg: '#180A1F', surface: 'rgba(217,70,239,0.06)',   surface2: 'rgba(217,70,239,0.10)',  border: 'rgba(217,70,239,0.16)',  accent: '#D946EF', sparkle: true },
@@ -58,14 +58,14 @@ export default function LibraryPage() {
   // Getting INTO a chat was the hard problem; getting BACK to one was the
   // quiet second half of it. Without this the only way to return to a
   // conversation was to remember which artist it belonged to, open their
-  // profile and press Chat again — so every visit cost as much as the first.
+  // profile and press Chat again, so every visit cost as much as the first.
   const [myRooms, setMyRooms] = useState([]);
   useEffect(() => {
     if (!user) { setMyRooms([]); return; }
     let cancelled = false;
     (async () => {
       // Two queries rather than one embed. chat_room_members has no foreign
-      // key to artists, so the artist name has to come through chat_rooms —
+      // key to artists, so the artist name has to come through chat_rooms , 
       // and chat_rooms has exactly one FK to artists, which means the embed
       // is unambiguous and safe to name.
       const { data: memberships, error: mErr } = await supabase
@@ -120,15 +120,40 @@ export default function LibraryPage() {
   // Featured artwork for the desktop right rail. Deliberately its own
   // effect and its own state: if this query fails or returns nothing, the
   // rail just doesn't render and the rest of the page is unaffected.
+  // HIDING A SONG HAS TO MEAN HIDING IT EVERYWHERE.
+  //
+  // "Not interested" writes a listener_feedback row and For You honours it,
+  // but this page never read it, so a track you had just told the app to stop
+  // showing you came straight back in "Fresh on Feelz" and "New to you". That
+  // reads as the app ignoring you, which is worse than never having the
+  // button.
+  //
+  // Read once here and passed to both strips below.
+  const [hiddenIds, setHiddenIds] = useState([]);
   useEffect(() => {
-    supabase.from('tracks')
+    if (!user) { setHiddenIds([]); return; }
+    let cancelled = false;
+    supabase.from('listener_feedback')
+      .select('track_id')
+      .eq('user_id', user.id)
+      .eq('signal', 'not_interested')
+      .then(({ data, error }) => {
+        if (error) { console.error('[library] hidden read failed:', error.code, error.message); return; }
+        if (!cancelled) setHiddenIds((data || []).map(r => r.track_id).filter(Boolean));
+      });
+    return () => { cancelled = true; };
+  }, [user]);
+
+  useEffect(() => {
+    let q = supabase.from('tracks')
       .select('id, title, slug, file_url, cover_artwork_url, artists(artist_name)')
       .eq('is_published', true)
       .not('cover_artwork_url', 'is', null)
       .order('created_at', { ascending: false })
-      .limit(6)
-      .then(({ data }) => setFeatured(data || []));
-  }, []);
+      .limit(6);
+    if (hiddenIds.length > 0) q = q.not('id', 'in', `(${hiddenIds.join(',')})`);
+    q.then(({ data }) => setFeatured(data || []));
+  }, [hiddenIds]);
 
   // "New to you" strip. Prefers recent tracks from artists this user
   // actually follows; falls back to recent published tracks if they don't
@@ -148,11 +173,13 @@ export default function LibraryPage() {
         .order('created_at', { ascending: false })
         .limit(15);
       if (ids.length > 0) q = q.in('artist_id', ids);
+      if (hiddenIds.length > 0) q = q.not('id', 'in', `(${hiddenIds.join(',')})`);
       const { data } = await q;
       setNewToYou(data || []);
     };
     load();
-  }, [user]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, hiddenIds]);
 
   useEffect(() => {
     if (!user) return;
@@ -222,7 +249,7 @@ export default function LibraryPage() {
   }, [user]);
 
   const isPro          = listenerTierSlug === 'pro' || listenerTierSlug === 'premium' || listenerTierSlug === 'fan_pro';
-  // The quota meter these fed is gone — it only ever rendered for Pro members,
+  // The quota meter these fed is gone, it only ever rendered for Pro members,
   // who are not subject to the quota. Left out rather than left unused so the
   // next person does not wire them back into a Pro-only card.
   // FREE_MONTHLY_QUOTA lives in netlify/functions/get-download-url.js, which is
@@ -252,7 +279,7 @@ export default function LibraryPage() {
         <link rel="icon" href="/favicon.ico" />
         <link rel="apple-touch-icon" href="/logo192.png" />
         <title>Library · Feelz Machine</title>
-        <meta name="description" content="Your music library — liked songs, downloads, playlists and artists you follow." />
+        <meta name="description" content="Your music library, liked songs, downloads, playlists and artists you follow." />
         <link rel="canonical" href="https://www.feelzmachine.com/library" />
       </Helmet>
 
@@ -316,11 +343,11 @@ export default function LibraryPage() {
                 </span>
               </div>
 
-              {/* Downloads — this whole card only renders when isPro is true.
+              {/* Downloads, this whole card only renders when isPro is true.
                   So the 3-a-month quota meter was being shown to the ONE group
                   of people the quota does not apply to, and to nobody else.
                   A Fan Pro member with five downloads saw "5 / 3 used" with the
-                  bar full and red — a limit she had paid to not have, drawn as
+                  bar full and red, a limit she had paid to not have, drawn as
                   if she had blown through it. Free listeners, who do have the
                   cap, never saw this card at all.
 

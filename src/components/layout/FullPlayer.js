@@ -8,6 +8,7 @@ import {
   Music2, Moon,
 } from 'lucide-react';
 import { usePlayer } from '../../contexts/PlayerContext';
+import useScreenAwake from '../../hooks/useScreenAwake';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../supabaseClient';
 import TrackActionSheet from '../TrackActionSheet';
@@ -793,6 +794,16 @@ export default function FullPlayer() {
   useEffect(() => {
     if (!isMinimized) animate(y, 0, { type: 'spring', damping: 30, stiffness: 300 });
   }, [isMinimized]);
+
+  // Stop the phone dimming and locking while the player is open, so the
+  // artwork, the lyrics and the scrubber stay lit through a song. Called
+  // BEFORE the early return below, because a hook that only runs on some
+  // renders changes the hook count between renders and React throws.
+  //
+  // A browser cannot set brightness, nothing can. What it can do is ask the
+  // system not to dim, which is what this does. See the note at the top of
+  // src/hooks/useScreenAwake.js.
+  useScreenAwake(!!currentTrack && !isMinimized);
 
   if (!currentTrack || isMinimized) return null;
 

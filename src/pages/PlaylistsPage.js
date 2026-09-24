@@ -40,7 +40,12 @@ export default function PlaylistsPage() {
   const fetchPlaylists = async () => {
     const [{ data: mine }, { data: collab }] = await Promise.all([
       supabase.from('playlists')
-        .select('id, name, cover_url, is_shared, is_public, user_id, created_at, playlist_tracks(id, position, tracks(cover_artwork_url))')
+        // share_token was missing from this select, so copyShareLink built
+        // `/library/playlists/join/undefined` and the invite link was dead.
+        // That is why marking a playlist collaborative looked like it did
+        // nothing: it DID write is_shared and a token, there was just no way
+        // to get the link back out.
+        .select('id, name, cover_url, is_shared, is_public, share_token, user_id, created_at, playlist_tracks(id, position, tracks(cover_artwork_url))')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false }),
       supabase.from('playlist_collaborators')
@@ -132,8 +137,30 @@ export default function PlaylistsPage() {
   };
 
   const copyShareLink = async (playlist) => {
-    const url = `${window.location.origin}/library/playlists/join/${playlist.share_token}`;
-    await navigator.clipboard.writeText(url).catch(() => {});
+    let token = playlist.share_token;
+
+    // A playlist marked shared before the select above was fixed has no token
+    // at all. Mint one now rather than copying a link that cannot work.
+    if (!token) {
+      token = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
+      const { error } = await supabase.from('playlists')
+        .update({ share_token: token, is_shared: true }).eq('id', playlist.id).eq('user_id', user.id);
+      if (error) {
+        console.error('[playlists] could not mint a share token:', error.code, error.message);
+        setCreateError('Could not make a link for that playlist: ' + error.message);
+        return;
+      }
+      setPlaylists(prev => prev.map(p => (p.id === playlist.id ? { ...p, share_token: token } : p)));
+    }
+
+    const url = `${window.location.origin}/library/playlists/join/${token}`;
+    try {
+      await navigator.clipboard.writeText(url);
+    } catch {
+      // Clipboard is blocked in some in-app browsers. Falling back to the
+      // share sheet is better than silently copying nothing.
+      if (navigator.share) { try { await navigator.share({ url }); } catch {} }
+    }
     setCopiedId(playlist.id);
     setTimeout(() => setCopiedId(null), 2000);
   };
@@ -191,7 +218,7 @@ export default function PlaylistsPage() {
       onClick={() => navigate(`/library/playlists/${playlist.id}`)}
       className="p-3 rounded-xl hover:bg-white/[0.04] transition group cursor-pointer"
     >
-      {/* Cover — square, full card width, with tap-to-upload for owners and a play overlay on hover */}
+      {/* Cover, square, full card width, with tap-to-upload for owners and a play overlay on hover */}
       <div className="relative w-full aspect-square mb-3">
         <div className="w-full h-full rounded-lg bg-gradient-to-br from-purple-600/30 to-blue-600/20 flex items-center justify-center relative overflow-hidden">
           <CollageCover playlist={playlist} />
@@ -233,17 +260,20 @@ export default function PlaylistsPage() {
         {isCollab ? ' · Collaborative' : playlist.is_shared ? ' · Shared' : playlist.is_public ? ' · Public' : ' · Private'}
       </p>
 
-      {/* Secondary actions — small, hover-revealed, kept out of the way of the card's main click target */}
+      {/* Secondary actions, small, hover-revealed, kept out of the way of the card's main click target */}
       <div className="flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition h-6">
         {playlist.is_shared && !isCollab && (
           <button
             onClick={e => { e.stopPropagation(); copyShareLink(playlist); }}
-            className="p-1 rounded hover:bg-white/[0.08] transition"
-            title="Copy share link"
+            className="flex items-center space-x-1 px-1.5 py-1 rounded hover:bg-white/[0.08] transition"
+            title="Copy the invite link"
           >
             {copiedId === playlist.id
               ? <Check className="w-3.5 h-3.5 text-green-400" />
               : <Link className="w-3.5 h-3.5 text-white/40" />}
+            <span className="text-[10px] text-white/35 md:hidden">
+              {copiedId === playlist.id ? 'Copied' : 'Invite link'}
+            </span>
           </button>
         )}
         {!isCollab && (
@@ -272,7 +302,7 @@ export default function PlaylistsPage() {
         </div>
       </div>
 
-      {/* New playlist button — sits under the header */}
+      {/* New playlist button, sits under the header */}
       <button onClick={() => setCreating(!creating)}
         className="w-full flex items-center space-x-2 px-4 py-3 mb-4 bg-white/[0.04] hover:bg-white/[0.07] rounded-xl border border-white/[0.06] text-sm text-white/60 hover:text-white/80 transition">
         <Plus className="w-4 h-4" /><span>New playlist</span>
@@ -314,7 +344,7 @@ export default function PlaylistsPage() {
             >
               <div className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-transform ${newShared ? 'translate-x-4' : 'translate-x-0.5'}`} />
             </div>
-            <span className="text-xs text-white/50">Collaborative — share with friends</span>
+            <span className="text-xs text-white/50">Collaborative, share with friends</span>
           </label>
           {createError && (
             <p className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">{createError}</p>

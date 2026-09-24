@@ -16,7 +16,7 @@ import { Helmet } from 'react-helmet-async';
 import { useNavigate } from 'react-router-dom';
 import {
   Loader, ArrowRight, Megaphone,
-  Upload as UploadIcon, ThumbsUp, PlayCircle, BookOpen, Music,
+  Upload as UploadIcon, ThumbsUp, PlayCircle, BookOpen, Music, Trophy,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import useSchoolSessions from '../hooks/useSchoolSessions';
@@ -67,8 +67,17 @@ function EntryGallery({ compId }) {
 
   const loadPage = React.useCallback((from) => {
     return supabase.from('school_sessions_entries')
-      .select('id, entrant_full_name, is_group, is_finalist, created_at, school:school_sessions_schools(name), school_name_freetext, song:school_sessions_shortlist_songs(title), track:tracks(title, cover_artwork_url), members:school_sessions_entry_members(member_name)')
+      // is_winner was missing from this select, which is why a winner kept
+      // reading as "Finalist" on the public page after being marked in admin:
+      // a winner IS still a finalist, so the only badge this page could draw
+      // was the finalist one. The vote page has always read both.
+      .select('id, entrant_full_name, is_group, is_finalist, is_winner, created_at, school:school_sessions_schools(name), school_name_freetext, song:school_sessions_shortlist_songs(title), track:tracks(title, cover_artwork_url), members:school_sessions_entry_members(member_name)')
       .eq('competition_id', compId)
+      // Winner first, then the other finalists, then everyone else newest
+      // first. Somebody opening this page after the announcement should not
+      // have to scroll to page three to find out who won.
+      .order('is_winner', { ascending: false })
+      .order('is_finalist', { ascending: false })
       .order('created_at', { ascending: false })
       .range(from, from + PAGE_SIZE - 1);
   }, [compId]);
@@ -101,7 +110,10 @@ function EntryGallery({ compId }) {
       <p className="text-lime-400 text-xs lg:text-sm font-bold tracking-widest uppercase">Entries so far</p>
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-2.5 lg:gap-3">
         {entries.map(e => (
-          <div key={e.id} className={`rounded-xl overflow-hidden border ${e.is_finalist ? 'border-lime-400/40 bg-lime-400/[0.04]' : 'border-white/[0.06] bg-white/[0.02]'}`}>
+          <div key={e.id} className={`rounded-xl overflow-hidden border ${
+            e.is_winner   ? 'border-lime-400 bg-lime-400/[0.10]'
+            : e.is_finalist ? 'border-lime-400/40 bg-lime-400/[0.04]'
+            : 'border-white/[0.06] bg-white/[0.02]'}`}>
             <div className="aspect-square bg-white/[0.04] flex items-center justify-center">
               {e.track?.cover_artwork_url ? (
                 <img src={e.track.cover_artwork_url} alt="" className="w-full h-full object-cover" />
@@ -119,8 +131,11 @@ function EntryGallery({ compId }) {
               <p className="text-[10px] text-white/30 truncate">
                 "{e.song?.title || e.track?.title}"
               </p>
-              {e.is_finalist && (
-                <p className="text-[9px] font-bold text-lime-400 uppercase tracking-wide mt-1">Finalist</p>
+              {(e.is_winner || e.is_finalist) && (
+                <p className="text-[9px] font-bold text-lime-400 uppercase tracking-wide mt-1 flex items-center gap-1">
+                  {e.is_winner && <Trophy className="w-2.5 h-2.5" />}
+                  {e.is_winner ? 'Winner' : 'Finalist'}
+                </p>
               )}
             </div>
           </div>

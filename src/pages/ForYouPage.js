@@ -1406,11 +1406,28 @@ export default function ForYouPage() {
           }));
 
         if (pickTracks.length > 0) {
+          // ROTATE, DO NOT ALWAYS START AT ONE.
+          //
+          // Taking picks 1 to 4 every time means the same song opens the app
+          // on every refresh. That track then collects every first play on the
+          // platform, its engagement score runs away from everything else, and
+          // the feed genuinely does become rigged towards it. It also just
+          // gets irritating.
+          //
+          // So the window moves. The whole list still gets shown, in the order
+          // it was built, it just starts somewhere different each time and
+          // wraps around, so no pick is permanently first and none is
+          // permanently unseen. Random rather than a stored cursor because a
+          // cursor is one more thing to keep per listener for no gain here.
+          const start = Math.floor(Math.random() * pickTracks.length);
+          const rotate = (list, n) => list.slice(n).concat(list.slice(0, n));
+          const rotated = rotate(pickTracks, start);
+
           if (fetched.length === 0) {
             // Nothing from the recommender: the curated list is the feed.
-            fetched = pickTracks.slice(0, PAGE_SIZE);
+            fetched = rotated.slice(0, PAGE_SIZE);
           } else {
-            leadPicks = pickTracks.slice(0, LEAD_PICKS);
+            leadPicks = rotated.slice(0, LEAD_PICKS);
             // A pick the recommender also chose must not appear twice, and the
             // curated position wins.
             const leadIds = new Set(leadPicks.map(t => t.id));

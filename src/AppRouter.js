@@ -321,16 +321,6 @@ export default function AppRouter() {
                   <TermsOfUse />
                 </PageTitle>
               } />
-              <Route path="/schoolsessions" element={
-                <PageTitle title="School Sessions">
-                  <SchoolSessionsPage />
-                </PageTitle>
-              } />
-              <Route path="/schoolsessions/vote" element={
-                <PageTitle title="Vote: School Sessions">
-                  <SchoolSessionsVotePage />
-                </PageTitle>
-              } />
               <Route path="/admin/vip-card-print/:candidateId" element={<VipCardPrintPage />} />
               {/* Retail renders its own full-screen shell and is a separate
                   product, so it must stay outside AppLayout or it gets the
@@ -344,14 +334,31 @@ export default function AppRouter() {
               <Route path="/retail/join/:token" element={<RetailJoinPage />} />
               <Route path="/retail/terms" element={<RetailTermsPage />} />
               <Route path="/retail/privacy" element={<RetailPrivacyPage />} />
-              <Route path="/schoolsessions/terms" element={
-                <PageTitle title="School Sessions: Terms">
-                  <SchoolSessionsTermsPage />
-                </PageTitle>
-              } />
               <Route element={<AppLayout />}>
                 <Route path="/" element={<ForYouPage />} />
                 <Route path="/home" element={<HomePage />} />
+
+                {/* School Sessions lives INSIDE the app shell.
+                    These three used to render outside AppLayout, next to the
+                    Retail pages. Retail belongs out there: it is a separate
+                    product with its own chrome. School Sessions is not. It is
+                    a competition on Feelz Machine, so opening it dropped you
+                    onto a page with no nav, no player and no way back into the
+                    app short of the browser's back button, which does nothing
+                    at all when the page was reached from a shared link.
+                    The judge panel was already inside; these three now match
+                    it. Signed-out visitors arriving from TikTok get the shell
+                    too, which is the point: the nav is how they find the rest
+                    of the platform. */}
+                <Route path="/schoolsessions" element={
+                  <PageTitle title="School Sessions"><SchoolSessionsPage /></PageTitle>
+                } />
+                <Route path="/schoolsessions/vote" element={
+                  <PageTitle title="Vote: School Sessions"><SchoolSessionsVotePage /></PageTitle>
+                } />
+                <Route path="/schoolsessions/terms" element={
+                  <PageTitle title="School Sessions: Terms"><SchoolSessionsTermsPage /></PageTitle>
+                } />
                 <Route path="/schoolsessions/judge" element={<SchoolSessionsJudgePanel />} />
                 <Route path="/for-you" element={<Navigate to="/" replace />} />
                 <Route path="/browse" element={<BrowsePage />} />

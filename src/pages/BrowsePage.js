@@ -586,13 +586,20 @@ export default function BrowsePage() {
                 thirteen moods took two full screens of empty boxes and pushed
                 the actual music off the bottom of the page. A filter is a
                 control, not content: it should cost one line, not a grid. */}
+            {/* ONE LINE ON A PHONE, THE LOT ON A DESKTOP.
+                Wrapping fourteen genres and thirteen moods is one line on a
+                wide screen and most of the screen on a phone: you scroll past
+                a wall of filters before you see a single song. So on mobile
+                they scroll sideways on one row, and from `sm` up they wrap as
+                before. `scrollbar-hide` and no-wrap do the work; nothing is
+                hidden and every pill is still reachable. */}
             <p className="section-label mb-2">Genres</p>
-            <div className="flex flex-wrap gap-2 mb-5">
+            <div className="flex sm:flex-wrap gap-2 mb-5 overflow-x-auto sm:overflow-visible scrollbar-hide -mx-1 px-1">
               {GENRE_TAGS.map(genre => {
                 const active = selectedGenre === genre;
                 return (
                   <button key={genre} onClick={() => setSelectedGenre(genre)}
-                    className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition border active:scale-95 ${
+                    className={`flex-shrink-0 px-3.5 py-1.5 rounded-full text-xs font-semibold transition border active:scale-95 ${
                       active
                         ? 'bg-white text-black border-white'
                         : 'bg-white/[0.04] text-white/60 border-white/[0.07] hover:bg-white/[0.08] hover:text-white'
@@ -604,12 +611,12 @@ export default function BrowsePage() {
             </div>
 
             <p className="section-label mb-2">Moods</p>
-            <div className="flex flex-wrap gap-2 mb-5">
+            <div className="flex sm:flex-wrap gap-2 mb-5 overflow-x-auto sm:overflow-visible scrollbar-hide -mx-1 px-1">
               {MOOD_TAGS.map(({ label, value, emoji }) => {
                 const active = selectedMood === value;
                 return (
                   <button key={label} onClick={() => setSelectedMood(active ? null : value)}
-                    className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold transition border active:scale-95 ${
+                    className={`flex-shrink-0 flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold transition border active:scale-95 ${
                       active
                         ? 'bg-white text-black border-white'
                         : 'bg-white/[0.04] text-white/60 border-white/[0.07] hover:bg-white/[0.08] hover:text-white'

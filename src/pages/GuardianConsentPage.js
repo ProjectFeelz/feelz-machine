@@ -22,6 +22,7 @@
 
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
+import useGoBack from '../hooks/useGoBack';
 import { Helmet } from 'react-helmet-async';
 import { ArrowLeft, Loader, ShieldCheck, Clock, AlertTriangle, Check } from 'lucide-react';
 import { supabase } from '../supabaseClient';
@@ -59,6 +60,10 @@ function readableError(err) {
 
 export default function GuardianConsentPage() {
   const navigate = useNavigate();
+  // navigate(-1) does nothing when this page IS the first history entry, which
+  // is every deep link and every tap from a notification, and it sent an admin
+  // arriving from the Hub back to /admin. useGoBack falls back to the Hub.
+  const goBack = useGoBack('/hub');
   const { user } = useAuth();
 
   const [loading, setLoading]   = React.useState(true);
@@ -172,15 +177,15 @@ export default function GuardianConsentPage() {
         <meta name="robots" content="noindex" />
       </Helmet>
 
-      <div className="flex items-center space-x-3 px-5 pt-6 pb-4">
-        <button onClick={() => navigate(-1)}
+      <div className="flex items-center space-x-3 px-5 pt-6 pb-4 max-w-3xl mx-auto w-full">
+        <button onClick={goBack}
           className="w-8 h-8 rounded-full bg-white/[0.06] flex items-center justify-center">
           <ArrowLeft className="w-4 h-4 text-white/60" />
         </button>
         <h1 className="text-lg font-black">Age and consent</h1>
       </div>
 
-      <div className="px-5 space-y-5 max-w-lg">
+      <div className="px-5 space-y-5 max-w-3xl mx-auto w-full">
         {/* ── Where this account stands ── */}
         {status === 'verified' && (
           <div className="flex items-start space-x-2.5 p-3.5 rounded-xl bg-green-500/10 border border-green-500/20">

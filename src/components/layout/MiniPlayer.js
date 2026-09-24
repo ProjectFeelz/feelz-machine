@@ -6,6 +6,7 @@ import TrackActionSheet from '../TrackActionSheet';
 import { usePlayer } from '../../contexts/PlayerContext';
 import { supabase } from '../../supabaseClient';
 import { useHaptics } from '../../hooks/useHaptics';
+import useKeyboardInset, { useKeyboardOpen } from '../../hooks/useKeyboardInset';
 
 export default function MiniPlayer() {
   const {
@@ -16,6 +17,10 @@ export default function MiniPlayer() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const { tap, heavy } = useHaptics();
+  // See the note on the wrapper's `bottom` further down: these two answer
+  // different questions and both are needed to sit flush on the keyboard.
+  const keyboardInset = useKeyboardInset();
+  const keyboardOpen  = useKeyboardOpen();
   const [showActionSheet, setShowActionSheet] = useState(false);
 
   const [radioSuggestions, setRadioSuggestions] = useState([]);
@@ -127,9 +132,28 @@ export default function MiniPlayer() {
           </div>
         </div>
       )}
+    {/* THE BLACK GAP ABOVE THE KEYBOARD.
+
+        This wrapper reserved 56px plus the safe area for MobileNav at all
+        times. But MobileNav hides itself the moment the keyboard opens, so
+        while you are typing that reserved strip is empty black between the
+        player and the top of the keyboard. public/index.html asks for
+        interactive-widget=resizes-content, which shrinks the layout viewport,
+        so the measured inset is correctly 0 with the keyboard up, and the nav
+        offset was the only thing left making the gap.
+
+          Open   bottom = inset. 0 under resizes-content, which already IS the
+                 top of the keyboard, and the keyboard height on older Chrome,
+                 Android WebView and every iOS version.
+          Closed the nav offset, exactly as before.
+
+        Same pair of hooks as the comment sheet. */}
     <div
       className="md:hidden fixed left-0 right-0 z-50"
-      style={{ bottom: 'calc(56px + var(--safe-area-bottom, 0px))' }}
+      style={{
+        bottom: keyboardOpen ? `${keyboardInset}px` : 'calc(56px + var(--safe-area-bottom, 0px))',
+        transition: 'bottom 0.12s ease',
+      }}
     >
       {/* End-of-queue: More like this */}
       {showRadioEnd && radioSuggestions.length > 0 && (
@@ -203,7 +227,7 @@ export default function MiniPlayer() {
                     />
                   : <div className="w-full h-full flex items-center justify-center text-white/30 text-lg">♪</div>}
               </div>
-              {/* Chevron overlay — makes it obvious this is tappable */}
+              {/* Chevron overlay, makes it obvious this is tappable */}
               <div className="absolute inset-0 flex items-center justify-center rounded-lg bg-black/40 opacity-0 hover:opacity-100 transition">
                 <ChevronUp className="w-4 h-4 text-white" />
               </div>
@@ -219,7 +243,7 @@ export default function MiniPlayer() {
             </div>
           </div>
 
-          {/* Expand pill — always visible affordance */}
+          {/* Expand pill, always visible affordance */}
           <button
             onClick={handleExpand}
             className="flex items-center space-x-1 px-2 py-1 rounded-full bg-white/[0.06] border border-white/[0.08] mr-1 flex-shrink-0"
@@ -245,7 +269,7 @@ export default function MiniPlayer() {
             </button>
             {/* Close. The bar had no dismiss control and nothing in the app
                 ever cleared currentTrack, so once you played anything the
-                mini player was permanent. Stops the music too — hiding a
+                mini player was permanent. Stops the music too, hiding a
                 still-playing player would leave no way to reach pause.
                 Deliberately the smallest target in the row so it is not
                 fat-thumbed instead of skip. */}

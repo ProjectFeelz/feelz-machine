@@ -13,7 +13,7 @@ import { TrackCreditsInline, AlbumCredits } from '../components/TrackCredits';
 import TrackVersions from '../components/TrackVersions';
 import {
   ArrowLeft, Play, Pause, Music, Loader, Download,
-  Heart, Share2, Check, ListMusic, ShoppingCart, X
+  Heart, Share2, Check, ListMusic, ShoppingCart, X, MoreHorizontal
 } from 'lucide-react';
 import ShareCard from '../components/ShareCard';
 import { showReceipt } from '../components/PurchaseReceipt';
@@ -569,23 +569,41 @@ export default function AlbumDetailPage() {
                     <TrackCreditsInline trackId={track.id} />
                   </div>
                 </button>
+                {/* FOUR CONTROLS AND A TITLE DO NOT FIT ON A PHONE.
+                    Like, comment, add-to-playlist and a price button are about
+                    150px that cannot shrink, against a 360px screen, so the
+                    title got about eight characters and every row read
+                    "Against Th...". The price stays visible, because that is
+                    the one people are looking for; the other three fold into
+                    the three dot menu, which already has Like, Comments and
+                    Add to Playlist in it. They come back inline from `sm` up,
+                    where there is room. */}
                 <div className="flex items-center space-x-1 flex-shrink-0">
-                  <button onClick={(e) => handleLike(track, e)} className="w-8 h-8 flex items-center justify-center rounded-lg transition active:scale-90">
+                  <button onClick={(e) => handleLike(track, e)}
+                    className="hidden sm:flex w-8 h-8 items-center justify-center rounded-lg transition active:scale-90">
                     <Heart className="w-4 h-4" fill={likedTracks[track.id] ? '#ef4444' : 'none'} color={likedTracks[track.id] ? '#ef4444' : 'rgba(255,255,255,0.25)'} />
                   </button>
                   {/* Comments, per track, not per album. The same thread the
                       track page, For You and the three dot menu open. */}
-                  <CommentButton
-                    track={{ ...track, artist_name: artist?.artist_name }}
-                    user={user}
-                    routePrefix="track"
-                    variant="badge"
-                    iconClassName="w-4 h-4"
-                    className="w-8 h-8 flex items-center justify-center rounded-lg transition active:scale-90 relative"
-                  />
+                  <div className="hidden sm:block">
+                    <CommentButton
+                      track={{ ...track, artist_name: artist?.artist_name }}
+                      user={user}
+                      routePrefix="track"
+                      variant="badge"
+                      iconClassName="w-4 h-4"
+                      className="w-8 h-8 flex items-center justify-center rounded-lg transition active:scale-90 relative"
+                    />
+                  </div>
                   <button onClick={(e) => { e.stopPropagation(); setShowAddToPlaylist(showAddToPlaylist === track.id ? null : track.id); }}
-                    className="w-8 h-8 flex items-center justify-center rounded-lg transition active:scale-90">
+                    className="hidden sm:flex w-8 h-8 items-center justify-center rounded-lg transition active:scale-90">
                     <ListMusic className="w-4 h-4 text-white/25 hover:text-white/60 transition" />
+                  </button>
+                  {/* Phone only: everything above, in one button. */}
+                  <button onClick={(e) => { e.stopPropagation(); setActionSheetTrack(track); }}
+                    aria-label="More"
+                    className="sm:hidden w-8 h-8 flex items-center justify-center rounded-lg transition active:scale-90">
+                    <MoreHorizontal className="w-4 h-4 text-white/30" />
                   </button>
                   {track.is_downloadable && (
                     purchasedTracks[track.id] ? (

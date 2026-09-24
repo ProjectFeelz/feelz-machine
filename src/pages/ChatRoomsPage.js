@@ -128,7 +128,7 @@ function ColorPicker({ value, onChange }) {
             }}
           >
             {s.value === null && (
-              <span className="text-[9px] text-white/40 font-bold">—</span>
+              <span className="text-[9px] text-white/40 font-bold">, </span>
             )}
           </button>
         ))}
@@ -155,7 +155,16 @@ export default function ChatRoomsPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName]       = useState('');
   const [newColor, setNewColor]     = useState(null);
-  const [subOnly, setSubOnly]       = useState(false);
+  // EVERY ARTIST ROOM IS SUBSCRIBERS ONLY.
+  //
+  // This was a toggle that defaulted to off, so most rooms came out open to
+  // anybody and an "exclusive" fan chat was exclusive only if the artist
+  // happened to notice the switch. A room anyone can walk into is not a
+  // reason to follow an artist, which is the entire point of having one.
+  //
+  // Kept as state rather than inlining `true` at the insert so there is one
+  // place to change it if that decision is ever revisited.
+  const [subOnly] = useState(true);
   const [creating, setCreating]     = useState(false);
 
   // Rename / colour room
@@ -217,7 +226,7 @@ export default function ChatRoomsPage() {
     setLoading(true);
     try {
       // is_active was not filtered. A room an artist had deactivated still
-      // appeared in this list and still opened — and migration 117 treats an
+      // appeared in this list and still opened, and migration 117 treats an
       // inactive room as gone, so the browse list and the Chat button could
       // disagree about whether a room exists. They agree now.
       const { data, error } = await supabase
@@ -278,7 +287,6 @@ export default function ChatRoomsPage() {
       setShowCreate(false);
       setNewName('');
       setNewColor(null);
-      setSubOnly(false);
       fetchRooms();
     } catch (err) {
       setError('Failed to create room: ' + err.message);
@@ -327,7 +335,7 @@ export default function ChatRoomsPage() {
   // The bug-report room is reachable from the Hub by its own button and is
   // kept out of this list on purpose.
   //
-  // It was pinned, so it sat at the very top of Chat Rooms — and any
+  // It was pinned, so it sat at the very top of Chat Rooms, and any
   // notification that fell through to /community landed people on it by
   // accident. A room for reporting faults is not somewhere you want someone
   // arriving without meaning to; it fills up with confused messages and
@@ -386,8 +394,8 @@ export default function ChatRoomsPage() {
       {/* Header */}
       <div className="flex items-center justify-between mb-6 sticky top-0 z-20 bg-black/95 backdrop-blur-xl md:relative md:top-auto md:bg-transparent md:backdrop-blur-none pt-14 md:pt-4 pb-3 -mx-6 px-6 border-b border-white/[0.04] md:border-none">
         <div className="flex items-center space-x-3">
-          {/* This page is now arrived AT — from Library's "Browse all" and
-              from a competition room — rather than being somewhere you just
+          {/* This page is now arrived AT, from Library's "Browse all" and
+              from a competition room, rather than being somewhere you just
               were. It had no way back. History first, Library as the fallback
               for a cold link. */}
           <button
@@ -453,17 +461,16 @@ export default function ChatRoomsPage() {
                 </div>
               )}
 
-              <div className="flex items-center justify-between">
+              {/* Not a choice any more. See the note on subOnly above. */}
+              <div className="flex items-start space-x-2 p-2.5 rounded-lg bg-white/[0.03] border border-white/[0.06]">
+                <Lock className="w-3.5 h-3.5 text-yellow-400 flex-shrink-0 mt-0.5" />
                 <div>
-                  <p className="text-sm text-white">Subscribers only</p>
-                  <p className="text-[10px] text-white/30">Only your followers can join</p>
+                  <p className="text-sm text-white">Followers only</p>
+                  <p className="text-[10px] text-white/30 leading-relaxed">
+                    Every room is for the people who follow you. That is what makes it
+                    worth following you for.
+                  </p>
                 </div>
-                <button
-                  onClick={() => setSubOnly(!subOnly)}
-                  className={`w-10 h-6 rounded-full transition-colors flex items-center px-0.5 ${subOnly ? 'bg-purple-500' : 'bg-white/[0.1]'}`}
-                >
-                  <div className={`w-5 h-5 rounded-full bg-white transition-transform ${subOnly ? 'translate-x-4' : 'translate-x-0'}`} />
-                </button>
               </div>
               <button
                 onClick={handleCreate}
