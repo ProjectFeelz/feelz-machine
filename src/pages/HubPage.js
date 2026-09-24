@@ -282,6 +282,7 @@ export default function HubPage() {
             <Section title="Platform Admin" icon={Shield}>
               <LinkCard icon={Shield} label="Admin Panel" description="Broadcast · Analytics · Moderation · Users" path="/admin" color="bg-yellow-500/20" />
               <LinkCard icon={Sparkles} label="Home Hero" description="Control the big slot at the top of Home" path="/admin/home-hero" color="bg-yellow-500/20" />
+              <LinkCard icon={Star} label="What's New" description="Posts and podcast for the home card, and the featured board" path="/admin/news" color="bg-yellow-500/20" />
               <LinkCard icon={Star} label="Cold Start Picks" description="What a brand new listener hears first" path="/admin/cold-start" color="bg-yellow-500/20" />
               <LinkCard icon={Send} label="Newsletter" description="Compose updates for the app or retail venues" path="/newsletter/compose" color="bg-yellow-500/20" />
               <LinkCard icon={Shield} label="Guardian Consents" description="Under 18 artists waiting on a parent to be confirmed" path="/admin/guardian-consents" color="bg-yellow-500/20" />

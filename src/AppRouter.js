@@ -101,6 +101,7 @@ const RetailJoinPage = React.lazy(() => import('./pages/RetailJoinPage'));
 const RetailLandingPage = React.lazy(() => import('./pages/RetailLandingPage'));
 const RetailStartPage = React.lazy(() => import('./pages/RetailStartPage'));
 const AdminHomeHero = React.lazy(() => import('./pages/AdminHomeHero'));
+const AdminNews = React.lazy(() => import('./pages/AdminNews'));
 const AdminColdStart = React.lazy(() => import('./pages/AdminColdStart'));
 const HiddenPage = React.lazy(() => import('./pages/HiddenPage'));
 const ContactPreferencesPage = React.lazy(() => import('./pages/ContactPreferencesPage'));
@@ -451,6 +452,7 @@ export default function AppRouter() {
                 <Route path="/newsletter/:slug" element={<NewsletterPostPage />} />
                 <Route path="/legal/:slug" element={<LegalDocumentPage />} />
                 <Route path="/admin/home-hero" element={<AdminHomeHero />} />
+                <Route path="/admin/news" element={<AdminNews />} />
                 <Route path="/admin/cold-start" element={<AdminColdStart />} />
                 <Route path="/admin/guardian-consents" element={<AdminGuardianConsents />} />
                 <Route path="/admin/personas" element={<AdminPersonas />} />

@@ -18,7 +18,7 @@ import useSchoolSessions from '../hooks/useSchoolSessions';
 // sfmza is Steve's personal channel, mentioned as an optional extra for
 // session-specific updates that won't necessarily post on the main one.
 const OFFICIAL_TIKTOK_HANDLE = 'feelzmachine';
-const OFFICIAL_YOUTUBE_HANDLE = 'feelz.machineza';
+const OFFICIAL_YOUTUBE_HANDLE = 'feelz.machine';   // youtube.com/@feelz.machine
 const PERSONAL_YOUTUBE_HANDLE = 'sfmza';
 
 const BLANK_FORM = {

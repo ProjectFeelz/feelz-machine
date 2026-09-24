@@ -265,6 +265,11 @@ export default function TrackCommentSheet({ track, user, onClose, routePrefix = 
               track_title:        trackRow.title,
               track_artwork:      track.cover_artwork_url || null,
               comment:            text.trim().slice(0, 100),
+              // WHICH comment this is. Without it, a reply typed into the
+              // notification had no parent to attach to and arrived on the
+              // track as a standalone comment, disconnected from the thing it
+              // answered. QuickReply in NotificationsPage reads this.
+              comment_id:         data.id,
               from_artist_id:     commenterArtist?.id || null,
               from_artist_name:   name,
               from_artist_image:  commenterArtist?.profile_image_url || null,

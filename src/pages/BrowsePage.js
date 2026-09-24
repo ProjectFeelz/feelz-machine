@@ -105,7 +105,10 @@ export default function BrowsePage() {
   const [actionSheetTrack, setActionSheetTrack] = useState(null);
   const [activeTab, setActiveTab]             = useState(() => {
     const params = new URLSearchParams(window.location.search);
-    return params.get('tab') || 'trending';
+    // Default is Tracks, not Trending. Trending is a small, slow-moving list
+    // dominated by whoever has the longest catalogue, so opening on it makes
+    // the platform look like one artist's shop window. ?tab= still overrides.
+    return params.get('tab') || 'tracks';
   });
   const [selectedGenre, setSelectedGenre]     = useState('All');
   const [selectedMood, setSelectedMood]       = useState(null);
@@ -174,6 +177,25 @@ export default function BrowsePage() {
     if (tab) setActiveTab(tab);
   }, [window.location.search]);
 
+  // The Featured board rotates daily (migration 128: a track earns a week on
+  // it, and the order changes every day so the same three are not permanently
+  // on top). This is the "changes every day" half — the same order for
+  // everybody all day, a different one tomorrow, no server call and no random
+  // that would reshuffle on every render.
+  const dailyOrder = (list) => {
+    const day = new Date().toISOString().slice(0, 10);
+    const key = (id) => {
+      const s = `${id}${day}`;
+      let h = 2166136261;
+      for (let i = 0; i < s.length; i++) {
+        h ^= s.charCodeAt(i);
+        h = Math.imul(h, 16777619);
+      }
+      return h >>> 0;
+    };
+    return [...list].sort((a, b) => key(a.id) - key(b.id));
+  };
+
   const fetchAll = async () => {
     try {
       const [
@@ -237,7 +259,7 @@ export default function BrowsePage() {
       ].sort((a, b) => new Date(b._date) - new Date(a._date));
 
       setTrending(trendingBoosted);
-      setFeatured(norm(featuredRaw));
+      setFeatured(dailyOrder(norm(featuredRaw)));
       setNewReleases(merged);
       setAllTracks(allNorm);
       setAlbums(albumsNorm);
@@ -272,11 +294,13 @@ export default function BrowsePage() {
     else playTrack(track, list);
   };
 
+  // Tracks leads, because it is the default. The bar scrolls horizontally on a
+  // phone, so a default sitting fourth would open highlighted but off-screen.
   const tabs = [
-    { key: 'featured', label: 'Featured', icon: Star },
-    { key: 'new',      label: 'New',      icon: Sparkles },
-    { key: 'trending', label: 'Trending', icon: Flame },
     { key: 'tracks',   label: 'Tracks',   icon: Music },
+    { key: 'new',      label: 'New',      icon: Sparkles },
+    { key: 'featured', label: 'Featured', icon: Star },
+    { key: 'trending', label: 'Trending', icon: Flame },
     { key: 'artists',  label: 'Artists',  icon: Crown },
     { key: 'collabs',  label: 'Collabs',  icon: Users },
     { key: 'albums',   label: 'Albums',   icon: Disc3 },
@@ -429,7 +453,13 @@ export default function BrowsePage() {
         {/* FEATURED */}
         {activeTab === 'featured' && (
           <div>
-            <SectionLabel icon={Star} title="Featured" subtitle="Hand-picked tracks from our team" />
+            {/* The subtitle used to say "hand-picked by our team", which stopped
+                being true with migration 128 — the board earns itself now and
+                rotates nightly. Saying so is the point: a board you can be
+                picked for is worth working towards, a board somebody's mate
+                picks is not. */}
+            <SectionLabel icon={Star} title="Featured"
+              subtitle="Earned this week — milestones, risers and new releases" />
             {featured.length > 0 ? (
               <>
                 <div className="hidden md:grid md:grid-cols-2 lg:grid-cols-3 gap-3 mb-4">

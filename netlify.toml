@@ -130,6 +130,11 @@
 [functions."daily-spotlight"]
   schedule = "5 0 * * *"
 
+# daily 00:20 — the Featured board. After daily-spotlight so the two nightly
+# jobs that touch what people see first are not fighting for the same minute.
+[functions."rotate-featured"]
+  schedule = "20 0 * * *"
+
 # daily 02:00
 [functions."cleanup-stories"]
   schedule = "0 2 * * *"

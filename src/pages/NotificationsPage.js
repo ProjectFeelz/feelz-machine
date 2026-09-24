@@ -60,7 +60,42 @@ const TYPE_CONFIG = {
   bug_report:         { icon: MessageCircle, color: 'text-red-400',    bg: 'bg-red-500/10',     label: 'Bug Report' },
   artist_thought:     { icon: MessageCircle, color: 'text-pink-400',   bg: 'bg-pink-500/10',    label: 'Thought' },
   wheel_challenge:    { icon: TrendingUp,    color: 'text-yellow-400', bg: 'bg-yellow-500/10',  label: 'Challenge' },
+
+  // Written by live code and missing from this map, which meant every one of
+  // them rendered with the fallback below — a bug report reply arriving
+  // labelled "New Stream", a leaderboard win labelled "New Stream".
+  wheel_winner:       { icon: Award,         color: 'text-yellow-400', bg: 'bg-yellow-500/10',  label: 'Winner!' },
+  competition_result: { icon: Award,         color: 'text-yellow-400', bg: 'bg-yellow-500/10',  label: 'Result' },
+  bug_reply:          { icon: MessageCircle, color: 'text-red-400',    bg: 'bg-red-500/10',     label: 'Bug Reply' },
+  challenge_xp:       { icon: Zap,           color: 'text-yellow-400', bg: 'bg-yellow-500/10',  label: 'XP' },
+  fan_leaderboard:    { icon: Award,         color: 'text-orange-400', bg: 'bg-orange-500/10',  label: 'Leaderboard' },
+  beat_purchase:      { icon: DollarSign,    color: 'text-green-400',  bg: 'bg-green-500/10',   label: 'Beat Sale' },
+  paid_download:      { icon: DollarSign,    color: 'text-green-400',  bg: 'bg-green-500/10',   label: 'Sale' },
+  admin_reminder:     { icon: Megaphone,     color: 'text-yellow-400', bg: 'bg-yellow-500/10',  label: 'Reminder' },
+
+  // Written by rotate_featured_tracks() (migration 128) when a track earns a
+  // week on the Featured board.
+  featured_placement: { icon: Star,          color: 'text-purple-300', bg: 'bg-purple-500/10',  label: 'Featured' },
 };
+
+// Everything in TYPE_CONFIG that goes NOWHERE when tapped, so the row can stop
+// advertising itself as tappable. A card with a chevron and a hover state that
+// does nothing is the thing that makes an app feel broken — worse than a card
+// that plainly is not a link.
+const INERT_TYPES = new Set(['streak', 'bug_report']);
+
+// Tapping does nothing for these, so the row drops the pointer cursor and the
+// hover lift rather than advertising a link that is not there.
+function isInert(n) {
+  if (INERT_TYPES.has(n?.type)) return true;
+  // An announcement carries its destination in metadata. Without one there is
+  // nothing behind the tap.
+  if (n?.type === 'announcement' || n?.type === 'admin_message') {
+    const m = n.metadata || {};
+    return !m.action_url && !m.cta_url;
+  }
+  return false;
+}
 
 const FILTERS = [
   { key: 'all',        label: 'All' },
@@ -98,10 +133,23 @@ function formatDate(date) {
 
 // ─── Quick reply box ──────────────────────────────────────────────────────────
 // replyType: 'post' → artist_post_comments, 'track' → track_comments
-function QuickReply({ postId, trackId, replyType = 'post', onSent }) {
+// A reply from here is a REPLY, not a new comment.
+//
+// It wrote track_comments without parent_comment_id, so a reply typed into a
+// notification arrived on the track as a standalone top-level comment with no
+// connection to the thing it answered — the comment thread renders its replies
+// purely from that column (TrackCommentSheet builds topLevel from
+// `!c.parent_comment_id`). The person who was answered saw an unrelated remark.
+//
+// The parent comes from the notification's own metadata. Older notifications
+// were written before comment_id was recorded, so it can be missing; in that
+// case this still posts, as a top-level comment, because losing what somebody
+// typed is worse than losing the threading.
+function QuickReply({ postId, trackId, parentCommentId = null, replyType = 'post', onSent }) {
   const { user } = useAuth();
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
+  const [failed, setFailed]   = useState(false);
   const inputRef = useRef(null);
 
   useEffect(() => { inputRef.current?.focus(); }, []);
@@ -111,12 +159,14 @@ function QuickReply({ postId, trackId, replyType = 'post', onSent }) {
     setSending(true);
     try {
       if (replyType === 'track' && trackId) {
-        await supabase.from('track_comments').insert({
-          track_id:   trackId,
-          user_id:    user.id,
-          content:    text.trim(),
-          created_at: new Date().toISOString(),
+        const { error: replyErr } = await supabase.from('track_comments').insert({
+          track_id:          trackId,
+          user_id:           user.id,
+          content:           text.trim(),
+          parent_comment_id: parentCommentId || null,
+          created_at:        new Date().toISOString(),
         });
+        if (replyErr) throw replyErr;
       } else if (postId) {
         await supabase.from('artist_post_comments').insert({
           post_id:    postId,
@@ -128,7 +178,9 @@ function QuickReply({ postId, trackId, replyType = 'post', onSent }) {
       setText('');
       onSent?.();
     } catch (err) {
-      console.warn('Reply failed:', err);
+      // It used to warn and clear the box, so a refused reply looked sent.
+      console.error('[notifications] reply failed:', err?.code, err?.message || err);
+      setFailed(true);
     }
     setSending(false);
   };
@@ -155,6 +207,9 @@ function QuickReply({ postId, trackId, replyType = 'post', onSent }) {
           ? <Loader className="w-3.5 h-3.5 animate-spin text-purple-400" />
           : <Send className="w-3.5 h-3.5 text-purple-400" />}
       </button>
+      {failed && (
+        <p className="text-[11px] text-red-400 flex-shrink-0">Not sent — try again</p>
+      )}
     </div>
   );
 }
@@ -422,9 +477,23 @@ export default function NotificationsPage() {
     });
   };
 
+  // `firstLoadDone` is what stops the list jumping to the top.
+  //
+  // Every refresh — marking one read, a realtime insert, accepting a collab —
+  // called fetchAll(0), which set pageLoading, which swapped the entire list
+  // for a centred spinner. The document collapsed to one screen, the browser
+  // clamped the scroll to zero, and the list came back at the top. With
+  // thousands of notifications that is the difference between reading your
+  // list and fighting it.
+  //
+  // The spinner is for the FIRST load, when there is genuinely nothing to
+  // look at. After that the list stays mounted and the rows update underneath
+  // the reader.
+  const firstLoadDone = useRef(false);
+
   const fetchAll = useCallback(async (pageNum = 0) => {
     if (!user) return;
-    if (pageNum === 0) setPageLoading(true);
+    if (pageNum === 0 && !firstLoadDone.current) setPageLoading(true);
     try {
       let query = supabase
         .from('notifications')
@@ -451,6 +520,7 @@ export default function NotificationsPage() {
     } catch (err) {
       console.error('Notifications fetch error:', err);
     }
+    firstLoadDone.current = true;
     setPageLoading(false);
   }, [artist, user]);
 
@@ -507,8 +577,13 @@ export default function NotificationsPage() {
   //
   // streak and top_supporter genuinely have nowhere to go: they are about
   // you, not about a track or a person, so they stay read-only.
+  //
+  // top_supporter is OUT of this set. It has a perfectly good destination —
+  // the artist you are a top supporter of — and a branch further down that
+  // navigates there, which this early return made unreachable. A dead branch
+  // and a dead tap, from one line.
   const READ_ONLY_TYPES = new Set([
-    'streak','top_supporter',
+    'streak',
     'bug_report',
   ]);
 
@@ -605,7 +680,13 @@ export default function NotificationsPage() {
 
     if (type === 'track_liked') {
       // For story likes, no track involved
-      if (meta.story_id) { navigate(`/artist/${notif.from_artist?.slug || meta.from_artist_slug || ''}`); return; }
+      // `/artist/` with an empty slug is a real navigation to a broken route —
+      // a blank page, which is worse than staying put.
+      if (meta.story_id) {
+        const storySlug = notif.from_artist?.slug || meta.from_artist_slug;
+        if (storySlug) { navigate(`/artist/${storySlug}`); return; }
+        return;
+      }
       // Use notification row track_id as fallback (most reliable)
       const likedTrackId = meta.track_id || notif.track_id;
       const likedTrackSlug = meta.track_slug || null;
@@ -711,7 +792,12 @@ export default function NotificationsPage() {
     }
     if (type === 'sale')         { navigate('/dashboard?tab=analytics&section=earnings'); return; }
     if (type === 'subscription') { navigate(meta.audience === 'artist' ? '/upgrade' : '/listener/upgrade'); return; }
-    if (type === 'weekly_report')                         { navigate('/dashboard?tab=analytics&section=stats'); return; }
+    if (type === 'weekly_report') {
+      // weekly-listener-recap.js sends this to LISTENERS, who have no artist
+      // dashboard. They were being sent to one anyway.
+      navigate(artist ? '/dashboard?tab=analytics&section=stats' : '/listener/stats');
+      return;
+    }
     if (type === 'monthly_wrapped')                       { navigate('/dashboard?tab=analytics&section=stats'); return; }
     if (type === 'download') {
       const dlTrackId = meta.track_id || notif.track_id;
@@ -754,7 +840,24 @@ export default function NotificationsPage() {
       const msTrackId = meta.track_id || notif.track_id;
       if (meta.track_slug) { navigate(`/track/${meta.track_slug}`); return; }
       if (msTrackId) { navigate(`/track/${msTrackId}`); return; }
-      navigate(artist ? '/dashboard?tab=analytics&section=stats' : '/browse');
+
+      // A LISTENER milestone is about the listener, not about a track.
+      //
+      // "You just listened to 500 tracks!" is written by
+      // check_listener_stream_milestones, whose metadata carries
+      // listener_streams and milestone_type and no track at all — so it always
+      // fell past both lines above and landed on the artist dashboard's
+      // analytics, or on Browse. Tapping a message about your own listening and
+      // arriving at a stats page for somebody's catalogue is the app losing
+      // what you tapped.
+      //
+      // Their own listening history is a real page and the right one. An
+      // artist's milestone about their own catalogue still goes to their stats.
+      if (meta.listener_streams != null || meta.listener_likes != null) {
+        navigate('/listener/stats');
+        return;
+      }
+      if (artist) { navigate('/dashboard?tab=analytics&section=stats'); }
       return;
     }
     if (type === 'competition_winner' || type === 'competition_result') {
@@ -779,6 +882,46 @@ export default function NotificationsPage() {
       return;
     }
     if (type === 'tier_upgrade' || type === 'tier_downgrade') { navigate('/listener/upgrade'); return; }
+
+    // ── The ones that fell off the end of this function ────────────────────
+    //
+    // Every type below is written by live code and had no branch here at all,
+    // so tapping one marked it read and did nothing. They were also rendered
+    // with the fallback badge, which is "New Stream" — a bug report reply
+    // arriving labelled New Stream.
+    if (type === 'bug_reply') {
+      // Straight into the bug room, which is where the reply is.
+      if (meta.room_id) { navigate(`/chat/${meta.room_id}`); return; }
+      if (meta.report_id) { navigate(`/hub?bug=${meta.report_id}`); return; }
+      navigate('/hub');
+      return;
+    }
+    if (type === 'challenge_xp')     { navigate('/competitions'); return; }
+    if (type === 'featured_placement') {
+      // Take them to the board they are on, not to their own dashboard —
+      // the whole reward is being seen next to everyone else.
+      navigate('/browse?tab=featured');
+      return;
+    }
+    if (type === 'fan_leaderboard') {
+      if (meta.artist_slug) { navigate(`/artist/${meta.artist_slug}/fans`); return; }
+      return;
+    }
+    if (type === 'beat_purchase' || type === 'paid_download') {
+      const soldTrackId = meta.track_id || notif.track_id;
+      if (artist) { navigate('/dashboard?tab=analytics&section=earnings'); return; }
+      if (meta.track_slug) { navigate(`/track/${meta.track_slug}`); return; }
+      if (soldTrackId) { navigate(`/track/${soldTrackId}`); return; }
+      navigate('/library/downloads');
+      return;
+    }
+    if (type === 'admin_reminder') {
+      // Written by paid-collab-reminder.js, which is nagging an artist about
+      // an unpaid collaboration.
+      if (meta.action_url) { navigate(meta.action_url); return; }
+      if (artist) { navigate('/dashboard?tab=collabs'); }
+      return;
+    }
     if (type === 'artist_thought') { navigate(meta.artist_slug ? `/artist/${meta.artist_slug}` : '/browse'); return; }
   };
 
@@ -878,7 +1021,13 @@ export default function NotificationsPage() {
               <p className="text-[10px] uppercase tracking-wider text-white/20 font-semibold mb-2 px-1">{date}</p>
               <div className="space-y-1">
                 {notifs.map((notif) => {
-                  const config = TYPE_CONFIG[notif.type] || TYPE_CONFIG.new_stream;
+                  // An unknown type used to borrow new_stream's icon and
+                  // label, so anything not in the map arrived claiming to be a
+                  // New Stream. A neutral badge is honest; the type is at
+                  // least readable rather than actively wrong.
+                  const config = TYPE_CONFIG[notif.type] || {
+                    icon: Bell, color: 'text-white/40', bg: 'bg-white/[0.06]', label: 'Update',
+                  };
                   const Icon   = config.icon;
                   const meta   = notif.metadata || {};
                   const isRead = notif.read;
@@ -913,7 +1062,9 @@ export default function NotificationsPage() {
                     <div
                       key={notif.id}
                       onClick={() => handleClick(notif)}
-                      className={`w-full flex items-start space-x-3 px-4 py-3.5 rounded-xl transition-all text-left cursor-pointer ${
+                      className={`w-full flex items-start space-x-3 px-4 py-3.5 rounded-xl transition-all text-left ${
+                        isInert(notif) ? 'cursor-default' : 'cursor-pointer'
+                      } ${
                         !isRead
                           ? 'bg-white/[0.03] border border-white/[0.07] hover:bg-white/[0.05]'
                           : 'hover:bg-white/[0.02]'
@@ -1045,6 +1196,7 @@ export default function NotificationsPage() {
                               <QuickReply
                                 postId={meta.post_id}
                                 trackId={meta.track_id}
+                                parentCommentId={meta.comment_id || null}
                                 replyType={meta.track_id ? 'track' : 'post'}
                                 onSent={() => setReplyingTo(null)}
                               />

@@ -21,6 +21,7 @@ import TrackCommentSheet from '../components/TrackCommentSheet';
 import { useAuth } from '../contexts/AuthContext';
 import { usePlayer } from '../contexts/PlayerContext';
 import VinylRecord from '../components/VinylRecord';
+import HomeAsideCard from '../components/HomeAsideCard';
 import PreorderTag from '../components/PreorderTag';
 
 import { ArtistStoryView } from '../components/ArtistStories';
@@ -1113,7 +1114,7 @@ function CommentSheetOverlay({ track, user, onClose }) {
 export default function ForYouPage() {
   const { user, isBeatmaker, loading: authLoading } = useAuth();
   const navigate    = useNavigate();
-  const { playTrack, setIsMinimized } = usePlayer();
+  const { playTrack, setIsMinimized, currentTrack } = usePlayer();
 
   // On a computer, signed-out visitors get the sign-in page with the app
   // running in a phone beside it, instead of the feed under a sign-in banner.
@@ -1228,13 +1229,9 @@ export default function ForYouPage() {
 
   const [shareCard, setShareCard]         = useState(null);  // { artist, url }
 
-  // When PlayerContext advances to next track (track ended), sync idx
-  const { currentTrack } = usePlayer();
-  useEffect(() => {
-    if (!currentTrack || !filteredTracks.length) return;
-    const newIdx = filteredTracks.findIndex(t => t.id === currentTrack.id);
-    if (newIdx > -1 && newIdx !== idx) setIdx(newIdx);
-  }, [currentTrack?.id]); // eslint-disable-line
+  // The card/player sync used to live here. It has moved down next to the
+  // playback effect it has to cooperate with — see "Keeping the card in step
+  // with the player" below.
 
   const filteredTracks = feedFilter === 'music' ? tracks.filter(t => !t.is_beat)
     : feedFilter === 'beats' ? tracks.filter(t => t.is_beat)
@@ -1639,12 +1636,17 @@ export default function ForYouPage() {
     }
   }, [filteredTracks.length]); // eslint-disable-line
 
+  // True once playback has been started FROM this feed. Used below to decide
+  // whether a track the player moved to on its own belongs to this feed.
+  const startedHereRef = React.useRef(false);
+
   const unlockAndPlay = () => {
     hasUserGestured.current = true;
     setShowTapToPlay(false);
     const item = filteredTracks[idx];
     if (item && item.file_url) {
       window.__feelz_play_source = 'for_you';
+      startedHereRef.current = true;
       const playableQueue = filteredTracks.filter(t => t?.file_url);
       playTrack(item, playableQueue, playableQueue.findIndex(t => t.id === item.id));
       lastPlayedIdx.current = idx;
@@ -1657,16 +1659,65 @@ export default function ForYouPage() {
     const item = filteredTracks[idx];
     if (!item || item._type === 'story') return;
     if (idx === lastPlayedIdx.current) return;
+    // Already the playing track — nothing to start. This matters because
+    // playTrack treats a second call for the current track as play/pause, so
+    // without this line every time the card caught up to the player (lock
+    // screen next, headset next, track ended) the page would immediately
+    // pause the song it had just caught up to.
+    if (item.id && item.id === currentTrack?.id) { lastPlayedIdx.current = idx; return; }
     // iOS: skip useEffect auto-play until unlocked via tap or swipe
     if (isIOS && !hasUserGestured.current) return;
     lastPlayedIdx.current = idx;
     if (item.file_url) {
       window.__feelz_play_source = 'for_you';
+      startedHereRef.current = true;
       const playableQueue = filteredTracks.filter(t => t?.file_url);
       playTrack(item, playableQueue, playableQueue.findIndex(t => t.id === item.id));
       setIsMinimized(true);
     }
   }, [idx, filteredTracks]); // eslint-disable-line
+
+  // ── Keeping the card in step with the player ──────────────────────────
+  //
+  // Three things move the audio without this page being touched: the track
+  // ending, next from the lock screen / headset / car, and PlayerContext
+  // quietly appending suggestions when the queue runs low
+  // (extendQueueWithSuggestions). The old version only looked the track up in
+  // this feed's own list, so the third case — which is the common one after a
+  // few tracks — always came back -1 and the card sat on the song that had
+  // finished while the audio carried on. That is the "next changes the song
+  // but not the page" report.
+  //
+  // So: if the player is on something this feed knows, move to it. If it is on
+  // something appended behind our back, adopt that track into the feed and move
+  // to it, so the card, the credits, the comments and the like button all
+  // describe what is actually in the speakers.
+  useEffect(() => {
+    if (!currentTrack?.id || !filteredTracks.length) return;
+
+    const known = filteredTracks.findIndex(t => t?.id === currentTrack.id);
+    if (known > -1) {
+      if (known !== idx) setIdx(known);
+      return;
+    }
+
+    // Unknown track. Only adopt it if this feed is what started playback —
+    // otherwise the player is being driven from somewhere else and the feed
+    // should stay where the person left it.
+    if (!startedHereRef.current) return;
+    if (!currentTrack.file_url) return;
+
+    // It also has to belong under the filter the person is looking at.
+    const passesFilter =
+      feedFilter === 'all' ||
+      (feedFilter === 'music' && !currentTrack.is_beat) ||
+      (feedFilter === 'beats' && !!currentTrack.is_beat);
+    if (!passesFilter) return;
+
+    const newIdx = filteredTracks.length;   // it lands at the end
+    setTracks(prev => (prev.some(t => t?.id === currentTrack.id) ? prev : [...prev, currentTrack]));
+    setIdx(newIdx);
+  }, [currentTrack?.id]); // eslint-disable-line
 
   const trackStartTime = React.useRef(null);
 
@@ -1708,6 +1759,7 @@ export default function ForYouPage() {
     const nextItem = filteredTracks[newIdx];
     if (nextItem && nextItem.file_url && nextItem._type !== 'story') {
       window.__feelz_play_source = 'for_you';
+      startedHereRef.current = true;
       const playableQueue = filteredTracks.filter(t => t?.file_url);
       playTrack(nextItem, playableQueue, playableQueue.findIndex(t => t.id === nextItem.id));
       lastPlayedIdx.current = newIdx;
@@ -1814,19 +1866,24 @@ export default function ForYouPage() {
   );
 
   return (
+    <>
+    {/* The PC-only card. A sibling of the feed, never a child of it: the card
+        stack is translated as one block on every swipe, so anything inside it
+        would slide away with the feed. */}
+    <HomeAsideCard />
+
     <div
-      className="bg-black overflow-hidden"
+      // Positioning moved from inline style to classes so the breakpoints are
+      // real media queries. The old version read window.innerWidth once at
+      // render and never again, so resizing a browser window left the feed
+      // under the sidebar until something else forced a re-render.
+      //   md:left-64      clears the 256px desktop sidebar
+      //   xl:right-[380px] clears the aside card, which only exists at xl
+      className="fixed top-0 bottom-0 left-0 right-0 md:left-64 xl:right-[380px] bg-black overflow-hidden"
       onTouchStart={onTouchStart}
       onTouchMove={onTouchMove}
       onTouchEnd={onTouchEnd}
       style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        // On desktop, offset by sidebar width
-        ...(window.innerWidth >= 768 ? { left: '256px' } : {}),
         touchAction: 'none',
         WebkitOverflowScrolling: 'touch',
       }}
@@ -2084,5 +2141,6 @@ export default function ForYouPage() {
         </div>
       )}
     </div>
+    </>
   );
 }

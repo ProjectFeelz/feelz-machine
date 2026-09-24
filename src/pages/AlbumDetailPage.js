@@ -562,11 +562,25 @@ export default function AlbumDetailPage() {
                 </div>
                 <button onClick={() => handlePlay(track)} className="flex-1 min-w-0 text-left">
                   <p className={`text-sm font-medium truncate ${isActive ? 'text-white' : 'text-white/80'}`}>{track.title}</p>
+                  {/* ON A PHONE THIS LINE IS THE PLAY COUNT AND NOTHING ELSE.
+                      The explicit tag, the duration and the credits wrapped
+                      onto two and three lines on a 360px screen and squashed
+                      the whole row — and every one of them is already in the
+                      three dot menu and on the track page. The play count
+                      stays because it is the one number people scan a
+                      tracklist for. Everything comes back from `sm` up, where
+                      there is room for it on one line. */}
                   <div className="flex items-center space-x-2 mt-0.5">
-                    {track.is_explicit && <span className="text-[9px] font-bold px-1 py-0.5 bg-white/10 text-white/40 rounded">E</span>}
+                    {track.is_explicit && (
+                      <span className="hidden sm:inline text-[9px] font-bold px-1 py-0.5 bg-white/10 text-white/40 rounded">E</span>
+                    )}
                     <span className="text-xs text-white/30">{formatNumber(track.stream_count || 0)} plays</span>
-                    {track.duration && <span className="text-xs text-white/20">{formatDuration(track.duration)}</span>}
-                    <TrackCreditsInline trackId={track.id} />
+                    {track.duration && (
+                      <span className="hidden sm:inline text-xs text-white/20">{formatDuration(track.duration)}</span>
+                    )}
+                    <span className="hidden sm:inline-flex">
+                      <TrackCreditsInline trackId={track.id} />
+                    </span>
                   </div>
                 </button>
                 {/* FOUR CONTROLS AND A TITLE DO NOT FIT ON A PHONE.

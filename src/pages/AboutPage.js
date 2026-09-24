@@ -69,7 +69,7 @@ const STATIC_PAGES = {
     blurb: 'Feelz Machine Retail plays licensed independent music in your venue, straight from a browser.',
     price: null,
     items: [
-      'Only music artists chose to submit',
+      'Every track is here because the artist put it here',
       'Half of what venues pay goes to the artists played',
       'Paid out to artists every month',
       'Runs on any screen with a browser',
