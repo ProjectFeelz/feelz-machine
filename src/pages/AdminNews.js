@@ -175,7 +175,10 @@ export default function AdminNews() {
               value={form.body} onChange={e => setForm({ ...form, body: e.target.value })} />
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <input className={inputCls} placeholder="Link (optional)" value={form.link_url}
+              {/* A path like /profile/edit opens inside the app; anything
+                  starting with http opens in a new tab. The card works out
+                  which from the first character. */}
+              <input className={inputCls} placeholder="Link — /dashboard, or https://…" value={form.link_url}
                 onChange={e => setForm({ ...form, link_url: e.target.value })} />
               <input className={inputCls} placeholder="Link wording (e.g. Read more)" value={form.link_label}
                 onChange={e => setForm({ ...form, link_label: e.target.value })} />

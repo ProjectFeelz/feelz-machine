@@ -761,6 +761,24 @@ function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare, onN
             rgba(${dominantColor},0.25) 40%,
             rgba(0,0,0,0.7) 100%)`
         }} />
+
+        {/* Desktop only: settle the bottom onto true black.
+            On a phone the bottom of the card is covered by the player bar and
+            the nav, so 0.7 black over a warm blurred cover never shows. On a
+            computer nothing covers it, and the column sat as a bright amber
+            strip between the dark sidebar and the dark card on the right —
+            the "sandwich". Landing on #000 means the feed meets both panels
+            with no seam instead of glowing between them.
+            Inside the background wrapper on purpose, so it stays under the
+            record (z-10) and the title and buttons (z-20). */}
+        <div className="hidden md:block absolute inset-0 pointer-events-none" style={{
+          background: `linear-gradient(180deg,
+            rgba(0,0,0,0) 30%,
+            rgba(0,0,0,0.35) 58%,
+            rgba(0,0,0,0.75) 80%,
+            rgba(0,0,0,0.94) 92%,
+            #000 100%)`
+        }} />
       </div>
 
       {/* YouTube video */}
@@ -1089,7 +1107,11 @@ function CommentSheetOverlay({ track, user, onClose }) {
       onTouchMove={e => e.stopPropagation()}
       onTouchEnd={e => e.stopPropagation()}
     >
+      {/* data-feelz-scroll: see the wheel handler. Touch was already handled
+          by the stopPropagation calls above; the mouse wheel was not, so on a
+          computer scrolling a long comment thread moved the feed behind it. */}
       <div
+        data-feelz-scroll
         onClick={e => e.stopPropagation()}
         style={{
           width: '100%',
@@ -1826,9 +1848,22 @@ export default function ForYouPage() {
   }, [idx, goTo]);
 
   // Mouse wheel / trackpad scroll on desktop
+  //
+  // The listener is on WINDOW, not on the feed, because the feed is a stack of
+  // absolutely positioned cards with nothing for the browser to scroll — the
+  // wheel has to be caught globally and turned into "next song".
+  //
+  // The cost of that is every other panel on the page. Scrolling the card on
+  // the right was flipping the song instead of scrolling the card, and the
+  // preventDefault below meant it could not scroll at all. So anything that
+  // does its own scrolling marks itself with data-feelz-scroll and keeps its
+  // wheel events. One attribute, checked in one place, rather than a list of
+  // selectors here that goes stale the next time a panel is added.
   const wheelLocked = React.useRef(false);
   useEffect(() => {
     const onWheel = (e) => {
+      const t = e.target;
+      if (t && t.nodeType === 1 && t.closest && t.closest('[data-feelz-scroll]')) return;
       e.preventDefault();
       if (wheelLocked.current) return;
       wheelLocked.current = true;
@@ -2005,8 +2040,13 @@ export default function ForYouPage() {
           content column, not the full viewport: on mobile there's no
           sidebar so those are the same thing, but on desktop the sidebar
           eats 256px off the left, so viewport-center and content-center
-          are different points. */}
-      <div className="fixed left-1/2 -translate-x-1/2 md:left-[calc(50%+128px)] z-[55] flex space-x-1 rounded-full p-0.5"
+          are different points.
+
+          The column is bounded on BOTH sides now. Sidebar 256 → shift right
+          by half of it, 128. Aside card 380 → shift left by half of it, 190.
+          At xl the two net out to 62px LEFT of centre, which is why the pill
+          was sitting to the right of the record until this line existed. */}
+      <div className="fixed left-1/2 -translate-x-1/2 md:left-[calc(50%+128px)] xl:left-[calc(50%_-_62px)] z-[55] flex space-x-1 rounded-full p-0.5"
         style={{
           top: 'calc(max(env(safe-area-inset-top, 0px), 14px) + 56px)',
           background: 'rgba(20,20,20,0.7)',
@@ -2070,7 +2110,9 @@ export default function ForYouPage() {
         <div className="fixed inset-0 z-[800] flex items-end justify-center"
           style={{ background: 'rgba(0,0,0,0.5)' }}
           onClick={() => setActiveSheet(null)}>
-          <div onClick={e => e.stopPropagation()}
+          {/* data-feelz-scroll: see the wheel handler. A long playlist list
+              was scrolling the FEED behind it instead of itself. */}
+          <div data-feelz-scroll onClick={e => e.stopPropagation()}
             style={{
               width: '100%',
               maxWidth: '480px',

@@ -27,7 +27,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Newspaper, Sparkles, Play, ExternalLink, Users, Music2 } from 'lucide-react';
+import { Newspaper, Sparkles, Play, ExternalLink, ChevronRight, Users, Music2 } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import { usePlayer } from '../contexts/PlayerContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -64,7 +64,13 @@ const fmt = (n) => {
 function NewsItem({ item }) {
   const [playing, setPlaying] = useState(false);
   const { isPlaying, togglePlay } = usePlayer();
+  const navigate = useNavigate();
   const vid = youTubeId(item.youtube_url);
+
+  // A link can be either — "/profile/edit" or "https://…". An internal path
+  // put through an <a href> would tear the whole app down and rebuild it,
+  // losing the playing track on the way, so those go through the router.
+  const internal = !!item.link_url && item.link_url.startsWith('/');
 
   const startVideo = () => {
     // Pause the music BEFORE the iframe exists, not after.
@@ -116,15 +122,25 @@ function NewsItem({ item }) {
           </p>
         )}
         {item.link_url && (
-          <a
-            href={item.link_url}
-            target="_blank"
-            rel="noreferrer"
-            className="mt-2 inline-flex items-center gap-1 text-[12px] font-semibold text-indigo-300 hover:text-indigo-200"
-          >
-            {item.link_label || 'Read more'}
-            <ExternalLink className="w-3 h-3" />
-          </a>
+          internal ? (
+            <button
+              onClick={() => navigate(item.link_url)}
+              className="mt-2 inline-flex items-center gap-1 text-[12px] font-semibold text-indigo-300 hover:text-indigo-200"
+            >
+              {item.link_label || 'Open'}
+              <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+          ) : (
+            <a
+              href={item.link_url}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-2 inline-flex items-center gap-1 text-[12px] font-semibold text-indigo-300 hover:text-indigo-200"
+            >
+              {item.link_label || 'Read more'}
+              <ExternalLink className="w-3 h-3" />
+            </a>
+          )
         )}
       </div>
     </div>
@@ -204,17 +220,26 @@ export default function HomeAsideCard() {
   const TabButton = ({ id, label, icon: Icon }) => (
     <button
       onClick={() => setTab(id)}
-      className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-[12px] font-semibold transition ${
+      // whitespace-nowrap and shrink-0 on the icon: at browser zoom the long
+      // label was wrapping onto two lines and making the tab bar twice as
+      // tall as the other one. A tab that changes height when you zoom is a
+      // tab that looks broken.
+      className={`flex-1 min-w-0 flex items-center justify-center gap-1.5 px-2 py-2 rounded-lg text-[11.5px] font-semibold whitespace-nowrap transition ${
         tab === id ? 'bg-white text-black' : 'text-white/40 hover:text-white/70'
       }`}
     >
-      <Icon className="w-3.5 h-3.5" />
-      <span>{label}</span>
+      <Icon className="w-3.5 h-3.5 flex-shrink-0" />
+      <span className="truncate">{label}</span>
     </button>
   );
 
   return (
     <aside
+      // data-feelz-scroll tells ForYouPage's window-level wheel handler to
+      // leave this alone. Without it, scrolling this card flipped the song
+      // underneath and the card itself would not move — the handler calls
+      // preventDefault on every wheel event it takes.
+      data-feelz-scroll
       className="hidden xl:flex fixed top-0 bottom-0 right-0 w-[380px] flex-col bg-black border-l border-white/[0.07] z-30"
       // Not inside the feed's card stack on purpose: the stack is translated
       // as one block on every swipe, and anything living in it would ride
