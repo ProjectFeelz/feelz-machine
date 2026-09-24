@@ -66,9 +66,9 @@ export default function AdminNews() {
   const ytPreview = youTubeId(form.youtube_url);
 
   const create = async () => {
-    if (!form.title.trim()) { showToast('A title is the one thing it needs'); return; }
+    if (!form.title.trim()) { showToast('It needs a title.'); return; }
     if (form.youtube_url.trim() && !ytPreview) {
-      showToast('That YouTube link is not one I can read — paste the address from the browser bar');
+      showToast('That YouTube link cannot be read. Copy it from the address bar.');
       return;
     }
     setSaving(true);
@@ -84,7 +84,7 @@ export default function AdminNews() {
     setSaving(false);
     if (error) { showToast('Error: ' + error.message); return; }
     setForm({ title: '', body: '', link_url: '', link_label: '', youtube_url: '' });
-    showToast('Live on the home card');
+    showToast('It is live on the home card.');
     load();
   };
 
@@ -96,7 +96,7 @@ export default function AdminNews() {
   };
 
   const remove = async (id) => {
-    if (!window.confirm('Delete this post? It disappears from the home card straight away.')) return;
+    if (!window.confirm('Delete this post? It comes off the home card straight away.')) return;
     const { error } = await supabase.from('platform_news').delete().eq('id', id);
     if (error) { showToast('Error: ' + error.message); return; }
     load();
@@ -106,7 +106,7 @@ export default function AdminNews() {
     const { error } = await supabase.from('tracks')
       .update({ featured_locked: locked }).eq('id', trackId);
     if (error) { showToast('Error: ' + error.message); return; }
-    showToast(locked ? 'Pinned — the nightly rotation will leave it alone' : 'Unpinned — it rotates out with the rest');
+    showToast(locked ? 'Pinned. The nightly rotation will leave it alone.' : 'Unpinned. It rotates out with the rest.');
     load();
   };
 
@@ -114,7 +114,7 @@ export default function AdminNews() {
     const { error } = await supabase.from('tracks')
       .update({ featured: false, featured_locked: false, featured_reason: null }).eq('id', trackId);
     if (error) { showToast('Error: ' + error.message); return; }
-    showToast('Taken off the board');
+    showToast('Taken off the board.');
     load();
   };
 
@@ -178,22 +178,22 @@ export default function AdminNews() {
               {/* A path like /profile/edit opens inside the app; anything
                   starting with http opens in a new tab. The card works out
                   which from the first character. */}
-              <input className={inputCls} placeholder="Link — /dashboard, or https://…" value={form.link_url}
+              <input className={inputCls} placeholder="Link. Use /dashboard, or a full https:// address" value={form.link_url}
                 onChange={e => setForm({ ...form, link_url: e.target.value })} />
               <input className={inputCls} placeholder="Link wording (e.g. Read more)" value={form.link_label}
                 onChange={e => setForm({ ...form, link_label: e.target.value })} />
             </div>
 
             <div>
-              <input className={inputCls} placeholder="YouTube link — paste it straight from the address bar"
+              <input className={inputCls} placeholder="YouTube link. Paste it from the address bar"
                 value={form.youtube_url}
                 onChange={e => setForm({ ...form, youtube_url: e.target.value })} />
               <p className="mt-1.5 text-[11px] text-white/25 flex items-center gap-1.5">
                 <Youtube className="w-3.5 h-3.5" />
                 {form.youtube_url.trim()
                   ? (ytPreview
-                      ? 'Good — that episode will show as a thumbnail. Nothing plays until somebody clicks it.'
-                      : 'I cannot read that one. A watch, youtu.be, shorts or live link all work.')
+                      ? 'Good. That episode shows as a thumbnail. Nothing plays until somebody clicks it.'
+                      : 'That one cannot be read. A watch, youtu.be, shorts or live link all work.')
                   : 'Optional. A podcast episode shows as a thumbnail on the card.'}
               </p>
               {ytPreview && (
@@ -265,7 +265,7 @@ export default function AdminNews() {
               slot per artist, and tier counts for nothing here.
               <br /><br />
               <strong className="text-white/60">Pin</strong> anything you want to
-              stay put — pinned rows are never taken down by the rotation.
+              stay put. Pinned tracks are never taken down by the rotation.
             </p>
           </div>
 

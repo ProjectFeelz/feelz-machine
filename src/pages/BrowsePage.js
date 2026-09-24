@@ -8,9 +8,14 @@ import { usePlayer } from '../contexts/PlayerContext';
 import { useAuth } from '../contexts/AuthContext';
 import {
   Search, Flame, TrendingUp, Play, Pause, Music, Crown,
-  Loader, Disc3, Star, Sparkles, Clock, Users,
+  Loader, Disc3, Star, Sparkles, Clock, Users, Newspaper,
 } from 'lucide-react';
 import VerifiedBadge from '../components/VerifiedBadge';
+// The same two things the home card shows on a computer, so Browse and Home
+// cannot disagree about who today's creators are or what the latest post is.
+import {
+  useHomeCardData, CreatorCard, NoCreators, NewsOverlay,
+} from '../components/HomeAsideCard';
 import { CollabGrid } from '../components/CollaborationsSpotlight';
 import { StoriesRail } from '../components/ArtistStories';
 
@@ -92,7 +97,7 @@ function SectionLabel({ icon: Icon, title, subtitle }) {
 
 export default function BrowsePage() {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
   const { playTrack, currentTrack, isPlaying, togglePlay } = usePlayer();
 
   useEffect(() => {
@@ -108,8 +113,17 @@ export default function BrowsePage() {
     // Default is Tracks, not Trending. Trending is a small, slow-moving list
     // dominated by whoever has the longest catalogue, so opening on it makes
     // the platform look like one artist's shop window. ?tab= still overrides.
-    return params.get('tab') || 'tracks';
+    // "whatsnew" is a panel, not a tab, so it must never become the landing
+    // state even if somebody bookmarks ?tab=whatsnew.
+    const t = params.get('tab');
+    return (!t || t === 'whatsnew') ? 'tracks' : t;
   });
+  const [newsOpen, setNewsOpen] = useState(false);
+  // Today's creators, and the posts behind the What's New panel. Six here
+  // rather than the home card's three, because this is a page and not a
+  // 380px column.
+  const { news, trending: cardTrending, creators, loaded: cardLoaded } =
+    useHomeCardData({ creatorCount: 6 });
   const [selectedGenre, setSelectedGenre]     = useState('All');
   const [selectedMood, setSelectedMood]       = useState(null);
   const [trending, setTrending]               = useState([]);
@@ -174,6 +188,9 @@ export default function BrowsePage() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const tab = params.get('tab');
+    // whatsnew is a panel, not a tab. A ?tab=whatsnew link opens the panel
+    // and leaves the page on whatever tab it was showing.
+    if (tab === 'whatsnew') { setNewsOpen(true); return; }
     if (tab) setActiveTab(tab);
   }, [window.location.search]);
 
@@ -289,14 +306,29 @@ export default function BrowsePage() {
     .filter(t => selectedGenre === 'All' || t.genre?.toLowerCase() === selectedGenre.toLowerCase())
     .filter(t => !selectedMood || t.mood?.toLowerCase() === selectedMood.toLowerCase());
 
+  // New Releases, split by shape. Both keep the newest-first order they were
+  // merged in; they are just no longer asked to share a grid row. The phone
+  // list below still shows them interleaved, because there both are the same
+  // shape: a row.
+  const newAlbums  = newReleases.filter(i => i._isAlbum);
+  const newSingles = newReleases.filter(i => !i._isAlbum);
+
   const handlePlayTrack = (track, list) => {
     if (currentTrack?.id === track.id) togglePlay();
     else playTrack(track, list);
   };
 
-  // Tracks leads, because it is the default. The bar scrolls horizontally on a
-  // phone, so a default sitting fourth would open highlighted but off-screen.
+  // Creators and What's New sit in front, because they are the two things
+  // worth seeing before you start digging. Tracks is still where you land
+  // (see the activeTab default), and it is still the first thing your eye
+  // reaches once you start reading the strip.
+  //
+  // What's New is not really a tab. Selecting it opens the same panel the
+  // home card opens and leaves whatever tab you were on alone, which is why
+  // it is flagged here rather than handled with a special case at the click.
   const tabs = [
+    { key: 'creators', label: 'Creators',   icon: Sparkles },
+    { key: 'whatsnew', label: "What's New", icon: Newspaper, opens: true },
     { key: 'tracks',   label: 'Tracks',   icon: Music },
     { key: 'new',      label: 'New',      icon: Sparkles },
     { key: 'featured', label: 'Featured', icon: Star },
@@ -373,14 +405,18 @@ export default function BrowsePage() {
 
         {/* Tab bar */}
         <div role="tablist" className="flex space-x-1 overflow-x-auto scrollbar-hide bg-white/[0.03] rounded-xl p-1">
-          {tabs.map(({ key, label, icon: Icon }) => (
-            <button key={key} role="tab" aria-selected={activeTab === key}
-              onClick={() => setActiveTab(key)}
+          {tabs.map(({ key, label, icon: Icon, opens }) => (
+            <button key={key} role="tab" aria-selected={!opens && activeTab === key}
+              onClick={() => (opens ? setNewsOpen(true) : setActiveTab(key))}
               className={`flex-shrink-0 flex items-center space-x-1.5 px-3 py-2 rounded-lg text-sm font-semibold transition ${
-                activeTab === key ? 'bg-white text-black' : 'text-white/35 hover:text-white/60'
+                !opens && activeTab === key ? 'bg-white text-black' : 'text-white/35 hover:text-white/60'
               }`}>
               <Icon className="w-3.5 h-3.5" />
               <span>{label}</span>
+              {/* A quiet dot when there is something to read in there. */}
+              {opens && news.length > 0 && (
+                <span className="w-1.5 h-1.5 rounded-full bg-violet-400 flex-shrink-0" />
+              )}
             </button>
           ))}
         </div>
@@ -459,7 +495,7 @@ export default function BrowsePage() {
                 picked for is worth working towards, a board somebody's mate
                 picks is not. */}
             <SectionLabel icon={Star} title="Featured"
-              subtitle="Earned this week — milestones, risers and new releases" />
+              subtitle="Earned this week by milestones, risers and new releases" />
             {featured.length > 0 ? (
               <>
                 <div className="hidden md:grid md:grid-cols-2 lg:grid-cols-3 gap-3 mb-4">
@@ -490,23 +526,67 @@ export default function BrowsePage() {
           </div>
         )}
 
+        {/* CREATORS — the same daily picks the home card shows, given room */}
+        {activeTab === 'creators' && (
+          <div>
+            <SectionLabel icon={Sparkles} title="Creators"
+              subtitle="Chosen fresh each day. Nobody twice in a week." />
+            {creators.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {creators.map(c => <CreatorCard key={c.id} creator={c} />)}
+              </div>
+            ) : cardLoaded ? (
+              <NoCreators />
+            ) : (
+              <div className="flex justify-center py-16"><Loader className="w-5 h-5 animate-spin text-white/20" /></div>
+            )}
+          </div>
+        )}
+
         {/* NEW RELEASES */}
         {activeTab === 'new' && (
           <div>
             <SectionLabel icon={Sparkles} title="New Releases" subtitle="Latest tracks and albums" />
             {newReleases.length > 0 ? (
               <>
-                <div className="hidden md:grid md:grid-cols-2 lg:grid-cols-3 gap-3 mb-4">
-                  {newReleases.map(item => item._isAlbum ? (
-                    <AlbumTile key={`album-${item.id}`} album={item} navigate={navigate} />
-                  ) : (
-                    <TrackCard key={`track-${item.id}`} track={item}
-                      currentTrack={currentTrack} isPlaying={isPlaying}
-                      onPlay={() => handlePlayTrack(item, newReleases.filter(i => !i._isAlbum))}
-                      onMore={() => setActionSheetTrack(item)}
-                      onArtist={() => item.artists?.slug && navigate(`/artist/${item.artists.slug}`)} />
-                  ))}
-                </div>
+                {/* Albums and tracks are laid out SEPARATELY on a computer.
+                    They used to share one grid, and they are not the same
+                    shape: an album tile is a big square of artwork with a
+                    caption under it, a track card is a single short row. CSS
+                    grid makes every cell in a row as tall as the tallest one
+                    in it, so each track card ended up marooned in the middle
+                    of an album-sized box of empty black. Two grids, each with
+                    one kind of card in it, and every cell is the height it
+                    was meant to be. */}
+                {newAlbums.length > 0 && (
+                  <div className="hidden md:block mb-7">
+                    <p className="mb-3 text-[11px] font-bold tracking-[0.14em] text-white/30 uppercase">
+                      Albums and EPs
+                    </p>
+                    <div className="grid md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                      {newAlbums.map(item => (
+                        <AlbumTile key={`album-${item.id}`} album={item} navigate={navigate} />
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {newSingles.length > 0 && (
+                  <div className="hidden md:block mb-4">
+                    <p className="mb-3 text-[11px] font-bold tracking-[0.14em] text-white/30 uppercase">
+                      Singles
+                    </p>
+                    <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-3">
+                      {newSingles.map(item => (
+                        <TrackCard key={`track-${item.id}`} track={item}
+                          currentTrack={currentTrack} isPlaying={isPlaying}
+                          onPlay={() => handlePlayTrack(item, newSingles)}
+                          onMore={() => setActionSheetTrack(item)}
+                          onArtist={() => item.artists?.slug && navigate(`/artist/${item.artists.slug}`)} />
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <div className="md:hidden space-y-0.5">
                   {newReleases.map((item, i) => item._isAlbum ? (
                     <button key={`album-${item.id}`} onClick={() => navigate(`/album/${item.id}`)}
@@ -758,6 +838,21 @@ export default function BrowsePage() {
           track={actionSheetTrack}
           artist={{ artist_name: actionSheetTrack.artist_name, slug: actionSheetTrack.artists?.slug }}
           onClose={() => setActionSheetTrack(null)}
+        />
+      )}
+
+      {/* The same panel the home card opens. Selecting What's New in the tab
+          strip opens this and leaves the tab you were reading alone. */}
+      {newsOpen && (
+        <NewsOverlay
+          news={news}
+          trending={cardTrending}
+          loaded={cardLoaded}
+          isAdmin={isAdmin}
+          onClose={() => setNewsOpen(false)}
+          onPlay={(t) => handlePlayTrack(t, cardTrending.filter(x => x?.file_url))}
+          currentTrack={currentTrack}
+          isPlaying={isPlaying}
         />
       )}
     </div>

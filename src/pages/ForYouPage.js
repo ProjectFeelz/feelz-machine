@@ -22,6 +22,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { usePlayer } from '../contexts/PlayerContext';
 import VinylRecord from '../components/VinylRecord';
 import HomeAsideCard from '../components/HomeAsideCard';
+import FeedTransportBar from '../components/FeedTransportBar';
 import PreorderTag from '../components/PreorderTag';
 
 import { ArtistStoryView } from '../components/ArtistStories';
@@ -1136,7 +1137,15 @@ function CommentSheetOverlay({ track, user, onClose }) {
 export default function ForYouPage() {
   const { user, isBeatmaker, loading: authLoading } = useAuth();
   const navigate    = useNavigate();
-  const { playTrack, setIsMinimized, currentTrack } = usePlayer();
+  const {
+    playTrack, setIsMinimized, currentTrack,
+    // For the desktop transport bar at the bottom of the feed. On "/" the
+    // app deliberately does not render DesktopPlayer (AppLayout checks the
+    // path), so without this bar a person on a computer has no play button,
+    // no scrubber and no idea how far through a song they are.
+    isPlaying, togglePlay, seek, currentTime, duration,
+    shuffle, toggleShuffle, repeat, toggleRepeat,
+  } = usePlayer();
 
   // On a computer, signed-out visitors get the sign-in page with the app
   // running in a phone beside it, instead of the feed under a sign-in banner.
@@ -2035,6 +2044,27 @@ export default function ForYouPage() {
       {/* Status bar gradient */}
       <div className="absolute top-0 inset-x-0 h-20 pointer-events-none z-30"
         style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,0.5), transparent)' }} />
+
+      {/* Transport, desktop only. Inside the feed container on purpose, so it
+          spans the column and not the window, and so it stops where the card
+          on the right begins. */}
+      <FeedTransportBar
+        track={filteredTracks[idx]}
+        isPlaying={isPlaying}
+        togglePlay={togglePlay}
+        seek={seek}
+        currentTime={currentTime}
+        duration={duration}
+        shuffle={shuffle}
+        toggleShuffle={toggleShuffle}
+        repeat={repeat}
+        toggleRepeat={toggleRepeat}
+        onPrev={() => goTo(idx - 1)}
+        onNext={() => goTo(idx + 1)}
+        hasPrev={idx > 0}
+        hasNext={idx < filteredTracks.length - 1}
+        nextTitle={filteredTracks[idx + 1]?.title || ''}
+      />
 
       {/* Feed filter tabs, fixed so they never move. Centered on the
           content column, not the full viewport: on mobile there's no
