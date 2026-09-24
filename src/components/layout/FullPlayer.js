@@ -1259,9 +1259,11 @@ export default function FullPlayer() {
       {showShareCard && (
         <ShareCard
           track={currentTrack}
-          shareUrl={currentTrack?.slug
-            ? `https://www.feelzmachine.com/track/${currentTrack.slug}`
-            : (currentTrack?.id ? `https://www.feelzmachine.com/track/${currentTrack.id}` : null)}
+          shareUrl={currentTrack?.short_code
+            ? `https://www.feelzmachine.com/t/${currentTrack.short_code}`
+            : currentTrack?.slug
+              ? `https://www.feelzmachine.com/track/${currentTrack.slug}`
+              : (currentTrack?.id ? `https://www.feelzmachine.com/track/${currentTrack.id}` : null)}
           onClose={() => setShowShareCard(false)}
         />
       )}

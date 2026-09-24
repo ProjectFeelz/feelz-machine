@@ -808,7 +808,9 @@ export default function TrackActionSheet({ track, artist, onClose }) {
         {showShareCard && (
             <ShareCard
                 track={track}
-                shareUrl={`https://www.feelzmachine.com/track/${track?.slug || track?.id}`}
+                shareUrl={track?.short_code
+                    ? `https://www.feelzmachine.com/t/${track.short_code}`
+                    : `https://www.feelzmachine.com/track/${track?.slug || track?.id}`}
                 onClose={() => setShowShareCard(false)}
             />
         )}

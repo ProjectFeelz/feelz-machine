@@ -118,12 +118,24 @@ export default function TrackPage() {
       const SELECT = '*, artists!tracks_artist_id_fkey(*), albums(id, title, slug, cover_artwork_url, price, release_type, release_date)';
       const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-      let { data: trackData, error } = await supabase
+      // TWO ARTISTS CAN HAVE THE SAME SLUG.
+      //
+      // tracks_artist_id_slug_key is UNIQUE (artist_id, slug), not unique on
+      // slug alone, but this route has no artist in it. This was
+      // .maybeSingle(), which raises PGRST116 on two rows, so the first time
+      // two artists both published an "Intro" the track page broke FOR BOTH.
+      // Ordered and limited instead: with a collision somebody still gets a
+      // working page, deterministically the same one every time, and the
+      // short link (/t/<code>, migration 185) is the unambiguous way to
+      // point at a specific track.
+      let { data: trackRows, error } = await supabase
         .from('tracks')
         .select(SELECT)
         .eq('slug', slug)
         .eq('is_published', true)
-        .maybeSingle();
+        .order('created_at', { ascending: true })
+        .limit(1);
+      let trackData = trackRows?.[0] || null;
 
       // Guarded on the uuid shape on purpose: `.eq('id', <not a uuid>)` is a
       // 22P02 from Postgres, not an empty result, so firing it blindly would
@@ -242,7 +254,12 @@ export default function TrackPage() {
   };
 
   const handleShare = async () => {
-    const url = `${BASE_URL}/track/${slug}`;
+    // The short link when the track has a code, which every track does from
+    // migration 185 onwards. Falls back to the canonical URL for anything
+    // that somehow has not been stamped.
+    const url = track?.short_code
+      ? `${BASE_URL}/t/${track.short_code}`
+      : `${BASE_URL}/track/${slug}`;
     if (navigator.share) {
       try {
         await navigator.share({ title: track.title, text: `${track.title} by ${artist?.artist_name} on Feelz Machine`, url });

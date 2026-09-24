@@ -15,10 +15,14 @@ export default function AdminArtists() {
   const [artists, setArtists] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  // Artists whose EMAIL matched, found server side. Merged into the filter
+  // above; never rendered on its own, so the row you see is always the real
+  // artist row with its counts.
+  const [emailHits, setEmailHits] = useState([]);
   const [sortBy, setSortBy] = useState('newest');
   const [grantingId, setGrantingId] = useState(null);
   // How long the next grant lasts. One control per page, so an admin sets the
-  // length once and then grants normally — rather than being asked twice for
+  // length once and then grants normally, rather than being asked twice for
   // every person, which is how a length setting ends up ignored.
   const [grantMonths, setGrantMonths] = useState(DEFAULT_GRANT_MONTHS);
   const [toast, setToast] = useState(null); // { message, type: 'success'|'error' }
@@ -27,6 +31,25 @@ export default function AdminArtists() {
     setToast({ message, type });
     setTimeout(() => setToast(null), 3000);
   };
+
+  // Only fires on something that could plausibly be an address or an id, so
+  // ordinary typing does not hit the server on every keystroke.
+  useEffect(() => {
+    const q = searchQuery.trim();
+    if (q.length < 3 || !(q.includes('@') || q.includes('-'))) { setEmailHits([]); return; }
+    let cancelled = false;
+    const t = setTimeout(async () => {
+      const { data, error } = await supabase.rpc('admin_find_artist', { p_query: q, p_limit: 25 });
+      if (cancelled) return;
+      // PGRST202 just means migration 184 has not run yet. Name, slug and id
+      // still work without it.
+      if (error && error.code !== 'PGRST202') {
+        console.error('[admin artists] lookup failed:', error.code, error.message);
+      }
+      setEmailHits(data || []);
+    }, 300);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [searchQuery]);
 
   const fetchArtists = useCallback(async () => {
     setLoading(true);
@@ -85,12 +108,12 @@ export default function AdminArtists() {
           artist_id: artistId,
           tier_id: tier.id,
           status: 'active',
-          // See AdminPeople.js — a granted tier must not read as a sale.
+          // See AdminPeople.js, a granted tier must not read as a sale.
           payment_provider: 'admin_grant',
           amount_paid: 0,
           paypal_subscription_id: `admin_grant_${Date.now()}`,
           started_at: new Date().toISOString(),
-          // Was a flat 365 days — one click, a free year. See grantDuration.js.
+          // Was a flat 365 days, one click, a free year. See grantDuration.js.
           expires_at: grantExpiry(months),
         });
         if (insertErr) throw new Error(`Subscription insert: ${insertErr.message}`);
@@ -102,7 +125,7 @@ export default function AdminArtists() {
         .eq('id', artistId);
       if (updateErr) throw new Error(`Artist update: ${updateErr.message}`);
 
-      // Migration 106 — tier_granted is admin-only there. The .then(() => {})
+      // Migration 106, tier_granted is admin-only there. The .then(() => {})
       // this replaces read no error at all, so the artist was never told their
       // tier had changed.
       await sendNotification(supabase, 'tier_granted (admin artists)', {
@@ -124,8 +147,26 @@ export default function AdminArtists() {
     setGrantingId(null);
   };
 
+  // SEARCHING BY THE THING YOU ACTUALLY HAVE.
+  //
+  // This matched artist_name and nothing else, so a slug, an id or an email
+  // found nobody and the account looked like it did not exist. That is how
+  // "Sweet melodyz" stayed invisible: three migrations and a report all
+  // searched for "Sweet Melodiez", and so did this box.
+  //
+  // Name, slug and id are on the row already, so they are matched here with
+  // no round trip. Email is not: addresses live in auth.users, which no
+  // client may read, so a match on one comes from admin_find_artist
+  // (migration 184) and is merged in below.
+  const q = searchQuery.trim().toLowerCase();
+  const emailHitIds = new Set(emailHits.map(h => h.id));
   const filtered = artists
-    .filter(a => (a.artist_name || '').toLowerCase().includes(searchQuery.toLowerCase()))
+    .filter(a => !q
+      || (a.artist_name || '').toLowerCase().includes(q)
+      || (a.slug || '').toLowerCase().includes(q)
+      || (a.id || '').toLowerCase() === q
+      || (a.user_id || '').toLowerCase() === q
+      || emailHitIds.has(a.id))
     .sort((a, b) => {
       if (sortBy === 'newest') return new Date(b.created_at) - new Date(a.created_at);
       if (sortBy === 'tracks') return b.trackCount - a.trackCount;
@@ -164,7 +205,7 @@ export default function AdminArtists() {
       </div>
 
       {/* How long a grant lasts. Was a hard-coded 365 days with no control at
-          all — one click in the tier dropdown and somebody had a free year. */}
+          all, one click in the tier dropdown and somebody had a free year. */}
       <div className="flex items-center space-x-2 mb-3">
         <span className="text-[11px] text-white/35">Grants last</span>
         <select value={grantMonths} onChange={e => setGrantMonths(Number(e.target.value))}
@@ -179,7 +220,7 @@ export default function AdminArtists() {
           <input
             type="text" value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search artists..."
+            placeholder="Name, slug, email or id"
             className="w-full pl-10 pr-4 py-3 bg-white/[0.04] rounded-xl text-sm text-white placeholder:text-white/20 border border-white/[0.06] focus:border-white/[0.15] focus:outline-none transition"
           />
         </div>
@@ -208,7 +249,7 @@ export default function AdminArtists() {
             <div key={a.id}
               className="w-full bg-white/[0.03] rounded-xl p-4 border border-white/[0.06] hover:bg-white/[0.05] transition">
               <div className="flex items-center justify-between">
-                {/* Artist info — clickable */}
+                {/* Artist info, clickable */}
                 <button onClick={() => navigate(`/artist/${a.slug || a.id}`)}
                   className="flex items-center space-x-3 min-w-0 flex-1 text-left">
                   <div className="w-12 h-12 rounded-full bg-white/[0.08] flex items-center justify-center flex-shrink-0 overflow-hidden">

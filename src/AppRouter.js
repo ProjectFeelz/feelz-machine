@@ -69,6 +69,7 @@ const TrackPage = React.lazy(() => import('./pages/TrackPage'));
 const CollabRadarPage = React.lazy(() => import('./pages/CollabRadarPage'));
 const AdminDuplicates = React.lazy(() => import('./pages/AdminDuplicates'));
 const GuardianConsentPage = React.lazy(() => import('./pages/GuardianConsentPage'));
+const ShortLinkPage = React.lazy(() => import('./pages/ShortLinkPage'));
 const AdminGuardianConsents = React.lazy(() => import('./pages/AdminGuardianConsents'));
 const AdminPersonas = React.lazy(() => import('./pages/AdminPersonas'));
 const CompetitionRoomPage = React.lazy(() => import('./pages/CompetitionRoomPage'));
@@ -350,6 +351,11 @@ export default function AppRouter() {
                     it. Signed-out visitors arriving from TikTok get the shell
                     too, which is the point: the nav is how they find the rest
                     of the platform. */}
+                {/* Short share links, migration 185. Both redirect to the
+                    canonical page; see the note in ShortLinkPage.js. */}
+                <Route path="/t/:code" element={<ShortLinkPage />} />
+                <Route path="/a/:code" element={<ShortLinkPage />} />
+
                 <Route path="/schoolsessions" element={
                   <PageTitle title="School Sessions"><SchoolSessionsPage /></PageTitle>
                 } />
