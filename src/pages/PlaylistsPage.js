@@ -228,13 +228,32 @@ export default function PlaylistsPage() {
             </div>
           )}
         </div>
+        {/* Change the cover.
+         *
+         * This used to be a label with `absolute inset-0`, covering the whole
+         * picture, hidden with `opacity-0` and shown on hover. Two things went
+         * wrong with that on a phone:
+         *
+         *   1. A phone has no hover. opacity-0 hides a thing, it does not stop
+         *      it being tapped, so the invisible sheet was still there.
+         *   2. It was a <label> wrapping a file input, and it called
+         *      stopPropagation, so the tap never reached the card.
+         *
+         * Between them, tapping a playlist opened the photo picker instead of
+         * the playlist. Every time, and with nothing on screen to explain why.
+         *
+         * It is now a small round button in the corner, the same size and shape
+         * as the play button opposite it, always visible. You can see what it
+         * does before you press it, and the rest of the picture goes back to
+         * being the way into the playlist.
+         */}
         {!isCollab && (
           <label
             onClick={e => { e.stopPropagation(); setEditingCoverId(playlist.id); }}
-            className="absolute inset-0 flex items-center justify-center rounded-lg opacity-0 group-hover:opacity-100 transition cursor-pointer bg-black/50"
+            className="absolute bottom-2 left-2 w-10 h-10 rounded-full bg-black/60 backdrop-blur-sm flex items-center justify-center cursor-pointer active:bg-black/80 transition"
             title="Change cover"
           >
-            <Camera className="w-5 h-5 text-white" />
+            <Camera className="w-4 h-4 text-white" />
             <input type="file" accept="image/*" className="hidden"
               ref={editingCoverId === playlist.id ? editCoverRef : null}
               onChange={e => {
@@ -246,7 +265,7 @@ export default function PlaylistsPage() {
         {(playlist.playlist_tracks?.length || 0) > 0 && (
           <button
             onClick={e => playPlaylist(playlist, e)}
-            className="absolute bottom-2 right-2 w-10 h-10 rounded-full bg-lime-400 shadow-lg flex items-center justify-center opacity-0 translate-y-1 group-hover:opacity-100 group-hover:translate-y-0 transition"
+            className="absolute bottom-2 right-2 w-10 h-10 rounded-full bg-lime-400 shadow-lg flex items-center justify-center transition md:opacity-0 md:translate-y-1 md:group-hover:opacity-100 md:group-hover:translate-y-0"
             title="Play playlist"
           >
             <Play className="w-4 h-4 text-black ml-0.5" fill="black" />
@@ -261,7 +280,9 @@ export default function PlaylistsPage() {
       </p>
 
       {/* Secondary actions, small, hover-revealed, kept out of the way of the card's main click target */}
-      <div className="flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition h-6">
+      {/* Same reasoning as the play button above: shown on a phone, revealed on
+          hover on a computer. */}
+      <div className="flex items-center space-x-1 transition h-6 md:opacity-0 md:group-hover:opacity-100">
         {playlist.is_shared && !isCollab && (
           <button
             onClick={e => { e.stopPropagation(); copyShareLink(playlist); }}

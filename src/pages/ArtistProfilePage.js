@@ -1102,19 +1102,10 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
   const isProfileOwner = user && myArtist && myArtist.id === artist.id;
   const isBeatmakerProfile = artist?.role === 'beatmaker';
   const pageUrl        = `${BASE_URL}/artist/${slug}`;
-  // The link the Share button hands out.
-  //
-  // This used to be the handle form, `/@<slug>`. It is shorter, and it works
-  // in a browser, but a crawler never sees an artist on it: WhatsApp, X and
-  // the rest do not run JavaScript, and /@ is turned into /artist/<slug> by
-  // React Router, in the browser, after the crawler has already gone. So a
-  // shared profile arrived with the plain Feelz Machine card and no picture.
-  //
-  // /artist/<slug> is the page itself. It is still readable, it is the URL
-  // Google indexes, and the preview is built server side, so the link shows
-  // the artist's name and their picture. /@<slug> is untouched and still
-  // works for anyone who types it or has one saved.
-  const shareShortUrl  = pageUrl;
+  // The handle form. Kept, on purpose. Its preview is built server side by
+  // netlify/edge-functions/social-preview-handle.js, so it arrives with the
+  // artist's name and picture on it like any other link.
+  const shareShortUrl  = `${BASE_URL}/@${slug}`;
   const ogImage        = artist.profile_image_url || `${BASE_URL}/og-default.png`;
   const pageTitle      = `${artist.artist_name} · Feelz Machine`;
   const pageDesc       = artist.bio

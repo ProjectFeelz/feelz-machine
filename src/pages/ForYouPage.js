@@ -665,17 +665,13 @@ function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare, onN
   };
 
   const handleShare = () => {
-    // The artist's page itself, not the handle form.
+    // The handle form. Short, and it is what a person recognises.
     //
-    // This was `/@<handle>`. NotFoundRedirect in src/AppRouter.js turns that
-    // into /artist/<slug>, but it does so in the browser, and the apps people
-    // paste links into do not run a browser. They ask for the page, read the
-    // HTML, and leave. So every profile shared from this card came out as the
-    // plain Feelz Machine card with no artist name and no picture on it.
-    //
-    // /artist/<slug> gets its preview built on the server, so the card shows
-    // who it is. The handle form still works for anyone who types it.
-    const url = `${window.location.origin}/artist/${track.artist_slug}`;
+    // It is kept. It was briefly swapped for /artist/<slug> to get a picture
+    // on the link, which worked but made the link long and ugly for no good
+    // reason: the right fix was to give /@ a preview, not to stop using it.
+    // netlify/edge-functions/social-preview-handle.js does that now.
+    const url = `${window.location.origin}/@${track.artist_slug}`;
     onShare({
       artist: {
         artist_name:       track.artist_name,

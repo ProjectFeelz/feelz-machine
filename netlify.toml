@@ -32,6 +32,39 @@
 # The declaration now lives in one place: netlify/edge-functions/social-preview.js.
 # Do not add [[edge_functions]] blocks for it back here, change the paths in
 # the function's config instead, so there is only ever one source of truth.
+#
+# The block below is a DIFFERENT function on a DIFFERENT set of paths, so it is
+# not the double registration described above. There is still exactly one
+# declaration per function.
+#
+# Why the handle links are claimed here and not in the function's own config:
+# social-preview.js declares its paths as URL patterns, and adding '/@*' to that
+# list stopped the entire function being registered. Every preview on the site
+# went back to the plain homepage card, while the thing that builds the cards
+# carried on answering correctly when called directly. That list will not take
+# an "@".
+#
+# `pattern` is a plain regular expression, so nothing has to parse the "@" as a
+# URL pattern. Anchored at both ends and escaped, it matches:
+#
+#   /@handle
+#   /@handle/single/<slug>   and /@handle/track/<slug>
+#   /@handle/beat/<slug>
+#   /@handle/album/<slug>
+#
+# and nothing else. If this line is ever wrong, the worst that happens is that
+# handle links go back to having no picture. social-preview.js is a separate
+# function and is not affected by anything in this block.
+#
+# TO CHECK IT IS WORKING, after deploying, open this in any browser:
+#
+#   https://www.feelzmachine.com/@<any-artist-handle>?_preview=1
+#
+# A page of meta tags means it is registered. The normal app means it is not.
+
+[[edge_functions]]
+  function = "social-preview-handle"
+  pattern = "^/@[^/]+(?:/(?:single|track|beat|album)/[^/]+)?/?$"
 
 # ── Cache headers ─────────────────────────────────────────────────────────────
 

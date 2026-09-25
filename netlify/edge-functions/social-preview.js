@@ -51,12 +51,30 @@ const ROUTE_PATTERNS = [
 ];
 
 export default async (request, context) => {
+  const url = new URL(request.url);
+
+  // ?_preview=1 — the switch that means nobody has to guess again.
+  //
+  // Everything in this file only happens for a crawler, and a crawler is not
+  // something you can be. So when previews broke there was no way to see
+  // whether this function was even running: the only test was to paste a link
+  // into WhatsApp and look at the result, which takes a minute, caches for a
+  // day, and tells you nothing about WHY.
+  //
+  // Add ?_preview=1 to any link and you get exactly what a crawler gets.
+  //
+  //   feelzmachine.com/track/<slug>?_preview=1   a page of meta tags  = working
+  //   feelzmachine.com/@<handle>?_preview=1      the normal app       = NOT working
+  //
+  // If you see the app, this function is not registered on that path, and no
+  // amount of fixing og-meta will help.
+  const forced = url.searchParams.get('_preview') === '1';
+
   const userAgent = request.headers.get('user-agent') || '';
-  if (!CRAWLER_PATTERN.test(userAgent)) {
+  if (!forced && !CRAWLER_PATTERN.test(userAgent)) {
     return context.next();
   }
 
-  const url = new URL(request.url);
   let type = null;
   let slug = null;
 

@@ -165,6 +165,49 @@ html, body, #root {
 
 select, option { color-scheme: dark; background-color: #1a1a1a; color: white; }
 
+/* ── iPhone: never let a tap on a field zoom the page ─────────────────────────
+ *
+ * THE BUG THIS FIXES
+ *
+ * On an iPhone, open a sheet with a text field in it, a comment box, the new
+ * playlist name, the invite link box, and the whole app grows past the edge of
+ * the screen. Buttons sit half off the right side. Closing the sheet does not
+ * put it back. Only killing the app and opening it again does.
+ *
+ * It is not a layout bug, and there is nothing wrong with the sheets. iOS zooms
+ * the page in whenever you tap a field whose text is smaller than 16px, so the
+ * field is easier to read. It has done this since the first iPhone. It does not
+ * zoom back out afterwards, and our pages have no zoom-out gesture to find,
+ * because the app fills the screen. So the app stays stretched.
+ *
+ * Android has never done this, which is why Android looked right all along.
+ *
+ * THE FIX
+ *
+ * Give every field at least 16px on a phone. iOS has nothing to correct, so it
+ * leaves the page alone. Anything wider than a phone is untouched, so the
+ * smaller field text on a computer stays exactly as designed.
+ *
+ * Do NOT do this instead by adding maximum-scale=1 or user-scalable=no to the
+ * viewport tag. That also stops a person pinching to zoom, which some people
+ * need in order to read anything at all.
+ *
+ * 1rem is 17px on a phone here (tailwind.config.js sets html to 17px below the
+ * md breakpoint), so every field lands on 17px, comfortably over the line.
+ *
+ * One thing to know: this sets the size, it does not only raise it. A field
+ * that was deliberately made bigger, the new playlist name box is the only one,
+ * comes down to 17px too. If a field has to be bigger than that, give it an
+ * inline style, which beats this rule.
+ */
+@media (max-width: 767px) {
+  input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']),
+  textarea,
+  select {
+    font-size: 1rem;
+  }
+}
+
 /* Sparkle theme — subtle twinkling overlay, purely decorative, sits above
    the background but never blocks clicks/taps */
 [data-theme-sparkle] body::before {
