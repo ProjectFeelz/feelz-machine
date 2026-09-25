@@ -479,15 +479,31 @@ export default function HomeAsideCard() {
 
         {/* ── Creators ────────────────────────────────────────────────── */}
         <div className="flex-1 overflow-y-auto scrollbar-hide px-4 py-4 space-y-3">
+          {/* At the top, and reading like an invitation rather than a footnote.
+           *
+           * This line used to sit under the last creator, in 11px grey at 20%
+           * opacity. By the time anyone reached it they had already decided
+           * whether to scroll, so the one sentence telling them what this
+           * column is for was the last thing they would ever read. Anything
+           * that says "here is what to do" belongs before the thing, not after
+           * it. */}
+          {loaded && creators.length > 0 && (
+            <div
+              className="rounded-xl px-3.5 py-3"
+              style={{ background: 'rgba(255,255,255,0.04)', border: `1px solid ${T.edge}` }}
+            >
+              <p className="text-[12px] font-semibold text-white/80 leading-snug">
+                Get to know your creators
+              </p>
+              <p className="text-[11px] text-white/35 mt-0.5 leading-relaxed">
+                A new set every day. Come back tomorrow for more.
+              </p>
+            </div>
+          )}
+
           {creators.map(c => <CreatorCard key={c.id} creator={c} />)}
 
           {loaded && !creators.length && <NoCreators />}
-
-          {loaded && creators.length > 0 && (
-            <p className="pt-1 pb-2 text-center text-[11px] text-white/20 leading-relaxed">
-              Come back tomorrow for more. Get to know your creators.
-            </p>
-          )}
         </div>
       </aside>
 
