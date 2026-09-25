@@ -1,6 +1,7 @@
 // src/components/TrackCommentSheet.js
 // Fixed: input always visible, reply context chip, iOS keyboard handling
 
+import { coverUrl } from '../utils/coverUrl';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Loader, X, Send, CornerDownRight, Smile } from 'lucide-react';
 import { supabase } from '../supabaseClient';
@@ -143,7 +144,20 @@ function ReactionBar({ commentId, userId }) {
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
-export default function TrackCommentSheet({ track, user, onClose, routePrefix = 'track' }) {
+export default function TrackCommentSheet({ track, user, onClose, routePrefix = 'track', focusComment = null }) {
+  // ── Land on the comment the notification was about ─────────────────────────
+  //
+  // A notification used to open this sheet at the top of the thread and leave
+  // you to find the comment yourself. It knew which one it meant the whole
+  // time; it just was not passing it on.
+  //
+  // Two things happen when it does. The comment is scrolled into the middle of
+  // the sheet, and it is briefly lit so the eye lands on it rather than on
+  // whatever happens to be in the centre. The highlight fades after a few
+  // seconds because it is a pointer, not a state: once you have seen it, a
+  // permanently marked comment is just clutter.
+  const focusRef = React.useRef(null);
+  const [litComment, setLitComment] = React.useState(null);
   const composerBottom = useComposerBottom();
   const [comments,   setComments]   = useState([]);
   const [text,       setText]       = useState('');
@@ -283,6 +297,24 @@ export default function TrackCommentSheet({ track, user, onClose, routePrefix = 
     setPosting(false);
   };
 
+  // Runs once the comments are in, not on mount: the element cannot be
+  // scrolled to before it exists.
+  React.useEffect(() => {
+    if (!focusComment || !comments.length) return;
+    // A reply lives inside its parent's group, so the parent has to be the
+    // thing we look for if the comment we want is a reply.
+    const target = comments.find(c => c.id === focusComment);
+    if (!target) return;
+    const anchorId = target.parent_comment_id || target.id;
+    const frame = requestAnimationFrame(() => {
+      const el = document.getElementById(`comment-${anchorId}`);
+      if (el) el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      setLitComment(focusComment);
+    });
+    const fade = setTimeout(() => setLitComment(null), 3200);
+    return () => { cancelAnimationFrame(frame); clearTimeout(fade); };
+  }, [focusComment, comments]);
+
   const topLevel = comments.filter(c => !c.parent_comment_id);
   const replyMap = {};
   comments.filter(c => c.parent_comment_id).forEach(r => {
@@ -295,8 +327,19 @@ export default function TrackCommentSheet({ track, user, onClose, routePrefix = 
     const avatar   = c.artists?.profile_image_url || c.user_profiles?.avatar_url;
     const isFanPro = c.user_profiles?.isFanPro || false;
     const isOwn  = c.user_id === user?.id;
+    const isLit = litComment === c.id;
     return (
-      <div key={c.id} className={`flex items-start space-x-3 ${isReply ? 'pl-8 mt-2' : ''}`}>
+      <div
+        key={c.id}
+        id={`comment-${c.id}`}
+        ref={isLit ? focusRef : null}
+        className={`flex items-start space-x-3 ${isReply ? 'pl-8 mt-2' : ''} ${isLit ? 'rounded-xl -mx-2 px-2 py-2' : ''}`}
+        style={isLit ? {
+          background: 'rgba(167,139,250,0.10)',
+          boxShadow: 'inset 0 0 0 1px rgba(167,139,250,0.28)',
+          transition: 'background 600ms ease, box-shadow 600ms ease',
+        } : { transition: 'background 600ms ease, box-shadow 600ms ease' }}
+      >
         <div className="w-8 h-8 rounded-full bg-white/10 overflow-hidden flex-shrink-0 flex items-center justify-center">
           {avatar
             ? <img src={avatar} alt="" className="w-full h-full object-cover" />
@@ -372,7 +415,7 @@ export default function TrackCommentSheet({ track, user, onClose, routePrefix = 
       {/* Track pill */}
       <div className="flex items-center space-x-2 px-4 py-2.5 border-b border-white/[0.04] bg-white/[0.01]">
         {track.cover_artwork_url
-          ? <img src={track.cover_artwork_url} alt="" className="w-7 h-7 rounded-md object-cover flex-shrink-0" />
+          ? <img src={coverUrl(track.cover_artwork_url, 400)} alt="" className="w-7 h-7 rounded-md object-cover flex-shrink-0" />
           : <div className="w-7 h-7 rounded-md bg-white/[0.06] flex-shrink-0" />}
         <div className="flex-1 min-w-0">
           <p className="text-xs font-semibold text-white/70 truncate">{track.title}</p>

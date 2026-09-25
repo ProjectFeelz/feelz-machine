@@ -1,3 +1,4 @@
+import { coverUrl } from '../utils/coverUrl';
 import { Helmet } from 'react-helmet-async';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -662,7 +663,20 @@ export default function NotificationsPage() {
     if (type === 'track_commented' || type === 'new_comment') {
       const commentTrackId = meta.track_id || notif.track_id;
       if (meta.post_id) { navigate(`/feed?post=${meta.post_id}`); return; }
-      if (commentTrackId) { navigate(`/?openComments=${commentTrackId}`); return; }
+      // Carry the comment id through, not just the track.
+      //
+      // Tapping "So-and-so commented on your track" opened the thread at the
+      // top and left you to find the comment yourself. On a track with three
+      // comments that is fine. On a track with sixty it means the notification
+      // told you something happened and then refused to show you what.
+      //
+      // The id is already on the notification (TrackCommentSheet writes it when
+      // it posts), so this is only a matter of passing it along.
+      const commentId = meta.comment_id || null;
+      if (commentTrackId) {
+        navigate(`/?openComments=${commentTrackId}${commentId ? `&comment=${commentId}` : ''}`);
+        return;
+      }
       if (meta.track_slug) { navigate(`/?openCommentsSlug=${meta.track_slug}`); return; }
       if (meta.artist_slug) { navigate(`/artist/${meta.artist_slug}`); return; }
       navigate('/browse');
@@ -1073,7 +1087,7 @@ export default function NotificationsPage() {
                       {/* Avatar / Icon */}
                       {meta.from_artist_image ? (
                         <div className="relative flex-shrink-0">
-                          <img src={meta.from_artist_image} alt=""
+                          <img src={coverUrl(meta.from_artist_image, 120)} alt=""
                             className="w-11 h-11 rounded-full object-cover" />
                           <div className={`absolute -bottom-0.5 -right-0.5 w-5 h-5 rounded-full ${config.bg} flex items-center justify-center border-2 border-black`}>
                             <Icon className={`w-2.5 h-2.5 ${config.color}`} />

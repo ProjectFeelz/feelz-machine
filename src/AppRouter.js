@@ -22,6 +22,7 @@ import OfflinePage from './pages/OfflinePage';
 const AboutPage = React.lazy(() => import('./pages/AboutPage'));
 const ComparisonPage = React.lazy(() => import('./pages/ComparisonPage'));
 const HomePage = React.lazy(() => import('./pages/HomePage'));
+const Welcome = React.lazy(() => import('./pages/Welcome'));
 const BrowsePage = React.lazy(() => import('./pages/BrowsePage'));
 const LoginPage = React.lazy(() => import('./pages/LoginPage'));
 const ResetPasswordPage = React.lazy(() => import('./pages/ResetPasswordPage'));
@@ -222,7 +223,7 @@ function AffiliateTracker() {
 function OnboardingGuard({ children }) {
   const { user, artist, listener, loading } = useAuth();
   const location = useLocation();
-  const skipPaths = ['/setup', '/login', '/reset-password', '/about', '/terms-of-use', '/privacy-policy', '/artist/', '/@', '/schoolsessions'];
+  const skipPaths = ['/setup', '/welcome', '/login', '/reset-password', '/about', '/terms-of-use', '/privacy-policy', '/artist/', '/@', '/schoolsessions'];
 
   // Public paths always render immediately, regardless of auth loading state.
   // This matters specifically for the /@slug -> /artist/slug redirect: the URL
@@ -234,9 +235,22 @@ function OnboardingGuard({ children }) {
   if (loading) return null;
   if (!user) return children;
 
-  // New user, has auth but no profile
+  // New user, has auth but no profile.
+  //
+  // This used to send everybody to /setup, which is a settings page. An artist
+  // can make sense of that. A listener lands on a wall of fields with no idea
+  // why they are looking at it, having asked to listen to music.
+  //
+  // So it now depends on what they said they were here to do at sign-up.
+  // LoginPage stores that choice, and AuthContext clears it the moment it uses
+  // it, so reading it here is safe: if it is still set, the artist row has not
+  // been made yet and /setup is where they belong.
   if (user && !artist && !listener) {
-    return <Navigate to="/setup" replace />;
+    // Everybody goes to /welcome now, whichever kind of account they asked
+    // for. Welcome.js reads the same pending_creator_role key and picks the
+    // right set of questions, so the branch that used to live here has moved
+    // to the one place that can act on it.
+    return <Navigate to="/welcome" replace />;
   }
   return children;
 }
@@ -339,6 +353,7 @@ export default function AppRouter() {
               <Route element={<AppLayout />}>
                 <Route path="/" element={<ForYouPage />} />
                 <Route path="/home" element={<HomePage />} />
+                <Route path="/welcome" element={<Welcome />} />
 
                 {/* School Sessions lives INSIDE the app shell.
                     These three used to render outside AppLayout, next to the

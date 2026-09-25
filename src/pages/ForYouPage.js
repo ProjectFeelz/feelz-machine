@@ -25,6 +25,7 @@ import VinylRecord from '../components/VinylRecord';
 import HomeAsideCard from '../components/HomeAsideCard';
 import FeedTransportBar from '../components/FeedTransportBar';
 import PreorderTag from '../components/PreorderTag';
+import { needsWelcome } from './Welcome';
 
 import { ArtistStoryView } from '../components/ArtistStories';
 import ShareCard from '../components/ShareCard';
@@ -1140,12 +1141,23 @@ function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare, onN
 // ── Main feed ─────────────────────────────────────────────────────────────────
 
 // ── Keyboard-aware comment sheet overlay ─────────────────────────────────────
-function CommentSheetOverlay({ track, user, onClose }) {
+function CommentSheetOverlay({ track, user, onClose, focusComment = null }) {
   return (
+    // The backdrop covers the same area the feed does, and no more.
+    //
+    // It used to be `inset: 0`, the whole window, so opening comments on a
+    // computer dimmed the sidebar and the Artist Highlight column as well. They
+    // are not part of what you are commenting on, and darkening them makes the
+    // sheet look like it belongs to the window rather than to the song.
+    //
+    // The offsets are the same ones the feed itself uses a few lines below:
+    // md:left-64 for the 256px sidebar, xl:right-[380px] for the aside, which
+    // only exists at xl. Same numbers on purpose. If the feed's bounds ever
+    // change, these have to change with them, and having them written the same
+    // way in both places is what makes that obvious.
     <div
+      className="fixed top-0 bottom-0 left-0 right-0 md:left-64 xl:right-[380px]"
       style={{
-        position: 'fixed',
-        inset: 0,
         zIndex: 800,
         display: 'flex',
         alignItems: 'flex-end',
@@ -1162,14 +1174,24 @@ function CommentSheetOverlay({ track, user, onClose }) {
     >
       {/* data-feelz-scroll: see the wheel handler. Touch was already handled
           by the stopPropagation calls above; the mouse wheel was not, so on a
-          computer scrolling a long comment thread moved the feed behind it. */}
+          computer scrolling a long comment thread moved the feed behind it.
+
+          THE SIZE IS A DESKTOP-ONLY CHANGE.
+
+          On a phone this is a sheet that slides up over a full-width card, and
+          480px wide by 65vh tall is right. On a computer the card is eight
+          hundred or more pixels wide and the sheet was a small box floating in
+          the middle of it, touching nothing, with dimmed feed on both sides.
+
+          At md and up it now fills the feed column instead: the full width it
+          is given, and 78% of the height. It reads as part of the song rather
+          than as a dialog that happens to be in front of it. Below md nothing
+          changes. */}
       <div
         data-feelz-scroll
         onClick={e => e.stopPropagation()}
+        className="w-full max-w-[480px] h-[65vh] md:max-w-none md:h-[78vh]"
         style={{
-          width: '100%',
-          maxWidth: '480px',
-          height: '65vh',
           maxHeight: 'calc(100vh - 80px)',
           display: 'flex',
           flexDirection: 'column',
@@ -1180,14 +1202,14 @@ function CommentSheetOverlay({ track, user, onClose }) {
           transform: 'translateZ(0)',
           WebkitTransform: 'translateZ(0)',
         }}>
-        <TrackCommentSheet track={track} user={user} onClose={onClose} />
+        <TrackCommentSheet track={track} user={user} onClose={onClose} focusComment={focusComment} />
       </div>
     </div>
   );
 }
 
 export default function ForYouPage() {
-  const { user, isBeatmaker, loading: authLoading } = useAuth();
+  const { user, artist, isBeatmaker, loading: authLoading } = useAuth();
   const navigate    = useNavigate();
   const {
     playTrack, setIsMinimized, currentTrack,
@@ -1288,12 +1310,35 @@ export default function ForYouPage() {
     return () => { cancelled = true; };
   }, []);
 
+  // One pass at the welcome for people who already have an account.
+  //
+  // OnboardingGuard only fires for an account with no profile row at all, and
+  // AuthContext creates a listeners row on first login, so in practice that
+  // window is a second or two. Everybody who signed up before today would never
+  // see it.
+  //
+  // This is the catch. It asks once per device, the check is a local flag
+  // before it is ever a query, and it does nothing at all if the person has
+  // already set themselves up. Deliberately not in OnboardingGuard: that runs
+  // on every route change, and this only needs to happen where people land.
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    (async () => {
+      const needs = await needsWelcome(user, artist);
+      if (!cancelled && needs) navigate('/welcome', { replace: true });
+    })();
+    return () => { cancelled = true; };
+  }, [user, artist, navigate]);
+
   // Deep-link support, notifications land here with ?openComments=<trackId>
   // or ?openCommentsSlug=<slug> instead of going to the separate track page
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const trackId = params.get('openComments');
     const trackSlug = params.get('openCommentsSlug');
+    // Which comment the notification was actually about, when it knows.
+    const focusComment = params.get('comment');
     if (!trackId && !trackSlug) return;
     (async () => {
       let query = supabase.from('tracks').select('id, title, slug, cover_artwork_url, artists!tracks_artist_id_fkey(artist_name)');
@@ -1303,6 +1348,7 @@ export default function ForYouPage() {
         setActiveSheet({
           type: 'comments',
           track: { ...data, artist_name: data.artists?.artist_name || '' },
+          focusComment,
         });
       }
       window.history.replaceState({}, '', '/');
@@ -2183,13 +2229,14 @@ export default function ForYouPage() {
           key={activeSheet.track?.id}
           track={activeSheet.track}
           user={user}
+          focusComment={activeSheet.focusComment || null}
           onClose={() => setActiveSheet(null)}
         />
       )}
 
       {/* Playlist sheet, fixed overlay */}
       {activeSheet?.type === 'playlist' && (
-        <div className="fixed inset-0 z-[800] flex items-end justify-center"
+        <div className="fixed inset-0 z-[800] flex items-center justify-center p-4"
           style={{ background: 'rgba(0,0,0,0.5)' }}
           onClick={() => setActiveSheet(null)}>
           {/* data-feelz-scroll: see the wheel handler. A long playlist list
@@ -2198,13 +2245,17 @@ export default function ForYouPage() {
             style={{
               width: '100%',
               maxWidth: '480px',
-              maxHeight: '70vh',
+              // Centred with air around it, not pinned to the bottom edge.
+              // Pinned, the last row of a long playlist list sat under the
+              // iPhone home bar, half drawn, with nothing saying there was
+              // more. Centred, the sheet always has a visible top AND bottom,
+              // so you can see where it ends.
+              maxHeight: 'min(78dvh, calc(100dvh - 32px))',
               display: 'flex',
               flexDirection: 'column',
               background: 'rgba(10,10,10,0.98)',
-              borderTop: '1px solid rgba(255,255,255,0.08)',
-              borderRadius: '24px 24px 0 0',
-              paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+              border: '1px solid rgba(255,255,255,0.08)',
+              borderRadius: '24px',
             }}>
             <PlaylistSheet track={activeSheet.track} user={user} onClose={() => setActiveSheet(null)} navigate={navigate} />
           </div>

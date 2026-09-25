@@ -1,3 +1,4 @@
+import { coverUrl } from '../utils/coverUrl';
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import OfflineSaveButton from './OfflineSaveButton';
@@ -429,18 +430,38 @@ export default function TrackActionSheet({ track, artist, onClose }) {
 
     return (
         <>
-        <div className="fixed inset-0 z-[100] flex items-end justify-center" onClick={onClose}>
+        {/* Centred, with room around it, instead of pinned to the bottom edge.
+         *
+         * It was `items-end` with `max-h-[92dvh]` and no padding, so the sheet
+         * ran from wherever its content started all the way to the very bottom
+         * of the screen. On a phone that put the last row of a playlist list
+         * underneath the home bar, half drawn, with nothing to tell you there
+         * was more. Adding to a playlist is the view where that hurt most,
+         * because the list is exactly the part you came to read.
+         *
+         * Centred with 16px of air on every side and a cap of 82% of the
+         * screen, the sheet always has a visible top AND a visible bottom, so
+         * you can see where it ends and whether there is more to scroll to.
+         *
+         * The corners are rounded on all four sides now. A sheet with square
+         * corners at the bottom is saying it continues off the screen, and this
+         * one does not. */}
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" onClick={onClose}>
             <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
             <div
-                className="relative w-full max-w-lg rounded-t-2xl overflow-x-hidden overflow-y-auto overscroll-contain max-h-[92dvh] animate-slide-up"
-                style={{ backgroundColor: '#111', border: '1px solid rgba(255,255,255,0.08)', borderBottom: 'none' }}
+                className="relative w-full max-w-lg rounded-2xl overflow-x-hidden overflow-y-auto overscroll-contain animate-slide-up"
+                style={{
+                  backgroundColor: '#111',
+                  border: '1px solid rgba(255,255,255,0.08)',
+                  maxHeight: 'min(82dvh, calc(100dvh - 32px))',
+                }}
                 onClick={(e) => e.stopPropagation()}
             >
                 {/* Track info header */}
                 <div className="flex items-center space-x-3 p-4 border-b border-white/[0.06]">
                     <div className="w-12 h-12 rounded-lg overflow-hidden bg-white/[0.06] flex-shrink-0">
                         {track.cover_artwork_url
-                            ? <img src={track.cover_artwork_url} alt="" className="w-full h-full object-cover" />
+                            ? <img src={coverUrl(track.cover_artwork_url, 400)} alt="" className="w-full h-full object-cover" />
                             : <div className="w-full h-full flex items-center justify-center"><Music className="w-5 h-5 text-white/20" /></div>}
                     </div>
                     <div className="flex-1 min-w-0">
