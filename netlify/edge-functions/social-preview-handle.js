@@ -23,7 +23,27 @@
 //
 // That is the whole point of the split. Please keep it.
 
-const CRAWLER_PATTERN = /facebookexternalhit|Facebot|Twitterbot|WhatsApp|Slackbot|Discordbot|LinkedInBot|TelegramBot|Pinterest|redditbot|vkShare|SkypeUriPreview|W3C_Validator/i;
+// Kept identical to social-preview.js on purpose. The reasoning for the wider
+// match, the header test and the search engine exception is written out in full
+// in that file; two copies of the reasoning would drift apart, two copies of
+// the rule will not, because a link either gets its picture or it does not and
+// that is easy to notice.
+const SEARCH_ENGINE = /Googlebot|Google-InspectionTool|Google Page Speed|Chrome-Lighthouse|bingbot|AdsBot-Google|Storebot-Google|DuckDuckBot|Applebot-Extended/i;
+
+const CRAWLER_PATTERN = new RegExp([
+  'facebookexternalhit', 'facebookcatalog', 'Facebot', 'Twitterbot', 'WhatsApp',
+  'Slackbot', 'Slack-ImgProxy', 'Discordbot', 'LinkedInBot', 'TelegramBot',
+  'Pinterest', 'redditbot', 'vkShare', 'SkypeUriPreview', 'W3C_Validator',
+  'Applebot', 'Embedly', 'Iframely', 'Quora Link Preview', 'Outbrain',
+  'Snapchat', 'Viber', 'Line\\/', 'Mastodon', 'Threads', 'Signal',
+  'SkypeRoutingBot', 'Yahoo Link Preview', 'Google-AMPHTML',
+  'bot', 'crawler', 'spider', 'preview', 'unfurl', 'opengraph', 'metainspector',
+  'link-?check', 'scraper', 'fetcher',
+].join('|'), 'i');
+
+function looksAutomated(request) {
+  return !request.headers.get('accept-language') && !request.headers.get('sec-fetch-mode');
+}
 
 // Longest first. /@h/album/s has to be tested before /@h, or the bare handle
 // would swallow it.
@@ -50,7 +70,10 @@ export default async (request, context) => {
   const forced = url.searchParams.get('_preview') === '1';
 
   const userAgent = request.headers.get('user-agent') || '';
-  if (!forced && !CRAWLER_PATTERN.test(userAgent)) {
+
+  if (!forced && SEARCH_ENGINE.test(userAgent)) return context.next();
+
+  if (!forced && !CRAWLER_PATTERN.test(userAgent) && !looksAutomated(request)) {
     return context.next();
   }
 
@@ -89,7 +112,11 @@ export default async (request, context) => {
     const html = await res.text();
     return new Response(html, {
       status: 200,
-      headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'public, max-age=1800' },
+      headers: {
+        'Content-Type': 'text/html; charset=utf-8',
+        'Cache-Control': 'public, max-age=1800',
+        'Vary': 'User-Agent',
+      },
     });
   } catch {
     return context.next();

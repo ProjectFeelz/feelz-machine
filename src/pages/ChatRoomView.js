@@ -1,7 +1,8 @@
+import { coverUrl } from '../utils/coverUrl';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
-import useKeyboardInset from '../hooks/useKeyboardInset';
+import useKeyboardInset, { useIosViewportPin, useKeyboardOpen } from '../hooks/useKeyboardInset';
 import { useAuth } from '../contexts/AuthContext';
 import { useTier } from '../contexts/useTier';
 import { usePullToRefresh } from '../hooks/usePullToRefresh';
@@ -80,7 +81,7 @@ function TrackPill({ trackId, navigate }) {
     >
       <div className="w-5 h-5 rounded overflow-hidden flex-shrink-0 bg-white/10">
         {track.cover_artwork_url
-          ? <img src={track.cover_artwork_url} alt="" className="w-full h-full object-cover" />
+          ? <img src={coverUrl(track.cover_artwork_url, 400)} alt="" className="w-full h-full object-cover" />
           : <Music className="w-3 h-3 text-purple-400" style={{ margin: 'auto', marginTop: 4 }} />}
       </div>
       <span className="text-xs font-medium text-purple-300 max-w-[110px] truncate">{track.title}</span>
@@ -473,6 +474,11 @@ export default function ChatRoomView() {
   // on any browser that resizes the layout viewport itself, where the flex
   // column below has already handled it.
   const keyboardInset = useKeyboardInset();
+  // null on everything that is not an iPhone or iPad, so Android keeps the
+  // behaviour below unchanged. See the hook for why iOS needs its own.
+  const iosPin = useIosViewportPin();
+  // Used to decide whether to allow for the iPhone home bar under the composer.
+  const keyboardOpen = useKeyboardOpen();
 
   const [room, setRoom]                           = useState(null);
   const [spendGate, setSpendGate]                 = useState(false);
@@ -1141,7 +1147,10 @@ export default function ChatRoomView() {
       // keyboard begins, so the composer sits on it instead of being scrolled
       // towards it. overscrollBehavior stops a flick in the message list from
       // dragging the whole page and shifting it again.
-      style={{
+      // On an iPhone the whole room is pinned to the visible area instead of
+      // being measured and resized. iosPin is null anywhere else, so Android
+      // and desktop keep exactly the behaviour described above.
+      style={iosPin || {
         height: keyboardInset > 0 ? `calc(100dvh - ${keyboardInset}px)` : '100dvh',
         maxHeight: keyboardInset > 0 ? `calc(100dvh - ${keyboardInset}px)` : '100dvh',
         overscrollBehavior: 'none',
@@ -1174,7 +1183,7 @@ export default function ChatRoomView() {
               {isBugRoom
                 ? <Bug className="w-5 h-5" style={{ color: accentColor }} />
                 : room.artists?.profile_image_url
-                  ? <img src={room.artists.profile_image_url} alt="" className="w-9 h-9 object-cover" />
+                  ? <img src={coverUrl(room.artists.profile_image_url, 120)} alt="" className="w-9 h-9 object-cover" />
                   : <span className="text-sm font-bold text-white/40">{room.artists?.artist_name?.[0]}</span>}
             </div>
             <div>
@@ -1225,7 +1234,7 @@ export default function ChatRoomView() {
                 <div className="w-7 h-7 rounded-lg overflow-hidden flex items-center justify-center flex-shrink-0"
                   style={{ background: 'linear-gradient(135deg,rgba(124,58,237,0.2),rgba(37,99,235,0.1))' }}>
                   {room.artists?.profile_image_url
-                    ? <img src={room.artists.profile_image_url} alt="" className="w-7 h-7 object-cover" />
+                    ? <img src={coverUrl(room.artists.profile_image_url, 400)} alt="" className="w-7 h-7 object-cover" />
                     : <span className="text-xs font-bold text-white/30">{room.artists?.artist_name?.[0]}</span>}
                 </div>
                 <p className="text-xs text-white/30 flex-1">{room.name} · Created by {room.artists?.artist_name}</p>
@@ -1267,7 +1276,7 @@ export default function ChatRoomView() {
                     {!sameSender ? (
                       <div className="w-8 h-8 rounded-full overflow-hidden bg-gradient-to-br from-purple-600/30 to-blue-600/20 flex items-center justify-center flex-shrink-0 mt-0.5">
                         {msg.artist?.profile_image_url
-                          ? <img src={msg.artist.profile_image_url} alt="" className="w-8 h-8 rounded-full object-cover" />
+                          ? <img src={coverUrl(msg.artist.profile_image_url, 120)} alt="" className="w-8 h-8 rounded-full object-cover" />
                           : <span className="text-xs font-bold text-white/40">{(msg.artist?.artist_name || '?')[0]}</span>}
                       </div>
                     ) : <div className="w-8 flex-shrink-0" />}
@@ -1366,7 +1375,20 @@ export default function ChatRoomView() {
 
           {/* Input bar or join prompt */}
           {isMember ? (
-            <div className="px-3 pt-2 pb-3 border-t border-white/[0.06] bg-black/95 backdrop-blur-xl flex-shrink-0">
+            <div
+              className="px-3 pt-2 pb-3 border-t border-white/[0.06] bg-black/95 backdrop-blur-xl flex-shrink-0"
+              // The home bar on an iPhone with no home button.
+              //
+              // There is a strip at the bottom of the screen that belongs to
+              // the phone, not to us, and the send button was sitting in it.
+              // The top bar of this room already allows for the notch; the
+              // bottom allowed for nothing.
+              //
+              // Only while the keyboard is CLOSED. With the keyboard up, that
+              // strip is covered by the keyboard and iOS keeps reporting a
+              // value for it, so allowing for it as well leaves an obvious gap
+              // between the composer and the keys.
+              style={{ paddingBottom: keyboardOpen ? 12 : 'max(env(safe-area-inset-bottom, 0px), 12px)' }}>
               {myMembership?.is_muted ? (
                 <div className="flex items-center justify-center space-x-2 py-2">
                   <VolumeX className="w-4 h-4 text-white/20" />
@@ -1387,7 +1409,7 @@ export default function ChatRoomView() {
                           className="w-full flex items-center space-x-2.5 px-3 py-2 hover:bg-white/[0.06] transition text-left border-b border-white/[0.04] last:border-0">
                           <div className="w-7 h-7 rounded-full overflow-hidden bg-white/10 flex-shrink-0 flex items-center justify-center">
                             {m.artists.profile_image_url
-                              ? <img src={m.artists.profile_image_url} alt="" className="w-full h-full object-cover" />
+                              ? <img src={coverUrl(m.artists.profile_image_url, 400)} alt="" className="w-full h-full object-cover" />
                               : <span className="text-[10px] font-bold text-white/40">{m.artists.artist_name[0]}</span>}
                           </div>
                           <span className="text-sm text-white">@{m.artists.artist_name}</span>
@@ -1412,7 +1434,7 @@ export default function ChatRoomView() {
                           className="w-full flex items-center space-x-2.5 px-3 py-2.5 hover:bg-white/[0.06] transition text-left border-b border-white/[0.04] last:border-0">
                           <div className="w-8 h-8 rounded-lg overflow-hidden bg-white/10 flex-shrink-0">
                             {track.cover_artwork_url
-                              ? <img src={track.cover_artwork_url} alt="" className="w-full h-full object-cover" />
+                              ? <img src={coverUrl(track.cover_artwork_url, 400)} alt="" className="w-full h-full object-cover" />
                               : <Music className="w-3.5 h-3.5 text-white/20 m-auto mt-2" />}
                           </div>
                           <div className="flex-1 min-w-0">

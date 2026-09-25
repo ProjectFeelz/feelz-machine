@@ -107,6 +107,82 @@ export function useKeyboardOpen(threshold = 120) {
   return open;
 }
 
+/**
+ * iOS, and only iOS.
+ *
+ * Android and iOS get a keyboard out of the way in completely different ways,
+ * and useKeyboardInset below handles the Android one. This is the other.
+ *
+ * On Android, with `interactive-widget=resizes-content` in the viewport tag,
+ * the LAYOUT viewport shrinks when the keyboard opens. Everything laid out to
+ * the bottom of the screen simply lands above the keyboard, and it stays there.
+ *
+ * iOS ignores `interactive-widget` entirely, and always has. The layout
+ * viewport stays the full height of the phone, the keyboard is drawn over the
+ * top of it, and Safari SCROLLS THE VISUAL VIEWPORT to bring the focused field
+ * into sight. That scroll is Safari's own guess, it keeps moving while the
+ * keyboard animates, and it moves again on the smallest drag. Measuring it and
+ * resizing the page to match, which is what useKeyboardInset does, means the
+ * page is chasing a number that will not sit still. That is the composer
+ * drifting around instead of sitting on the keyboard.
+ *
+ * The way out is to stop measuring and start following. The visual viewport
+ * knows exactly where it is, so a panel pinned to it cannot drift: it is not
+ * being moved by Safari, it is moving WITH Safari.
+ *
+ * Returns the style to spread onto the panel, or null on anything that is not
+ * iOS, so the caller leaves its existing behaviour alone everywhere else.
+ */
+export function useIosViewportPin() {
+  const [pin, setPin] = useState(null);
+
+  useEffect(() => {
+    // iPadOS reports itself as a Mac, so the touch test is what catches it.
+    const isIOS =
+      /iP(hone|ad|od)/.test(navigator.userAgent) ||
+      (navigator.userAgent.includes('Mac') && typeof document !== 'undefined' && 'ontouchend' in document);
+    const vv = window.visualViewport;
+    if (!isIOS || !vv) return;
+
+    let frame = null;
+
+    const measure = () => {
+      frame = null;
+      setPin({
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        height: `${vv.height}px`,
+        // offsetTop is how far Safari has scrolled the visible area down inside
+        // the full-height page. Moving by the same amount puts this panel back
+        // exactly over what the person is looking at.
+        transform: `translateY(${vv.offsetTop}px)`,
+        // No transition. The visual viewport is already animating; easing on
+        // top of that is what makes it feel like it is sliding around loose.
+        transition: 'none',
+        overscrollBehavior: 'none',
+      });
+    };
+
+    const schedule = () => { if (frame === null) frame = requestAnimationFrame(measure); };
+
+    measure();
+    vv.addEventListener('resize', schedule);
+    vv.addEventListener('scroll', schedule);
+    window.addEventListener('orientationchange', schedule);
+
+    return () => {
+      if (frame !== null) cancelAnimationFrame(frame);
+      vv.removeEventListener('resize', schedule);
+      vv.removeEventListener('scroll', schedule);
+      window.removeEventListener('orientationchange', schedule);
+    };
+  }, []);
+
+  return pin;
+}
+
 export default function useKeyboardInset() {
   const [inset, setInset] = useState(0);
 

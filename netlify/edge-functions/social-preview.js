@@ -9,7 +9,54 @@
 // the per-page meta tags react-helmet-async sets are invisible to a crawler
 // that never executes the JS that sets them.
 
-const CRAWLER_PATTERN = /facebookexternalhit|Facebot|Twitterbot|WhatsApp|Slackbot|Discordbot|LinkedInBot|TelegramBot|Pinterest|redditbot|vkShare|SkypeUriPreview|W3C_Validator/i;
+// ── Who gets the preview ─────────────────────────────────────────────────────
+//
+// The old list named thirteen crawlers. Anything not on it got the app, which
+// for something that does not run JavaScript means the plain Feelz Machine
+// card with no artwork. Tested against a real third party unfurler: the same
+// link showed the full card with ?_preview=1 forcing the crawler path, and the
+// generic card without it. The pipeline was never the problem. The list was.
+//
+// A named list cannot be kept complete. New apps appear, existing ones change
+// their user agent, and each time a link quietly stops carrying its picture
+// with nothing to show that anything broke.
+//
+// So there are now three ways in, and a way out.
+//
+// 1. A much wider pattern, including the generic words a fetcher almost always
+//    puts in its user agent.
+// 2. A header test. Every real browser sends Accept-Language, and every browser
+//    of the last several years sends Sec-Fetch-Mode on a page load. Almost no
+//    crawler sends either. Missing BOTH is a strong signal.
+// 3. ?_preview=1, for testing.
+//
+// Being wrong in the generous direction is close to free here. The HTML this
+// serves carries a meta refresh to the real page, so a person who somehow
+// landed on it is bounced straight to the app. A missed crawler costs a
+// preview; a false positive costs a blink.
+//
+// THE EXCEPTION IS SEARCH. Googlebot and bingbot run JavaScript and should
+// index the real page, not a stub with a redirect on it. They are let through
+// before anything else is considered.
+const SEARCH_ENGINE = /Googlebot|Google-InspectionTool|Google Page Speed|Chrome-Lighthouse|bingbot|AdsBot-Google|Storebot-Google|DuckDuckBot|Applebot-Extended/i;
+
+const CRAWLER_PATTERN = new RegExp([
+  // The ones we know by name.
+  'facebookexternalhit', 'facebookcatalog', 'Facebot', 'Twitterbot', 'WhatsApp',
+  'Slackbot', 'Slack-ImgProxy', 'Discordbot', 'LinkedInBot', 'TelegramBot',
+  'Pinterest', 'redditbot', 'vkShare', 'SkypeUriPreview', 'W3C_Validator',
+  'Applebot', 'Embedly', 'Iframely', 'Quora Link Preview', 'Outbrain',
+  'Snapchat', 'Viber', 'Line\\/', 'Mastodon', 'Threads', 'Signal',
+  'SkypeRoutingBot', 'Yahoo Link Preview', 'Google-AMPHTML',
+  // And the words a fetcher we have never heard of tends to use anyway.
+  'bot', 'crawler', 'spider', 'preview', 'unfurl', 'opengraph', 'metainspector',
+  'link-?check', 'scraper', 'fetcher',
+].join('|'), 'i');
+
+// Missing both of these is close to proof that nothing with a screen is asking.
+function looksAutomated(request) {
+  return !request.headers.get('accept-language') && !request.headers.get('sec-fetch-mode');
+}
 
 // Each entry gives the type og-meta needs and how to get the slug out of the
 // path. `slug` defaults to the first capture group; give it a function when
@@ -71,7 +118,11 @@ export default async (request, context) => {
   const forced = url.searchParams.get('_preview') === '1';
 
   const userAgent = request.headers.get('user-agent') || '';
-  if (!forced && !CRAWLER_PATTERN.test(userAgent)) {
+
+  // Search engines run JavaScript. They get the real page.
+  if (!forced && SEARCH_ENGINE.test(userAgent)) return context.next();
+
+  if (!forced && !CRAWLER_PATTERN.test(userAgent) && !looksAutomated(request)) {
     return context.next();
   }
 
@@ -116,7 +167,14 @@ export default async (request, context) => {
     const html = await res.text();
     return new Response(html, {
       status: 200,
-      headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'public, max-age=1800' },
+      headers: {
+        'Content-Type': 'text/html; charset=utf-8',
+        'Cache-Control': 'public, max-age=1800',
+        // One URL now has two possible answers, this card or the app, and which
+        // one you get depends on your user agent. Without Vary a cache is free
+        // to hand the app to a crawler, or this stub to a person.
+        'Vary': 'User-Agent',
+      },
     });
   } catch {
     // Timed out, refused, or threw. Fall through to the normal app rather
