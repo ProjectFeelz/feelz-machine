@@ -327,7 +327,7 @@ export default function BrowsePage() {
   // home card opens and leaves whatever tab you were on alone, which is why
   // it is flagged here rather than handled with a special case at the click.
   const tabs = [
-    { key: 'creators', label: 'Creators',   icon: Sparkles },
+    { key: 'creators', label: 'Artist Highlight', icon: Sparkles },
     { key: 'whatsnew', label: "What's New", icon: Newspaper, opens: true },
     { key: 'tracks',   label: 'Tracks',   icon: Music },
     { key: 'new',      label: 'New',      icon: Sparkles },
@@ -529,8 +529,8 @@ export default function BrowsePage() {
         {/* CREATORS — the same daily picks the home card shows, given room */}
         {activeTab === 'creators' && (
           <div>
-            <SectionLabel icon={Sparkles} title="Creators"
-              subtitle="Chosen fresh each day. Nobody twice in a week." />
+            <SectionLabel icon={Sparkles} title="Artist Highlight"
+              subtitle="Come back tomorrow for more. Get to know your creators." />
             {creators.length > 0 ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {creators.map(c => <CreatorCard key={c.id} creator={c} />)}

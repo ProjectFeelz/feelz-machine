@@ -16,6 +16,7 @@ import {
   Heart, Share2, Check, ListMusic, ShoppingCart, X, MoreHorizontal
 } from 'lucide-react';
 import ShareCard from '../components/ShareCard';
+import { buildShareUrl } from '../utils/shareLink';
 import { showReceipt } from '../components/PurchaseReceipt';
 import PriceBreakdown, { useQuote } from '../components/PriceBreakdown';
 import { CommentButton } from '../components/TrackComments';
@@ -779,9 +780,16 @@ export default function AlbumDetailPage() {
       {showShareCard && (
         <ShareCard
           track={{ title: album.title, artist_name: artist?.artist_name, cover_artwork_url: album.cover_artwork_url }}
-          shareUrl={album?.short_code
-            ? `https://www.feelzmachine.com/a/${album.short_code}`
-            : `https://www.feelzmachine.com/album/${id}`}
+          // Albums need both the artist and the album slug to be
+          // unambiguous, since an album slug is only unique per artist.
+          // With only one of them the short code is the safer link, and
+          // /album/<uuid> is never sent.
+          shareUrl={buildShareUrl({
+            kind: 'album',
+            slug: album?.slug,
+            artistSlug: artist?.slug,
+            shortCode: album?.short_code,
+          })}
           onClose={() => setShowShareCard(false)}
         />
       )}

@@ -448,8 +448,11 @@ export default function HomeAsideCard() {
             <div className="flex items-center gap-2 px-3 py-2 rounded-xl flex-1 min-w-0"
               style={{ background: T.surfaceUp, border: `1px solid ${T.edge}` }}>
               <Sparkles className="w-4 h-4 flex-shrink-0" style={{ color: T.accent }} />
-              <span className="text-[13px] font-bold text-white truncate">Creators</span>
-              <span className="ml-auto text-[10px] font-semibold tracking-wider text-white/25 flex-shrink-0">TODAY</span>
+              {/* No TODAY pill any more. "Artist Highlight" is a longer
+                  label than "Creators" was, and the row has to hold the
+                  What's New button beside it inside 380px. The tagline
+                  underneath already says the picks change daily. */}
+              <span className="text-[13px] font-bold text-white truncate">Artist Highlight</span>
             </div>
 
             {/* Not a tab. A door — it opens over the page, because a column
@@ -481,7 +484,7 @@ export default function HomeAsideCard() {
 
           {loaded && creators.length > 0 && (
             <p className="pt-1 pb-2 text-center text-[11px] text-white/20 leading-relaxed">
-              Fresh picks each day. Nobody twice in a week.
+              Come back tomorrow for more. Get to know your creators.
             </p>
           )}
         </div>

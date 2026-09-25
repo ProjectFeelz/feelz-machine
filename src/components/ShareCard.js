@@ -2,6 +2,7 @@ import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { Download, Share2, X, Loader, Link, Check, Film } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import { buildStoryMp4, MEDIARECORDER_MP4_TYPES } from '../utils/storyMp4';
+import { resolveShareUrl, urlEndsInId } from '../utils/shareLink';
 
 // ── The glow colours ────────────────────────────────────────────────────────
 //
@@ -161,6 +162,34 @@ function drawLyricLine(ctx, text, x, y, maxWidth, index, t) {
   return y + Math.min(lines.length, 3) * 74;
 }
 
+// Shrink a picture before it is used, and hand back a small canvas.
+//
+// THIS IS A MEMORY FIX, NOT A LOOKS FIX.
+//
+// Artwork on here is uploaded at full size. One profile picture in the
+// catalogue is 3072 x 4080, which is roughly 50MB once the browser has
+// decoded it, and the frame then blurs that at a 120px radius. iOS gives a
+// web page a hard memory ceiling and kills the whole tab when it is passed,
+// which is what "A problem repeatedly occurred" means. It is not a crash in
+// our code, it is the system taking the page away.
+//
+// Nothing here needs the full size. The record label is drawn about 500px
+// across. The background copy is blurred until it is a smudge. So both get
+// shrunk first, and the huge original is dropped.
+function downscale(img, maxEdge) {
+  if (!img) return null;
+  const w = img.naturalWidth || img.width;
+  const h = img.naturalHeight || img.height;
+  if (!w || !h) return img;
+  if (Math.max(w, h) <= maxEdge) return img;
+  const k = maxEdge / Math.max(w, h);
+  const c = document.createElement('canvas');
+  c.width  = Math.max(1, Math.round(w * k));
+  c.height = Math.max(1, Math.round(h * k));
+  c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+  return c;
+}
+
 function loadImage(src) {
   return new Promise(function(resolve, reject) {
     // Try direct load first with cache-bust to prevent stale responses
@@ -242,8 +271,29 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
   const subtitle   = track?.artist_name || (artist ? 'Listen on Feelz Machine' : '');
   const artworkUrl = track?.cover_artwork_url || artist?.profile_image_url || null;
   const audioUrl   = track?.file_url || null;
-  const displayUrl = shareUrl
-    ? shareUrl.replace('https://www.', '').replace('https://', '')
+  // The link this sheet actually hands out.
+  //
+  // Not simply the shareUrl prop. Callers build that themselves and several
+  // of them fall back to the track's raw id when they have not selected its
+  // slug, which produces /track/10a17a25-734b-... — long, meaningless, and
+  // with no artwork on it, because og-meta looks tracks up by slug.
+  //
+  // So the prop is a starting point. If it is good it is kept; if it ends in
+  // an id the slug is fetched and a proper link is built. See utils/shareLink.
+  const [linkUrl, setLinkUrl] = useState(
+    shareUrl && !urlEndsInId(shareUrl) ? shareUrl : ''
+  );
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const url = await resolveShareUrl({ supabase, track, artist, given: shareUrl });
+      if (!cancelled) setLinkUrl(url);
+    })();
+    return () => { cancelled = true; };
+  }, [track?.id, track?.slug, track?.short_code, artist?.slug, shareUrl]); // eslint-disable-line
+
+  const displayUrl = linkUrl
+    ? linkUrl.replace('https://www.', '').replace('https://', '')
     : 'feelzmachine.com';
 
   // Lyrics are on the track object almost everywhere (For You, the player).
@@ -257,6 +307,33 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
   // song before. That is how a Nostalgic Unit video came out carrying Steve
   // C-SA's lyrics. Whenever the track changes, the words go back to unknown
   // and are fetched again for the song actually being shared.
+  // The phone's bottom nav sits over the bottom of the screen. The sheet is
+  // drawn above it, so the Copy link and Send link buttons ended up behind it
+  // and could not be pressed at all.
+  //
+  // Measured, not assumed. The nav is h-16 plus the phone's safe area, and
+  // this app scales its root font size on mobile, so 64 is not the number on
+  // every device. On a computer the nav is display:none and this comes back
+  // 0, which is exactly the padding a computer should get.
+  const [navGap, setNavGap] = useState(0);
+  useEffect(() => {
+    const measure = () => {
+      const nav = document.querySelector('nav[class*="md:hidden"]');
+      setNavGap(nav ? Math.round(nav.getBoundingClientRect().height) : 0);
+    };
+    measure();
+    // Once more after the nav has settled, since the safe-area variable and
+    // the scaled root font are not always applied on the first frame.
+    const t = setTimeout(measure, 300);
+    window.addEventListener('resize', measure);
+    window.addEventListener('orientationchange', measure);
+    return () => {
+      clearTimeout(t);
+      window.removeEventListener('resize', measure);
+      window.removeEventListener('orientationchange', measure);
+    };
+  }, []);
+
   const lyricsTrackRef = useRef(track?.id || null);
   useEffect(() => {
     if (lyricsTrackRef.current !== track?.id) {
@@ -392,7 +469,7 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
   }, []);
 
   // ── Video frame draw ────────────────────────────────────────────────────────
-  const drawVideoFrame = useCallback(async (ctx, artImg, vinylImg, angle, glowKey, songTime = 0) => {
+  const drawVideoFrame = useCallback(async (ctx, artImg, vinylImg, angle, glowKey, songTime = 0, bleedImg = null) => {
     const W = 1080, H = 1920;
 
     // The chosen glow. Everything coloured in this frame comes from here, so
@@ -402,12 +479,15 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
     ctx.fillStyle = G.base;
     ctx.fillRect(0, 0, W, H);
 
-    if (artImg) {
-      // Very subtle blurred artwork at low opacity, just enough to add depth
+    // The blurred wash behind everything. Deliberately drawn from the TINY
+    // copy: it is blurred to a smudge, so the small one is indistinguishable
+    // from the original and costs a fraction of the memory to filter.
+    const bleed = bleedImg || artImg;
+    if (bleed) {
       ctx.save();
       ctx.globalAlpha = 0.15;
       ctx.filter = 'blur(120px)';
-      ctx.drawImage(artImg, -200, -200, W + 400, H * 0.7);
+      ctx.drawImage(bleed, -200, -200, W + 400, H * 0.7);
       ctx.filter = 'none';
       ctx.globalAlpha = 1;
       ctx.restore();
@@ -581,13 +661,18 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
     let cancelled = false;
     setAssets(null);
     (async () => {
-      let artImg = null;
-      if (artworkUrl) { try { artImg = await loadImage(artworkUrl); } catch {} }
+      let full = null;
+      if (artworkUrl) { try { full = await loadImage(artworkUrl); } catch {} }
       if (cancelled) return;
+      // 900 for the label, which is drawn about 500px across.
+      // 360 for the background, which is blurred beyond recognition anyway.
+      const artImg   = downscale(full, 900);
+      const bleedImg = downscale(full, 360);
+      full = null;   // let the big one go
       let vinylImg = null;
       try { vinylImg = await buildVinylImage(artImg, 840); } catch {}
       if (cancelled) return;
-      setAssets({ artImg, vinylImg });
+      setAssets({ artImg, bleedImg, vinylImg });
     })();
     return () => { cancelled = true; };
   }, [artworkUrl, buildVinylImage]);
@@ -604,7 +689,7 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
     let cancelled = false;
     (async () => {
       if (cancelled) return;
-      await drawVideoFrame(ctx, assets.artImg, assets.vinylImg, 0, glowId, startTime);
+      await drawVideoFrame(ctx, assets.artImg, assets.vinylImg, 0, glowId, startTime, assets.bleedImg);
     })();
     return () => { cancelled = true; };
   }, [assets, recording, drawVideoFrame, startTime, glowId, showLyrics, lyrics]);
@@ -627,9 +712,14 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
     // Reuse what the preview already loaded. Downloading the cover a second
     // time here was a slow start and one more thing that could hang.
     let artImg   = assets?.artImg || null;
+    let bleedImg = assets?.bleedImg || null;
     let vinylImg = assets?.vinylImg || null;
     if (!vinylImg) {
-      if (artworkUrl && !artImg) { try { artImg = await loadImage(artworkUrl); } catch {} }
+      let full = null;
+      if (artworkUrl && !artImg) { try { full = await loadImage(artworkUrl); } catch {} }
+      artImg   = artImg   || downscale(full, 900);
+      bleedImg = bleedImg || downscale(full, 360);
+      full = null;
       try { vinylImg = await buildVinylImage(artImg, 840); } catch {}
     }
 
@@ -651,7 +741,7 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
       const mp4 = await Promise.race([
         buildStoryMp4({
           canvas, fps: FPS, seconds: DURATION, audioUrl, startTime,
-          drawFrame: (i) => drawVideoFrame(ctx, artImg, vinylImg, i * radsPerFrame, glowId, startTime + i / FPS),
+          drawFrame: (i) => drawVideoFrame(ctx, artImg, vinylImg, i * radsPerFrame, glowId, startTime + i / FPS, bleedImg),
           onProgress: setVideoProgress,
         }),
         new Promise((_, reject) =>
@@ -812,7 +902,7 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
         return;
       }
       const frameStart = performance.now();
-      await drawVideoFrame(ctx, artImg, vinylImg, angle, glowId, startTime + frame / FPS);
+      await drawVideoFrame(ctx, artImg, vinylImg, angle, glowId, startTime + frame / FPS, bleedImg);
       angle += radsPerFrame;
       frame++;
       setVideoProgress(Math.round((frame / totalFrames) * 95));
@@ -831,7 +921,19 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
     setRecording(false);
   };
 
-  useEffect(() => () => stopRecording(), []); // cleanup on unmount
+  // Cleanup on unmount. Stop any recording, and hand the canvases back.
+  //
+  // Two 1080x1920 canvases are about 16MB of backing store between them, and
+  // iOS does not always release them just because React dropped the element.
+  // Setting the size to zero tells the browser it can let go now, which
+  // matters on a phone that has already been asked for a lot of memory.
+  useEffect(() => () => {
+    stopRecording();
+    [previewRef.current, videoRef.current].forEach(c => {
+      if (!c) return;
+      try { c.width = 0; c.height = 0; } catch {}
+    });
+  }, []); // eslint-disable-line
 
   // ── Share / download handlers ─────────────────────────────────────────────────
   // Sharing the LINK. This is the path for a profile, a song or an album when
@@ -844,7 +946,7 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
   // artwork on it. Before this, a shared short link showed the plain
   // Feelz Machine homepage preview with no picture.
   const handleShareLink = async () => {
-    const url = shareUrl || window.location.href;
+    const url = linkUrl || shareUrl || window.location.href;
     const text = track
       ? `Listen to ${title} by ${track.artist_name} on Feelz Machine`
       : `${title} on Feelz Machine`;
@@ -883,7 +985,7 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
         files: [file],
         title,
         text: track ? `Listen to ${title} by ${track.artist_name} on Feelz Machine` : `Listen to ${title} on Feelz Machine`,
-        url: shareUrl || window.location.href,
+        url: linkUrl || shareUrl || window.location.href,
       };
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
         await navigator.share(shareData);
@@ -899,7 +1001,7 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
   };
 
   const handleCopyLink = async () => {
-    const url = shareUrl || window.location.href;
+    const url = linkUrl || shareUrl || window.location.href;
     try {
       await navigator.clipboard.writeText(url);
       setCopied(true); setTimeout(() => setCopied(false), 2000);
@@ -918,9 +1020,19 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
     // scrolling marks itself with this and keeps its own wheel events.
     <div
       data-feelz-scroll
-      className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 backdrop-blur-sm p-3"
+      className="fixed inset-0 z-[200] flex items-end md:items-center justify-center bg-black/80 backdrop-blur-sm"
       onClick={onClose}
       onWheel={e => e.stopPropagation()}
+      // The padding is the layout. The sheet's max-height is 100% of what is
+      // left after it, so reserving the nav here is the whole fix: the sheet
+      // can never reach under the nav, and on a phone it sits right on top of
+      // it, where a thumb already is.
+      style={{
+        paddingTop: 'calc(env(safe-area-inset-top, 0px) + 12px)',
+        paddingBottom: navGap + 12,
+        paddingLeft: 12,
+        paddingRight: 12,
+      }}
     >
       <div
         className="relative w-full max-w-sm rounded-3xl flex flex-col overflow-hidden"
@@ -938,7 +1050,7 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
         style={{
           backgroundColor: '#111',
           border: '1px solid rgba(255,255,255,0.08)',
-          maxHeight: 'calc(100dvh - 24px)',
+          maxHeight: '100%',
         }}
         onClick={e => e.stopPropagation()}
       >

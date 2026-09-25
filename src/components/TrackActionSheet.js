@@ -13,6 +13,7 @@ import {
     MessageCircle,
 } from 'lucide-react';
 import ShareCard from './ShareCard';
+import { buildShareUrl } from '../utils/shareLink';
 import { TrackCommentsOverlay } from './TrackComments';
 
 const PAYPAL_CLIENT_ID = process.env.REACT_APP_PAYPAL_CLIENT_ID;
@@ -808,9 +809,14 @@ export default function TrackActionSheet({ track, artist, onClose }) {
         {showShareCard && (
             <ShareCard
                 track={track}
-                shareUrl={track?.short_code
-                    ? `https://www.feelzmachine.com/t/${track.short_code}`
-                    : `https://www.feelzmachine.com/track/${track?.slug || track?.id}`}
+                // Slug first: the song's name belongs in the link. The old
+                // `slug || id` fallback shipped raw UUIDs whenever the screen
+                // that opened this had not selected the slug column.
+                shareUrl={buildShareUrl({
+                    kind: track?.is_beat ? 'beat' : 'track',
+                    slug: track?.slug,
+                    shortCode: track?.short_code,
+                })}
                 onClose={() => setShowShareCard(false)}
             />
         )}

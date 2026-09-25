@@ -15,6 +15,7 @@ import TrackActionSheet from '../TrackActionSheet';
 import { useHaptics } from '../../hooks/useHaptics';
 import VinylRecord from '../VinylRecord';
 import ShareCard from '../ShareCard';
+import { buildShareUrl } from '../../utils/shareLink';
 import ReactPlayer from 'react-player';
 
 function formatTime(secs) {
@@ -1259,11 +1260,15 @@ export default function FullPlayer() {
       {showShareCard && (
         <ShareCard
           track={currentTrack}
-          shareUrl={currentTrack?.short_code
-            ? `https://www.feelzmachine.com/t/${currentTrack.short_code}`
-            : currentTrack?.slug
-              ? `https://www.feelzmachine.com/track/${currentTrack.slug}`
-              : (currentTrack?.id ? `https://www.feelzmachine.com/track/${currentTrack.id}` : null)}
+          // The slug first, because the song's name belongs in the link.
+          // Never the raw id: that used to be the last fallback here and it
+          // produced /track/10a17a25-... which says nothing and arrives with
+          // no artwork. ShareCard fetches the slug itself if this is null.
+          shareUrl={buildShareUrl({
+            kind: currentTrack?.is_beat ? 'beat' : 'track',
+            slug: currentTrack?.slug,
+            shortCode: currentTrack?.short_code,
+          })}
           onClose={() => setShowShareCard(false)}
         />
       )}
