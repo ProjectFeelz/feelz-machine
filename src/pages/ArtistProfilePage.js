@@ -1,3 +1,4 @@
+import { coverUrl } from '../utils/coverUrl';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { downloadTrack, downloadErrorMessage } from '../utils/downloadTrack';
@@ -1101,7 +1102,19 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
   const isProfileOwner = user && myArtist && myArtist.id === artist.id;
   const isBeatmakerProfile = artist?.role === 'beatmaker';
   const pageUrl        = `${BASE_URL}/artist/${slug}`;
-  const shareShortUrl  = `${BASE_URL}/@${slug}`;
+  // The link the Share button hands out.
+  //
+  // This used to be the handle form, `/@<slug>`. It is shorter, and it works
+  // in a browser, but a crawler never sees an artist on it: WhatsApp, X and
+  // the rest do not run JavaScript, and /@ is turned into /artist/<slug> by
+  // React Router, in the browser, after the crawler has already gone. So a
+  // shared profile arrived with the plain Feelz Machine card and no picture.
+  //
+  // /artist/<slug> is the page itself. It is still readable, it is the URL
+  // Google indexes, and the preview is built server side, so the link shows
+  // the artist's name and their picture. /@<slug> is untouched and still
+  // works for anyone who types it or has one saved.
+  const shareShortUrl  = pageUrl;
   const ogImage        = artist.profile_image_url || `${BASE_URL}/og-default.png`;
   const pageTitle      = `${artist.artist_name} · Feelz Machine`;
   const pageDesc       = artist.bio
@@ -1161,12 +1174,12 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
           Desktop is untouched: there the banner is sized by the flex row. */}
       <div className="relative w-full h-[132px] lg:h-auto lg:min-h-0 lg:w-auto">
         {artist.banner_image_url || theme?.banner_image_url ? (
-          <img src={artist.banner_image_url || theme?.banner_image_url} alt="" className="absolute inset-0 w-full h-full object-cover" />
+          <img src={coverUrl(artist.banner_image_url || theme?.banner_image_url, 1000)} alt="" className="absolute inset-0 w-full h-full object-cover" />
         ) : (
           <div className="absolute inset-0" style={{ background: `linear-gradient(135deg, ${secondaryColor}40, ${accentColor}30, ${bgColor})` }} />
         )}
         {theme?.background_image_url && !artist.banner_image_url && !theme?.banner_image_url && (
-          <img src={theme.background_image_url} alt="" className="absolute inset-0 w-full h-full object-cover opacity-30" />
+          <img src={coverUrl(theme.background_image_url, 400)} alt="" className="absolute inset-0 w-full h-full object-cover opacity-30" />
         )}
         <div className="absolute inset-0" style={{ background: `linear-gradient(to bottom, transparent 20%, ${bgColor} 100%)` }} />
         <div className="fixed top-0 left-0 right-0 flex items-center justify-between px-4 z-50" style={{ paddingTop: 'max(env(safe-area-inset-top, 0px), 12px)', height: 'calc(max(env(safe-area-inset-top, 0px), 12px) + 44px)' }}>
@@ -1204,7 +1217,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
             <div className="relative w-40 h-40 lg:w-48 lg:h-48 rounded-2xl overflow-hidden border-4 shadow-2xl"
               style={{ borderColor: stories.length > 0 ? 'transparent' : bgColor, backgroundColor: `${secondaryColor}30` }}>
               {artist.profile_image_url ? (
-                <img src={artist.profile_image_url} alt={artist.artist_name} className="w-full h-full object-cover" />
+                <img src={coverUrl(artist.profile_image_url, 400)} alt={artist.artist_name} className="w-full h-full object-cover" />
               ) : (
                 <div className="w-full h-full flex items-center justify-center"
                   style={{ background: `linear-gradient(135deg, ${secondaryColor}, ${accentColor})` }}>
@@ -1577,7 +1590,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
             style={{ backgroundColor: `${textColor}06`, border: `1px solid ${primaryColor}30` }}>
             <div className="w-20 h-20 lg:w-24 lg:h-24 rounded-xl overflow-hidden flex-shrink-0" style={{ backgroundColor: `${textColor}08` }}>
               {topPick.cover_artwork_url
-                ? <img src={topPick.cover_artwork_url} alt={topPick.title} className="w-full h-full object-cover" />
+                ? <img src={coverUrl(topPick.cover_artwork_url, 400)} alt={topPick.title} className="w-full h-full object-cover" />
                 : <div className="w-full h-full flex items-center justify-center"><Music className="w-8 h-8" style={{ color: `${textColor}20` }} /></div>}
             </div>
             <div className="min-w-0 flex-1">
@@ -1614,7 +1627,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
               >
                 <div className="relative aspect-square rounded-xl overflow-hidden mb-2" style={{ backgroundColor: `${textColor}08` }}>
                   {track.cover_artwork_url
-                    ? <img src={track.cover_artwork_url} alt={track.title} className="w-full h-full object-cover" />
+                    ? <img src={coverUrl(track.cover_artwork_url, 400)} alt={track.title} className="w-full h-full object-cover" />
                     : <div className="w-full h-full flex items-center justify-center"><Music className="w-8 h-8" style={{ color: `${textColor}20` }} /></div>}
                   <PreorderTag track={track} />
                   <span
@@ -1669,7 +1682,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
                     <div className="w-full aspect-square rounded-2xl overflow-hidden relative"
                       style={{ boxShadow: withinWeek ? `0 0 0 2px ${secondaryColor}, 0 0 30px ${secondaryColor}60` : 'none' }}>
                       {track.cover_artwork_url
-                        ? <img src={track.cover_artwork_url} alt={track.title} className="w-full h-full object-cover" />
+                        ? <img src={coverUrl(track.cover_artwork_url, 400)} alt={track.title} className="w-full h-full object-cover" />
                         : <div className="w-full h-full flex items-center justify-center" style={{ background: `linear-gradient(135deg, ${secondaryColor}30, ${accentColor}15)` }}><Music className="w-12 h-12" style={{ color: `${textColor}20` }} /></div>}
                       {withinWeek && (
                         <div className="absolute top-2 right-2 px-2 py-1 rounded-full text-[10px] font-bold" style={{ background: secondaryColor, color: '#fff' }}>NEW</div>
@@ -1688,7 +1701,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
                       <div key={track.id} className="flex-shrink-0 w-32 cursor-pointer group" onClick={() => handlePlayTrack(track)}>
                         <div className="aspect-square rounded-xl overflow-hidden mb-1.5 relative" style={{ backgroundColor: `${textColor}08` }}>
                           {track.cover_artwork_url
-                            ? <img src={track.cover_artwork_url} alt={track.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                            ? <img src={coverUrl(track.cover_artwork_url, 400)} alt={track.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
                             : <div className="w-full h-full flex items-center justify-center" style={{ background: `linear-gradient(135deg, ${secondaryColor}30, ${accentColor}15)` }}><Music className="w-6 h-6" style={{ color: `${textColor}20` }} /></div>}
                         </div>
                         <p className="text-sm font-medium truncate" style={{ color: textColor }}>{track.title}</p>
@@ -1736,7 +1749,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
                     <div className="w-28 h-28 rounded-xl overflow-hidden flex-shrink-0 relative"
                       style={{ backgroundColor: `${textColor}08` }}>
                       {track.cover_artwork_url
-                        ? <img src={track.cover_artwork_url} alt={track.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                        ? <img src={coverUrl(track.cover_artwork_url, 400)} alt={track.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
                         : <div className="w-full h-full flex items-center justify-center" style={{ background: `linear-gradient(135deg, ${secondaryColor}30, ${accentColor}15)` }}><Music className="w-8 h-8" style={{ color: `${textColor}20` }} /></div>}
                     </div>
                     <div className="min-w-0 flex-1">
@@ -1785,7 +1798,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
                     <div className="aspect-square rounded-xl overflow-hidden mb-1.5 relative"
                       style={{ backgroundColor: `${textColor}08`, boxShadow: showGlow ? `0 0 0 2px ${secondaryColor}, 0 0 20px ${secondaryColor}60, 0 0 40px ${secondaryColor}30` : 'none' }}>
                       {track.cover_artwork_url
-                        ? <img src={track.cover_artwork_url} alt={track.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                        ? <img src={coverUrl(track.cover_artwork_url, 400)} alt={track.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
                         : <div className="w-full h-full flex items-center justify-center" style={{ background: `linear-gradient(135deg, ${secondaryColor}30, ${accentColor}15)` }}><Music className="w-6 h-6" style={{ color: `${textColor}20` }} /></div>}
                       {showGlow && (
                         <div className="absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded-full text-[9px] font-bold" style={{ background: secondaryColor, color: '#fff' }}>NEW</div>
@@ -1829,7 +1842,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
                     onClick={() => navigate(`/album/${album.slug || album.id}`)}>
                     <div className="aspect-square rounded-xl overflow-hidden mb-2" style={{ backgroundColor: `${textColor}08` }}>
                       {album.cover_artwork_url
-                        ? <img src={album.cover_artwork_url} alt={album.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                        ? <img src={coverUrl(album.cover_artwork_url, 400)} alt={album.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
                         : <div className="w-full h-full flex items-center justify-center"><Music className="w-8 h-8" style={{ color: `${textColor}20` }} /></div>}
                     </div>
                     <p className="text-sm font-medium truncate" style={{ color: textColor }}>{album.title}</p>
@@ -1862,7 +1875,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
                   <div key={track.id} className="cursor-pointer group" onClick={() => handlePlayTrack(track)}>
                     <div className="aspect-square rounded-xl overflow-hidden mb-2" style={{ backgroundColor: `${textColor}08` }}>
                       {track.cover_artwork_url
-                        ? <img src={track.cover_artwork_url} alt={track.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                        ? <img src={coverUrl(track.cover_artwork_url, 400)} alt={track.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
                         : <div className="w-full h-full flex items-center justify-center"><Music className="w-8 h-8" style={{ color: `${textColor}20` }} /></div>}
                     </div>
                     <p className="text-sm font-medium truncate" style={{ color: textColor }}>{track.title}</p>
@@ -1951,7 +1964,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
                     }}
                   >
                     {collab.tracks?.cover_artwork_url
-                      ? <img src={collab.tracks.cover_artwork_url} alt={collab.tracks?.title || ''} className="w-full h-full object-cover" />
+                      ? <img src={coverUrl(collab.tracks.cover_artwork_url, 400)} alt={collab.tracks?.title || ''} className="w-full h-full object-cover" />
                       : <div className="w-full h-full flex items-center justify-center"><Music className="w-8 h-8" style={{ color: `${textColor}20` }} /></div>}
 
                     {/* The credit on the artwork, where Popular puts its rank. */}
@@ -2028,7 +2041,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
                 <div className="flex items-center space-x-3">
                   <div className="w-12 h-12 rounded-lg overflow-hidden flex-shrink-0" style={{ backgroundColor: `${secondaryColor}20` }}>
                     {pwywTrack.cover_artwork_url
-                      ? <img src={pwywTrack.cover_artwork_url} alt="" className="w-full h-full object-cover" />
+                      ? <img src={coverUrl(pwywTrack.cover_artwork_url, 400)} alt="" className="w-full h-full object-cover" />
                       : <div className="w-full h-full flex items-center justify-center"><Music className="w-5 h-5" style={{ color: `${textColor}30` }} /></div>}
                   </div>
                   <div className="flex-1 min-w-0">
@@ -2236,7 +2249,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
                 <div className="flex items-center space-x-3">
                   <div className="w-12 h-12 rounded-lg overflow-hidden flex-shrink-0" style={{ backgroundColor: `${secondaryColor}20` }}>
                     {purchaseTrack.cover_artwork_url
-                      ? <img src={purchaseTrack.cover_artwork_url} alt="" className="w-full h-full object-cover" />
+                      ? <img src={coverUrl(purchaseTrack.cover_artwork_url, 400)} alt="" className="w-full h-full object-cover" />
                       : <div className="w-full h-full flex items-center justify-center"><Music className="w-5 h-5" style={{ color: `${textColor}30` }} /></div>}
                   </div>
                   <div className="flex-1 min-w-0">
@@ -2312,7 +2325,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
               <div key={a.id} className="flex-shrink-0 w-24 cursor-pointer group" onClick={() => navigate(`/artist/${a.slug}`)}>
                 <div className="w-24 h-24 rounded-full overflow-hidden mb-2 mx-auto" style={{ backgroundColor: `${textColor}08` }}>
                   {a.profile_image_url
-                    ? <img src={a.profile_image_url} alt={a.artist_name} className="w-full h-full object-cover" />
+                    ? <img src={coverUrl(a.profile_image_url, 400)} alt={a.artist_name} className="w-full h-full object-cover" />
                     : <div className="w-full h-full flex items-center justify-center"><Music className="w-8 h-8" style={{ color: `${textColor}20` }} /></div>}
                 </div>
                 <p className="text-xs font-medium text-center truncate" style={{ color: textColor }}>{a.artist_name}</p>
@@ -2533,7 +2546,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
                             <button key={track.id} onClick={() => addToLiveQueue(track)}
                               className="w-full flex items-center space-x-3 px-3 py-2.5 hover:bg-white/[0.06] transition text-left border-b border-white/[0.04] last:border-0">
                               <div className="w-8 h-8 rounded-lg bg-white/[0.06] flex-shrink-0 overflow-hidden">
-                                {track.cover_artwork_url ? <img src={track.cover_artwork_url} alt="" className="w-full h-full object-cover" /> : <Music className="w-3.5 h-3.5 text-white/20 m-auto mt-2" />}
+                                {track.cover_artwork_url ? <img src={coverUrl(track.cover_artwork_url, 400)} alt="" className="w-full h-full object-cover" /> : <Music className="w-3.5 h-3.5 text-white/20 m-auto mt-2" />}
                               </div>
                               <div className="flex-1 min-w-0">
                                 <p className="text-sm text-white truncate">{track.title}</p>
@@ -2550,7 +2563,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
                             <div key={track.id} className="flex items-center space-x-2.5 px-2 py-2 rounded-xl bg-white/[0.04] border border-white/[0.06]">
                               <span className="text-[10px] text-white/20 w-4 text-center">{i + 1}</span>
                               <div className="w-7 h-7 rounded-md bg-white/[0.06] flex-shrink-0 overflow-hidden">
-                                {track.cover_artwork_url ? <img src={track.cover_artwork_url} alt="" className="w-full h-full object-cover" /> : <Music className="w-3 h-3 text-white/20 m-auto mt-2" />}
+                                {track.cover_artwork_url ? <img src={coverUrl(track.cover_artwork_url, 400)} alt="" className="w-full h-full object-cover" /> : <Music className="w-3 h-3 text-white/20 m-auto mt-2" />}
                               </div>
                               <p className="text-xs text-white flex-1 truncate">{track.title}</p>
                               {track.duration && <p className="text-[10px] text-white/30 flex-shrink-0">{fmtLiveDuration(track.duration)}</p>}
@@ -2634,7 +2647,7 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
                     <div className="w-12 h-12 rounded-full p-0.5 flex-shrink-0" style={{ background: 'linear-gradient(135deg, #8B5CF6, #06B6D4)' }}>
                       <div className="w-full h-full rounded-full overflow-hidden" style={{ backgroundColor: bgColor }}>
                         {artist.profile_image_url
-                          ? <img src={artist.profile_image_url} alt="" className="w-full h-full object-cover" />
+                          ? <img src={coverUrl(artist.profile_image_url, 400)} alt="" className="w-full h-full object-cover" />
                           : <div className="w-full h-full flex items-center justify-center text-xs font-bold" style={{ color: textColor }}>{artist.artist_name?.[0]}</div>}
                       </div>
                     </div>

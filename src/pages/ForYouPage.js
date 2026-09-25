@@ -10,6 +10,7 @@
  * Bottom: track title, artist name, genre pill, reason tag
  */
 
+import { coverUrl } from '../utils/coverUrl';
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
@@ -482,7 +483,7 @@ function StoryFeedCard({ item, isActive, onOpen, navigate }) {
         <div className="w-24 h-24 rounded-full p-0.5 bg-gradient-to-tr from-purple-500 to-pink-400">
           <div className="w-full h-full rounded-full overflow-hidden bg-black border-2 border-black">
             {artist.profile_image_url
-              ? <img src={artist.profile_image_url} alt={artist.artist_name} className="w-full h-full object-cover" />
+              ? <img src={coverUrl(artist.profile_image_url, 400)} alt={artist.artist_name} className="w-full h-full object-cover" />
               : <div className="w-full h-full bg-purple-500/30 flex items-center justify-center text-2xl font-bold text-white">{artist.artist_name?.[0]}</div>}
           </div>
         </div>
@@ -664,9 +665,17 @@ function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare, onN
   };
 
   const handleShare = () => {
-    // The handle form, which is shorter and already redirects to
-    // /artist/<slug> (see NotFoundRedirect in src/AppRouter.js).
-    const url = `${window.location.origin}/@${track.artist_slug}`;
+    // The artist's page itself, not the handle form.
+    //
+    // This was `/@<handle>`. NotFoundRedirect in src/AppRouter.js turns that
+    // into /artist/<slug>, but it does so in the browser, and the apps people
+    // paste links into do not run a browser. They ask for the page, read the
+    // HTML, and leave. So every profile shared from this card came out as the
+    // plain Feelz Machine card with no artist name and no picture on it.
+    //
+    // /artist/<slug> gets its preview built on the server, so the card shows
+    // who it is. The handle form still works for anyone who types it.
+    const url = `${window.location.origin}/artist/${track.artist_slug}`;
     onShare({
       artist: {
         artist_name:       track.artist_name,
@@ -751,7 +760,7 @@ function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare, onN
       {/* Blurred background with dominant color tint */}
       <div className="absolute inset-0 overflow-hidden">
         {track.cover_artwork_url && (
-          <img src={track.cover_artwork_url} alt=""
+          <img src={coverUrl(track.cover_artwork_url, 400)} alt=""
             className="w-full h-full object-cover"
             style={{ filter: 'blur(48px) brightness(0.3) saturate(1.4)', transform: 'scale(1.2)' }} />
         )}

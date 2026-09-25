@@ -33,6 +33,23 @@
 const PUBLIC_PATH = '/storage/v1/object/public/';
 const RENDER_PATH = '/storage/v1/render/image/public/';
 
+// BOTH width AND height, with resize=contain. This is not optional.
+//
+// Passing width on its own does NOT scale the picture. Supabase keeps the
+// original height, so a 1254x1254 cover comes back 400x1254: a tall squashed
+// strip. The square box it is drawn in then object-covers the middle out of
+// that, which looks like the artwork has been zoomed into. Measured on the
+// live catalogue before and after:
+//
+//   original                 2936 KB   1254x1254
+//   width only (wrong)        905 KB   400x1254   <- squashed, then cropped
+//   contain                   335 KB   400x400
+//   contain, as WebP           42 KB   400x400    <- what a browser gets
+//
+// `contain` fits the picture inside the box and keeps its shape. A square
+// cover comes back square; a tall photo comes back tall (2204x4076 becomes
+// 216x400). Cropping is left to the layout's own object-cover, exactly as it
+// was before any of this.
 export function coverUrl(url, width = 400, quality = 72) {
   if (!url || typeof url !== 'string') return url;
   // Already a transform request. Leave it alone rather than stacking params.
@@ -41,8 +58,9 @@ export function coverUrl(url, width = 400, quality = 72) {
   // asset. Nothing to do.
   if (!url.includes(PUBLIC_PATH)) return url;
 
+  const w = Math.round(width);
   const sep = url.includes('?') ? '&' : '?';
-  return `${url.replace(PUBLIC_PATH, RENDER_PATH)}${sep}width=${Math.round(width)}&quality=${quality}`;
+  return `${url.replace(PUBLIC_PATH, RENDER_PATH)}${sep}width=${w}&height=${w}&resize=contain&quality=${quality}`;
 }
 
 // Common sizes, named so the numbers are not scattered through the pages.

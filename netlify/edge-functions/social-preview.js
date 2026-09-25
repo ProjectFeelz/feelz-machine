@@ -30,12 +30,15 @@ const ROUTE_PATTERNS = [
   { re: /^\/t\/([^/]+)\/?$/, type: 'short' },
   { re: /^\/a\/([^/]+)\/?$/, type: 'short' },
 
-  // The handle forms. These are SHARE links, not just vanity ones: the Share
-  // button on a For You card hands out /@handle, and the album share hands out
-  // /@handle/album/<slug>. They are turned into the canonical page by
-  // NotFoundRedirect in src/AppRouter.js, which is React Router, which is
-  // JavaScript, which a crawler never runs. So every one of them arrived with
-  // the plain homepage card on it and no artwork.
+  // The handle forms.
+  //
+  // THESE NEVER RUN. /@* is not in `config.path` below, on purpose, and the
+  // reason is written out down there. They are kept because they are correct
+  // and cost nothing: if the registration problem is ever solved, the matching
+  // is already here and right.
+  //
+  // Nothing shares a /@ link any more. ArtistProfilePage and ForYouPage both
+  // hand out /artist/<slug>, which is the first pattern in this list.
   //
   // Longest first. /@h/album/s must be tested before /@h, or the bare handle
   // pattern would never see it.
@@ -106,6 +109,26 @@ export default async (request, context) => {
   }
 };
 
+// '/@*' IS DELIBERATELY NOT IN THIS LIST.
+//
+// Adding it took every preview on the site down: songs, artists and albums
+// all fell back to the plain homepage card, while og-meta itself carried on
+// answering correctly when called directly. The edge function was simply no
+// longer being handed the request. An "@" in a Netlify path pattern is not
+// worth debugging in production, and the cost of getting it wrong is every
+// shared link on the platform.
+//
+// The handle forms are handled on the app's side instead, which cannot break
+// anything here: the two places that shared a /@ link, the Share button on an
+// artist profile and the one on a For You card, now hand out /artist/<slug>.
+// That path is already in this list and already has a working preview, so the
+// problem is solved without asking this file to match an "@" at all.
+//
+// /@handle still works for anyone who types it or has one saved. It just is
+// not what we hand to other people any more.
+//
+// If you ever want to put it back, deploy it on its own and paste a track
+// link into WhatsApp before anything else ships behind it.
 export const config = {
-  path: ['/artist/*', '/track/*', '/beat/*', '/album/*', '/schoolsessions', '/t/*', '/a/*', '/@*'],
+  path: ['/artist/*', '/track/*', '/beat/*', '/album/*', '/schoolsessions', '/t/*', '/a/*'],
 };
