@@ -1,9 +1,9 @@
+import { coverUrl } from '../utils/coverUrl';
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { Download, Share2, X, Loader, Link, Check, Film } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import { buildStoryMp4, MEDIARECORDER_MP4_TYPES } from '../utils/storyMp4';
 import { resolveShareUrl, urlEndsInId } from '../utils/shareLink';
-import { coverUrl } from '../utils/coverUrl';
 
 // ── The glow colours ────────────────────────────────────────────────────────
 //
@@ -1031,8 +1031,25 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
       // left after it, so reserving the nav here is the whole fix: the sheet
       // can never reach under the nav, and on a phone it sits right on top of
       // it, where a thumb already is.
+      // The top reserves the app's own header the same way the bottom reserves
+      // the nav, and for the same reason.
+      //
+      // On a phone there is a row fixed to the top of every screen: the streak
+      // pill, the bell, and the profile picture (AppLayout.js, the md:hidden
+      // bar at z-[60]). This sheet was reaching up underneath it, so the app's
+      // profile picture sat directly on top of this sheet's close button. You
+      // could see the X and you could not press it, and with nothing else on
+      // the sheet that closes it, the only way out was to kill the app.
+      //
+      // Raising the z-index does not fix it. This sheet is rendered inside the
+      // page, and the page is its own stacking context, so z-[200] here is not
+      // compared against z-[60] out there. The reliable fix is to not be in
+      // that space at all.
+      //
+      // 44px is that row's height in AppLayout, plus 12px of air so the X is
+      // clear of the profile picture rather than just next to it.
       style={{
-        paddingTop: 'calc(env(safe-area-inset-top, 0px) + 12px)',
+        paddingTop: 'calc(max(env(safe-area-inset-top, 0px), 12px) + 56px)',
         paddingBottom: navGap + 12,
         paddingLeft: 12,
         paddingRight: 12,

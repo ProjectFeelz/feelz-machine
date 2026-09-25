@@ -1,3 +1,4 @@
+import { coverUrl } from '../utils/coverUrl';
 import { Helmet } from 'react-helmet-async';
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
@@ -154,7 +155,7 @@ function SquareCard({ item, itemList = [], isAlbum = false, showNew = false, onP
               </div>
             )}
             <img
-              src={item.cover_artwork_url}
+              src={coverUrl(item.cover_artwork_url, 400)}
               alt={item.title ? item.title.trim() : ''}
               loading="lazy"
               decoding="async"
@@ -478,12 +479,18 @@ export default function HomePage() {
       // artists:users!playlists_user_id_fkey(...), which 400s because that
       // relationship doesn't resolve, so this section silently never
       // rendered. Owner names are looked up separately instead.
+      // Pull a pool rather than the twelve newest.
+      //
+      // This row was ordered strictly by when a playlist was made, over the
+      // handful of public playlists that exist, so it showed the same five
+      // things every day and looked broken. It was not broken. There was
+      // nothing new to show.
       const { data, error } = await supabase
         .from('playlists')
         .select('id, name, cover_url, user_id, created_at, is_public, playlist_tracks(id, tracks(cover_artwork_url))')
         .eq('is_public', true)
         .order('created_at', { ascending: false })
-        .limit(12);
+        .limit(40);
       if (error || !data) return;
 
       const withTracks = data.filter(p => p.playlist_tracks?.length > 0);
@@ -499,7 +506,30 @@ export default function HomePage() {
         (owners || []).forEach(o => { ownerMap[o.user_id] = o; });
       }
 
-      setFeaturedPlaylists(withTracks.map(p => ({ ...p, owner: ownerMap[p.user_id] || null })));
+      const withOwners = withTracks.map(p => ({ ...p, owner: ownerMap[p.user_id] || null }));
+
+      // The row is called Artist Playlists, so an artist's playlist comes
+      // first. Owners were already being looked up here and then only used for
+      // a name, which is why a listener's own playlist could sit at the top of
+      // a row named after artists. A fuller playlist beats a thinner one after
+      // that, because a two track playlist is not a playlist yet.
+      const ranked = [...withOwners].sort((a, b) => {
+        const artistA = a.owner ? 1 : 0;
+        const artistB = b.owner ? 1 : 0;
+        if (artistA !== artistB) return artistB - artistA;
+        return (b.playlist_tracks?.length || 0) - (a.playlist_tracks?.length || 0);
+      });
+
+      // Then turn the list day by day, so there is something different to see
+      // tomorrow even when nobody has made a new playlist. Same idea as the
+      // featured board. The day number is the seed, so it is the same row for
+      // everybody on a given day and it moves on at midnight rather than
+      // reshuffling under somebody mid scroll.
+      const day = Math.floor(Date.now() / 86400000);
+      const start = ranked.length ? day % ranked.length : 0;
+      const rotated = [...ranked.slice(start), ...ranked.slice(0, start)];
+
+      setFeaturedPlaylists(rotated.slice(0, 12));
     } catch {}
   };
 
@@ -771,7 +801,7 @@ export default function HomePage() {
             style={{ minHeight: '200px' }}
           >
             {hero.image_url && (
-              <img src={hero.image_url} alt="" className="absolute inset-0 w-full h-full object-cover" />
+              <img src={coverUrl(hero.image_url, 400)} alt="" className="absolute inset-0 w-full h-full object-cover" />
             )}
             <div className="absolute inset-0" style={{
               background: hero.image_url
@@ -928,7 +958,7 @@ export default function HomePage() {
               >
                 <div className="w-16 h-16 rounded-2xl overflow-hidden bg-white/[0.06] flex-shrink-0">
                   {artist.profile_image_url
-                    ? <img src={artist.profile_image_url} alt={artist.artist_name || ''} loading="lazy" decoding="async" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                    ? <img src={coverUrl(artist.profile_image_url, 400)} alt={artist.artist_name || ''} loading="lazy" decoding="async" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
                     : <div className="w-full h-full flex items-center justify-center"><Music className="w-6 h-6 text-white/20" /></div>
                   }
                 </div>
@@ -986,7 +1016,7 @@ export default function HomePage() {
               >
                 <div className="relative aspect-square rounded-xl overflow-hidden bg-white/[0.06] mb-2">
                   {session.artist_image
-                    ? <img src={session.artist_image} alt={session.artist_name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                    ? <img src={coverUrl(session.artist_image, 400)} alt={session.artist_name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
                     : <div className="w-full h-full flex items-center justify-center"><Radio className="w-8 h-8 text-white/20" /></div>
                   }
                   {/* Red live badge overlay */}
@@ -1084,13 +1114,29 @@ export default function HomePage() {
               border: '1px solid rgba(167,139,250,0.35)',
               boxShadow: '0 8px 32px rgba(139,92,246,0.15)',
             }}>
-            <div className="flex space-x-5 overflow-x-auto scrollbar-hide">
+            {/* touch-pan-x and snap-x, and the scrollbar class is gone.
+             *
+             * `scrollbar-hide` is not a real class. It is not in the Tailwind
+             * config and not in index.css, so it did nothing here. Scrollbars
+             * are already hidden site wide by the rule in index.css, which is
+             * Steve's standing design rule, so nothing changes by dropping it.
+             *
+             * `touch-pan-x` is the one that matters. body carries
+             * `overflow-x: hidden`, and iOS will hand a sideways drag to the
+             * page rather than to a rail inside it unless the rail says
+             * plainly that sideways is its job. Saying so is what makes this
+             * swipe on a phone.
+             *
+             * Snap points make it land on a card instead of halfway across
+             * one, which is the difference between a rail that feels built and
+             * one that feels like a scrolling div. */}
+            <div className="flex space-x-5 overflow-x-auto touch-pan-x snap-x snap-mandatory">
               {featuredPlaylists.map(pl => {
                 const coverUrl = pl.cover_url || pl.playlist_tracks?.find(pt => pt.tracks?.cover_artwork_url)?.tracks?.cover_artwork_url;
                 return (
                   <button key={pl.id}
                     onClick={() => navigate(`/library/playlists/${pl.id}`)}
-                    className="flex-shrink-0 w-40 md:w-48 text-left group">
+                    className="flex-shrink-0 w-40 md:w-48 text-left group snap-start">
                     <div className="w-40 h-40 md:w-48 md:h-48 rounded-xl overflow-hidden mb-3 relative"
                       style={{
                         background: 'rgba(139,92,246,0.12)',
@@ -1134,7 +1180,7 @@ export default function HomePage() {
               <button key={a.id} onClick={() => navigate(`/artist/${a.slug}`)}
                 className="flex-shrink-0 w-40 md:w-52 text-center group">
                 <div className="w-40 h-40 md:w-52 md:h-52 rounded-full overflow-hidden bg-white/[0.06] mb-2 mx-auto">
-                  <img src={a.profile_image_url} alt={a.artist_name || ''}
+                  <img src={coverUrl(a.profile_image_url, 400)} alt={a.artist_name || ''}
                     loading="lazy" decoding="async"
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
                 </div>

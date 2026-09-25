@@ -20,6 +20,58 @@ const supabase = createClient(
 const SITE_URL = 'https://www.feelzmachine.com';
 const DEFAULT_IMAGE = `${SITE_URL}/og-default.png`;
 
+// ── The picture on the card ──────────────────────────────────────────────────
+//
+// THIS IS WHY LINKS HAD NO THUMBNAIL.
+//
+// Everything else about previews was working. The routing was right, this
+// function returned the right title and the right image address. Measured on
+// the live catalogue, what it was handing over was:
+//
+//   a track cover      2553 KB   1254 x 1254
+//   an album cover     1491 KB   1024 x 1024
+//   an artist photo    2668 KB   2204 x 4076
+//
+// WhatsApp will not draw a preview picture that big. It fetches the image, sees
+// the size, and gives up, so you get the card with the words on it and a blank
+// space where the artwork should be. That is exactly what was on screen.
+// Facebook and X allow more, but they are slower with a heavy file and X
+// ignores a picture as tall and narrow as that artist photo.
+//
+// So the fix is not more routing. It is to stop sending a 2.5 MB original and
+// send a picture made for the job.
+//
+// Supabase resizes on its side and caches the result, the same way the app does
+// through src/utils/coverUrl.js. 1200 x 630 is the size every platform asks for.
+// `cover` fills that rectangle and crops the overflow, which is right here: a
+// social card is a fixed shape, and letterboxing a tall photo into it leaves
+// grey bars. The app uses `contain` because it draws its own square.
+//
+// Measured after this change: around 60 to 120 KB. Comfortably inside every
+// platform's limit, and it arrives quickly, which matters because a crawler
+// gives up on a slow image.
+//
+// An address that is not a Supabase public object, our own og-default.png, is
+// handed back untouched.
+const PUBLIC_PATH = '/storage/v1/object/public/';
+
+const OG_WIDTH = 1200;
+const OG_HEIGHT = 630;
+
+// Resizing at Supabase is not enough on its own, because Supabase keeps the
+// source format and most of the artwork on this platform is PNG. A 1200 x 630
+// PNG is still over a megabyte. og-image.js re-encodes it as a JPEG, which is
+// what makes it small enough to be drawn. The full reasoning, with the measured
+// numbers, is in the header of that file.
+//
+// Anything that is not a Supabase public object, our own og-default.png, is
+// handed back as it is. og-image would refuse it anyway.
+function cardImage(url) {
+  if (!url || typeof url !== 'string') return DEFAULT_IMAGE;
+  if (!url.includes(PUBLIC_PATH)) return url;
+  return `${SITE_URL}/.netlify/functions/og-image?u=${encodeURIComponent(url)}`;
+}
+
 function esc(str) {
   return String(str || '')
     .replace(/&/g, '&amp;')
@@ -66,13 +118,44 @@ async function buildMeta(type, slug) {
   if (type === 'artist' && slug) {
     const { data: artist } = await supabase
       .from('artists')
-      .select('artist_name, bio, profile_image_url')
+      .select('id, artist_name, bio, profile_image_url')
       .eq('slug', slug)
       .maybeSingle();
     if (artist) {
       title = `${artist.artist_name} on Feelz Machine`;
       description = artist.bio ? artist.bio.slice(0, 160) : `Listen to ${artist.artist_name} on Feelz Machine`;
+
+      // An artist with no photo used to get the plain Feelz Machine card, the
+      // FM logo and nothing else. On a music platform that is a wasted card:
+      // the artist almost always has artwork, it is just on their songs rather
+      // than on their face. Measured on the live catalogue, five of the twelve
+      // artists checked had no photo, and every one of them had cover art.
+      //
+      // So we borrow it. Most played first, because that is the song they are
+      // known for, then newest as a tie break. Only published tracks, so a
+      // draft cover never ends up on a shared link.
+      //
+      // The generic card is still there for an artist with no photo AND no
+      // published music, which is the only case where there is genuinely
+      // nothing of theirs to show.
       image = artist.profile_image_url || DEFAULT_IMAGE;
+      if (!artist.profile_image_url && artist.id) {
+        const { data: fallback } = await supabase
+          .from('tracks')
+          .select('cover_artwork_url')
+          .eq('artist_id', artist.id)
+          .eq('is_published', true)
+          .not('cover_artwork_url', 'is', null)
+          // stream_count, not play_count. play_count exists in this codebase
+          // but it is a localStorage key and a notification field, not a column
+          // on tracks. Ordering by a column that does not exist makes PostgREST
+          // return an error, and the fallback would silently never fire.
+          .order('stream_count', { ascending: false, nullsFirst: false })
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (fallback?.cover_artwork_url) image = fallback.cover_artwork_url;
+      }
       jsonLd = {
         '@context': 'https://schema.org',
         '@type': 'MusicGroup',
@@ -228,6 +311,12 @@ exports.handler = async (event) => {
 
   const { title, description, image, pageUrl, jsonLd } = meta;
 
+  // Resized here, in one place, rather than at each of the five branches above.
+  // Those branches decide WHICH picture; this decides what shape it arrives in.
+  // The JSON-LD above deliberately keeps the full size original, because that
+  // is structured data about the work, not a card.
+  const cardImg = cardImage(image);
+
   const html = `<!DOCTYPE html>
 <html>
 <head>
@@ -237,14 +326,18 @@ exports.handler = async (event) => {
   ${jsonLd ? `<script type="application/ld+json">${JSON.stringify(jsonLd).replace(/</g, '\\u003c')}</script>` : ''}
   <meta property="og:title" content="${esc(title)}" />
   <meta property="og:description" content="${esc(description)}" />
-  <meta property="og:image" content="${esc(image)}" />
+  <meta property="og:image" content="${esc(cardImg)}" />
+  <meta property="og:image:secure_url" content="${esc(cardImg)}" />
+  <meta property="og:image:width" content="${OG_WIDTH}" />
+  <meta property="og:image:height" content="${OG_HEIGHT}" />
+  <meta property="og:image:alt" content="${esc(title)}" />
   <meta property="og:url" content="${esc(pageUrl)}" />
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="Feelz Machine" />
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="${esc(title)}" />
   <meta name="twitter:description" content="${esc(description)}" />
-  <meta name="twitter:image" content="${esc(image)}" />
+  <meta name="twitter:image" content="${esc(cardImg)}" />
   <meta http-equiv="refresh" content="0; url=${esc(pageUrl)}" />
 </head>
 <body>Redirecting...</body>

@@ -13,6 +13,17 @@
   included_files = ["node_modules/ffmpeg-static/**"]
   timeout = 26
 
+# og-image re-encodes artwork as JPEG so link previews are small enough for
+# WhatsApp to draw. sharp ships a compiled binary for each platform, which
+# esbuild cannot bundle, so it has to be left as a real node_modules require.
+# Without this line the function loads sharp, fails, and falls back to
+# redirecting at the Supabase picture. That is not an outage, previews keep
+# the artwork they had, but the whole point of the function is lost.
+[functions."og-image"]
+  external_node_modules = ["sharp"]
+  included_files = ["node_modules/sharp/**", "node_modules/@img/**"]
+  timeout = 20
+
 [functions."engagement-drip-background"]
   timeout = 860
   # Merged into the existing table rather than added as a second
