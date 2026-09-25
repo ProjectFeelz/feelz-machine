@@ -56,7 +56,7 @@ async function resolveShortCode(code) {
 
 async function buildMeta(type, slug) {
   let title = 'Feelz Machine';
-  let description = 'Independent artists. Direct to fans. Stream, support and discover music — no middlemen.';
+  let description = 'Independent artists. Direct to fans. Stream, support and discover music. No middlemen.';
   let image = DEFAULT_IMAGE;
   let pageUrl = SITE_URL;
   // Structured data. The crawler only ever sees this HTML, so JSON-LD has to
@@ -119,9 +119,9 @@ async function buildMeta(type, slug) {
       .maybeSingle();
     if (beat) {
       const artistName = beat.artists?.artist_name || 'Feelz Machine';
-      title = `${beat.title} — beat by ${artistName}`;
+      title = `${beat.title}, a beat by ${artistName}`;
       description = beat.bpm
-        ? `${beat.bpm} BPM${beat.beat_key ? ` · ${beat.beat_key}` : ''} — license this beat on Feelz Machine`
+        ? `${beat.bpm} BPM${beat.beat_key ? ` · ${beat.beat_key}` : ''}. License this beat on Feelz Machine.`
         : `License "${beat.title}" by ${artistName} on Feelz Machine`;
       image = beat.cover_artwork_url || DEFAULT_IMAGE;
     }
@@ -196,9 +196,9 @@ async function buildMeta(type, slug) {
       .select('prize_description, prize_breakdown_text')
       .eq('is_school_sessions', true)
       .maybeSingle();
-    title = 'School Sessions — Feelz Machine';
+    title = 'School Sessions on Feelz Machine';
     description = comp?.prize_breakdown_text || comp?.prize_description
-      || 'A high school music competition on Feelz Machine. Pick a song from the shortlist and cover it — cash prizes for the winning school and student.';
+      || 'A high school music competition on Feelz Machine. Pick a song from the shortlist and cover it. Cash prizes for the winning school and student.';
     pageUrl = `${SITE_URL}/schoolsessions`;
   }
 

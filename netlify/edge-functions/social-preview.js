@@ -11,6 +11,9 @@
 
 const CRAWLER_PATTERN = /facebookexternalhit|Facebot|Twitterbot|WhatsApp|Slackbot|Discordbot|LinkedInBot|TelegramBot|Pinterest|redditbot|vkShare|SkypeUriPreview|W3C_Validator/i;
 
+// Each entry gives the type og-meta needs and how to get the slug out of the
+// path. `slug` defaults to the first capture group; give it a function when
+// the useful part is somewhere else.
 const ROUTE_PATTERNS = [
   { re: /^\/artist\/([^/]+)\/?$/, type: 'artist' },
   { re: /^\/track\/([^/]+)\/?$/, type: 'track' },
@@ -26,6 +29,22 @@ const ROUTE_PATTERNS = [
   // with no artwork on it. og-meta resolves the code server side instead.
   { re: /^\/t\/([^/]+)\/?$/, type: 'short' },
   { re: /^\/a\/([^/]+)\/?$/, type: 'short' },
+
+  // The handle forms. These are SHARE links, not just vanity ones: the Share
+  // button on a For You card hands out /@handle, and the album share hands out
+  // /@handle/album/<slug>. They are turned into the canonical page by
+  // NotFoundRedirect in src/AppRouter.js, which is React Router, which is
+  // JavaScript, which a crawler never runs. So every one of them arrived with
+  // the plain homepage card on it and no artwork.
+  //
+  // Longest first. /@h/album/s must be tested before /@h, or the bare handle
+  // pattern would never see it.
+  { re: /^\/@([^/]+)\/(?:single|track)\/([^/]+)\/?$/, type: 'track', slug: (m) => m[2] },
+  { re: /^\/@([^/]+)\/beat\/([^/]+)\/?$/,             type: 'beat',  slug: (m) => m[2] },
+  // og-meta's album branch splits the slug on "/" and expects
+  // artistSlug/albumSlug, which is exactly what the handle form already has.
+  { re: /^\/@([^/]+)\/album\/([^/]+)\/?$/,            type: 'album', slug: (m) => `${m[1]}/${m[2]}` },
+  { re: /^\/@([^/]+)\/?$/,                             type: 'artist' },
 ];
 
 export default async (request, context) => {
@@ -38,11 +57,11 @@ export default async (request, context) => {
   let type = null;
   let slug = null;
 
-  for (const { re, type: t } of ROUTE_PATTERNS) {
+  for (const { re, type: t, slug: pick } of ROUTE_PATTERNS) {
     const match = url.pathname.match(re);
     if (match) {
       type = t;
-      slug = match[1] || null;
+      slug = (pick ? pick(match) : match[1]) || null;
       break;
     }
   }
@@ -88,5 +107,5 @@ export default async (request, context) => {
 };
 
 export const config = {
-  path: ['/artist/*', '/track/*', '/beat/*', '/album/*', '/schoolsessions', '/t/*', '/a/*'],
+  path: ['/artist/*', '/track/*', '/beat/*', '/album/*', '/schoolsessions', '/t/*', '/a/*', '/@*'],
 };
