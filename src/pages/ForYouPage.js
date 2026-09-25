@@ -33,6 +33,7 @@ import {
   Heart, MessageCircle, ListMusic, UserCheck,
   Share2, Loader, X, Send, ChevronUp,
   Sparkles, Volume2, VolumeX, Info, EyeOff,
+  Film, Disc3,
 } from 'lucide-react';
 
 // True when this page is running inside the phone on the sign-in page.
@@ -562,6 +563,32 @@ function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare, onN
   const [following, setFollowing]     = useState(null); // null = loading, false = not following, true = following
   const [commentCount, setCommentCount] = useState(0);
 
+  // ── The record comes first, the video is asked for ──────────────────────────
+  //
+  // A card used to show the video automatically whenever the track had one, and
+  // the record only when it did not. Two problems with that.
+  //
+  // The look. Videos are made by whoever made them, at whatever quality they
+  // could manage. Scrolling through the feed meant the app changed character
+  // every few cards, and the record, which is the one thing that looks like
+  // Feelz Machine and nothing else, was the exception rather than the rule.
+  //
+  // The phone. Every video card that scrolled past started decoding video and
+  // pulling data whether anyone wanted to watch it or not. That is a large part
+  // of why iPhones were giving up on this page.
+  //
+  // So every card shows the record. A track with a video gets a Watch button in
+  // the bar on the right, and the video only starts once somebody presses it.
+  // Nothing is hidden, the video is one tap away, and the feed holds its look.
+  const [watching, setWatching] = useState(false);
+
+  // Scrolling away puts the card back to the record. Without this, a card left
+  // on video keeps its video when you swipe back to it later, and it keeps
+  // decoding in the background while you are three cards further down.
+  useEffect(() => { if (!isActive) setWatching(false); }, [isActive]);
+
+  const showVideo = hasVideo && isActive && watching;
+
   useEffect(() => {
     if (!track.id) return;
     supabase.from('track_likes').select('*', { count: 'exact', head: true }).eq('track_id', track.id)
@@ -734,7 +761,10 @@ function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare, onN
     const video = videoRef.current;
     if (!video) return;
     try { video.currentTime = isThisOne ? (currentTime || 0) : 0; } catch {}
-  }, [track.id, isThisOne]); // eslint-disable-line
+    // showVideo is in here because the element does not exist until Watch is
+    // pressed. Without it this effect runs against nothing, returns early, and
+    // the video that then appears starts at zero while the song is a minute in.
+  }, [track.id, isThisOne, showVideo]); // eslint-disable-line
 
   // Then keep the two together while they run.
   React.useEffect(() => {
@@ -788,7 +818,7 @@ function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare, onN
       </div>
 
       {/* YouTube video */}
-      {hasVideo && isActive && (
+      {showVideo && (
         <div className="absolute inset-0 z-10">
           {isUploadedVideo ? (
             /* Native video for Supabase-hosted MP4s, synced to audio player */
@@ -827,8 +857,8 @@ function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare, onN
         </div>
       )}
 
-      {/* Vinyl, positioned in upper 55% of screen */}
-      {!hasVideo && (
+      {/* The record. Shown on every card now, not only the ones with no video. */}
+      {!showVideo && (
         <div className="relative z-10 flex items-center justify-center" style={{ marginTop: '-12vh' }}>
           <VinylRecord coverUrl={track.cover_artwork_url} isPlaying={playing} size={vinylSize} />
 
@@ -847,6 +877,23 @@ function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare, onN
       {/* Right action bar */}
       <div className="absolute bottom-32 z-20 flex flex-col items-center space-y-5" style={{ right: "16px" }}
         onClick={e => e.stopPropagation()}>
+
+        {/* Watch. Only on the cards that have something to watch.
+         *
+         * It sits at the top of the bar rather than under the record so that
+         * the shape of every card stays the same whether the track has a video
+         * or not. The label changes rather than the button moving, so pressing
+         * it twice gets you back to where you started. */}
+        {hasVideo && (
+          <button onClick={() => setWatching(v => !v)} className="flex flex-col items-center space-y-1">
+            <div className="w-11 h-11 flex items-center justify-center">
+              {watching
+                ? <Disc3 className="w-7 h-7 text-white/90" strokeWidth={2} />
+                : <Film  className="w-7 h-7 text-white/90" strokeWidth={2} />}
+            </div>
+            <span className="text-[11px] font-semibold text-white/80">{watching ? 'Record' : 'Watch'}</span>
+          </button>
+        )}
 
         {/* Like */}
         <button onClick={handleLike} className="flex flex-col items-center space-y-1">

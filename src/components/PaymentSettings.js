@@ -274,6 +274,49 @@ export default function PaymentSettings() {
         </div>
       </div>
 
+      {/* Your agreements.
+       *
+       * The Feelz Retail submit gate ends with this line:
+       *
+       *   "Your agreement is recorded against version X and Y of these
+       *    documents. If we change them later, this track stays on the version
+       *    you agreed to, and you can read it any time from your Payment
+       *    Settings."
+       *
+       * Payment Settings had no such link. Somebody who agreed to something and
+       * then went looking for it, exactly as they were told to, found nothing.
+       * A promise like that has to be kept, because the whole point of a
+       * versioned agreement is that the person can go back and read it.
+       *
+       * Both open in a new tab so nothing half-typed on this page is lost.
+       *
+       * Shown to every artist rather than only to those who have pitched. The
+       * check for "has this person agreed" would be another round trip, and
+       * reading the terms before you submit is a good thing, not a leak. */}
+      <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] p-4">
+        <h4 className="text-sm font-semibold text-white mb-1">Your agreements</h4>
+        <p className="text-xs text-white/40 leading-relaxed mb-3">
+          The documents you agree to when you send a track to Feelz Retail. If we
+          change them later, anything you already submitted stays on the version
+          you agreed to.
+        </p>
+        <div className="space-y-2">
+          {[
+            ['retail-submission-terms', 'Retail submission terms', 'What you agree to when you submit'],
+            ['retail-licence',          'Retail licence',          'What applies if your track is accepted'],
+          ].map(([slug, title, sub]) => (
+            <a key={slug} href={`/legal/${slug}`} target="_blank" rel="noopener noreferrer"
+              className="flex items-center justify-between p-3 rounded-lg bg-white/[0.03] border border-white/[0.04] hover:bg-white/[0.06] transition">
+              <div className="min-w-0">
+                <p className="text-sm text-white font-medium truncate">{title}</p>
+                <p className="text-[10px] text-white/30 truncate">{sub}</p>
+              </div>
+              <ExternalLink className="w-3.5 h-3.5 text-white/30 flex-shrink-0 ml-3" />
+            </a>
+          ))}
+        </div>
+      </div>
+
       {/* Recent payouts */}
       {recentPayouts.length > 0 && (
         <div>

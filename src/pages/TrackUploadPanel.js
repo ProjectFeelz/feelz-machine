@@ -1,3 +1,4 @@
+import { coverUrl } from '../utils/coverUrl';
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
@@ -1420,7 +1421,7 @@ export default function TrackUploadPanel() {
     }
 
     if (!schoolSessionsFormValid(schoolSessionsEnabled, schoolSessionsForm)) {
-      showMessage('error', 'Please fill in the entrant name, email, TikTok handle and video link, school, the YouTube confirmation, and (if under 18) guardian consent for the School Sessions entry.');
+      showMessage('error', 'Please fill in the entrant name, email, TikTok handle and video link, school, the YouTube confirmation, agreement to the School Sessions terms, and (if under 18) guardian consent for the School Sessions entry.');
       return;
     }
 
@@ -2187,7 +2188,7 @@ export default function TrackUploadPanel() {
                     <span className="text-xs text-white/20 w-4 text-center">{index + 1}</span>
                     <div className="w-7 h-7 rounded-md overflow-hidden bg-white/10 flex-shrink-0">
                       {t.cover_artwork_url
-                        ? <img src={t.cover_artwork_url} alt="" className="w-full h-full object-cover" />
+                        ? <img src={coverUrl(t.cover_artwork_url, 400)} alt="" className="w-full h-full object-cover" />
                         : <div className="w-full h-full flex items-center justify-center"><Music className="w-3 h-3 text-white/20" /></div>}
                     </div>
                     <p className="text-sm text-white flex-1 truncate">{t.title}</p>
@@ -2553,7 +2554,7 @@ export default function TrackUploadPanel() {
                   {editingAlbumId !== album.id ? (
                     <div className="flex items-center space-x-3 p-3">
                       {album.cover_artwork_url
-                        ? <img src={album.cover_artwork_url} alt="" className="w-12 h-12 rounded-lg object-cover flex-shrink-0" />
+                        ? <img src={coverUrl(album.cover_artwork_url, 120)} alt="" className="w-12 h-12 rounded-lg object-cover flex-shrink-0" />
                         : <div className="w-12 h-12 rounded-lg bg-white/[0.06] flex items-center justify-center flex-shrink-0"><Music className="w-5 h-5 text-white/20" /></div>}
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-white truncate">{album.title}</p>
@@ -2609,7 +2610,7 @@ export default function TrackUploadPanel() {
                         <div className="flex items-center space-x-3">
                           {(editAlbumCoverFile ? URL.createObjectURL(editAlbumCoverFile) : editAlbumForm.cover_artwork_url) ? (
                             <img
-                              src={editAlbumCoverFile ? URL.createObjectURL(editAlbumCoverFile) : editAlbumForm.cover_artwork_url}
+                              src={coverUrl(editAlbumCoverFile ? URL.createObjectURL(editAlbumCoverFile) : editAlbumForm.cover_artwork_url, 120)}
                               alt=""
                               className="w-16 h-16 rounded-lg object-cover flex-shrink-0 border border-white/[0.08]"
                             />
@@ -2762,7 +2763,7 @@ export default function TrackUploadPanel() {
                                   <GripVertical className="w-4 h-4" />
                                 </button>
                                 {track.cover_artwork_url
-                                  ? <img src={track.cover_artwork_url} alt="" className="w-10 h-10 rounded-lg object-cover flex-shrink-0" />
+                                  ? <img src={coverUrl(track.cover_artwork_url, 120)} alt="" className="w-10 h-10 rounded-lg object-cover flex-shrink-0" />
                                   : <div className="w-10 h-10 rounded-lg bg-white/[0.06] flex items-center justify-center flex-shrink-0"><Music className="w-4 h-4 text-white/20" /></div>}
                                 <div className="flex-1 min-w-0">
                                   <div className="flex items-center space-x-1.5">
@@ -2857,7 +2858,7 @@ export default function TrackUploadPanel() {
                                     <FieldLabel>Cover Artwork</FieldLabel>
                                     <div className="flex items-center gap-3">
                                       {(editCoverFile ? URL.createObjectURL(editCoverFile) : editForm.cover_artwork_url) && (
-                                        <img src={editCoverFile ? URL.createObjectURL(editCoverFile) : editForm.cover_artwork_url}
+                                        <img src={coverUrl(editCoverFile ? URL.createObjectURL(editCoverFile) : editForm.cover_artwork_url, 120)}
                                           alt="cover" className="w-12 h-12 rounded-lg object-cover flex-shrink-0" />
                                       )}
                                       <label className="cursor-pointer text-xs px-3 py-1.5 bg-white/[0.06] rounded-lg hover:bg-white/[0.1] text-white/60 transition">
@@ -2941,7 +2942,7 @@ export default function TrackUploadPanel() {
                         <div className="flex flex-col sm:flex-row sm:items-center gap-3 p-3">
                           <div className="flex items-center space-x-3 min-w-0">
                           {track.cover_artwork_url
-                            ? <img src={track.cover_artwork_url} alt="" className="w-12 h-12 rounded-lg object-cover flex-shrink-0" />
+                            ? <img src={coverUrl(track.cover_artwork_url, 120)} alt="" className="w-12 h-12 rounded-lg object-cover flex-shrink-0" />
                             : <div className="w-12 h-12 rounded-lg bg-white/[0.06] flex items-center justify-center flex-shrink-0"><Music className="w-5 h-5 text-white/20" /></div>}
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-medium text-white truncate">{track.title}</p>
@@ -3128,7 +3129,7 @@ export default function TrackUploadPanel() {
                               <div className="flex items-center gap-3">
                                 {(editCoverFile ? URL.createObjectURL(editCoverFile) : editForm.cover_artwork_url) && (
                                   <img
-                                    src={editCoverFile ? URL.createObjectURL(editCoverFile) : editForm.cover_artwork_url}
+                                    src={coverUrl(editCoverFile ? URL.createObjectURL(editCoverFile) : editForm.cover_artwork_url, 120)}
                                     alt="cover" className="w-12 h-12 rounded-lg object-cover flex-shrink-0" />
                                 )}
                                 <label className="cursor-pointer text-xs px-3 py-1.5 bg-white/[0.06] rounded-lg hover:bg-white/[0.1] text-white/60 transition">

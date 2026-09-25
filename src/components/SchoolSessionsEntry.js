@@ -40,6 +40,7 @@ const BLANK_FORM = {
   guardianContact: '',
   guardianRelationship: '',
   guardianConsented: false,
+  termsAccepted: false,
 };
 
 function Toggle({ value, onChange }) {
@@ -77,6 +78,9 @@ export function schoolSessionsFormValid(enabled, form) {
   if (!form.schoolId && !form.schoolFreeText.trim()) return false;
   if (!form.songId) return false;
   if (form.isGroup && form.groupMembers.filter(m => m.trim()).length === 0) return false;
+  // The terms say entering means you agree to them. Until now nothing on this
+  // form said so, linked to them, or asked. See the note by the checkbox.
+  if (!form.termsAccepted) return false;
   if (form.isMinor) {
     if (!form.guardianName.trim() || !form.guardianContact.trim() || !form.guardianConsented) return false;
   }
@@ -331,6 +335,36 @@ export default function SchoolSessionsEntry({ enabled, setEnabled, form, setForm
               </label>
             </div>
           )}
+
+          {/* The terms.
+           *
+           * Section 3 of /schoolsessions/terms says that entering means you
+           * agree to them. Nothing on this form said that, nothing linked to
+           * them, and nobody was asked. So the document claimed an agreement
+           * that was never put in front of anyone, which is not an agreement.
+           *
+           * It is last on purpose. A person reads it once the rest is filled
+           * in and they know what they are agreeing about.
+           *
+           * target="_blank" matters more than it looks. Navigating away from
+           * this page throws away a half-filled entry, the audio file and the
+           * artwork along with it. Opening in a new tab is the difference
+           * between reading the terms and losing twenty minutes of work.
+           */}
+          <label className="flex items-start space-x-2.5 cursor-pointer pt-1">
+            <input type="checkbox" checked={form.termsAccepted}
+              onChange={e => set('termsAccepted', e.target.checked)}
+              className="mt-0.5 rounded border-white/20" />
+            <span className="text-xs text-white/60">
+              I have read and agree to the{' '}
+              <a href="/schoolsessions/terms" target="_blank" rel="noopener noreferrer"
+                onClick={e => e.stopPropagation()}
+                className="text-lime-400 font-semibold underline underline-offset-2">
+                School Sessions terms
+              </a>
+              . They open in a new tab, so nothing you have typed here is lost.
+            </span>
+          </label>
         </div>
       )}
     </div>
