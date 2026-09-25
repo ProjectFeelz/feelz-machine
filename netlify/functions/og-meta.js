@@ -28,6 +28,32 @@ function esc(str) {
     .replace(/"/g, '&quot;');
 }
 
+// Short links: /t/<code> and /a/<code>.
+//
+// These are the links the share sheet hands out, and they had no preview at
+// all. The short link is resolved in the BROWSER by ShortLinkPage, which
+// calls resolve_short_code and then redirects. A crawler never runs that, so
+// every shared short link showed the generic homepage card with no artwork.
+//
+// Resolving the code here turns the short link into the same type and slug
+// the long URL would have used, and everything below then works unchanged.
+async function resolveShortCode(code) {
+  if (!code) return { type: null, slug: null };
+  const { data, error } = await supabase.rpc('resolve_short_code', { p_code: code });
+  if (error) {
+    console.error('[og-meta] resolve_short_code failed:', error.code, error.message);
+    return { type: null, slug: null };
+  }
+  const hit = Array.isArray(data) ? data[0] : data;
+  if (!hit) return { type: null, slug: null };
+
+  if (hit.kind === 'track' && hit.slug) return { type: 'track', slug: hit.slug };
+  // Albums are looked up by id below, the same way ShortLinkPage redirects to
+  // /album/<id>, because an album slug is only unique per artist.
+  if (hit.kind === 'album' && hit.id)   return { type: 'album_id', slug: hit.id };
+  return { type: null, slug: null };
+}
+
 async function buildMeta(type, slug) {
   let title = 'Feelz Machine';
   let description = 'Independent artists. Direct to fans. Stream, support and discover music — no middlemen.';
@@ -132,6 +158,38 @@ async function buildMeta(type, slug) {
     pageUrl = `${SITE_URL}/album/${slug}`;
   }
 
+  // An album reached through a short link, where all we have is its id.
+  // Same card as the branch above, looked up a different way.
+  if (type === 'album_id' && slug) {
+    const { data: album } = await supabase
+      .from('albums')
+      .select('title, slug, description, cover_artwork_url, release_date, artists(artist_name, slug)')
+      .eq('id', slug)
+      .maybeSingle();
+    if (album) {
+      const artistName = album.artists?.artist_name || 'Feelz Machine';
+      title = `${album.title} by ${artistName}`;
+      description = album.description
+        ? album.description.slice(0, 160)
+        : `Listen to ${album.title} by ${artistName} on Feelz Machine`;
+      image = album.cover_artwork_url || DEFAULT_IMAGE;
+      pageUrl = album.artists?.slug && album.slug
+        ? `${SITE_URL}/album/${album.artists.slug}/${album.slug}`
+        : `${SITE_URL}/album/${slug}`;
+      jsonLd = {
+        '@context': 'https://schema.org',
+        '@type': 'MusicAlbum',
+        name: album.title,
+        byArtist: { '@type': 'MusicGroup', name: artistName },
+        ...(album.cover_artwork_url ? { image: album.cover_artwork_url } : {}),
+        ...(album.release_date ? { datePublished: album.release_date } : {}),
+        url: pageUrl,
+      };
+    } else {
+      pageUrl = `${SITE_URL}/album/${slug}`;
+    }
+  }
+
   if (type === 'schoolsessions') {
     const { data: comp } = await supabase
       .from('competitions')
@@ -149,11 +207,19 @@ async function buildMeta(type, slug) {
 
 exports.handler = async (event) => {
   const params = event.queryStringParameters || {};
-  const type = params.type;
-  const slug = params.slug;
+  let type = params.type;
+  let slug = params.slug;
 
   let meta;
   try {
+    // A short link carries a code, not a slug. Turn it into the real thing
+    // first, then the rest of this function does not need to know the
+    // difference.
+    if (type === 'short') {
+      const resolved = await resolveShortCode(slug);
+      type = resolved.type;
+      slug = resolved.slug;
+    }
     meta = await buildMeta(type, slug);
   } catch (e) {
     console.error('og-meta error:', e);

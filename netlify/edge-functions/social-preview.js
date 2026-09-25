@@ -20,6 +20,12 @@ const ROUTE_PATTERNS = [
   // homepage meta.
   { re: /^\/album\/([^/]+\/[^/]+)\/?$/, type: 'album' },
   { re: /^\/schoolsessions\/?$/, type: 'schoolsessions' },
+  // The short links the share sheet hands out. These had no preview at all:
+  // /t/<code> is resolved in the browser by ShortLinkPage, which a crawler
+  // never runs, so every shared short link showed the generic homepage card
+  // with no artwork on it. og-meta resolves the code server side instead.
+  { re: /^\/t\/([^/]+)\/?$/, type: 'short' },
+  { re: /^\/a\/([^/]+)\/?$/, type: 'short' },
 ];
 
 export default async (request, context) => {
@@ -82,5 +88,5 @@ export default async (request, context) => {
 };
 
 export const config = {
-  path: ['/artist/*', '/track/*', '/beat/*', '/album/*', '/schoolsessions'],
+  path: ['/artist/*', '/track/*', '/beat/*', '/album/*', '/schoolsessions', '/t/*', '/a/*'],
 };

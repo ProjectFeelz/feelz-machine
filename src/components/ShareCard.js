@@ -1,7 +1,36 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
-import { Download, Share2, X, Loader, Link, Check, Film, Image } from 'lucide-react';
+import { Download, Share2, X, Loader, Link, Check, Film } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import { buildStoryMp4, MEDIARECORDER_MP4_TYPES } from '../utils/storyMp4';
+
+// ── The glow colours ────────────────────────────────────────────────────────
+//
+// These used to be called "Background" and set a flat fill that was then
+// covered by a hard-coded purple glow at the top, a blurred copy of the
+// artwork, and a black fade over the bottom third. The only place the colour
+// could show through was a thin band in the middle, already darkened, so
+// picking one changed nothing you could see.
+//
+// They now drive the GLOW, which is the part of the frame that is actually
+// made of colour: the wash behind the record and the ring around it. `base`
+// is still the flat fill underneath, kept very dark so the glow reads.
+//
+// No brown, and no amber, which is the same thing on a dark frame.
+const GLOWS = [
+  { id: 'none',   label: 'None',   swatch: '#101014', base: '#08080a', glow: [120, 120, 140] },
+  { id: 'purple', label: 'Purple', swatch: '#6d28d9', base: '#0b0714', glow: [ 88,  28, 220] },
+  { id: 'blue',   label: 'Blue',   swatch: '#1d4ed8', base: '#060a16', glow: [ 37,  99, 235] },
+  { id: 'red',    label: 'Red',    swatch: '#b91c1c', base: '#130608', glow: [200,  30,  60] },
+  { id: 'green',  label: 'Green',  swatch: '#8CAB2E', base: '#080d06', glow: [140, 171,  46] },
+  { id: 'chrome', label: 'Chrome', swatch: '#c8ccd4', base: '#0a0a0c', glow: [200, 208, 220] },
+];
+
+const glowById = (id) => GLOWS.find(g => g.id === id) || GLOWS[0];
+
+// rgba() from a [r,g,b] and an alpha. The glow is drawn several times at
+// different strengths, so this saves writing the triple out six times and
+// getting one of them wrong.
+const rgba = (c, a) => `rgba(${c[0]},${c[1]},${c[2]},${a})`;
 
 // ── Helper functions, all defined as hoisted function declarations ──────────
 
@@ -86,6 +115,22 @@ function lyricLinesAt(lyrics, t, songLength) {
 // One line of lyric, in colour. The gradient shifts with the line number so
 // consecutive lines are never the same colour, and it is drawn over a dark
 // glow so it stays readable on artwork of any brightness.
+// How many lines a string will wrap to at the font currently set on ctx.
+// Used to work out how tall the caption block will be BEFORE placing it, so
+// the gap under the record can be given back when the writing is long.
+// Must stay in step with the wrapping inside drawLyricLine below.
+function countWrappedLines(ctx, text, maxWidth) {
+  if (!text) return 0;
+  const words = String(text).split(' ');
+  let lines = 1, line = '';
+  words.forEach(w => {
+    const test = line ? `${line} ${w}` : w;
+    if (ctx.measureText(test).width > maxWidth && line) { lines += 1; line = w; }
+    else line = test;
+  });
+  return lines;
+}
+
 function drawLyricLine(ctx, text, x, y, maxWidth, index, t) {
   if (!text) return y;
   const hue = (index * 47 + t * 18) % 360;
@@ -162,8 +207,9 @@ function drawFMLogo(ctx, x, y, size) {
 /**
  * ShareCard
  *
- * Tab 1, Image: 1080×1080 canvas card (existing behaviour)
- * Tab 2, Video: 1080×1920 Stories video with spinning vinyl + audio (30s)
+ * One thing: a 1080x1920 Stories video, spinning vinyl plus 30s of audio.
+ * Plus the plain link, for when the point is to send somebody to the song
+ * rather than to show them a clip of it.
  *
  * Props:
  *   track    - track object (title, artist_name, cover_artwork_url, file_url)
@@ -172,8 +218,6 @@ function drawFMLogo(ctx, x, y, size) {
  *   onClose  - close handler
  */
 export default function ShareCard({ track, artist, shareUrl, onClose }) {
-  const [tab, setTab]               = useState('image'); // 'image' | 'video'
-  const [ready, setReady]           = useState(false);
   const [sharing, setSharing]       = useState(false);
   const [copied, setCopied]         = useState(false);
   const [recording, setRecording]     = useState(false);
@@ -184,11 +228,10 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
   const [duration, setDuration]       = useState(30);
   const [videoFormat, setVideoFormat]   = useState('');
   const [converting, setConverting]     = useState(false);
-  const [bgColor, setBgColor]           = useState('#0d0d0d');
+  const [glowId, setGlowId]             = useState('purple');
   const [lyrics, setLyrics]             = useState(track?.lyrics || null);
   const [showLyrics, setShowLyrics]     = useState(true);
 
-  const canvasRef    = useRef(null);
   const videoRef     = useRef(null);
   const previewRef   = useRef(null); // live preview canvas
   const animFrameRef = useRef(null);
@@ -215,99 +258,23 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
   }, [track?.id, lyrics]);
 
   // ── Image card ───────────────────────────────────────────────────────────────
-  const drawImageCard = useCallback(async () => {
-    const canvas = canvasRef.current;
-    if (!canvas || tab !== 'image') return;
-    const ctx = canvas.getContext('2d');
-    const W = 1080, H = 1080;
-    canvas.width  = W;
-    canvas.height = H;
-
-    ctx.fillStyle = '#0d0d0d';
-    ctx.fillRect(0, 0, W, H);
-
-    if (artworkUrl) {
-      // Subtle artwork bleed for depth, matches app aesthetic
-      try {
-        const bgImg = await loadImage(artworkUrl);
-        ctx.save();
-        ctx.globalAlpha = 0.12;
-        ctx.filter = 'blur(100px)';
-        ctx.drawImage(bgImg, -100, -100, W + 200, H * 0.6);
-        ctx.filter = 'none';
-        ctx.globalAlpha = 1;
-        ctx.restore();
-      } catch {}
-    }
-
-    // Purple glow at top
-    const topGlow = ctx.createRadialGradient(W/2, 0, 0, W/2, 0, H * 0.55);
-    topGlow.addColorStop(0,   'rgba(88,28,220,0.15)');
-    topGlow.addColorStop(1,   'rgba(0,0,0,0)');
-    ctx.fillStyle = topGlow;
-    ctx.fillRect(0, 0, W, H);
-
-    if (artworkUrl) {
-      try {
-        const img = await loadImage(artworkUrl);
-        ctx.save();
-        ctx.globalAlpha = 0.25;
-        ctx.filter = 'blur(60px)';
-        ctx.drawImage(img, -60, -60, W + 120, H + 120);
-        ctx.filter = 'none';
-        ctx.globalAlpha = 1;
-        ctx.restore();
-
-        const size = 640, x = (W - size) / 2, y = 120;
-        roundRect(ctx, x, y, size, size, 40);
-        ctx.save(); ctx.clip();
-        ctx.drawImage(img, x, y, size, size);
-        ctx.restore();
-        ctx.save();
-        roundRect(ctx, x, y, size, size, 40);
-        ctx.strokeStyle = 'rgba(255,255,255,0.08)';
-        ctx.lineWidth = 2; ctx.stroke(); ctx.restore();
-      } catch {}
-    } else {
-      roundRect(ctx, 220, 120, 640, 640, 40);
-      ctx.fillStyle = 'rgba(139,92,246,0.3)'; ctx.fill();
-    }
-
-    ctx.fillStyle = '#FFFFFF';
-    ctx.font = 'bold 64px -apple-system, BlinkMacSystemFont, sans-serif';
-    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-    const titleY = 800;
-    wrapText(ctx, title, W / 2, titleY, W - 120, 72);
-    ctx.fillStyle = 'rgba(255,255,255,0.45)';
-    ctx.font = '40px -apple-system, BlinkMacSystemFont, sans-serif';
-    const subtitleLines = Math.ceil(title.length / 20);
-    ctx.fillText(subtitle, W / 2, titleY + subtitleLines * 76);
-    // FM logo, top left
-    await drawFMLogo(ctx, 60, 60, 100);
-
-    // Feelzmachine.com wordmark, subtle, bottom centre
-    ctx.fillStyle = 'rgba(255,255,255,0.2)';
-    ctx.font = '28px -apple-system, BlinkMacSystemFont, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('feelzmachine.com', W / 2, H - 56);
-    ctx.fillStyle = 'rgba(140,171,46,0.6)';
-    ctx.beginPath(); ctx.arc(W / 2 - 180, H - 40, 4, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.arc(W / 2 + 180, H - 40, 4, 0, Math.PI * 2); ctx.fill();
-
-    setReady(true);
-  }, [tab, title, subtitle, artworkUrl, displayUrl]);
+  // The image card is gone. It used to be tab 1 here: a 1080x1080 square with
+  // the artwork and the title on it.
+  //
+  // It was removed on purpose. It did the same job as a link preview but
+  // worse: a flat picture nobody can tap, that carries no link, and that a
+  // person then has to paste a URL beside anyway. The video is the thing
+  // worth making, and for everything else the link itself now carries the
+  // artwork (og-meta resolves /t/ and /a/ short links server side, so the
+  // preview a crawler builds has the cover on it).
 
   useEffect(() => {
-    if (tab === 'image') { setReady(false); drawImageCard(); }
-    else {
-      setReady(true);
-      if (audioUrl) {
-        const a = new window.Audio();
-        a.src = audioUrl;
-        a.onloadedmetadata = () => setDuration(Math.floor(a.duration) || 30);
-      }
+    if (audioUrl) {
+      const a = new window.Audio();
+      a.src = audioUrl;
+      a.onloadedmetadata = () => setDuration(Math.floor(a.duration) || 30);
     }
-  }, [tab, drawImageCard, audioUrl]);
+  }, [audioUrl]);
 
   // ── SVG vinyl to canvas image ────────────────────────────────────────────────
   // Renders the VinylRecord SVG to an HTMLImageElement so the canvas draw
@@ -402,12 +369,14 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
   }, []);
 
   // ── Video frame draw ────────────────────────────────────────────────────────
-  const drawVideoFrame = useCallback(async (ctx, artImg, vinylImg, angle, bgOverride, songTime = 0) => {
+  const drawVideoFrame = useCallback(async (ctx, artImg, vinylImg, angle, glowKey, songTime = 0) => {
     const W = 1080, H = 1920;
 
-    // Background, user selected colour with subtle artwork bleed
-    const baseBg = bgOverride || '#0d0d0d';
-    ctx.fillStyle = baseBg;
+    // The chosen glow. Everything coloured in this frame comes from here, so
+    // picking a swatch changes the whole look rather than a strip in the
+    // middle nobody can see.
+    const G = glowById(glowKey);
+    ctx.fillStyle = G.base;
     ctx.fillRect(0, 0, W, H);
 
     if (artImg) {
@@ -421,12 +390,21 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
       ctx.restore();
     }
 
-    // Purple ambient glow at top, matches app's header glow
+    // Ambient glow at the top, in the chosen colour.
     const topGlow = ctx.createRadialGradient(W/2, 0, 0, W/2, 0, H * 0.5);
-    topGlow.addColorStop(0,   'rgba(88,28,220,0.18)');
-    topGlow.addColorStop(0.5, 'rgba(88,28,220,0.06)');
+    topGlow.addColorStop(0,   rgba(G.glow, 0.26));
+    topGlow.addColorStop(0.5, rgba(G.glow, 0.09));
     topGlow.addColorStop(1,   'rgba(0,0,0,0)');
     ctx.fillStyle = topGlow;
+    ctx.fillRect(0, 0, W, H);
+
+    // And a second one behind where the record will sit, so the colour is
+    // present in the middle of the frame and not only along the top edge.
+    const midGlow = ctx.createRadialGradient(W/2, H/2 - 180, 0, W/2, H/2 - 180, 620);
+    midGlow.addColorStop(0,   rgba(G.glow, 0.22));
+    midGlow.addColorStop(0.7, rgba(G.glow, 0.05));
+    midGlow.addColorStop(1,   'rgba(0,0,0,0)');
+    ctx.fillStyle = midGlow;
     ctx.fillRect(0, 0, W, H);
 
     // Bottom fade to pure black
@@ -436,17 +414,26 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
     ctx.fillStyle = bottomFade;
     ctx.fillRect(0, 0, W, H);
 
-    // ── Vinyl disc, moved up from centre for better composition ───────────────
+    // Worked out up here rather than with the rest of the text, because
+    // whether there are lyrics decides where the record sits.
+    const words = showLyrics ? lyricLinesAt(lyrics, songTime, track?.duration || 0) : null;
+    const hasWords = !!words?.line;
+
+    // ── Vinyl disc, above centre ──────────────────────────────────────────────
+    // The record stays where it is. Steve asked for the WRITING to come down,
+    // not the record to go up, and those are different edits: lifting the
+    // record would open the same gap while leaving the text at the same
+    // height on the frame.
     const vinylSize = 840;
     const cx = W / 2;
-    const cy = H / 2 - 180; // moved up
+    const cy = H / 2 - 180;
     const r  = vinylSize / 2;
 
     // Outer glow ring, separates vinyl from background
     const glowGrad = ctx.createRadialGradient(cx, cy, r * 0.85, cx, cy, r * 1.15);
-    glowGrad.addColorStop(0,   'rgba(100,60,200,0.0)');
-    glowGrad.addColorStop(0.6, 'rgba(80,40,160,0.25)');
-    glowGrad.addColorStop(0.85,'rgba(60,20,120,0.15)');
+    glowGrad.addColorStop(0,   rgba(G.glow, 0));
+    glowGrad.addColorStop(0.6, rgba(G.glow, 0.42));
+    glowGrad.addColorStop(0.85,rgba(G.glow, 0.22));
     glowGrad.addColorStop(1,   'rgba(0,0,0,0)');
     ctx.fillStyle = glowGrad;
     ctx.beginPath();
@@ -483,18 +470,41 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
     ctx.restore();
 
     // ── Text ───────────────────────────────────────────────────────────────────
-    const words = showLyrics ? lyricLinesAt(lyrics, songTime, track?.duration || 0) : null;
-    const hasWords = !!words?.line;
+    // How far below the record the writing starts.
+    //
+    // It was 54 with lyrics on, which put the title almost touching the edge
+    // of the disc.
+    //
+    // The gap is asked for, not fixed, because the block underneath is not
+    // always the same height. A short song title with one line of lyric needs
+    // nothing; a title that wraps to two lines, with a lyric that wraps to
+    // three and a next line under it, is 400px of writing. At the full gap
+    // that case ended up 12px from the wordmark. So the gap is taken if there
+    // is room for it and given back if there is not, down to a floor of 44,
+    // which still clears the disc.
+    const titleLineH  = hasWords ? 76 : 88;
+    const titleLines  = Math.max(1, Math.ceil(title.length / 18));
 
-    // With lyrics on the frame the title sits tighter so the words get room.
-    const textY = cy + r + (hasWords ? 54 : 80);
+    // How tall the writing will be, measured rather than guessed. The lyric
+    // wrapping has to match drawLyricLine, so the font is set first.
+    let blockH = titleLines * titleLineH + (hasWords ? 40 : 48);
+    if (hasWords) {
+      ctx.font = 'bold 62px -apple-system, BlinkMacSystemFont, sans-serif';
+      blockH += 86 + Math.min(3, countWrappedLines(ctx, words.line, W - 160)) * 74;
+      if (words.next) blockH += 14 + 44;
+    }
+
+    // Nothing may come closer than this to the wordmark at the bottom.
+    const SAFE_BOTTOM = H - 150;
+    const wanted = cy + r + (hasWords ? 118 : 140);
+    const textY  = Math.max(cy + r + 44, Math.min(wanted, SAFE_BOTTOM - blockH));
+
     ctx.fillStyle = '#fff';
     ctx.font = `bold ${hasWords ? 60 : 72}px -apple-system, BlinkMacSystemFont, sans-serif`;
     ctx.textAlign = 'center'; ctx.textBaseline = 'top';
     wrapText(ctx, title, W / 2, textY, W - 120, hasWords ? 72 : 84);
 
-    const titleLines = Math.max(1, Math.ceil(title.length / 18));
-    const subY = textY + titleLines * (hasWords ? 76 : 88);
+    const subY = textY + titleLines * titleLineH;
     ctx.fillStyle = 'rgba(255,255,255,0.45)';
     ctx.font = `${hasWords ? 40 : 48}px -apple-system, BlinkMacSystemFont, sans-serif`;
     ctx.fillText(subtitle, W / 2, subY);
@@ -530,11 +540,11 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
     ctx.fillStyle = 'rgba(140,171,46,0.6)';
     ctx.beginPath(); ctx.arc(W/2 - 220, H - 54, 5, 0, Math.PI*2); ctx.fill();
     ctx.beginPath(); ctx.arc(W/2 + 220, H - 54, 5, 0, Math.PI*2); ctx.fill();
-  }, [title, subtitle, artworkUrl, displayUrl, bgColor, lyrics, showLyrics, track?.duration]);
+  }, [title, subtitle, artworkUrl, displayUrl, lyrics, showLyrics, track?.duration]);
 
   // Render a static preview frame when on video tab
   useEffect(() => {
-    if (tab !== 'video' || recording) return;
+    if (recording) return;
     const canvas = previewRef.current;
     if (!canvas) return;
     canvas.width  = 1080;
@@ -547,10 +557,10 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
       if (cancelled) return;
       const vinylImg = await buildVinylImage(artImg, 840);
       if (cancelled) return;
-      await drawVideoFrame(ctx, artImg, vinylImg, 0, bgColor, startTime);
+      await drawVideoFrame(ctx, artImg, vinylImg, 0, glowId, startTime);
     })();
     return () => { cancelled = true; };
-  }, [tab, artworkUrl, recording, buildVinylImage, drawVideoFrame, startTime]);
+  }, [artworkUrl, recording, buildVinylImage, drawVideoFrame, startTime, glowId, showLyrics, lyrics]);
 
   // ── Record video ─────────────────────────────────────────────────────────────
   const recordVideo = useCallback(async () => {
@@ -588,7 +598,7 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
       setVideoFormat('MP4');
       const mp4 = await buildStoryMp4({
         canvas, fps: FPS, seconds: DURATION, audioUrl, startTime,
-        drawFrame: (i) => drawVideoFrame(ctx, artImg, vinylImg, i * radsPerFrame, bgColor, startTime + i / FPS),
+        drawFrame: (i) => drawVideoFrame(ctx, artImg, vinylImg, i * radsPerFrame, glowId, startTime + i / FPS),
         onProgress: setVideoProgress,
       });
       if (mp4) {
@@ -746,7 +756,7 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
         return;
       }
       const frameStart = performance.now();
-      await drawVideoFrame(ctx, artImg, vinylImg, angle, bgColor, startTime + frame / FPS);
+      await drawVideoFrame(ctx, artImg, vinylImg, angle, glowId, startTime + frame / FPS);
       angle += radsPerFrame;
       frame++;
       setVideoProgress(Math.round((frame / totalFrames) * 95));
@@ -757,7 +767,7 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
       animFrameRef.current = setTimeout(animate, delay);
     };
     animate();
-  }, [audioUrl, artworkUrl, drawVideoFrame, startTime, buildVinylImage, bgColor]);
+  }, [audioUrl, artworkUrl, drawVideoFrame, startTime, buildVinylImage, glowId]);
 
   const stopRecording = () => {
     if (animFrameRef.current) clearTimeout(animFrameRef.current);
@@ -768,35 +778,32 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
   useEffect(() => () => stopRecording(), []); // cleanup on unmount
 
   // ── Share / download handlers ─────────────────────────────────────────────────
-  const handleDownloadImage = () => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const link = document.createElement('a');
-    link.download = `${title.replace(/[^a-z0-9]/gi, '-').toLowerCase()}-feelzmachine.png`;
-    link.href = canvas.toDataURL('image/png');
-    link.click();
-  };
-
-  const handleShareImage = async () => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    setSharing(true);
-    try {
-      canvas.toBlob(async (blob) => {
-        if (!blob) return;
-        const file = new File([blob], `${title}-feelzmachine.png`, { type: 'image/png' });
-        if (navigator.canShare && navigator.canShare({ files: [file] })) {
-          const trackUrl = shareUrl || window.location.href;
-          await navigator.share({
-            files: [file], title,
-            text: track
-              ? `Listen to ${title} by ${track.artist_name} on Feelz Machine\n${trackUrl}`
-              : `Listen to ${title} on Feelz Machine\n${trackUrl}`,
-          });
-        } else { handleDownloadImage(); }
-      }, 'image/png');
-    } catch {}
-    setSharing(false);
+  // Sharing the LINK. This is the path for a profile, a song or an album when
+  // somebody just wants to send it to a person.
+  //
+  // The native sheet is given the url as a url, not buried in the text, so
+  // the receiving app knows to unfurl it. WhatsApp, Instagram DMs, Messages
+  // and the rest then fetch it and build their own card, and because og-meta
+  // now resolves /t/ and /a/ short codes server side, that card has the cover
+  // artwork on it. Before this, a shared short link showed the plain
+  // Feelz Machine homepage preview with no picture.
+  const handleShareLink = async () => {
+    const url = shareUrl || window.location.href;
+    const text = track
+      ? `Listen to ${title} by ${track.artist_name} on Feelz Machine`
+      : `${title} on Feelz Machine`;
+    if (navigator.share) {
+      setSharing(true);
+      try {
+        await navigator.share({ title, text, url });
+      } catch (e) {
+        // Cancelling is not a failure, and must not look like one.
+        if (e.name !== 'AbortError') handleCopyLink();
+      }
+      setSharing(false);
+      return;
+    }
+    handleCopyLink();
   };
 
   const handleDownloadVideo = () => {
@@ -863,38 +870,15 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
         </button>
 
         <div className="p-5 pb-2">
-          {/* Tabs */}
-          <div className="flex bg-white/[0.05] rounded-xl p-1 mb-4">
-            {[
-              { id: 'image', label: 'Image', icon: Image  },
-              { id: 'video', label: 'Story Video', icon: Film },
-            ].map(t => (
-              <button key={t.id} onClick={() => { setTab(t.id); setVideoBlob(null); }}
-                className={`flex-1 flex items-center justify-center space-x-1.5 py-2 rounded-lg text-xs font-semibold transition ${
-                  tab === t.id ? 'bg-white text-black' : 'text-white/40 hover:text-white/60'
-                }`}>
-                <t.icon className="w-3.5 h-3.5" />
-                <span>{t.label}</span>
-              </button>
-            ))}
+          {/* One thing to make, so no tabs. The image card used to live beside
+              this and was removed: it was a flat picture that carried no link,
+              which is the job a link preview already does properly. */}
+          <div className="flex items-center gap-2 mb-4 px-1">
+            <Film className="w-4 h-4 text-purple-400" />
+            <p className="text-sm font-bold text-white">Story video</p>
           </div>
 
-          {/* Image tab */}
-          {tab === 'image' && (
-            <div className="relative rounded-2xl overflow-hidden bg-white/[0.04] aspect-square">
-              <canvas ref={canvasRef} className="w-full h-full"
-                style={{ opacity: ready ? 1 : 0, transition: 'opacity 0.3s' }} />
-              {!ready && (
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <Loader className="w-6 h-6 animate-spin text-white/20" />
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Video tab */}
-          {tab === 'video' && (
-            <div className="space-y-3">
+          <div className="space-y-3">
               {/* Hidden recording canvas */}
               <canvas ref={videoRef} className="hidden" />
 
@@ -947,27 +931,28 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
                 </button>
               )}
 
-              {/* Background colour picker */}
+              {/* Glow colour. Was labelled Background and did nothing you
+                  could see, because the flat fill it changed was covered on
+                  every side. The swatches now show the glow colour itself,
+                  which is what actually changes on the frame. */}
               {!recording && (
                 <div className="space-y-2">
-                  <p className="text-[11px] text-white/40">Background</p>
+                  <div className="flex items-baseline justify-between">
+                    <p className="text-[11px] text-white/40">Glow</p>
+                    <p className="text-[11px] text-white/25">{glowById(glowId).label}</p>
+                  </div>
                   <div className="flex space-x-2">
-                    {[
-                      { color: '#0d0d0d', label: 'Black' },
-                      { color: '#0a0a1a', label: 'Dark Blue' },
-                      { color: '#0d0a14', label: 'Dark Purple' },
-                      { color: '#0a140a', label: 'Dark Green' },
-                      { color: '#14080a', label: 'Dark Red' },
-                      { color: '#1a1008', label: 'Dark Amber' },
-                    ].map(({ color, label }) => (
+                    {GLOWS.map(g => (
                       <button
-                        key={color}
-                        onClick={() => { setBgColor(color); setVideoBlob(null); setVideoProgress(0); }}
-                        title={label}
-                        className="w-8 h-8 rounded-lg border-2 transition"
+                        key={g.id}
+                        onClick={() => { setGlowId(g.id); setVideoBlob(null); setVideoProgress(0); }}
+                        title={g.label}
+                        aria-label={g.label}
+                        aria-pressed={glowId === g.id}
+                        className="w-9 h-9 rounded-lg border-2 transition"
                         style={{
-                          backgroundColor: color,
-                          borderColor: bgColor === color ? '#8CAB2E' : 'rgba(255,255,255,0.1)',
+                          background: `radial-gradient(circle at 35% 30%, ${g.swatch}, ${g.base} 120%)`,
+                          borderColor: glowId === g.id ? '#8CAB2E' : 'rgba(255,255,255,0.1)',
                         }}
                       />
                     ))}
@@ -999,72 +984,67 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
               {!audioUrl && (
                 <p className="text-[10px] text-amber-400/60 text-center">No audio, video will be visual only</p>
               )}
-            </div>
-          )}
+          </div>
         </div>
 
         {/* Actions */}
         <div className="px-5 pb-7 pt-3 space-y-3">
-          {tab === 'image' ? (
-            <>
-              <div className="flex space-x-3">
-                <button onClick={handleDownloadImage} disabled={!ready}
-                  className="flex-1 flex items-center justify-center space-x-2 py-3 rounded-2xl bg-white/[0.06] hover:bg-white/[0.1] transition disabled:opacity-30 text-sm font-semibold text-white">
-                  <Download className="w-4 h-4" /><span>Save</span>
-                </button>
-                <button onClick={handleShareImage} disabled={!ready || sharing}
+          {!videoBlob && !recording && !converting && (
+            <button onClick={recordVideo}
+              className="w-full flex items-center justify-center space-x-2 py-3 rounded-2xl bg-purple-600 hover:bg-purple-500 transition text-sm font-semibold text-white">
+              <Film className="w-4 h-4" /><span>Make the video</span>
+            </button>
+          )}
+          {recording && (
+            <button onClick={stopRecording}
+              className="w-full flex items-center justify-center space-x-2 py-3 rounded-2xl bg-red-500/20 border border-red-500/30 transition text-sm font-semibold text-red-400">
+              <span>Cancel</span>
+            </button>
+          )}
+          {videoBlob && !recording && !converting && (
+            <div className={videoFormat === 'MP4' ? 'flex space-x-3' : ''}>
+              <button onClick={handleDownloadVideo}
+                className={`flex items-center justify-center space-x-2 py-3 rounded-2xl bg-white/[0.06] hover:bg-white/[0.1] transition text-sm font-semibold text-white ${videoFormat === 'MP4' ? 'flex-1' : 'w-full'}`}>
+                <Download className="w-4 h-4" />
+                <span>{videoFormat === 'MP4' ? 'Save' : 'Save to device'}</span>
+              </button>
+              {videoFormat === 'MP4' && (
+                <button onClick={handleShareVideo} disabled={sharing}
                   className="flex-1 flex items-center justify-center space-x-2 py-3 rounded-2xl bg-purple-600 hover:bg-purple-500 transition disabled:opacity-30 text-sm font-semibold text-white">
                   {sharing ? <Loader className="w-4 h-4 animate-spin" /> : <><Share2 className="w-4 h-4" /><span>Share</span></>}
                 </button>
-              </div>
+              )}
+            </div>
+          )}
+          {videoBlob && (
+            <button onClick={() => { setVideoBlob(null); setVideoProgress(0); }}
+              className="w-full text-center text-xs text-white/20 hover:text-white/40 py-1 transition">
+              Make it again
+            </button>
+          )}
+          {videoError && <p className="text-xs text-red-400 text-center">{videoError}</p>}
+
+          {/* Just send the link. Separated by a rule because it is a different
+              thing from the video, not a lesser version of it: this is what
+              you use when somebody should end up ON the song, not looking at
+              a clip of it. The receiving app builds the picture itself. */}
+          <div className="pt-1" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+            <p className="pt-3 pb-2 text-[11px] text-white/30 text-center">
+              Or just send the link. It arrives with the artwork on it.
+            </p>
+            <div className="flex space-x-3">
               <button onClick={handleCopyLink}
-                className="w-full flex items-center justify-center space-x-2 py-3 rounded-2xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.06] transition text-sm font-semibold text-white/60">
+                className="flex-1 flex items-center justify-center space-x-2 py-3 rounded-2xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.06] transition text-sm font-semibold text-white/60">
                 {copied
-                  ? <><Check className="w-4 h-4 text-green-400" /><span className="text-green-400">Link copied!</span></>
+                  ? <><Check className="w-4 h-4 text-green-400" /><span className="text-green-400">Copied</span></>
                   : <><Link className="w-4 h-4" /><span>Copy link</span></>}
               </button>
-              <p className="text-[10px] text-white/20 text-center leading-relaxed">
-                For Instagram Stories: save the card, open Instagram, then paste the link in your story.
-              </p>
-            </>
-          ) : (
-            <>
-              {!videoBlob && !recording && !converting && (
-                <button onClick={recordVideo}
-                  className="w-full flex items-center justify-center space-x-2 py-3 rounded-2xl bg-purple-600 hover:bg-purple-500 transition text-sm font-semibold text-white">
-                  <Film className="w-4 h-4" /><span>Generate Story Video</span>
-                </button>
-              )}
-              {recording && (
-                <button onClick={stopRecording}
-                  className="w-full flex items-center justify-center space-x-2 py-3 rounded-2xl bg-red-500/20 border border-red-500/30 transition text-sm font-semibold text-red-400">
-                  <span>Cancel</span>
-                </button>
-              )}
-              {videoBlob && !recording && !converting && (
-                <div className={videoFormat === 'MP4' ? 'flex space-x-3' : ''}>
-                  <button onClick={handleDownloadVideo}
-                    className={`flex items-center justify-center space-x-2 py-3 rounded-2xl bg-white/[0.06] hover:bg-white/[0.1] transition text-sm font-semibold text-white ${videoFormat === 'MP4' ? 'flex-1' : 'w-full'}`}>
-                    <Download className="w-4 h-4" />
-                    <span>{videoFormat === 'MP4' ? 'Save' : 'Save to device'}</span>
-                  </button>
-                  {videoFormat === 'MP4' && (
-                    <button onClick={handleShareVideo} disabled={sharing}
-                      className="flex-1 flex items-center justify-center space-x-2 py-3 rounded-2xl bg-purple-600 hover:bg-purple-500 transition disabled:opacity-30 text-sm font-semibold text-white">
-                      {sharing ? <Loader className="w-4 h-4 animate-spin" /> : <><Share2 className="w-4 h-4" /><span>Share</span></>}
-                    </button>
-                  )}
-                </div>
-              )}
-              {videoBlob && (
-                <button onClick={() => { setVideoBlob(null); setVideoProgress(0); }}
-                  className="w-full text-center text-xs text-white/20 hover:text-white/40 py-1 transition">
-                  Regenerate
-                </button>
-              )}
-              {videoError && <p className="text-xs text-red-400 text-center">{videoError}</p>}
-            </>
-          )}
+              <button onClick={handleShareLink} disabled={sharing}
+                className="flex-1 flex items-center justify-center space-x-2 py-3 rounded-2xl bg-white/[0.06] hover:bg-white/[0.1] transition disabled:opacity-30 text-sm font-semibold text-white">
+                <Share2 className="w-4 h-4" /><span>Send link</span>
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
