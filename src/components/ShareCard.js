@@ -3,6 +3,7 @@ import { Download, Share2, X, Loader, Link, Check, Film } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import { buildStoryMp4, MEDIARECORDER_MP4_TYPES } from '../utils/storyMp4';
 import { resolveShareUrl, urlEndsInId } from '../utils/shareLink';
+import { coverUrl } from '../utils/coverUrl';
 
 // ── The glow colours ────────────────────────────────────────────────────────
 //
@@ -662,7 +663,10 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
     setAssets(null);
     (async () => {
       let full = null;
-      if (artworkUrl) { try { full = await loadImage(artworkUrl); } catch {} }
+      // 1000 wide is plenty: the biggest thing drawn from it is the record
+      // label at about 500px. Downloading the 3MB original to then throw most
+      // of it away was costing a phone the download AND the decode.
+      if (artworkUrl) { try { full = await loadImage(coverUrl(artworkUrl, 1000)); } catch {} }
       if (cancelled) return;
       // 900 for the label, which is drawn about 500px across.
       // 360 for the background, which is blurred beyond recognition anyway.
@@ -716,7 +720,7 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
     let vinylImg = assets?.vinylImg || null;
     if (!vinylImg) {
       let full = null;
-      if (artworkUrl && !artImg) { try { full = await loadImage(artworkUrl); } catch {} }
+      if (artworkUrl && !artImg) { try { full = await loadImage(coverUrl(artworkUrl, 1000)); } catch {} }
       artImg   = artImg   || downscale(full, 900);
       bleedImg = bleedImg || downscale(full, 360);
       full = null;

@@ -11,6 +11,8 @@ import {
   Loader, Disc3, Star, Sparkles, Clock, Users, Newspaper,
 } from 'lucide-react';
 import VerifiedBadge from '../components/VerifiedBadge';
+// Ask Supabase for the size we actually draw. See utils/coverUrl.
+import { coverUrl, COVER } from '../utils/coverUrl';
 // The same two things the home card shows on a computer, so Browse and Home
 // cannot disagree about who today's creators are or what the latest post is.
 import {
@@ -446,7 +448,7 @@ export default function BrowsePage() {
                       className="flex-shrink-0 w-20 text-center">
                       <div className="w-16 h-16 rounded-full mx-auto mb-1.5 overflow-hidden bg-white/[0.06]">
                         {a.profile_image_url
-                          ? <img src={a.profile_image_url} alt="" className="w-full h-full object-cover" loading="lazy" />
+                          ? <img src={coverUrl(a.profile_image_url, COVER.row)} alt="" className="w-full h-full object-cover" loading="lazy" />
                           : <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-purple-600/40 to-blue-600/30">
                               <span className="text-lg font-bold text-white/60">{a.artist_name?.[0]}</span>
                             </div>}
@@ -593,7 +595,7 @@ export default function BrowsePage() {
                       className="w-full flex items-center space-x-3 p-2.5 rounded-xl hover:bg-white/[0.02] transition text-left">
                       <div className="w-10 h-10 rounded-md overflow-hidden flex-shrink-0 bg-white/[0.06]">
                         {item.cover_artwork_url
-                          ? <img src={item.cover_artwork_url} alt="" className="w-full h-full object-cover" loading="lazy" />
+                          ? <img src={coverUrl(item.cover_artwork_url, COVER.row)} alt="" className="w-full h-full object-cover" loading="lazy" />
                           : <div className="w-full h-full flex items-center justify-center"><Disc3 className="w-4 h-4 text-white/15" /></div>}
                       </div>
                       <div className="flex-1 min-w-0">
@@ -674,7 +676,7 @@ export default function BrowsePage() {
                       <div className="relative aspect-square rounded-xl overflow-hidden mb-1.5 bg-white/[0.06]">
                         <PreorderTag track={track} />
                         {track.cover_artwork_url
-                          ? <img src={track.cover_artwork_url} alt="" loading="lazy"
+                          ? <img src={coverUrl(track.cover_artwork_url, COVER.rail)} alt="" loading="lazy"
                               className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
                           : <div className="w-full h-full flex items-center justify-center"><Music className="w-6 h-6 text-white/15" /></div>}
                       </div>
@@ -789,7 +791,7 @@ export default function BrowsePage() {
                     className="text-center group">
                     <div className="relative w-full aspect-square rounded-2xl overflow-hidden bg-white/[0.06] mb-2">
                       {a.profile_image_url
-                        ? <img src={a.profile_image_url} alt="" loading="lazy"
+                        ? <img src={coverUrl(a.profile_image_url, COVER.tile)} alt="" loading="lazy"
                             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
                         : <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-purple-600/30 to-blue-600/20">
                             <span className="text-2xl font-bold text-white/40">{a.artist_name?.[0]}</span>
@@ -872,7 +874,7 @@ function TrackCard({ track, rank, currentTrack, isPlaying, onPlay, onMore, onArt
       {rank && <span className="absolute top-2 left-2 text-[9px] font-bold text-white/20">#{rank}</span>}
       <div className="relative w-12 h-12 rounded-lg overflow-hidden flex-shrink-0 bg-white/[0.06]">
         {track.cover_artwork_url
-          ? <img src={track.cover_artwork_url} alt="" className="w-full h-full object-cover" loading="lazy" />
+          ? <img src={coverUrl(track.cover_artwork_url, COVER.row)} alt="" className="w-full h-full object-cover" loading="lazy" />
           : <div className="w-full h-full flex items-center justify-center"><Music className="w-5 h-5 text-white/15" /></div>}
         <div className="absolute inset-0 flex items-center justify-center bg-black/30">
           {isTrackPlaying ? <Pause className="w-4 h-4 text-white" fill="white" /> : <Play className="w-4 h-4 text-white" fill="white" />}
@@ -927,7 +929,7 @@ function TrendingRow({ track, rank, currentTrack, isPlaying, onPlay, onMore, onA
       </div>
       <div className="relative w-11 h-11 rounded-lg overflow-hidden flex-shrink-0">
         {track.cover_artwork_url
-          ? <img src={track.cover_artwork_url} alt="" className="w-full h-full object-cover" loading="lazy" />
+          ? <img src={coverUrl(track.cover_artwork_url, COVER.row)} alt="" className="w-full h-full object-cover" loading="lazy" />
           : <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-purple-900/40 to-blue-900/30"><Music className="w-4 h-4 text-white/20" /></div>}
         {isTrackPlaying && (
           <div className="absolute bottom-0.5 right-0.5 flex items-end space-x-px">
@@ -985,7 +987,7 @@ function TrackRow({ track, index, currentTrack, isPlaying, onPlay, onMore, onArt
       </div>
       <div className="w-10 h-10 rounded-md overflow-hidden flex-shrink-0 bg-white/[0.06]">
         {track.cover_artwork_url
-          ? <img src={track.cover_artwork_url} alt="" className="w-full h-full object-cover" loading="lazy" />
+          ? <img src={coverUrl(track.cover_artwork_url, COVER.row)} alt="" className="w-full h-full object-cover" loading="lazy" />
           : <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-purple-900/30 to-blue-900/20"><Music className="w-4 h-4 text-white/15" /></div>}
       </div>
       <div className="flex-1 min-w-0">
@@ -1010,7 +1012,7 @@ function AlbumTile({ album, navigate }) {
     <button onClick={() => navigate(`/album/${album.slug || album.id}`)} className="text-left group">
       <div className="relative aspect-square rounded-xl overflow-hidden bg-white/[0.06] mb-2">
         {album.cover_artwork_url
-          ? <img src={album.cover_artwork_url} alt="" loading="lazy"
+          ? <img src={coverUrl(album.cover_artwork_url, COVER.tile)} alt="" loading="lazy"
               className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
           : <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-white/[0.06] to-white/[0.02]">
               <Disc3 className="w-8 h-8 text-white/10" />

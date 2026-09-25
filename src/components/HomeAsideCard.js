@@ -38,6 +38,7 @@ import {
 import { supabase } from '../supabaseClient';
 import { usePlayer } from '../contexts/PlayerContext';
 import { useAuth } from '../contexts/AuthContext';
+import { coverUrl, COVER } from '../utils/coverUrl';
 
 // ── Tokens ─────────────────────────────────────────────────────────────
 // Named once so the panel and the overlay cannot drift apart, and so the
@@ -251,7 +252,7 @@ export function NewsOverlay({ news, trending, loaded, isAdmin, onClose, onPlay, 
                       style={{ borderTop: i === 0 ? 'none' : `1px solid ${T.edge}` }}>
                       <span className="w-4 text-[13px] font-bold text-white/25 tabular-nums">{i + 1}</span>
                       {t.cover_artwork_url ? (
-                        <img src={t.cover_artwork_url} alt="" className="w-11 h-11 rounded-lg object-cover" loading="lazy" />
+                        <img src={coverUrl(t.cover_artwork_url, COVER.row)} alt="" className="w-11 h-11 rounded-lg object-cover" loading="lazy" />
                       ) : (
                         <span className="w-11 h-11 rounded-lg flex items-center justify-center" style={{ background: T.surface }}>
                           <Music2 className="w-4 h-4 text-white/25" />
@@ -355,7 +356,7 @@ export function CreatorCard({ creator: c }) {
           cannot clash with whatever loads next to it. */}
       <div className="relative w-full" style={{ aspectRatio: '4 / 3' }}>
         <img
-          src={c.profile_image_url}
+          src={coverUrl(c.profile_image_url, COVER.card)}
           alt={c.artist_name}
           className="absolute inset-0 w-full h-full object-cover transition duration-500 group-hover:scale-[1.04]"
           loading="lazy"
