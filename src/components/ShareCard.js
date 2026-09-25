@@ -249,11 +249,34 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
   // Lyrics are on the track object almost everywhere (For You, the player).
   // Share can also be opened from places that select fewer columns, so fetch
   // them once if they are missing rather than silently dropping them.
+  //
+  // THE RESET BELOW IS THE IMPORTANT PART. `lyrics` was seeded from the track
+  // in useState, which only runs on the FIRST mount. Share this sheet on one
+  // song, close it, open it on another, and the component is often the same
+  // instance with a new `track` prop — so the words stayed on screen from the
+  // song before. That is how a Nostalgic Unit video came out carrying Steve
+  // C-SA's lyrics. Whenever the track changes, the words go back to unknown
+  // and are fetched again for the song actually being shared.
+  const lyricsTrackRef = useRef(track?.id || null);
+  useEffect(() => {
+    if (lyricsTrackRef.current !== track?.id) {
+      lyricsTrackRef.current = track?.id || null;
+      setLyrics(track?.lyrics ?? null);
+      setVideoBlob(null);
+      setVideoProgress(0);
+    }
+  }, [track?.id, track?.lyrics]);
+
   useEffect(() => {
     if (lyrics !== null || !track?.id) return;
     let cancelled = false;
-    supabase.from('tracks').select('lyrics').eq('id', track.id).maybeSingle()
-      .then(({ data }) => { if (!cancelled) setLyrics(data?.lyrics || ''); });
+    const wantedId = track.id;
+    supabase.from('tracks').select('lyrics').eq('id', wantedId).maybeSingle()
+      .then(({ data }) => {
+        // Guard again on arrival: a slow reply for the previous song must not
+        // land on the new one.
+        if (!cancelled && lyricsTrackRef.current === wantedId) setLyrics(data?.lyrics || '');
+      });
     return () => { cancelled = true; };
   }, [track?.id, lyrics]);
 
@@ -542,25 +565,49 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
     ctx.beginPath(); ctx.arc(W/2 + 220, H - 54, 5, 0, Math.PI*2); ctx.fill();
   }, [title, subtitle, artworkUrl, displayUrl, lyrics, showLyrics, track?.duration]);
 
-  // Render a static preview frame when on video tab
+  // The artwork and the vinyl, loaded ONCE and kept.
+  //
+  // This is why the preview went blank every time a colour was clicked or the
+  // slider moved. Redrawing meant re-running loadImage, which cache-busts the
+  // URL on purpose (?_cb=Date.now()), so every redraw was a fresh download of
+  // the cover over the network. Between the canvas being cleared and the
+  // download finishing there was nothing on screen, and dragging the slider
+  // fired one download per pixel of movement.
+  //
+  // Now the pictures are fetched once per artwork and reused. A colour change
+  // is a redraw of pixels already in memory, which is instant.
+  const [assets, setAssets] = useState(null); // { artImg, vinylImg }
   useEffect(() => {
-    if (recording) return;
-    const canvas = previewRef.current;
-    if (!canvas) return;
-    canvas.width  = 1080;
-    canvas.height = 1920;
-    const ctx = canvas.getContext('2d');
     let cancelled = false;
+    setAssets(null);
     (async () => {
       let artImg = null;
       if (artworkUrl) { try { artImg = await loadImage(artworkUrl); } catch {} }
       if (cancelled) return;
-      const vinylImg = await buildVinylImage(artImg, 840);
+      let vinylImg = null;
+      try { vinylImg = await buildVinylImage(artImg, 840); } catch {}
       if (cancelled) return;
-      await drawVideoFrame(ctx, artImg, vinylImg, 0, glowId, startTime);
+      setAssets({ artImg, vinylImg });
     })();
     return () => { cancelled = true; };
-  }, [artworkUrl, recording, buildVinylImage, drawVideoFrame, startTime, glowId, showLyrics, lyrics]);
+  }, [artworkUrl, buildVinylImage]);
+
+  // Static preview frame. Synchronous apart from the logo, and it never
+  // clears the canvas before it has something to put back.
+  useEffect(() => {
+    if (recording || !assets) return;
+    const canvas = previewRef.current;
+    if (!canvas) return;
+    if (canvas.width !== 1080)  canvas.width  = 1080;
+    if (canvas.height !== 1920) canvas.height = 1920;
+    const ctx = canvas.getContext('2d');
+    let cancelled = false;
+    (async () => {
+      if (cancelled) return;
+      await drawVideoFrame(ctx, assets.artImg, assets.vinylImg, 0, glowId, startTime);
+    })();
+    return () => { cancelled = true; };
+  }, [assets, recording, drawVideoFrame, startTime, glowId, showLyrics, lyrics]);
 
   // ── Record video ─────────────────────────────────────────────────────────────
   const recordVideo = useCallback(async () => {
@@ -577,13 +624,14 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
     canvas.height = 1920;
     const ctx = canvas.getContext('2d');
 
-    let artImg = null;
-    if (artworkUrl) {
-      try { artImg = await loadImage(artworkUrl); } catch {}
+    // Reuse what the preview already loaded. Downloading the cover a second
+    // time here was a slow start and one more thing that could hang.
+    let artImg   = assets?.artImg || null;
+    let vinylImg = assets?.vinylImg || null;
+    if (!vinylImg) {
+      if (artworkUrl && !artImg) { try { artImg = await loadImage(artworkUrl); } catch {} }
+      try { vinylImg = await buildVinylImage(artImg, 840); } catch {}
     }
-
-    // Build the vinyl SVG image once, reused every frame
-    const vinylImg = await buildVinylImage(artImg, 840);
 
     const DURATION = 30; // seconds
     const FPS      = 30;
@@ -596,11 +644,19 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
     // browser cannot encode H.264 + AAC.
     try {
       setVideoFormat('MP4');
-      const mp4 = await buildStoryMp4({
-        canvas, fps: FPS, seconds: DURATION, audioUrl, startTime,
-        drawFrame: (i) => drawVideoFrame(ctx, artImg, vinylImg, i * radsPerFrame, glowId, startTime + i / FPS),
-        onProgress: setVideoProgress,
-      });
+      // A watchdog. Encoding a 30 second video takes well under two minutes on
+      // anything current; past that it is stuck, and a spinner that never
+      // stops is worse than an error, because there is nothing the person can
+      // do but close the app. This turns a hang into a message and a retry.
+      const mp4 = await Promise.race([
+        buildStoryMp4({
+          canvas, fps: FPS, seconds: DURATION, audioUrl, startTime,
+          drawFrame: (i) => drawVideoFrame(ctx, artImg, vinylImg, i * radsPerFrame, glowId, startTime + i / FPS),
+          onProgress: setVideoProgress,
+        }),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('mp4 encode timed out')), 150000)),
+      ]);
       if (mp4) {
         mp4._ext = 'mp4';
         setVideoBlob(mp4);
@@ -767,7 +823,7 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
       animFrameRef.current = setTimeout(animate, delay);
     };
     animate();
-  }, [audioUrl, artworkUrl, drawVideoFrame, startTime, buildVinylImage, glowId]);
+  }, [audioUrl, artworkUrl, drawVideoFrame, startTime, buildVinylImage, glowId, assets]);
 
   const stopRecording = () => {
     if (animFrameRef.current) clearTimeout(animFrameRef.current);
@@ -856,139 +912,167 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
   };
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-end md:items-center justify-center bg-black/80 backdrop-blur-sm p-4 pb-6 md:pb-4"
-      onClick={onClose}>
+    // data-feelz-scroll: the For You page listens for the wheel on WINDOW and
+    // turns it into "next song", so scrolling anywhere over this sheet was
+    // changing the track underneath it. Everything that does its own
+    // scrolling marks itself with this and keeps its own wheel events.
+    <div
+      data-feelz-scroll
+      className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 backdrop-blur-sm p-3"
+      onClick={onClose}
+      onWheel={e => e.stopPropagation()}
+    >
       <div
-        className="relative w-full max-w-sm rounded-3xl"
-        style={{ backgroundColor: '#111', border: '1px solid rgba(255,255,255,0.08)', maxHeight: 'calc(100dvh - 32px)', overflowY: 'auto' }}
+        className="relative w-full max-w-sm rounded-3xl flex flex-col overflow-hidden"
+        // ONE PANEL, AND IT DOES NOT SCROLL.
+        //
+        // It used to be a tall column with overflow-y:auto, which is why the
+        // buttons at the bottom were cut off: the sheet was taller than the
+        // screen and the only way to reach them was to scroll, and scrolling
+        // was broken (see above).
+        //
+        // Now the sheet is exactly as tall as the screen allows and its parts
+        // divide that height between them. The controls and the buttons take
+        // the room they need first, and the preview takes whatever is left,
+        // so the bottom of the sheet is always the bottom of the sheet.
+        style={{
+          backgroundColor: '#111',
+          border: '1px solid rgba(255,255,255,0.08)',
+          maxHeight: 'calc(100dvh - 24px)',
+        }}
         onClick={e => e.stopPropagation()}
       >
-        {/* Close */}
-        <button onClick={onClose}
-          className="absolute top-4 right-4 z-10 w-8 h-8 flex items-center justify-center rounded-full bg-white/[0.08] hover:bg-white/[0.15] transition">
-          <X className="w-4 h-4 text-white/60" />
-        </button>
-
-        <div className="p-5 pb-2">
-          {/* One thing to make, so no tabs. The image card used to live beside
-              this and was removed: it was a flat picture that carried no link,
-              which is the job a link preview already does properly. */}
-          <div className="flex items-center gap-2 mb-4 px-1">
+        {/* Header */}
+        <div className="flex-shrink-0 flex items-center justify-between px-5 pt-4 pb-3">
+          <div className="flex items-center gap-2">
             <Film className="w-4 h-4 text-purple-400" />
             <p className="text-sm font-bold text-white">Story video</p>
           </div>
+          <button onClick={onClose}
+            className="w-8 h-8 flex items-center justify-center rounded-full bg-white/[0.08] hover:bg-white/[0.15] transition">
+            <X className="w-4 h-4 text-white/60" />
+          </button>
+        </div>
 
-          <div className="space-y-3">
-              {/* Hidden recording canvas */}
-              <canvas ref={videoRef} className="hidden" />
+        {/* Preview. flex-1 with min-h-0 is what makes it give way: it shrinks
+            to whatever is left after the controls, instead of pushing them
+            off the bottom. object-contain keeps the 9:16 shape inside it, so
+            what is on screen is what comes out, just smaller. */}
+        <div className="flex-1 min-h-0 flex px-5 pb-3">
+          {/* flex-1 + min-h-0 on BOTH this and the row above it, not
+              height:100%. A percentage height inside a flex item does not
+              resolve reliably: the box came out 523px tall inside a 364px
+              slot and the preview sat on top of the controls. Making each
+              level a flex parent and letting the child flex into it is the
+              version that actually measures. */}
+          <div className="flex-1 min-h-0 min-w-0 rounded-2xl bg-black relative overflow-hidden flex items-center justify-center">
+            <canvas ref={videoRef} className="hidden" />
+            <canvas ref={previewRef} className="w-full h-full object-contain" />
 
-              {/* Preview, shows a static frame of how the video will look */}
-              <div className="rounded-2xl bg-black aspect-[9/16] relative overflow-hidden flex items-center justify-center">
-                <canvas ref={previewRef} className="w-full h-full object-contain" />
-                {(recording || converting) && (
-                  <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/60 space-y-3">
-                    <div className="w-16 h-16 relative">
-                      <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
-                        <circle cx="18" cy="18" r="15.9" fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="2" />
-                        <circle cx="18" cy="18" r="15.9" fill="none" stroke="#8B5CF6" strokeWidth="2"
-                          strokeDasharray={`${converting ? 100 : videoProgress} 100`} strokeLinecap="round"
-                          style={converting ? { animation: 'spin 1s linear infinite' } : {}} />
-                      </svg>
-                      {!converting && <span className="absolute inset-0 flex items-center justify-center text-xs font-bold text-white">{videoProgress}%</span>}
-                    </div>
-                    <p className="text-xs text-white/60">
-                      {converting ? 'Converting to MP4 for Instagram...' : 'Rendering...'}
-                    </p>
-                    {converting && (
-                      <p className="text-[10px] text-white/30 px-8 text-center">
-                        This takes 30–60s. Don't close the app.
-                      </p>
-                    )}
-                  </div>
-                )}
-                {videoBlob && !recording && (
-                  <div className="absolute bottom-4 left-0 right-0 flex flex-col items-center space-y-2">
-                    <div className="px-3 py-1.5 rounded-full bg-green-500/20 border border-green-500/30 flex items-center space-x-1.5">
-                      <Check className="w-3 h-3 text-green-400" />
-                      <span className="text-xs font-semibold text-green-400">Ready to share</span>
-                    </div>
-                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/[0.06] text-white/30">
-                      Save → open Instagram → share as story
-                    </span>
-                  </div>
+            {!assets && !recording && (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <Loader className="w-6 h-6 animate-spin text-white/20" />
+              </div>
+            )}
+
+            {(recording || converting) && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/70 space-y-3 px-6 text-center">
+                <div className="w-16 h-16 relative">
+                  <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
+                    <circle cx="18" cy="18" r="15.9" fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="2" />
+                    <circle cx="18" cy="18" r="15.9" fill="none" stroke="#8B5CF6" strokeWidth="2"
+                      strokeDasharray={`${converting ? 100 : videoProgress} 100`} strokeLinecap="round"
+                      style={converting ? { animation: 'spin 1s linear infinite' } : {}} />
+                  </svg>
+                  {!converting && <span className="absolute inset-0 flex items-center justify-center text-xs font-bold text-white">{videoProgress}%</span>}
+                </div>
+                <p className="text-xs text-white/60">
+                  {converting ? 'Making it an MP4 for Instagram' : 'Making your video'}
+                </p>
+                {converting && (
+                  <p className="text-[10px] text-white/30">Takes up to a minute. Keep the app open.</p>
                 )}
               </div>
+            )}
 
-              {/* Lyrics on the video */}
-              {!recording && lyrics && (
-                <button
-                  onClick={() => { setShowLyrics(v => !v); setVideoBlob(null); setVideoProgress(0); }}
-                  className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl bg-white/[0.04] border border-white/[0.06]">
-                  <span className="text-xs text-white/70">Show the lyrics on the video</span>
-                  <span className={`w-9 h-5 rounded-full transition-colors flex items-center px-0.5 ${showLyrics ? 'bg-purple-500' : 'bg-white/[0.12]'}`}>
-                    <span className={`w-4 h-4 rounded-full bg-white transition-transform ${showLyrics ? 'translate-x-4' : 'translate-x-0'}`} />
-                  </span>
-                </button>
-              )}
-
-              {/* Glow colour. Was labelled Background and did nothing you
-                  could see, because the flat fill it changed was covered on
-                  every side. The swatches now show the glow colour itself,
-                  which is what actually changes on the frame. */}
-              {!recording && (
-                <div className="space-y-2">
-                  <div className="flex items-baseline justify-between">
-                    <p className="text-[11px] text-white/40">Glow</p>
-                    <p className="text-[11px] text-white/25">{glowById(glowId).label}</p>
-                  </div>
-                  <div className="flex space-x-2">
-                    {GLOWS.map(g => (
-                      <button
-                        key={g.id}
-                        onClick={() => { setGlowId(g.id); setVideoBlob(null); setVideoProgress(0); }}
-                        title={g.label}
-                        aria-label={g.label}
-                        aria-pressed={glowId === g.id}
-                        className="w-9 h-9 rounded-lg border-2 transition"
-                        style={{
-                          background: `radial-gradient(circle at 35% 30%, ${g.swatch}, ${g.base} 120%)`,
-                          borderColor: glowId === g.id ? '#8CAB2E' : 'rgba(255,255,255,0.1)',
-                        }}
-                      />
-                    ))}
-                  </div>
+            {videoBlob && !recording && (
+              <div className="absolute bottom-3 left-0 right-0 flex justify-center">
+                <div className="px-3 py-1.5 rounded-full bg-green-500/20 border border-green-500/30 flex items-center space-x-1.5">
+                  <Check className="w-3 h-3 text-green-400" />
+                  <span className="text-xs font-semibold text-green-400">Ready</span>
                 </div>
-              )}
-
-              {/* Start time picker */}
-              {audioUrl && !recording && (
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <p className="text-[11px] text-white/40">Start from</p>
-                    <p className="text-[11px] text-white/60 font-medium">
-                      {Math.floor(startTime / 60)}:{String(startTime % 60).padStart(2, '0')}
-                    </p>
-                  </div>
-                  <input
-                    type="range"
-                    min={0}
-                    max={Math.max(0, duration - 30)}
-                    value={startTime}
-                    onChange={e => { setStartTime(Number(e.target.value)); setVideoBlob(null); }}
-                    className="w-full accent-purple-500"
-                  />
-                  <p className="text-[10px] text-white/20">Drag to choose which 30 seconds to use</p>
-                </div>
-              )}
-
-              {!audioUrl && (
-                <p className="text-[10px] text-amber-400/60 text-center">No audio, video will be visual only</p>
-              )}
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Actions */}
-        <div className="px-5 pb-7 pt-3 space-y-3">
+        {/* Controls. Fixed height, always visible, never scrolled to. */}
+        <div className="flex-shrink-0 px-5 pb-5 space-y-3">
+
+          {!recording && lyrics ? (
+            <button
+              onClick={() => { setShowLyrics(v => !v); setVideoBlob(null); setVideoProgress(0); }}
+              className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl bg-white/[0.04] border border-white/[0.06]">
+              <span className="text-xs text-white/70">Show the lyrics on the video</span>
+              <span className={`w-9 h-5 rounded-full transition-colors flex items-center px-0.5 flex-shrink-0 ${showLyrics ? 'bg-purple-500' : 'bg-white/[0.12]'}`}>
+                <span className={`w-4 h-4 rounded-full bg-white transition-transform ${showLyrics ? 'translate-x-4' : 'translate-x-0'}`} />
+              </span>
+            </button>
+          ) : null}
+
+          {/* Glow colour. Was labelled Background and did nothing you could
+              see, because the flat fill it changed was covered on every side.
+              The swatches now show the glow colour itself, which is what
+              actually changes on the frame. */}
+          {!recording && (
+            <div>
+              <div className="flex items-baseline justify-between mb-1.5">
+                <p className="text-[11px] text-white/40">Glow</p>
+                <p className="text-[11px] text-white/25">{glowById(glowId).label}</p>
+              </div>
+              <div className="flex gap-2">
+                {GLOWS.map(g => (
+                  <button
+                    key={g.id}
+                    onClick={() => { setGlowId(g.id); setVideoBlob(null); setVideoProgress(0); }}
+                    title={g.label}
+                    aria-label={g.label}
+                    aria-pressed={glowId === g.id}
+                    className="flex-1 h-9 rounded-lg border-2 transition"
+                    style={{
+                      background: `radial-gradient(circle at 35% 30%, ${g.swatch}, ${g.base} 120%)`,
+                      borderColor: glowId === g.id ? '#8CAB2E' : 'rgba(255,255,255,0.1)',
+                    }}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {audioUrl && !recording && (
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <p className="text-[11px] text-white/40">Start from</p>
+                <p className="text-[11px] text-white/60 font-medium">
+                  {Math.floor(startTime / 60)}:{String(startTime % 60).padStart(2, '0')}
+                </p>
+              </div>
+              <input
+                type="range"
+                min={0}
+                max={Math.max(0, duration - 30)}
+                value={startTime}
+                onChange={e => { setStartTime(Number(e.target.value)); setVideoBlob(null); }}
+                className="w-full accent-purple-500"
+              />
+            </div>
+          )}
+
+          {!audioUrl && (
+            <p className="text-[10px] text-amber-400/60 text-center">No audio, the video will be pictures only</p>
+          )}
+
+          {/* Buttons */}
           {!videoBlob && !recording && !converting && (
             <button onClick={recordVideo}
               className="w-full flex items-center justify-center space-x-2 py-3 rounded-2xl bg-purple-600 hover:bg-purple-500 transition text-sm font-semibold text-white">
@@ -1006,7 +1090,7 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
               <button onClick={handleDownloadVideo}
                 className={`flex items-center justify-center space-x-2 py-3 rounded-2xl bg-white/[0.06] hover:bg-white/[0.1] transition text-sm font-semibold text-white ${videoFormat === 'MP4' ? 'flex-1' : 'w-full'}`}>
                 <Download className="w-4 h-4" />
-                <span>{videoFormat === 'MP4' ? 'Save' : 'Save to device'}</span>
+                <span>Save</span>
               </button>
               {videoFormat === 'MP4' && (
                 <button onClick={handleShareVideo} disabled={sharing}
@@ -1016,34 +1100,22 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
               )}
             </div>
           )}
-          {videoBlob && (
-            <button onClick={() => { setVideoBlob(null); setVideoProgress(0); }}
-              className="w-full text-center text-xs text-white/20 hover:text-white/40 py-1 transition">
-              Make it again
-            </button>
-          )}
           {videoError && <p className="text-xs text-red-400 text-center">{videoError}</p>}
 
-          {/* Just send the link. Separated by a rule because it is a different
-              thing from the video, not a lesser version of it: this is what
-              you use when somebody should end up ON the song, not looking at
-              a clip of it. The receiving app builds the picture itself. */}
-          <div className="pt-1" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
-            <p className="pt-3 pb-2 text-[11px] text-white/30 text-center">
-              Or just send the link. It arrives with the artwork on it.
-            </p>
-            <div className="flex space-x-3">
-              <button onClick={handleCopyLink}
-                className="flex-1 flex items-center justify-center space-x-2 py-3 rounded-2xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.06] transition text-sm font-semibold text-white/60">
-                {copied
-                  ? <><Check className="w-4 h-4 text-green-400" /><span className="text-green-400">Copied</span></>
-                  : <><Link className="w-4 h-4" /><span>Copy link</span></>}
-              </button>
-              <button onClick={handleShareLink} disabled={sharing}
-                className="flex-1 flex items-center justify-center space-x-2 py-3 rounded-2xl bg-white/[0.06] hover:bg-white/[0.1] transition disabled:opacity-30 text-sm font-semibold text-white">
-                <Share2 className="w-4 h-4" /><span>Send link</span>
-              </button>
-            </div>
+          {/* Just send the link. A different thing from the video, not a
+              lesser version of it: this is for when somebody should end up ON
+              the song. The receiving app builds the picture itself. */}
+          <div className="flex gap-3 pt-1" style={{ borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: 12 }}>
+            <button onClick={handleCopyLink}
+              className="flex-1 flex items-center justify-center space-x-2 py-2.5 rounded-2xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.06] transition text-xs font-semibold text-white/60">
+              {copied
+                ? <><Check className="w-3.5 h-3.5 text-green-400" /><span className="text-green-400">Copied</span></>
+                : <><Link className="w-3.5 h-3.5" /><span>Copy link</span></>}
+            </button>
+            <button onClick={handleShareLink} disabled={sharing}
+              className="flex-1 flex items-center justify-center space-x-2 py-2.5 rounded-2xl bg-white/[0.06] hover:bg-white/[0.1] transition disabled:opacity-30 text-xs font-semibold text-white">
+              <Share2 className="w-3.5 h-3.5" /><span>Send link</span>
+            </button>
           </div>
         </div>
       </div>
