@@ -33,9 +33,31 @@ import React from 'react';
 import { PlayCircle, ExternalLink } from 'lucide-react';
 import { youTubeEmbedSrc, youTubeThumb } from '../utils/youtube';
 
-export default function SchoolCourseCard({ url, title, desc, icon: Icon = PlayCircle }) {
+// Vertical, and why it is not simply a taller box.
+//
+// The audience arrives from TikTok, on a phone, and the platform course is a
+// screen recording of a phone. So 9:16 is the honest frame: put a vertical
+// video in a 16:9 one and YouTube pillarboxes it, wasting half the width on
+// black bars and shrinking the UI the course is trying to show.
+//
+// The catch is the desktop. These cards sit in a lg:grid-cols-2 grid, so a
+// 9:16 video at half a laptop's width comes out around 890px tall and shoves
+// the entry button off the bottom of the screen. Capping the media width
+// keeps a vertical course phone-shaped on every screen instead of letting it
+// grow to fill one.
+const VERTICAL_MAX_W = 300;
+
+export default function SchoolCourseCard({ url, title, desc, icon: Icon = PlayCircle, vertical }) {
   const [open, setOpen] = React.useState(false);
   if (!url) return null;
+
+  // A /shorts/ link is vertical by definition, so it does not need declaring.
+  // Anything else says so explicitly, because the aspect ratio of an ordinary
+  // YouTube video cannot be known from its url.
+  const isVertical = vertical ?? /\/shorts\//.test(url);
+  const frame = isVertical
+    ? { aspectRatio: '9 / 16', maxWidth: VERTICAL_MAX_W, marginLeft: 'auto', marginRight: 'auto' }
+    : { aspectRatio: '16 / 9' };
 
   const embed = youTubeEmbedSrc(url, { autoplay: true });
   const thumb = youTubeThumb(url);
@@ -58,7 +80,7 @@ export default function SchoolCourseCard({ url, title, desc, icon: Icon = PlayCi
   return (
     <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] overflow-hidden">
       {open ? (
-        <div className="relative w-full bg-black" style={{ aspectRatio: '16 / 9' }}>
+        <div className="relative w-full bg-black" style={frame}>
           <iframe
             src={embed}
             title={title}
@@ -74,7 +96,7 @@ export default function SchoolCourseCard({ url, title, desc, icon: Icon = PlayCi
           onClick={() => setOpen(true)}
           aria-label={`Play ${title}`}
           className="relative w-full block text-left group"
-          style={{ aspectRatio: '16 / 9' }}
+          style={frame}
         >
           {thumb ? (
             <img src={thumb} alt="" loading="lazy"

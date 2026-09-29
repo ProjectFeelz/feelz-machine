@@ -372,15 +372,22 @@ export default function SchoolSessionsPage() {
               {/* Plays in place. A YouTube link becomes an inline player that
                   loads nothing until it is tapped; anything else stays the
                   link card it always was. See src/components/SchoolCourseCard.js */}
+              {/* Both marked vertical. The audience comes from TikTok on a
+                  phone, and the platform course is a screen recording of a
+                  phone, so 9:16 is the frame that does not waste half its
+                  width on black bars. Drop `vertical` from either one if that
+                  course ends up shot wide. */}
               <SchoolCourseCard
                 url={platformCourseUrl}
                 icon={PlayCircle}
+                vertical
                 title="How to Use Feelz Machine"
                 desc="Recording, uploading, splits, so nobody's at a disadvantage."
               />
               <SchoolCourseCard
                 url={viralCourseUrl}
                 icon={BookOpen}
+                vertical
                 title="How to Make Viral Content"
                 desc="Get your song seen on TikTok and bring in votes."
               />
