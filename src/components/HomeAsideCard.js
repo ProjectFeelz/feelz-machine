@@ -7,7 +7,7 @@
 //   The column itself is CREATORS. Three artists a day, chosen by
 //   pick_creator_highlights() so everyone loading the page today sees the
 //   same three and nobody comes round again inside a week. It is the column's
-//   permanent content because it is the part with artwork in it — a strip of
+//   permanent content because it is the part with artwork in it, a strip of
 //   text posts next to a record player is a dead strip.
 //
 //   WHAT'S NEW & TRENDING is a button, not a tab. It opens over the page, so
@@ -17,7 +17,7 @@
 // THE RULE THIS FILE EXISTS TO KEEP
 //
 //   It must never disturb the music. No <iframe> is rendered until somebody
-//   clicks a thumbnail — a YouTube embed that merely exists can autoplay —
+//   clicks a thumbnail, a YouTube embed that merely exists can autoplay , 
 //   and the click pauses the audio player before the iframe mounts. Nothing
 //   here calls playTrack on its own.
 //
@@ -25,7 +25,7 @@
 //
 //   Everything in here is neutral: near-black surfaces, chrome hairlines, one
 //   violet accent used only on things you can press. That is deliberate. The
-//   content IS the colour — artist photos, cover art, video thumbnails — and
+//   content IS the colour, artist photos, cover art, video thumbnails, and
 //   any hue in the furniture would end up fighting whatever artwork loaded
 //   next to it. Contrast comes from luminance and edges, not from paint.
 
@@ -36,6 +36,7 @@ import {
   Users, Music2, X, Pin,
 } from 'lucide-react';
 import { supabase } from '../supabaseClient';
+import { visibleNow, platformStoryArtistId } from '../utils/stories';
 import { usePlayer } from '../contexts/PlayerContext';
 import { useAuth } from '../contexts/AuthContext';
 import { coverUrl, COVER } from '../utils/coverUrl';
@@ -89,7 +90,7 @@ function NewsItem({ item, featured }) {
   const navigate = useNavigate();
   const vid = youTubeId(item.youtube_url);
 
-  // A link can be either — "/profile/edit" or "https://…". An internal path
+  // A link can be either, "/profile/edit" or "https://…". An internal path
   // put through an <a href> would tear the whole app down and rebuild it,
   // losing the playing track on the way, so those go through the router.
   const internal = !!item.link_url && item.link_url.startsWith('/');
@@ -216,6 +217,14 @@ export function NewsOverlay({ news, trending, loaded, isAdmin, onClose, onPlay, 
         </header>
 
         <div className="px-6 py-6 space-y-4">
+          {/* The story rail, above the posts.
+              Not a new feed. These are ordinary rows in artist_stories owned
+              by the platform artist, so the same stories show in the For You
+              rail and on the profile ring without anything else changing. The
+              rail simply renders nothing when none are live, which is the
+              normal state between scheduled ones. */}
+          <PlatformStoryRail />
+
           {pinned.map(item => <NewsItem key={item.id} item={item} featured />)}
           {rest.map(item   => <NewsItem key={item.id} item={item} />)}
 
@@ -315,7 +324,7 @@ export function useHomeCardData({ creatorCount = 3 } = {}) {
       if (cancelled) return;
 
       // Logged, never shown. Before migration 128 runs, the news table and
-      // the RPC do not exist and these come back 404/42883 — the column just
+      // the RPC do not exist and these come back 404/42883, the column just
       // renders what it has.
       if (newsRes.error)    console.warn('[home card] news:',     newsRes.error.code, newsRes.error.message);
       if (trendRes.error)   console.warn('[home card] trending:', trendRes.error.code, trendRes.error.message);
@@ -335,6 +344,77 @@ export function useHomeCardData({ creatorCount = 3 } = {}) {
   }, [creatorCount]);
 
   return { news, trending, creators, loaded };
+}
+
+
+// ── The platform story rail ────────────────────────────────────────────────
+//
+// Sits at the top of What's New. Reads exactly what every other story surface
+// reads, through the shared visibleNow filter, so a story planned for
+// December stays invisible until December on this surface too.
+//
+// Tapping one does not open a bespoke viewer. It routes to the platform
+// artist's profile, where the story ring already exists and already works.
+// A second viewer would be a second thing to keep in step with the first.
+export function PlatformStoryRail() {
+  const navigate = useNavigate();
+  const [stories, setStories] = React.useState([]);
+  const [slug, setSlug] = React.useState(null);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const artistId = await platformStoryArtistId(supabase);
+      if (!artistId || cancelled) return;
+
+      const [{ data: rows }, { data: art }] = await Promise.all([
+        visibleNow(
+          supabase
+            .from('artist_stories')
+            .select('id, media_url, media_type, caption, publish_at, expires_at')
+            .eq('artist_id', artistId))
+          .order('publish_at', { ascending: false })
+          .limit(12),
+        supabase.from('artists').select('slug').eq('id', artistId).maybeSingle(),
+      ]);
+      if (cancelled) return;
+      setStories(rows || []);
+      setSlug(art?.slug || null);
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  if (!stories.length) return null;
+
+  return (
+    <div className="-mx-1 mb-1">
+      <p className="px-1 mb-2 text-[11px] font-bold uppercase tracking-widest" style={{ color: T.accent }}>
+        From Feelz Machine
+      </p>
+      <div className="flex gap-2.5 overflow-x-auto scrollbar-hide px-1 pb-1">
+        {stories.map(st => (
+          <button
+            key={st.id}
+            onClick={() => slug && navigate(`/artist/${slug}`)}
+            className="relative flex-shrink-0 rounded-xl overflow-hidden transition hover:opacity-90"
+            style={{ width: 92, aspectRatio: '9 / 16', border: `1px solid ${T.edge}` }}
+            title={st.caption || 'Open'}
+          >
+            {st.media_type === 'video'
+              ? <video src={st.media_url} className="absolute inset-0 w-full h-full object-cover" muted playsInline />
+              : <img src={st.media_url} alt={st.caption || ''} className="absolute inset-0 w-full h-full object-cover" loading="lazy" />}
+            <span className="absolute inset-0"
+              style={{ background: 'linear-gradient(180deg, rgba(0,0,0,0) 45%, rgba(0,0,0,0.85) 100%)' }} />
+            {st.caption && (
+              <span className="absolute left-1.5 right-1.5 bottom-1.5 text-[10px] font-semibold text-white/90 leading-tight line-clamp-2 text-left">
+                {st.caption}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 // ── One creator card ───────────────────────────────────────────────────
@@ -416,12 +496,12 @@ export default function HomeAsideCard() {
     playTrack(track, trending.filter(t => t?.file_url));
   }, [currentTrack?.id, playTrack, togglePlay, trending]);
 
-  // NOTE — do not add "if there is nothing, render null" here.
+  // NOTE, do not add "if there is nothing, render null" here.
   //
   // The feed next door reserves this column with a CSS breakpoint
   // (ForYouPage: xl:right-[380px]), and a media query cannot know whether this
   // component decided to draw. Returning null would leave a 380px strip of
-  // black nailed to the side of the page with nothing in it — worse than any
+  // black nailed to the side of the page with nothing in it, worse than any
   // empty state. The column is always occupied; what fills it degrades.
 
   return (
@@ -429,13 +509,13 @@ export default function HomeAsideCard() {
       <aside
         // data-feelz-scroll tells ForYouPage's window-level wheel handler to
         // leave this alone. Without it, scrolling this card flipped the song
-        // underneath and the card itself would not move — the handler calls
+        // underneath and the card itself would not move, the handler calls
         // preventDefault on every wheel event it takes.
         data-feelz-scroll
         className="hidden xl:flex fixed top-0 bottom-0 right-0 w-[380px] flex-col z-30"
         style={{
           background: T.panel,
-          // A hairline that is brightest at the top and fades out — the edge
+          // A hairline that is brightest at the top and fades out, the edge
           // of a surface catching light, rather than a drawn border. It is
           // what stops the column reading as a hole cut in the page now that
           // the feed beside it also ends in black.
@@ -456,7 +536,7 @@ export default function HomeAsideCard() {
               <span className="text-[13px] font-bold text-white truncate">Artist Highlight</span>
             </div>
 
-            {/* Not a tab. A door — it opens over the page, because a column
+            {/* Not a tab. A door, it opens over the page, because a column
                 380px wide is a bad place to read paragraphs. */}
             <button
               onClick={() => setNewsOpen(true)}

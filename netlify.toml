@@ -179,9 +179,21 @@
 [functions."rotate-featured"]
   schedule = "20 0 * * *"
 
-# daily 02:00
+# hourly, at 41 past
+#
+# Was daily at 02:00. A story is HIDDEN from the app the moment it expires,
+# because every read filters on expires_at, so the schedule was never what
+# decided whether a story was still visible. What it decided was how long the
+# media file stayed reachable afterwards: the bucket is public, so a story
+# that had "disappeared" from the app could still be opened by anyone holding
+# its URL for up to another 24 hours.
+#
+# Hourly cuts that window to an hour. The job is cheap when there is nothing
+# to do: one indexed select on expires_at, and it returns immediately on an
+# empty result. 41 past rather than on the hour so it is not queued behind
+# everything else that runs at :00.
 [functions."cleanup-stories"]
-  schedule = "0 2 * * *"
+  schedule = "41 * * * *"
 
 # daily 02:30
 [functions."cleanup-empty-albums"]

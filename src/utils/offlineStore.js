@@ -1,11 +1,11 @@
 // src/utils/offlineStore.js
 //
-// OFFLINE LISTENING — the storage layer
+// OFFLINE LISTENING, the storage layer
 //
 // What this is for: keeping the actual audio for a track on the person's
 // device so it plays with no network at all. That is a different thing from
 // the existing Downloads feature, which hands the browser an .mp3 and puts a
-// file in the phone's Downloads folder — outside the app, invisible to the
+// file in the phone's Downloads folder, outside the app, invisible to the
 // player, and no use for listening in Feelz Machine on a plane.
 //
 //
@@ -32,7 +32,7 @@
 //
 // WHY THERE IS A LEASE AND NOT JUST A FILE
 //
-// Offline entitlement cannot be checked at play time — there is no network,
+// Offline entitlement cannot be checked at play time, there is no network,
 // that is the entire point. So the check happens once, at save time, on the
 // server (netlify/functions/get-offline-url.js), and the answer is written
 // next to the audio as an expiry date. Playing offline re-reads that date
@@ -182,7 +182,7 @@ export async function offlineUsage() {
   const items = await listOffline();
   const bytes = items.reduce((sum, m) => sum + (m.bytes || 0), 0);
 
-  // The browser's own view of the origin's allowance. Purely informational —
+  // The browser's own view of the origin's allowance. Purely informational , 
   // never gate a save on it, because the numbers are deliberately fuzzy and a
   // wrong refusal is worse than a failed write we can report.
   let quota = null;
@@ -227,7 +227,7 @@ function snapshotTrack(track, extra) {
  *
  * The transaction is the part worth noticing. Audio and metadata are written
  * together or not at all, so there is never a metadata row promising a track
- * whose audio failed to land — which would show as a song in the library that
+ * whose audio failed to land, which would show as a song in the library that
  * silently refuses to play.
  *
  * onProgress is called with 0..1, or null when the response has no
@@ -277,7 +277,7 @@ export async function saveTrackOffline(track, { authToken, onProgress, signal } 
     }
     blob = new Blob(chunks, { type: audioRes.headers.get('content-type') || mimeType || 'audio/mpeg' });
   } else {
-    // No stream or no length — Safari and some webviews. Still works, just
+    // No stream or no length, Safari and some webviews. Still works, just
     // without a progress bar, which is better than refusing to save.
     if (onProgress) onProgress(null);
     blob = await audioRes.blob();
@@ -351,10 +351,10 @@ export async function clearOffline() {
  *
  * The two kinds of refusal are treated differently on purpose:
  *
- *   410 / 404 — the track itself is gone: the artist unpublished it, or it was
+ *   410 / 404, the track itself is gone: the artist unpublished it, or it was
  *               deleted. The local copy is removed, because there is nothing
  *               left for it to be a copy of.
- *   403       — the person is not entitled RIGHT NOW: Fan Pro lapsed, or a
+ *   403      , the person is not entitled RIGHT NOW: Fan Pro lapsed, or a
  *               paid track's purchase no longer covers it. The copy is LEFT
  *               ALONE and simply stops renewing, so it runs out its remaining
  *               lease instead of vanishing the moment a card is declined.
@@ -387,7 +387,7 @@ export async function renewLeases(authToken) {
         continue;
       }
 
-      // Not entitled at this moment. Leave the existing lease to run out —
+      // Not entitled at this moment. Leave the existing lease to run out , 
       // see the note above on why this is not a delete.
       if (res.status === 403) { lapsed++; continue; }
 
@@ -421,7 +421,7 @@ export async function renewLeases(authToken) {
 //    sees a normal same-origin HTTP response with Accept-Ranges, so seeking,
 //    scrubbing and duration all work exactly as they do online.
 //
-// 2. A blob: object URL. Used when no worker is controlling the page yet —
+// 2. A blob: object URL. Used when no worker is controlling the page yet , 
 //    a first visit before the worker takes over, or a browser with service
 //    workers disabled. Playback works; seeking in a blob URL is less reliable
 //    on older iOS, which is why it is the fallback and not the default.
@@ -455,7 +455,7 @@ export function offlineAudioPath(trackId) {
  * offlineSrcFor
  *
  * Returns a src the audio element can use, or null if this track is not
- * usable offline. Null is the signal to fall back to the streaming URL — this
+ * usable offline. Null is the signal to fall back to the streaming URL, this
  * function never throws into the playback path.
  */
 export async function offlineSrcFor(trackId) {
@@ -495,14 +495,14 @@ export async function offlineSrcFor(trackId) {
 /**
  * offlineSrcSync / playbackSrc
  *
- * The player sets audio.src synchronously — playTrack, the crossfade and
- * jumpToIndex all do — and that is worth preserving: making every online play
+ * The player sets audio.src synchronously, playTrack, the crossfade and
+ * jumpToIndex all do, and that is worth preserving: making every online play
  * wait on an IndexedDB round trip to discover it is not saved would slow down
  * the common case to serve the rare one.
  *
  * So the fast path is entirely synchronous. When a service worker is
  * controlling the page, the local URL is just a string built from the track
- * id — /offline-audio/<id> — and needs no storage read at all, because the
+ * id, /offline-audio/<id>, and needs no storage read at all, because the
  * worker does the reading when the audio element requests it.
  *
  * The only case that cannot be answered synchronously is a saved track with no
@@ -525,8 +525,16 @@ export function playbackSrc(track) {
   // cachedStreamSrc is a synchronous cache read and returns null unless
   // REACT_APP_PRIVATE_AUDIO is on, so with the flag off this is byte for byte
   // the old behaviour. With it on and the cache cold, file_url is still what
-  // gets assigned and PlayerContext swaps in the signed URL a moment later —
+  // gets assigned and PlayerContext swaps in the signed URL a moment later,
   // which is why the bucket must stay public until that swap is proven.
+  //
+  // The one exception is a saved copy of a file the track no longer points at.
+  // Re-uploading a master leaves every offline copy pointing at the old audio,
+  // and preferring it means the artist who just replaced the file is the one
+  // person guaranteed to keep hearing the old version.
+  if (offlineCopyIsStale(track)) {
+    return cachedStreamSrc(track?.id) || track?.file_url || null;
+  }
   return offlineSrcSync(track?.id) || cachedStreamSrc(track?.id) || track?.file_url || null;
 }
 
@@ -538,20 +546,79 @@ export function isOfflineSrc(src) {
 /**
  * A synchronous view of what is saved, for render paths that cannot await.
  *
- * Kept warm by useOfflineLibrary. Read-only and best-effort: an empty set
+ * Kept warm by useOfflineLibrary. Read-only and best-effort: an empty map
  * means "not known yet", never "definitely not saved", so nothing should
  * block on it.
+ *
+ * It holds the file_url each copy was saved from as well as the id, which is
+ * what makes the staleness check below possible without a storage read.
  */
-let savedIdCache = new Set();
+let savedCache = new Map();   // trackId -> fileUrl at the time it was saved
 
-export function primeSavedIds(ids) {
-  savedIdCache = new Set(ids);
+/**
+ * Accepts the meta records, or a plain list of ids for any caller that still
+ * has only ids. Ids alone mean the file_url is unknown, and an unknown
+ * file_url is never treated as stale: the saved copy still plays, exactly as
+ * it did before this existed.
+ */
+export function primeSavedIds(list) {
+  const next = new Map();
+  for (const entry of list || []) {
+    if (entry && typeof entry === 'object') next.set(entry.trackId, entry.fileUrl || null);
+    else next.set(entry, null);
+  }
+  savedCache = next;
 }
 
 export function savedIdsSnapshot() {
-  return savedIdCache;
+  return new Set(savedCache.keys());
 }
 
 export function isSavedOfflineSync(trackId) {
-  return savedIdCache.has(trackId);
+  return savedCache.has(trackId);
+}
+
+/**
+ * offlineCopyIsStale
+ *
+ * True when this device holds a saved copy that was taken from a DIFFERENT
+ * file than the track now points at, AND there is a network to fetch the
+ * current one from.
+ *
+ * The network condition is not a detail, it is the whole reason this function
+ * is safe. Bypassing the saved copy means streaming instead, and streaming
+ * with no signal plays nothing at all. Somebody on a plane holding last
+ * month's master should hear last month's master, not silence, so when the
+ * browser says there is no connection the saved copy wins no matter how old
+ * it is. An old master beats no master.
+ *
+ * navigator.onLine is only trustworthy in one direction: false really does
+ * mean no network, while true can still mean a captive portal or a dead
+ * connection. That asymmetry happens to point the right way here. A false
+ * negative leaves the old behaviour exactly as it was, which is what it did
+ * before any of this existed.
+ *
+ * This is the case an artist hits after re-uploading a master. Replacing the
+ * audio writes a brand new object: uploadFile in src/pages/TrackUploadPanel.js
+ * names every upload `${Date.now()}-${random}.${ext}` and never overwrites, so
+ * a replaced track always has a file_url it has never had before. Anyone
+ * holding an offline copy, the artist very much included, kept playing the old
+ * master forever, because playbackSrc preferred the local copy and nothing
+ * ever compared the two.
+ *
+ * Deliberately conservative. It only reports stale when BOTH urls are known
+ * and they differ. Unknown on either side means play what is saved, because
+ * the entire point of an offline copy is that it works when nothing else does,
+ * and refusing to play it on a guess would be a far worse bug than playing a
+ * slightly old master.
+ */
+export function offlineCopyIsStale(track) {
+  if (!track?.id) return false;
+  if (!savedCache.has(track.id)) return false;
+  // No network, no bypass. See the note above.
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return false;
+  const savedFrom = savedCache.get(track.id);
+  const current   = track.file_url || null;
+  if (!savedFrom || !current) return false;
+  return savedFrom !== current;
 }

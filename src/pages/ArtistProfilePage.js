@@ -10,6 +10,7 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import useGoBack from '../hooks/useGoBack';
 import PriceBreakdown, { useQuote } from '../components/PriceBreakdown';
 import { supabase } from '../supabaseClient';
+import { visibleNow } from '../utils/stories';
 import { showReceipt } from '../components/PurchaseReceipt';
 import { useAuth } from '../contexts/AuthContext';
 import { useTier } from '../contexts/useTier';
@@ -295,10 +296,9 @@ export default function ArtistProfilePage() {
   }, [artist?.id]);
   useEffect(() => {
     if (!artist?.id) return;
-    supabase.from('artist_stories')
+    visibleNow(supabase.from('artist_stories')
       .select('*')
-      .eq('artist_id', artist.id)
-      .gt('expires_at', new Date().toISOString())
+      .eq('artist_id', artist.id))
       .order('created_at', { ascending: false })
       .limit(20)
       .then(({ data }) => setStories(data || []));

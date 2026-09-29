@@ -12,6 +12,7 @@ import { useNavigate } from 'react-router-dom';
 import { Loader, Send, Users, Store, Headphones, Plus, X, ArrowLeft, Mail, Check, AlertTriangle, FileText, Save, Clock } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../supabaseClient';
+import PlatformStoryComposer from '../components/admin/PlatformStoryComposer';
 import { WysiwygEditor } from '../components/admin/WysiwygEditor';
 
 // One table for the three audiences. Every place that needed to know about an
@@ -448,6 +449,13 @@ export default function NewsletterComposePage() {
             <span className={`font-semibold ${isAdmin ? 'text-yellow-400' : 'text-purple-400'}`}>{isAdmin ? 'Admin' : 'Newsletter Editor'}</span>
           </p>
         </div>
+        </div>
+
+        {/* The story calendar. Same job as a newsletter, different surface, so
+            it lives on the same page rather than behind another route. It
+            hides itself if migration 191 has not run. */}
+        <div className="pt-1 pb-2 border-y border-white/[0.06] py-4">
+          <PlatformStoryComposer onToast={showToast} />
         </div>
 
         {drafts.length > 0 && (

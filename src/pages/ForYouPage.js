@@ -16,6 +16,7 @@ import { useNavigate } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 import ReactPlayer from 'react-player';
 import { supabase } from '../supabaseClient';
+import { visibleNow } from '../utils/stories';
 import { resolveStreamSrc } from '../utils/streamUrl';
 import { parseLyrics, activeLineIndex, wordProgress, lyricTheme } from '../utils/lyrics';
 import { sendNotification } from '../utils/notify';
@@ -1296,10 +1297,10 @@ export default function ForYouPage() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const { data, error } = await supabase
-        .from('artist_stories')
-        .select('artist_id')
-        .gt('expires_at', new Date().toISOString())
+      const { data, error } = await visibleNow(
+        supabase
+          .from('artist_stories')
+          .select('artist_id'))
         .limit(500);
       if (error) { console.error('[foryou] active stories failed:', error.code, error.message); return; }
       if (!cancelled) setStoryArtistIds(new Set((data || []).map(r => r.artist_id).filter(Boolean)));
@@ -1630,11 +1631,11 @@ export default function ForYouPage() {
             .from('follows').select('artist_id').eq('follower_id', user.id).limit(20);
           if (follows?.length) {
             const artistIds = follows.map(f => f.artist_id);
-            const { data: stories } = await supabase
-              .from('artist_stories')
-              .select('id, media_url, media_type, caption, expires_at, view_count, artist_id, artists(id, artist_name, slug, profile_image_url)')
-              .in('artist_id', artistIds)
-              .gt('expires_at', new Date().toISOString())
+            const { data: stories } = await visibleNow(
+              supabase
+                .from('artist_stories')
+                .select('id, media_url, media_type, caption, expires_at, view_count, artist_id, artists(id, artist_name, slug, profile_image_url)')
+                .in('artist_id', artistIds))
               .order('created_at', { ascending: false })
               .limit(10);
             if (stories?.length) {

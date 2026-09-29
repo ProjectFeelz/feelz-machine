@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useRef, useCallback, useEff
 import { supabase } from '../supabaseClient';
 import { getTrackAvailability } from '../utils/trackAccess';
 import { useMediaSession } from '../hooks/useMediaSession';
-import { playbackSrc, isSavedOfflineSync, offlineSrcFor } from '../utils/offlineStore';
+import { playbackSrc, isSavedOfflineSync, offlineSrcFor, offlineCopyIsStale } from '../utils/offlineStore';
 import { resolveStreamLater, warmStreamUrls } from '../utils/streamUrl';
 import { buildOfflinePlayRow, queueOfflinePlay, flushOfflinePlays } from '../utils/offlinePlayQueue';
 import { sendNotification, sendStreamDigest } from '../utils/notify';
@@ -19,8 +19,8 @@ function preloadCover(track) {
 //
 // Every place that assigns audio.src now goes through playbackSrc, which
 // returns the copy stored on this device when there is one and the streaming
-// URL otherwise. It is deliberately synchronous — see the comment on it in
-// utils/offlineStore.js — so an online listener never waits on a storage read
+// URL otherwise. It is deliberately synchronous, see the comment on it in
+// utils/offlineStore.js, so an online listener never waits on a storage read
 // to discover they have nothing saved.
 //
 // resolveLocalLater is the safety net for the one case playbackSrc cannot
@@ -31,6 +31,9 @@ function preloadCover(track) {
 function resolveLocalLater(audio, track, { onSwap } = {}) {
   if (!track?.id) return;
   if (!isSavedOfflineSync(track.id)) return;
+  // The saved copy is of a file this track no longer points at, so swapping it
+  // in would undo what playbackSrc just decided and put the old master back.
+  if (offlineCopyIsStale(track)) return;
   if (audio.src && audio.src.includes('/offline-audio/')) return;  // already local
 
   offlineSrcFor(track.id).then(localSrc => {
@@ -155,7 +158,7 @@ export function PlayerProvider({ children }) {
     // `await` runs after control has returned to the caller. The track-change
     // path clears currentStreamIdRef on the line immediately after calling
     // us, so by the time the old code read the ref (after two awaits) it was
-    // always null — and finalise_stream never ran on a track change.
+    // always null, and finalise_stream never ran on a track change.
     //
     // That is the most common way a play ends: a skip. So the stream row kept
     // the placeholder `completed = false` and the 30-second duration that
@@ -326,7 +329,7 @@ export function PlayerProvider({ children }) {
       // ── Crossfade: use a temporary second element to fade out the current
       // track, then switch audioRef (the primary, event-listened element) to
       // the new track once the overlap completes.
-      // We never swap refs — audioRef stays as the primary element throughout
+      // We never swap refs, audioRef stays as the primary element throughout
       // so all event listeners (timeupdate, ended, play, pause) remain valid.
       const primaryAudio = audioRef.current;
       const targetVol    = volumeRef.current;
@@ -337,7 +340,7 @@ export function PlayerProvider({ children }) {
       const currentSrc      = primaryAudio.src;
       const currentPosition = primaryAudio.currentTime;
 
-      // Pause primary immediately — prevents echo from two elements on same src
+      // Pause primary immediately, prevents echo from two elements on same src
       primaryAudio.pause();
 
       // Set fadeOut to the OLD track at the exact playback position
@@ -498,8 +501,8 @@ export function PlayerProvider({ children }) {
       //
       // Queued ONLY when the browser says it is offline, which is the one
       // case where we know for certain the request never left the device. A
-      // "failed to fetch" while apparently online is ambiguous — it may have
-      // landed and lost its response — and queueing that would risk
+      // "failed to fetch" while apparently online is ambiguous, it may have
+      // landed and lost its response, and queueing that would risk
       // double-counting, which is worse than losing it. That case keeps
       // today's behaviour until log_stream itself takes a client id.
       if (!navigator.onLine) {
@@ -547,7 +550,7 @@ export function PlayerProvider({ children }) {
       // through an RPC that resolves the artist's user itself, so there is
       // nothing left for the client to look up.
 
-      // 4b. first_listener — fire once when stream_count goes from 0 to 1
+      // 4b. first_listener, fire once when stream_count goes from 0 to 1
       // prior_stream_count is the BEFORE value, computed server-side inside the same transaction
       if (logResult.prior_stream_count === 0) {
         try {
@@ -565,7 +568,7 @@ export function PlayerProvider({ children }) {
           const listenerName = listenerArtist?.artist_name || 'Someone';
           // Through send_notification, not a direct insert. The INSERT policy on
           // notifications permits only self-addressed rows, and this one is
-          // addressed to the ARTIST by a listener — which is why it has been
+          // addressed to the ARTIST by a listener, which is why it has been
           // returning 403 on every first stream since it was written. See
           // migration 106.
           await sendNotification(supabase, 'first_listener (player)', {
@@ -590,7 +593,7 @@ export function PlayerProvider({ children }) {
       }
 
       // 5. Notify artist of new stream (rich notification with track info)
-      // DB trigger was dropped — we create it here so we control the metadata
+      // DB trigger was dropped, we create it here so we control the metadata
       try {
         const { data: fullTrack } = await supabase
           .from('tracks')
@@ -598,7 +601,7 @@ export function PlayerProvider({ children }) {
           .eq('id', trackId)
           .maybeSingle();
 
-        // Group album tracks — only notify once per album session
+        // Group album tracks, only notify once per album session
         // Use track's album_id to determine title/artwork to show
         const isAlbumTrack = !!fullTrack?.album_id;
         const notifTitle   = isAlbumTrack
@@ -669,8 +672,8 @@ export function PlayerProvider({ children }) {
         });
       } catch { /* non-critical, never break playback */ }
 
-      // 5b. Fan milestone — celebrate the LISTENER's loyalty to this artist.
-      //     "You've played [Artist] 100 times" — fires at 10, 50, 100, 250, 500, 1000.
+      // 5b. Fan milestone, celebrate the LISTENER's loyalty to this artist.
+      //     "You've played [Artist] 100 times", fires at 10, 50, 100, 250, 500, 1000.
       const FAN_MILESTONES = [10, 50, 100, 250, 500, 1000];
       try {
         const { count: totalPlays } = await supabase
@@ -719,8 +722,8 @@ export function PlayerProvider({ children }) {
   const playTrack = useCallback((track, trackList = []) => {
     if (!track?.file_url) return;
 
-    // THE GATE. Every path into playback comes through here — feeds, rails,
-    // queues, action sheets, notifications, radio — so this is the only place
+    // THE GATE. Every path into playback comes through here, feeds, rails,
+    // queues, action sheets, notifications, radio, so this is the only place
     // the rule has to be written, and no new call site can forget it.
     //
     // It blocks only on positive evidence (see trackAccess.js): an explicit
@@ -795,7 +798,7 @@ export function PlayerProvider({ children }) {
   //
   // Built for blocked playback, but it is the only app-wide notice renderer
   // that exists, and `window.showToast` was referenced in
-  // utils/downloadTrack.js while being defined absolutely nowhere — so the
+  // utils/downloadTrack.js while being defined absolutely nowhere, so the
   // iOS "Tap Share to save" hint has never appeared. Publishing showNotice
   // there makes that dead reference work and gives plain utils, which have no
   // access to React context, a way to say something.
@@ -895,7 +898,7 @@ export function PlayerProvider({ children }) {
   // Dismiss the player entirely.
   //
   // Nothing in the app set currentTrack back to null, and MiniPlayer /
-  // DesktopPlayer only return null when it is null — so once you played
+  // DesktopPlayer only return null when it is null, so once you played
   // anything, the bar was permanent for the rest of the session with no
   // control to get rid of it.
   //

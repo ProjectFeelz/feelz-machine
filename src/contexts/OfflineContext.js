@@ -1,6 +1,6 @@
 // src/contexts/OfflineContext.js
 //
-// OFFLINE LISTENING — the React side
+// OFFLINE LISTENING, the React side
 //
 // One shared source of truth for what is saved on this device. It has to be
 // shared rather than a plain hook, because three separate places ask the same
@@ -25,8 +25,8 @@ const OfflineContext = createContext(null);
 
 // The server's codes, turned into sentences. Same reasoning as
 // downloadErrorMessage in utils/downloadTrack.js: without this, five callers
-// each invent their own wording, or — far more likely, going by the six
-// swallowed-error bugs already found in this codebase — show nothing at all
+// each invent their own wording, or, far more likely, going by the six
+// swallowed-error bugs already found in this codebase, show nothing at all
 // and leave a button spinning forever.
 export function offlineErrorMessage(err) {
   switch (err?.message) {
@@ -34,7 +34,7 @@ export function offlineErrorMessage(err) {
     case 'fan_pro_required':   // older code name, kept so a stale bundle still reads right
       return 'Offline listening comes with Fan Pro, Artist Pro or Artist Premium. Upgrade to keep music on your device.';
     case 'purchase_required':
-      return 'Buy this track first — then you can keep it offline.';
+      return 'Buy this track first, then you can keep it offline.';
     case 'not_released_yet':
       return "This track hasn't been released yet.";
     case 'track_unavailable':
@@ -71,12 +71,15 @@ export function OfflineProvider({ children }) {
     try {
       const list = await listOffline();
       setItems(list);
-      primeSavedIds(list.filter(m => leaseState(m) !== 'expired').map(m => m.trackId));
+      // The whole meta record, not just the id. It carries the file_url the
+      // copy was saved from, which is what lets playbackSrc notice that a
+      // track has been re-uploaded since. See offlineCopyIsStale.
+      primeSavedIds(list.filter(m => leaseState(m) !== 'expired'));
       setUsage(await offlineUsage());
       setSupported(true);
     } catch (err) {
       // A browser with IndexedDB disabled, or private mode on some versions of
-      // Safari. Not an error to shout about — the feature simply isn't there.
+      // Safari. Not an error to shout about, the feature simply isn't there.
       if (err?.message === 'offline_unsupported') setSupported(false);
       setItems([]);
       primeSavedIds([]);
@@ -90,7 +93,7 @@ export function OfflineProvider({ children }) {
   // Renew on reconnect, and once on load if we already have a network.
   //
   // This is the only moment entitlement can be re-checked, so it is also the
-  // only moment a lease can be taken away — which is the right place for it:
+  // only moment a lease can be taken away, which is the right place for it:
   // the person is online and can be told why.
   const renewRef = useRef(0);
   const renew = useCallback(async () => {
@@ -213,7 +216,7 @@ export function OfflineProvider({ children }) {
 }
 
 // Safe defaults if something renders outside the provider, matching the
-// pattern useTier already uses. A missing provider must not crash a page —
+// pattern useTier already uses. A missing provider must not crash a page , 
 // it just means nothing is saved.
 const FALLBACK = {
   items: [], loading: false, supported: false,

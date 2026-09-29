@@ -2,9 +2,9 @@
  * ArtistStories.js
  *
  * Two exports:
- *   StoriesRail     — horizontal scroll of artist story bubbles (for HomePage)
- *   ArtistStoryView — full-screen story viewer (for ArtistProfilePage)
- *   StoryUpload     — upload new story (shown to artist on their own profile)
+ *   StoriesRail    , horizontal scroll of artist story bubbles (for HomePage)
+ *   ArtistStoryView, full-screen story viewer (for ArtistProfilePage)
+ *   StoryUpload    , upload new story (shown to artist on their own profile)
  *
  * Stories expire after 24 hours. Media can be audio, image, or short video.
  * View counts increment on open.
@@ -13,6 +13,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
+import { visibleNow } from '../utils/stories';
 import { sendNotification } from '../utils/notify';
 import { useAuth } from '../contexts/AuthContext';
 import { useHaptics } from '../hooks/useHaptics';
@@ -34,8 +35,8 @@ function timeLeft(expiresAt) {
 // ── Story Upload ──────────────────────────────────────────────────────────────
 export function StoryUpload({ artistId, onUploaded, inline = false }) {
   const { tap } = useHaptics();
-  // `inline` was already being PASSED by both call sites — CreateMenuModal
-  // and the profile's own + menu — and this component never declared it. So
+  // `inline` was already being PASSED by both call sites, CreateMenuModal
+  // and the profile's own + menu, and this component never declared it. So
   // it rendered its trigger button and its own full-screen overlay inside a
   // sheet that was already a modal: you opened "Add Story" and were shown a
   // second "Add Story" button, and tapping that threw a bottom sheet over the
@@ -54,7 +55,7 @@ export function StoryUpload({ artistId, onUploaded, inline = false }) {
 
   // The artist's own stories that have not expired yet.
   //
-  // There was no way to see what you had posted and no way to take it down —
+  // There was no way to see what you had posted and no way to take it down , 
   // the only remedy for a mistake was to wait out the full 24 hours. Now the
   // sheet you post from is also the sheet you manage from.
   const [mine, setMine]             = useState([]);
@@ -67,11 +68,11 @@ export function StoryUpload({ artistId, onUploaded, inline = false }) {
   const loadMine = useCallback(async () => {
     if (!artistId) return;
     setMineLoading(true);
-    const { data, error } = await supabase
-      .from('artist_stories')
-      .select('id, media_url, media_type, caption, view_count, like_count, expires_at, created_at')
-      .eq('artist_id', artistId)
-      .gt('expires_at', new Date().toISOString())
+    const { data, error } = await visibleNow(
+      supabase
+        .from('artist_stories')
+        .select('id, media_url, media_type, caption, view_count, like_count, expires_at, created_at')
+        .eq('artist_id', artistId))
       .order('created_at', { ascending: false });
     if (error) console.error('[story] own stories load failed:', error.code, error.message);
     setMine(data || []);
@@ -85,7 +86,7 @@ export function StoryUpload({ artistId, onUploaded, inline = false }) {
     // The row first. If the row goes and the file lingers, the story is gone
     // from the app and the orphan costs a few KB. Deleting the file first and
     // then failing to delete the row would leave a story that renders as a
-    // broken image — the worse of the two failures, so it is the one that
+    // broken image, the worse of the two failures, so it is the one that
     // cannot happen.
     const { error } = await supabase.from('artist_stories').delete().eq('id', story.id);
     if (error) {
@@ -94,14 +95,39 @@ export function StoryUpload({ artistId, onUploaded, inline = false }) {
       setDeletingId(null);
       return;
     }
-    // Best-effort file cleanup. The public URL ends in the storage path.
+    // Best-effort file cleanup.
+    //
+    // This looked right and removed nothing, for a reason worth spelling out:
+    // the BUCKET is called stories and the key inside it ALSO starts with
+    // stories/, because the upload above writes
+    // `stories/${artistId}/${Date.now()}.${ext}`. So a public URL reads
+    //
+    //   .../object/public/stories/stories/<artistId>/<ts>.<ext>
+    //                    ^bucket  ^key
+    //
+    // and indexOf('/stories/') finds the BUCKET segment, not the key. The old
+    // line handed remove() `stories/stories/<artistId>/<ts>.<ext>`, one level
+    // too deep, which matches no object. remove() reports that in its return
+    // value rather than throwing, and the return value was discarded, so every
+    // manually deleted story left its media file sitting in a public bucket.
+    // The row vanished from the app and the file stayed reachable by URL to
+    // anyone who had it.
+    //
+    // Split on the bucket segment and keep everything after it, which is the
+    // key by definition however many path parts it has.
     try {
-      const marker = '/stories/';
+      const marker = '/object/public/stories/';
       const i = story.media_url.indexOf(marker);
-      if (i !== -1) {
-        await supabase.storage.from('stories').remove([story.media_url.slice(i + 1)]);
+      const key = i === -1 ? null : story.media_url.slice(i + marker.length).split('?')[0];
+      if (key) {
+        const { error: rmErr } = await supabase.storage.from('stories').remove([key]);
+        // Logged, not shown. The story is already gone as far as the artist is
+        // concerned, but a silent failure here is what hid this for months.
+        if (rmErr) console.error('[story] media file not removed:', key, rmErr.message);
       }
-    } catch { /* the row is gone; an orphaned object is not worth failing over */ }
+    } catch (err) {
+      console.error('[story] media cleanup threw:', err?.message);
+    }
     setMine(prev => prev.filter(x => x.id !== story.id));
     setDeletingId(null);
     onUploaded?.();
@@ -124,7 +150,7 @@ export function StoryUpload({ artistId, onUploaded, inline = false }) {
     if (f.size > MAX_MB * 1024 * 1024) { setError(`Max file size is ${MAX_MB}MB`); return; }
     setFile(f);
     setError('');
-    // Always create object URL for preview — works for all types
+    // Always create object URL for preview, works for all types
     setPreview(URL.createObjectURL(f));
   };
 
@@ -143,7 +169,7 @@ export function StoryUpload({ artistId, onUploaded, inline = false }) {
       body: JSON.stringify({ video: base64, mimeType: videoFile.type }),
     });
 
-    if (!res.ok) throw new Error('Video conversion failed — try uploading an MP4 directly');
+    if (!res.ok) throw new Error('Video conversion failed, try uploading an MP4 directly');
     const { mp4 } = await res.json();
 
     // Convert base64 back to File
@@ -186,7 +212,7 @@ export function StoryUpload({ artistId, onUploaded, inline = false }) {
       // The file uploaded to storage, this line ran, whatever the database
       // said was thrown away, the modal closed and everything looked like it
       // had worked. If the row was refused there was no story and no message
-      // saying so — which is exactly the "I uploaded a story but it's not
+      // saying so, which is exactly the "I uploaded a story but it's not
       // showing" symptom, and it is unfalsifiable from the outside because
       // success and failure produce identical screens.
       const { error: insErr } = await supabase.from('artist_stories').insert({
@@ -201,7 +227,7 @@ export function StoryUpload({ artistId, onUploaded, inline = false }) {
         console.error('[story] insert refused:', insErr.code, insErr.message, insErr.details || '', insErr.hint || '');
         throw new Error(
           insErr.code === '42501' || /row-level security/i.test(insErr.message)
-            ? 'The file uploaded but the story could not be saved — your account is not allowed to post stories for this artist.'
+            ? 'The file uploaded but the story could not be saved, your account is not allowed to post stories for this artist.'
             : `Story could not be saved: ${insErr.message}`
         );
       }
@@ -225,7 +251,7 @@ export function StoryUpload({ artistId, onUploaded, inline = false }) {
         videos with your followers.
       </p>
 
-      {/* Your live stories — see them, and take one down.
+      {/* Your live stories, see them, and take one down.
           This is the half that did not exist. An artist could post and then
           had no view of what was up and no way to remove it short of waiting
           out the full day. */}
@@ -321,7 +347,7 @@ export function StoryUpload({ artistId, onUploaded, inline = false }) {
     </>
   );
 
-  // Inline: the caller already owns a modal shell. Render the content only —
+  // Inline: the caller already owns a modal shell. Render the content only , 
   // no trigger button, no second overlay.
   if (inline) return <div>{body}</div>;
 
@@ -375,13 +401,13 @@ function StoryBubble({ artist, stories, viewed, onClick }) {
       className="flex-shrink-0 flex flex-col items-center space-y-1.5 w-[68px]">
       {/* The ring, made to read as a ring.
           It was a 2px (p-0.5) two-stop gradient, which at 64px across is a
-          hairline — on a dark page next to full-colour artwork it reads as an
+          hairline, on a dark page next to full-colour artwork it reads as an
           edge on the avatar rather than as the "there is something new here"
           signal every other app has trained people to look for. Three
           changes: 3px so it has actual width, a three-stop gradient so it
           does not flatten into one purple, and a soft coloured glow so it
           separates from the black behind it. Viewed stories stay deliberately
-          flat and grey — the contrast between the two states is the whole
+          flat and grey, the contrast between the two states is the whole
           point, and brightening both would have destroyed it. */}
       <div
         className={`w-16 h-16 rounded-full ${hasUnviewed
@@ -447,8 +473,8 @@ export function ArtistStoryView({ stories, artist, initialIndex = 0, onClose }) 
           .then(({ data: liker }) => {
             if (liker && artist.user_id && artist.user_id !== user.id) {
               // .catch() on a supabase insert never fires for a database
-              // error — supabase-js resolves { data, error } rather than
-              // throwing — so this was a 403 nobody could see. Through the
+              // error, supabase-js resolves { data, error } rather than
+              // throwing, so this was a 403 nobody could see. Through the
               // RPC, and the helper reads the error.
               sendNotification(supabase, 'story like (stories)', {
                 type:     'track_liked',
@@ -594,7 +620,7 @@ export function ArtistStoryView({ stories, artist, initialIndex = 0, onClose }) 
         <button className="absolute right-0 top-0 bottom-0 w-1/3" onClick={goNext} />
       </div>
 
-      {/* Bottom bar — track pill + like */}
+      {/* Bottom bar, track pill + like */}
       <div className="absolute bottom-4 left-4 right-4 z-20 flex items-end justify-between">
         {story.tracks ? (
           <button
@@ -705,7 +731,7 @@ export function StoriesRail({ userId }) {
     <>
       {/* Given a heading and real vertical space.
           On Home this sat directly under "Welcome back" as a lone avatar with
-          no label and no margin — it looked like a stray account chip rather
+          no label and no margin, it looked like a stray account chip rather
           than a row of stories, which is exactly how it was being read. Every
           other rail on that page has a labelled header; this one now matches. */}
       <div className="mb-5">
