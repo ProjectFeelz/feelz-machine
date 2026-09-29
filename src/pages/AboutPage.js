@@ -7,9 +7,8 @@
 // same list the upgrade page uses, so the two never disagree.
 
 import { Helmet } from 'react-helmet-async';
-import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import React, { useLayoutEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '../supabaseClient';
 import {
   Check, Mic2, Headphones, Store, Sparkles, Disc3, SlidersHorizontal, ChevronRight,
 } from 'lucide-react';
@@ -153,19 +152,10 @@ export default function AboutPage() {
   const height = useFitHeight(rootRef);
   const [tab, setTab] = useState('about');
   const [tier, setTier] = useState('pro');
-  const [playStoreUrl, setPlayStoreUrl] = useState('');
-  const [appStoreUrl, setAppStoreUrl] = useState('');
 
-  useEffect(() => {
-    supabase.from('platform_settings').select('key, value')
-      .in('key', ['play_store_url', 'app_store_url'])
-      .then(({ data }) => {
-        (data || []).forEach(row => {
-          if (row.key === 'play_store_url') setPlayStoreUrl(row.value || '');
-          if (row.key === 'app_store_url') setAppStoreUrl(row.value || '');
-        });
-      });
-  }, []);
+  // The Google Play and App Store footer links were read from
+  // platform_settings here. Feelz Machine is a PWA and is staying one, so there
+  // are no store listings to link to and this page no longer asks for them.
 
   const isPhone = typeof window !== 'undefined' && window.innerWidth < 768;
   const compact = isPhone || (!!height && height < 640);
@@ -346,8 +336,6 @@ export default function AboutPage() {
           <button onClick={() => navigate('/terms-of-use')} className="hover:text-white/70 whitespace-nowrap">Terms</button>
           <button onClick={() => navigate('/vs/spotify')} className="hover:text-white/70 whitespace-nowrap hidden sm:inline">vs Spotify</button>
           <button onClick={() => navigate('/vs/bandcamp')} className="hover:text-white/70 whitespace-nowrap hidden sm:inline">vs Bandcamp</button>
-          {playStoreUrl && <a href={playStoreUrl} target="_blank" rel="noopener noreferrer" className="hover:text-white/70 whitespace-nowrap">Google Play</a>}
-          {appStoreUrl && <a href={appStoreUrl} target="_blank" rel="noopener noreferrer" className="hover:text-white/70 whitespace-nowrap">App Store</a>}
         </div>
         <span className="whitespace-nowrap text-white/20">© 2026 Project Feelz</span>
       </div>

@@ -242,10 +242,14 @@ export default function PlatformStoryComposer({ onToast }) {
   const soon = rows.filter(r => Date.parse(r.publish_at || r.created_at) > now);
 
   return (
-    <div className="space-y-4">
-      <div>
+    // Three columns on a wide screen, because this is three separate jobs and
+    // stacking them made one very tall panel that stretched the caption box to
+    // the width of the window. Read left to right: what is written, what you
+    // are making, what is already booked.
+    <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3 items-start">
+      <div className="md:col-span-2 xl:col-span-3">
         <h2 className="text-sm font-bold text-white">Platform stories</h2>
-        <p className="text-xs text-white/40 mt-0.5 leading-relaxed">
+        <p className="text-xs text-white/40 mt-0.5 leading-relaxed max-w-2xl">
           These run at the top of What's New and in the story rail, the same as an artist's story.
           Each one shows for 24 hours from the time you pick. Plan as far ahead as you like.
         </p>
@@ -254,14 +258,20 @@ export default function PlatformStoryComposer({ onToast }) {
       {/* ── Written, waiting for an image ── */}
       {queue.length > 0 && (
         <div>
-          <p className="text-[11px] font-semibold text-white/45 mb-1.5">
+          <p className="text-[11px] font-semibold text-white/60 mb-1">
             Written and waiting for an image ({queue.length})
           </p>
-          <p className="text-[10px] text-white/25 mb-2 leading-relaxed">
-            Recreated from the updates that already went out. Tap one, add the picture, adjust the date if you want it.
+          <p className="text-[10px] text-white/35 mb-2 leading-relaxed">
+            Recreated from the updates that already went out. Pick one, add the picture, adjust the date if you want it.
           </p>
-          <div className="space-y-1.5 max-h-64 overflow-y-auto pr-1">
+          <div className="space-y-1.5 max-h-72 xl:max-h-[520px] overflow-y-auto pr-1">
             {queue.map(q => (
+              // These read as disabled before, which is what a very low
+              // contrast border and 30% text look like next to a solid purple
+              // button. They are the opposite of disabled: they are the
+              // starting point. So they carry a visible frame, a slot where
+              // the picture is going to go, and the words at a weight you can
+              // actually read.
               <button
                 key={q.id}
                 onClick={() => {
@@ -274,15 +284,28 @@ export default function PlatformStoryComposer({ onToast }) {
                   setError('');
                   fileRef.current?.click();
                 }}
-                className={`w-full text-left rounded-lg border p-2.5 transition ${
+                className={`group w-full text-left rounded-xl border p-3 flex gap-3 transition ${
                   fromQueue === q.id
-                    ? 'border-purple-500/50 bg-purple-500/10'
-                    : 'border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.04]'
+                    ? 'border-purple-500/60 bg-purple-500/10'
+                    : 'border-white/[0.12] bg-white/[0.04] hover:border-purple-500/40 hover:bg-white/[0.07]'
                 }`}>
-                <p className="text-xs text-white/75 leading-snug">{q.caption}</p>
-                <p className="text-[10px] text-white/30 mt-1">
-                  {q.note}{q.suggested_at ? ` · suggested ${fmtWhen(q.suggested_at)}` : ''}
-                </p>
+                <span
+                  className={`w-9 h-12 rounded-md border border-dashed flex items-center justify-center flex-shrink-0 transition ${
+                    fromQueue === q.id
+                      ? 'border-purple-400/60 text-purple-300'
+                      : 'border-white/25 text-white/35 group-hover:border-purple-400/50 group-hover:text-purple-300'
+                  }`}>
+                  <ImageIcon className="w-3.5 h-3.5" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-xs text-white/90 leading-snug">{q.caption}</span>
+                  <span className="block text-[10px] text-white/40 mt-1 truncate">
+                    {q.note}{q.suggested_at ? ` · suggested ${fmtWhen(q.suggested_at)}` : ''}
+                  </span>
+                  <span className="block text-[10px] font-semibold text-purple-300/70 mt-1.5 group-hover:text-purple-300 transition">
+                    {fromQueue === q.id ? 'Picked' : 'Add an image →'}
+                  </span>
+                </span>
               </button>
             ))}
           </div>
@@ -294,7 +317,11 @@ export default function PlatformStoryComposer({ onToast }) {
         <input ref={fileRef} type="file" accept={ACCEPT} onChange={pick} className="hidden" />
 
         {preview ? (
-          <div className="relative rounded-lg overflow-hidden bg-black" style={{ aspectRatio: '9 / 16', maxHeight: 260 }}>
+          // A story is a portrait thing, so the preview is portrait and a fixed
+          // width rather than whatever the column happens to be. Full width it
+          // letterboxed a phone-shaped picture inside a landscape box, which is
+          // not what it will look like to anyone.
+          <div className="relative rounded-lg overflow-hidden bg-black mx-auto w-[168px]" style={{ aspectRatio: '9 / 16' }}>
             {file?.type?.startsWith('video')
               ? <video src={preview} className="w-full h-full object-contain" muted playsInline />
               : <img src={preview} alt="" className="w-full h-full object-contain" />}
@@ -346,19 +373,23 @@ export default function PlatformStoryComposer({ onToast }) {
       </div>
 
       {/* ── The calendar ── */}
-      {loading ? (
-        <p className="text-xs text-white/30">Loading the calendar…</p>
-      ) : (
-        <>
-          <Group title={`Showing now (${live.length})`} rows={live} armed={armed} setArmed={setArmed} remove={remove} live />
-          <Group title={`Planned (${soon.length})`}     rows={soon} armed={armed} setArmed={setArmed} remove={remove} />
-          {rows.length === 0 && (
-            <p className="text-xs text-white/30">
-              Nothing planned yet. Anything you add here shows up wherever stories already show.
-            </p>
-          )}
-        </>
-      )}
+      {/* Takes the full width back on a tablet, where two columns is already
+          the limit, and sits as the third column on a desktop. */}
+      <div className="md:col-span-2 xl:col-span-1 space-y-4">
+        {loading ? (
+          <p className="text-xs text-white/30">Loading the calendar…</p>
+        ) : (
+          <>
+            <Group title={`Showing now (${live.length})`} rows={live} armed={armed} setArmed={setArmed} remove={remove} live />
+            <Group title={`Planned (${soon.length})`}     rows={soon} armed={armed} setArmed={setArmed} remove={remove} />
+            {rows.length === 0 && (
+              <p className="text-xs text-white/30">
+                Nothing planned yet. Anything you add here shows up wherever stories already show.
+              </p>
+            )}
+          </>
+        )}
+      </div>
     </div>
   );
 }
@@ -368,7 +399,10 @@ function Group({ title, rows, armed, setArmed, remove, live }) {
   return (
     <div>
       <p className="text-[11px] font-semibold text-white/45 mb-1.5">{title}</p>
-      <div className="space-y-1.5">
+      {/* Two up on a tablet, where this block has the full width and a single
+          column would leave a caption stranded next to a bin icon a foot away.
+          Back to one on a desktop, where it is already the narrow third column. */}
+      <div className="grid gap-1.5 md:grid-cols-2 xl:grid-cols-1">
         {rows.map(r => (
           <div key={r.id} className="flex items-center gap-3 rounded-lg border border-white/[0.06] bg-white/[0.02] p-2">
             <div className="w-10 h-14 rounded-md overflow-hidden bg-black flex-shrink-0">

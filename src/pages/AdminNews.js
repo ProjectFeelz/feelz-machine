@@ -138,7 +138,10 @@ export default function AdminNews() {
   );
 
   return (
-    <div className="pt-4 pb-32 px-4 md:px-8">
+    // AppLayout already supplies md:px-8 md:pt-8, so this page was padding a
+    // second time on desktop and then running the width of the monitor. Its own
+    // padding is mobile only now, and the work stops at a readable width.
+    <div className="pt-4 md:pt-0 pb-32 px-4 md:px-0 max-w-[1500px] mx-auto">
       <Helmet><title>What's New</title><meta name="robots" content="noindex, nofollow" /></Helmet>
 
       {toast && (
@@ -163,9 +166,13 @@ export default function AdminNews() {
       </div>
 
       {/* ── POSTS ──────────────────────────────────────────────────────── */}
+      {/* Two columns on a desktop: what you are writing on the left, what is
+          already posted on the right. Writing a post used to push the list of
+          posts off the bottom of the screen, so you could not see what you had
+          already said while saying the next thing. */}
       {tab === 'news' && (
-        <>
-          <div className="rounded-2xl border border-white/[0.07] bg-white/[0.02] p-5 space-y-3 mb-8 max-w-2xl">
+        <div className="grid gap-5 lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)] items-start">
+          <div className="rounded-2xl border border-white/[0.07] bg-white/[0.02] p-5 space-y-3 lg:sticky lg:top-6">
             <p className="text-xs font-bold text-white/50 uppercase tracking-wide">New post</p>
 
             <input className={inputCls} placeholder="Title" value={form.title}
@@ -213,7 +220,7 @@ export default function AdminNews() {
           ) : items.length === 0 ? (
             <p className="text-xs text-white/30 py-4">Nothing posted yet.</p>
           ) : (
-            <div className="space-y-2 max-w-2xl">
+            <div className="space-y-2">
               {items.map(n => {
                 const vid = youTubeId(n.youtube_url);
                 return (
@@ -250,13 +257,13 @@ export default function AdminNews() {
               })}
             </div>
           )}
-        </>
+        </div>
       )}
 
       {/* ── FEATURED BOARD ─────────────────────────────────────────────── */}
       {tab === 'board' && (
-        <div className="max-w-2xl">
-          <div className="rounded-xl border border-white/[0.07] bg-white/[0.02] p-4 mb-5">
+        <div className="grid gap-5 lg:grid-cols-[minmax(0,360px)_minmax(0,1fr)] items-start">
+          <div className="rounded-xl border border-white/[0.07] bg-white/[0.02] p-4 lg:sticky lg:top-6">
             <p className="text-xs text-white/40 leading-relaxed">
               The board fills itself every night. A track earns a week on it by
               passing a stream milestone, by being one of the week's biggest

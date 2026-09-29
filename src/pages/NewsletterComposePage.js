@@ -434,7 +434,11 @@ export default function NewsletterComposePage() {
         </div>
       )}
 
-      <div className="px-5 md:px-8 pt-8 space-y-6">
+      {/* AppLayout already supplies md:px-8 md:pt-8, so this page was padding
+          a second time on desktop and then running the full width of whatever
+          monitor it was opened on. Its own padding is now mobile only, and the
+          column stops at a readable width instead of stretching. */}
+      <div className="px-5 md:px-0 pt-8 md:pt-0 space-y-6 max-w-[1500px] mx-auto">
         <div className="flex items-start space-x-3">
           <button onClick={() => navigate('/hub')}
             className="w-9 h-9 flex items-center justify-center rounded-full bg-white/[0.06] hover:bg-white/[0.1] transition flex-shrink-0 mt-1">
@@ -454,7 +458,7 @@ export default function NewsletterComposePage() {
         {/* The story calendar. Same job as a newsletter, different surface, so
             it lives on the same page rather than behind another route. It
             hides itself if migration 191 has not run. */}
-        <div className="pt-1 pb-2 border-y border-white/[0.06] py-4">
+        <div className="border-y border-white/[0.06] py-5">
           <PlatformStoryComposer onToast={showToast} />
         </div>
 

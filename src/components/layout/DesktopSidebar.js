@@ -1,11 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Home, Search, Library, LayoutDashboard, User, Info, Sparkles } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { Bell } from 'lucide-react';
 import useNotifications from '../../contexts/useNotifications';
 import { myAvatar, myName, myInitial } from '../../utils/me';
-import { supabase } from '../../supabaseClient';
 
 // navItems built dynamically in component based on role
 
@@ -41,21 +40,11 @@ function DesktopNotifButton() {
   );
 }
 
-function PlayStoreIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-      <path d="M3.18 23.76a2.5 2.5 0 0 0 2.35-.28l11.05-6.37-3.08-3.08zM1.5 1.3C1.19 1.64 1 2.16 1 2.83v18.34c0 .67.19 1.19.5 1.53l.08.08 10.27-10.27v-.24L1.58 1.22zM20.37 9.96l-2.68-1.55-3.42 3.42 3.42 3.42 2.7-1.56c.77-.44.77-1.16 0-1.6zM5.53.52L16.58 6.9l-3.08 3.08L5.53.52z"/>
-    </svg>
-  );
-}
-
-function AppStoreIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-      <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/>
-    </svg>
-  );
-}
+// The Google Play and App Store buttons lived here. Feelz Machine is a PWA and
+// is staying one, so there is nothing to send anyone to a store for. The
+// platform_settings keys play_store_url and app_store_url are no longer read by
+// anything in the app; they are left in the database rather than dropped, so
+// this is a code change and not a data migration.
 
 export default function DesktopSidebar() {
   const navigate = useNavigate();
@@ -73,22 +62,6 @@ export default function DesktopSidebar() {
     { path: '/profile',      icon: User,            label: 'Profile' },
   ];
 
-  const [playStoreUrl, setPlayStoreUrl] = useState('');
-  const [appStoreUrl, setAppStoreUrl] = useState('');
-
-  useEffect(() => {
-    supabase
-      .from('platform_settings')
-      .select('key, value')
-      .in('key', ['play_store_url', 'app_store_url'])
-      .then(({ data }) => {
-        (data || []).forEach(row => {
-          if (row.key === 'play_store_url') setPlayStoreUrl(row.value || '');
-          if (row.key === 'app_store_url') setAppStoreUrl(row.value || '');
-        });
-      });
-  }, []);
-
   const handleNav = (path) => {
     if ((path === '/library' || path === '/profile') && !user) {
       navigate('/login');
@@ -96,8 +69,6 @@ export default function DesktopSidebar() {
     }
     navigate(path);
   };
-
-  const hasAppButtons = playStoreUrl || appStoreUrl;
 
   return (
     <aside
@@ -156,38 +127,6 @@ export default function DesktopSidebar() {
 
         {/* Notifications */}
         <DesktopNotifButton />
-
-        {/* App Store buttons */}
-        {hasAppButtons && (
-          <div className="space-y-1.5 px-1">
-            {playStoreUrl && (
-              <a href={playStoreUrl} target="_blank" rel="noopener noreferrer"
-                className="w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl hover:bg-white/[0.04] transition text-left"
-                style={{ textDecoration: 'none' }}>
-                <div className="w-5 h-5 flex items-center justify-center text-white/60 flex-shrink-0">
-                  <PlayStoreIcon />
-                </div>
-                <div>
-                  <p className="text-[9px] text-white/45 leading-none">GET IT ON</p>
-                  <p className="text-xs text-white/50 font-medium leading-tight">Google Play</p>
-                </div>
-              </a>
-            )}
-            {appStoreUrl && (
-              <a href={appStoreUrl} target="_blank" rel="noopener noreferrer"
-                className="w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl hover:bg-white/[0.04] transition text-left"
-                style={{ textDecoration: 'none' }}>
-                <div className="w-5 h-5 flex items-center justify-center text-white/60 flex-shrink-0">
-                  <AppStoreIcon />
-                </div>
-                <div>
-                  <p className="text-[9px] text-white/45 leading-none">DOWNLOAD ON THE</p>
-                  <p className="text-xs text-white/50 font-medium leading-tight">App Store</p>
-                </div>
-              </a>
-            )}
-          </div>
-        )}
 
         {/* About link */}
         <button
