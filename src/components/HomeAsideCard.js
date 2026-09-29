@@ -36,6 +36,7 @@ import {
   Users, Music2, X, Pin,
 } from 'lucide-react';
 import { supabase } from '../supabaseClient';
+import { youTubeId } from '../utils/youtube';
 import { visibleNow, platformStoryArtistId } from '../utils/stories';
 import { usePlayer } from '../contexts/PlayerContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -55,26 +56,15 @@ const T = {
   accentDim:'rgba(167,139,250,0.14)',
 };
 
-// Accepts whatever Steve pastes: watch?v=, youtu.be/, /embed/, /shorts/,
-// /live/, with or without extra query junk. Returns null for anything else,
-// which is what keeps a mistyped link from rendering a broken player.
-export function youTubeId(url) {
-  if (!url || typeof url !== 'string') return null;
-  const patterns = [
-    /[?&]v=([A-Za-z0-9_-]{11})/,
-    /youtu\.be\/([A-Za-z0-9_-]{11})/,
-    /\/embed\/([A-Za-z0-9_-]{11})/,
-    /\/shorts\/([A-Za-z0-9_-]{11})/,
-    /\/live\/([A-Za-z0-9_-]{11})/,
-  ];
-  for (const p of patterns) {
-    const m = url.match(p);
-    if (m) return m[1];
-  }
-  // A bare id, pasted on its own
-  if (/^[A-Za-z0-9_-]{11}$/.test(url.trim())) return url.trim();
-  return null;
-}
+// The parser moved to src/utils/youtube.js so School Sessions could use it
+// without importing this whole module, its player and its auth hooks. It is
+// re-exported here because src/pages/AdminNews.js:25 imports it from this
+// path, and changing that import buys nothing.
+// Imported AND re-exported, not just re-exported. `export { x } from '...'`
+// forwards the name without binding it locally, and this file calls
+// youTubeId itself further down, so the bare re-export compiled fine and
+// would have thrown at runtime the moment somebody opened the podcast card.
+export { youTubeId };
 
 const fmt = (n) => {
   const v = Number(n) || 0;

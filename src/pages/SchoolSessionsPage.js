@@ -22,6 +22,7 @@ import { useAuth } from '../contexts/AuthContext';
 import useSchoolSessions from '../hooks/useSchoolSessions';
 import DistrictNomination from '../components/DistrictNomination';
 import ShortlistSongs from '../components/ShortlistSongs';
+import SchoolCourseCard from '../components/SchoolCourseCard';
 import { supabase } from '../supabaseClient';
 
 // Prominent hero countdown, ticks every second, shown as separate
@@ -368,26 +369,21 @@ export default function SchoolSessionsPage() {
           <div className="space-y-3 lg:space-y-4">
             <p className="text-lime-400 text-xs lg:text-sm font-bold tracking-widest uppercase">Free courses to get you ready</p>
             <div className="grid lg:grid-cols-2 gap-2.5 lg:gap-3">
-              {platformCourseUrl && (
-                <a href={platformCourseUrl} target="_blank" rel="noopener noreferrer"
-                  className="flex items-center space-x-3 rounded-xl bg-white/[0.03] border border-white/[0.06] p-3.5 lg:p-4 hover:bg-white/[0.05] transition">
-                  <PlayCircle className="w-4 h-4 text-lime-400 flex-shrink-0" />
-                  <div>
-                    <p className="text-sm font-semibold text-white">How to Use Feelz Machine</p>
-                    <p className="text-xs text-white/40 mt-0.5">Recording, uploading, splits, so nobody's at a disadvantage.</p>
-                  </div>
-                </a>
-              )}
-              {viralCourseUrl && (
-                <a href={viralCourseUrl} target="_blank" rel="noopener noreferrer"
-                  className="flex items-center space-x-3 rounded-xl bg-white/[0.03] border border-white/[0.06] p-3.5 lg:p-4 hover:bg-white/[0.05] transition">
-                  <BookOpen className="w-4 h-4 text-lime-400 flex-shrink-0" />
-                  <div>
-                    <p className="text-sm font-semibold text-white">How to Make Viral Content</p>
-                    <p className="text-xs text-white/40 mt-0.5">Get your song seen on TikTok and bring in votes.</p>
-                  </div>
-                </a>
-              )}
+              {/* Plays in place. A YouTube link becomes an inline player that
+                  loads nothing until it is tapped; anything else stays the
+                  link card it always was. See src/components/SchoolCourseCard.js */}
+              <SchoolCourseCard
+                url={platformCourseUrl}
+                icon={PlayCircle}
+                title="How to Use Feelz Machine"
+                desc="Recording, uploading, splits, so nobody's at a disadvantage."
+              />
+              <SchoolCourseCard
+                url={viralCourseUrl}
+                icon={BookOpen}
+                title="How to Make Viral Content"
+                desc="Get your song seen on TikTok and bring in votes."
+              />
             </div>
           </div>
         )}
