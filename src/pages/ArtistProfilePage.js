@@ -691,9 +691,37 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
       }
     } catch (err) { console.error('Follow error:', err); }
   };
+  // ── The bell, and what it did not used to know ───────────────────────────
+  //
+  // It wrote a row to artist_alerts and stopped there. Which is right as far
+  // as it goes, but if the browser has not granted notification permission
+  // that row produces nothing a person can see: no push, no buzz, and the
+  // bell sitting there lit up saying otherwise. Somebody who had dismissed
+  // the one browser prompt had no way back in and no way to know.
+  //
+  // So the bell is now the way in. Turning it on when permission has never
+  // been asked for asks, and this is the best moment there is: a real tap, on
+  // a real artist, immediately after choosing to follow them. Browsers give
+  // one chance at that prompt, and this is a far better one than page load.
+  //
+  // If permission was already refused, the bell says so rather than pretending.
+  // Nothing in a web page can reopen that prompt; it is a browser setting and
+  // only the person can change it. Saying that plainly beats a lit bell that
+  // does nothing.
+  const [pushPermission, setPushPermission] = React.useState(
+    typeof Notification !== 'undefined' ? Notification.permission : 'unsupported'
+  );
+
   const handleToggleNotif = async () => {
     if (!user) { navigate('/login'); return; }
     if (notifLoading) return;
+
+    // Blocked at the browser. Nothing this code can do, so say what it is.
+    if (pushPermission === 'denied') {
+      showNotice?.('Notifications are blocked for this site in your browser settings. Turn them back on there and this will start working.');
+      return;
+    }
+
     setNotifLoading(true);
     try {
       if (notifEnabled) {
@@ -702,6 +730,21 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
       } else {
         await supabase.from('artist_alerts').upsert({ artist_id: artist.id, user_id: user.id }, { onConflict: 'user_id,artist_id' });
         setNotifEnabled(true);
+
+        // Ask now, while the tap is still the reason. askNotificationPermission
+        // no-ops if permission is anything other than 'default', so this is
+        // safe to call every time.
+        if (pushPermission === 'default') {
+          askNotificationPermission({
+            delayMs: 300,
+            onGranted: () => setPushPermission('granted'),
+          });
+          // The prompt is asynchronous and the person may take a while over
+          // it. Re-read once it has had time to resolve either way.
+          setTimeout(() => {
+            if (typeof Notification !== 'undefined') setPushPermission(Notification.permission);
+          }, 4000);
+        }
       }
     } catch (err) { console.error('Notif toggle error:', err); }
     setNotifLoading(false);
@@ -1028,6 +1071,8 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
 
   const handlePlayTrack = (track) => {
     window.__feelz_play_source = 'artist_profile';
+    // Stamped so PlayerContext can tell a fresh click from a stale global.
+    window.__feelz_play_source_at = Date.now();
     if (currentTrack?.id === track.id) { togglePlay(); return; }
     playTrack(
       { ...track, artist_name: artist.artist_name, artist_slug: artist.slug },
@@ -1292,22 +1337,39 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
             {isFollowing ? <UserCheck className="w-3.5 h-3.5" /> : <UserPlus className="w-3.5 h-3.5" />}
             <span>{isFollowing ? 'Following' : 'Follow'}</span>
           </button>
-          {isFollowing && user.id !== artist?.user_id && (
-            <button onClick={handleToggleNotif} disabled={notifLoading}
-              title={notifEnabled ? 'Turn off notifications' : 'Turn on notifications'}
-              className="flex items-center space-x-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all active:scale-95 disabled:opacity-40"
-              style={{
-                backgroundColor: notifEnabled ? `${secondaryColor}25` : 'transparent',
-                color: notifEnabled ? secondaryColor : `${textColor}50`,
-                border: `2px solid ${notifEnabled ? secondaryColor + '40' : textColor + '20'}`,
-              }}>
-              {notifLoading
-                ? <Loader className="w-3.5 h-3.5 animate-spin" />
-                : notifEnabled
-                  ? <Bell className="w-3.5 h-3.5" />
-                  : <BellOff className="w-3.5 h-3.5" />}
-            </button>
-          )}
+          {/* The bell. Three states rather than two, because "on but the
+              browser will not deliver it" is a real state and it used to look
+              identical to "on and working".
+                blocked   browser said no. Amber, and tapping explains.
+                on        alerts saved and permission granted.
+                off       alerts not saved.
+              It also carries a word now. A bare icon next to Follow read as
+              decoration, and the whole problem was that nobody knew this was
+              where notifications lived. */}
+          {isFollowing && user.id !== artist?.user_id && (() => {
+            const blocked = pushPermission === 'denied';
+            const live    = notifEnabled && !blocked;
+            return (
+              <button onClick={handleToggleNotif} disabled={notifLoading}
+                aria-pressed={live}
+                title={blocked
+                  ? 'Blocked in your browser settings'
+                  : notifEnabled ? 'Turn off alerts for this artist' : 'Get alerts when they drop something'}
+                className="flex items-center space-x-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all active:scale-95 disabled:opacity-40"
+                style={{
+                  backgroundColor: blocked ? 'rgba(245,158,11,0.15)' : live ? `${secondaryColor}25` : 'transparent',
+                  color:           blocked ? '#F59E0B' : live ? secondaryColor : `${textColor}50`,
+                  border: `2px solid ${blocked ? 'rgba(245,158,11,0.45)' : live ? secondaryColor + '40' : textColor + '20'}`,
+                }}>
+                {notifLoading
+                  ? <Loader className="w-3.5 h-3.5 animate-spin" />
+                  : live
+                    ? <Bell className="w-3.5 h-3.5" />
+                    : <BellOff className="w-3.5 h-3.5" />}
+                <span>{blocked ? 'Blocked' : live ? 'Alerts on' : 'Alerts'}</span>
+              </button>
+            );
+          })()}
           {tracks.length > 0 && (
             <>
               <button onClick={() => handlePlayTrack(tracks[0])}

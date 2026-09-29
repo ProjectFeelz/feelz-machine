@@ -14,6 +14,9 @@ import { useAuth } from './AuthContext';
 // collaboration_id and from_artist_id are not columns the RPC writes, so they
 // travel in metadata, which is where the notification renderers already look
 // for from_artist_id.
+// Past this, the badge says 99+. See fetchUnreadCount for why it is capped.
+const UNREAD_CAP = 99;
+
 export async function createNotification({ artistId, userId, type, title, message, fromArtistId, trackId, collaborationId, metadata }) {
   const { error } = await sendNotification(supabase, `${type} (createNotification)`, {
     type,
@@ -74,19 +77,49 @@ export default function useNotifications() {
     setLoading(false);
   }, [artist, user]);
 
+  // ── THE 503 ON /rest/v1/notifications ────────────────────────────────────
+  //
+  // This asked for `count: 'exact'` with `head: true`, every two minutes, for
+  // every signed-in person. An exact count is not a cheap lookup: Postgres has
+  // to walk every row matching the filter, under RLS, and produce a real
+  // total. On a notifications table that only ever grows, that gets slower
+  // every week until it passes the statement timeout, and a timed-out HEAD
+  // request comes back as a 503.
+  //
+  // Same shape as the 503 on track_likes from the For You page, same cause,
+  // second place it was written.
+  //
+  // WHY A CAPPED COUNT IS THE RIGHT ANSWER, NOT A FASTER ONE
+  //
+  // Nobody needs to know they have 1,483 unread notifications. The badge is a
+  // nudge, and every badge in every app stops counting somewhere. So it asks
+  // for ids up to a cap and counts what comes back: a bounded index scan
+  // instead of an unbounded aggregate, and the same number on screen for
+  // anybody with fewer than the cap, which is almost everybody.
+  //
+  // Past the cap the badge shows 99+, which is what it should have said all
+  // along rather than a precise number nobody reads.
   const fetchUnreadCount = useCallback(async () => {
     if (!user) return;
     let query = supabase
       .from('notifications')
-      .select('*', { count: 'exact', head: true })
-      .eq('read', false);
+      .select('id')
+      .eq('read', false)
+      .limit(UNREAD_CAP + 1);
     if (artist) {
       query = query.or(`artist_id.eq.${artist.id},user_id.eq.${user.id}`);
     } else {
       query = query.eq('user_id', user.id);
     }
-    const { count } = await query;
-    setUnreadCount(count || 0);
+    const { data, error } = await query;
+    if (error) {
+      // Leave the last known number alone rather than dropping the badge to
+      // zero on a blip. A badge that flickers to nothing and back reads as
+      // notifications being lost.
+      console.warn('[notifications] unread count failed:', error.code, error.message);
+      return;
+    }
+    setUnreadCount(data?.length || 0);
   }, [artist, user]);
 
   const markAsRead = useCallback(async (notificationId) => {

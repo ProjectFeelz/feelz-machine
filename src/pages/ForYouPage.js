@@ -1940,6 +1940,8 @@ export default function ForYouPage() {
     const item = filteredTracks[idx];
     if (item && item.file_url) {
       window.__feelz_play_source = 'for_you';
+      // Stamped so PlayerContext can tell a fresh click from a stale global.
+      window.__feelz_play_source_at = Date.now();
       startedHereRef.current = true;
       const playableQueue = filteredTracks.filter(t => t?.file_url);
       playTrack(item, playableQueue, playableQueue.findIndex(t => t.id === item.id));
@@ -1964,6 +1966,8 @@ export default function ForYouPage() {
     lastPlayedIdx.current = idx;
     if (item.file_url) {
       window.__feelz_play_source = 'for_you';
+      // Stamped so PlayerContext can tell a fresh click from a stale global.
+      window.__feelz_play_source_at = Date.now();
       startedHereRef.current = true;
       const playableQueue = filteredTracks.filter(t => t?.file_url);
       playTrack(item, playableQueue, playableQueue.findIndex(t => t.id === item.id));
@@ -2053,6 +2057,8 @@ export default function ForYouPage() {
     const nextItem = filteredTracks[newIdx];
     if (nextItem && nextItem.file_url && nextItem._type !== 'story') {
       window.__feelz_play_source = 'for_you';
+      // Stamped so PlayerContext can tell a fresh click from a stale global.
+      window.__feelz_play_source_at = Date.now();
       startedHereRef.current = true;
       const playableQueue = filteredTracks.filter(t => t?.file_url);
       playTrack(nextItem, playableQueue, playableQueue.findIndex(t => t.id === nextItem.id));

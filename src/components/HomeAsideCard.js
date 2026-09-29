@@ -483,6 +483,8 @@ export default function HomeAsideCard() {
     if (!track?.file_url) return;
     if (currentTrack?.id === track.id) { togglePlay(); return; }
     window.__feelz_play_source = 'home_card';
+    // Stamped so PlayerContext can tell a fresh click from a stale global.
+    window.__feelz_play_source_at = Date.now();
     playTrack(track, trending.filter(t => t?.file_url));
   }, [currentTrack?.id, playTrack, togglePlay, trending]);
 

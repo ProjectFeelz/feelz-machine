@@ -45,6 +45,8 @@ export default function ShortlistSongs({ songs = [], compact = false }) {
     const track = forPlayer(song);
     if (!track) return;
     window.__feelz_play_source = 'school_sessions';
+    // Stamped so PlayerContext can tell a fresh click from a stale global.
+    window.__feelz_play_source_at = Date.now();
     playTrack(track, queue);
   };
 

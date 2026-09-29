@@ -15,7 +15,8 @@ import {
   ChevronRight, Crown, Zap, Star, LayoutDashboard,
   User, LogOut, DollarSign, Radio, Mic2,
   Loader, X, Youtube, Info, Search,
-  Plus, MessageSquare, Check, Send, Store, Trophy, Sparkles, EyeOff, Bug, Newspaper, MailCheck} from 'lucide-react';
+  Plus, MessageSquare, Check, Send, Store, Trophy, Sparkles, EyeOff, Bug, Newspaper, MailCheck,
+  SlidersHorizontal} from 'lucide-react';
 import { sendNotification } from '../utils/notify';
 
 function LinkCard({ icon: Icon, label, description, path, color, onClick }) {
@@ -284,6 +285,7 @@ export default function HubPage() {
               <LinkCard icon={Sparkles} label="Home Hero" description="Control the big slot at the top of Home" path="/admin/home-hero" color="bg-yellow-500/20" />
               <LinkCard icon={Star} label="What's New" description="Posts and podcast for the home card, and the featured board" path="/admin/news" color="bg-yellow-500/20" />
               <LinkCard icon={Star} label="Cold Start Picks" description="What a brand new listener hears first" path="/admin/cold-start" color="bg-yellow-500/20" />
+              <LinkCard icon={SlidersHorizontal} label="Feed Weights" description="What a play is worth, and whether changing it helped" path="/admin/feed" color="bg-yellow-500/20" />
               <LinkCard icon={Send} label="Newsletter" description="Compose updates for the app or retail venues" path="/newsletter/compose" color="bg-yellow-500/20" />
               <LinkCard icon={Shield} label="Guardian Consents" description="Under 18 artists waiting on a parent to be confirmed" path="/admin/guardian-consents" color="bg-yellow-500/20" />
               <LinkCard icon={Users} label="Seed Personas" description="Platform artists that fill the catalogue and earn nothing" path="/admin/personas" color="bg-yellow-500/20" />

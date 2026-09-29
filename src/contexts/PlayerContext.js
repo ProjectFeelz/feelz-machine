@@ -7,7 +7,192 @@ import { resolveStreamLater, warmStreamUrls } from '../utils/streamUrl';
 import { buildOfflinePlayRow, queueOfflinePlay, flushOfflinePlays } from '../utils/offlinePlayQueue';
 import { sendNotification, sendStreamDigest } from '../utils/notify';
 
+// ── Where a play came from ──────────────────────────────────────────────────
+//
+// event_source used to be read straight off window.__feelz_play_source at the
+// moment the event was written, and only five places in the whole app ever set
+// it: For You, Home card, artist profile, school sessions. Everything else,
+// Library, Browse, an album, a playlist, Liked, search, a track page, Driving,
+// landed as 'unknown'. That was 237 plays over thirty days, 13% of everything,
+// sitting in one bucket with a 64% completion rate, which is to say the
+// deliberate listening, the most valuable signal on the platform, was the part
+// that could not be attributed.
+//
+// Worse, the global was sticky. It was set on a click and never cleared, so a
+// play started from Library after visiting an artist page was recorded as
+// artist_profile. The untagged surfaces were not only missing, they were
+// quietly inflating the tagged ones.
+//
+// Both are fixed the same way: the source is resolved once, at playTrack,
+// which the comment on that function correctly calls the one gate every path
+// into playback goes through. An explicit setter still wins, but only if it
+// was set in the last few seconds, which is the difference between "this click
+// set it" and "something set it four pages ago". Otherwise the route the
+// person is actually on decides, which is right by construction and cannot be
+// forgotten by a new call site.
+const SOURCE_TTL_MS = 8000;
+
+export function sourceFromPath(path) {
+  const p = String(path || '').toLowerCase().replace(/\/+$/, '') || '/';
+  if (p === '/') return 'for_you';
+  if (p === '/home') return 'home';
+  if (p === '/browse') return 'browse';
+  if (p === '/feed') return 'feed';
+  if (p === '/community' || p.startsWith('/chat')) return 'community';
+  if (p === '/library') return 'library';
+  if (p === '/library/likes') return 'liked_songs';
+  if (p === '/library/downloads') return 'downloads';
+  if (p === '/library/offline') return 'offline_library';
+  if (p === '/library/recent') return 'recently_played';
+  if (p.startsWith('/library/playlists')) return 'playlist';
+  if (p.startsWith('/album/')) return 'album';
+  if (p.startsWith('/beat/')) return 'beat_page';
+  if (p.startsWith('/artist/')) return 'artist_profile';
+  if (p.startsWith('/track/') || p.startsWith('/t/') || p.startsWith('/a/')) return 'track_page';
+  if (p.startsWith('/session/')) return 'listening_session';
+  if (p.startsWith('/competition')) return 'competitions';
+  if (p.startsWith('/schoolsessions')) return 'school_sessions';
+  if (p === '/driving') return 'driving';
+  if (p.startsWith('/retail')) return 'retail';
+  if (p === '/notifications') return 'notifications';
+  if (p === '/search') return 'search';
+  if (p === '/wheel') return 'wheel';
+  if (p === '/hub' || p === '/profile' || p.startsWith('/profile/')) return 'profile';
+  return 'other';
+}
+
+export function resolvePlaySource() {
+  let explicit = null;
+  try {
+    const at = Number(window.__feelz_play_source_at) || 0;
+    if (window.__feelz_play_source && Date.now() - at < SOURCE_TTL_MS) {
+      explicit = window.__feelz_play_source;
+    }
+  } catch { /* ignore */ }
+  return explicit || sourceFromPath(window.location?.pathname);
+}
+
+// Somebody who arrived from Plugin Gallery or the FiveM server is a different
+// person from somebody already on the platform, and until now there was no way
+// to tell them apart: the app read no referrer and no parameters at all.
+//
+// This goes in its OWN column rather than being folded into event_source.
+// Where somebody came from and what screen they pressed play on are two
+// different questions, and mixing two dimensions into one text column is what
+// made event_source hard to read in the first place. Keeping them apart means
+// "album plays from the FiveM server" is a question with an answer.
+//
+// sessionStorage rather than localStorage on purpose. It should describe this
+// visit, not brand somebody an external visitor for the rest of the year.
+const EXTERNAL_KEY = 'fm_entry_from';
+
+export function readExternalEntry() {
+  try {
+    const q = new URLSearchParams(window.location.search);
+    const raw = q.get('from') || q.get('utm_source');
+    if (raw) {
+      const clean = raw.toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 24);
+      if (clean) { sessionStorage.setItem(EXTERNAL_KEY, clean); return clean; }
+    }
+    return sessionStorage.getItem(EXTERNAL_KEY) || null;
+  } catch {
+    return null;
+  }
+}
+
 // Preload a track's cover art into the browser cache so VinylRecord/Cassette show instantly
+// ── Telling an interruption apart from a pause ───────────────────────────────
+//
+// A call, a navigation prompt, another app taking the audio: every one of them
+// reaches this app as an ordinary pause event, carrying nothing that says it
+// was not a person pressing pause. The browser does not tell you. So the
+// difference has to be tracked on our side, by marking every pause we asked
+// for, and treating the rest as the phone taking the audio away.
+//
+// The rule that matters most is the one about being unsure. Resuming over a
+// deliberate pause is far worse than failing to resume after an interruption:
+// somebody who stopped the music at a drive-through window and had it start
+// talking again by itself would rightly call that broken, while somebody whose
+// music did not come back after a call just presses play. So anything this
+// cannot positively identify as an interruption is left alone.
+//
+// Exported and pure so the decision can be tested on its own, away from an
+// audio element and a browser. The order of the checks is the whole logic:
+// deliberate wins over everything, because our own crossfade pauses the
+// element mid-fade and a track change pauses it before swapping the source,
+// and both of those would otherwise look exactly like a phone call.
+export function classifyPause({ deliberate, crossfading, ended, hasSrc }) {
+  if (deliberate)  return 'deliberate';   // we asked for this one
+  if (crossfading) return 'crossfade';    // our own fade between tracks
+  if (ended)       return 'ended';        // the track simply finished
+  if (!hasSrc)     return 'idle';         // nothing was loaded to interrupt
+  return 'interrupted';                   // the phone took the audio
+}
+
+// Which track plays next when nothing is shuffled.
+//
+// Deliberately a mirror of the non-shuffle branch inside playNextFromRef
+// rather than a shared call, because that function is in the middle of a
+// crossfade and is not somewhere to introduce a refactor. If the two ever
+// disagree the cost is small and silent: the preloader fetches a track that
+// does not end up playing, which wastes a little data and helps nobody. Worth
+// knowing, not worth risking the crossfade over.
+//
+// Returns null when there is no next track, which is the end of a queue that
+// is not repeating.
+export function nextSequentialIndex({ length, index, repeat }) {
+  if (!length) return null;
+  if (repeat === 'one') return null;     // the same track again, already loaded
+  const next = index + 1;
+  if (next < length) return next;
+  return repeat === 'all' ? 0 : null;
+}
+
+// ── Claiming the car's speakers ─────────────────────────────────────────────
+//
+// Two things can be playing audio on a phone at once, and which one you hear
+// is not something the web normally gets a say in. Open a YouTube tab while a
+// track is playing and YouTube wins, because it started last. In a car that is
+// the difference between music and somebody's video essay.
+//
+// The Audio Session API is the say. Setting the type to 'playback' declares
+// this as primary media audio, which is an exclusive claim: the system pauses
+// other playback audio and leaves non-playback sounds, like a navigation
+// prompt or a notification, alone. Which is the right split. Nobody wants the
+// turn instruction suppressed.
+//
+// WHERE IT WORKS, HONESTLY
+//
+// Safari on iOS, and it is still marked experimental. Chrome on Android does
+// not implement it and decides focus for itself, so there this is a no-op and
+// the resume logic is what carries. Everything here is wrapped because an
+// experimental API on a moving target should never be able to stop the music.
+//
+// CLAIMED ONLY WHILE PLAYING
+//
+// This is an exclusive claim over every other app's audio, so it is taken when
+// a track starts and given back on a deliberate pause. Holding it while
+// nothing plays would mean an app sitting open in a background tab quietly
+// stopping something else from making a sound, which is not ours to do.
+function claimAudioSession() {
+  try {
+    if (typeof navigator !== 'undefined' && navigator.audioSession) {
+      navigator.audioSession.type = 'playback';
+    }
+  } catch {
+    // Experimental, and the accepted values have changed once already. A
+    // browser that rejects the value keeps whatever it had.
+  }
+}
+
+function releaseAudioSession() {
+  try {
+    if (typeof navigator !== 'undefined' && navigator.audioSession) {
+      navigator.audioSession.type = 'auto';
+    }
+  } catch {}
+}
+
 function preloadCover(track) {
   if (!track?.cover_artwork_url) return;
   const img = new window.Image();
@@ -88,6 +273,35 @@ export function PlayerProvider({ children }) {
   const crossfadingRef  = useRef(false);
   const CROSSFADE_SECS  = 1.5; // seconds of overlap, short enough to not echo
   const streamLoggedRef = useRef(false);
+
+  // Captured once when a track starts, then used by every write for that play.
+  // Reading the source again at write time is what let it drift: the listening
+  // event is written when the play ENDS, which can be several navigations
+  // later, so the person may be on a different screen entirely by then.
+  const playSourceRef = useRef('unknown');
+  const entryFromRef = useRef(null);
+  // Flipped to false the first time the database says it has no entry_from
+  // column, so a build that lands before migration 203 keeps recording plays.
+  const entryFromSupportedRef = useRef(true);
+
+  // A third element that never plays. Its whole job is to have already pulled
+  // the next track's audio down the wire so the real element does not have to.
+  // See the preload effect further down.
+  const preloadRef      = useRef(new Audio());
+  const preloadedForRef = useRef(null);
+
+  // Interruption handling. deliberatePauseRef covers every pause this app
+  // asked for, whether the person pressed it or the code did during a track
+  // change. Anything else that stops the audio was the phone, not us.
+  const deliberatePauseRef = useRef(false);
+  const interruptedRef     = useRef(false);
+  const resumeTriesRef     = useRef(0);
+
+  // Driving mode is an explicit statement that this phone is doing one job
+  // right now. It buys a longer fight for the speakers, and nothing else.
+  // Opening the screen is the consent; there is no version of this that turns
+  // itself on because the app guessed somebody was in a car.
+  const drivingRef = useRef(false);
 
   // ── Listening events ────────────────────────────────────────────────────
   // Taste signal capture for the For You model. Deliberately separate from
@@ -179,7 +393,7 @@ export function PlayerProvider({ children }) {
       const userId = session?.user?.id;
       if (!userId) return;
 
-      await supabase.from('listening_events').insert({
+      const row = {
         user_id:          userId,
         track_id:         track.id,
         artist_id:        track.artist_id || null,
@@ -191,12 +405,34 @@ export function PlayerProvider({ children }) {
         track_seconds:    trackSeconds,
         completion_pct:   pct,
         end_reason:       endReason,
-        event_source:     window.__feelz_play_source || 'unknown',
+        event_source:     playSourceRef.current || 'unknown',
         country:          geo?.country || null,
         country_name:     geo?.country_name || null,
         city:             geo?.city || null,
         region:           geo?.region || null,
-      });
+      };
+      if (entryFromSupportedRef.current) row.entry_from = entryFromRef.current;
+
+      // entry_from is added by migration 203. If this build reaches people
+      // before that migration is run, PostgREST rejects the whole insert
+      // because of the unknown column, and the platform stops recording ANY
+      // listening events, which is the signal the entire feed is built on.
+      //
+      // So the column is dropped and the insert retried once. Losing where a
+      // visit came from is a footnote; losing every play for as long as it
+      // takes somebody to notice is not. The flag means the retry happens
+      // once per session rather than on every play.
+      const { error: insertError } = await supabase.from('listening_events').insert(row);
+      if (insertError && entryFromSupportedRef.current) {
+        const missingColumn =
+          insertError.code === 'PGRST204' ||
+          /entry_from/.test(insertError.message || '');
+        if (missingColumn) {
+          entryFromSupportedRef.current = false;
+          delete row.entry_from;
+          await supabase.from('listening_events').insert(row);
+        }
+      }
 
       // The stream row was written at the 30 second mark with completed
       // false, because at that point nothing had been completed. Now the
@@ -250,6 +486,85 @@ export function PlayerProvider({ children }) {
     const ids = queue.slice(start, start + 4).map(t => t?.id).filter(Boolean);
     if (ids.length) warmStreamUrls(ids);
   }, [queue, queueIndex]);
+
+  // ── Pull the next track down before it is needed ────────────────────────
+  //
+  // The URL was already being signed ahead by the effect above, which removed
+  // the round trip. What it did not do is fetch any audio, so at the moment of
+  // a track change the element still has to open a connection and buffer
+  // enough to fire canplay before a note comes out.
+  //
+  // On headphones that lands inside the crossfade and nobody notices. In a car
+  // it is the thing you actually hear: the last track fades away and there is
+  // a second or two of road noise before the next one arrives. Road noise is
+  // what a stall sounds like at 120km/h.
+  //
+  // So once the current track passes halfway, a third audio element is pointed
+  // at the next one. It never plays and is muted so it cannot. Setting src and
+  // calling load() is what asks the browser to start buffering, and because
+  // both elements resolve to the same URL, the real element's request lands on
+  // what this one already fetched.
+  //
+  // HONEST ABOUT WHERE THIS WORKS
+  //
+  // preload is a hint, not an instruction. Chrome and Edge on Android honour
+  // it. Safari on iOS frequently ignores it on a cellular connection, which is
+  // deliberate on Apple's part and cannot be forced. So this helps most
+  // exactly where most Android drivers are, and does no harm where it is
+  // ignored.
+  //
+  // Halfway rather than earlier, because someone skipping through a playlist
+  // never reaches it and never spends the data.
+  const preloadNext = useCallback(() => {
+    // Shuffle picks at random at the moment of the change, so there is no next
+    // track to preload. Guessing one would just be data spent on a track that
+    // is very unlikely to play.
+    if (shuffleRef.current) return;
+
+    const q   = queueRef.current;
+    const nextIdx = nextSequentialIndex({
+      length: q.length,
+      index:  queueIndexRef.current,
+      repeat: repeatRef.current,
+    });
+    if (nextIdx == null) return;
+
+    const next = q[nextIdx];
+    if (!next?.file_url) return;
+
+    // Already on the device. The service worker serves it locally and there is
+    // nothing to fetch.
+    if (isSavedOfflineSync(next.id)) return;
+
+    // Somebody on a metered connection who has asked their phone to save data
+    // has not agreed to us fetching a song they have not chosen to hear yet.
+    const conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+    if (conn?.saveData) return;
+    if (conn?.effectiveType && /^(slow-)?2g$/.test(conn.effectiveType)) return;
+
+    const src = playbackSrc(next);
+    if (!src) return;
+
+    const el = preloadRef.current;
+    if (el.src === src) return;
+    try {
+      el.muted   = true;
+      el.preload = 'auto';
+      el.src     = src;
+      el.load();
+    } catch {
+      // A failed preload is not a failed anything. The track will load the
+      // ordinary way a moment later.
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!duration || !currentTrack?.id) return;
+    if (currentTime < duration / 2) return;
+    if (preloadedForRef.current === currentTrack.id) return;
+    preloadedForRef.current = currentTrack.id;
+    preloadNext();
+  }, [currentTime, duration, currentTrack?.id, preloadNext]);
 
   const fetchingSuggestionsRef = useRef(false);
 
@@ -431,8 +746,35 @@ export function PlayerProvider({ children }) {
         playNextFromRef();
       }
     };
-    const onPlay  = () => setIsPlaying(true);
-    const onPause = () => setIsPlaying(false);
+    const onPlay  = () => {
+      setIsPlaying(true);
+      // Take the speakers at the moment we actually start making sound, not
+      // before. See claimAudioSession.
+      claimAudioSession();
+      // Playing again clears the slate. Whatever stopped us is over, and the
+      // retry budget is back for the next interruption.
+      interruptedRef.current = false;
+      resumeTriesRef.current = 0;
+    };
+
+    const onPause = () => {
+      setIsPlaying(false);
+
+      const verdict = classifyPause({
+        deliberate:  deliberatePauseRef.current,
+        crossfading: crossfadingRef.current,
+        ended:       audio.ended,
+        hasSrc:      !!audio.src,
+      });
+
+      // The flag is one-shot: it described the pause that just happened and
+      // must not describe the next one.
+      if (verdict === 'deliberate') { deliberatePauseRef.current = false; return; }
+      if (verdict !== 'interrupted') return;
+
+      interruptedRef.current = true;
+      resumeTriesRef.current = 0;
+    };
     audio.addEventListener('timeupdate',     onTimeUpdate);
     audio.addEventListener('durationchange', onDurationChange);
     audio.addEventListener('ended',          onEnded);
@@ -447,6 +789,73 @@ export function PlayerProvider({ children }) {
       audio.pause();
     };
   }, [playNextFromRef, flushListeningEvent]);
+
+  // ── Picking the music back up after something took the audio ────────────
+  //
+  // A call, a navigation prompt, a voice assistant. The phone pauses the audio
+  // and hands it back when it is done, and whether playback resumes is up to
+  // the browser. Chrome on Android usually resumes. Safari on iOS usually does
+  // not, and what the driver gets is silence for the rest of the journey until
+  // they pick the phone up, which is the moment you least want them to.
+  //
+  // There is no interruption-ended event on the web, so there is nothing to
+  // wait for. What there is: the tab becomes visible again when the call ends
+  // and the person comes back to the app, and a short retry covers the case
+  // where the audio was handed back while the app stayed in the background.
+  //
+  // THE LIMIT, DELIBERATELY
+  //
+  // Three attempts over about six seconds, then it stops. This is not a loop
+  // that keeps trying to start the music. If something is holding the audio
+  // for longer than that, it wants the audio more than we do, and a car that
+  // starts playing music by itself several minutes later is worse than one
+  // that stays quiet. The play button is right there.
+  //
+  // Driving mode raises it to eight, about sixteen seconds. Somebody who
+  // opened that screen has said what this phone is for, and a call that lasts
+  // a few rings should not end the music for the rest of the journey. It is
+  // still a limit, not a loop.
+  const RESUME_TRIES         = 3;
+  const RESUME_TRIES_DRIVING = 8;
+  const RESUME_SPACING_MS    = 2000;
+
+  useEffect(() => {
+    const audio = audioRef.current;
+
+    const tryResume = () => {
+      if (!interruptedRef.current) return;
+      if (!audio.src || audio.ended || audio.paused === false) return;
+      const budget = drivingRef.current ? RESUME_TRIES_DRIVING : RESUME_TRIES;
+      if (resumeTriesRef.current >= budget) { interruptedRef.current = false; return; }
+      resumeTriesRef.current += 1;
+      // Re-claim on every attempt, not just the first. Whatever took the audio
+      // claimed it for itself, so asking to play again without asking for the
+      // speakers back is asking for the half that does not matter.
+      claimAudioSession();
+      audio.play().catch(() => {
+        // Blocked, usually because the browser wants a gesture first, or the
+        // audio is still held by whatever took it. Not an error worth showing
+        // anyone: either a later attempt lands or they press play.
+      });
+    };
+
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') tryResume();
+    };
+
+    document.addEventListener('visibilitychange', onVisible);
+
+    // The background case. Cheap enough to leave running: it does nothing at
+    // all unless an interruption was recorded, and it gives up after three.
+    const timer = setInterval(() => {
+      if (interruptedRef.current) tryResume();
+    }, RESUME_SPACING_MS);
+
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      clearInterval(timer);
+    };
+  }, []);
 
   useEffect(() => {
     if (currentTime >= 30 && !streamLoggedRef.current && currentTrack) {
@@ -509,7 +918,7 @@ export function PlayerProvider({ children }) {
         queueOfflinePlay(buildOfflinePlayRow({
           trackId,
           durationPlayed: Math.floor(audioRef.current.currentTime),
-          source: window.__feelz_play_source || 'offline',
+          source: playSourceRef.current || 'offline',
         }));
         return;
       }
@@ -536,7 +945,7 @@ export function PlayerProvider({ children }) {
         p_completed: false,
         p_platform: 'web',
         p_device_type: /Mobi|Android/i.test(navigator.userAgent) ? 'mobile' : 'desktop',
-        p_source: window.__feelz_play_source || 'unknown',
+        p_source: playSourceRef.current || 'unknown',
       });
 
       if (logError || !logResult?.logged) return; // self-stream or track not found, bail like before
@@ -738,14 +1147,25 @@ export function PlayerProvider({ children }) {
 
     const audio = audioRef.current;
     if (currentTrack?.id === track.id) {
-      if (isPlaying) { audio.pause(); } else { audio.play().catch(console.error); }
+      if (isPlaying) { deliberatePauseRef.current = true; audio.pause(); }
+      else { interruptedRef.current = false; audio.play().catch(console.error); }
       // Does NOT un-minimise. Tapping the playing track is play/pause, and
       // forcing the full player back open made it impossible to keep it
       // minimised.
       return;
     }
     flushListeningEvent('track_change');
+    // AFTER the flush, never before. flushListeningEvent writes the event for
+    // the play that is ending, and that play belongs to the screen it started
+    // on. Capturing above this line would have stamped the outgoing play with
+    // the incoming track's source, which is the same drift this is fixing.
+    playSourceRef.current = resolvePlaySource();
+    entryFromRef.current = readExternalEntry();
     streamLoggedRef.current = false;
+    // Ours, not the phone's. Without this the pause below reads as an
+    // interruption and the resume logic would fight the track change.
+    deliberatePauseRef.current = true;
+    interruptedRef.current     = false;
     audio.pause();
     audio.dataset.feelzTrackId = String(track.id);
     audio.src = playbackSrc(track);
@@ -822,12 +1242,37 @@ export function PlayerProvider({ children }) {
 
   const togglePlay = useCallback(() => {
     const audio = audioRef.current;
-    if (isPlaying) { audio.pause(); } else { audio.play().catch(console.error); }
+    if (isPlaying) {
+      // Marked before the call, because the pause event fires synchronously
+      // in some browsers and would otherwise read as an interruption.
+      deliberatePauseRef.current = true;
+      interruptedRef.current     = false;
+      audio.pause();
+      // Someone who pressed pause has finished with the speakers. Holding the
+      // claim here would keep another app quiet for no reason.
+      releaseAudioSession();
+    } else {
+      interruptedRef.current = false;
+      claimAudioSession();
+      audio.play().catch(console.error);
+    }
   }, [isPlaying]);
 
   const seek = useCallback((time) => {
     audioRef.current.currentTime = time;
     setCurrentTime(time);
+  }, []);
+
+  // Driving mode sets this while its screen is open. Nothing else should.
+  //
+  // useCallback and not an inline arrow in the value object, because the
+  // driving screen turns this on in an effect keyed on this function. A fresh
+  // identity every render would tear the effect down and set it up again on
+  // every tick of the progress bar, which means driving mode switching itself
+  // off and on several times a second.
+  const setDrivingMode = useCallback((on) => {
+    drivingRef.current = !!on;
+    if (on && !audioRef.current.paused) claimAudioSession();
   }, []);
 
   const setVolumeLevel = useCallback((v) => {
@@ -1000,6 +1445,7 @@ export function PlayerProvider({ children }) {
     removeFromQueue, moveInQueue, playNextInQueue, clearQueue, closePlayer, toggleShuffle, toggleRepeat,
     replaceQueue, jumpToIndex,
     playbackNotice, showNotice, dismissPlaybackNotice: () => setPlaybackNotice(null),
+    setDrivingMode,
   };
 
   return (

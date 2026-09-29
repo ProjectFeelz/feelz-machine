@@ -12,9 +12,10 @@ import {
   CheckCheck, Trash2, Music, Download, Megaphone,
   Radio, FileText, Play, DollarSign, Send, ChevronDown,
   Star, Zap, Award, Gift,
-  ExternalLink,
+  ExternalLink, Settings,
 } from 'lucide-react';
 import useNotifications from '../contexts/useNotifications';
+import NotificationPreferences from '../components/NotificationPreferences';
 import { downloadTrack } from '../utils/downloadTrack';
 import WrappedCard from '../components/WrappedCard';
 
@@ -411,7 +412,9 @@ export default function NotificationsPage() {
   // every tapped push notification. See src/hooks/useGoBack.js.
   const goBack = useGoBack('/hub');
   const { artist, user } = useAuth();
-  const { playTrack, replaceQueue } = usePlayer();
+  const { playTrack, replaceQueue, showNotice } = usePlayer();
+  // The settings sheet. See where it renders, near the filter tabs.
+  const [showPrefs, setShowPrefs] = useState(false);
   const { unreadCount, markAsRead, markAllRead, clearAll } = useNotifications();
   const [filter,      setFilter]      = useState('all');
   const [expandedIds, setExpandedIds] = useState([]);
@@ -974,11 +977,29 @@ export default function NotificationsPage() {
           </button>
           <div>
             <h1 className="text-xl font-bold text-white">Notifications</h1>
-            {unreadCount > 0 && <p className="text-xs text-white/40">{unreadCount} unread</p>}
+            {/* 99+ rather than a number, past the cap. The count is capped in
+                useNotifications.js so the badge query stays bounded; saying
+                "100 unread" when it is really 500 would be the one place that
+                cap became a lie. Every badge in the app already stopped at
+                9+, so the exact count this replaced was never once shown. */}
+            {unreadCount > 0 && (
+              <p className="text-xs text-white/40">
+                {unreadCount > 99 ? '99+' : unreadCount} unread
+              </p>
+            )}
           </div>
         </div>
         {/* Header actions */}
         <div className="flex items-center space-x-1">
+          {/* Notification settings. This page is where somebody comes when
+              they are thinking about notifications, so it is where the switch
+              to change them belongs. Before this there was no switch anywhere
+              in the app and the only lever was the browser's block button. */}
+          <button onClick={() => setShowPrefs(true)}
+            className="p-2 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] transition"
+            title="Notification settings" aria-label="Notification settings">
+            <Settings className="w-4 h-4 text-white/40" />
+          </button>
           {unreadCount > 0 && (
             <button onClick={markAllRead}
               className="p-2 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] transition"
@@ -995,6 +1016,29 @@ export default function NotificationsPage() {
           )}
         </div>
       </div>
+
+      {/* ── Notification settings ──
+          A sheet rather than a route: it is a short list of switches, and
+          sending somebody to another page to flip one and then find their way
+          back is more navigation than the task deserves. */}
+      {showPrefs && (
+        <div className="fixed inset-0 z-[600] flex items-end sm:items-center justify-center bg-black/80 backdrop-blur-sm"
+          onClick={() => setShowPrefs(false)}>
+          <div
+            className="w-full sm:max-w-md max-h-[85vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl p-5"
+            style={{ backgroundColor: '#0f0f0f', border: '1px solid rgba(255,255,255,0.08)' }}
+            onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <span className="text-xs font-bold text-white/40 uppercase tracking-wider">Settings</span>
+              <button onClick={() => setShowPrefs(false)}
+                className="w-8 h-8 flex items-center justify-center rounded-full bg-white/[0.08] hover:bg-white/[0.12] transition">
+                <X className="w-4 h-4 text-white/60" />
+              </button>
+            </div>
+            <NotificationPreferences user={user} onToast={showNotice} />
+          </div>
+        </div>
+      )}
 
       {/* Filter tabs with unread badges */}
       <div className="flex space-x-1 bg-white/[0.03] rounded-xl p-1 mb-5 overflow-x-auto no-scrollbar">

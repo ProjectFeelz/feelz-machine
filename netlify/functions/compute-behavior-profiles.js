@@ -235,7 +235,123 @@ function buildArtistSummary(profile) {
 }
 
 // ── Compute ONE listener profile ──────────────────────────────────────────────
-async function computeListenerProfile(userId) {
+// ── SCORING WEIGHTS ──────────────────────────────────────────────────────────
+//
+// These used to be literals a few lines down:
+//
+//     const weight = e.completion_pct >= 80 ? 3 : e.completion_pct >= 40 ? 1 : 0;
+//
+// Changing an 80 to a 70 meant a commit and a deploy, so in practice nobody
+// ever did, and those numbers were chosen before there was any data to choose
+// them against. They now live in public.feed_weights (migration 202), one row
+// per version, and this reads whichever is active.
+//
+// MEASURED, 29 Sep, over 1,809 scorable plays:
+//
+//     under 10%   400   22%   scored 0
+//     10 to 40%   365   20%   scored 0
+//     40 to 80%   218   12%   weight 1
+//     over 80%    826   46%   weight 3
+//
+// A hard U, and 42% of every play discarded before scoring. The band the
+// weights separate is the smallest one there is.
+//
+// THE RULE THIS DOES NOT BREAK
+//
+// The comment below this block records a decision: a fast skip is noise about
+// today's mood, not taste, so it is not used as a negative signal. Migration
+// 202 seeds weight_abandon and weight_weak at ZERO, which is exactly that
+// rule, so nothing about anybody's feed changes on the day this ships. The
+// dials exist so the rule can be tested rather than argued about.
+//
+// THE HOLDOUT
+//
+// A fixed slice of listeners stays on the original weights whatever gets
+// activated, so a change can be measured against a control group in the same
+// week rather than against last week, which moves for a dozen unrelated
+// reasons. The bucket is computed here rather than asked for per user, because
+// this function runs over every listener on the platform and that would be one
+// round trip each. Same salt and same arithmetic as feed_holdout_bucket() in
+// migration 202, and there is a test that the two agree.
+const crypto = require('crypto');
+
+const FALLBACK_WEIGHTS = {
+  threshold_abandon: 10, threshold_partial: 40, threshold_full: 80,
+  weight_abandon: 0, weight_weak: 0, weight_partial: 1, weight_full: 3,
+  recency_half_life: 0, affinity_min_weight: 1,
+};
+
+let _weightCache = null;
+
+async function loadWeights() {
+  if (_weightCache) return _weightCache;
+  try {
+    const [{ data: all }, { data: setting }] = await Promise.all([
+      supabase.from('feed_weights').select('*').order('id', { ascending: true }),
+      supabase.from('platform_settings').select('value').eq('key', 'feed_holdout_pct').maybeSingle(),
+    ]);
+    const rows    = all || [];
+    // The oldest row is the control, always. Migration 202 seeds it with the
+    // literals this file used to carry, so the holdout is genuinely "what we
+    // were doing before".
+    const control = rows[0] || FALLBACK_WEIGHTS;
+    const active  = rows.find(r => r.is_active) || control;
+    const pct     = Math.max(0, Math.min(100, parseInt(setting?.value ?? '10', 10) || 0));
+    _weightCache = { active, control, holdoutPct: pct };
+  } catch (err) {
+    // A feed that stops learning because a settings table was unreachable is
+    // far worse than one running yesterday's numbers.
+    console.warn('[profiles] could not load feed_weights, using the built-in defaults:', err.message);
+    _weightCache = { active: FALLBACK_WEIGHTS, control: FALLBACK_WEIGHTS, holdoutPct: 0 };
+  }
+  return _weightCache;
+}
+
+function holdoutBucket(userId) {
+  const h = crypto.createHash('md5').update(`feed-holdout-v1:${userId}`).digest('hex').slice(0, 8);
+  return parseInt(h, 16) % 100;
+}
+
+function weightsFor(userId, cache) {
+  if (!cache) return FALLBACK_WEIGHTS;
+  if (cache.holdoutPct > 0 && userId && holdoutBucket(userId) < cache.holdoutPct) return cache.control;
+  return cache.active;
+}
+
+// What one play is worth: which band it lands in, then how long ago it was.
+//
+// Returning a signed number rather than a count of samples is the change that
+// lets a rejection mean anything. The old code pushed a track's bpm into an
+// array `weight` times, so zero meant "ignore" and there was no way to express
+// "this pushed me away", which is what 42% of plays were actually saying.
+function playWeight(event, w, nowMs) {
+  // null and undefined checked BEFORE the cast, because Number(null) is 0 and
+  // 0 is below the abandon threshold. Without this a play whose completion was
+  // never recorded scores as a hard rejection, which is the strongest possible
+  // statement to make about a track nobody has any data on. eventsWithPct
+  // filters these out upstream today, so it never fired, but a landmine that
+  // depends on a caller two hundred lines away is still a landmine.
+  const raw = event?.completion_pct;
+  if (raw === null || raw === undefined || raw === '') return 0;
+  const pct = Number(raw);
+  if (!Number.isFinite(pct)) return 0;
+
+  let base;
+  if (pct < w.threshold_abandon)      base = Number(w.weight_abandon);
+  else if (pct < w.threshold_partial) base = Number(w.weight_weak);
+  else if (pct < w.threshold_full)    base = Number(w.weight_partial);
+  else                                base = Number(w.weight_full);
+
+  const halfLife = Number(w.recency_half_life) || 0;
+  if (halfLife > 0 && event.created_at) {
+    const days = Math.max(0, (nowMs - Date.parse(event.created_at)) / 86400000);
+    base *= Math.pow(0.5, days / halfLife);
+  }
+  return base;
+}
+
+async function computeListenerProfile(userId, weightCache = null) {
+  const w      = weightsFor(userId, weightCache);
   const now    = new Date();
   const d30    = new Date(now - 30 * 86400000).toISOString();
   const d14    = new Date(now - 14 * 86400000).toISOString();
@@ -294,7 +410,9 @@ async function computeListenerProfile(userId) {
     // carries a constant ~30s duration_played by construction, so it can
     // never tell us how far anyone actually got.
     supabase.from('listening_events')
-      .select('track_id, artist_id, genre, mood, bpm, completion_pct, listened_seconds, end_reason')
+      // created_at is needed for the recency half-life. It was not selected
+      // before because nothing decayed.
+      .select('track_id, artist_id, genre, mood, bpm, completion_pct, listened_seconds, end_reason, created_at')
       .eq('user_id', userId)
       .gte('created_at', d30)
       .order('created_at', { ascending: false })
@@ -378,27 +496,58 @@ async function computeListenerProfile(userId) {
   // Weighted toward tracks actually finished. Someone who abandons every
   // fast track should not read as a fast-track listener just because those
   // tracks were served to them.
-  const bpmSamples = [];
+  // A weighted mean rather than a repeated-sample mean.
+  //
+  // The old version pushed a bpm into an array `weight` times, which works for
+  // 0, 1 and 3 and cannot express anything else: no fractions, so no recency
+  // decay, and no negatives, so a track somebody abandoned could never pull
+  // the average away from its tempo. A weighted sum handles all three.
+  //
+  // Negative weights are clamped out of the denominator on purpose. "This
+  // person likes 140bpm slightly less" is not a thing an average of bpm values
+  // can represent, and subtracting a tempo from a mean produces nonsense. The
+  // rejection signal belongs to genre and artist affinity below, where it
+  // means something. Here a disliked track simply does not vote.
+  let bpmWeighted = 0, bpmWeightTotal = 0;
+  const nowMs = now.getTime();
   eventsWithPct.forEach(e => {
     if (!e.bpm) return;
-    const weight = e.completion_pct >= 80 ? 3 : e.completion_pct >= 40 ? 1 : 0;
-    for (let i = 0; i < weight; i++) bpmSamples.push(e.bpm);
+    const weight = Math.max(0, playWeight(e, w, nowMs));
+    if (weight <= 0) return;
+    bpmWeighted    += Number(e.bpm) * weight;
+    bpmWeightTotal += weight;
   });
   // Fall back to plain stream history when there are no events yet.
-  if (bpmSamples.length === 0) {
-    allStreams.forEach(s => { if (s.tracks?.bpm) bpmSamples.push(s.tracks.bpm); });
+  if (bpmWeightTotal === 0) {
+    allStreams.forEach(s => {
+      if (s.tracks?.bpm) { bpmWeighted += Number(s.tracks.bpm); bpmWeightTotal += 1; }
+    });
   }
-  const avgBpm = bpmSamples.length > 0
-    ? Math.round(bpmSamples.reduce((a, b) => a + b, 0) / bpmSamples.length)
-    : null;
+  const avgBpm = bpmWeightTotal > 0 ? Math.round(bpmWeighted / bpmWeightTotal) : null;
 
   // ── Top artist ──────────────────────────────────────────────────────────
   // Prefer completed listens, fall back to raw stream counts.
+  // Scored, not counted.
+  //
+  // This used to be "count every play over 40% and ignore the rest", so an
+  // artist somebody had skipped nine times and finished twice scored exactly
+  // the same as one they had finished twice and never skipped. With signed
+  // weights the nine skips are subtracted, and an artist whose total goes
+  // negative drops out of the running entirely, which it could not do before.
+  //
+  // The threshold is a weight now rather than a percentage, so moving the
+  // bands on the admin page moves this with them instead of leaving a 40
+  // hardcoded here that quietly disagrees.
   const artistPlayCounts = {};
   eventsWithPct.forEach(e => {
-    if (!e.artist_id || e.completion_pct < 40) return;
-    artistPlayCounts[e.artist_id] = (artistPlayCounts[e.artist_id] || 0) + 1;
+    if (!e.artist_id) return;
+    const weight = playWeight(e, w, nowMs);
+    if (weight === 0) return;
+    artistPlayCounts[e.artist_id] = (artistPlayCounts[e.artist_id] || 0) + weight;
   });
+  for (const id of Object.keys(artistPlayCounts)) {
+    if (artistPlayCounts[id] < Number(w.affinity_min_weight)) delete artistPlayCounts[id];
+  }
   if (Object.keys(artistPlayCounts).length === 0) {
     allStreams.forEach(s => {
       const a = s.tracks?.artist_id;
@@ -613,11 +762,18 @@ async function computeAllProfiles() {
   let artistCount   = 0;
   const errors      = [];
 
+  // Once for the whole run, not once per listener. Which weight set applies to
+  // a given person is worked out locally from their id, so this is two queries
+  // rather than two per listener.
+  const weightCache = await loadWeights();
+  console.log('[profiles] weights: active "%s", holdout %s%%',
+    weightCache.active?.label || 'built-in defaults', weightCache.holdoutPct);
+
   // Process listeners in batches of 10
   const BATCH = 10;
   for (let i = 0; i < (listeners || []).length; i += BATCH) {
     const batch = listeners.slice(i, i + BATCH);
-    const profiles = await Promise.all(batch.map(l => computeListenerProfile(l.user_id).catch(e => {
+    const profiles = await Promise.all(batch.map(l => computeListenerProfile(l.user_id, weightCache).catch(e => {
       errors.push({ user: l.user_id, err: e.message }); return null;
     })));
     const valid = profiles.filter(Boolean);
