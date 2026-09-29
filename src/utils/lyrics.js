@@ -59,7 +59,30 @@
 // range's end timestamp sits in the middle of the line.
 const STAMP = String.raw`(?:(\d{1,2}):)?(\d{1,2}):(\d{2})(?:[.,:](\d{1,3}))?`;
 
-const RANGE_SEP = String.raw`\s*(?:→|->|—|–|-|to)\s*`;
+// Range separators, LONGEST FIRST. The ordering is the whole point.
+//
+// This list was `(?:→|->|—|–|-|to)` and it broke on `-->`, which is what
+// Whisper and most transcription exports actually emit. Tracing why is worth
+// keeping, because the failure looked like the separator was simply absent:
+//
+//   `->` needs `-` then `>`; the input has `-` then `-`, so it fails.
+//   `-` then matches the FIRST hyphen, leaving `-> 00:22.16]` where the end
+//   timestamp should be. That is not a timestamp, so the whole optional range
+//   group backtracks out, the closing `]` never matches either, and every
+//   character from the second hyphen onward falls into the lyric text.
+//
+// So the line kept its correct start time and displayed `--> 00:22.16] I found
+// a coin...`, and the word sweep then spent real seconds crawling through
+// `-->` and `00:22.16]` before it reached an actual word. That is the delay:
+// the highlight was not late, it was busy highlighting the timestamp.
+//
+// A font with arrow ligatures draws `-->` as a single arrow, which is why the
+// player appeared to be printing `→ 00:37.40]` rather than three ASCII
+// characters. Same text, prettier rendering of the wrong thing.
+//
+// An alternation is only as good as its longest branch, so anything that
+// starts with a shorter branch has to come after it.
+const RANGE_SEP = String.raw`\s*(?:-->|–>|—>|->|=>|>>|\.\.\.|\.\.|→|⟶|➞|~|—|–|-|to|until)\s*`;
 
 // [start] or [start → end] or [start-end], the whole group optional-bracketed.
 const LINE_RE = new RegExp(
@@ -71,6 +94,52 @@ const WORD_TAG_RE = new RegExp(String.raw`<\s*${STAMP}\s*>`, 'g');
 
 // A line that is only a tag, like [ar:Big Feelz] or [00:12.34] with no words.
 const META_RE = /^\s*\[[a-z]{2,10}:[^\]]*\]\s*$/i;
+
+// ── The backstop ────────────────────────────────────────────────────────────
+//
+// Adding `-->` above fixes the format we know about. This fixes the class.
+//
+// Twice now a separator nobody listed has put timestamps on a listener's
+// screen, and the next unlisted one would do it again. So after the line is
+// parsed, whatever the parse made of it, anything still shaped like parser
+// residue is removed before the text can reach a screen.
+//
+// The rule is deliberately narrow: a timestamp is only removed when it is
+// bracketed, or preceded by a separator, or followed by a closing bracket.
+// A bare number at the start of a line is left exactly where it is, because
+// "3:15 in the morning" is a lyric and eating it would be a worse bug than
+// the one being fixed here. That single condition is what separates a
+// backstop from a blunt instrument.
+const RESIDUE_RE = new RegExp(
+  String.raw`^\s*(?:` +
+    // a separator, then a timestamp, with or without its brackets
+    String.raw`(?:${RANGE_SEP})(?:\[\s*)?${STAMP}\s*\]?` +
+    String.raw`|` +
+    // or a timestamp that still has its closing bracket attached
+    String.raw`(?:\[\s*)?${STAMP}\s*\]` +
+    String.raw`|` +
+    // or a bracket left behind on its own
+    String.raw`\]` +
+  String.raw`)\s*`
+);
+
+// A fully bracketed stamp or range anywhere in the line: [00:12.34],
+// [00:12.34 --> 00:22.16]. Always residue, never a lyric.
+const BRACKETED_RE = new RegExp(
+  String.raw`\[\s*${STAMP}(?:${RANGE_SEP}${STAMP})?\s*\]`, 'g'
+);
+
+function scrubResidue(text) {
+  let out = String(text || '').replace(BRACKETED_RE, ' ');
+  // Loop because one line can carry more than one leftover, and each pass can
+  // expose the next. Capped so a pathological input cannot spin here.
+  for (let i = 0; i < 6; i++) {
+    const next = out.replace(RESIDUE_RE, '');
+    if (next === out) break;
+    out = next;
+  }
+  return out.replace(/\s+/g, ' ').trim();
+}
 
 function toSeconds(h, m, s, frac) {
   const hours = h ? parseInt(h, 10) : 0;
@@ -139,7 +208,10 @@ export function parseLyrics(raw) {
     const start = toSeconds(m[1], m[2], m[3], m[4]);
     // Groups 5 to 8 are the range's end, present only when there was one.
     const end   = m[6] ? toSeconds(m[5], m[6], m[7], m[8]) : null;
-    let text    = (m[9] || '').trim();
+    // scrubResidue, not just trim. If the separator in this file is one we
+    // have not met, the end timestamp is sitting at the front of this string
+    // right now, and it is about to become the first two words of the lyric.
+    let text    = scrubResidue(m[9] || '');
 
     // Enhanced LRC: pull the word tags out before anything else looks at the
     // text, so their timestamps never reach the screen.
@@ -167,7 +239,7 @@ export function parseLyrics(raw) {
         for (let i = 0; i < words.length; i++) {
           words[i].end = i + 1 < words.length ? words[i + 1].start : (end ?? null);
         }
-        text = text.replace(WORD_TAG_RE, '').replace(/\s+/g, ' ').trim();
+        text = scrubResidue(text.replace(WORD_TAG_RE, ''));
         void last;
       }
     }
@@ -205,9 +277,13 @@ export function parseLyrics(raw) {
 
   // Not timed. Keep every line, including the ones that looked like they had
   // a timestamp, because a single "3:15" in a verse is a lyric, not a cue.
+  // scrubResidue runs here too. A file with exactly one timed line lands in
+  // this branch, and it would otherwise print its own timestamp. The rule
+  // above still protects a real "3:15" in a verse: no separator, no bracket,
+  // nothing to strip.
   const all = rawLines
     .filter(l => !META_RE.test(l))
-    .map(text => ({ start: null, end: null, displayEnd: null, text, words: null }));
+    .map(l => ({ start: null, end: null, displayEnd: null, text: scrubResidue(l), words: null }));
   void plain;
   return { synced: false, lines: all };
 }
