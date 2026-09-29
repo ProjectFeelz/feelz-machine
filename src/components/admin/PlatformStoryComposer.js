@@ -63,6 +63,8 @@ export default function PlatformStoryComposer({ onToast }) {
   const [error, setError]     = React.useState('');
 
   const [rows, setRows]       = React.useState([]);
+  const [queue, setQueue]     = React.useState([]);
+  const [fromQueue, setFromQueue] = React.useState(null);   // queue row id
   const [loading, setLoading] = React.useState(false);
   const [armed, setArmed]     = React.useState(null);
 
@@ -98,6 +100,24 @@ export default function PlatformStoryComposer({ onToast }) {
       setError(err.message);
     }
     setRows(data || []);
+
+    // The written-but-not-illustrated pile, seeded by migration 192 from the
+    // updates that actually went out. Absent table means 192 has not run,
+    // which is not an error, just an empty queue.
+    const { data: q, error: qErr } = await supabase
+      .from('platform_story_queue')
+      .select('id, caption, suggested_at, note')
+      .is('used_story_id', null)
+      // dropped_at is a tombstone, not a delete: the row stays so its source
+      // keeps migration 192 from queueing the same update again. Open means
+      // neither used nor dropped. See migration 195.
+      .is('dropped_at', null)
+      .order('suggested_at', { ascending: true })
+      .limit(100);
+    if (qErr && qErr.code !== '42P01' && qErr.code !== 'PGRST205') {
+      console.error('[platform story] queue load failed:', qErr.code, qErr.message);
+    }
+    setQueue(q || []);
     setLoading(false);
   }, [artistId]);
 
@@ -118,6 +138,7 @@ export default function PlatformStoryComposer({ onToast }) {
     setPreview(null);
     setCaption('');
     setWhen(defaultWhen());
+    setFromQueue(null);
     if (fileRef.current) fileRef.current.value = '';
   };
 
@@ -144,18 +165,30 @@ export default function PlatformStoryComposer({ onToast }) {
       // it to publish_at plus 24 hours, so a story planned for December cannot
       // be given a September expiry by a client that computed it at save time.
       // That was the bug that made planning impossible in the first place.
-      const { error: insErr } = await supabase.from('artist_stories').insert({
+      const { data: created, error: insErr } = await supabase.from('artist_stories').insert({
         artist_id:  artistId,
         media_url:  publicUrl,
         media_type: file.type.startsWith('video') ? 'video' : 'image',
         caption:    caption.trim() || null,
         publish_at: publishIso,
-      });
+      }).select('id').single();
       if (insErr) {
         // The upload already happened. Leaving the object behind on a refused
         // insert is the orphan this feature can actually avoid, so it does.
         await supabase.storage.from('stories').remove([key]);
         throw insErr;
+      }
+
+      // Close the queue row only once the story exists. Marking it used any
+      // earlier and a failed insert would lose the text for good, which is
+      // the one thing in this flow that is not recoverable: the image can be
+      // uploaded again, the words cannot be written again from nothing.
+      if (fromQueue && created?.id) {
+        const { error: qErr } = await supabase
+          .from('platform_story_queue')
+          .update({ used_story_id: created.id, used_at: new Date().toISOString() })
+          .eq('id', fromQueue);
+        if (qErr) console.error('[platform story] queue not closed:', qErr.code, qErr.message);
       }
 
       toast(`Scheduled for ${fmtWhen(publishIso)}`);
@@ -217,6 +250,44 @@ export default function PlatformStoryComposer({ onToast }) {
           Each one shows for 24 hours from the time you pick. Plan as far ahead as you like.
         </p>
       </div>
+
+      {/* ── Written, waiting for an image ── */}
+      {queue.length > 0 && (
+        <div>
+          <p className="text-[11px] font-semibold text-white/45 mb-1.5">
+            Written and waiting for an image ({queue.length})
+          </p>
+          <p className="text-[10px] text-white/25 mb-2 leading-relaxed">
+            Recreated from the updates that already went out. Tap one, add the picture, adjust the date if you want it.
+          </p>
+          <div className="space-y-1.5 max-h-64 overflow-y-auto pr-1">
+            {queue.map(q => (
+              <button
+                key={q.id}
+                onClick={() => {
+                  setFromQueue(q.id);
+                  setCaption(q.caption || '');
+                  if (q.suggested_at) {
+                    const d = new Date(q.suggested_at);
+                    if (d.getTime() > Date.now()) setWhen(toLocalInput(d));
+                  }
+                  setError('');
+                  fileRef.current?.click();
+                }}
+                className={`w-full text-left rounded-lg border p-2.5 transition ${
+                  fromQueue === q.id
+                    ? 'border-purple-500/50 bg-purple-500/10'
+                    : 'border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.04]'
+                }`}>
+                <p className="text-xs text-white/75 leading-snug">{q.caption}</p>
+                <p className="text-[10px] text-white/30 mt-1">
+                  {q.note}{q.suggested_at ? ` · suggested ${fmtWhen(q.suggested_at)}` : ''}
+                </p>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* ── Compose ── */}
       <div className="rounded-xl border border-white/[0.07] bg-white/[0.02] p-3 space-y-3">
