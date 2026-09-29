@@ -8,10 +8,10 @@ import ListenerWelcomeTour from './ListenerWelcomeTour';
 import { ArrowRight, Check, Loader } from 'lucide-react';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// useTourState — called by AppLayout
+// useTourState, called by AppLayout
 // Returns { show, dismiss } after auth loads.
 // Persists completion to BOTH localStorage (instant) AND user_profiles in
-// Supabase (syncs across devices — phone done = PC skips tour too).
+// Supabase (syncs across devices, so phone done = PC skips tour too).
 // ─────────────────────────────────────────────────────────────────────────────
 export function useTourState(isArtist, ready) {
   const { user, hasProfile } = useAuth();
@@ -21,7 +21,7 @@ export function useTourState(isArtist, ready) {
     if (!ready || !user?.id) return;
 
     // An account with neither an artists row nor a listeners row cannot use
-    // the app at all — AppLayout bounces it to /setup from every page, and
+    // the app at all. AppLayout bounces it to /setup from every page, and
     // ProfileSetup can only edit a profile that already exists. So show the
     // role picker regardless of what the done flags say.
     //
@@ -46,15 +46,15 @@ export function useTourState(isArtist, ready) {
           .eq('user_id', user.id)
           .maybeSingle();
 
-        // 400 = column doesn't exist yet (migration pending) — show tour
+        // 400 = column doesn't exist yet (migration pending), so show tour
         if (error) { setShow(true); return; }
 
         if (data?.onboarding_done) {
-          // Already done on another device — mirror to localStorage and stay hidden
+          // Already done on another device, so mirror to localStorage and stay hidden
           localStorage.setItem(localKey, '1');
           return;
         }
-        // Not done anywhere — show tour
+        // Not done anywhere, so show tour
         setShow(true);
       } catch {
         // If DB check fails, fall back to showing tour (safe default)
@@ -71,7 +71,7 @@ export function useTourState(isArtist, ready) {
 
     // Never record the tour as done while the account still has no profile.
     // Writing onboarding_done before a profile exists is exactly what made
-    // the old trap permanent — the flag outlived the failure that caused it.
+    // the old trap permanent: the flag outlived the failure that caused it.
     if (!hasProfile) return;
 
     // 1. Instant local write so dismiss feels instant
@@ -88,7 +88,7 @@ export function useTourState(isArtist, ready) {
         );
       if (error) console.warn('Tour sync skipped (run schema migration):', error.message);
     } catch {
-      // Non-fatal — localStorage is the fallback for this device
+      // Non-fatal, localStorage is the fallback for this device
     }
   }, [user?.id, hasProfile]);
 
@@ -102,12 +102,16 @@ const STEP_ROLE    = 'role';
 const STEP_FOLLOW  = 'follow';
 const STEP_WELCOME = 'welcome';
 
+// Sub-lines say what the role DOES in this app, in the app's own words, so
+// the pick is informed rather than aspirational. "Monetise your art" was a
+// pitch; "sell downloads, take tips, sell merch" is a list of the things the
+// artist side actually contains.
 const ROLES = [
   {
     id:    'listener',
     emoji: '🎧',
     label: 'Listener',
-    sub:   'Discover music, follow artists & support independents',
+    sub:   'Stream, follow artists, vote in competitions and buy the music you love',
     color: '#a855f7',
     glow:  'rgba(168,85,247,0.18)',
   },
@@ -115,7 +119,7 @@ const ROLES = [
     id:    'artist',
     emoji: '🎤',
     label: 'Artist',
-    sub:   'Release music, build your audience & monetise your art',
+    sub:   'Release singles, EPs and albums, and sell downloads with no platform cut',
     color: '#22d3ee',
     glow:  'rgba(34,211,238,0.15)',
   },
@@ -123,7 +127,7 @@ const ROLES = [
     id:    'beatmaker',
     emoji: '🎛️',
     label: 'Beat Maker',
-    sub:   'Upload beats, license your productions & collab with vocalists',
+    sub:   'Upload beats, license your productions and find vocalists to work with',
     color: '#f472b6',
     glow:  'rgba(244,114,182,0.15)',
   },
@@ -166,7 +170,7 @@ function RoleCard({ role, selected, onSelect }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// RoleStep — first screen
+// RoleStep, the first screen
 // ─────────────────────────────────────────────────────────────────────────────
 function RoleStep({ onContinue }) {
   const [selected,  setSelected]  = useState(null);
@@ -203,7 +207,7 @@ function RoleStep({ onContinue }) {
           if (error) throw error;
         }
       } else if (artist?.id) {
-        // Has a profile already — just record which kind of creator they are.
+        // Has a profile already, so just record which kind of creator they are.
         const { error } = await supabase
           .from('artists')
           .update({ role: selected === 'beatmaker' ? 'beatmaker' : 'artist', role_confirmed: true })
@@ -234,7 +238,7 @@ function RoleStep({ onContinue }) {
       console.error('[tour] could not save role:', err?.code, err?.message, err?.hint || '');
       setSaveError(
         err?.code === 'PGRST202' || err?.code === '42883'
-          ? 'Setup is not finished on our side yet — migration 97 has not run. Nothing was lost; try again shortly.'
+          ? 'Setup is not finished on our side yet. Migration 97 has not run. Nothing was lost; try again shortly.'
           : 'We could not finish setting up your account. Please try again.'
       );
       setSaving(false);
@@ -273,7 +277,7 @@ function RoleStep({ onContinue }) {
             How are you<br />here today?
           </h1>
           <p className="text-sm text-white/40 leading-relaxed">
-            Pick the role that fits best — you can always change it later in Settings.
+            Pick the role that fits best. You can change it later in Settings.
           </p>
         </div>
 
@@ -323,7 +327,7 @@ function RoleStep({ onContinue }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// AppTour — orchestrates the full onboarding flow
+// AppTour orchestrates the full onboarding flow
 //
 //   All roles:   ROLE → FOLLOW (genre + artists) → WELCOME → onDone
 //
@@ -338,7 +342,7 @@ export default function AppTour({ isArtist, isBeatmaker, onDone }) {
   const navigate = useNavigate();
 
   // Block ForYouPage's window wheel listener from firing while tour is open.
-  // ForYouPage attaches a non-passive 'wheel' listener to window — we capture
+  // ForYouPage attaches a non-passive 'wheel' listener to window, and we capture
   // it first and stop it reaching the feed underneath.
   useEffect(() => {
     const block = (e) => { e.stopPropagation(); };

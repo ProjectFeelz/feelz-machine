@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import CollaboratorSearch from '../components/CollaboratorSearch';
 import SchoolSessionsEntry, { schoolSessionsFormValid, SCHOOL_SESSIONS_BLANK_FORM } from '../components/SchoolSessionsEntry';
+import LyricsThemePicker from '../components/LyricsThemePicker';
 import TierGate from '../components/TierGate';
 import { useTier } from '../contexts/useTier';
 import { useAudioConverter } from '../hooks/useAudioConverter';
@@ -858,6 +859,7 @@ function AddTrackToAlbum({
         genre:             trackForm.genre,
         mood:              trackForm.mood,
         lyrics:            trackForm.lyrics || null,
+        lyrics_theme:      trackForm.lyrics_theme || null,
         file_url:          fileUrl,
         cover_artwork_url: coverUrl,
         track_number:      parseInt(trackForm.track_number) || (existingTrackCount + 1),
@@ -1465,6 +1467,7 @@ export default function TrackUploadPanel() {
         genre:             trackForm.genre,
         mood:              trackForm.mood,
         lyrics:            trackForm.lyrics || null,
+        lyrics_theme:      trackForm.lyrics_theme || null,
         file_url:          fileUrl,
         cover_artwork_url: coverUrl,
         track_number:      parseInt(trackForm.track_number) || (albumTrackQueue.length + 1),
@@ -1699,7 +1702,8 @@ export default function TrackUploadPanel() {
     setEditCoverFile(null); setEditAudioFile(null);
     setEditForm({
       title: track.title, genre: track.genre || '', mood: track.mood || '',
-      lyrics: track.lyrics || '', is_explicit: track.is_explicit,
+      lyrics: track.lyrics || '', lyrics_theme: track.lyrics_theme || null,
+      is_explicit: track.is_explicit,
       is_downloadable: track.is_downloadable, is_published: track.is_published,
       is_premium: track.is_premium, download_price: track.download_price || 0,
       featured: track.featured, pay_what_you_want: track.pay_what_you_want || false,
@@ -1790,6 +1794,7 @@ export default function TrackUploadPanel() {
         artist_id: artist.id,
         title: editForm.title, slug: slugify(editForm.title),
         genre: editForm.genre, mood: editForm.mood, lyrics: editForm.lyrics,
+        lyrics_theme: editForm.lyrics_theme || null,
         is_explicit: editForm.is_explicit, is_downloadable: editForm.is_downloadable,
         is_published: editForm.is_published, is_premium: editForm.is_premium,
         download_price: parseFloat(editForm.download_price) || 0,
@@ -2318,8 +2323,15 @@ export default function TrackUploadPanel() {
                   <FieldLabel>Lyrics (optional)</FieldLabel>
                   <textarea rows={3} value={trackForm.lyrics}
                     onChange={(e) => setTrackForm({ ...trackForm, lyrics: e.target.value })}
-                    placeholder="Paste lyrics here…"
+                    placeholder="Paste lyrics here. Timestamps are fine: [00:12.34], 00:12.34, or a range like [00:12.34 -> 00:18.00]. They are read and hidden, never shown."
                     className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none resize-none" />
+                  {/* Only once there is something to colour. */}
+                  {trackForm.lyrics?.trim() && (
+                    <LyricsThemePicker
+                      value={trackForm.lyrics_theme}
+                      onChange={(k) => setTrackForm({ ...trackForm, lyrics_theme: k })}
+                    />
+                  )}
                 </div>
               </TierGate>
               )}
@@ -2831,7 +2843,14 @@ export default function TrackUploadPanel() {
                                   <FieldLabel>Lyrics</FieldLabel>
                                   <textarea rows={3} value={editForm.lyrics}
                                     onChange={(e) => setEditForm({ ...editForm, lyrics: e.target.value })}
+                                    placeholder="Timestamps are fine and are never shown to listeners."
                                     className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none resize-none" />
+                                  {editForm.lyrics?.trim() && (
+                                    <LyricsThemePicker
+                                      value={editForm.lyrics_theme}
+                                      onChange={(k) => setEditForm({ ...editForm, lyrics_theme: k })}
+                                    />
+                                  )}
                                 </div>
 
                                 <div className="flex flex-wrap gap-3">

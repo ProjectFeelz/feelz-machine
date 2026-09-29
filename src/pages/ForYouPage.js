@@ -17,6 +17,7 @@ import { Helmet } from 'react-helmet-async';
 import ReactPlayer from 'react-player';
 import { supabase } from '../supabaseClient';
 import { resolveStreamSrc } from '../utils/streamUrl';
+import { parseLyrics, activeLineIndex, wordProgress, lyricTheme } from '../utils/lyrics';
 import { sendNotification } from '../utils/notify';
 import TrackCommentSheet from '../components/TrackCommentSheet';
 import { useAuth } from '../contexts/AuthContext';
@@ -191,79 +192,75 @@ function PlaylistSheet({ track, user, onClose, navigate }) {
 
 
 
-// ── LRC parser (same as FullPlayer) ──────────────────────────────────────────
-function parseLRC(raw) {
-  if (!raw) return null;
-  const lines = raw.split('\n');
-  const parsed = [];
-  const LRC_RE = /^\[(\d{1,2}):(\d{2})(?:[.:](\ d{1,3}))?\]\s*(.*)$/;
-  let matched = 0;
-  for (const line of lines) {
-    const m = line.match(/^\[(\d{1,2}):(\d{2})(?:[.:](\d{1,3}))?\]\s*(.*)$/);
-    if (m) {
-      matched++;
-      const mins = parseInt(m[1], 10);
-      const secs = parseInt(m[2], 10);
-      const ms   = m[3] ? parseInt(m[3].padEnd(3, '0'), 10) : 0;
-      const text = m[4].trim();
-      parsed.push({ time: mins * 60 + secs + ms / 1000, text });
-    }
-  }
-  return matched >= 2 ? parsed.sort((a, b) => a.time - b.time) : null;
-}
+// The LRC parser that lived here read only bracketed [mm:ss.xx] and treated
+// anything else as untimed, so lyrics pasted as "00:33.88 text" or as a range
+// showed their own timestamps to the listener. Replaced by the shared parser
+// in src/utils/lyrics.js so the feed and the full player agree.
+
 
 // ── Caption overlay ───────────────────────────────────────────────────────────
-function LyricsCaption({ lyrics, currentTime, isActive, duration }) {
-  const [visible, setVisible] = React.useState(true);
-  if (!lyrics || !isActive) return null;
+function LyricsCaption({ lyrics, currentTime, isActive, duration, themeKey }) {
+  // Parsed once per track, not on every tick.
+  const { synced, lines } = React.useMemo(() => parseLyrics(lyrics), [lyrics]);
+  const theme = lyricTheme(themeKey);
 
-  const lrcLines = parseLRC(lyrics);
+  if (!lyrics || !isActive || !lines.length) return null;
 
-  if (lrcLines) {
-    // Timestamped LRC, show active line
-    const activeIdx = lrcLines.reduce((best, line, i) =>
-      line.time <= currentTime ? i : best, -1);
-    const activeLine = activeIdx >= 0 ? lrcLines[activeIdx] : null;
-    const nextLine   = activeIdx >= 0 && activeIdx + 1 < lrcLines.length ? lrcLines[activeIdx + 1] : null;
-    if (!activeLine?.text && !nextLine?.text) return null;
+  if (synced) {
+    const i = activeLineIndex(lines, currentTime);
+    const line = i >= 0 ? lines[i] : null;
+    const next = i >= 0 && i + 1 < lines.length ? lines[i + 1] : null;
+    if (!line?.text && !next?.text) return null;
+
     return (
       <div className="absolute bottom-44 left-0 right-0 z-20 pointer-events-none text-center px-8">
-        {activeLine?.text && (
-          <p key={activeIdx} className="text-center text-white text-base font-bold leading-snug mb-1 drop-shadow-lg"
-            style={{ textShadow: '0 2px 8px rgba(0,0,0,0.9), 0 0 20px rgba(0,0,0,0.7)', animation: 'lyricFade 0.3s ease' }}>
-            {activeLine.text}
+        {line?.text && (
+          <p key={i} className="text-center text-base font-bold leading-snug mb-1"
+            style={{ textShadow: `0 2px 8px rgba(0,0,0,0.9), 0 0 20px ${theme.glow}`, animation: 'lyricFade 0.3s ease' }}>
+            {/* Word by word, same sweep as the full player. */}
+            {(line.words || [{ text: line.text, start: line.start, end: line.end }]).map((w, k) => {
+              const p = wordProgress(w, currentTime);
+              if (p <= 0) return <span key={k} style={{ color: 'rgba(255,255,255,0.45)' }}>{w.text}</span>;
+              if (p >= 1) return <span key={k} style={{ color: theme.sung }}>{w.text}</span>;
+              const pct = Math.max(0, Math.min(100, p * 100));
+              return (
+                <span key={k} style={{
+                  backgroundImage: `linear-gradient(90deg, ${theme.singing} ${pct}%, rgba(255,255,255,0.45) ${pct}%)`,
+                  WebkitBackgroundClip: 'text', backgroundClip: 'text', color: 'transparent',
+                  display: 'inline-block', whiteSpace: 'pre',
+                }}>{w.text}</span>
+              );
+            })}
           </p>
         )}
-        {nextLine?.text && (
-          <p className="text-center text-white/40 text-sm leading-snug drop-shadow-lg"
+        {next?.text && (
+          <p className="text-center text-white/35 text-sm leading-snug"
             style={{ textShadow: '0 2px 8px rgba(0,0,0,0.9)' }}>
-            {nextLine.text}
+            {next.text}
           </p>
         )}
       </div>
     );
   }
 
-  // Plain text, no timestamps. Spread the words across the song itself rather
+  // Plain text, no timestamps. Spread the lines across the song itself rather
   // than a fixed four seconds a line: a two minute song with forty lines used
   // to run out of lyrics after two and a half minutes of nothing, and a short
   // one finished its words long before the music did.
-  const lines = lyrics.split('\n').map(l => l.trim()).filter(Boolean);
-  if (!lines.length) return null;
-  const totalLines = lines.length;
-  const LEAD_IN = 2;                       // most songs have an intro
-  const span    = Math.max((duration || totalLines * 4) - LEAD_IN, totalLines);
-  const perLine = span / totalLines;
-  const lineIdx = currentTime < LEAD_IN
-    ? 0
-    : Math.min(Math.floor((currentTime - LEAD_IN) / perLine), totalLines - 1);
-  const line = lines[lineIdx];
-  if (!line) return null;
+  const plain = lines.map(l => l.text.trim()).filter(Boolean);
+  if (!plain.length) return null;
+  const LEAD_IN = 2;
+  const span    = Math.max((duration || plain.length * 4) - LEAD_IN, plain.length);
+  const perLine = span / plain.length;
+  const idx = currentTime < LEAD_IN ? 0
+    : Math.min(Math.floor((currentTime - LEAD_IN) / perLine), plain.length - 1);
+  const text = plain[idx];
+  if (!text) return null;
   return (
     <div className="absolute bottom-44 left-0 right-0 z-20 pointer-events-none text-center px-8">
-      <p key={lineIdx} className="text-center text-white text-base font-bold leading-snug drop-shadow-lg"
-        style={{ textShadow: '0 2px 8px rgba(0,0,0,0.9), 0 0 20px rgba(0,0,0,0.7)', animation: 'lyricFade 0.3s ease' }}>
-        {line}
+      <p key={idx} className="text-center text-base font-bold leading-snug"
+        style={{ color: theme.sung, textShadow: `0 2px 8px rgba(0,0,0,0.9), 0 0 20px ${theme.glow}`, animation: 'lyricFade 0.3s ease' }}>
+        {text}
       </p>
     </div>
   );
@@ -803,7 +800,7 @@ function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare, onN
             On a phone the bottom of the card is covered by the player bar and
             the nav, so 0.7 black over a warm blurred cover never shows. On a
             computer nothing covers it, and the column sat as a bright amber
-            strip between the dark sidebar and the dark card on the right —
+            strip between the dark sidebar and the dark card on the right , 
             the "sandwich". Landing on #000 means the feed meets both panels
             with no seam instead of glowing between them.
             Inside the background wrapper on purpose, so it stays under the
@@ -869,7 +866,7 @@ function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare, onN
       {/* Lyrics captions */}
       {isThisOne && track.lyrics && (
         <LyricsCaption lyrics={track.lyrics} currentTime={currentTime} isActive={isActive}
-          duration={track.duration || 0} />
+          duration={track.duration || 0} themeKey={track.lyrics_theme} />
       )}
 
       {/* Floating hearts, only on active card */}
@@ -1359,7 +1356,7 @@ export default function ForYouPage() {
   const [shareCard, setShareCard]         = useState(null);  // { artist, url }
 
   // The card/player sync used to live here. It has moved down next to the
-  // playback effect it has to cooperate with — see "Keeping the card in step
+  // playback effect it has to cooperate with, see "Keeping the card in step
   // with the player" below.
 
   const filteredTracks = feedFilter === 'music' ? tracks.filter(t => !t.is_beat)
@@ -1423,7 +1420,7 @@ export default function ForYouPage() {
           const idList = rankedIds.map(r => r.id);
           const { data: rankedTracks, error: rankedErr } = await supabase
             .from('tracks')
-            .select('id, title, slug, short_code, genre, mood, cover_artwork_url, file_url, youtube_url, duration, lyrics, artist_id, is_beat, stream_count, like_count, bpm, beat_key, beat_scale, download_price, engagement_score, is_published, is_preorder, release_date, ai_content, ai_content_admin_override, artists!tracks_artist_id_fkey(artist_name, slug, profile_image_url)')
+            .select('id, title, slug, short_code, genre, mood, cover_artwork_url, file_url, youtube_url, duration, lyrics, lyrics_theme, artist_id, is_beat, stream_count, like_count, bpm, beat_key, beat_scale, download_price, engagement_score, is_published, is_preorder, release_date, ai_content, ai_content_admin_override, artists!tracks_artist_id_fkey(artist_name, slug, profile_image_url)')
             .in('id', idList);
 
           if (rankedErr) console.error('[ForYou] ranked tracks query failed:', rankedErr.code, rankedErr.message, rankedErr.hint || '');
@@ -1460,7 +1457,7 @@ export default function ForYouPage() {
 
         let recQuery = supabase
           .from('listener_recommendations')
-          .select('score, reason, tracks(id, title, slug, short_code, genre, mood, cover_artwork_url, file_url, youtube_url, duration, lyrics, artist_id, is_beat, stream_count, like_count, bpm, beat_key, beat_scale, download_price, engagement_score, is_published, is_preorder, release_date, ai_content, ai_content_admin_override, artists!tracks_artist_id_fkey(artist_name, slug, profile_image_url))')
+          .select('score, reason, tracks(id, title, slug, short_code, genre, mood, cover_artwork_url, file_url, youtube_url, duration, lyrics, lyrics_theme, artist_id, is_beat, stream_count, like_count, bpm, beat_key, beat_scale, download_price, engagement_score, is_published, is_preorder, release_date, ai_content, ai_content_admin_override, artists!tracks_artist_id_fkey(artist_name, slug, profile_image_url))')
           .eq('user_id', user.id)
           .order('score', { ascending: false })
           .range(offset, offset + PAGE_SIZE - 1);
@@ -1515,7 +1512,7 @@ export default function ForYouPage() {
       if (offset === 0) {
         const { data: picks, error: picksErr } = await supabase
           .from('cold_start_picks')
-          .select('position, tracks(id, title, slug, short_code, genre, mood, cover_artwork_url, file_url, youtube_url, duration, lyrics, artist_id, is_beat, stream_count, like_count, bpm, beat_key, beat_scale, download_price, engagement_score, is_published, is_preorder, release_date, ai_content, ai_content_admin_override, artists!tracks_artist_id_fkey(artist_name, slug, profile_image_url))')
+          .select('position, tracks(id, title, slug, short_code, genre, mood, cover_artwork_url, file_url, youtube_url, duration, lyrics, lyrics_theme, artist_id, is_beat, stream_count, like_count, bpm, beat_key, beat_scale, download_price, engagement_score, is_published, is_preorder, release_date, ai_content, ai_content_admin_override, artists!tracks_artist_id_fkey(artist_name, slug, profile_image_url))')
           .eq('is_active', true)
           .order('position');
 
@@ -1579,7 +1576,7 @@ export default function ForYouPage() {
         const existingIdsStr = allExcludeIds.length > 0 ? `(${allExcludeIds.join(',')})` : null;
 
         let recentQuery = supabase.from('tracks')
-          .select('id, title, slug, short_code, genre, mood, cover_artwork_url, file_url, youtube_url, duration, lyrics, artist_id, is_beat, stream_count, like_count, bpm, beat_key, beat_scale, download_price, engagement_score, is_published, is_preorder, release_date, ai_content, ai_content_admin_override, artists!tracks_artist_id_fkey(artist_name, slug, profile_image_url)')
+          .select('id, title, slug, short_code, genre, mood, cover_artwork_url, file_url, youtube_url, duration, lyrics, lyrics_theme, artist_id, is_beat, stream_count, like_count, bpm, beat_key, beat_scale, download_price, engagement_score, is_published, is_preorder, release_date, ai_content, ai_content_admin_override, artists!tracks_artist_id_fkey(artist_name, slug, profile_image_url)')
           .eq('is_published', true)
           .order('created_at', { ascending: false })
           .limit(halfPage);
@@ -1593,7 +1590,7 @@ export default function ForYouPage() {
         // longer, stream_count ignores likes, comments and downloads entirely.
         // stream_count stays as the tiebreak for tracks not yet scored.
         let topQuery = supabase.from('tracks')
-          .select('id, title, slug, short_code, genre, mood, cover_artwork_url, file_url, youtube_url, duration, lyrics, artist_id, is_beat, stream_count, like_count, bpm, beat_key, beat_scale, download_price, engagement_score, is_published, is_preorder, release_date, ai_content, ai_content_admin_override, artists!tracks_artist_id_fkey(artist_name, slug, profile_image_url)')
+          .select('id, title, slug, short_code, genre, mood, cover_artwork_url, file_url, youtube_url, duration, lyrics, lyrics_theme, artist_id, is_beat, stream_count, like_count, bpm, beat_key, beat_scale, download_price, engagement_score, is_published, is_preorder, release_date, ai_content, ai_content_admin_override, artists!tracks_artist_id_fkey(artist_name, slug, profile_image_url)')
           .eq('is_published', true)
           .order('engagement_score', { ascending: false, nullsFirst: false })
           .order('stream_count', { ascending: false })
@@ -1707,7 +1704,7 @@ export default function ForYouPage() {
     (async () => {
       const { data } = await supabase
         .from('tracks')
-        .select('id, title, slug, short_code, genre, mood, cover_artwork_url, file_url, youtube_url, duration, lyrics, artist_id, is_beat, stream_count, like_count, bpm, beat_key, beat_scale, download_price, engagement_score, is_published, is_preorder, release_date, ai_content, ai_content_admin_override, artists!tracks_artist_id_fkey(artist_name, slug, profile_image_url)')
+        .select('id, title, slug, short_code, genre, mood, cover_artwork_url, file_url, youtube_url, duration, lyrics, lyrics_theme, artist_id, is_beat, stream_count, like_count, bpm, beat_key, beat_scale, download_price, engagement_score, is_published, is_preorder, release_date, ai_content, ai_content_admin_override, artists!tracks_artist_id_fkey(artist_name, slug, profile_image_url)')
         .eq('is_published', true)
         .order('created_at', { ascending: false })
         .limit(30);
@@ -1788,7 +1785,7 @@ export default function ForYouPage() {
     const item = filteredTracks[idx];
     if (!item || item._type === 'story') return;
     if (idx === lastPlayedIdx.current) return;
-    // Already the playing track — nothing to start. This matters because
+    // Already the playing track, nothing to start. This matters because
     // playTrack treats a second call for the current track as play/pause, so
     // without this line every time the card caught up to the player (lock
     // screen next, headset next, track ended) the page would immediately
@@ -1812,8 +1809,8 @@ export default function ForYouPage() {
   // ending, next from the lock screen / headset / car, and PlayerContext
   // quietly appending suggestions when the queue runs low
   // (extendQueueWithSuggestions). The old version only looked the track up in
-  // this feed's own list, so the third case — which is the common one after a
-  // few tracks — always came back -1 and the card sat on the song that had
+  // this feed's own list, so the third case, which is the common one after a
+  // few tracks, always came back -1 and the card sat on the song that had
   // finished while the audio carried on. That is the "next changes the song
   // but not the page" report.
   //
@@ -1830,7 +1827,7 @@ export default function ForYouPage() {
       return;
     }
 
-    // Unknown track. Only adopt it if this feed is what started playback —
+    // Unknown track. Only adopt it if this feed is what started playback , 
     // otherwise the player is being driven from somewhere else and the feed
     // should stay where the person left it.
     if (!startedHereRef.current) return;
@@ -1957,7 +1954,7 @@ export default function ForYouPage() {
   // Mouse wheel / trackpad scroll on desktop
   //
   // The listener is on WINDOW, not on the feed, because the feed is a stack of
-  // absolutely positioned cards with nothing for the browser to scroll — the
+  // absolutely positioned cards with nothing for the browser to scroll, the
   // wheel has to be caught globally and turned into "next song".
   //
   // The cost of that is every other panel on the page. Scrolling the card on

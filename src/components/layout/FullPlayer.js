@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { usePlayer } from '../../contexts/PlayerContext';
 import useScreenAwake from '../../hooks/useScreenAwake';
+import LyricsView from '../LyricsView';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../supabaseClient';
 import TrackActionSheet from '../TrackActionSheet';
@@ -23,29 +24,10 @@ function formatTime(secs) {
   return `${Math.floor(secs / 60)}:${Math.floor(secs % 60).toString().padStart(2, '0')}`;
 }
 
-// ── LRC timestamp parser ──────────────────────────────────────────────────────
-// Parses [mm:ss.xx] or [mm:ss] prefixed lines
-// Returns array of { time: seconds, text: string } or null if not LRC format
-function parseLRC(raw) {
-  if (!raw) return null;
-  const lines = raw.split('\n');
-  const parsed = [];
-  const LRC_RE = /^\[(\d{1,2}):(\d{2})(?:[.:](\d{1,3}))?\]\s*(.*)$/;
-  let matched = 0;
-  for (const line of lines) {
-    const m = line.match(LRC_RE);
-    if (m) {
-      matched++;
-      const mins = parseInt(m[1], 10);
-      const secs = parseInt(m[2], 10);
-      const ms   = m[3] ? parseInt(m[3].padEnd(3, '0'), 10) : 0;
-      const text = m[4].trim();
-      parsed.push({ time: mins * 60 + secs + ms / 1000, text });
-    }
-  }
-  // Only treat as LRC if at least 2 timestamped lines found
-  return matched >= 2 ? parsed.sort((a, b) => a.time - b.time) : null;
-}
+// The LRC parser that used to sit here has been replaced by
+// src/utils/lyrics.js, which reads every format this app actually receives
+// rather than only bracketed [mm:ss.xx]. Removed rather than left in place,
+// so there is one parser and not two that can disagree.
 
 // ── Icon components ───────────────────────────────────────────────────────────
 const IconImage = () => (
@@ -495,139 +477,16 @@ const baseY = H - 14, maxBarH = 28;
 
 
 // ── Lyrics display component ──────────────────────────────────────────────────
-function LyricsDisplay({ lyrics, currentTime, duration, isPlaying }) {
-  const scrollRef      = useRef(null);
-  const userScrollRef  = useRef(false);
-  const resumeTimer    = useRef(null);
-  const lineRefs       = useRef([]);
-
-  const lrcLines = parseLRC(lyrics);
-  const isLRC    = !!lrcLines;
-
-  // Find active line index for LRC
-  const activeLine = isLRC
-    ? lrcLines.reduce((best, line, i) => {
-        return line.time <= currentTime ? i : best;
-      }, -1)
-    : -1;
-
-  // Auto-scroll to active line
-  useEffect(() => {
-    if (!isLRC || activeLine < 0 || userScrollRef.current) return;
-    const el = lineRefs.current[activeLine];
-    if (el && scrollRef.current) {
-      const container = scrollRef.current;
-      const elTop     = el.offsetTop;
-      const elHeight  = el.offsetHeight;
-      const target    = elTop - container.clientHeight / 2 + elHeight / 2;
-      container.scrollTo({ top: Math.max(0, target), behavior: 'smooth' });
-    }
-  }, [activeLine, isLRC]);
-
-  // Plain text position-based scroll
-  useEffect(() => {
-    if (isLRC || userScrollRef.current || !duration || !scrollRef.current) return;
-    const container = scrollRef.current;
-    const maxScroll  = container.scrollHeight - container.clientHeight;
-    if (maxScroll <= 0) return;
-    const target = (currentTime / duration) * maxScroll * 0.85;
-    container.scrollTo({ top: target, behavior: 'smooth' });
-  }, [Math.floor(currentTime / 3), isLRC, duration]); // only update every 3 seconds
-
-  const handleScroll = () => {
-    userScrollRef.current = true;
-    clearTimeout(resumeTimer.current);
-    resumeTimer.current = setTimeout(() => { userScrollRef.current = false; }, 3000);
-  };
-
-  // Reset on track change
-  useEffect(() => {
-    userScrollRef.current = false;
-    if (scrollRef.current) scrollRef.current.scrollTop = 0;
-  }, [lyrics]);
-
-  if (!lyrics) {
-    return (
-      <div className="flex-1 flex flex-col items-center justify-center text-center px-8 space-y-3">
-        <div className="w-14 h-14 rounded-2xl bg-white/[0.05] flex items-center justify-center">
-          <Music2 className="w-6 h-6 text-white/20" />
-        </div>
-        <p className="text-sm text-white/30">No lyrics for this track</p>
-        <p className="text-xs text-white/15">Artists can add lyrics when uploading</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex-1 relative min-h-0">
-      {/* Top fade */}
-      <div className="absolute top-0 left-0 right-0 h-12 bg-gradient-to-b from-black to-transparent z-10 pointer-events-none" />
-
-      <div
-        ref={scrollRef}
-        onScroll={handleScroll}
-        className="h-full overflow-y-auto px-8 py-12 scrollbar-hide"
-        style={{ scrollBehavior: 'smooth' }}
-      >
-        {isLRC ? (
-          // LRC mode, line by line with highlight
-          <div className="space-y-5 pb-32">
-            {lrcLines.map((line, i) => {
-              const isActive  = i === activeLine;
-              const isPast    = i < activeLine;
-              const isEmpty   = !line.text.trim();
-              if (isEmpty) return <div key={i} className="h-4" />;
-              return (
-                <p
-                  key={i}
-                  ref={el => { lineRefs.current[i] = el; }}
-                  className="text-left leading-snug transition-all duration-300"
-                  style={{
-                    fontSize: isActive ? '1.35rem' : '1.1rem',
-                    fontWeight: isActive ? 700 : 400,
-                    color: isActive
-                      ? 'rgba(255,255,255,1)'
-                      : isPast
-                        ? 'rgba(255,255,255,0.25)'
-                        : 'rgba(255,255,255,0.45)',
-                    transform: isActive ? 'translateX(4px)' : 'translateX(0)',
-                  }}
-                >
-                  {line.text}
-                </p>
-              );
-            })}
-          </div>
-        ) : (
-          // Plain text mode
-          <div className="pb-32">
-            {lyrics.split('\n').map((line, i) => (
-              <p
-                key={i}
-                className="text-white/70 leading-relaxed mb-1"
-                style={{ fontSize: '1.05rem', minHeight: line.trim() ? undefined : '1rem' }}
-              >
-                {line.trim() || '\u00A0'}
-              </p>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Bottom fade */}
-      <div className="absolute bottom-0 left-0 right-0 h-20 bg-gradient-to-t from-black to-transparent pointer-events-none" />
-
-      {/* LRC badge */}
-      {isLRC && (
-        <div className="absolute top-3 right-4 z-20">
-          <span className="text-[9px] font-bold uppercase tracking-widest text-white/20 bg-white/[0.05] px-2 py-0.5 rounded-full border border-white/[0.08]">
-            Synced
-          </span>
-        </div>
-      )}
-    </div>
-  );
-}
+// LyricsDisplay has moved to src/components/LyricsView.js.
+//
+// The parser that used to live at the top of this file accepted one format,
+// [mm:ss.xx] at the start of a line, and treated everything else as untimed.
+// Lyrics pasted as "00:33.88 text" or "[00:44.94 -> 00:52.88] text" therefore
+// rendered with their own timestamps showing, as plain text, which is what
+// the player was doing on Against The Storm.
+//
+// The replacement reads all of those, plus enhanced LRC word tags, and lights
+// the words one at a time. See the notes in src/utils/lyrics.js.
 
 // ── Main FullPlayer ───────────────────────────────────────────────────────────
 export default function FullPlayer() {
@@ -959,11 +818,20 @@ export default function FullPlayer() {
           <>
             {/* ── Lyrics mode, full height scrollable ── */}
             {isLyricsMode ? (
-              <LyricsDisplay
+              <LyricsView
                 lyrics={lyrics}
                 currentTime={currentTime}
                 duration={duration}
-                isPlaying={isPlaying}
+                themeKey={currentTrack?.lyrics_theme}
+                empty={
+                  <div className="flex-1 flex flex-col items-center justify-center text-center px-8 space-y-3">
+                    <div className="w-14 h-14 rounded-2xl bg-white/[0.05] flex items-center justify-center">
+                      <Music2 className="w-6 h-6 text-white/20" />
+                    </div>
+                    <p className="text-sm text-white/30">No lyrics for this track</p>
+                    <p className="text-xs text-white/15">Artists can add lyrics when uploading</p>
+                  </div>
+                }
               />
             ) : (
               /* ── Main display area (artwork / vinyl / video) ── */

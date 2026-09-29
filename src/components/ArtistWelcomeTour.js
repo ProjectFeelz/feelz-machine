@@ -2,12 +2,31 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { usePushNotifications } from '../hooks/usePushNotifications';
 import {
-  Upload, MessageCircle, Bell, Flame, Users,
-  ArrowRight, ChevronLeft, Check, Sparkles, Radio,
+  Upload, MessageCircle, Bell, Flame,
+  ArrowRight, ChevronLeft, Sparkles,
   TrendingUp, Hash,
 } from 'lucide-react';
 
 // ── Tour slides ───────────────────────────────────────────────────────────────
+//
+// Same rule as the listener tour: every claim is checked against the code that
+// enforces it, and where a number appears the file that owns it is named.
+//
+// What was stale before this pass:
+//
+//   posts          pointed at "Community → Post". Posting lives on /feed, and
+//                  src/pages/HubPage.js:365 says Hub is the only route to it.
+//   chatrooms      told artists to invite their fans in without mentioning
+//                  that src/pages/ChatRoomView.js:949 requires a fan to have
+//                  Fan Pro before they can join ANY room. An artist who built
+//                  a room on the strength of this slide would watch nobody
+//                  arrive and reasonably conclude the feature was broken.
+//   notifications  said "Hub → Notifications". The bell moved to the top bar,
+//                  src/components/layout/AppLayout.js:129.
+//   trending       said streams, likes and downloads, evenly. The real weights
+//                  are in netlify/functions/update-engagement-scores.js and
+//                  they are nowhere near even, which is actionable information
+//                  an artist can actually use.
 const SLIDES = [
   {
     id: 'welcome',
@@ -25,7 +44,7 @@ const SLIDES = [
     accentColor: '#22d3ee',
     glowColor: 'rgba(34,211,238,0.15)',
     title: 'Drop your music\nfirst',
-    subtitle: 'Head to Hub → Upload Track. Singles, EPs, albums — WAV files auto-convert to 320kbps MP3. Your followers get notified the moment you publish.',
+    subtitle: 'Head to Hub, then Upload Track. Singles, EPs and albums all go through the same screen, and a WAV is converted to 320kbps MP3 for you. Paste your lyrics while you are there, with or without timestamps, and pick the colour they light up in.',
     icon: Upload,
     tag: 'Hub → Upload Track',
     visual: 'upload',
@@ -35,10 +54,10 @@ const SLIDES = [
     emoji: '📝',
     accentColor: '#f472b6',
     glowColor: 'rgba(244,114,182,0.15)',
-    title: 'Post on your\nprofile',
-    subtitle: 'Share thoughts, behind-the-scenes moments and updates directly with your audience. Consistent posting keeps fans engaged between releases.',
+    title: 'Keep talking\nbetween releases',
+    subtitle: 'Hub, then Feed, is where you write a post. The plus button holds the rest: a 24 hour story, a voice memo, a notification straight to your followers, and going live. A quiet profile between drops is the thing that loses people.',
     icon: Hash,
-    tag: 'Community → Post',
+    tag: 'Hub → Feed',
     visual: 'post',
   },
   {
@@ -47,9 +66,12 @@ const SLIDES = [
     accentColor: '#10b981',
     glowColor: 'rgba(16,185,129,0.15)',
     title: 'Build your\ncommunity',
-    subtitle: 'Create chat rooms and invite your fans in. Fans who spend $5+ on your music unlock exclusive subscriber-only rooms — a direct line between you and your real supporters.',
+    subtitle: 'Create chat rooms and invite your fans in. Before you build one, know who can walk in: a fan needs Fan Pro to join any room, and a subscribers-only room also needs $5 or more spent on your music. Small rooms, real supporters.',
     icon: MessageCircle,
-    tag: 'Community → Chat Rooms',
+    // src/pages/HubPage.js:387 is the artist's card and it is called
+    // "Your Fan Chat", not "Chat Rooms". Naming it anything else sends people
+    // hunting for a card that is not there.
+    tag: 'Hub → Your Fan Chat',
     visual: 'chat',
   },
   {
@@ -58,9 +80,9 @@ const SLIDES = [
     accentColor: '#f59e0b',
     glowColor: 'rgba(245,158,11,0.15)',
     title: 'Watch your\nnotifications',
-    subtitle: "Every follow, like, stream milestone and collab request lands in your notifications panel. It's how you stay in touch with what's working and who's connecting with your sound.",
+    subtitle: "Every follow, like, comment, milestone and collab request lands on the bell at the top of the screen. It is the fastest read you have on what is working and who is connecting with your sound.",
     icon: Bell,
-    tag: 'Hub → Notifications',
+    tag: 'The bell, top of screen',
     visual: 'bell',
   },
   {
@@ -68,8 +90,12 @@ const SLIDES = [
     emoji: '🔥',
     accentColor: '#ef4444',
     glowColor: 'rgba(239,68,68,0.15)',
-    title: 'Get your people\nlistening — trend',
-    subtitle: "Trending on the home page is driven by streams, likes and downloads. The more your community engages with your tracks, the higher you climb. Share your profile link everywhere.",
+    // Weights from netlify/functions/update-engagement-scores.js:7-15, said
+    // out loud because a ranking nobody understands just looks rigged. An
+    // artist can act on "a download counts more than a stream"; they cannot
+    // act on "engagement".
+    title: 'Get your people\nlistening',
+    subtitle: "Trending is scored nightly and the inputs are not equal. A download counts most, then a comment, then a playlist add, then a like, and a stream this week counts for more than a stream last month. Ask for the thing you actually want.",
     icon: TrendingUp,
     tag: 'Home → Trending',
     visual: 'trending',
@@ -174,10 +200,17 @@ function ChatVisual({ color }) {
   return (
     <div className="mx-auto w-56">
       <div className="rounded-2xl border overflow-hidden" style={{ borderColor: color + '30' }}>
-        <div className="px-3 py-2 flex items-center space-x-2" style={{ backgroundColor: color + '15' }}>
-          <div className="w-2 h-2 rounded-full" style={{ backgroundColor: color }} />
-          <span className="text-xs font-semibold" style={{ color }}>My Inner Circle</span>
-          <span className="ml-auto text-[10px] text-white/30">🔒 Subscribers only</span>
+        {/* Both gates on the header, because an artist deciding whether to
+            build a room needs to know who can actually walk through the door. */}
+        <div className="px-3 py-2" style={{ backgroundColor: color + '15' }}>
+          <div className="flex items-center space-x-2">
+            <div className="w-2 h-2 rounded-full" style={{ backgroundColor: color }} />
+            <span className="text-xs font-semibold" style={{ color }}>My Inner Circle</span>
+          </div>
+          <div className="flex items-center space-x-1.5 mt-1.5">
+            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md" style={{ backgroundColor: color + '25', color }}>Fan Pro to join</span>
+            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md" style={{ backgroundColor: color + '25', color }}>$5 spent</span>
+          </div>
         </div>
         <div className="p-3 space-y-2" style={{ backgroundColor: color + '05' }}>
           {msgs.map((m, i) => (
@@ -227,32 +260,47 @@ function BellVisual({ color }) {
   );
 }
 
+// A leaderboard of invented track names taught an artist nothing. This shows
+// the actual scoring weights from netlify/functions/update-engagement-scores.js
+// as bar lengths, so the shape of the thing is readable in one glance: a
+// download is worth twelve streams, and asking your people to download is a
+// different ask from asking them to press play.
+//
+// If those weights change, change them here. Two places, both named.
 function TrendingVisual({ color }) {
-  const tracks = [
-    { pos: 1, name: 'Your track', streams: '12.4K', hot: true },
-    { pos: 2, name: 'Neon Pulse', streams: '9.1K', hot: false },
-    { pos: 3, name: 'Deep Water', streams: '7.8K', hot: false },
+  const weights = [
+    { label: 'Download',     w: 12 },
+    { label: 'Comment',      w: 8  },
+    { label: 'Playlist add', w: 6  },
+    { label: 'Like',         w: 5  },
+    { label: 'Stream',       w: 1  },
   ];
+  const max = 12;
   return (
     <div className="mx-auto w-56">
       <div className="rounded-2xl border overflow-hidden" style={{ borderColor: color + '30' }}>
         <div className="px-3 py-2 flex items-center space-x-2" style={{ backgroundColor: color + '12' }}>
           <Flame className="w-3.5 h-3.5" style={{ color }} />
-          <span className="text-xs font-semibold" style={{ color }}>Trending Now</span>
+          <span className="text-xs font-semibold" style={{ color }}>What moves the needle</span>
         </div>
-        <div className="divide-y" style={{ borderColor: color + '10' }}>
-          {tracks.map((t) => (
-            <div key={t.pos} className="flex items-center space-x-3 px-3 py-2.5" style={{ backgroundColor: t.hot ? color + '08' : 'transparent' }}>
-              <span className="text-xs font-bold w-4" style={{ color: t.hot ? color : 'rgba(255,255,255,0.2)' }}>#{t.pos}</span>
-              <span className="flex-1 text-xs font-medium" style={{ color: t.hot ? 'white' : 'rgba(255,255,255,0.45)' }}>{t.name}</span>
-              <div className="flex items-center space-x-1">
-                {t.hot && <TrendingUp className="w-3 h-3" style={{ color }} />}
-                <span className="text-[10px]" style={{ color: t.hot ? color : 'rgba(255,255,255,0.25)' }}>{t.streams}</span>
+        <div className="p-3 space-y-2">
+          {weights.map((item, i) => (
+            <div key={item.label} style={{ animation: 'fade-in-up 0.35s ease both', animationDelay: `${i * 0.08}s` }}>
+              <div className="flex justify-between mb-1">
+                <span className="text-[11px] text-white/55">{item.label}</span>
+                <span className="text-[10px] font-bold" style={{ color }}>×{item.w}</span>
+              </div>
+              <div className="h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: color + '15' }}>
+                <div
+                  className="h-full rounded-full"
+                  style={{ width: `${(item.w / max) * 100}%`, backgroundColor: i === 0 ? color : color + '70' }}
+                />
               </div>
             </div>
           ))}
         </div>
       </div>
+      <p className="text-center text-[10px] text-white/25 mt-2">Recent plays weigh more than old ones</p>
     </div>
   );
 }

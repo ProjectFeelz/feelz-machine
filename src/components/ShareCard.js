@@ -2,6 +2,7 @@ import { coverUrl } from '../utils/coverUrl';
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { Download, Share2, X, Loader, Link, Check, Film } from 'lucide-react';
 import { supabase } from '../supabaseClient';
+import { parseLyrics, activeLineIndex } from '../utils/lyrics';
 import { buildStoryMp4, MEDIARECORDER_MP4_TYPES } from '../utils/storyMp4';
 import { resolveShareUrl, urlEndsInId } from '../utils/shareLink';
 
@@ -84,28 +85,21 @@ function proxyUrl(src) {
 
 // Lyrics for the video. Timestamped [mm:ss.xx] lines are followed exactly;
 // plain words are spread evenly across the song so they at least move with it.
-function parseLrcForVideo(raw) {
-  if (!raw) return null;
-  const out = [];
-  raw.split('\n').forEach(line => {
-    const m = line.match(/^\[(\d{1,2}):(\d{2})(?:[.:](\d{1,3}))?\]\s*(.*)$/);
-    if (!m) return;
-    const ms = m[3] ? parseInt(m[3].padEnd(3, '0'), 10) : 0;
-    out.push({ time: parseInt(m[1], 10) * 60 + parseInt(m[2], 10) + ms / 1000, text: m[4].trim() });
-  });
-  return out.length >= 2 ? out.sort((a, b) => a.time - b.time) : null;
-}
+// The third copy of the same too-narrow LRC parser has been removed. It read
+// only bracketed [mm:ss.xx], so a track whose lyrics were pasted as
+// "00:33.88 text" or as a range rendered its timestamps into the shared MP4,
+// permanently, in something the artist then posts. Uses the shared parser in
+// src/utils/lyrics.js now, like the player and the feed.
 
 function lyricLinesAt(lyrics, t, songLength) {
   if (!lyrics) return null;
-  const lrc = parseLrcForVideo(lyrics);
-  if (lrc) {
-    let idx = -1;
-    lrc.forEach((l, i) => { if (l.time <= t) idx = i; });
-    if (idx < 0) return { index: 0, line: '', next: lrc[0]?.text || '' };
-    return { index: idx, line: lrc[idx].text, next: lrc[idx + 1]?.text || '' };
+  const { synced, lines: parsed } = parseLyrics(lyrics);
+  if (synced) {
+    const idx = activeLineIndex(parsed, t);
+    if (idx < 0) return { index: 0, line: '', next: parsed[0]?.text || '' };
+    return { index: idx, line: parsed[idx].text, next: parsed[idx + 1]?.text || '' };
   }
-  const lines = lyrics.split('\n').map(l => l.trim()).filter(Boolean);
+  const lines = parsed.map(l => l.text.trim()).filter(Boolean);
   if (!lines.length) return null;
   const LEAD_IN = 2;
   const span    = Math.max((songLength || lines.length * 4) - LEAD_IN, lines.length);
@@ -276,7 +270,7 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
   //
   // Not simply the shareUrl prop. Callers build that themselves and several
   // of them fall back to the track's raw id when they have not selected its
-  // slug, which produces /track/10a17a25-734b-... — long, meaningless, and
+  // slug, which produces /track/10a17a25-734b-..., long, meaningless, and
   // with no artwork on it, because og-meta looks tracks up by slug.
   //
   // So the prop is a starting point. If it is good it is kept; if it ends in
@@ -304,7 +298,7 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
   // THE RESET BELOW IS THE IMPORTANT PART. `lyrics` was seeded from the track
   // in useState, which only runs on the FIRST mount. Share this sheet on one
   // song, close it, open it on another, and the component is often the same
-  // instance with a new `track` prop — so the words stayed on screen from the
+  // instance with a new `track` prop, so the words stayed on screen from the
   // song before. That is how a Nostalgic Unit video came out carrying Steve
   // C-SA's lyrics. Whenever the track changes, the words go back to unknown
   // and are fetched again for the song actually being shared.
