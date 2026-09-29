@@ -20,6 +20,8 @@ import {
 } from '../components/HomeAsideCard';
 import { CollabGrid } from '../components/CollaborationsSpotlight';
 import { StoriesRail } from '../components/ArtistStories';
+import spreadByArtist from '../utils/spreadByArtist';
+import { fetchArtistFallbackCovers, artistImage } from '../utils/artistAvatar';
 
 function formatNumber(n) {
   if (!n) return '0';
@@ -184,6 +186,7 @@ export default function BrowsePage() {
   const [featured, setFeatured]               = useState([]);
   const [newReleases, setNewReleases]         = useState([]);
   const [allTracks, setAllTracks]             = useState([]);
+  const [artistCovers, setArtistCovers]       = useState(() => new Map());
   const [artists, setArtists]                 = useState([]);
   const [albums, setAlbums]                   = useState([]);
   const [loading, setLoading]                 = useState(true);
@@ -219,11 +222,21 @@ export default function BrowsePage() {
         genreTags = prefData?.genre_preferences || [];
       }
       if (genreTags.length === 0) return;
-      const recFromLocal = allTracks.filter(t =>
+      // Spread BEFORE the slice, never after.
+      //
+      // This read .slice(0, 8) straight off the filtered list, and the list
+      // it filters is ordered by engagement_score, so an artist with a run of
+      // well-performing tracks in your favourite genre took all eight slots.
+      // Recommended For You then showed one artist six times, which is not a
+      // recommendation, it is a advert nobody asked for.
+      //
+      // Slicing first would defeat this entirely: eight tracks by one artist,
+      // dealt out, are still eight tracks by one artist.
+      const pool = allTracks.filter(t =>
         !listenedIds.includes(t.id) &&
         (genreTags.includes(t.genre) || genreTags.includes(t.mood))
-      ).slice(0, 8);
-      setRecommended(recFromLocal);
+      );
+      setRecommended(spreadByArtist(pool).slice(0, 8));
     } catch (err) { console.error('Browse recs error:', err); }
   };
 
@@ -400,19 +413,27 @@ export default function BrowsePage() {
       // are left out until they have one or the other. Nothing is deleted and
       // nothing is hidden anywhere else: their profile, their tracks and
       // search all still work exactly as before.
+      // An artist with music has artwork even when they have no photo: the
+      // cover of whatever they released last. That is a real card, so they
+      // are no longer hidden for want of a profile picture. Only an artist
+      // with no picture and nothing released stays out, because they have
+      // genuinely nothing to show.
+      const noPhoto = (artistsData || []).filter(a => !a.profile_image_url);
+      const covers = await fetchArtistFallbackCovers(noPhoto.map(a => a.id));
+
       const presentable = (artistsData || []).filter(a =>
-        !!a.profile_image_url || Number(a.follower_count ?? a.display_follower_count ?? 0) > 0
+        !!a.profile_image_url
+        || covers.has(a.id)
+        || Number(a.follower_count ?? a.display_follower_count ?? 0) > 0
       );
 
-      // Images still first among the ones that are left, since an artist with
-      // followers but no picture is a weaker card than one with a picture.
-      const sortedArtists = presentable.sort((a, b) => {
-        const aHasImg = !!(a.profile_image_url);
-        const bHasImg = !!(b.profile_image_url);
-        if (aHasImg && !bHasImg) return -1;
-        if (!aHasImg && bHasImg) return 1;
-        return 0;
-      });
+      // Three tiers rather than two. A photo is still the strongest card, a
+      // release cover is a real one, and an artist carried only by their
+      // follower count is the weakest and goes last.
+      const rank = (a) => (a.profile_image_url ? 0 : covers.has(a.id) ? 1 : 2);
+      const sortedArtists = presentable.sort((a, b) => rank(a) - rank(b));
+
+      setArtistCovers(covers);
       setArtists(sortedArtists);
     } catch (err) { console.error('Browse fetch error:', err); }
     finally { setLoading(false); }
@@ -957,8 +978,11 @@ export default function BrowsePage() {
                   <button key={a.id} onClick={() => navigate(`/artist/${a.slug}`)}
                     className="text-center group">
                     <div className="relative w-full aspect-square rounded-2xl overflow-hidden bg-white/[0.06] mb-2">
-                      {a.profile_image_url
-                        ? <img src={coverUrl(a.profile_image_url, COVER.tile)} alt="" loading="lazy"
+                      {/* Their photo, or failing that the cover of their last
+                          release. The lettered gradient is the last resort
+                          for somebody who has neither. */}
+                      {artistImage(a, artistCovers)
+                        ? <img src={coverUrl(artistImage(a, artistCovers), COVER.tile)} alt="" loading="lazy"
                             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
                         : <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-purple-600/30 to-blue-600/20">
                             <span className="text-2xl font-bold text-white/40">{a.artist_name?.[0]}</span>

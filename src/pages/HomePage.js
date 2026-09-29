@@ -17,6 +17,7 @@ import { StoriesRail } from '../components/ArtistStories';
 import { CollabRail } from '../components/CollaborationsSpotlight';
 import WrappedCard from '../components/WrappedCard';
 import OnThisDay from '../components/OnThisDay';
+import { fetchArtistFallbackCovers, artistImage } from '../utils/artistAvatar';
 
 function getArtistLimit(totalArtists) {
   if (totalArtists < 10) return 3;
@@ -263,6 +264,7 @@ export default function HomePage() {
   const [recommended, setRecommended]               = useState([]);
   const [hero, setHero]                             = useState(null);
   const [libraryPeek, setLibraryPeek]               = useState([]);
+  const [topArtistCovers, setTopArtistCovers]      = useState(() => new Map());
   const [followedReleases, setFollowedReleases]     = useState([]);
   const [loading, setLoading]                       = useState(true);
   const [actionSheetTrack, setActionSheetTrack]     = useState(null);
@@ -300,8 +302,12 @@ export default function HomePage() {
           .eq('is_published', true).order('engagement_score', { ascending: false }).limit(60),
         supabase.from('artists')
           .select('id, artist_name, slug, profile_image_url, is_verified, follower_count, display_follower_count, total_streams, tier')
-          .not('profile_image_url', 'is', null)
-          .neq('profile_image_url', '')
+          // The "must have a photo" filter has been lifted. An artist with
+          // music has artwork, the cover of their last release, and showing
+          // that is better than leaving them out of the platform's own
+          // "Artists to Follow" row for want of a headshot. Over-fetched and
+          // then trimmed below to the ones that have something to show, so
+          // the row is never padded with empty circles.
           // Seed personas being wound down stop appearing here first, which is
           // the "gradual" in gradually decommissioning them: they keep playing
           // and stay in the Feelz Retail playlists, they just stop being
@@ -309,7 +315,7 @@ export default function HomePage() {
           // default of 'active' (migration 177), so this never drops a real
           // artist.
           .eq('seed_status', 'active')
-          .order('display_follower_count', { ascending: false }).limit(24),
+          .order('display_follower_count', { ascending: false }).limit(48),
         // The tuning number for the spread. It used to be the LENGTH of the
         // query above, which is capped at 24, so a 200 artist platform was
         // being tuned as if it had 24 artists.
@@ -363,7 +369,20 @@ export default function HomePage() {
         albumList.filter(a => !['single', 'beat'].includes(a.release_type)),
         artistCount));
       setTrending(diversify(trendingBoosted, artistCount));
-      setTopArtists(artists || []);
+      // Photo first, release cover second, and anybody with neither is left
+      // out. The row is 24 wide as it always was; the query now fetches 48 so
+      // that dropping the empty ones does not leave it short.
+      const artistList = artists || [];
+      const artistFallbacks = await fetchArtistFallbackCovers(
+        artistList.filter(a => !a.profile_image_url).map(a => a.id)
+      );
+      setTopArtistCovers(artistFallbacks);
+      setTopArtists(
+        artistList
+          .filter(a => a.profile_image_url || artistFallbacks.has(a.id))
+          .sort((a, b) => (a.profile_image_url ? 0 : 1) - (b.profile_image_url ? 0 : 1))
+          .slice(0, 24)
+      );
 
       // artistCount is passed down rather than read off topArtists state. The
       // setter above has not applied yet inside this function, so the old code
@@ -798,16 +817,27 @@ export default function HomePage() {
           .select('artist:artists(id, artist_name, slug, profile_image_url)')
           .eq('follower_id', user.id).limit(4),
       ]);
+
+      // An artist with no profile picture was drawn as a grey music note,
+      // which reads as a broken or empty account rather than as somebody who
+      // simply has not uploaded a photo. They have artwork: the cover of
+      // whatever they put out last. One batched lookup for the ones that
+      // need it, so a rail of six is not six extra requests.
+      const artists = (fols || []).map(f => f.artist).filter(Boolean);
+      const covers = await fetchArtistFallbackCovers(
+        artists.filter(a => !a.profile_image_url).map(a => a.id)
+      );
+
       const items = [
         ...(pls || []).map(p => ({
           key: `pl-${p.id}`, kind: 'playlist', label: p.name,
           image: p.cover_url || p.playlist_tracks?.find(t => t.tracks?.cover_artwork_url)?.tracks?.cover_artwork_url,
           path: `/library/playlists/${p.id}`,
         })),
-        ...(fols || []).filter(f => f.artist).map(f => ({
-          key: `ar-${f.artist.id}`, kind: 'artist', label: f.artist.artist_name,
-          image: f.artist.profile_image_url,
-          path: `/artist/${f.artist.slug || f.artist.id}`,
+        ...artists.map(a => ({
+          key: `ar-${a.id}`, kind: 'artist', label: a.artist_name,
+          image: artistImage(a, covers),
+          path: `/artist/${a.slug || a.id}`,
         })),
       ];
       setLibraryPeek(items.slice(0, 6));
@@ -1063,7 +1093,10 @@ export default function HomePage() {
               <button key={a.id} onClick={() => navigate(`/artist/${a.slug}`)}
                 className="flex-shrink-0 w-40 md:w-52 text-center group">
                 <div className="w-40 h-40 md:w-52 md:h-52 rounded-full overflow-hidden bg-white/[0.06] mb-2 mx-auto">
-                  <img src={coverUrl(a.profile_image_url, 400)} alt={a.artist_name || ''}
+                  {/* Their photo, or the cover of their last release. Nobody
+                      without one of the two reaches this row, so there is no
+                      empty-circle case to draw. */}
+                  <img src={coverUrl(artistImage(a, topArtistCovers), 400)} alt={a.artist_name || ''}
                     loading="lazy" decoding="async"
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
                 </div>

@@ -32,6 +32,7 @@ import { needsWelcome } from './Welcome';
 import { ArtistStoryView } from '../components/ArtistStories';
 import ShareCard from '../components/ShareCard';
 import { askNotificationPermission } from '../utils/askNotificationPermission';
+import spreadByArtist from '../utils/spreadByArtist';
 import {
   Heart, MessageCircle, ListMusic, UserCheck,
   Share2, Loader, X, Send, ChevronUp,
@@ -48,40 +49,9 @@ const IN_PHONE_PREVIEW = typeof window !== 'undefined' && (
 // Search engines and link previews must still see the feed at "/".
 const IS_BOT = typeof navigator !== 'undefined' && /bot|crawl|spider|slurp|facebookexternalhit|lighthouse|headless|preview/i.test(navigator.userAgent || '');
 
-// No artist gets the feed to themselves.
-//
-// One account uploading a lot can take over For You: the ranking reads
-// engagement, and a burst of new tracks from one artist scores as a burst of
-// new tracks. This deals the page out like cards instead, one track per
-// artist per round, in the order the ranking put them.
-//
-// Nothing is dropped and nothing is reordered within an artist. An artist with
-// nine tracks in a page still has all nine, spaced out, with everyone else's
-// music in between.
-function spreadByArtist(list) {
-  if (!Array.isArray(list) || list.length < 3) return list || [];
-
-  const buckets = new Map();   // artist -> their tracks, in ranking order
-  list.forEach(t => {
-    const key = t.artist_id || t.artist_name || 'unknown';
-    if (!buckets.has(key)) buckets.set(key, []);
-    buckets.get(key).push(t);
-  });
-  if (buckets.size === 1) return list;
-
-  const queues = [...buckets.values()];
-  const out = [];
-  while (out.length < list.length) {
-    let placedThisRound = false;
-    for (const q of queues) {
-      if (!q.length) continue;
-      out.push(q.shift());
-      placedThisRound = true;
-    }
-    if (!placedThisRound) break;   // belt and braces, never loop forever
-  }
-  return out;
-}
+// spreadByArtist moved to src/utils/spreadByArtist.js, imported at the top of
+// this file. It was needed on the Library rails too and a second copy would
+// have drifted from this one. Behaviour is unchanged.
 
 // Every listener_feedback write in this file was fire-and-forget: no await, no
 // .then, no error read. So the 400 they have all been returning was invisible,

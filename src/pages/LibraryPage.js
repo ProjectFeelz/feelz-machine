@@ -12,6 +12,7 @@ import {
   Shield, ChevronDown, Check, BarChart2, Play, MessageCircle,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import spreadByArtist from '../utils/spreadByArtist';
 
 // ── App theme definitions (module-level so they never recreate) ───────────────
 const THEMES = [
@@ -144,15 +145,29 @@ export default function LibraryPage() {
     return () => { cancelled = true; };
   }, [user]);
 
+  // ONE ARTIST DOES NOT GET THE RAIL.
+  //
+  // This used to be limit(6) ordered by created_at, which means an artist who
+  // uploads an album in one sitting owns every slot until somebody else
+  // releases. That is exactly what was happening: six covers, one artist.
+  //
+  // The order of operations is the whole fix. Fetching 60 and spreading is
+  // right; fetching 6 and spreading does nothing, because six tracks by one
+  // artist spread out are still six tracks by one artist. Over-fetch, spread
+  // the pool, then cut to the six that are shown.
+  //
+  // artist_id is in the select for the same reason. spreadByArtist buckets on
+  // it, and without it every row keys to the same bucket and the function
+  // quietly returns the list untouched.
   useEffect(() => {
     let q = supabase.from('tracks')
-      .select('id, title, slug, file_url, cover_artwork_url, artists(artist_name)')
+      .select('id, title, slug, file_url, cover_artwork_url, artist_id, artists(artist_name)')
       .eq('is_published', true)
       .not('cover_artwork_url', 'is', null)
       .order('created_at', { ascending: false })
-      .limit(6);
+      .limit(60);
     if (hiddenIds.length > 0) q = q.not('id', 'in', `(${hiddenIds.join(',')})`);
-    q.then(({ data }) => setFeatured(data || []));
+    q.then(({ data }) => setFeatured(spreadByArtist(data || []).slice(0, 6)));
   }, [hiddenIds]);
 
   // "New to you" strip. Prefers recent tracks from artists this user
@@ -166,16 +181,20 @@ export default function LibraryPage() {
           .from('follows').select('artist_id').eq('follower_id', user.id).limit(50);
         ids = (follows || []).map(f => f.artist_id).filter(Boolean);
       }
+      // Same over-fetch, spread, cut as above. It matters more here, not
+      // less: when you follow only a handful of artists this list is drawn
+      // from a small pool, so one of them releasing an album takes the whole
+      // strip and it looks like the others have stopped making music.
       let q = supabase.from('tracks')
-        .select('id, title, slug, file_url, cover_artwork_url, created_at, artists(artist_name)')
+        .select('id, title, slug, file_url, cover_artwork_url, created_at, artist_id, artists(artist_name)')
         .eq('is_published', true)
         .not('cover_artwork_url', 'is', null)
         .order('created_at', { ascending: false })
-        .limit(15);
+        .limit(60);
       if (ids.length > 0) q = q.in('artist_id', ids);
       if (hiddenIds.length > 0) q = q.not('id', 'in', `(${hiddenIds.join(',')})`);
       const { data } = await q;
-      setNewToYou(data || []);
+      setNewToYou(spreadByArtist(data || []).slice(0, 15));
     };
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
