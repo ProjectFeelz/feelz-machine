@@ -268,175 +268,216 @@ function LyricsCaption({ lyrics, currentTime, isActive, duration, themeKey }) {
 }
 
 
-// ── Floating hearts + listener bubbles ───────────────────────────────────────
-const HEART_COLORS = ['#ef4444','#f472b6','#fb923c','#a78bfa','#f43f5e'];
+// ── Floating hearts ──────────────────────────────────────────────────────────
+//
+// WHAT THIS USED TO DO, AND WHY IT DOES NOT ANY MORE
+//
+// It fired bursts on a timer whose interval was derived from the track's TOTAL
+// like count, and each burst showed the name of somebody who had liked the
+// track at some point in the past. No new like had to happen. On screen it
+// read as "these people are liking this right now", and they were not. It was
+// a simulation of activity dressed as the thing itself.
+//
+// Steve's call, and the right one: honesty builds trust. A listener who works
+// out that the names are recycled loses more faith in everything else on the
+// page than the animation was ever worth, and it is the sort of thing people
+// do work out, because the same name comes round again.
+//
+// So now:
+//
+//   A heart flies when somebody actually likes the track, and not otherwise.
+//   On arriving at a card, ONE pill says how many people have liked it, in the
+//   past tense, which is a fact rather than a performance.
+//
+// The page is quieter. That is the correct amount of noise for what is
+// happening, and when a heart does fly it means something.
+const HEART_COLORS = ['#ef4444', '#f472b6', '#fb923c', '#a78bfa', '#f43f5e'];
+
+// THE FIVE COLOURS USED TO DO NOTHING.
+//
+// The glyph was the emoji ❤️, which carries a variation selector forcing
+// emoji presentation, so it renders from the colour font and CSS `color` is
+// ignored. Every heart came out the same red however carefully the colour was
+// picked. Rendered and checked rather than assumed. The lucide Heart is a
+// plain SVG, so `fill` is real, it looks identical on every device, and it is
+// cheaper than an emoji glyph.
+
+function prefersReducedMotion() {
+  try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; }
+  catch { return false; }
+}
 
 function FloatingHearts({ trackId, isActive }) {
   const [hearts, setHearts]   = React.useState([]);
   const [bubbles, setBubbles] = React.useState([]);
-  const likersRef  = React.useRef([]); // cached liker profiles [{ name, avatar }]
-  const burstIdx   = React.useRef(0);  // which liker to show next
-  const ambientRef = React.useRef(null);
   const pollRef    = React.useRef(null);
+  // Every timeout this component starts, so unmounting can clear the lot.
+  // They used to be fire and forget, which left them running against a card
+  // that had been swiped away.
+  const timeoutsRef = React.useRef(new Set());
+  // The time of the newest like already shown. The old poll ran every 10
+  // seconds and asked for anything from the last 12, so the same like fell
+  // inside two checks and flew twice. Asking for likes newer than the last one
+  // shown cannot repeat itself.
+  const sinceRef   = React.useRef(null);
+
+  const later = React.useCallback((fn, ms) => {
+    const id = setTimeout(() => { timeoutsRef.current.delete(id); fn(); }, ms);
+    timeoutsRef.current.add(id);
+    return id;
+  }, []);
 
   React.useEffect(() => {
-    if (!trackId || !isActive) return; // only run when card is visible
+    if (!trackId || !isActive) return;
+    const reduced = prefersReducedMotion();
+    let cancelled = false;
+    // Copied into the effect so the cleanup clears the set this run created,
+    // not whatever the ref points at by the time cleanup fires.
+    const timeouts = timeoutsRef.current;
 
-    // ── Step 1: load all likers once on mount ──────────────────────────────
-    const loadLikers = async () => {
-      try {
-        const { data: likes } = await supabase
-          .from('track_likes')
-          .select('user_id')
-          .eq('track_id', trackId)
-          .limit(30);
-
-        if (!likes?.length) return;
-
-        // Batch fetch profiles
-        const ids = likes.map(l => l.user_id).filter(Boolean);
-        const [{ data: artists }, { data: profiles }, { data: listenerRows }] = await Promise.all([
-          supabase.from('artists').select('user_id, artist_name, profile_image_url').in('user_id', ids),
-          supabase.from('user_profiles').select('user_id, name, avatar_url').in('user_id', ids),
-          supabase.from('listeners').select('user_id, display_name, avatar_url').in('user_id', ids),
-        ]);
-
-        const artistMap   = Object.fromEntries((artists      || []).map(a => [a.user_id, { name: a.artist_name,   avatar: a.profile_image_url }]));
-        const profileMap  = Object.fromEntries((profiles     || []).map(p => [p.user_id, { name: p.name,           avatar: p.avatar_url }]));
-        const listenerMap = Object.fromEntries((listenerRows || []).map(l => [l.user_id, { name: l.display_name,   avatar: l.avatar_url }]));
-
-        // Priority: artist name > user_profiles name > listener display_name
-        likersRef.current = ids
-          .map(id => artistMap[id] || profileMap[id] || listenerMap[id])
-          .filter(l => l?.name)
-          // Shuffle so order is random
-          .sort(() => Math.random() - 0.5);
-      } catch {}
-    };
-
-    // ── Step 2: spawn a burst (2-4 hearts + one name pill) ────────────────
-    const spawnBurst = () => {
-      const likers = likersRef.current;
-      const count  = likers.length;
-
-      // Hearts, 2 to 4 at a time
-      const n = 2 + Math.floor(Math.random() * 3);
-      const newHearts = Array.from({ length: n }, (_, i) => ({
-        id:    Date.now() + i + Math.random(),
-        x:     10 + Math.random() * 70,
-        color: HEART_COLORS[Math.floor(Math.random() * HEART_COLORS.length)],
-        size:  14 + Math.random() * 12,
-        delay: i * 120,
-      }));
-      setHearts(prev => [...prev, ...newHearts]);
-      setTimeout(() => setHearts(prev => prev.filter(h => !newHearts.find(n => n.id === h.id))), 3000);
-
-      // Name pill, cycle through likers
-      if (count > 0) {
-        const liker = likers[burstIdx.current % count];
-        burstIdx.current++;
-        const bubble = {
-          id:     Date.now() + Math.random(),
-          name:   liker.name,
-          avatar: liker.avatar,
-          x:      8 + Math.random() * 40,
-        };
+    const spawn = (liker) => {
+      if (cancelled) return;
+      if (!reduced) {
+        const n = 2 + Math.floor(Math.random() * 3);
+        const batch = Array.from({ length: n }, (_, i) => ({
+          id:    `${Date.now()}-${i}-${Math.random()}`,
+          x:     10 + Math.random() * 70,
+          color: HEART_COLORS[Math.floor(Math.random() * HEART_COLORS.length)],
+          size:  14 + Math.random() * 12,
+          delay: i * 120,
+        }));
+        setHearts(prev => [...prev, ...batch]);
+        later(() => setHearts(prev => prev.filter(h => !batch.some(b => b.id === h.id))), 3000);
+      }
+      if (liker?.name) {
+        const bubble = { id: `${Date.now()}-${Math.random()}`, name: liker.name, avatar: liker.avatar, x: 8 + Math.random() * 40 };
         setBubbles(prev => [...prev, bubble]);
-        setTimeout(() => setBubbles(prev => prev.filter(b => b.id !== bubble.id)), 3500);
+        later(() => setBubbles(prev => prev.filter(b => b.id !== bubble.id)), 3500);
       }
     };
 
-    // ── Step 3: run at natural-feeling intervals ───────────────────────────
-    const startAmbient = (likeCount) => {
-      if (ambientRef.current) return; // already running
-      if (likeCount < 1) return;
-
-      // Interval scales with likes: 1 like = every ~12s, 10 likes = ~6s, 50+ = ~3s
-      const interval = Math.max(3000, 13000 - likeCount * 200);
-
-      const tick = () => {
-        spawnBurst();
-        // Slightly randomise next tick so it feels organic
-        ambientRef.current = setTimeout(tick, interval + (Math.random() - 0.5) * 2000);
-      };
-      // First burst after 1.5s so it feels immediate
-      ambientRef.current = setTimeout(tick, 1500);
+    // ONE query, not four.
+    //
+    // Resolving a name used to mean hitting artists, user_profiles and
+    // listeners separately and taking the first that answered, on every card.
+    // It now asks only for the handful of people involved in a real like, and
+    // only when one happens, so the cost is paid where the value is.
+    const namesFor = async (ids) => {
+      if (!ids.length) return {};
+      const [{ data: artists }, { data: profiles }, { data: listeners }] = await Promise.all([
+        supabase.from('artists').select('user_id, artist_name, profile_image_url').in('user_id', ids),
+        supabase.from('user_profiles').select('user_id, name, avatar_url').in('user_id', ids),
+        supabase.from('listeners').select('user_id, display_name, avatar_url').in('user_id', ids),
+      ]);
+      const out = {};
+      for (const a of (artists   || [])) out[a.user_id] = { name: a.artist_name,   avatar: a.profile_image_url };
+      for (const p of (profiles  || [])) if (!out[p.user_id]) out[p.user_id] = { name: p.name,         avatar: p.avatar_url };
+      for (const l of (listeners || [])) if (!out[l.user_id]) out[l.user_id] = { name: l.display_name, avatar: l.avatar_url };
+      return out;
     };
 
-    const init = async () => {
-      await loadLikers();
-      // Also check total like count to decide interval
-      const { count } = await supabase
-        .from('track_likes')
-        .select('*', { count: 'exact', head: true })
-        .eq('track_id', trackId);
-      startAmbient(count || 0);
-
-      // Still poll for real-time new likes every 10s
-      pollRef.current = setInterval(async () => {
-        try {
-          const since = new Date(Date.now() - 12000).toISOString();
-          const { data: newLikes } = await supabase
-            .from('track_likes')
-            .select('user_id')
-            .eq('track_id', trackId)
-            .gte('created_at', since)
-            .limit(3);
-          if (newLikes?.length) {
-            // Reload likers to include new one
-            await loadLikers();
-            spawnBurst();
-          }
-        } catch {}
-      }, 10000);
+    // ── On arrival: one honest line ────────────────────────────────────────
+    //
+    // A count, in the past tense. It says what is true about the track rather
+    // than implying anybody is doing anything at this moment.
+    const intro = async () => {
+      try {
+        const { count, error } = await supabase
+          .from('track_likes')
+          .select('user_id', { count: 'exact' })
+          .eq('track_id', trackId)
+          .limit(1);
+        // `head: true` turned this into a HEAD request, which is the call that
+        // was returning 503 in the console. A normal GET asking for one row
+        // still carries the exact count in the range header and does not.
+        if (error || cancelled || !count) return;
+        setBubbles(prev => [...prev, {
+          id: `intro-${trackId}`, intro: true, x: 8,
+          name: `${count.toLocaleString()} ${count === 1 ? 'person has' : 'people have'} liked this`,
+        }]);
+        later(() => setBubbles(prev => prev.filter(b => b.id !== `intro-${trackId}`)), 4200);
+      } catch {}
     };
 
-    init();
+    // ── Then: real likes only ──────────────────────────────────────────────
+    const poll = async () => {
+      if (document.visibilityState !== 'visible') return;   // nothing to animate to
+      try {
+        let q = supabase.from('track_likes')
+          .select('user_id, created_at')
+          .eq('track_id', trackId)
+          .order('created_at', { ascending: false })
+          .limit(5);
+        if (sinceRef.current) q = q.gt('created_at', sinceRef.current);
+        const { data } = await q;
+        if (cancelled || !data?.length) return;
+        sinceRef.current = data[0].created_at;
+        const names = await namesFor(data.map(d => d.user_id).filter(Boolean));
+        if (cancelled) return;
+        data.slice(0, 3).reverse().forEach((d, i) => later(() => spawn(names[d.user_id]), i * 700));
+      } catch {}
+    };
+
+    // The high water mark starts at now, so arriving at a card does not replay
+    // likes that happened before the viewer got here. Those are the intro's
+    // job, and it states them as history.
+    sinceRef.current = new Date().toISOString();
+    intro();
+
+    // Paused while the tab is hidden. It used to keep querying every ten
+    // seconds on a phone in somebody's pocket.
+    pollRef.current = setInterval(poll, 15000);
+    const onVisible = () => { if (document.visibilityState === 'visible') poll(); };
+    document.addEventListener('visibilitychange', onVisible);
 
     return () => {
-      clearTimeout(ambientRef.current);
+      cancelled = true;
       clearInterval(pollRef.current);
-      ambientRef.current = null;
+      document.removeEventListener('visibilitychange', onVisible);
+      timeouts.forEach(clearTimeout);
+      timeouts.clear();
     };
-  }, [trackId, isActive]); // eslint-disable-line
+  }, [trackId, isActive, later]);
 
   if (!hearts.length && !bubbles.length) return null;
 
   return (
     <div className="absolute inset-0 pointer-events-none z-40 overflow-hidden">
-      {/* Floating hearts */}
       {hearts.map(h => (
         <div key={h.id} className="absolute bottom-36"
-          style={{
-            left: `${h.x}%`,
-            animation: `floatHeart 2.5s ease-out ${h.delay}ms forwards`,
-            fontSize: h.size,
-          }}>
-          <span style={{ color: h.color, filter: 'drop-shadow(0 0 4px rgba(239,68,68,0.5))' }}>❤️</span>
+          style={{ left: `${h.x}%`, animation: `floatHeart 2.5s ease-out ${h.delay}ms forwards` }}>
+          <Heart style={{ width: h.size, height: h.size, color: h.color, fill: h.color }} />
         </div>
       ))}
 
-      {/* Listener name pills, float upward alongside hearts */}
       {bubbles.map(b => (
         <div key={b.id}
           className="absolute flex items-center space-x-1.5 rounded-full px-2.5 py-1.5"
           style={{
             bottom: '144px',
             left: `${b.x || 8}%`,
-            maxWidth: '60%',
-            background: 'rgba(0,0,0,0.65)',
-            backdropFilter: 'blur(10px)',
+            maxWidth: '72%',
+            // Flat black instead of backdrop-filter: blur(10px). Backdrop blur
+            // is one of the more expensive things to composite on a mobile
+            // GPU, and this sits inside a full screen scrolling feed where
+            // several can be on at once. At 78% opacity over artwork the
+            // difference is not visible and the jank is.
+            background: 'rgba(0,0,0,0.78)',
             border: '1px solid rgba(255,255,255,0.14)',
             animation: 'bubbleFloat 3.2s ease forwards',
             zIndex: 41,
           }}>
-          <div className="w-5 h-5 rounded-full overflow-hidden bg-white/10 flex-shrink-0">
-            {b.avatar
-              ? <img src={b.avatar} alt="" className="w-full h-full object-cover" />
-              : <div className="w-full h-full flex items-center justify-center text-[9px] font-bold text-white/50">{b.name[0]}</div>}
-          </div>
+          {!b.intro && (
+            <div className="w-5 h-5 rounded-full overflow-hidden bg-white/10 flex-shrink-0">
+              {b.avatar
+                // Through coverUrl. A raw profile image on this catalogue has
+                // been measured at 3MB, and this draws it at twenty pixels.
+                ? <img src={coverUrl(b.avatar, 80)} alt="" className="w-full h-full object-cover" />
+                : <div className="w-full h-full flex items-center justify-center text-[9px] font-bold text-white/50">{b.name?.[0] || '?'}</div>}
+            </div>
+          )}
           <span className="text-[11px] font-semibold text-white/90 truncate">{b.name}</span>
-          <span style={{ fontSize: 13 }}>❤️</span>
+          <Heart style={{ width: 12, height: 12, color: '#f43f5e', fill: '#f43f5e' }} className="flex-shrink-0" />
         </div>
       ))}
 
@@ -451,6 +492,17 @@ function FloatingHearts({ trackId, isActive }) {
           12%  { opacity: 1; transform: translateY(0) scale(1); }
           60%  { opacity: 1; transform: translateY(-60px); }
           100% { opacity: 0; transform: translateY(-130px) scale(0.9); }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          /* Somebody who has asked their device for less movement gets the
+             names and the count and none of the flying. */
+          @keyframes floatHeart { from { opacity: 0 } to { opacity: 0 } }
+          @keyframes bubbleFloat {
+            0%   { opacity: 0 }
+            12%  { opacity: 1; transform: none }
+            88%  { opacity: 1; transform: none }
+            100% { opacity: 0 }
+          }
         }
       `}</style>
     </div>
@@ -518,7 +570,7 @@ function StoryFeedCard({ item, isActive, onOpen, navigate }) {
 }
 
 // ── Single card ───────────────────────────────────────────────────────────────
-function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare, onNext, onHide, queue, queueIndex, storyArtistIds }) {
+function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare, onNext, onHide, queue, queueIndex, storyArtists, seenStories, onOpenStory }) {
   const [justHid, setJustHid] = React.useState(null); // { id, title } for undo
   const { currentTrack, isPlaying, currentTime, setIsMinimized, togglePlay } = usePlayer();
   const { artist: myArtist } = useAuth();
@@ -731,15 +783,29 @@ function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare, onN
   const artistLabel = (track.artist_name || '').trim()
     || (track.artist_slug ? `@${track.artist_slug}` : 'Unknown artist');
 
-  // Does this artist have a story running right now?
+  // ── Does this artist have a story running, and has it been watched ───────
   //
-  // Stories reach this page as their own injected cards, but only from
-  // artists the viewer already FOLLOWS and only on the first page of the
-  // feed. So an artist you have just discovered here can be mid-story and
-  // give no sign of it. The credit pill is already the tap target for "go see
-  // this artist", so it carries the signal: it glows, and the artist profile
-  // it opens is where the story ring lives.
-  const hasStory = !!track.artist_id && !!storyArtistIds && storyArtistIds.has(track.artist_id);
+  // Stories reach this page as their own injected cards, but only from artists
+  // the viewer already FOLLOWS and only on the first page of the feed. So an
+  // artist you have just discovered here can be mid-story and give no sign of
+  // it. The credit pill carries the signal.
+  //
+  // THE PILL USED TO GLOW AND THEN GO TO THE PROFILE
+  //
+  // Which meant noticing the glow, guessing what it meant, landing on a
+  // profile, finding the ring and tapping that. Three steps to watch a thing
+  // that lasts fifteen seconds, and every one of them a place to give up. An
+  // unwatched story now opens on the first tap.
+  //
+  // Once watched it goes back to being a name. Same pill, quieter, and it
+  // opens the profile again, because at that point the profile is what
+  // somebody tapping an artist's name actually wants. A new story from the
+  // same artist lights it up again, since "seen" is recorded as the timestamp
+  // of what was seen rather than as a flag.
+  const storyInfo   = (track.artist_id && storyArtists) ? storyArtists.get(track.artist_id) : null;
+  const hasStory    = !!storyInfo;
+  const seenAt      = (storyInfo && seenStories) ? seenStories[track.artist_id] : null;
+  const storyUnseen = hasStory && (!seenAt || (storyInfo.latest && seenAt < storyInfo.latest));
 
   const handleTap = () => {
     togglePlay();
@@ -1009,18 +1075,30 @@ function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare, onN
               genuinely does not fit. A fixed cap would have clipped
               "EON Jams Collective" on a phone that had room for all of it.
               The full name stays available on long-press via `title`. */}
-          <button onClick={goToArtist}
-            title={hasStory ? `${artistLabel}, story running now` : artistLabel}
+          <button
+            onClick={storyUnseen && onOpenStory
+              ? (e) => { e.stopPropagation(); onOpenStory(track.artist_id); }
+              : goToArtist}
+            title={storyUnseen
+              ? `Watch ${artistLabel}'s story`
+              : hasStory ? `${artistLabel}, story already watched` : artistLabel}
             className={`min-w-0 truncate px-2.5 py-0.5 rounded-full
                        text-[12px] font-bold text-left transition active:scale-95
                        ${hasStory ? 'text-white' : 'text-white/75 hover:text-white hover:bg-white/[0.14]'}`}
-            style={hasStory
+            style={storyUnseen
+              // Unwatched: the loud one. This is the only state that opens a
+              // story, so it is the only one that gets to shout.
               ? {
                   background: 'linear-gradient(90deg, rgba(217,70,239,0.30), rgba(236,72,153,0.26))',
                   border: '1px solid rgba(244,114,182,0.60)',
                   boxShadow: '0 0 10px rgba(236,72,153,0.45)',
                 }
-              : { background: 'rgba(255,255,255,0.10)', border: '1px solid rgba(255,255,255,0.16)' }}>
+              : hasStory
+                // Watched, still running: a ring without the glow. It says the
+                // story is there if they want it again without pulling at
+                // them, which is the difference a seen state is for.
+                ? { background: 'rgba(236,72,153,0.10)', border: '1px solid rgba(244,114,182,0.28)' }
+                : { background: 'rgba(255,255,255,0.10)', border: '1px solid rgba(255,255,255,0.16)' }}>
             {artistLabel}
           </button>
           {user && !isOwnTrack && following === false && (
@@ -1289,24 +1367,113 @@ export default function ForYouPage() {
   const [viewingStory, setViewingStory] = useState(null); // { artist, stories }
   const [activeSheet, setActiveSheet]   = useState(null); // { type, track }
 
-  // Every artist with a story running right now, regardless of whether the
-  // viewer follows them. The story CARDS injected into this feed are
-  // follow-gated and first-page only; this is just the set of ids, so the
-  // credit pill on any card can light up. One small query, once per mount.
-  const [storyArtistIds, setStoryArtistIds] = useState(() => new Set());
+  // ── Who has a story running right now ────────────────────────────────────
+  //
+  // Every artist with a live story, whether or not the viewer follows them.
+  // The story CARDS injected into this feed are follow-gated and first page
+  // only; this is the wider set, so the credit pill on any card can light up.
+  //
+  // A Map rather than a Set, because the pill now needs to know more than
+  // "yes": how many, and when the newest one went up, which is what decides
+  // whether this viewer has seen it.
+  const [storyArtists, setStoryArtists] = useState(() => new Map());
+
+  // WHY THIS REFRESHES AND DID NOT USED TO
+  //
+  // It ran once on mount with an empty dependency array. People sit on this
+  // feed for a long time, so a story that went up ten minutes into a session
+  // never lit up, and one that expired kept glowing until a reload. The pill
+  // said "story running now" about something that had finished.
+  //
+  // Two triggers, and both are needed. The interval catches a story going up
+  // while somebody scrolls. Coming back to the tab catches the case the
+  // interval cannot, because a backgrounded tab has its timers throttled hard
+  // and someone returning after an hour would otherwise see an hour-old
+  // picture of who is live.
+  const loadStoryArtists = React.useCallback(async () => {
+    const { data, error } = await visibleNow(
+      supabase.from('artist_stories').select('artist_id, created_at')).limit(500);
+    if (error) { console.error('[foryou] active stories failed:', error.code, error.message); return; }
+    const m = new Map();
+    for (const row of (data || [])) {
+      if (!row.artist_id) continue;
+      const prev = m.get(row.artist_id);
+      const at = row.created_at || null;
+      if (!prev) m.set(row.artist_id, { count: 1, latest: at });
+      else m.set(row.artist_id, { count: prev.count + 1, latest: (at > prev.latest ? at : prev.latest) });
+    }
+    setStoryArtists(m);
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
-    (async () => {
-      const { data, error } = await visibleNow(
-        supabase
-          .from('artist_stories')
-          .select('artist_id'))
-        .limit(500);
-      if (error) { console.error('[foryou] active stories failed:', error.code, error.message); return; }
-      if (!cancelled) setStoryArtistIds(new Set((data || []).map(r => r.artist_id).filter(Boolean)));
-    })();
-    return () => { cancelled = true; };
-  }, []);
+    const run = () => { if (!cancelled) loadStoryArtists(); };
+    run();
+    const timer = setInterval(run, 90000);
+    const onVisible = () => { if (document.visibilityState === 'visible') run(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [loadStoryArtists]);
+
+  // ── Which of them this viewer has already watched ────────────────────────
+  //
+  // Stored as artist id to the timestamp of the newest story they had seen at
+  // the time, not as a plain "seen" flag. That way a NEW story from the same
+  // artist lights the pill again, which a flag could not do without being
+  // cleared by something, and nothing was going to clear it.
+  //
+  // localStorage rather than a table: it is a per device convenience about a
+  // thing that expires in 24 hours, and a round trip to record it would be
+  // more machinery than the fact deserves. Keyed per user so two accounts on
+  // one phone do not inherit each other's history.
+  const seenKey = user ? `fm_seen_stories_${user.id}` : null;
+  const [seenStories, setSeenStories] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(seenKey) || '{}'); } catch { return {}; }
+  });
+
+  const markStorySeen = React.useCallback((artistId, latest) => {
+    setSeenStories(prev => {
+      const next = { ...prev, [artistId]: latest || new Date().toISOString() };
+      try { if (seenKey) localStorage.setItem(seenKey, JSON.stringify(next)); } catch {}
+      return next;
+    });
+  }, [seenKey]);
+
+  // Opening a story from the credit pill. The pill only knows an artist id, so
+  // the stories and the artist row are fetched at the moment of the tap rather
+  // than held for every artist on the feed, which would be a query for people
+  // whose pill nobody ever presses.
+  const openStoryForArtist = React.useCallback(async (artistId) => {
+    if (!artistId) return;
+    try {
+      const [{ data: stories, error: sErr }, { data: artist }] = await Promise.all([
+        visibleNow(
+          supabase.from('artist_stories')
+            .select('*, tracks:tagged_track_id(*), artists(*)')
+            .eq('artist_id', artistId)
+            .order('created_at', { ascending: true })).limit(30),
+        supabase.from('artists')
+          .select('id, artist_name, slug, profile_image_url, is_verified')
+          .eq('id', artistId).maybeSingle(),
+      ]);
+      if (sErr) { console.error('[foryou] story open failed:', sErr.code, sErr.message); return; }
+      if (!stories?.length) {
+        // It expired between the pill lighting up and the tap. Refresh the set
+        // so it stops glowing rather than leaving them tapping a dead pill.
+        loadStoryArtists();
+        return;
+      }
+      const latest = stories[stories.length - 1]?.created_at || null;
+      markStorySeen(artistId, latest);
+      setViewingStory({ artist: artist || stories[0]?.artists || null, stories });
+    } catch (err) {
+      console.error('[foryou] story open threw:', err?.message);
+    }
+  }, [loadStoryArtists, markStorySeen]);
 
   // One pass at the welcome for people who already have an account.
   //
@@ -2109,7 +2276,7 @@ export default function ForYouPage() {
                         updated_at: new Date().toISOString(),
                       }, { onConflict: 'user_id,track_id' }));
                     }
-                  }} queue={filteredTracks} queueIndex={i} storyArtistIds={storyArtistIds} /> : null
+                  }} queue={filteredTracks} queueIndex={i} storyArtists={storyArtists} seenStories={seenStories} onOpenStory={openStoryForArtist} /> : null
               )}
             </div>
           );

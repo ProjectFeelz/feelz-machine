@@ -68,6 +68,44 @@ exports.handler = async (event) => {
       return { statusCode: 200, body: JSON.stringify({ skipped: true, reason: 'no eligible artists' }) };
     }
 
+    // ── EVERY LISTENER USED TO GET THE SAME THREE ARTISTS ────────────────────
+    //
+    // The pool above is ordered by total_streams, and the picker below walks it
+    // from the top. So for any listener with nothing in their history, the
+    // first tier matched the first three artists in that list, and it was the
+    // same first three for every one of them. Two people sitting next to each
+    // other saw an identical "Artists of the Day", which is what Steve and his
+    // wife noticed, and it always led with whoever is top of the streams table.
+    //
+    // Fixing the client fallback was only half of it. This job produces the
+    // same result for the same reason, and it is the half that runs first.
+    //
+    // WHY ORDERING BY STREAMS WAS WRONG HERE SPECIFICALLY
+    //
+    // This row exists to show somebody an artist they have never heard. Sorting
+    // the candidates by total streams does the opposite of that: it puts the
+    // artists who already get heard the most at the front of a discovery row.
+    // The quality bar is the eligibility filter above, a real profile picture,
+    // not suspended, at least one track. Past that bar, who leads should not be
+    // decided by who is already winning.
+    //
+    // So each listener walks the same pool from a different place, stable for
+    // the day, different tomorrow. Same idea as the client fallback so the two
+    // behave alike.
+    const gcd = (a, b) => (b ? gcd(b, a % b) : a);
+    const poolSize = allArtists.length;
+    const stride = [17, 13, 11, 7, 5, 3].find(s => poolSize > s && gcd(s, poolSize) === 1) || 1;
+
+    const poolFor = (userId) => {
+      let seed = 0;
+      const key = `${userId}:${TODAY}`;
+      for (let k = 0; k < key.length; k++) seed = ((seed << 5) - seed + key.charCodeAt(k)) | 0;
+      const offset = ((seed % poolSize) + poolSize) % poolSize;
+      const out = new Array(poolSize);
+      for (let k = 0; k < poolSize; k++) out[k] = allArtists[(offset + k * stride) % poolSize];
+      return out;
+    };
+
     // 3. Check who already got a spotlight today
     const userIds = activeListeners.map(l => l.user_id);
     const { data: alreadySpotlit } = await supabase
@@ -129,8 +167,13 @@ exports.handler = async (event) => {
           const chosen = [];
           const taken  = new Set(todayIds);
 
+          // This listener's own view of the pool. Same artists, different
+          // starting point, so the tiers below prefer what they should prefer
+          // without everybody landing on the same three names.
+          const pool = poolFor(listener.user_id);
+
           const take = (predicate) => {
-            for (const a of allArtists) {
+            for (const a of pool) {
               if (chosen.length >= need) return;
               if (taken.has(a.id)) continue;
               if (!predicate(a)) continue;

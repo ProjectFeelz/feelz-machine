@@ -225,14 +225,36 @@ export default function TipGoal({ artistId, primaryColor = '#8B5CF6', textColor 
       </button>
 
       {/* THE FLOATING CARD
-          Absolutely positioned so it overlays whatever is below instead of
-          displacing it — which is the whole reason the old card could not
-          stay in the header. Centred on the pill and clamped to the viewport
-          so it cannot push the page sideways on a narrow screen. */}
+          Overlays whatever is below instead of displacing it, which is the
+          whole reason the old card could not stay in the header.
+          //
+          ON A DESKTOP it is a popover: anchored under the pill, pointing at
+          it, because the pill is what it is about and there is room either
+          side of it for the card to be centred on.
+          //
+          ON A PHONE it is centred on the SCREEN instead, and here is why.
+          This pill sits in a row of pills, and `left-1/2 -translate-x-1/2`
+          centres the card on the PILL, not the viewport. When the pill is
+          over toward the right of that row, which it usually is because it
+          comes after Follow, Message and Merch, a 288px card centred on it
+          hangs off the right edge of a phone. The old max-width clamped how
+          WIDE the card could be and said nothing about WHERE it sat, so it
+          stayed half off the screen at any width.
+          //
+          A backdrop comes with it, below md only. Without one, a card
+          floating in the middle of the screen with the page still bright
+          behind it reads as something that has come loose. */}
       {open && (
+        <>
+          <div
+            className="md:hidden fixed inset-0 z-[70] bg-black/70 backdrop-blur-sm"
+            onClick={() => setOpen(false)}
+            aria-hidden="true"
+          />
         <div
           role="dialog"
-          className="absolute top-full left-1/2 -translate-x-1/2 mt-2 z-[80] w-72 max-w-[calc(100vw-2.5rem)] p-4 rounded-2xl text-left"
+          className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[calc(100vw-2.5rem)] max-w-sm z-[80] p-4 rounded-2xl text-left
+                     md:absolute md:top-full md:translate-y-0 md:mt-2 md:w-72 md:max-w-[calc(100vw-2.5rem)]"
           style={{
             backgroundColor: '#0f0f0f',
             border: '1px solid rgba(255,255,255,0.09)',
@@ -240,9 +262,11 @@ export default function TipGoal({ artistId, primaryColor = '#8B5CF6', textColor 
           }}
           onClick={e => e.stopPropagation()}
         >
-          {/* Little pointer up at the pill */}
+          {/* Little pointer up at the pill. Desktop only: on a phone the card
+              is in the middle of the screen and the pill is somewhere else
+              entirely, so an arrow would be pointing at nothing. */}
           <div
-            className="absolute -top-[5px] left-1/2 -translate-x-1/2 w-2.5 h-2.5 rotate-45"
+            className="hidden md:block absolute -top-[5px] left-1/2 -translate-x-1/2 w-2.5 h-2.5 rotate-45"
             style={{
               backgroundColor: '#0f0f0f',
               borderLeft: '1px solid rgba(255,255,255,0.09)',
@@ -282,6 +306,7 @@ export default function TipGoal({ artistId, primaryColor = '#8B5CF6', textColor 
             </div>
           </div>
         </div>
+        </>
       )}
 
       {showEdit && <GoalEditModal goal={goal} artistId={artistId} onClose={() => setShowEdit(false)} onSaved={fetchGoal} />}

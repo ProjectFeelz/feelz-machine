@@ -1,6 +1,6 @@
 import { coverUrl } from '../utils/coverUrl';
 import { Helmet } from 'react-helmet-async';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import { useStreakContext } from '../contexts/StreakContext';
@@ -83,18 +83,53 @@ function formatNumber(n) {
   return n.toString();
 }
 
-function Section({ title, icon: Icon, onSeeAll, children, gradient }) {
-  const gradients = {
-    amber:  { bg: 'linear-gradient(135deg, rgba(120,53,15,0.18) 0%, rgba(30,20,10,0.4) 60%, transparent 100%)', border: '1px solid rgba(245,158,11,0.12)' },
-    purple: { bg: 'linear-gradient(135deg, rgba(88,28,135,0.18) 0%, rgba(30,27,75,0.35) 60%, transparent 100%)', border: '1px solid rgba(139,92,246,0.15)' },
-    teal:   { bg: 'linear-gradient(135deg, rgba(13,148,136,0.15) 0%, rgba(10,30,30,0.4) 60%, transparent 100%)', border: '1px solid rgba(20,184,166,0.15)' },
-    rose:   { bg: 'linear-gradient(135deg, rgba(136,19,55,0.18) 0%, rgba(30,10,20,0.4) 60%, transparent 100%)', border: '1px solid rgba(244,63,94,0.15)' },
-  };
-  const g = gradients[gradient];
+// ── One row of the home page ────────────────────────────────────────────────
+//
+// WHAT WAS WRONG
+//
+// Every row with a gradient got exactly the same treatment: full bleed, a
+// hairline along the top and bottom, twenty pixels of padding, no corners. Put
+// two of those next to each other and they do not read as two rows. They read
+// as one tall block with a line through the middle of it, and that is before
+// you notice that "You Haven't Heard This Yet" and "Trending" were both teal,
+// so the colour did not separate them either.
+//
+// WHAT SEPARATES THEM NOW
+//
+// Two different shapes, alternating. A `band` row keeps the full bleed
+// gradient. A plain row has no background at all and carries its colour as a
+// short bar beside the title instead. Because they alternate, two rows of the
+// same shape can never end up touching, and the eye gets a rhythm to count
+// rather than a wall to scan.
+//
+// The gap between rows went from 32 to 48 pixels as well. On a phone, 32 was
+// less than the height of one card, so the space between two rows read as
+// padding inside one row rather than the end of anything.
+const TONES = {
+  amber:   { band: 'linear-gradient(135deg, rgba(120,53,15,0.18) 0%, rgba(30,20,10,0.4) 60%, transparent 100%)', line: 'rgba(245,158,11,0.12)', bar: '#F59E0B' },
+  purple:  { band: 'linear-gradient(135deg, rgba(88,28,135,0.18) 0%, rgba(30,27,75,0.35) 60%, transparent 100%)', line: 'rgba(139,92,246,0.15)', bar: '#A78BFA' },
+  teal:    { band: 'linear-gradient(135deg, rgba(13,148,136,0.15) 0%, rgba(10,30,30,0.4) 60%, transparent 100%)',  line: 'rgba(20,184,166,0.15)', bar: '#2DD4BF' },
+  rose:    { band: 'linear-gradient(135deg, rgba(136,19,55,0.18) 0%, rgba(30,10,20,0.4) 60%, transparent 100%)',   line: 'rgba(244,63,94,0.15)',  bar: '#FB7185' },
+  emerald: { band: 'linear-gradient(135deg, rgba(6,78,59,0.20) 0%, rgba(8,28,22,0.4) 60%, transparent 100%)',      line: 'rgba(16,185,129,0.15)', bar: '#34D399' },
+};
+
+function Section({ title, icon: Icon, onSeeAll, children, gradient, band = false }) {
+  const t = TONES[gradient];
+  const banded = band && t;
   return (
-    <div className="mb-8" style={g ? { borderRadius: 0, padding: '20px 0', background: g.bg, borderTop: g.border, borderBottom: g.border } : {}}>
+    <div
+      className="mb-12"
+      style={banded
+        ? { borderRadius: 0, padding: '24px 0', background: t.band, borderTop: `1px solid ${t.line}`, borderBottom: `1px solid ${t.line}` }
+        : {}}
+    >
       <div className="flex items-center justify-between mb-3 px-6">
         <div className="flex items-center space-x-2">
+          {/* The colour bar is what a plain row has instead of a background.
+              Same identity, a fraction of the ink. */}
+          {!banded && t && (
+            <span className="w-[3px] h-3.5 rounded-full flex-shrink-0" style={{ backgroundColor: t.bar }} />
+          )}
           {Icon && <Icon className="w-3.5 h-3.5 text-white/30" />}
           <span className="section-label">{title}</span>
         </div>
@@ -226,7 +261,6 @@ export default function HomePage() {
   const [trending, setTrending]                     = useState([]);
   const [topArtists, setTopArtists]                 = useState([]);
   const [recommended, setRecommended]               = useState([]);
-  const [featuredPlaylists, setFeaturedPlaylists]   = useState([]);
   const [hero, setHero]                             = useState(null);
   const [libraryPeek, setLibraryPeek]               = useState([]);
   const [followedReleases, setFollowedReleases]     = useState([]);
@@ -236,6 +270,9 @@ export default function HomePage() {
   const [wrappedNotif, setWrappedNotif]             = useState(null);
   const [spotlightArtists, setSpotlightArtists]     = useState([]);
   const [unheardTracks, setUnheardTracks]           = useState([]);
+  // Read by fetchRecommendations, which runs in a callback where the state
+  // value would be whatever it was when that function was created.
+  const unheardRef = useRef([]);
   const [weeklyDiscoveries, setWeeklyDiscoveries]   = useState(0);
   const [liveSessions, setLiveSessions]             = useState([]);
 
@@ -335,7 +372,7 @@ export default function HomePage() {
         await Promise.all([
           fetchRecommendations(artistCount),
           fetchFollowedReleases(artistCount),
-          fetchCompetitions(), fetchWrapped(), fetchLiveSessions(), fetchFeaturedPlaylists(),
+          fetchCompetitions(), fetchWrapped(), fetchLiveSessions(),
         ]);
       } else {
         await Promise.all([fetchCompetitions(), fetchLiveSessions()]);
@@ -439,9 +476,18 @@ export default function HomePage() {
 
   const fetchRecommendations = async (artistCount = 0) => {
     try {
+      // 500, not 50.
+      //
+      // This limit was doing two jobs and only suited one of them. Fifty
+      // streams is plenty to work out somebody's top three genres. It is not
+      // enough to work out what they have already heard, and `listenedIds`
+      // below is built from this same list, so the exclusion only covered the
+      // fifty most recent plays. Anything heard before that was free to come
+      // back as a recommendation. A regular listener was being recommended
+      // songs they play often, under a heading that implies the opposite.
       const { data: streamData } = await supabase
         .from('streams').select('track_id, tracks(genre, mood)')
-        .eq('user_id', user.id).limit(50);
+        .eq('user_id', user.id).limit(500);
       let genreTags = [], listenedIds = [];
       if (streamData?.length > 0) {
         const tagCounts = {};
@@ -466,72 +512,34 @@ export default function HomePage() {
         .order('engagement_score', { ascending: false }).limit(40);
       if (listenedIds.length > 0) query = query.not('id', 'in', `(${listenedIds.join(',')})`);
       const { data: recData } = await query;
-      setRecommended(diversify((recData || []).map(t => ({
-        ...t, artist_name: t.artists?.artist_name || 'Unknown Artist',
-        artist_slug: t.artists?.slug || null,
-      })), artistCount));
+      // Kept apart from "You Haven't Heard This Yet" rather than merged.
+      //
+      // The two rows were converging: both query published tracks, both order
+      // by engagement_score, both exclude what you have streamed. The only
+      // difference was that this one narrows to your top three tags. So the
+      // highest-engagement unheard track in your favourite genre qualified for
+      // both, and appeared in both, a few hundred pixels apart.
+      //
+      // They are different questions and worth keeping separate: one is "more
+      // of what you like", the other is "something you have not tried". The
+      // overlap was an accident of them sharing a sort key, not a sign that
+      // one of them is redundant. So this drops anything the row above has
+      // already shown, and the two stay distinct on the page.
+      const alreadyShown = new Set(unheardRef.current.map(t => t.id));
+      setRecommended(diversify((recData || [])
+        .filter(t => !alreadyShown.has(t.id))
+        .map(t => ({
+          ...t, artist_name: t.artists?.artist_name || 'Unknown Artist',
+          artist_slug: t.artists?.slug || null,
+        })), artistCount));
     } catch (err) { console.error('Recommendations error:', err); }
   };
 
-  const fetchFeaturedPlaylists = async () => {
-    try {
-      // Note: no join to a users table here. An earlier version tried
-      // artists:users!playlists_user_id_fkey(...), which 400s because that
-      // relationship doesn't resolve, so this section silently never
-      // rendered. Owner names are looked up separately instead.
-      // Pull a pool rather than the twelve newest.
-      //
-      // This row was ordered strictly by when a playlist was made, over the
-      // handful of public playlists that exist, so it showed the same five
-      // things every day and looked broken. It was not broken. There was
-      // nothing new to show.
-      const { data, error } = await supabase
-        .from('playlists')
-        .select('id, name, cover_url, user_id, created_at, is_public, playlist_tracks(id, tracks(cover_artwork_url))')
-        .eq('is_public', true)
-        .order('created_at', { ascending: false })
-        .limit(40);
-      if (error || !data) return;
-
-      const withTracks = data.filter(p => p.playlist_tracks?.length > 0);
-      if (withTracks.length === 0) { setFeaturedPlaylists([]); return; }
-
-      const ownerIds = [...new Set(withTracks.map(p => p.user_id).filter(Boolean))];
-      let ownerMap = {};
-      if (ownerIds.length > 0) {
-        const { data: owners } = await supabase
-          .from('artists')
-          .select('user_id, artist_name, slug, profile_image_url')
-          .in('user_id', ownerIds);
-        (owners || []).forEach(o => { ownerMap[o.user_id] = o; });
-      }
-
-      const withOwners = withTracks.map(p => ({ ...p, owner: ownerMap[p.user_id] || null }));
-
-      // The row is called Artist Playlists, so an artist's playlist comes
-      // first. Owners were already being looked up here and then only used for
-      // a name, which is why a listener's own playlist could sit at the top of
-      // a row named after artists. A fuller playlist beats a thinner one after
-      // that, because a two track playlist is not a playlist yet.
-      const ranked = [...withOwners].sort((a, b) => {
-        const artistA = a.owner ? 1 : 0;
-        const artistB = b.owner ? 1 : 0;
-        if (artistA !== artistB) return artistB - artistA;
-        return (b.playlist_tracks?.length || 0) - (a.playlist_tracks?.length || 0);
-      });
-
-      // Then turn the list day by day, so there is something different to see
-      // tomorrow even when nobody has made a new playlist. Same idea as the
-      // featured board. The day number is the seed, so it is the same row for
-      // everybody on a given day and it moves on at midnight rather than
-      // reshuffling under somebody mid scroll.
-      const day = Math.floor(Date.now() / 86400000);
-      const start = ranked.length ? day % ranked.length : 0;
-      const rotated = [...ranked.slice(start), ...ranked.slice(0, start)];
-
-      setFeaturedPlaylists(rotated.slice(0, 12));
-    } catch {}
-  };
+  // fetchFeaturedPlaylists() lived here, and the Artist Playlists row it fed
+  // lived near the bottom of this page. Both have moved to the Browse page,
+  // where somebody is already looking for something to put on. Two queries
+  // per signed-in load, one of them with a second lookup for owner names,
+  // gone from the home path entirely.
 
   // fetchSimilarArtists() lived here. It ran two queries on every signed in
   // load and wrote to similarArtists, which nothing on this page has
@@ -588,10 +596,45 @@ export default function HomePage() {
       const candidates = (pool || []).filter(a => !already.has(a.id));
 
       if (candidates.length) {
-        const dayIndex = Math.floor(Date.parse(today) / 86400000);
-        const offset   = ((dayIndex % candidates.length) + candidates.length) % candidates.length;
+        // THE BUG THIS FIXES
+        //
+        // The offset used to be the day number and nothing else. The candidate
+        // list is the same for everybody, ordered by total streams, so every
+        // account on the platform started at the same index and got the same
+        // three artists. Two people sitting next to each other saw an
+        // identical "Artists of the Day", which is the opposite of what a
+        // personal row is for, and it always led with whoever is top of the
+        // streams table.
+        //
+        // The user id is now mixed in, so the starting point differs per
+        // account while still being stable for that account all day: same
+        // person, same picks until tomorrow. Anyone comparing two accounts
+        // sees two different sets, which is the whole point.
+        //
+        // Cheap string hash rather than anything cryptographic. This decides
+        // which musician somebody is shown, not anything that needs to resist
+        // an attacker, and it has to run on every home page load.
+        let seed = 0;
+        const key = `${user.id}:${today}`;
+        for (let i = 0; i < key.length; i++) {
+          seed = ((seed << 5) - seed + key.charCodeAt(i)) | 0;
+        }
+        const offset = ((seed % candidates.length) + candidates.length) % candidates.length;
+
+        // The stride walks the list rather than taking three in a row, so two
+        // accounts that land near each other do not get near-identical sets.
+        //
+        // It has to be coprime with the list length or it revisits the same
+        // few positions and never covers the rest: a stride of 7 over exactly
+        // 7 candidates lands on the same artist every single time, which would
+        // have replaced one bug with a worse one. So take the first candidate
+        // stride that shares no factor with the length, falling back to 1,
+        // which always works and is just the old walk.
+        const gcd = (a, b) => (b ? gcd(b, a % b) : a);
+        const stride = [7, 5, 3].find(s => candidates.length > s && gcd(s, candidates.length) === 1) || 1;
         for (let i = 0; picked.length < SPOTLIGHT_PER_DAY && i < candidates.length; i++) {
-          picked.push(candidates[(offset + i) % candidates.length]);
+          const pick = candidates[(offset + i * stride) % candidates.length];
+          if (!picked.some(p => p.id === pick.id)) picked.push(pick);
         }
       }
 
@@ -623,11 +666,13 @@ export default function HomePage() {
         }
 
         const { data } = await query;
-        setUnheardTracks((data || []).slice(0, ROW_TARGET).map(t => ({
+        const rows = (data || []).slice(0, ROW_TARGET).map(t => ({
           ...t,
           artist_name: t.artists?.artist_name || 'Unknown Artist',
           artist_slug: t.artists?.slug || null,
-        })));
+        }));
+        unheardRef.current = rows;
+        setUnheardTracks(rows);
       } catch (err) { console.error('Unheard fetch error:', err); }
     };
     fetchUnheard();
@@ -872,73 +917,57 @@ export default function HomePage() {
         </p>
       </div>
 
+
       {/* Stories rail, followed artists' 24hr clips */}
       <StoriesRail userId={user?.id} />
 
-      {/* Collaborations get their own row. They existed only at the bottom of
-          an artist's own profile before this, which meant the platform's own
-          argument, that artists here work together, was the thing hardest
-          to see. */}
-      <CollabRail limit={12} />
 
-
-
-
-      {/* Active Competitions */}
-      {activeCompetitions.filter(c => !c.wheel_challenge).length > 0 && (
-        <div className="mb-6">
-          <div className="flex items-center justify-between mb-3 px-6">
-            <div className="flex items-center space-x-2">
-              <Trophy className="w-3.5 h-3.5 text-yellow-400/60" />
-              <span className="section-label">Competitions</span>
-            </div>
-          </div>
-          <div className="flex space-x-3 overflow-x-auto px-6 scrollbar-hide">
-            {activeCompetitions.filter(c => !c.wheel_challenge).map(comp => (
-              <button
-                key={comp.id}
-                onClick={() => navigate(`/competition/${comp.id}`)}
-                className="flex-shrink-0 w-52 p-3.5 rounded-2xl border text-left transition active:scale-[0.98]"
-                style={{
-                  borderColor: comp.paid_collab ? 'rgba(245,158,11,0.25)' : 'rgba(255,255,255,0.08)',
-                  background: comp.paid_collab
-                    ? 'linear-gradient(135deg, rgba(245,158,11,0.08), transparent)'
-                    : 'rgba(255,255,255,0.02)',
-                }}
-              >
-                <div className="flex items-center space-x-2 mb-2">
-                  <span className="text-base">{comp.paid_collab ? '💰' : '🏆'}</span>
-                  <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${
-                    comp.status === 'voting'
-                      ? 'bg-blue-500/20 text-blue-400'
-                      : 'bg-green-500/20 text-green-400'
-                  }`}>
-                    {comp.status === 'voting' ? 'Vote Now' : 'Enter Now'}
-                  </span>
-                </div>
-                <p className="text-sm font-semibold text-white truncate mb-1">{comp.title}</p>
-                {comp.brief && <p className="text-[11px] text-white/35 truncate">{comp.brief}</p>}
-                {comp.paid_collab && (
-                  <p className="text-[10px] font-bold mt-1.5" style={{ color: '#F59E0B' }}>$50 USD Prize</p>
-                )}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* From artists you follow, personal pull, logged-in users only */}
-      {followedReleases.length > 0 && (
-        <Section title="From Artists You Follow" icon={Users} gradient="rose" onSeeAll={() => navigate('/browse?tab=new')}>
+      {/* Trending, highest social proof, works for every visitor */}
+      {trending.length > 0 && (
+        <Section title="Trending" icon={Flame} gradient="teal" band onSeeAll={() => navigate('/browse?tab=trending')}>
           <div className="flex space-x-3 overflow-x-auto px-6 scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
-            {followedReleases.map(track => (
-              <SquareCard key={track.id} item={track} itemList={followedReleases}
+            {trending.map(track => (
+              <SquareCard key={track.id} item={track} itemList={trending}
                 onPlay={handlePlay} onMore={handleMore}
                 currentTrack={currentTrack} isPlaying={isPlaying} />
             ))}
           </div>
         </Section>
       )}
+
+
+      {/* New Releases, tracks only, with NEW badge + date */}
+      {newReleases.length > 0 && (
+        <Section title="New Singles" gradient="purple" onSeeAll={() => navigate('/browse?tab=new')}>
+          <div className="flex space-x-3 overflow-x-auto px-6 scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
+            {newReleases.map(item => (
+              <SquareCard
+                key={`track-${item.id}`}
+                item={item} itemList={newReleases}
+                isAlbum={false} showNew onPlay={handlePlay} onMore={handleMore}
+                currentTrack={currentTrack} isPlaying={isPlaying} />
+            ))}
+          </div>
+        </Section>
+      )}
+
+
+      {/* Albums, dedicated row so they don't drown in singles */}
+      {newAlbums.length > 0 && (
+        <Section title="Albums & EPs" gradient="amber" band onSeeAll={() => navigate('/browse?tab=new')}>
+          <div className="flex space-x-3 overflow-x-auto px-6 scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
+            {newAlbums.map(album => (
+              <SquareCard
+                key={`album-${album.id}`}
+                item={album} itemList={[]}
+                isAlbum showNew={false} onPlay={handlePlay} onMore={handleMore}
+                currentTrack={currentTrack} isPlaying={isPlaying} />
+            ))}
+          </div>
+        </Section>
+      )}
+
+
 
       {/* Artists of the Day, three undiscovered artists picked for this user */}
       {user && spotlightArtists.length > 0 && (
@@ -982,9 +1011,10 @@ export default function HomePage() {
         </div>
       )}
 
+
       {/* You haven't heard this yet */}
       {user && unheardTracks.length > 0 && (
-        <Section title="You Haven't Heard This Yet" icon={Headphones} gradient="teal">
+        <Section title="You Haven't Heard This Yet" icon={Headphones} gradient="emerald" band>
           <div className="flex space-x-3 overflow-x-auto px-6 scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
             {unheardTracks.map(track => (
               <SquareCard key={track.id} item={track} itemList={unheardTracks}
@@ -994,6 +1024,61 @@ export default function HomePage() {
           </div>
         </Section>
       )}
+
+
+      {/* From artists you follow, personal pull, logged-in users only */}
+      {followedReleases.length > 0 && (
+        <Section title="From Artists You Follow" icon={Users} gradient="rose" onSeeAll={() => navigate('/browse?tab=new')}>
+          <div className="flex space-x-3 overflow-x-auto px-6 scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
+            {followedReleases.map(track => (
+              <SquareCard key={track.id} item={track} itemList={followedReleases}
+                onPlay={handlePlay} onMore={handleMore}
+                currentTrack={currentTrack} isPlaying={isPlaying} />
+            ))}
+          </div>
+        </Section>
+      )}
+
+
+      {/* Recommended */}
+      {recommended.length > 0 && (
+        <Section title="Recommended For You" icon={Sparkles} gradient="purple" band onSeeAll={() => navigate('/browse?tab=tracks')}>
+          <div className="flex space-x-3 overflow-x-auto px-6 scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
+            {recommended.map(track => (
+              <SquareCard key={track.id} item={track} itemList={recommended}
+                onPlay={handlePlay} onMore={handleMore}
+                currentTrack={currentTrack} isPlaying={isPlaying} />
+            ))}
+          </div>
+        </Section>
+      )}
+
+
+
+      {/* Artists to Follow */}
+      {topArtists.length > 0 && (
+        <Section title="Artists to Follow" gradient="rose" onSeeAll={() => navigate('/browse?tab=artists')}>
+          <div className="flex space-x-3 overflow-x-auto px-6 scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
+            {topArtists.map(a => (
+              <button key={a.id} onClick={() => navigate(`/artist/${a.slug}`)}
+                className="flex-shrink-0 w-40 md:w-52 text-center group">
+                <div className="w-40 h-40 md:w-52 md:h-52 rounded-full overflow-hidden bg-white/[0.06] mb-2 mx-auto">
+                  <img src={coverUrl(a.profile_image_url, 400)} alt={a.artist_name || ''}
+                    loading="lazy" decoding="async"
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                </div>
+                <div className="flex items-center justify-center space-x-1">
+                  <p className="text-sm font-medium text-white truncate max-w-[140px]">{a.artist_name}</p>
+                  {a.is_verified && <VerifiedBadge size="sm" />}
+                </div>
+                <p className="text-xs text-white/30 mt-0.5">{formatNumber(a.display_follower_count ?? a.follower_count)} followers</p>
+              </button>
+            ))}
+          </div>
+        </Section>
+      )}
+
+
 
       {/* 🔴 Live Now, artists currently streaming */}
       {liveSessions.length > 0 && (
@@ -1039,128 +1124,64 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* Trending, highest social proof, works for every visitor */}
-      {trending.length > 0 && (
-        <Section title="Trending" icon={Flame} gradient="teal" onSeeAll={() => navigate('/browse?tab=trending')}>
-          <div className="flex space-x-3 overflow-x-auto px-6 scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
-            {trending.map(track => (
-              <SquareCard key={track.id} item={track} itemList={trending}
-                onPlay={handlePlay} onMore={handleMore}
-                currentTrack={currentTrack} isPlaying={isPlaying} />
-            ))}
-          </div>
-        </Section>
-      )}
 
-      {/* New Releases, tracks only, with NEW badge + date */}
-      {newReleases.length > 0 && (
-        <Section title="New Singles" gradient="purple" onSeeAll={() => navigate('/browse?tab=new')}>
-          <div className="flex space-x-3 overflow-x-auto px-6 scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
-            {newReleases.map(item => (
-              <SquareCard
-                key={`track-${item.id}`}
-                item={item} itemList={newReleases}
-                isAlbum={false} showNew onPlay={handlePlay} onMore={handleMore}
-                currentTrack={currentTrack} isPlaying={isPlaying} />
-            ))}
-          </div>
-        </Section>
-      )}
-
-      {/* Albums, dedicated row so they don't drown in singles */}
-      {newAlbums.length > 0 && (
-        <Section title="Albums & EPs" onSeeAll={() => navigate('/browse?tab=new')}>
-          <div className="flex space-x-3 overflow-x-auto px-6 scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
-            {newAlbums.map(album => (
-              <SquareCard
-                key={`album-${album.id}`}
-                item={album} itemList={[]}
-                isAlbum showNew={false} onPlay={handlePlay} onMore={handleMore}
-                currentTrack={currentTrack} isPlaying={isPlaying} />
-            ))}
-          </div>
-        </Section>
-      )}
-
-
-      {/* Recommended */}
-      {recommended.length > 0 && (
-        <Section title="Recommended For You" icon={Sparkles} gradient="amber" onSeeAll={() => navigate('/browse?tab=tracks')}>
-          <div className="flex space-x-3 overflow-x-auto px-6 scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
-            {recommended.map(track => (
-              <SquareCard key={track.id} item={track} itemList={recommended}
-                onPlay={handlePlay} onMore={handleMore}
-                currentTrack={currentTrack} isPlaying={isPlaying} />
-            ))}
-          </div>
-        </Section>
-      )}
-
-
-      {/* ── Artist Playlists (replaces Featured) ── */}
-      {featuredPlaylists.length > 0 && (
-        <div className="mb-8">
+      {/* Active Competitions */}
+      {activeCompetitions.filter(c => !c.wheel_challenge).length > 0 && (
+        <div className="mb-6">
           <div className="flex items-center justify-between mb-3 px-6">
             <div className="flex items-center space-x-2">
-              <ListMusic className="w-3.5 h-3.5" style={{ color: 'rgba(167,139,250,0.7)' }} />
-              <span className="section-label">Artist Playlists</span>
+              <Trophy className="w-3.5 h-3.5 text-yellow-400/60" />
+              <span className="section-label">Competitions</span>
             </div>
-            <button onClick={() => navigate('/browse')}
-              className="text-xs text-white/30 hover:text-white/50 transition">See all →</button>
           </div>
-          <div className="mx-6 rounded-2xl py-6 px-5"
-            style={{
-              background: 'linear-gradient(135deg, rgba(139,92,246,0.28) 0%, rgba(88,28,135,0.35) 55%, rgba(20,15,45,0.95) 100%)',
-              border: '1px solid rgba(167,139,250,0.35)',
-              boxShadow: '0 8px 32px rgba(139,92,246,0.15)',
-            }}>
-            {/* touch-pan-x and snap-x, and the scrollbar class is gone.
-             *
-             * `scrollbar-hide` is not a real class. It is not in the Tailwind
-             * config and not in index.css, so it did nothing here. Scrollbars
-             * are already hidden site wide by the rule in index.css, which is
-             * Steve's standing design rule, so nothing changes by dropping it.
-             *
-             * `touch-pan-x` is the one that matters. body carries
-             * `overflow-x: hidden`, and iOS will hand a sideways drag to the
-             * page rather than to a rail inside it unless the rail says
-             * plainly that sideways is its job. Saying so is what makes this
-             * swipe on a phone.
-             *
-             * Snap points make it land on a card instead of halfway across
-             * one, which is the difference between a rail that feels built and
-             * one that feels like a scrolling div. */}
-            <div className="flex space-x-5 overflow-x-auto touch-pan-x snap-x snap-mandatory">
-              {featuredPlaylists.map(pl => {
-                const coverUrl = pl.cover_url || pl.playlist_tracks?.find(pt => pt.tracks?.cover_artwork_url)?.tracks?.cover_artwork_url;
-                return (
-                  <button key={pl.id}
-                    onClick={() => navigate(`/library/playlists/${pl.id}`)}
-                    className="flex-shrink-0 w-40 md:w-48 text-left group snap-start">
-                    <div className="w-40 h-40 md:w-48 md:h-48 rounded-xl overflow-hidden mb-3 relative"
-                      style={{
-                        background: 'rgba(139,92,246,0.12)',
-                        border: '1px solid rgba(167,139,250,0.25)',
-                        boxShadow: '0 4px 20px rgba(0,0,0,0.4)',
-                      }}>
-                      {coverUrl
-                        ? <img src={coverUrl} alt={pl.name} loading="lazy"
-                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
-                        : <div className="w-full h-full flex items-center justify-center">
-                            <ListMusic className="w-12 h-12" style={{ color: 'rgba(167,139,250,0.4)' }} />
-                          </div>}
-                    </div>
-                    <p className="text-sm font-bold text-white truncate">{pl.name}</p>
-                    <p className="text-xs text-white/40 truncate mt-0.5">
-                      {pl.playlist_tracks?.length || 0} tracks
-                    </p>
-                  </button>
-                );
-              })}
-            </div>
+          <div className="flex space-x-3 overflow-x-auto px-6 scrollbar-hide">
+            {activeCompetitions.filter(c => !c.wheel_challenge).map(comp => (
+              <button
+                key={comp.id}
+                onClick={() => navigate(`/competition/${comp.id}`)}
+                className="flex-shrink-0 w-52 p-3.5 rounded-2xl border text-left transition active:scale-[0.98]"
+                style={{
+                  borderColor: comp.paid_collab ? 'rgba(245,158,11,0.25)' : 'rgba(255,255,255,0.08)',
+                  background: comp.paid_collab
+                    ? 'linear-gradient(135deg, rgba(245,158,11,0.08), transparent)'
+                    : 'rgba(255,255,255,0.02)',
+                }}
+              >
+                <div className="flex items-center space-x-2 mb-2">
+                  <span className="text-base">{comp.paid_collab ? '💰' : '🏆'}</span>
+                  <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${
+                    comp.status === 'voting'
+                      ? 'bg-blue-500/20 text-blue-400'
+                      : 'bg-green-500/20 text-green-400'
+                  }`}>
+                    {comp.status === 'voting' ? 'Vote Now' : 'Enter Now'}
+                  </span>
+                </div>
+                <p className="text-sm font-semibold text-white truncate mb-1">{comp.title}</p>
+                {comp.brief && <p className="text-[11px] text-white/35 truncate">{comp.brief}</p>}
+                {comp.paid_collab && (
+                  <p className="text-[10px] font-bold mt-1.5" style={{ color: '#F59E0B' }}>$50 USD Prize</p>
+                )}
+              </button>
+            ))}
           </div>
         </div>
       )}
+
+
+      {/* Collaborations get their own row. They existed only at the bottom of
+          an artist's own profile before this, which meant the platform's own
+          argument, that artists here work together, was the thing hardest
+          to see. */}
+      <CollabRail limit={12} />
+
+
+
+
+
+      {/* On This Day, resurface a track from exactly 1 year ago */}
+      <OnThisDay user={user} />
+
 
       {/* Monthly Wrapped card */}
       {wrappedNotif && (
@@ -1168,33 +1189,6 @@ export default function HomePage() {
           <WrappedCard notification={wrappedNotif} compact />
         </div>
       )}
-
-      {/* On This Day, resurface a track from exactly 1 year ago */}
-      <OnThisDay user={user} />
-
-      {/* Artists to Follow */}
-      {topArtists.length > 0 && (
-        <Section title="Artists to Follow" gradient="rose" onSeeAll={() => navigate('/browse?tab=artists')}>
-          <div className="flex space-x-3 overflow-x-auto px-6 scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
-            {topArtists.map(a => (
-              <button key={a.id} onClick={() => navigate(`/artist/${a.slug}`)}
-                className="flex-shrink-0 w-40 md:w-52 text-center group">
-                <div className="w-40 h-40 md:w-52 md:h-52 rounded-full overflow-hidden bg-white/[0.06] mb-2 mx-auto">
-                  <img src={coverUrl(a.profile_image_url, 400)} alt={a.artist_name || ''}
-                    loading="lazy" decoding="async"
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
-                </div>
-                <div className="flex items-center justify-center space-x-1">
-                  <p className="text-sm font-medium text-white truncate max-w-[140px]">{a.artist_name}</p>
-                  {a.is_verified && <VerifiedBadge size="sm" />}
-                </div>
-                <p className="text-xs text-white/30 mt-0.5">{formatNumber(a.display_follower_count ?? a.follower_count)} followers</p>
-              </button>
-            ))}
-          </div>
-        </Section>
-      )}
-
 
       {actionSheetTrack && (
         <TrackActionSheet

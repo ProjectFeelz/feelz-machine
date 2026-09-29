@@ -8,7 +8,7 @@ import { usePlayer } from '../contexts/PlayerContext';
 import { useAuth } from '../contexts/AuthContext';
 import {
   Search, Flame, TrendingUp, Play, Pause, Music, Crown,
-  Loader, Disc3, Star, Sparkles, Clock, Users, Newspaper,
+  Loader, Disc3, Star, Sparkles, Clock, Users, Newspaper, ListMusic,
 } from 'lucide-react';
 import VerifiedBadge from '../components/VerifiedBadge';
 // Ask Supabase for the size we actually draw. See utils/coverUrl.
@@ -59,6 +59,52 @@ const MOOD_TAGS = [
   { label: 'Aggressive', value: 'Aggressive',  emoji: '⚡' },
   { label: 'Peaceful',   value: 'Peaceful',    emoji: '🕊️' },
 ];
+
+// ── The filter pills ──────────────────────────────────────────────────────────
+//
+// Lifted out of the Tracks tab so the Albums tab can have the same ones rather
+// than a second copy that drifts. Two tabs, one set of pills, one set of
+// styles, and if the genre list changes it changes in both places at once.
+//
+// Wrapping fourteen genres and thirteen moods is one line on a wide screen and
+// most of the screen on a phone: you would scroll past a wall of filters before
+// seeing a single release. So on mobile they scroll sideways on one row, and
+// from `sm` up they wrap as before. Nothing is hidden and every pill is still
+// reachable.
+function FilterPills({ genre, onGenre, mood, onMood }) {
+  const pill = (active) =>
+    `flex-shrink-0 px-3.5 py-1.5 rounded-full text-xs font-semibold transition border active:scale-95 ${
+      active
+        ? 'bg-white text-black border-white'
+        : 'bg-white/[0.04] text-white/60 border-white/[0.07] hover:bg-white/[0.08] hover:text-white'
+    }`;
+  const row = 'flex sm:flex-wrap gap-2 mb-5 overflow-x-auto sm:overflow-visible scrollbar-hide -mx-1 px-1';
+
+  return (
+    <>
+      <p className="section-label mb-2">Genres</p>
+      <div className={row}>
+        {GENRE_TAGS.map(g => (
+          <button key={g} onClick={() => onGenre(g)} className={pill(genre === g)}>{g}</button>
+        ))}
+      </div>
+
+      <p className="section-label mb-2">Moods</p>
+      <div className={row}>
+        {MOOD_TAGS.map(({ label, value, emoji }) => {
+          const active = mood === value;
+          return (
+            <button key={label} onClick={() => onMood(active ? null : value)}
+              className={`${pill(active)} flex items-center gap-1.5`}>
+              <span className="text-sm leading-none">{emoji}</span>
+              <span>{label}</span>
+            </button>
+          );
+        })}
+      </div>
+    </>
+  );
+}
 
 // ── Search history helpers ────────────────────────────────────────────────────
 const SEARCH_HISTORY_KEY = 'fm_search_history';
@@ -128,6 +174,12 @@ export default function BrowsePage() {
     useHomeCardData({ creatorCount: 6 });
   const [selectedGenre, setSelectedGenre]     = useState('All');
   const [selectedMood, setSelectedMood]       = useState(null);
+  // Albums keep their own selection rather than sharing the tracks one. Moving
+  // between tabs should not silently re-filter the other tab, and somebody
+  // browsing Soul albums is not necessarily after Soul tracks.
+  const [albumGenre, setAlbumGenre]           = useState('All');
+  const [albumMood, setAlbumMood]             = useState(null);
+  const [playlists, setPlaylists]             = useState([]);
   const [trending, setTrending]               = useState([]);
   const [featured, setFeatured]               = useState([]);
   const [newReleases, setNewReleases]         = useState([]);
@@ -138,7 +190,7 @@ export default function BrowsePage() {
   const [searchResults, setSearchResults]     = useState(null);
   const [recommended, setRecommended]         = useState([]);
 
-  useEffect(() => { fetchAll(); }, [user]);
+  useEffect(() => { fetchAll(); fetchPlaylists(); }, [user]);
 
   useEffect(() => {
     if (user && allTracks.length > 0) fetchRecommended();
@@ -223,6 +275,7 @@ export default function BrowsePage() {
         { data: tracksRaw,   error: tracksErr },
         { data: albumsRaw,   error: albumsErr },
         { data: artistsData, error: artistsErr },
+        { data: albumTagsRaw, error: albumTagsErr },
       ] = await Promise.all([
         supabase.from('tracks')
           .select('*, albums(title, cover_artwork_url, price), artists!tracks_artist_id_fkey(id, artist_name, slug, profile_image_url, is_verified, tier)')
@@ -235,10 +288,36 @@ export default function BrowsePage() {
           .eq('is_published', true).order('created_at', { ascending: false }).limit(50),
         supabase.from('albums')
           .select('*, artists(artist_name, slug)')
-          .eq('is_published', true).order('release_date', { ascending: false }).limit(50),
+          .eq('is_published', true).order('release_date', { ascending: false }).limit(60),
+        // A card for an artist with no picture and nobody following them is a
+        // grey circle with a name under it, and a screen full of those makes
+        // the whole platform look abandoned. The rule is deliberately an OR,
+        // not an AND: an artist who has bothered with a profile picture earns
+        // a card at zero followers, and an artist people actually follow earns
+        // one without a picture. It takes both being absent to be left out.
+        //
+        // Filtered client side rather than in the query, because PostgREST
+        // drops NULL rows on a `not.` filter and an artist whose
+        // follower_count has simply never been written should be judged on
+        // their picture, not vanished for a null.
         supabase.from('artists')
           .select('id, artist_name, slug, profile_image_url, is_verified, follower_count, display_follower_count, total_streams, tier')
-          .order('total_streams', { ascending: false }).limit(50),
+          .order('total_streams', { ascending: false }).limit(80),
+        // ALBUMS DO NOT HAVE A GENRE OR A MOOD. Only tracks do; the album
+        // insert in TrackUploadPanel writes title, slug, description, cover,
+        // release date, release type, price and nothing else. So filtering
+        // albums by genre means asking their TRACKS what they are, which is
+        // also the more honest answer: an album is whatever is on it.
+        //
+        // A separate flat query rather than embedding tracks in the albums
+        // select, because this page has already been bitten once by an
+        // ambiguous embed returning HTTP 300 and a silently empty page. Two
+        // columns and an id, so it stays cheap.
+        supabase.from('tracks')
+          .select('album_id, genre, mood')
+          .eq('is_published', true)
+          .not('album_id', 'is', null)
+          .limit(2000),
       ]);
 
       // Surface query failures. Destructuring only `data` and dropping
@@ -247,7 +326,7 @@ export default function BrowsePage() {
       // completely clean console. That cost a day of looking in the wrong
       // place. If these queries ever fail again, we will know immediately.
       [['trending', trendingErr], ['featured', featuredErr], ['tracks', tracksErr],
-       ['albums', albumsErr], ['artists', artistsErr]]
+       ['albums', albumsErr], ['artists', artistsErr], ['album tags', albumTagsErr]]
         .forEach(([label, err]) => {
           if (err) console.error(`[Browse] ${label} query failed:`, err.code, err.message, err.hint || '');
         });
@@ -271,7 +350,39 @@ export default function BrowsePage() {
         .sort((a, b) => b._boosted - a._boosted);
 
       const allNorm    = norm(tracksRaw);
-      const albumsNorm = normAlbums(albumsRaw);
+
+      // "Albums & EPs" has to mean albums and EPs.
+      //
+      // Every release lives in the albums table whatever it is called, and
+      // since the release type floors in migrations 169 and 173, a two track
+      // release is correctly labelled a single. So a card reading MAXI SINGLE
+      // was sitting under a heading that said Albums & EPs. HomePage already
+      // filters this out; the Browse tab never did, which is why the same
+      // release looked right on one page and wrong on the other.
+      //
+      // Filtered here rather than in the query, for the same reason as the
+      // artists above: PostgREST's `not.in` also drops rows where
+      // release_type is NULL, and an older release with no type set should
+      // still count as an album.
+      // Every genre and mood that appears anywhere on the album, lowercased
+      // once here so the filter is a set lookup and not a string compare per
+      // card per keystroke. An album counts as Soul if any track on it is
+      // Soul, which is how somebody actually thinks about a record.
+      const tagsByAlbum = new Map();
+      for (const row of (albumTagsRaw || [])) {
+        if (!row.album_id) continue;
+        let entry = tagsByAlbum.get(row.album_id);
+        if (!entry) { entry = { genres: new Set(), moods: new Set() }; tagsByAlbum.set(row.album_id, entry); }
+        if (row.genre) entry.genres.add(String(row.genre).toLowerCase());
+        if (row.mood)  entry.moods.add(String(row.mood).toLowerCase());
+      }
+
+      const albumsNorm = normAlbums(albumsRaw)
+        .filter(a => !['single', 'beat'].includes(a.release_type))
+        .map(a => {
+          const t = tagsByAlbum.get(a.id);
+          return { ...a, _genres: t ? t.genres : new Set(), _moods: t ? t.moods : new Set() };
+        });
       const merged = [
         ...allNorm.map(t => ({ ...t, _isAlbum: false, _date: t.created_at })),
         ...albumsNorm.map(a => ({ ...a, _isAlbum: true, _date: a.release_date || a.created_at })),
@@ -282,8 +393,20 @@ export default function BrowsePage() {
       setNewReleases(merged);
       setAllTracks(allNorm);
       setAlbums(albumsNorm);
-      // Artists with images first, imageless ones pushed to the end
-      const sortedArtists = (artistsData || []).sort((a, b) => {
+      // Pushing the bare profiles to the end was not enough: they were still
+      // on the page, and a grid that trails off into grey circles with names
+      // under them is what makes the catalogue look abandoned. An artist with
+      // neither a picture nor a single follower has nothing to show, so they
+      // are left out until they have one or the other. Nothing is deleted and
+      // nothing is hidden anywhere else: their profile, their tracks and
+      // search all still work exactly as before.
+      const presentable = (artistsData || []).filter(a =>
+        !!a.profile_image_url || Number(a.follower_count ?? a.display_follower_count ?? 0) > 0
+      );
+
+      // Images still first among the ones that are left, since an artist with
+      // followers but no picture is a weaker card than one with a picture.
+      const sortedArtists = presentable.sort((a, b) => {
         const aHasImg = !!(a.profile_image_url);
         const bHasImg = !!(b.profile_image_url);
         if (aHasImg && !bHasImg) return -1;
@@ -293,6 +416,64 @@ export default function BrowsePage() {
       setArtists(sortedArtists);
     } catch (err) { console.error('Browse fetch error:', err); }
     finally { setLoading(false); }
+  };
+
+  // ── Artist playlists ──
+  //
+  // Carried over from HomePage, where this row used to live, including the
+  // reasons the ranking works the way it does. Fetched on its own rather than
+  // folded into the block above, because it needs a second query for the
+  // owners and there is no point making the rest of the page wait for it.
+  const fetchPlaylists = async () => {
+    try {
+      // No join to a users table. An earlier version tried
+      // artists:users!playlists_user_id_fkey(...), which 400s because that
+      // relationship does not resolve, and the section silently never
+      // rendered. Owners are looked up separately instead.
+      const { data, error } = await supabase
+        .from('playlists')
+        .select('id, name, cover_url, user_id, created_at, is_public, playlist_tracks(id, tracks(cover_artwork_url))')
+        .eq('is_public', true)
+        .order('created_at', { ascending: false })
+        .limit(60);
+      if (error) { console.error('[Browse] playlists query failed:', error.code, error.message); return; }
+
+      const withTracks = (data || []).filter(p => p.playlist_tracks?.length > 0);
+      if (!withTracks.length) { setPlaylists([]); return; }
+
+      const ownerIds = [...new Set(withTracks.map(p => p.user_id).filter(Boolean))];
+      const ownerMap = {};
+      if (ownerIds.length) {
+        const { data: owners } = await supabase
+          .from('artists')
+          .select('user_id, artist_name, slug, profile_image_url')
+          .in('user_id', ownerIds);
+        (owners || []).forEach(o => { ownerMap[o.user_id] = o; });
+      }
+      const withOwners = withTracks.map(p => ({ ...p, owner: ownerMap[p.user_id] || null }));
+
+      // The tab is called Artist Playlists, so an artist's playlist comes
+      // first: a listener's own playlist sitting at the top of something named
+      // after artists is the thing this ordering exists to prevent. A fuller
+      // playlist beats a thinner one after that, because a two track playlist
+      // is not a playlist yet.
+      const ranked = [...withOwners].sort((a, b) => {
+        const artistA = a.owner ? 1 : 0;
+        const artistB = b.owner ? 1 : 0;
+        if (artistA !== artistB) return artistB - artistA;
+        return (b.playlist_tracks?.length || 0) - (a.playlist_tracks?.length || 0);
+      });
+
+      // Then turn the list day by day, so there is something different to see
+      // tomorrow even when nobody has made a new playlist. The day number is
+      // the seed, so it is the same for everybody on a given day and it moves
+      // at midnight rather than reshuffling under somebody mid scroll.
+      const day = Math.floor(Date.now() / 86400000);
+      const start = ranked.length ? day % ranked.length : 0;
+      setPlaylists([...ranked.slice(start), ...ranked.slice(0, start)].slice(0, 24));
+    } catch (err) {
+      console.error('[Browse] playlists failed:', err?.message);
+    }
   };
 
   const searchAll = (q) => {
@@ -307,6 +488,13 @@ export default function BrowsePage() {
   const filteredTracks = allTracks
     .filter(t => selectedGenre === 'All' || t.genre?.toLowerCase() === selectedGenre.toLowerCase())
     .filter(t => !selectedMood || t.mood?.toLowerCase() === selectedMood.toLowerCase());
+
+  // An album matches if ANY track on it does, which is the sets built in the
+  // fetch. An album whose tracks carry no genre at all matches only "All",
+  // rather than being claimed by whichever filter happens to be selected.
+  const filteredAlbums = albums
+    .filter(a => albumGenre === 'All' || a._genres?.has(albumGenre.toLowerCase()))
+    .filter(a => !albumMood || a._moods?.has(albumMood.toLowerCase()));
 
   // New Releases, split by shape. Both keep the newest-first order they were
   // merged in; they are just no longer asked to share a grid row. The phone
@@ -325,19 +513,34 @@ export default function BrowsePage() {
   // (see the activeTab default), and it is still the first thing your eye
   // reaches once you start reading the strip.
   //
-  // What's New is not really a tab. Selecting it opens the same panel the
-  // home card opens and leaves whatever tab you were on alone, which is why
-  // it is flagged here rather than handled with a special case at the click.
+  // REORDERED, and the order is the point.
+  //
+  // Albums used to be last, behind Collabs, which is where you put something
+  // nobody is meant to find. It is one of the two things people come to a
+  // music catalogue looking for, so it now sits directly after Tracks.
+  //
+  // Artist Highlight stays at the front. Migration 190 exists to keep that
+  // rotation moving, and a rotating row is worth nothing behind six tabs.
+  //
+  // Artist Playlists is new here, moved off the Home page.
+  //
+  // The tail is the narrower stuff: ways of slicing the same catalogue
+  // (New, Trending, Featured), then people (Artists, Collabs), then the
+  // notices panel, which is not really a tab at all.
   const tabs = [
-    { key: 'creators', label: 'Artist Highlight', icon: Sparkles },
-    { key: 'whatsnew', label: "What's New", icon: Newspaper, opens: true },
-    { key: 'tracks',   label: 'Tracks',   icon: Music },
-    { key: 'new',      label: 'New',      icon: Sparkles },
-    { key: 'featured', label: 'Featured', icon: Star },
-    { key: 'trending', label: 'Trending', icon: Flame },
-    { key: 'artists',  label: 'Artists',  icon: Crown },
-    { key: 'collabs',  label: 'Collabs',  icon: Users },
-    { key: 'albums',   label: 'Albums',   icon: Disc3 },
+    { key: 'creators',  label: 'Artist Highlight', icon: Sparkles },
+    { key: 'tracks',    label: 'Tracks',    icon: Music },
+    { key: 'albums',    label: 'Albums',    icon: Disc3 },
+    { key: 'playlists', label: 'Playlists', icon: ListMusic },
+    { key: 'new',       label: 'New',       icon: Sparkles },
+    { key: 'trending',  label: 'Trending',  icon: Flame },
+    { key: 'featured',  label: 'Featured',  icon: Star },
+    { key: 'artists',   label: 'Artists',   icon: Crown },
+    { key: 'collabs',   label: 'Collabs',   icon: Users },
+    // Not really a tab. Selecting it opens the same panel the home card opens
+    // and leaves whatever tab you were on alone, which is why it is flagged
+    // here rather than handled with a special case at the click.
+    { key: 'whatsnew',  label: "What's New", icon: Newspaper, opens: true },
   ];
 
   if (!user || loading) {
@@ -698,47 +901,11 @@ export default function BrowsePage() {
                 thirteen moods took two full screens of empty boxes and pushed
                 the actual music off the bottom of the page. A filter is a
                 control, not content: it should cost one line, not a grid. */}
-            {/* ONE LINE ON A PHONE, THE LOT ON A DESKTOP.
-                Wrapping fourteen genres and thirteen moods is one line on a
-                wide screen and most of the screen on a phone: you scroll past
-                a wall of filters before you see a single song. So on mobile
-                they scroll sideways on one row, and from `sm` up they wrap as
-                before. `scrollbar-hide` and no-wrap do the work; nothing is
-                hidden and every pill is still reachable. */}
-            <p className="section-label mb-2">Genres</p>
-            <div className="flex sm:flex-wrap gap-2 mb-5 overflow-x-auto sm:overflow-visible scrollbar-hide -mx-1 px-1">
-              {GENRE_TAGS.map(genre => {
-                const active = selectedGenre === genre;
-                return (
-                  <button key={genre} onClick={() => setSelectedGenre(genre)}
-                    className={`flex-shrink-0 px-3.5 py-1.5 rounded-full text-xs font-semibold transition border active:scale-95 ${
-                      active
-                        ? 'bg-white text-black border-white'
-                        : 'bg-white/[0.04] text-white/60 border-white/[0.07] hover:bg-white/[0.08] hover:text-white'
-                    }`}>
-                    {genre}
-                  </button>
-                );
-              })}
-            </div>
-
-            <p className="section-label mb-2">Moods</p>
-            <div className="flex sm:flex-wrap gap-2 mb-5 overflow-x-auto sm:overflow-visible scrollbar-hide -mx-1 px-1">
-              {MOOD_TAGS.map(({ label, value, emoji }) => {
-                const active = selectedMood === value;
-                return (
-                  <button key={label} onClick={() => setSelectedMood(active ? null : value)}
-                    className={`flex-shrink-0 flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold transition border active:scale-95 ${
-                      active
-                        ? 'bg-white text-black border-white'
-                        : 'bg-white/[0.04] text-white/60 border-white/[0.07] hover:bg-white/[0.08] hover:text-white'
-                    }`}>
-                    <span className="text-sm leading-none">{emoji}</span>
-                    <span>{label}</span>
-                  </button>
-                );
-              })}
-            </div>
+            {/* Pills live in FilterPills now, shared with the Albums tab, so
+                the two cannot drift apart. The reasoning that used to sit here
+                about one line on a phone and the whole lot on a desktop moved
+                with them. */}
+            <FilterPills genre={selectedGenre} onGenre={setSelectedGenre} mood={selectedMood} onMood={setSelectedMood} />
 
             {(selectedGenre !== 'All' || selectedMood) && (
               <div className="flex items-center space-x-2 mb-4">
@@ -822,14 +989,79 @@ export default function BrowsePage() {
         {activeTab === 'albums' && (
           <div>
             <SectionLabel icon={Disc3} title="Albums & EPs" subtitle="Latest releases" />
-            {albums.length > 0 ? (
+
+            <FilterPills genre={albumGenre} onGenre={setAlbumGenre} mood={albumMood} onMood={setAlbumMood} />
+
+            {(albumGenre !== 'All' || albumMood) && (
+              <div className="flex items-center space-x-2 mb-4">
+                <p className="text-xs text-white/40">
+                  Showing {filteredAlbums.length} {filteredAlbums.length === 1 ? 'release' : 'releases'}
+                  {albumGenre !== 'All' && <span className="text-white/70"> in {albumGenre}</span>}
+                  {albumMood && <span className="text-white/70"> feeling {albumMood}</span>}
+                </p>
+                <button onClick={() => { setAlbumGenre('All'); setAlbumMood(null); }}
+                  className="text-xs text-white/30 hover:text-white/60 transition underline">Clear</button>
+              </div>
+            )}
+
+            {filteredAlbums.length > 0 ? (
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                {albums.map(album => (
+                {filteredAlbums.map(album => (
                   <AlbumTile key={album.id} album={album} navigate={navigate} />
                 ))}
               </div>
             ) : (
-              <p className="text-center text-white/20 text-sm py-12">No albums yet</p>
+              <p className="text-center text-white/20 text-sm py-12">
+                {albumGenre === 'All' && !albumMood
+                  ? 'No albums yet'
+                  : `No ${albumMood || albumGenre} releases yet`}
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* ── Artist Playlists ──
+            Moved off the Home page, where it sat in a purple box between
+            Recommended For You and Artists to Follow and read as an advert
+            rather than part of the page. Browse is where somebody is already
+            looking for something to put on, which is what a playlist is. */}
+        {activeTab === 'playlists' && (
+          <div>
+            <SectionLabel icon={ListMusic} title="Artist Playlists" subtitle="Put together by the artists themselves" />
+            {playlists.length > 0 ? (
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                {playlists.map(pl => {
+                  // A playlist with no cover of its own borrows the artwork of
+                  // the first track on it that has any, which is what the row
+                  // on Home did and the reason most of these have a picture.
+                  const art = pl.cover_url
+                    || pl.playlist_tracks?.find(pt => pt.tracks?.cover_artwork_url)?.tracks?.cover_artwork_url;
+                  const count = pl.playlist_tracks?.length || 0;
+                  return (
+                    <button
+                      key={pl.id}
+                      onClick={() => navigate(`/library/playlists/${pl.id}`)}
+                      className="text-left group"
+                    >
+                      <div className="aspect-square rounded-xl overflow-hidden bg-white/[0.06] mb-2">
+                        {art
+                          ? <img src={coverUrl(art, 400)} alt={pl.name} loading="lazy" decoding="async"
+                                 className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                          : <div className="w-full h-full flex items-center justify-center">
+                              <ListMusic className="w-6 h-6 text-white/20" />
+                            </div>}
+                      </div>
+                      <p className="text-sm font-semibold text-white truncate">{pl.name}</p>
+                      <p className="text-xs text-white/30 truncate">
+                        {count} {count === 1 ? 'track' : 'tracks'}
+                        {pl.owner?.artist_name ? ` · ${pl.owner.artist_name}` : ''}
+                      </p>
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="text-center text-white/20 text-sm py-12">No artist playlists yet</p>
             )}
           </div>
         )}
