@@ -76,9 +76,10 @@ export function youTubeEmbedSrc(url, { autoplay = false } = {}) {
 
   if (list) {
     // A playlist url that also names a video starts on that video and keeps
-    // the rest queued. A bare playlist url plays it from the top.
-    if (id) params.set('list', list);
-    else    params.set('listType', 'playlist'), params.set('list', list);
+    // the rest queued. A bare playlist url plays it from the top, which needs
+    // listType as well as list.
+    params.set('list', list);
+    if (!id) params.set('listType', 'playlist');
     return id
       ? `https://www.youtube-nocookie.com/embed/${id}?${params.toString()}`
       : `https://www.youtube-nocookie.com/embed/videoseries?${params.toString()}`;
