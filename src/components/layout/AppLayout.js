@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useContext } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import MobileNav from './MobileNav';
+import WindowControlsOverlay from './WindowControlsOverlay';
 import DesktopSidebar from './DesktopSidebar';
 import DesktopPlayer from './DesktopPlayer';
 import MiniPlayer from './MiniPlayer';
@@ -249,12 +250,17 @@ export default function AppLayout() {
     <ListenerThemeProvider>
     <StreakContext.Provider value={streakValue}>
       <div className="min-h-screen bg-black text-white">
+        {/* The installed desktop app's own title bar. Renders nothing at all
+            unless Window Controls Overlay is actually on, which means a
+            browser tab and a phone are untouched by it. */}
+        <WindowControlsOverlay />
+
         {/* Offline detection, fixed banner, renders above everything */}
         <OfflineBanner />
 
         {/* Listener mode banner */}
         {viewAs === 'listener' && (
-          <div className="fixed top-0 inset-x-0 z-[200] flex items-center justify-between px-4 py-2"
+          <div className="fixed top-0 inset-x-0 z-[200] flex items-center justify-between px-4 py-2 fm-wco-offset-top"
             style={{ background: 'rgba(139,92,246,0.95)', backdropFilter: 'blur(8px)' }}>
             <p className="text-xs font-semibold text-white">🎧 Listening as fan</p>
             <button onClick={() => setViewAs(null)}

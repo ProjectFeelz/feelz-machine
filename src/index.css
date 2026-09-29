@@ -233,3 +233,93 @@ select, option { color-scheme: dark; background-color: #1a1a1a; color: white; }
   0%, 100% { opacity: 0.5; }
   50% { opacity: 1; }
 }
+/* ── Window Controls Overlay: the installed desktop app's own title bar ──────
+
+   Chromium desktop only, and only for the INSTALLED app. In a normal browser
+   tab, on a phone, and in a standalone PWA that has the overlay switched off,
+   every rule below is inert and --fm-titlebar stays 0px, so nothing about the
+   existing layout moves.
+
+   --fm-titlebar is the one number the rest of the app reads. It is declared
+   here at 0 and only ever set to a real height inside the media query, which
+   is what keeps this feature entirely removable: delete this block and the
+   variable resolves to 0 everywhere it is used.
+
+   The 33px fallback is Chromium's default strip height, used only if
+   titlebar-area-height is somehow unavailable while the overlay is on. Better
+   a strip of roughly the right size than a zero-height one with the app
+   painting underneath the close button.                                      */
+
+:root {
+  --fm-titlebar: 0px;
+}
+
+@media (display-mode: window-controls-overlay) {
+  :root {
+    --fm-titlebar: env(titlebar-area-height, 33px);
+  }
+
+  /* Positioned to the SAFE area rather than to the window. On Windows the
+     buttons are on the right so this starts at 0 and stops short; on a Mac it
+     starts after the traffic lights. Hard-coding left:0/width:100% would put
+     this under the buttons on one of the two. */
+  .fm-titlebar {
+    position: fixed;
+    left:   env(titlebar-area-x, 0px);
+    top:    env(titlebar-area-y, 0px);
+    width:  env(titlebar-area-width, 100%);
+    height: env(titlebar-area-height, 33px);
+    z-index: 2147483000;            /* above the app, below nothing of ours */
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 12px;
+    background: #000;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    user-select: none;
+    -webkit-user-select: none;
+    /* The whole strip is the window's drag handle. Anything clickable put in
+       here later MUST set -webkit-app-region: no-drag or it stops responding
+       to clicks and becomes part of the handle. */
+    -webkit-app-region: drag;
+    app-region: drag;
+  }
+
+  .fm-titlebar-mark {
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    color: #b794fb;
+    border: 1px solid rgba(183, 148, 251, 0.35);
+    border-radius: 5px;
+    padding: 1px 4px;
+    line-height: 1.2;
+  }
+
+  .fm-titlebar-name {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: rgba(255, 255, 255, 0.55);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* Everything anchored to the top of the window moves down by the strip.
+     The sidebar and the docked player set `top` inline, so those two carry
+     var(--fm-titlebar) in their own files; these are the rest. */
+  main > .md\:px-8 {
+    padding-top: calc(2rem + var(--fm-titlebar));
+  }
+
+  .fm-wco-offset-top {
+    top: var(--fm-titlebar) !important;
+  }
+
+  /* A full-screen overlay still covers the app, but not the title bar, or the
+     window becomes impossible to move while one is open. */
+  .fm-wco-below-titlebar {
+    top: var(--fm-titlebar) !important;
+  }
+}

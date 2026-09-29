@@ -722,7 +722,9 @@ export default function FullPlayer() {
           ? "hidden md:flex fixed right-0 z-40 w-[400px] flex-col overflow-hidden"
           : "fixed inset-0 z-[100] bg-black flex flex-col"}
         style={isDesktop ? {
-          top: 0, bottom: '88px',
+          // Below the app's own title bar when the installed desktop app is
+          // drawing one, and flush with the top of the window everywhere else.
+          top: 'var(--fm-titlebar, 0px)', bottom: '88px',
           background: 'rgba(12,12,12,0.97)',
           backdropFilter: 'blur(24px)',
           WebkitBackdropFilter: 'blur(24px)',

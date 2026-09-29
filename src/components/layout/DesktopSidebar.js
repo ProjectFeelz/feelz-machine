@@ -72,8 +72,14 @@ export default function DesktopSidebar() {
 
   return (
     <aside
-      className="hidden md:flex flex-col w-64 fixed left-0 top-0 bottom-0 z-40 border-r border-white/[0.06]"
+      className="hidden md:flex flex-col w-64 fixed left-0 bottom-0 z-40 border-r border-white/[0.06]"
       style={{
+        // top comes from --fm-titlebar rather than being pinned at 0, so the
+        // sidebar starts below the app's own title bar when the installed
+        // desktop app is drawing one. The variable is 0px everywhere else, so
+        // this is the same top-0 it has always been in a browser tab and on a
+        // phone.
+        top: 'var(--fm-titlebar, 0px)',
         background: 'rgba(14,14,16,0.94)',
         backdropFilter: 'blur(24px)',
         WebkitBackdropFilter: 'blur(24px)',
