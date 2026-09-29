@@ -98,6 +98,7 @@ const NewsletterComposePage = React.lazy(() => import('./pages/NewsletterCompose
 const NewsletterPostPage = React.lazy(() => import('./pages/NewsletterPostPage'));
 const LegalDocumentPage = React.lazy(() => import('./pages/LegalDocumentPage'));
 const VipCardPrintPage = React.lazy(() => import('./pages/VipCardPrintPage'));
+const DrivingPage = React.lazy(() => import('./pages/DrivingPage'));
 const RetailJoinPage = React.lazy(() => import('./pages/RetailJoinPage'));
 const RetailLandingPage = React.lazy(() => import('./pages/RetailLandingPage'));
 const RetailStartPage = React.lazy(() => import('./pages/RetailStartPage'));
@@ -338,6 +339,16 @@ export default function AppRouter() {
                 </PageTitle>
               } />
               <Route path="/admin/vip-card-print/:candidateId" element={<VipCardPrintPage />} />
+
+              {/* Driving mode renders its own full-screen shell and must stay
+                  OUTSIDE AppLayout. Inside it, the sidebar, the mini player
+                  and the mini player's toast all still mount, and the toast
+                  sits at z-[400] against this page's z-[100], so a notice
+                  would land on top of the controls. Out here nothing else
+                  renders at all, which is the whole idea of the screen.
+                  PlayerProvider wraps the entire route table, so the audio
+                  element and the queue carry straight through. */}
+              <Route path="/driving" element={<DrivingPage />} />
               {/* Retail renders its own full-screen shell and is a separate
                   product, so it must stay outside AppLayout or it gets the
                   Feelz Machine sidebar on top of its own chrome. Same reason

@@ -5,7 +5,7 @@ import {
   Play, Pause, SkipBack, SkipForward, ChevronDown,
   Shuffle, Repeat, Repeat1, Heart, Share2,
   ListMusic, Volume2, VolumeX, X, MoreHorizontal,
-  Music2, Moon,
+  Music2, Moon, Car,
 } from 'lucide-react';
 import { usePlayer } from '../../contexts/PlayerContext';
 import useScreenAwake from '../../hooks/useScreenAwake';
@@ -744,10 +744,22 @@ export default function FullPlayer() {
             <ChevronDown className="w-6 h-6 text-white" />
           </button>
           <p className="text-xs text-white/50 uppercase tracking-widest font-medium">Now Playing</p>
-          <button onClick={() => { tap(); setShowQueue(p => !p); }}
-            className="w-10 h-10 flex items-center justify-center">
-            <ListMusic className={`w-5 h-5 ${showQueue ? 'text-white' : 'text-white/50'}`} />
-          </button>
+          <div className="flex items-center">
+            {/* Driving mode. Phone only: this is for a dash mount, and on a
+                desktop the full player is already the size of a wall. It sits
+                next to the queue button rather than inside the action sheet
+                because a driver getting into the car wants one tap, and the
+                sheet is two taps and a scroll. */}
+            <button onClick={() => { tap(); navigate('/driving'); }}
+              aria-label="Driving mode"
+              className="md:hidden w-10 h-10 flex items-center justify-center">
+              <Car className="w-5 h-5 text-white/50" />
+            </button>
+            <button onClick={() => { tap(); setShowQueue(p => !p); }}
+              className="w-10 h-10 flex items-center justify-center">
+              <ListMusic className={`w-5 h-5 ${showQueue ? 'text-white' : 'text-white/50'}`} />
+            </button>
+          </div>
         </div>
 
         {/* Queue view */}

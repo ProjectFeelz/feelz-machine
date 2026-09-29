@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { coverUrl } from '../utils/coverUrl';
 
 /**
  * useMediaSession
@@ -54,24 +55,46 @@ import { useEffect, useRef } from 'react';
 // tick, so anything past two seconds was not the track playing forward.
 const SEEK_JUMP_SECONDS = 2;
 
+// WHY THIS DOES NOT HAND OVER cover_artwork_url
+//
+// Artwork on this platform is whatever size the artist exported, and measured
+// on the live catalogue that is routinely 2.8 to 3.2 MB. A phone draws that
+// without complaining. A car stereo often will not: head units have their own
+// ceiling on an album art image received over Bluetooth, and the ones that hit
+// it do not scale the picture down, they drop it and show their own generic
+// music glyph. Which looks, from the driver's seat, like the app failed.
+//
+// The same is true of the lock screen on a weak signal, where a 3 MB cover is
+// still downloading while the track is already playing.
+//
+// So it asks Supabase for the sizes it declares, through the same transform
+// the rest of the app uses. A 512 square comes back around 335 KB as PNG and
+// far less as WebP. Three sizes are offered because the spec lets the consumer
+// pick, and a head unit that wants a small one should not be handed the big
+// one and left to cope.
+const ART_SIZES = [96, 256, 512];
+
 function artworkFor(track) {
   const url = track?.cover_artwork_url;
   if (!url) {
-    // A car that gets no artwork shows its own generic music glyph, which
-    // looks like the track failed to load. The app icon is at least ours.
+    // Better our icon than the head unit's generic glyph, which reads as a
+    // failure rather than as a track without a cover.
     return [
       { src: '/icon-192.png', sizes: '192x192', type: 'image/png' },
       { src: '/icon-512.png', sizes: '512x512', type: 'image/png' },
     ];
   }
-  const ext = (url.split('?')[0].split('.').pop() || '').toLowerCase();
-  const type = ext === 'png' ? 'image/png'
-             : ext === 'webp' ? 'image/webp'
-             : 'image/jpeg';
-  // One entry, honestly described. The old version listed the same URL three
-  // times as 512, 256 and 128, so whichever size the head unit asked for it
-  // was told it was getting, and it was always getting the same file.
-  return [{ src: url, sizes: '512x512', type }];
+  // coverUrl hands back anything that is not a Supabase public object
+  // untouched, so an external cover still works, it just does not shrink.
+  return ART_SIZES.map(px => ({
+    src:   coverUrl(url, px),
+    sizes: `${px}x${px}`,
+    // The transform negotiates on the Accept header, so what actually comes
+    // back is usually WebP. The type here is a hint and browsers do not
+    // enforce it; declaring the wrong exact codec is harmless, declaring the
+    // wrong SIZE is not, which is the half this used to get wrong.
+    type:  'image/jpeg',
+  }));
 }
 
 export function useMediaSession({ currentTrack, isPlaying, togglePlay, playNext, playPrev, seek, currentTime, duration }) {
@@ -119,6 +142,40 @@ export function useMediaSession({ currentTrack, isPlaying, togglePlay, playNext,
     if (!('mediaSession' in navigator)) return;
     navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
   }, [isPlaying]);
+
+  // ── Taking the head unit's display back ──
+  //
+  // A phone holds one active media session at a time, and the last thing to
+  // declare itself playing owns it. Watch something in another tab or another
+  // app and that becomes the session: the car shows its title, and the
+  // steering wheel buttons control it, and they keep doing so after the other
+  // thing has stopped. The music is playing and the dashboard is showing
+  // somebody else's video.
+  //
+  // Re-declaring the metadata and the play state is what takes it back.
+  // Visibility is the moment worth doing it: coming back to this app is
+  // exactly when the other thing has been left, and a driver who has just
+  // switched back should find the wheel controlling the music again.
+  useEffect(() => {
+    if (!('mediaSession' in navigator)) return;
+
+    const reassert = () => {
+      if (document.visibilityState !== 'visible') return;
+      if (!currentTrack || !isPlaying) return;
+      try {
+        navigator.mediaSession.metadata = new window.MediaMetadata({
+          title:   currentTrack.title || 'Unknown Track',
+          artist:  currentTrack.artist_name || 'Unknown Artist',
+          album:   currentTrack.albums?.title || currentTrack.album_title || '',
+          artwork: artworkFor(currentTrack),
+        });
+        navigator.mediaSession.playbackState = 'playing';
+      } catch {}
+    };
+
+    document.addEventListener('visibilitychange', reassert);
+    return () => document.removeEventListener('visibilitychange', reassert);
+  }, [currentTrack, isPlaying]);
 
   // ── Position, only when something moved it ──
   //
