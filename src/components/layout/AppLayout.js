@@ -7,6 +7,7 @@ import MiniPlayer from './MiniPlayer';
 import FullPlayer from './FullPlayer';
 import { usePlayer } from '../../contexts/PlayerContext';
 import { useAuth } from '../../contexts/AuthContext';
+import { myAvatar } from '../../utils/me';
 import { useAppThemeInit } from '../../hooks/useAppTheme';
 import { ListenerThemeProvider } from '../../contexts/ListenerThemeContext';
 import { Bell, Flame, UserCircle, Compass } from 'lucide-react';
@@ -96,7 +97,7 @@ function SplashScreen() {
 function MobileBellButton() {
   const { unreadCount } = useNotifications();
   const { streak, discoveryStreak } = useContext(StreakContext);
-  const { user, artist, isArtist } = useAuth();
+  const { user, artist, listener, isArtist } = useAuth();
   const navigate = useNavigate();
 
   const profilePath = isArtist && artist?.slug
@@ -146,9 +147,12 @@ function MobileBellButton() {
           aria-label="Profile"
           className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-white/[0.06] transition overflow-hidden"
         >
-          {(isArtist ? artist?.profile_image_url : null) ? (
+          {/* Was `isArtist ? artist?.profile_image_url : null`, which handed
+              every listener a null and then the default icon, however good a
+              picture they had uploaded. See src/utils/me.js. */}
+          {myAvatar({ artist, listener, user }) ? (
             <img
-              src={artist.profile_image_url}
+              src={myAvatar({ artist, listener, user })}
               alt="Profile"
               className="w-full h-full object-cover rounded-full"
             />

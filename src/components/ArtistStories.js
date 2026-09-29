@@ -680,13 +680,28 @@ export function StoriesRail({ userId }) {
   useEffect(() => {
     const load = async () => {
       try {
+        // Pins the platform's own stories to the front of the rail. This
+        // already existed and reads an env var; migration 191 creates the
+        // artist it is meant to point at, looked up by the slug
+        // 'feelz-machine'. Set REACT_APP_PLATFORM_ARTIST_ID to that id, or
+        // leave it unset and the pin simply does nothing, which is what it
+        // has been doing.
         const platformArtistId = process.env.REACT_APP_PLATFORM_ARTIST_ID;
 
         // Get all active (non-expired) stories
-        const { data: stories } = await supabase
-          .from('artist_stories')
-          .select('*, tracks:tagged_track_id(id, title, slug, file_url, cover_artwork_url), artists(id, artist_name, slug, profile_image_url, user_id)')
-          .gt('expires_at', new Date().toISOString())
+        // visibleNow, not a bare expires_at check.
+        //
+        // This is the fifth story read in the app and the one that was missed
+        // when publish_at was added, because it lives in a different component
+        // in this same file rather than in one of the pages. It is also the
+        // widest: no artist filter, limit 100, every live story on the
+        // platform. Left as it was, it is the one surface that would have
+        // shown December's planned stories in September, to the two people
+        // the database policy exempts.
+        const { data: stories } = await visibleNow(
+          supabase
+            .from('artist_stories')
+            .select('*, tracks:tagged_track_id(id, title, slug, file_url, cover_artwork_url), artists(id, artist_name, slug, profile_image_url, user_id)'))
           .order('created_at', { ascending: false })
           .limit(100);
 

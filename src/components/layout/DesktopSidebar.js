@@ -4,6 +4,7 @@ import { Home, Search, Library, LayoutDashboard, User, Info, Sparkles } from 'lu
 import { useAuth } from '../../contexts/AuthContext';
 import { Bell } from 'lucide-react';
 import useNotifications from '../../contexts/useNotifications';
+import { myAvatar, myName, myInitial } from '../../utils/me';
 import { supabase } from '../../supabaseClient';
 
 // navItems built dynamically in component based on role
@@ -59,7 +60,7 @@ function AppStoreIcon() {
 export default function DesktopSidebar() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, artist, isBeatmaker, isArtist } = useAuth();
+  const { user, artist, listener, isBeatmaker, isArtist } = useAuth();
 
   const navItems = [
     { path: '/',             icon: Sparkles,        label: 'For You' },
@@ -197,23 +198,27 @@ export default function DesktopSidebar() {
           <Info className="w-4 h-4 text-white/55" />
         </button>
 
-        {/* Artist card */}
-        {artist && (
+        {/* Account card.
+            Was gated on `{artist && ...}`, so a listener got no card at all:
+            no picture, no name, nothing to click. It renders for anybody
+            signed in now, and the picture and name come from the shared
+            resolver in src/utils/me.js rather than from the artist row. */}
+        {user && (
           <button
-            onClick={() => navigate(`/artist/${artist.slug}`)}
+            onClick={() => navigate(artist?.slug ? `/artist/${artist.slug}` : `/listener/${user.id}`)}
             className="w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl hover:bg-white/[0.05] transition-all group"
             style={{ border: '1px solid rgba(255,255,255,0.05)' }}>
             <div className="w-8 h-8 rounded-full overflow-hidden bg-white/10 flex-shrink-0 ring-2 ring-white/10">
-              {artist.profile_image_url
-                ? <img src={artist.profile_image_url} alt="" className="w-full h-full object-cover" />
+              {myAvatar({ artist, listener, user })
+                ? <img src={myAvatar({ artist, listener, user })} alt="" className="w-full h-full object-cover" />
                 : <div className="w-full h-full flex items-center justify-center">
-                    <span className="text-xs font-bold text-white/60">{artist.artist_name?.[0]}</span>
+                    <span className="text-xs font-bold text-white/60">{myInitial({ artist, listener, user })}</span>
                   </div>
               }
             </div>
             <div className="flex-1 min-w-0 text-left">
               <p className="text-xs font-semibold text-white/70 group-hover:text-white truncate transition-colors">
-                {artist.artist_name}
+                {myName({ artist, listener, user })}
               </p>
               <p className="text-xs text-white/25">View profile →</p>
             </div>

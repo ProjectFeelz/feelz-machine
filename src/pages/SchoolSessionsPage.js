@@ -210,6 +210,7 @@ export default function SchoolSessionsPage() {
   const phase = currentPhase(comp);
   const viralCourseUrl = gate.config?.viral_course_url;
   const platformCourseUrl = gate.config?.platform_course_url;
+  const hasCourses = !!(viralCourseUrl || platformCourseUrl);
   const nextSeason = (gate.config?.season || 1) + 1;
 
   const BASE_URL = 'https://www.feelzmachine.com';
@@ -332,7 +333,15 @@ export default function SchoolSessionsPage() {
           <p className="text-lime-400 text-xs lg:text-sm font-bold tracking-widest uppercase">Three months, three phases</p>
           <div className="space-y-3 lg:space-y-0 lg:grid lg:grid-cols-3 lg:gap-4">
             {[
-              { key: 'awareness', icon: Megaphone, title: 'Awareness', desc: 'Get ready, take the courses below, check the song shortlist, spread the word.' },
+              // The courses block below is conditional on the two urls being
+            // set in school_sessions_config, and this line was not. With the
+            // urls empty the page told a student to "take the courses below"
+            // and then showed no courses, which reads as something failing to
+            // load rather than as something not published yet.
+            { key: 'awareness', icon: Megaphone, title: 'Awareness',
+              desc: hasCourses
+                ? 'Get ready, take the courses below, check the song shortlist, spread the word.'
+                : 'Get ready, check the song shortlist, and spread the word.' },
               { key: 'submissions', icon: UploadIcon, title: 'Submissions', desc: 'Pick a song from the shortlist, record your cover, and toggle "Enter into School Sessions" when you upload.' },
               { key: 'voting', icon: ThumbsUp, title: 'Voting', desc: 'Judges announce finalists and pick the winner. The public votes separately for the People\u2019s Choice pick.' },
             ].map((p, i) => {

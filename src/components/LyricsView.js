@@ -55,10 +55,38 @@ function Word({ word, t, theme, reduced }) {
   }
 
   const pct = Math.max(0, Math.min(100, p * 100));
+
+  // WHY THE GRADIENT IS FIXED AND THE POSITION MOVES
+  //
+  // The first version redrew the gradient every tick, hard cut at the word's
+  // progress. It was correct and it looked steppy, for a reason that is not
+  // in this file: currentTime comes from the audio element's `timeupdate`
+  // event (src/contexts/PlayerContext.js:423) and browsers fire that about
+  // four times a second. So the fill advanced in 250ms jumps. On a word that
+  // lasts 300ms that is one jump, which reads as a flicker rather than a
+  // sweep.
+  //
+  // Interpolating in JS with requestAnimationFrame would fix it and would
+  // re-render every line sixty times a second to do it.
+  //
+  // So the browser does the interpolating instead. The gradient never
+  // changes: it is two flat halves of a background twice the width of the
+  // word. Moving background-position from 100% to 0% wipes the sung colour
+  // across the glyphs, and a linear transition of roughly one tick's length
+  // means the paint is still travelling toward the last known position when
+  // the next one arrives. Continuous motion, no animation frames, no extra
+  // renders, and it degrades to the old behaviour if transitions are off.
   return (
     <span
       style={{
-        backgroundImage: `linear-gradient(90deg, ${theme.singing} ${pct}%, ${theme.unsung} ${pct}%)`,
+        backgroundImage: `linear-gradient(90deg, ${theme.singing} 0 50%, ${theme.unsung} 50% 100%)`,
+        backgroundSize: '200% 100%',
+        backgroundPosition: `${100 - pct}% 0`,
+        // 260ms rather than 250: a hair longer than the tick it is bridging,
+        // so the motion is still in flight when the next tick re-targets it.
+        // Shorter and it arrives early and stalls, which is the stutter this
+        // is here to remove.
+        transition: 'background-position 260ms linear',
         WebkitBackgroundClip: 'text',
         backgroundClip: 'text',
         color: 'transparent',
