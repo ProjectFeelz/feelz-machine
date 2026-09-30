@@ -1,6 +1,6 @@
 import { coverUrl } from '../utils/coverUrl';
 import { Helmet } from 'react-helmet-async';
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import useGoBack from '../hooks/useGoBack';
 import { supabase } from '../supabaseClient';
@@ -64,7 +64,7 @@ const TYPE_CONFIG = {
   wheel_challenge:    { icon: TrendingUp,    color: 'text-yellow-400', bg: 'bg-yellow-500/10',  label: 'Challenge' },
 
   // Written by live code and missing from this map, which meant every one of
-  // them rendered with the fallback below — a bug report reply arriving
+  // them rendered with the fallback below, a bug report reply arriving
   // labelled "New Stream", a leaderboard win labelled "New Stream".
   wheel_winner:       { icon: Award,         color: 'text-yellow-400', bg: 'bg-yellow-500/10',  label: 'Winner!' },
   competition_result: { icon: Award,         color: 'text-yellow-400', bg: 'bg-yellow-500/10',  label: 'Result' },
@@ -82,7 +82,7 @@ const TYPE_CONFIG = {
 
 // Everything in TYPE_CONFIG that goes NOWHERE when tapped, so the row can stop
 // advertising itself as tappable. A card with a chevron and a hover state that
-// does nothing is the thing that makes an app feel broken — worse than a card
+// does nothing is the thing that makes an app feel broken, worse than a card
 // that plainly is not a link.
 const INERT_TYPES = new Set(['streak', 'bug_report']);
 
@@ -169,7 +169,7 @@ function formatDate(date) {
 //
 // It wrote track_comments without parent_comment_id, so a reply typed into a
 // notification arrived on the track as a standalone top-level comment with no
-// connection to the thing it answered — the comment thread renders its replies
+// connection to the thing it answered, since the comment thread renders its replies
 // purely from that column (TrackCommentSheet builds topLevel from
 // `!c.parent_comment_id`). The person who was answered saw an unrelated remark.
 //
@@ -240,7 +240,7 @@ function QuickReply({ postId, trackId, parentCommentId = null, replyType = 'post
           : <Send className="w-3.5 h-3.5 text-purple-400" />}
       </button>
       {failed && (
-        <p className="text-[11px] text-red-400 flex-shrink-0">Not sent — try again</p>
+        <p className="text-[11px] text-red-400 flex-shrink-0">Not sent, try again</p>
       )}
     </div>
   );
@@ -513,7 +513,7 @@ export default function NotificationsPage() {
 
   // `firstLoadDone` is what stops the list jumping to the top.
   //
-  // Every refresh — marking one read, a realtime insert, accepting a collab —
+  // Every refresh, whether marking one read, a realtime insert or accepting a collab,
   // called fetchAll(0), which set pageLoading, which swapped the entire list
   // for a centred spinner. The document collapsed to one screen, the browser
   // clamped the scroll to zero, and the list came back at the top. With
@@ -558,7 +558,46 @@ export default function NotificationsPage() {
     setPageLoading(false);
   }, [artist, user]);
 
-  useEffect(() => { setPage(0); fetchAll(0); }, [fetchAll, unreadCount]);
+  // ONE FETCH, then keep the list in step by hand.
+  //
+  // This was `[fetchAll, unreadCount]`, so every time you read a notification
+  // the unread count changed and the whole list refetched from page zero. And
+  // fetchAll replaces the array on page zero, so three pages of loaded history
+  // silently collapsed back to one. Read a notification near the bottom and
+  // everything below it disappeared.
+  //
+  // Depending on unreadCount here was never about freshness. It was a way of
+  // saying "something changed", and it answered by throwing the list away.
+  useEffect(() => { setPage(0); fetchAll(0); }, [fetchAll]);
+
+  // Marking read is a local edit. The write still goes to the database
+  // through markAsRead; this is what the reader sees, immediately, without
+  // the row moving or the page below it vanishing.
+  const markReadLocal = useCallback((id) => {
+    setAllNotifs(prev => prev.map(n => (n.id === id ? { ...n, read: true } : n)));
+  }, []);
+
+  // Dismissing one row.
+  //
+  // Removed from the list first, then deleted. The other way round means
+  // watching a row sit there for the length of a round trip after you have
+  // told it to go, which reads as the button not working.
+  //
+  // A collapsed group dismisses everything it stands for, because that is what
+  // the reader thinks they are dismissing.
+  const dismissOne = useCallback(async (notif) => {
+    const ids = notif._groupRows ? notif._groupRows.map(r => r.id) : [notif.id];
+    setAllNotifs(prev => prev.filter(n => !ids.includes(n.id)));
+    const { error } = await supabase.from('notifications').delete().in('id', ids);
+    if (error) {
+      console.error('[notifications] dismiss failed:', error.code, error.message);
+      // Put it back rather than leaving the reader believing it is gone. It
+      // will reappear on the next load anyway, and a row that returns without
+      // explanation is worse than one that never left.
+      setAllNotifs(prev => [...notif._groupRows || [notif], ...prev]
+        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
+    }
+  }, []);
 
   // Realtime: re-fetch when notifications are inserted OR updated (digest updates)
   useEffect(() => {
@@ -570,8 +609,24 @@ export default function NotificationsPage() {
         schema: 'public',
         table: 'notifications',
         filter: artist ? `artist_id=eq.${artist.id}` : `user_id=eq.${user.id}`,
-      }, () => {
-        fetchAll(0); // refresh the list
+      }, (payload) => {
+        // Prepend the new row rather than refetching. A refetch here reset
+        // pagination and discarded everything the reader had loaded, which on
+        // a busy account meant the list rearranged itself while being read.
+        if (payload.eventType === 'INSERT' && payload.new) {
+          setAllNotifs(prev => (
+            prev.some(n => n.id === payload.new.id) ? prev : [payload.new, ...prev]
+          ));
+          return;
+        }
+        // An UPDATE is a digest being rewritten in place. Patch that one row.
+        if (payload.eventType === 'UPDATE' && payload.new) {
+          setAllNotifs(prev => prev.map(n => (n.id === payload.new.id ? { ...n, ...payload.new } : n)));
+          return;
+        }
+        if (payload.eventType === 'DELETE' && payload.old) {
+          setAllNotifs(prev => prev.filter(n => n.id !== payload.old.id));
+        }
       })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
@@ -583,21 +638,79 @@ export default function NotificationsPage() {
     fetchAll(next);
   };
 
-  const filtered = allNotifs.filter(n => filterMatch(n.type, filter) && !HIDDEN_TYPES.has(n.type));
+  const filtered = useMemo(
+    () => allNotifs.filter(n => filterMatch(n.type, filter) && !HIDDEN_TYPES.has(n.type)),
+    [allNotifs, filter]
+  );
 
-  // Group by date
-  const grouped = {};
-  filtered.forEach(n => {
-    const d = new Date(n.created_at);
+  // COLLAPSING REPEATS.
+  //
+  // Twenty people liking one track was twenty rows. For an artist with any
+  // traction the list stops being readable at exactly the moment it starts
+  // being good news, which is the wrong way round.
+  //
+  // Only UNREAD rows of the same type and subject collapse, and only while
+  // there are three or more. Read rows stay individual because somebody
+  // scrolling back through history is looking for one specific thing, and a
+  // group is harder to find in than a list. A group of two saves no space and
+  // costs a tap.
+  const groupKeyOf = (n) => {
+    const m = n.metadata || {};
+    const subject = m.track_id || m.track_title || m.playlist_id || m.post_id || '';
+    return `${n.type}::${subject}`;
+  };
+
+  // Date buckets, built once per change rather than on every render. This was
+  // rebuilt inline with a fresh `new Date()` per row, on a component that used
+  // to refetch constantly, so it ran far more than anybody intended.
+  const grouped = useMemo(() => {
     const today = new Date();
     const yesterday = new Date(today); yesterday.setDate(yesterday.getDate() - 1);
-    let key;
-    if (d.toDateString() === today.toDateString()) key = 'Today';
-    else if (d.toDateString() === yesterday.toDateString()) key = 'Yesterday';
-    else key = d.toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
-    if (!grouped[key]) grouped[key] = [];
-    grouped[key].push(n);
-  });
+    const todayStr = today.toDateString();
+    const yesterdayStr = yesterday.toDateString();
+
+    const out = {};
+    filtered.forEach(n => {
+      const d = new Date(n.created_at);
+      const ds = d.toDateString();
+      const key = ds === todayStr ? 'Today'
+                : ds === yesterdayStr ? 'Yesterday'
+                : d.toLocaleDateString('en-GB', { month: 'long', day: 'numeric' });
+      if (!out[key]) out[key] = [];
+      out[key].push(n);
+    });
+
+    // Collapse within each day, never across days: "20 people liked this"
+    // spanning a week is not one event and should not read as one.
+    Object.keys(out).forEach(day => {
+      const seen = new Map();
+      out[day].forEach(n => {
+        if (n.read) return;
+        const k = groupKeyOf(n);
+        if (!seen.has(k)) seen.set(k, []);
+        seen.get(k).push(n);
+      });
+
+      const collapsed = new Map();
+      seen.forEach((rows, k) => { if (rows.length >= 3) collapsed.set(k, rows); });
+      if (collapsed.size === 0) return;
+
+      const used = new Set();
+      out[day] = out[day].flatMap(n => {
+        if (n.read) return [n];
+        const k = groupKeyOf(n);
+        const rows = collapsed.get(k);
+        if (!rows) return [n];
+        if (used.has(k)) return [];
+        used.add(k);
+        // The newest row carries the group, so the artwork, the link and the
+        // copy are all real rather than synthesised.
+        return [{ ...rows[0], _groupCount: rows.length, _groupRows: rows }];
+      });
+    });
+
+    return out;
+  }, [filtered]);
 
   // Types that have inline actions (don't navigate on tap)
   const INLINE_ACTION_TYPES = new Set(['collab_request']);
@@ -612,8 +725,8 @@ export default function NotificationsPage() {
   // streak and top_supporter genuinely have nowhere to go: they are about
   // you, not about a track or a person, so they stay read-only.
   //
-  // top_supporter is OUT of this set. It has a perfectly good destination —
-  // the artist you are a top supporter of — and a branch further down that
+  // top_supporter is OUT of this set. It has a perfectly good destination,
+  // the artist you are a top supporter of, and a branch further down that
   // navigates there, which this early return made unreachable. A dead branch
   // and a dead tap, from one line.
   const READ_ONLY_TYPES = new Set([
@@ -669,6 +782,7 @@ export default function NotificationsPage() {
 
   const handleClick = async (notif) => {
     markAsRead(notif.id);
+    markReadLocal(notif.id);
     if (INLINE_ACTION_TYPES.has(notif.type)) return;
     if (READ_ONLY_TYPES.has(notif.type)) return;
 
@@ -727,7 +841,7 @@ export default function NotificationsPage() {
 
     if (type === 'track_liked') {
       // For story likes, no track involved
-      // `/artist/` with an empty slug is a real navigation to a broken route —
+      // `/artist/` with an empty slug is a real navigation to a broken route,
       // a blank page, which is worse than staying put.
       if (meta.story_id) {
         const storySlug = notif.from_artist?.slug || meta.from_artist_slug;
@@ -892,7 +1006,7 @@ export default function NotificationsPage() {
       //
       // "You just listened to 500 tracks!" is written by
       // check_listener_stream_milestones, whose metadata carries
-      // listener_streams and milestone_type and no track at all — so it always
+      // listener_streams and milestone_type and no track at all, so it always
       // fell past both lines above and landed on the artist dashboard's
       // analytics, or on Browse. Tapping a message about your own listening and
       // arriving at a stats page for somebody's catalogue is the app losing
@@ -934,7 +1048,7 @@ export default function NotificationsPage() {
     //
     // Every type below is written by live code and had no branch here at all,
     // so tapping one marked it read and did nothing. They were also rendered
-    // with the fallback badge, which is "New Stream" — a bug report reply
+    // with the fallback badge, which is "New Stream". A bug report reply
     // arriving labelled New Stream.
     if (type === 'bug_reply') {
       // Straight into the bug room, which is where the reply is.
@@ -945,7 +1059,7 @@ export default function NotificationsPage() {
     }
     if (type === 'challenge_xp')     { navigate('/competitions'); return; }
     if (type === 'featured_placement') {
-      // Take them to the board they are on, not to their own dashboard —
+      // Take them to the board they are on, not to their own dashboard,
       // the whole reward is being seen next to everyone else.
       navigate('/browse?tab=featured');
       return;
@@ -1093,14 +1207,33 @@ export default function NotificationsPage() {
           <Loader className="w-5 h-5 animate-spin text-white/30" />
         </div>
       ) : filtered.length === 0 ? (
-        <div className="text-center py-16">
+        <div className="text-center py-16 px-6">
           <Bell className="w-10 h-10 mx-auto text-white/10 mb-3" />
           <p className="text-white/30 text-sm">
-            {filter === 'all' ? 'No notifications yet' : `No ${filter} notifications`}
+            {filter === 'all' ? 'No notifications yet' : `Nothing in ${filter} yet`}
           </p>
-          {!artist && filter === 'all' && (
-            <p className="text-white/15 text-xs mt-2">Follow artists to get notified when they drop new music</p>
-          )}
+          {/* An empty tab is the moment to say what would put something in it.
+              Every tab but All used to stop at "No social notifications",
+              which tells somebody the tab works and nothing else. */}
+          <p className="text-white/20 text-xs mt-2 max-w-xs mx-auto leading-relaxed">
+            {filter === 'all'
+              ? (artist
+                  ? 'Follows, comments, sales and milestones all land here.'
+                  : 'Follow artists to hear when they drop new music.')
+              : filter === 'social'
+              ? (artist
+                  ? 'Follows, comments, messages and posts about you show up here.'
+                  : 'Follows, replies and messages show up here.')
+              : filter === 'money'
+              ? (artist
+                  ? 'Tips, sales, downloads and payouts land here as they happen.'
+                  : 'Anything you buy or tip shows up here.')
+              : filter === 'milestones'
+              ? 'Streaks, first listeners and the numbers worth stopping for.'
+              : filter === 'collabs'
+              ? 'Collaboration invites and remix requests arrive here.'
+              : ''}
+          </p>
         </div>
       ) : (
         <div className="space-y-6">
@@ -1140,7 +1273,7 @@ export default function NotificationsPage() {
                   // Monthly wrapped gets its own card
                   if (notif.type === 'monthly_wrapped') {
                     return (
-                      <div key={notif.id} onClick={() => { if (!notif.read) markAsRead(notif.id); }}>
+                      <div key={notif.id} onClick={() => { if (!notif.read) { markAsRead(notif.id); markReadLocal(notif.id); } }}>
                         <WrappedCard notification={notif} compact />
                       </div>
                     );
@@ -1150,7 +1283,7 @@ export default function NotificationsPage() {
                     <div
                       key={notif.id}
                       onClick={() => handleClick(notif)}
-                      className={`w-full flex items-start space-x-3 px-4 py-3.5 rounded-xl transition-all text-left ${
+                      className={`group relative w-full flex items-start space-x-3 px-4 py-3.5 rounded-xl transition-all text-left ${
                         isInert(notif) ? 'cursor-default' : 'cursor-pointer'
                       } ${
                         !isRead
@@ -1177,9 +1310,20 @@ export default function NotificationsPage() {
                       <div className="flex-1 min-w-0">
 
                         {/* Title */}
-                        <p className={`text-[15px] leading-snug font-semibold ${!isRead ? 'text-white' : 'text-white/60'}`}>
+                        {/* pr-4 only when unread, because that is the only
+                            time the dot is in the top right corner for a long
+                            title to run underneath. */}
+                        <p className={`text-[15px] leading-snug font-semibold ${!isRead ? 'text-white pr-4' : 'text-white/60'}`}>
                           {notif.title}
                         </p>
+                        {/* What a collapsed group stands for. Without this the
+                            reader sees one like and has no idea nineteen more
+                            are behind it. */}
+                        {notif._groupCount > 1 && (
+                          <p className="text-[11px] font-semibold text-white/40 mt-0.5">
+                            and {notif._groupCount - 1} more like this
+                          </p>
+                        )}
 
                         {/* Message */}
                         {notif.message && (
@@ -1292,18 +1436,54 @@ export default function NotificationsPage() {
                           </div>
                         )}
 
-                        {/* Meta row: type badge + timestamp */}
-                        <div className="flex items-center space-x-2 mt-2">
+                        {/* Meta row: type badge, timestamp, dismiss.
+                            DISMISS LIVES HERE, IN THE FLOW, NOT IN A CORNER.
+                            The blue dot owns the top right corner, so an
+                            absolutely positioned X there would sit on top of
+                            it. Floating the X anywhere else over the card is
+                            worse: this body also renders accept and decline
+                            buttons, a download button and a reply box, and an
+                            overlay has no way of knowing what is underneath
+                            it. In the meta row it cannot overlap anything,
+                            because the layout is doing the placing rather than
+                            me guessing coordinates.
+                            ml-auto pushes it to the right edge, so it still
+                            reads as the row's own control rather than another
+                            action on the notification.
+                            gap-2 rather than space-x-2, and this is not a
+                            style preference. space-x-2 compiles to a
+                            margin-left on every child after the first, at a
+                            higher specificity than ml-auto, so ml-auto lost
+                            and the button rendered tight against the
+                            timestamp in the middle of the row. Measured, not
+                            assumed. */}
+                        <div className="flex items-center gap-2 mt-2">
                           <span className={`text-[11px] px-2 py-0.5 rounded-full font-semibold ${config.bg} ${config.color}`}>
                             {config.label}
                           </span>
                           <span className="text-[11px] text-white/25">{formatDate(notif.created_at)}</span>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); dismissOne(notif); }}
+                            aria-label={notif._groupRows ? `Dismiss these ${notif._groupRows.length}` : 'Dismiss'}
+                            title="Dismiss"
+                            className="ml-auto flex-shrink-0 w-7 h-7 -my-1 rounded-lg flex items-center justify-center
+                                       text-white/30 hover:text-white/80 hover:bg-white/[0.08] transition"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
                         </div>
                       </div>
 
-                      {/* Unread dot */}
+                      {/* UNREAD DOT.
+                          Back where it was. The edge bar I had put on the left
+                          is gone with it: one state deserves one marker, and
+                          this is the one people already know from the rest of
+                          the app. */}
                       {!isRead && (
-                        <div className="w-2 h-2 rounded-full bg-white mt-2.5 flex-shrink-0" />
+                        <span
+                          className="absolute right-3 top-4 w-2 h-2 rounded-full bg-blue-400 flex-shrink-0"
+                          aria-label="Unread"
+                        />
                       )}
                     </div>
                   );
