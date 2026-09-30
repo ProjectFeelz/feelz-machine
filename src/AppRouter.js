@@ -2,6 +2,9 @@ import React, { useEffect, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { HelmetProvider, Helmet } from 'react-helmet-async';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+// A tiny synchronous localStorage read. Imported eagerly on purpose: the
+// router guard renders and cannot await a lazy chunk to decide a redirect.
+import { hasSeenWelcome } from './pages/Welcome';
 import { PlayerProvider } from './contexts/PlayerContext';
 import { TierProvider } from './contexts/useTier';
 import { OfflineProvider } from './contexts/OfflineContext';
@@ -106,6 +109,7 @@ const AdminHomeHero = React.lazy(() => import('./pages/AdminHomeHero'));
 const AdminNews = React.lazy(() => import('./pages/AdminNews'));
 const AdminColdStart = React.lazy(() => import('./pages/AdminColdStart'));
 const AdminFeed = React.lazy(() => import('./pages/AdminFeed'));
+const LearnPage = React.lazy(() => import('./pages/LearnPage'));
 const HiddenPage = React.lazy(() => import('./pages/HiddenPage'));
 const ContactPreferencesPage = React.lazy(() => import('./pages/ContactPreferencesPage'));
 const ArtistCollectionPage = React.lazy(() => import('./pages/ArtistCollectionPage'));
@@ -247,7 +251,21 @@ function OnboardingGuard({ children }) {
   // LoginPage stores that choice, and AuthContext clears it the moment it uses
   // it, so reading it here is safe: if it is still set, the artist row has not
   // been made yet and /setup is where they belong.
-  if (user && !artist && !listener) {
+  //
+  // hasSeenWelcome is the circuit breaker, and it is not decoration.
+  //
+  // This condition reads the TABLES. If the rows are missing for any reason,
+  // and finishing the flow fails to create them, the person is sent back here
+  // on every single sign in with no way out. That happened: Welcome.js used
+  // `.update()` on listeners, which matches nothing when there is no row and
+  // reports success anyway, so an account with no listeners row was asked what
+  // it wanted to be forever.
+  //
+  // The write is fixed. This is the second lock on the same door: once
+  // somebody has been through the flow, they are let into the app even if the
+  // rows are not what we expect. A thin profile they can fix in settings is a
+  // far better failure than an account that cannot be used at all.
+  if (user && !artist && !listener && !hasSeenWelcome()) {
     // Everybody goes to /welcome now, whichever kind of account they asked
     // for. Welcome.js reads the same pending_creator_role key and picks the
     // right set of questions, so the branch that used to live here has moved
@@ -423,6 +441,7 @@ export default function AppRouter() {
                 <Route path="/notifications" element={<NotificationsPage />} />
                 <Route path="/hub" element={<HubPage />} />
                 <Route path="/about" element={<AboutPage />} />
+                <Route path="/learn" element={<LearnPage />} />
                 <Route path="/vs/:platform" element={<ComparisonPage />} />
                 <Route path="/album/:id" element={<AlbumDetailPage />} />
                 {/* TrackDetailPage consolidated into TrackPage below */}

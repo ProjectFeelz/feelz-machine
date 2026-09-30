@@ -86,6 +86,14 @@ export default function SchoolLessonList({ lessons, title, desc }) {
 
   const doneCount = list.filter(l => watched.includes(l.id)).length;
 
+  // NEXT UP, which is what makes this a drip rather than a wall of fourteen
+  // videos. The first lesson they have not opened is marked; everything else
+  // stays exactly as watchable as before. A lock would be the obvious way to
+  // pace a course and it would be the wrong one here: somebody who wants to
+  // binge it the night before they upload should be able to, and somebody who
+  // arrives at week nine should not be told to come back in nine weeks.
+  const nextUp = list.find(l => !watched.includes(l.id));
+
   return (
     <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] overflow-hidden">
       <div className="flex items-start gap-3 p-3.5 lg:p-4 border-b border-white/[0.06]">
@@ -135,6 +143,11 @@ export default function SchoolLessonList({ lessons, title, desc }) {
                   <span className={`block text-sm truncate ${seen ? 'text-white/55' : 'text-white'}`}>
                     {lesson.title}
                   </span>
+                  {nextUp && nextUp.id === lesson.id && doneCount > 0 && (
+                    <span className="block text-[10px] font-bold uppercase tracking-wider text-lime-300/80 mt-0.5">
+                      Next up
+                    </span>
+                  )}
                 </span>
 
                 {len && <span className="text-[11px] text-white/30 tabular-nums flex-shrink-0">{len}</span>}

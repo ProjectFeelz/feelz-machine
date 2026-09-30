@@ -228,11 +228,51 @@ export default function Welcome() {
           updated_at: new Date().toISOString(),
         }, { onConflict: 'user_id' });
 
-        await supabase.from('listeners').update({
+        // UPSERT, not update.
+        //
+        // This was `.update(...).eq('user_id', user.id)`, which matches zero
+        // rows when the account has no listeners row yet and returns success
+        // anyway, because updating nothing is not an error. So the flow
+        // finished, navigated away, and created nothing.
+        //
+        // The guard in AppRouter sends anybody with no artist AND no listener
+        // row back to /welcome. Between the two, an account that never got a
+        // listeners row was asked what it wanted to be on every single sign
+        // in, forever, with no way out. That is the feelzmachine@gmail loop.
+        const { error: lErr } = await supabase.from('listeners').upsert({
+          user_id: user.id,
           display_name: finalName,
           ...(avatarUrl ? { avatar_url: avatarUrl } : {}),
           updated_at: new Date().toISOString(),
-        }).eq('user_id', user.id);
+        }, { onConflict: 'user_id' });
+        if (lErr) throw lErr;
+      } else if (role !== 'listener' && !artist?.id) {
+        // No artist row yet, which the old code handled by doing nothing at
+        // all: not the artists row, not even user_profiles. Somebody who
+        // signed up to release music and whose row had not been created got
+        // every answer thrown away and was then asked again next time.
+        //
+        // user_profiles first, so the name survives even if the artists
+        // insert is refused.
+        await supabase.from('user_profiles').upsert({
+          user_id: user.id, name: finalName, bio: bio.trim() || null,
+          genre: genres[0] || null, genre_preferences: genres,
+          ...(avatarUrl ? { avatar_url: avatarUrl } : {}),
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'user_id' });
+
+        const base = generateSlug(finalName || '');
+        const { error: aErr } = await supabase.from('artists').insert({
+          user_id: user.id,
+          artist_name: finalName,
+          bio: bio.trim() || null,
+          genre: genres[0] || null,
+          role,
+          role_confirmed: true,
+          ...(base ? { slug: await getUniqueSlug(base, null) } : {}),
+          ...(avatarUrl ? { profile_image_url: avatarUrl } : {}),
+        });
+        if (aErr) throw aErr;
       } else if (artist?.id) {
         const update = {
           artist_name: finalName,
@@ -268,8 +308,26 @@ export default function Welcome() {
         return;
       }
     }
-    // Remembered locally as well as in the database, so this never reappears
-    // because of a slow query. markWelcomeSeen is what the guard reads.
+    // THE DURABLE MARKER. This is the one that stops the loop.
+    //
+    // Everything above writes the ANSWERS. None of it records the fact that
+    // the person was here, and a skip writes an empty genres array, which the
+    // old completion test read as "not done". So a skip was remembered only
+    // in localStorage, and the app asked again on every new browser, every
+    // installed-app session, every cleared cache, forever.
+    //
+    // Written outside the try above on purpose: if saving the answers failed,
+    // the person still went through this and must not be asked again. Losing
+    // their genres is a worse feed. Losing this is an account that nags.
+    try {
+      await supabase.from('user_profiles').upsert({
+        user_id: user.id,
+        welcome_completed_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'user_id' });
+    } catch { /* the local flag below still covers this device */ }
+
+    // Local as well, because it is free and it is the common case.
     markWelcomeSeen();
     navigate(goTo || flow.doneTo, { replace: true });
   };
@@ -402,10 +460,31 @@ export function markWelcomeSeen() {
   try { localStorage.setItem(SEEN_KEY, '1'); } catch {}
 }
 
+// Synchronous, for the router guard, which renders and cannot await.
+export function hasSeenWelcome() {
+  try { return localStorage.getItem(SEEN_KEY) === '1'; } catch { return false; }
+}
+
 export async function needsWelcome(user, artist) {
   if (!user) return false;
   try { if (localStorage.getItem(SEEN_KEY) === '1') return false; } catch {}
   try {
+    // The durable marker, asked before anything else and before any guessing.
+    //
+    // Everything below this line is inference: has a name, picked genres, has
+    // a slug. Inference is how this went wrong, because somebody who SKIPS
+    // satisfies none of it and is therefore asked again forever, on a screen
+    // whose own copy promises skipping is a real option.
+    //
+    // welcome_completed_at is not an inference. It is set the moment somebody
+    // finishes or skips, and once it is set nothing here may ask again.
+    const { data: doneRow } = await supabase
+      .from('user_profiles')
+      .select('welcome_completed_at')
+      .eq('user_id', user.id)
+      .maybeSingle();
+    if (doneRow?.welcome_completed_at) { markWelcomeSeen(); return false; }
+
     // An artist who has named themselves has been set up, here or in /setup.
     // The auto-generated placeholder name contains a dash and six random
     // characters, so it is not evidence of anything.

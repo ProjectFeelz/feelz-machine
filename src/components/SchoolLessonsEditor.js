@@ -21,7 +21,7 @@
 // statement instead. See migration 207.
 
 import React from 'react';
-import { ArrowUp, ArrowDown, Trash2, Plus, Loader } from 'lucide-react';
+import { ArrowUp, ArrowDown, Trash2, Plus, Loader, Send } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import { isYouTube } from '../utils/youtube';
 
@@ -121,6 +121,49 @@ export default function SchoolLessonsEditor({ courseKey, label }) {
     load();
   };
 
+  // ── Weekly drafts ──────────────────────────────────────────────────────────
+  //
+  // One newsletter draft per lesson, a week apart, written from the lessons
+  // that actually exist rather than from a template guessing at their titles.
+  // NOTHING IS SENT. Every draft lands unsent in the newsletter list with a
+  // note saying which week it belongs to, and Davu sends them.
+  //
+  // Deliberately NOT posted to What's New. That card shows sixteen items,
+  // newest first with pinned on top, and nothing in platform_news expires. So
+  // fourteen course posts would push every evergreen guide off the end and
+  // there is no mechanism that would ever bring them back.
+  const makeDrafts = async () => {
+    if (rows.length === 0) { setNote('Add the lessons first.'); return; }
+    const ok = window.confirm(
+      `Create ${rows.length} unsent drafts, one per lesson, a week apart?\n\n` +
+      `Nothing is sent. They appear in the newsletter list for Davu, each noted with its week.`
+    );
+    if (!ok) return;
+
+    setBusy(true); setNote('');
+    const start = new Date();
+    const payload = rows.map((r, i) => {
+      const when = new Date(start.getTime() + i * 7 * 86400000);
+      const dateStr = when.toLocaleDateString('en-GB', { day: 'numeric', month: 'long' });
+      return {
+        title:   `Lesson ${i + 1}: ${r.title}`,
+        excerpt: `${r.title}. A few minutes, and the rest of the course is there if you want to run ahead.`,
+        audience: 'main_app',
+        note:    `Course drip, week ${i + 1} of ${rows.length}. Send on or after ${dateStr}. In-app only, no email.`,
+        body:
+          `<p>This week's lesson: <strong>${r.title}</strong>.</p>` +
+          `<p><a href="/learn">Watch it here</a>. It is short, and you can stop anywhere.</p>` +
+          `<p>The whole course is on that page too, so if you would rather not wait a week between lessons, you do not have to. Nothing is locked.</p>` +
+          `<p>Steve</p>`,
+      };
+    });
+
+    const { error } = await supabase.from('newsletter_drafts').insert(payload);
+    setBusy(false);
+    if (error) { setNote('Could not create the drafts: ' + error.message); return; }
+    setNote(`${payload.length} drafts created, all unsent. They are in the newsletter list.`);
+  };
+
   const notYouTube = rows.filter(r => !isYouTube(r.url)).length;
 
   return (
@@ -144,11 +187,18 @@ export default function SchoolLessonsEditor({ courseKey, label }) {
         value={bulk}
         onChange={e => setBulk(e.target.value)}
       />
-      <button onClick={addBulk} disabled={busy || !bulk.trim()}
-        className="mt-2 px-3.5 py-2 rounded-lg bg-white/[0.08] text-white text-xs font-semibold hover:bg-white/[0.14] transition disabled:opacity-30 flex items-center gap-1.5">
-        {busy ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
-        Add these
-      </button>
+      <div className="flex items-center gap-2 mt-2 flex-wrap">
+        <button onClick={addBulk} disabled={busy || !bulk.trim()}
+          className="px-3.5 py-2 rounded-lg bg-white/[0.08] text-white text-xs font-semibold hover:bg-white/[0.14] transition disabled:opacity-30 flex items-center gap-1.5">
+          {busy ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+          Add these
+        </button>
+        <button onClick={makeDrafts} disabled={busy || rows.length === 0}
+          className="px-3.5 py-2 rounded-lg bg-white/[0.06] text-white/70 text-xs font-semibold hover:bg-white/[0.12] transition disabled:opacity-30 flex items-center gap-1.5">
+          <Send className="w-3.5 h-3.5" />
+          Create weekly drafts
+        </button>
+      </div>
 
       {notYouTube > 0 && (
         <p className="text-[11px] text-amber-200/60 mt-2">

@@ -15,7 +15,7 @@ import { Bell, Flame, UserCircle, Compass } from 'lucide-react';
 import useNotifications from '../../contexts/useNotifications';
 import { OfflineBanner } from '../../hooks/useOffline';
 import ErrorBoundary from '../ErrorBoundary';
-import AppTour, { useTourState } from '../AppTour';
+import CoursePrompt from '../CoursePrompt';
 import { useStreak } from '../../hooks/useStreak';
 import { StreakContext } from '../../contexts/StreakContext';
 import InstallPrompt from '../InstallPrompt';
@@ -182,7 +182,6 @@ export default function AppLayout() {
   const streakValue = useStreak(user);
 
   // Tour, fires once per account type after first sign-up
-  const { show: showTour, dismiss: dismissTour } = useTourState(isArtist, !loading);
 
   // Splash: wait for auth, then small buffer to avoid flash
   useEffect(() => {
@@ -294,6 +293,10 @@ export default function AppLayout() {
               main { padding-right: ${currentTrack && !isMinimized ? '400px' : '0px'}; transition: padding-right 0.18s ease; }
             }
           `}</style>
+          {/* Waits for the welcome tour to finish, then offers the course
+              once. Dismissed for good on the X. See src/components/CoursePrompt.js */}
+          <CoursePrompt userId={user?.id} />
+
           <div className="md:px-8 md:pt-8 w-full">
             <ErrorBoundary>
               <Outlet />
@@ -321,9 +324,14 @@ export default function AppLayout() {
           <ListenerCreateMenu onClose={() => setShowCreateMenu(false)} />
         )}
 
-        {showTour && splashDone && !loading && hasProfile && (
-          <AppTour isArtist={isArtist} isBeatmaker={isBeatmaker} onDone={dismissTour} />
-        )}
+        {/* The welcome tour is gone. It was thirty slides, sixteen for a
+            listener and fourteen for an artist, firing after somebody had
+            already answered five questions and before they had got anything
+            out of the app. That is where people left.
+            The same material now lives in the course at /learn, offered by
+            CoursePrompt and reachable from both plus menus and About, so it
+            is there when somebody wants it instead of standing between them
+            and the music. */}
         <InstallPrompt />
       </div>
     </StreakContext.Provider>

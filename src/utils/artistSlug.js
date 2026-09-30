@@ -31,11 +31,20 @@ export function generateSlug(name) {
 // your profile without changing your name would collide with yourself and
 // pointlessly churn your own URL.
 export async function getUniqueSlug(base, currentArtistId) {
-  const { count } = await supabase
+  // The .neq is applied ONLY when there is an id to exclude.
+  //
+  // It used to be unconditional, and called with null it became `id != null`,
+  // which in SQL is never true rather than always true. So the count came back
+  // 0 for a slug that was already taken and this handed it straight back,
+  // which then fails on the unique index at insert time. That path had no
+  // caller until a new artist row was created without one, and it would have
+  // been a confusing failure to trace from the error alone.
+  let q = supabase
     .from('artists')
     .select('*', { count: 'exact', head: true })
-    .eq('slug', base)
-    .neq('id', currentArtistId);
+    .eq('slug', base);
+  if (currentArtistId) q = q.neq('id', currentArtistId);
+  const { count } = await q;
   if (!count) return base;
   const suffix = Math.random().toString(36).slice(2, 6);
   return `${base}-${suffix}`;

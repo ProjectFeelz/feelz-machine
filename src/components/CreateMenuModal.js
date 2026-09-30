@@ -289,6 +289,10 @@ export default function CreateMenuModal({ artist, user, onClose, primaryColor = 
                 { id: 'memo', icon: '🎙️', label: 'Voice Memo', sub: 'Record a message for your fans', color: 'pink' },
                 { id: 'live', icon: '🔴', label: 'Go Live', sub: 'Start a live session', color: 'red' },
                 ...(canNewsletter ? [{ id: 'newsletter', icon: '📨', label: 'Newsletter', sub: 'Write an update for the app or venues', color: 'purple' }] : []),
+                // Last on purpose. It is the one thing here that is not an
+                // action on your own catalogue, and somebody who needs it is
+                // looking for it rather than reaching past it.
+                { id: 'course', icon: '🎓', label: 'How to Use Feelz Machine', sub: 'Recording, uploading, splits, getting paid', color: 'gray' },
               ].map(({ id, icon, label, sub }) => (
                 <button key={id}
                   onClick={() => {
@@ -302,6 +306,7 @@ export default function CreateMenuModal({ artist, user, onClose, primaryColor = 
                     else if (id === 'merch_locked') { close(); navigate('/upgrade'); }
                     else if (id === 'newsletter') { close(); navigate('/newsletter/compose'); }
                     else if (id === 'chats') { close(); navigate('/community'); }
+                    else if (id === 'course') { close(); navigate('/learn'); }
                     else setCreateTab(id);
                   }}
                   className="w-full flex items-center space-x-3 p-4 rounded-2xl border transition active:scale-[0.98] text-left"
