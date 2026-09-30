@@ -305,6 +305,13 @@ export default function HubPage() {
             </Section>
 
             <Section title="School Sessions" icon={Trophy}>
+              {/* The control panel leads, because it is the one you reach for
+                  most and it was the one you could not reach at all. The route
+                  has existed since the panel was built but nothing in the app
+                  ever linked to it, so it was only findable by typing
+                  /admin/school-sessions into the address bar. The path is
+                  unchanged, so any bookmark still works. */}
+              <LinkCard icon={SlidersHorizontal} label="Run the Competition" description="Dates, schools, shortlist, courses, entries" path="/admin/school-sessions" color="bg-lime-500/20" />
               <LinkCard icon={Trophy} label="Public Page Preview" description="See it even while it's switched off" path="/schoolsessions" color="bg-lime-500/20" />
               <LinkCard icon={Trophy} label="Judge Panel" description="Mark finalists and pick the winner" path="/schoolsessions/judge" color="bg-lime-500/20" />
             </Section>

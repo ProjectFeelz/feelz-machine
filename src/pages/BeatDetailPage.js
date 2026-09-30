@@ -105,7 +105,30 @@ export default function BeatDetailPage() {
         t = t2;
       }
 
-      if (!t) { setLoading(false); return; }
+      // Not a beat under this slug. Before giving up, check whether it is an
+      // ordinary track, and send them there.
+      //
+      // WHY: the action sheet picks its destination with
+      // `track.is_beat ? '/beat' : '/track'`, and is_beat is only right if the
+      // surface that opened the sheet happened to SELECT that column. Several
+      // do not, so a beat opened from those lands on /track, and a track whose
+      // row has is_beat set lands on /beat. Either way the page queried with
+      // the wrong `.eq('is_beat', ...)` filter, found nothing, and showed a
+      // dead end for a track that exists and is perfectly reachable.
+      //
+      // Fixing the callers would mean auditing every select in the app and
+      // would break again the next time somebody adds one. The page knowing
+      // how to hand off is the version that stays fixed.
+      if (!t) {
+        const { data: asTrack } = await supabase
+          .from('tracks').select('slug, is_beat').eq('slug', slug).maybeSingle();
+        if (asTrack && asTrack.is_beat !== true) {
+          navigate(`/track/${asTrack.slug}`, { replace: true });
+          return;
+        }
+        setLoading(false);
+        return;
+      }
       setTrack(t);
       setArtist(t.artists);
       setLikeCount(t.like_count || 0);

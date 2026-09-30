@@ -51,7 +51,7 @@ exports.handler = async (event) => {
     // NOT pwyw_minimum_price. That column is in schema_dump.sql but not in the
     // database, see the note in paypal-order.js. Selecting it here would take
     // out every download on the platform, not just the PWYW ones.
-    .select('file_url, title, slug, is_preorder, release_date, download_price, is_downloadable, artist_id, album_id, pay_what_you_want, minimum_price')
+    .select('file_url, title, slug, is_preorder, release_date, download_price, is_downloadable, artist_id, album_id, pay_what_you_want, minimum_price, preorder_early_access')
     .eq('id', trackId)
     .maybeSingle();
 
@@ -75,14 +75,44 @@ exports.handler = async (event) => {
     const now = new Date();
     const releaseDate = new Date(track.release_date);
     if (releaseDate > now) {
-      return {
-        statusCode: 403,
-        body: JSON.stringify({
-          error: 'not_released_yet',
-          release_date: track.release_date,
-          message: 'This track has not been released yet. You will be able to download it on the release date.',
-        }),
-      };
+      // Did they pre-order it, and has the artist opened early access on this
+      // release? Both questions are asked here rather than reusing the
+      // purchase check further down, because that one runs long after this
+      // gate and moving it would mean restructuring a function that works.
+      // This costs two reads and only on a pre-order before its date, which
+      // is the rarest path in here.
+      let earlyAccess = track.preorder_early_access === true;
+      if (!earlyAccess && track.album_id) {
+        const { data: alb } = await adminClient.from('albums')
+          .select('preorder_early_access').eq('id', track.album_id).maybeSingle();
+        earlyAccess = alb?.preorder_early_access === true;
+      }
+
+      let owned = false;
+      {
+        let lookup = adminClient.from('purchases').select('id')
+          .eq('user_id', user.id).eq('status', 'completed');
+        lookup = track.album_id
+          ? lookup.or(`track_id.eq.${trackId},album_id.eq.${track.album_id}`)
+          : lookup.eq('track_id', trackId);
+        const { data: paidRows } = await lookup.limit(1);
+        owned = (paidRows?.length || 0) > 0;
+      }
+
+      if (!(earlyAccess && owned)) {
+        return {
+          statusCode: 403,
+          body: JSON.stringify({
+            error: 'not_released_yet',
+            release_date: track.release_date,
+            // Lets the client tell a buyer from a stranger. A person who has
+            // paid should be told they own it and when it unlocks; a person
+            // who has not should be invited to pre-order.
+            owned,
+            message: 'This track has not been released yet. You will be able to download it on the release date.',
+          }),
+        };
+      }
     }
   }
 
@@ -129,7 +159,16 @@ exports.handler = async (event) => {
     const { data: artistCheck } = await adminClient
       .from('artists').select('id').eq('user_id', user.id).maybeSingle();
 
-    if (!artistCheck) {
+    // Platform admins bypass it too, matching get-offline-url.js. This
+    // currently changes nothing for anybody, because every admin on the
+    // platform also has an artist row and was already bypassing on that.
+    // It is here so the two functions cannot drift: an admin who is not an
+    // artist would otherwise be entitled to offline and rationed on
+    // downloads, and nobody would find out until it happened to them.
+    const { data: adminCheck } = await adminClient
+      .from('admins').select('user_id').eq('user_id', user.id).maybeSingle();
+
+    if (!artistCheck && !adminCheck) {
       // This is a listener, check their tier.
       //
       // BOTH sources, in the order they are authoritative. This function used

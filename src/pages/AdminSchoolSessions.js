@@ -8,6 +8,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import useGoBack from '../hooks/useGoBack';
 import { supabase } from '../supabaseClient';
+import SchoolLessonsEditor from '../components/SchoolLessonsEditor';
 import { useAuth } from '../contexts/AuthContext';
 import {
   GraduationCap, ArrowLeft, Loader, Plus, X, Download, Check, Trophy, Music,
@@ -645,18 +646,31 @@ export default function AdminSchoolSessions({ embedded = false }) {
               onChange={e => setConfig({ ...config, season: e.target.value })}
               onBlur={e => saveConfig({ season: parseInt(config.season) || 1 })} />
           </Field>
-          <Field label='"How to Use Feelz Machine" course URL' hint="Hosted on projectfeelz.com">
+          {/* The hints used to say "Hosted on projectfeelz.com", which stopped
+              being true when these started embedding. A YouTube link now
+              plays inside the School Sessions page; anything else still opens
+              in a new tab exactly as before. A playlist is usually the better
+              answer for a long tutorial: it breaks into segments and
+              auto-advances, and the student never leaves the page.
+              The playlist has to be Public or Unlisted. Private embeds as a
+              blank box with no error. */}
+          <Field label='"How to Use Feelz Machine" course URL'
+                 hint="A YouTube video or playlist plays inline on the page. Any other link opens in a new tab. Playlists must be Public or Unlisted.">
             <input className={inputCls} value={config?.platform_course_url || ''}
               onChange={e => setConfig({ ...config, platform_course_url: e.target.value })}
               onBlur={e => saveConfig({ platform_course_url: e.target.value || null })}
-              placeholder="https://projectfeelz.com/courses/..." />
+              placeholder="https://youtube.com/playlist?list=..." />
           </Field>
-          <Field label='"How to Make Viral Content" course URL' hint="Hosted on projectfeelz.com">
+          <SchoolLessonsEditor courseKey="platform" label="How to Use Feelz Machine, lessons" />
+
+          <Field label='"How to Make Viral Content" course URL'
+                 hint="Same again. Short segments in a playlist beat one long video on a phone.">
             <input className={inputCls} value={config?.viral_course_url || ''}
               onChange={e => setConfig({ ...config, viral_course_url: e.target.value })}
               onBlur={e => saveConfig({ viral_course_url: e.target.value || null })}
-              placeholder="https://projectfeelz.com/courses/..." />
+              placeholder="https://youtube.com/playlist?list=..." />
           </Field>
+          <SchoolLessonsEditor courseKey="viral" label="How to Make Viral Content, lessons" />
           <Field label="YouTube playlist URL" hint="Shown as a clickable link on the School Sessions page, the shortlist songs or entry compilation, whichever you're linking">
             <input className={inputCls} value={config?.youtube_playlist_url || ''}
               onChange={e => setConfig({ ...config, youtube_playlist_url: e.target.value })}

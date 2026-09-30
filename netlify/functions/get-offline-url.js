@@ -82,27 +82,15 @@ exports.handler = async (event) => {
   // ── The track ───────────────────────────────────────────────────────────────
   const { data: track, error: trackError } = await admin
     .from('tracks')
-    .select('id, title, file_url, is_published, is_preorder, release_date, download_price, is_downloadable, artist_id, album_id')
+    .select('id, title, file_url, is_published, is_preorder, release_date, download_price, is_downloadable, artist_id, album_id, preorder_early_access')
     .eq('id', trackId)
     .maybeSingle();
 
   if (trackError) return json(500, { error: 'lookup_failed' });
   if (!track)     return json(404, { error: 'track_not_found' });
 
-  // 410 rather than 404: the app treats Gone as "you had this, you no longer
-  // may" and removes the local copy, which is exactly right for a track the
-  // artist has since pulled.
-  if (track.is_published === false) return json(410, { error: 'track_unavailable' });
-
-  if (track.is_preorder && track.release_date && new Date(track.release_date) > new Date()) {
-    return json(403, {
-      error: 'not_released_yet',
-      release_date: track.release_date,
-      message: 'This track has not been released yet.',
-    });
-  }
-
-  if (!track.file_url) return json(404, { error: 'no_audio_file' });
+  // The availability gates USED TO BE HERE, above everything else, and that
+  // was the bug. See the block further down, after entitlement is known.
 
   // ── Is it a paid track, and did they buy it? ─────────────────────────────────
   // Same album-derived pricing as get-download-url: a track with no price of
@@ -126,12 +114,23 @@ exports.handler = async (event) => {
     return data?.user_id === user.id;
   })();
 
+  // Hoisted out of the block below so the tier gate can see it. Somebody who
+  // has PAID for a track has already bought the right to keep it, and being
+  // asked for a monthly subscription on top of a purchase is the one refusal
+  // in here a buyer would rightly call a con. A free track is different and
+  // still needs a tier: nothing was paid for, so there is nothing to honour.
+  let boughtThisTrack = false;
+
+  // DETECTION ONLY. The refusal is further down, because the availability
+  // gates have to know whether this person bought the track before they can
+  // decide whether it is gone for them.
+  //
+  // Same rule as get-download-url.js. A completed purchase of the track or
+  // its album is the authority, at whatever the price is now. The grant
+  // row is read with limit(1), not maybeSingle: someone with two rows for
+  // one track (a free grant then a purchase) made maybeSingle fail, which
+  // came back as "Buy this track" for a buyer, the 403 in the console.
   if (effectivePrice > 0 && !isOwnTrack) {
-    // Same rule as get-download-url.js. A completed purchase of the track or
-    // its album is the authority, at whatever the price is now. The grant
-    // row is read with limit(1), not maybeSingle: someone with two rows for
-    // one track (a free grant then a purchase) made maybeSingle fail, which
-    // came back as "Buy this track" for a buyer, the 403 in the console.
     let lookup = admin.from('purchases').select('id')
       .eq('user_id', user.id).eq('status', 'completed');
     lookup = track.album_id
@@ -147,15 +146,72 @@ exports.handler = async (event) => {
       .order('amount_paid', { ascending: false })
       .limit(1);
     const purchase = grants?.[0] || null;
-    const bought = (paidRows?.length || 0) > 0 || Number(purchase?.amount_paid) > 0;
+    boughtThisTrack = (paidRows?.length || 0) > 0 || Number(purchase?.amount_paid) > 0;
+  }
 
-    if (!bought) {
+  // ── Availability, now that we know what this person is owed ─────────────────
+  //
+  // THE BUG THIS FIXES
+  //
+  // The unpublished check used to run before any of the above, and the client
+  // DELETES the local copy on a 410 (see renewLeases in offlineStore.js). So
+  // an artist unpublishing a track silently wiped it off the device of every
+  // person who had paid for it, at the next renewal, with no warning and no
+  // way to get it back. A purchase is permanent; an artist taking a track off
+  // the shelf is not a refund.
+  //
+  // A buyer and the artist themselves now pass this gate. Everybody else gets
+  // the same 410 as before, and their copy is removed, which is still right:
+  // they were holding it on a subscription, not on a receipt.
+  const keepsItRegardless = isOwnTrack || boughtThisTrack;
+
+  if (track.is_published === false && !keepsItRegardless) {
+    return json(410, { error: 'track_unavailable' });
+  }
+
+  // Pre-order. A buyer waits unless the artist has said otherwise on this
+  // release, because the file is DRM-free and an early copy cannot be
+  // recalled. preorder_early_access is that decision, and it is off unless
+  // somebody deliberately turned it on. The artist always passes: it is their
+  // own record.
+  //
+  // The album flag counts as well as the track's own, so an artist pre-selling
+  // a record sets it once instead of on every track and cannot half-set it by
+  // forgetting one. Read here rather than via the SQL helper to keep this to a
+  // single round trip on a gate that runs on every save.
+  if (track.is_preorder && track.release_date
+      && new Date(track.release_date) > new Date() && !isOwnTrack) {
+    let earlyAccess = track.preorder_early_access === true;
+    if (!earlyAccess && track.album_id) {
+      const { data: alb } = await admin.from('albums')
+        .select('preorder_early_access').eq('id', track.album_id).maybeSingle();
+      earlyAccess = alb?.preorder_early_access === true;
+    }
+
+    // Only a BUYER gets in early. Early access is what the pre-order buys, so
+    // a subscriber who has not bought it still waits for release day.
+    if (!(earlyAccess && boughtThisTrack)) {
       return json(403, {
-        error: 'purchase_required',
-        minimum: effectivePrice,
-        message: 'Buy this track to keep it offline.',
+        error: 'not_released_yet',
+        release_date: track.release_date,
+        // The client decides the wording: somebody who has paid should be told
+        // they own it and when it unlocks, not handed a stranger's refusal.
+        owned: boughtThisTrack === true,
+        message: 'This track has not been released yet.',
       });
     }
+  }
+
+  // No exemption possible. There is no file to hand over.
+  if (!track.file_url) return json(404, { error: 'no_audio_file' });
+
+  // The refusal that was lifted out of the detection block above.
+  if (effectivePrice > 0 && !isOwnTrack && !boughtThisTrack) {
+    return json(403, {
+      error: 'purchase_required',
+      minimum: effectivePrice,
+      message: 'Buy this track to keep it offline.',
+    });
   }
 
   // ── Paying accounts only ────────────────────────────────────────────────────
@@ -182,8 +238,26 @@ exports.handler = async (event) => {
   // artist and listener tiers and the naming is inconsistent across them
   // ('pro' and 'fan_pro' are both in use for the same tier id). Asking what
   // it is NOT is the version that does not break when a tier is renamed.
-  if (!isOwnTrack) {
+  // A bought track skips this gate entirely. See the note on boughtThisTrack
+  // above: the purchase IS the entitlement, and it only applies to the track
+  // that was paid for, never to the rest of the catalogue.
+  if (!isOwnTrack && !boughtThisTrack) {
     const paidReason = await (async () => {
+      // 0. Platform admins.
+      //
+      // Deliberately first and deliberately not a tier. Somebody who runs the
+      // platform cannot test what a paying listener gets if the feature is
+      // shut to them, and the alternative, giving yourself a fake paid
+      // subscription row, puts made-up revenue in the same tables the payout
+      // and reporting queries read. A grant that lives in code and leaves no
+      // financial trace is the honest version.
+      const { data: adminRow } = await admin
+        .from('admins')
+        .select('user_id')
+        .eq('user_id', user.id)
+        .maybeSingle();
+      if (adminRow) return 'platform_admin';
+
       // 1. listeners.tier
       const { data: listenerRow } = await admin
         .from('listeners')

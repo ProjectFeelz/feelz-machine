@@ -192,6 +192,76 @@ function spreadWords(words, start, end) {
  *   lines   [{ start, end, text, words: [{ text, start, end }] }]
  *           For unsynced lyrics: one entry per line, start/end null.
  */
+// A leading timestamp with no brackets, optionally a range: the shape most
+// transcription tools emit. Anchored to the start of the line ONLY, because
+// "meet me at 3:15" is a lyric and eating it mid-line would be a worse bug
+// than the one this fixes.
+const LEADING_BARE_RE = new RegExp(
+  String.raw`^\s*${STAMP}(?:${RANGE_SEP}${STAMP})?\s*`
+);
+
+// ── Lyrics as plain text, for pages with no playhead ────────────────────────
+//
+// WHY THIS EXISTS AS A SHARED FUNCTION
+//
+// TrackPage had its own inline regex for this:
+//
+//   /\[\d{1,2}:\d{2}(?:[.:]\d{1,3})?\]/g
+//
+// which strips [00:12.34] and nothing else. Every track transcribed by a tool
+// that emits ranges, [00:11.56 --> 00:16.08], sailed straight through it and
+// the timestamps were printed to the reader as though they were words. Davu
+// found it on a track page; it was never right, it just needed a track whose
+// lyrics came from a transcriber rather than being typed by hand.
+//
+// The player never had this problem because it uses parseLyrics, which knows
+// all six formats. The fix is not a better regex in the page, it is the page
+// using the same knowledge as the player, so a seventh format only has to be
+// taught to this file.
+//
+// Line breaks are preserved, unlike scrubResidue, because a lyric sheet read
+// as a paragraph is not a lyric sheet. Runs of blank lines collapse to one so
+// a verse break survives without leaving a hole in the page.
+export function lyricsToPlainText(raw) {
+  if (!raw) return '';
+  const out = [];
+  let blanks = 0;
+
+  for (const line of String(raw).split(/\r?\n/)) {
+    // [ar:...], [ti:...] and friends are file metadata, never words.
+    if (META_RE.test(line)) continue;
+
+    let text = line
+      // Per-word <00:12.34> tags from enhanced LRC. Stripped FIRST: they sit
+      // between words, so leaving them until after the leading-stamp pass
+      // means the line still reads "<00:12.34> Hello <00:13.10> world" to a
+      // person with no playhead to sync them against.
+      .replace(WORD_TAG_RE, ' ')
+      .replace(BRACKETED_RE, ' ')
+      .replace(LEADING_BARE_RE, '');
+
+    // Same loop as scrubResidue: one line can carry more than one leftover
+    // and each pass can expose the next. Capped so a pathological input
+    // cannot spin here.
+    for (let i = 0; i < 6; i++) {
+      const next = text.replace(RESIDUE_RE, '');
+      if (next === text) break;
+      text = next;
+    }
+
+    // Collapse runs of spaces WITHIN the line only. Trailing whitespace goes;
+    // a leading indent the writer chose is not ours to remove.
+    text = text.replace(/[ \t]+/g, ' ').trimEnd();
+
+    if (!text.trim()) { blanks++; continue; }
+    if (blanks > 0 && out.length > 0) out.push('');   // keep one verse break
+    blanks = 0;
+    out.push(text.trim());
+  }
+
+  return out.join('\n');
+}
+
 export function parseLyrics(raw) {
   if (!raw || typeof raw !== 'string') return { synced: false, lines: [] };
 

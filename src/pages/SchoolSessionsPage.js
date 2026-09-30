@@ -23,6 +23,7 @@ import useSchoolSessions from '../hooks/useSchoolSessions';
 import DistrictNomination from '../components/DistrictNomination';
 import ShortlistSongs from '../components/ShortlistSongs';
 import SchoolCourseCard from '../components/SchoolCourseCard';
+import SchoolLessonList from '../components/SchoolLessonList';
 import { supabase } from '../supabaseClient';
 
 // Prominent hero countdown, ticks every second, shown as separate
@@ -173,6 +174,30 @@ export default function SchoolSessionsPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const gate = useSchoolSessions();
+  // Lessons, if a course has been broken into them. Declared up here with the
+  // other hooks rather than beside the courses they belong to, because this
+  // component returns early while the gate is loading and a hook below that
+  // return would not run on every render.
+  //
+  // Its own state and its own effect: if this query fails or the table is not
+  // there yet, both courses fall back to the playlist card they have always
+  // been and nothing else on the page notices. The page is reachable logged
+  // out and the read policy allows anon, so a student sees the course before
+  // making an account.
+  const [lessons, setLessons] = React.useState([]);
+  React.useEffect(() => {
+    let cancelled = false;
+    supabase.from('school_course_lessons')
+      .select('id, course_key, position, title, url, duration_s')
+      .eq('is_active', true)
+      .order('position')
+      .then(({ data, error }) => {
+        if (error) { console.warn('[school] lessons unavailable:', error.code, error.message); return; }
+        if (!cancelled) setLessons(data || []);
+      });
+    return () => { cancelled = true; };
+  }, []);
+
   const [songs, setSongs] = React.useState([]);
   const [entryCount, setEntryCount] = React.useState(null);
 
@@ -211,6 +236,9 @@ export default function SchoolSessionsPage() {
   const phase = currentPhase(comp);
   const viralCourseUrl = gate.config?.viral_course_url;
   const platformCourseUrl = gate.config?.platform_course_url;
+
+  const platformLessons = lessons.filter(l => l.course_key === 'platform');
+  const viralLessons    = lessons.filter(l => l.course_key === 'viral');
   const hasCourses = !!(viralCourseUrl || platformCourseUrl);
   const nextSeason = (gate.config?.season || 1) + 1;
 
@@ -377,20 +405,41 @@ export default function SchoolSessionsPage() {
                   phone, so 9:16 is the frame that does not waste half its
                   width on black bars. Drop `vertical` from either one if that
                   course ends up shot wide. */}
-              <SchoolCourseCard
-                url={platformCourseUrl}
-                icon={PlayCircle}
-                vertical
-                title="How to Use Feelz Machine"
-                desc="Recording, uploading, splits, so nobody's at a disadvantage."
-              />
-              <SchoolCourseCard
-                url={viralCourseUrl}
-                icon={BookOpen}
-                vertical
-                title="How to Make Viral Content"
-                desc="Get your song seen on TikTok and bring in votes."
-              />
+              {/* A course broken into lessons shows the list; one that has
+                  not been shows the playlist card exactly as before. Both
+                  paths are live at once, so a course can be split up whenever
+                  somebody gets round to it rather than all of them having to
+                  move together. */}
+              {platformLessons.length > 0 ? (
+                <SchoolLessonList
+                  lessons={platformLessons}
+                  title="How to Use Feelz Machine"
+                  desc="Recording, uploading, splits, so nobody's at a disadvantage."
+                />
+              ) : (
+                <SchoolCourseCard
+                  url={platformCourseUrl}
+                  icon={PlayCircle}
+                  vertical
+                  title="How to Use Feelz Machine"
+                  desc="Recording, uploading, splits, so nobody's at a disadvantage."
+                />
+              )}
+              {viralLessons.length > 0 ? (
+                <SchoolLessonList
+                  lessons={viralLessons}
+                  title="How to Make Viral Content"
+                  desc="Get your song seen on TikTok and bring in votes."
+                />
+              ) : (
+                <SchoolCourseCard
+                  url={viralCourseUrl}
+                  icon={BookOpen}
+                  vertical
+                  title="How to Make Viral Content"
+                  desc="Get your song seen on TikTok and bring in votes."
+                />
+              )}
             </div>
           </div>
         )}

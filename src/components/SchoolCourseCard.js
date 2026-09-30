@@ -102,11 +102,34 @@ export default function SchoolCourseCard({ url, title, desc, icon: Icon = PlayCi
             <img src={thumb} alt="" loading="lazy"
               className="absolute inset-0 w-full h-full object-cover" />
           ) : (
-            // A playlist with no single video to take a frame from.
-            <span className="absolute inset-0 bg-gradient-to-br from-lime-400/15 to-transparent" />
+            // A BARE PLAYLIST URL, which has no single video to take a frame
+            // from, so youTubeThumb returns null.
+            //
+            // This used to be a lime wash at 15% with the same dark scrim laid
+            // over it as a real thumbnail gets. The scrim exists to keep the
+            // play button readable on top of a photograph; over a near
+            // transparent gradient it simply wins, and the card rendered as a
+            // black rectangle with a button floating in it. It read as a
+            // broken image rather than as a course.
+            //
+            // Stronger, and no scrim over it, so it looks deliberate.
+            <span className="absolute inset-0"
+              style={{ background: 'linear-gradient(145deg, rgba(163,230,53,0.22) 0%, rgba(163,230,53,0.06) 45%, rgba(0,0,0,0.35) 100%)' }} />
           )}
-          <span className="absolute inset-0"
-            style={{ background: 'linear-gradient(180deg, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.8) 100%)' }} />
+          {thumb && (
+            <span className="absolute inset-0"
+              style={{ background: 'linear-gradient(180deg, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.8) 100%)' }} />
+          )}
+          {!thumb && (
+            // Says what it is. A playlist is a course with several lessons in
+            // it, and somebody looking at a poster frame should be able to
+            // tell that before they tap.
+            <span className="absolute left-0 right-0 bottom-0 p-3 text-center">
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-lime-300/80">
+                Lesson playlist
+              </span>
+            </span>
+          )}
           <span className="absolute inset-0 flex items-center justify-center">
             <span className="w-12 h-12 rounded-full bg-lime-400 text-black flex items-center justify-center shadow-lg group-hover:scale-105 transition">
               <PlayCircle className="w-6 h-6" />

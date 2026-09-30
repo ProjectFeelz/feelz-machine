@@ -1,5 +1,6 @@
 import { coverUrl } from '../utils/coverUrl';
 import React, { useState, useEffect } from 'react';
+import { localInputToInstant, instantToLocalInput, describeLocalRelease } from '../utils/releaseTime';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import {
@@ -156,7 +157,7 @@ const BLANK_TRACK = {
   is_explicit: false, is_downloadable: true, is_published: true,
   is_premium: false, download_price: '0', featured: false,
   pay_what_you_want: false, minimum_price: '0',
-  is_preorder: false, release_date: null,
+  is_preorder: false, release_date: null, preorder_early_access: false,
   track_number: '1', audio_file: null, cover_file: null, has_versions: false,
   youtube_url: '', ai_content: 'human',
   // Beat-specific fields
@@ -873,7 +874,11 @@ function AddTrackToAlbum({
         pay_what_you_want: trackForm.pay_what_you_want || false,
         minimum_price:     parseFloat(trackForm.minimum_price) > 0 ? parseFloat(trackForm.minimum_price) : null,
         is_preorder:       trackForm.is_preorder || false,
-        release_date:      trackForm.is_preorder && trackForm.release_date ? trackForm.release_date : null,
+        release_date:      trackForm.is_preorder ? localInputToInstant(trackForm.release_date) : null,
+        // Forced back to false when the track is not a pre-order, so a flag
+        // set and then cancelled cannot sit on the row waiting to surprise
+        // somebody the next time pre-order is switched on.
+        preorder_early_access: (trackForm.is_preorder && trackForm.preorder_early_access) || false,
         youtube_url:       trackForm.youtube_url?.trim() || null,
         ai_content:        trackForm.ai_content || 'human',
         is_beat:           trackForm.is_beat || false,
@@ -1119,11 +1124,45 @@ function AddTrackToAlbum({
       </div>
 
       {trackForm.is_preorder && (
-        <div>
-          <FieldLabel>Release Date</FieldLabel>
-          <FInput type="datetime-local"
-            value={trackForm.release_date ? trackForm.release_date.substring(0, 16) : ''}
-            onChange={(e) => setTrackForm({ ...trackForm, release_date: e.target.value })} />
+        <div className="space-y-3">
+          <div>
+            <FieldLabel>Release Date</FieldLabel>
+            <FInput type="datetime-local"
+              value={instantToLocalInput(trackForm.release_date)}
+              onChange={(e) => setTrackForm({ ...trackForm, release_date: e.target.value })} />
+            {/* The timezone is named rather than assumed. An artist releasing
+                to a schedule somebody else set needs to see which clock this
+                is, not trust that it was handled. */}
+            {describeLocalRelease(trackForm.release_date) && (
+              <p className="text-[11px] text-white/35 mt-1.5">
+                Goes live {describeLocalRelease(trackForm.release_date)}
+              </p>
+            )}
+          </div>
+
+          {/* Off by default, and the warning is the point. The file has no DRM
+              on it, so an early copy is out of your hands for good. Somebody
+              turning this on should understand that before they do, not find
+              out afterwards. */}
+          <label className="flex items-start gap-2.5 cursor-pointer rounded-lg bg-white/[0.02] border border-white/[0.06] p-3">
+            <input type="checkbox"
+              checked={trackForm.preorder_early_access || false}
+              onChange={() => setTrackForm({
+                ...trackForm,
+                preorder_early_access: !trackForm.preorder_early_access,
+              })}
+              className="rounded border-white/20 mt-0.5" />
+            <span>
+              <span className="text-xs text-white/70 font-medium">
+                Let people who pre-order hear it now
+              </span>
+              <span className="block text-[11px] text-white/35 mt-0.5">
+                {trackForm.preorder_early_access
+                  ? 'Anyone who pre-orders can play and download it straight away. The file has no copy protection, so once it is out there you cannot take it back. Only turn this on if an early leak would not hurt the release.'
+                  : 'Off: buyers get it on release day, like everyone else. Turn it on to make early access the reason to pre-order.'}
+              </span>
+            </span>
+          </label>
         </div>
       )}
 
@@ -1483,7 +1522,11 @@ export default function TrackUploadPanel() {
         pay_what_you_want: trackForm.pay_what_you_want || false,
         minimum_price:     parseFloat(trackForm.minimum_price) > 0 ? parseFloat(trackForm.minimum_price) : null,
         is_preorder:       trackForm.is_preorder || false,
-        release_date:      trackForm.is_preorder && trackForm.release_date ? trackForm.release_date : null,
+        release_date:      trackForm.is_preorder ? localInputToInstant(trackForm.release_date) : null,
+        // Forced back to false when the track is not a pre-order, so a flag
+        // set and then cancelled cannot sit on the row waiting to surprise
+        // somebody the next time pre-order is switched on.
+        preorder_early_access: (trackForm.is_preorder && trackForm.preorder_early_access) || false,
         youtube_url:       trackForm.youtube_url?.trim() || null,
         ai_content:        trackForm.ai_content || 'human',
         is_beat:           trackForm.is_beat || false,

@@ -28,6 +28,33 @@ const OfflineContext = createContext(null);
 // each invent their own wording, or, far more likely, going by the six
 // swallowed-error bugs already found in this codebase, show nothing at all
 // and leave a button spinning forever.
+// A release date somebody can actually read. "14 March" beats an ISO string,
+// and the year only appears when it is not this one, because "14 March 2026"
+// in 2026 is noise.
+//
+// THE DATE ONLY, AND THE TIME DELIBERATELY LEFT OFF.
+//
+// The first version showed the time and suppressed it at midnight, on the
+// grounds that "on 14 March at 00:00" reads like a machine wrote it. Testing
+// it from Johannesburg showed why that does not work: a release stored as
+// 00:00Z renders as "at 02:00" here, so the suppression never fires and the
+// buyer is told a time the artist never chose.
+//
+// The artist picks the date in a datetime-local field, which has no timezone
+// in it, so what got stored is already ambiguous about which midnight was
+// meant. Showing a precise time built on an ambiguous value is worse than
+// showing no time at all, and the exact minute is not what somebody waiting
+// for a record wants to know.
+function unlockWording(iso) {
+  const ms = Date.parse(iso || '');
+  if (!Number.isFinite(ms)) return null;
+  const d = new Date(ms);
+  const sameYear = d.getFullYear() === new Date().getFullYear();
+  return d.toLocaleDateString('en-GB', {
+    day: 'numeric', month: 'long', ...(sameYear ? {} : { year: 'numeric' }),
+  });
+}
+
 export function offlineErrorMessage(err) {
   switch (err?.message) {
     case 'paid_tier_required':
@@ -35,8 +62,21 @@ export function offlineErrorMessage(err) {
       return 'Offline listening comes with Fan Pro, Artist Pro or Artist Premium. Upgrade to keep music on your device.';
     case 'purchase_required':
       return 'Buy this track first, then you can keep it offline.';
-    case 'not_released_yet':
-      return "This track hasn't been released yet.";
+    case 'not_released_yet': {
+      // Two different people hit this. One has paid and is being told to wait
+      // for something they already own; the other has not bought it at all.
+      // Sending both the same sentence is what made this feel like the
+      // platform had forgotten the buyer handed over money.
+      const when = unlockWording(err?.details?.release_date);
+      if (err?.details?.owned) {
+        return when
+          ? `You own this. It unlocks on ${when}, and it will save to your device then.`
+          : 'You own this. It will save to your device on release day.';
+      }
+      return when
+        ? `Out on ${when}. Pre-order it and it is yours the moment it lands.`
+        : "This track hasn't been released yet.";
+    }
     case 'track_unavailable':
       return 'The artist has taken this track down.';
     case 'offline_limit_reached':

@@ -2,6 +2,7 @@ import { Helmet } from 'react-helmet-async';
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import useGoBack from '../hooks/useGoBack';
+import { lyricsToPlainText } from '../utils/lyrics';
 import { supabase } from '../supabaseClient';
 import TrackVersions from '../components/TrackVersions';
 import PreSaveButton from '../components/PreSaveButton';
@@ -155,7 +156,21 @@ export default function TrackPage() {
         }
       }
 
-      if (error || !trackData) { setLoading(false); return; }
+      // The mirror of the handoff in BeatDetailPage. A beat opened from a
+      // surface that did not select is_beat arrives here instead of /beat, and
+      // this page's is_published filter or the beat's own shape then produced
+      // a dead end for something that exists. Check for a beat under the same
+      // slug before giving up.
+      if (error || !trackData) {
+        const { data: asBeat } = await supabase
+          .from('tracks').select('slug, is_beat').eq('slug', slug).maybeSingle();
+        if (asBeat?.is_beat === true) {
+          navigate(`/beat/${asBeat.slug}`, { replace: true });
+          return;
+        }
+        setLoading(false);
+        return;
+      }
 
       setTrack(trackData);
 
@@ -636,10 +651,15 @@ export default function TrackPage() {
             Lyrics
           </h2>
           {(() => {
-            const lines = track.lyrics
-              .replace(/\[\d{1,2}:\d{2}(?:[.:]\d{1,3})?\]/g, '')  // LRC timestamps
-              .split('\n')
-              .map(l => l.trimEnd());
+            // lyricsToPlainText, not a regex written here. The inline one this
+            // replaces only knew [00:12.34] and printed every other format to
+            // the reader as if the timestamps were words: Davu found a track
+            // whose lyrics came from a transcriber emitting ranges, and the
+            // page showed "[00:11.56 -> 00:16.08] This one go out to my
+            // brothers". The player was always fine because it uses the shared
+            // parser; now this page uses the same knowledge, so a new format
+            // only has to be taught to src/utils/lyrics.js once.
+            const lines = lyricsToPlainText(track.lyrics).split('\n');
             const long    = lines.length > 10;
             const visible = long && !lyricsOpen ? lines.slice(0, 10) : lines;
             return (

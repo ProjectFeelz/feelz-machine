@@ -251,7 +251,15 @@ export async function saveTrackOffline(track, { authToken, onProgress, signal } 
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new Error(body.error || `offline_url_failed_${res.status}`);
+    // The code alone is not enough to write a decent message. A pre-order
+    // refusal needs the release date and needs to know whether this person
+    // bought it, because telling a buyer the same thing you tell a stranger
+    // is the part that reads as the platform having forgotten they paid.
+    // Carried on the Error rather than thrown as an object so every existing
+    // `err.message` check keeps working untouched.
+    const e = new Error(body.error || `offline_url_failed_${res.status}`);
+    e.details = body;
+    throw e;
   }
 
   const { signedUrl, expiresAt, mimeType } = await res.json();

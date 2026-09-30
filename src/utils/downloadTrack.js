@@ -21,8 +21,23 @@ export function downloadErrorMessage(err) {
       // The most confusing one: it fires on your OWN track, which is exactly
       // when you are most likely to be testing and least likely to guess why.
       return "You can't download your own track — it would inflate your download count.";
-    case 'not_released_yet':
-      return "This track hasn't been released yet. You'll be able to download it on the release date.";
+    case 'not_released_yet': {
+      const ms = Date.parse(err?.details?.release_date || '');
+      const when = Number.isFinite(ms)
+        ? new Date(ms).toLocaleDateString('en-GB', {
+            day: 'numeric', month: 'long',
+            ...(new Date(ms).getFullYear() === new Date().getFullYear() ? {} : { year: 'numeric' }),
+          })
+        : null;
+      if (err?.details?.owned) {
+        return when
+          ? `You own this. The download unlocks on ${when}.`
+          : 'You own this. The download unlocks on release day.';
+      }
+      return when
+        ? `Out on ${when}. Pre-order it and the download is yours the moment it lands.`
+        : "This track hasn't been released yet. You'll be able to download it on the release date.";
+    }
     // Kept, but the server no longer sends it: free listeners now get three
     // a month rather than none at all. A stale bundle in someone's cache can
     // still receive it, so the wording stays accurate for that case.
@@ -69,7 +84,13 @@ export async function downloadTrack(trackId, title, authToken) {
 
   if (response.status === 403) {
     const err = await response.json().catch(() => ({}));
-    if (err.error === 'not_released_yet')        throw new Error('not_released_yet');
+    if (err.error === 'not_released_yet') {
+      // Same reason as offlineStore.js: the code alone cannot tell a buyer
+      // from a stranger, and they should not be read the same sentence.
+      const e = new Error('not_released_yet');
+      e.details = err;
+      throw e;
+    }
     if (err.error === 'artists_cannot_download') throw new Error('artists_cannot_download');
     if (err.error === 'fan_pro_required')        throw new Error('fan_pro_required');
     if (err.error === 'monthly_quota_exceeded')  throw new Error('monthly_quota_exceeded');
