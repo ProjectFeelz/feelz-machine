@@ -107,12 +107,42 @@ const FILTERS = [
   { key: 'money',      label: 'Money' },
 ];
 
+// SOCIAL IS THE REMAINDER, NOT A LIST.
+//
+// Every tab used to be a hardcoded list of type strings, and anything on none
+// of the lists appeared in All and nowhere else. That is why Social showed a
+// badge in All and then opened empty: the rows behind the badge were types
+// like dm, message, story, new_track, new_release, post, room, comments,
+// mention_text, engagement, fan_leaderboard and challenge_xp, none of which
+// anybody remembered to add when the type was introduced.
+//
+// A list of everything that IS social has to be updated every time somebody
+// adds a notification, and the failure when they forget is silent and
+// invisible: a notification that exists, is counted, and cannot be opened.
+//
+// So the three precise buckets stay lists, because money, milestones and
+// collabs genuinely are closed sets, and Social becomes everything else. A
+// type added next year lands somewhere a person can find it without anybody
+// having to remember this file exists.
+const MONEY = ['tip','download','payout_pending','beat_purchase','purchase','sale',
+               'subscription','paid_download','paid','earned','payout'];
+const MILESTONES = ['top_supporter','streak','first_listener','competition_winner',
+                    'weekly_report','monthly_wrapped','fan_leaderboard','challenge_xp'];
+
 function filterMatch(type, filter) {
   if (filter === 'all')        return true;
-  if (filter === 'collabs')    return type?.startsWith('collab_');
-  if (filter === 'social')     return ['new_follower','track_liked','playlist_add','track_commented','new_comment','new_post','new_stream','mention','artist_thought'].includes(type);
-  if (filter === 'milestones') return type?.startsWith('milestone_') || ['top_supporter','streak','first_listener','competition_winner','weekly_report','monthly_wrapped'].includes(type);
-  if (filter === 'money')      return ['tip','download','payout_pending','beat_purchase','purchase','sale','subscription'].includes(type);
+  if (filter === 'collabs')    return type?.startsWith('collab_') || type === 'paid_collab' || type === 'remix';
+  if (filter === 'milestones') return type?.startsWith('milestone_') || MILESTONES.includes(type);
+  if (filter === 'money')      return MONEY.includes(type);
+  if (filter === 'social') {
+    // Everything that is not one of the three above. Collabs are excluded as
+    // well so an artist does not see the same row in two tabs.
+    if (!type) return true;
+    if (type.startsWith('collab_') || type === 'paid_collab' || type === 'remix') return false;
+    if (type.startsWith('milestone_') || MILESTONES.includes(type)) return false;
+    if (MONEY.includes(type)) return false;
+    return true;
+  }
   return true;
 }
 
