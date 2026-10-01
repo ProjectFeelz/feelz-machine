@@ -66,9 +66,26 @@ const keyFor = (table, userId) => `${table}:${userId}`;
  * Resolves to the row or null. Never throws: a failure resolves null and is
  * logged, because every caller here already treats "no row" as a valid answer
  * and none of them should be able to break a page by failing.
+ *
+ * WHEN NULL IS NOT ENOUGH, use userRowResult below. "no row" and "the read
+ * failed" are the same null here, and at least one caller must tell them
+ * apart: AuthContext CREATES an artist row when the read comes back empty, so
+ * collapsing a network blip into "this person has no artist profile" would
+ * have it quietly create a second one.
  */
 export function userRow(table, userId) {
-  if (!table || !userId) return Promise.resolve(null);
+  return userRowResult(table, userId).then(r => r.data);
+}
+
+/**
+ * The same read, with the error kept.
+ *
+ * Returns { data, error } in the shape supabase-js already uses, so a caller
+ * that needs to distinguish an empty result from a failed one reads exactly
+ * what it read before.
+ */
+export function userRowResult(table, userId) {
+  if (!table || !userId) return Promise.resolve({ data: null, error: null });
 
   const key = keyFor(table, userId);
   const hit = cache.get(key);
@@ -86,13 +103,13 @@ export function userRow(table, userId) {
         // left the app believing this person has no listener row for a minute,
         // which reads as being signed out of half the features.
         cache.delete(key);
-        return null;
+        return { data: null, error };
       }
-      return data || null;
+      return { data: data || null, error: null };
     }, (err) => {
       console.warn(`[userRow] ${table} threw:`, err?.message);
       cache.delete(key);
-      return null;
+      return { data: null, error: { message: err?.message || 'request failed', code: '' } };
     });
 
   cache.set(key, { promise, at: Date.now() });

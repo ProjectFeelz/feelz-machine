@@ -336,7 +336,9 @@ export default function SchoolSessionsPage() {
             student has to know it exists BEFORE they decide whether to enter,
             which means it belongs beside the thing that made them read this
             far rather than in the small print further down. */}
-        <SchoolVipPrize signedIn={!!user} />
+        <div id="vip" className="scroll-mt-20">
+          <SchoolVipPrize signedIn={!!user} />
+        </div>
 
         {/* How it works */}
         <p className="text-xs text-white/50 leading-relaxed border-l-2 border-lime-400 pl-3">

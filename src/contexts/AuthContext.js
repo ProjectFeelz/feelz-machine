@@ -1,6 +1,6 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
-import { userRow, invalidateUserRow, clearUserRowCache } from '../utils/userRow';
+import { userRow, userRowResult, invalidateUserRow, clearUserRowCache } from '../utils/userRow';
 
 // Which user id an artist-profile creation is currently in flight for.
 let creatingArtistFor = null;
@@ -17,11 +17,13 @@ export function AuthProvider({ children }) {
   const [viewAs, setViewAs]   = useState(null);
 
   const fetchProfile = async (userId) => {
-    let { data } = await supabase
-      .from('user_profiles')
-      .select('*')
-      .eq('user_id', userId)
-      .maybeSingle();
+    // Through userRow for the same reason listeners and admins are: this ran
+    // twice on every cold load. See src/utils/userRow.js and loadedFor below.
+    //
+    // The legacy `profiles` fallback stays a direct read, because it keys on
+    // `id` rather than `user_id` and userRow is deliberately only for the
+    // user_id shape.
+    let data = await userRow('user_profiles', userId);
     if (!data) {
       const res = await supabase
         .from('profiles')
@@ -34,11 +36,15 @@ export function AuthProvider({ children }) {
   };
 
   const fetchArtist = async (userId) => {
-    const { data, error } = await supabase
-      .from('artists')
-      .select('*')
-      .eq('user_id', userId)
-      .maybeSingle();
+    // Same again. An artist row read twice at startup is two of the slowest
+    // calls in the boot group, for one answer.
+    //
+    // userRowResult rather than userRow, and this is not a style choice.
+    // The `else if (!error)` branch below CREATES an artist row when the read
+    // comes back empty. If a failed read collapsed into null the way plain
+    // userRow does, a network blip at startup would look like "this person has
+    // no artist profile" and it would make them a second one.
+    const { data, error } = await userRowResult('artists', userId);
     if (data) {
       // Apply a pending role selection from signup, if one exists. This
       // is what makes the Artist/Beat Maker choice on the login page
@@ -54,6 +60,10 @@ export function AuthProvider({ children }) {
           .maybeSingle();
         localStorage.removeItem('pending_creator_role');
         setArtist(updated || data);
+        // Every write to this row drops the cached copy. Without it the row
+        // just created or changed stays invisible to anything reading through
+        // userRow until the TTL expires.
+        invalidateUserRow('artists', userId);
         return;
       }
       if (pendingRole) localStorage.removeItem('pending_creator_role');
@@ -139,6 +149,7 @@ export function AuthProvider({ children }) {
                 return;
               }
               setArtist(retried || null);
+              invalidateUserRow('artists', userId);
               return;
             }
 
@@ -148,6 +159,7 @@ export function AuthProvider({ children }) {
           }
 
           setArtist(created || null);
+          invalidateUserRow('artists', userId);
           return;
         } catch (err) {
           console.error('[auth] artist profile creation threw:', err.message);
@@ -205,7 +217,26 @@ export function AuthProvider({ children }) {
     }
   };
 
+  // WHY loadUser RUNS TWICE, AND THE GUARD THAT WAS NOT CATCHING IT
+  //
+  // On a cold load with an existing session, two paths both call this: the
+  // getSession() promise below, and onAuthStateChange firing SIGNED_IN, which
+  // Supabase sends on session restore and not only on an actual login.
+  //
+  // There IS a guard, inside a setUser updater: `if (!prev || prev.id !== ...)`.
+  // It cannot work on a cold load, because both paths run while `user` is
+  // still null, so `!prev` is true for both and loadUser runs twice. Measured:
+  // user_profiles, artists, listeners and admins each requested twice before
+  // anybody had touched anything.
+  //
+  // A ref, because this has to be true the instant it is set rather than on
+  // the next render, which is exactly what state cannot promise and is why the
+  // original guard was written in the wrong place.
+  const loadedFor = useRef(null);
+
   const loadUser = async (sessionUser) => {
+    if (loadedFor.current === sessionUser?.id) return;
+    loadedFor.current = sessionUser?.id || null;
     if (!sessionUser) return;
     setUser(sessionUser);
     // Check for affiliate ref in sessionStorage (set by landing page)
@@ -278,6 +309,7 @@ export function AuthProvider({ children }) {
         });
       }
       if (event === 'SIGNED_OUT') {
+        loadedFor.current = null;
         setUser(null);
         setProfile(null);
         setArtist(null);
@@ -333,6 +365,7 @@ export function AuthProvider({ children }) {
     // to the person who just left, and the next person on this device must not
     // be handed it out of memory.
     clearUserRowCache();
+    loadedFor.current = null;
     setUser(null);
     setProfile(null);
     setArtist(null);
@@ -347,6 +380,8 @@ export function AuthProvider({ children }) {
       // had, which is the opposite of what every caller wants.
       invalidateUserRow('listeners', user.id);
       invalidateUserRow('admins', user.id);
+      invalidateUserRow('user_profiles', user.id);
+      invalidateUserRow('artists', user.id);
       await fetchProfile(user.id);
       await fetchArtist(user.id);
       await fetchListener(user.id);

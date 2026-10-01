@@ -11,6 +11,7 @@
 import React, { useState, useEffect } from 'react';
 import { GraduationCap, Plus, X } from 'lucide-react';
 import { supabase } from '../supabaseClient';
+import { entriesAreOpen, currentPhase, phaseDate } from '../utils/schoolPhase';
 import ShortlistSongs from './ShortlistSongs';
 import useSchoolSessions from '../hooks/useSchoolSessions';
 
@@ -130,6 +131,36 @@ export default function SchoolSessionsEntry({ enabled, setEnabled, form, setForm
 
   const comp = gate.config?.competition;
 
+  // THE PHASE GATE.
+  //
+  // This component checked whether the feature was on and whether the district
+  // was allowed, and never whether entries were actually open. So a student
+  // could file an entry a month before the opening date, burning a single-use
+  // verification code on an email address that can only be used once.
+  //
+  // Before the date, the toggle is replaced by a plain statement of when it
+  // opens. After entries close, the same, so somebody who left it to the last
+  // night is told plainly rather than shown a control that will fail.
+  if (comp && !entriesAreOpen(comp)) {
+    const phase = currentPhase(comp);
+    const opens = phaseDate(comp.entries_open_at);
+    const closed = phaseDate(comp.entries_close_at);
+    return (
+      <div className="rounded-lg border border-lime-400/15 bg-lime-400/[0.03] p-4">
+        <p className="text-sm font-semibold text-white">School Sessions</p>
+        <p className="text-xs text-white/40 mt-1">
+          {phase === 'awareness'
+            ? (opens
+                ? `Entries open on ${opens}. Record your cover now and it is ready to go.`
+                : 'Entries are not open yet.')
+            : (closed
+                ? `Entries closed on ${closed}. Judging is under way.`
+                : 'Entries are closed. Judging is under way.')}
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="rounded-lg border border-lime-400/20 bg-lime-400/[0.04] overflow-hidden">
       <label className="flex items-center justify-between p-4 cursor-pointer">
@@ -147,6 +178,33 @@ export default function SchoolSessionsEntry({ enabled, setEnabled, form, setForm
 
       {enabled && (
         <div className="p-4 pt-0 space-y-3.5 border-t border-lime-400/10">
+
+          {/* THE SECOND PRIZE, SAID AT THE MOMENT OF ENTERING.
+              It is on the landing page already, which is where somebody
+              decides whether to enter at all. This is the other moment it
+              earns its keep: a student who scrolled past it there, or who
+              arrived straight at the upload panel from the dashboard, would
+              otherwise file their entry never knowing the card exists.
+              Deliberately two sentences and no numbers. The thresholds live in
+              the database and are stated in full on /schoolsessions; repeating
+              them here would be a second copy to keep in step, and the first
+              time it drifts is the first time a student is told the wrong
+              target. */}
+          <div className="rounded-lg border border-white/[0.09] bg-white/[0.04] p-3">
+            <p className="text-[11px] font-bold tracking-wider uppercase text-lime-300/70">
+              There is a second prize
+            </p>
+            <p className="text-[11px] text-white/55 mt-1 leading-relaxed">
+              Entering also puts you in the running for a VIP card: a seat in one of
+              the judging rounds, earned by bringing people to the platform rather
+              than by winning. Two per school, and it is yours whether or not your
+              cover places.{' '}
+              <a href="/schoolsessions#vip" className="text-lime-300 underline underline-offset-2">
+                How it works
+              </a>
+            </p>
+          </div>
+
           <div>
             <Label>Which song are you covering?</Label>
             <select value={form.songId}

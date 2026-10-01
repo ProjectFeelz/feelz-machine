@@ -36,6 +36,15 @@
 // exposed every entrant's name, school and counts to any signed in account;
 // that was a list of schoolchildren and it is closed.
 
+// COLOUR
+//
+// Neutral panel, lime for one job only: saying a threshold has been crossed.
+// This was amber, which on a near black background reads as brown and belongs
+// to no part of the platform. The cash prize above it already owns lime as a
+// filled block, so this one stays quiet and earns its lime a line at a time,
+// which also makes the two read as first prize and second prize rather than as
+// two competing panels.
+
 import React from 'react';
 import { supabase } from '../supabaseClient';
 import { Crown, Users, Headphones, Copy, Check } from 'lucide-react';
@@ -124,14 +133,14 @@ export default function SchoolVipPrize({ signedIn }) {
   const awarded = !!progress?.card_awarded;
 
   return (
-    <div className="rounded-xl border border-amber-400/25 bg-amber-400/[0.04] p-5 lg:p-6 space-y-4">
+    <div className="rounded-xl border border-white/10 bg-white/[0.03] p-5 lg:p-6 space-y-4">
 
       <div className="flex items-start gap-3">
-        <span className="w-9 h-9 rounded-lg bg-amber-400/15 flex items-center justify-center flex-shrink-0">
-          <Crown className="w-4.5 h-4.5 text-amber-300" />
+        <span className="w-9 h-9 rounded-lg bg-white/[0.07] flex items-center justify-center flex-shrink-0">
+          <Crown className="w-4.5 h-4.5 text-lime-300" />
         </span>
         <div className="min-w-0">
-          <p className="text-[11px] font-bold tracking-widest uppercase text-amber-300/80">
+          <p className="text-[11px] font-bold tracking-widest uppercase text-lime-300/70">
             A second thing to win
           </p>
           <p className="text-lg lg:text-xl font-bold text-white leading-tight mt-0.5">
@@ -178,7 +187,7 @@ export default function SchoolVipPrize({ signedIn }) {
           )}
 
           {progress.has_entered && !awarded && progress.school_has_card && perSchool === 1 && (
-            <p className="text-[11px] text-amber-300/70 leading-relaxed">
+            <p className="text-[11px] text-white/40 leading-relaxed">
               Somebody at {progress.school} already holds this season's card.
             </p>
           )}
@@ -199,8 +208,8 @@ export default function SchoolVipPrize({ signedIn }) {
             <button
               onClick={copy}
               aria-label="Copy your link"
-              className="flex-shrink-0 h-11 px-4 rounded-lg bg-amber-400 text-black text-xs font-bold
-                         hover:bg-amber-300 active:scale-95 transition inline-flex items-center gap-1.5"
+              className="flex-shrink-0 h-11 px-4 rounded-lg bg-lime-400 text-black text-xs font-bold
+                         hover:bg-lime-300 active:scale-95 transition inline-flex items-center gap-1.5"
             >
               {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
               {copied ? 'Copied' : 'Copy'}
