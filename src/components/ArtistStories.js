@@ -393,9 +393,68 @@ export function StoryUpload({ artistId, onUploaded, inline = false }) {
   );
 }
 
+// ── The platform's own account ────────────────────────────────────────────────
+//
+// Migration 191 creates this artist row with artist_name 'Feelz Machine' and
+// slug 'feelz-machine', and sets no profile image, because the artists table
+// has no column it could have put one in that the migration was willing to
+// guess at. So every bubble, every story header and every mention of the
+// platform account fell through to the first letter of the name and rendered
+// as a grey circle with an F in it.
+//
+// Matched on the slug rather than REACT_APP_PLATFORM_ARTIST_ID. That env var
+// is read a few lines down and, by the admission of the comment next to it,
+// has never been set, so anything depending on it does nothing. The slug is
+// what migration 191 creates, what platform_story_artist_id() looks up, and
+// what every other half of this feature already keys on.
+const PLATFORM_SLUG = 'feelz-machine';
+const PLATFORM_LOGO = '/logo.png';
+
+export function isPlatformArtist(artist, envId) {
+  if (!artist) return false;
+  if (envId && artist.id === envId) return true;
+  return artist.slug === PLATFORM_SLUG;
+}
+
+// What to draw in the circle. Null means there is genuinely nothing, and the
+// caller falls back to the initial, which is still the right answer for an
+// ordinary artist who has not uploaded a picture.
+export function storyAvatarSrc(artist) {
+  if (artist?.profile_image_url) return artist.profile_image_url;
+  if (artist?.slug === PLATFORM_SLUG) return PLATFORM_LOGO;
+  return null;
+}
+
+// The logo is a rounded square on black, not a photograph. object-cover would
+// crop its corners against a circular mask and cut the green outline, so it is
+// inset and contained instead. An artist's own photo still covers, because
+// cropping a photo to a circle is correct.
+export function storyAvatarClass(artist) {
+  return artist?.profile_image_url
+    ? 'w-full h-full object-cover'
+    : 'w-full h-full object-contain p-1.5 bg-black';
+}
+
 // ── Story Bubble ──────────────────────────────────────────────────────────────
-function StoryBubble({ artist, stories, viewed, onClick }) {
-  const hasUnviewed = stories.some(s => !viewed.has(s.id));
+//
+// Two modes.
+//
+// GROUPED, one bubble per artist, every story behind it. This is the normal
+// rail and it is what every app does, because with twenty artists posting you
+// want twenty faces, not two hundred circles.
+//
+// EXPANDED, one bubble per story, used when almost nobody has posted. The
+// grouped rail is correct and still looks broken on a quiet day: five stories
+// from the platform account collapse into a single circle sitting alone in a
+// full width panel, which reads as "there is nothing here" when there are
+// actually five things here. In expanded mode each story gets its own bubble,
+// showing its own image where it has one, so the rail fills with what is
+// actually there.
+function StoryBubble({ artist, stories, story, label, viewed, onClick }) {
+  const hasUnviewed = story ? !viewed.has(story.id) : stories.some(s => !viewed.has(s.id));
+  const src   = story?.media_type === 'image' ? story.media_url : storyAvatarSrc(artist);
+  const cls   = story?.media_type === 'image' ? 'w-full h-full object-cover' : storyAvatarClass(artist);
+  const badge = story && story.media_type !== 'image' ? story.media_type : null;
   return (
     <button onClick={onClick}
       className="flex-shrink-0 flex flex-col items-center space-y-1.5 w-[68px]">
@@ -415,16 +474,26 @@ function StoryBubble({ artist, stories, viewed, onClick }) {
           : 'p-[2px] bg-white/15'}`}
         style={hasUnviewed ? { boxShadow: '0 0 12px rgba(236,72,153,0.45)' } : undefined}
       >
-        <div className="w-full h-full rounded-full overflow-hidden bg-black border-2 border-black">
-          {artist.profile_image_url
-            ? <img src={artist.profile_image_url} alt={artist.artist_name} className="w-full h-full object-cover" />
+        <div className="relative w-full h-full rounded-full overflow-hidden bg-black border-2 border-black">
+          {src
+            ? <img src={src} alt={artist.artist_name} className={cls} />
             : <div className="w-full h-full bg-white/10 flex items-center justify-center text-sm font-bold text-white/40">
                 {artist.artist_name?.[0]}
               </div>}
+          {/* An expanded bubble for audio or video has no still to show, so it
+              says which it is rather than looking like a duplicate of the one
+              beside it. */}
+          {badge && (
+            <span className="absolute bottom-0 right-0 w-5 h-5 rounded-full bg-black/80 border border-white/15 flex items-center justify-center">
+              {badge === 'video'
+                ? <Video className="w-2.5 h-2.5 text-white/70" />
+                : <Music className="w-2.5 h-2.5 text-white/70" />}
+            </span>
+          )}
         </div>
       </div>
       <span className={`text-[10px] truncate max-w-[68px] ${hasUnviewed ? 'text-white/80 font-semibold' : 'text-white/40'}`}>
-        {artist.artist_name}
+        {label || artist.artist_name}
       </span>
     </button>
   );
@@ -558,8 +627,8 @@ export function ArtistStoryView({ stories, artist, initialIndex = 0, onClose }) 
       <div className="flex items-center justify-between px-4 py-3 flex-shrink-0">
         <div className="flex items-center space-x-2.5">
           <div className="w-8 h-8 rounded-full overflow-hidden bg-white/10">
-            {artist.profile_image_url
-              ? <img src={artist.profile_image_url} alt="" className="w-full h-full object-cover" />
+            {storyAvatarSrc(artist)
+              ? <img src={storyAvatarSrc(artist)} alt="" className={storyAvatarClass(artist)} />
               : <div className="w-full h-full flex items-center justify-center text-xs font-bold text-white/40">{artist.artist_name?.[0]}</div>}
           </div>
           <div>
@@ -718,8 +787,13 @@ export function StoriesRail({ userId }) {
 
         const groupList = Object.values(groups);
 
-        // Pin platform story first if it exists
-        const platformIdx = groupList.findIndex(g => g.artist.id === platformArtistId);
+        // Pin the platform's stories first.
+        //
+        // This matched on REACT_APP_PLATFORM_ARTIST_ID alone, which is not
+        // set, so the pin has never once fired. isPlatformArtist falls back to
+        // the slug migration 191 creates, which needs no configuration and
+        // cannot drift per environment.
+        const platformIdx = groupList.findIndex(g => isPlatformArtist(g.artist, platformArtistId));
         if (platformIdx > 0) {
           const [platform] = groupList.splice(platformIdx, 1);
           groupList.unshift(platform);
@@ -742,6 +816,38 @@ export function StoriesRail({ userId }) {
 
   if (loading || !storyGroups.length) return null;
 
+  // ── What the rail actually shows ──────────────────────────────────────────
+  //
+  // Grouped by artist once enough artists are posting, expanded to one bubble
+  // per story when they are not. See StoryBubble for why.
+  //
+  // EXPAND_BELOW is 3 because 2 bubbles in a full width panel still reads as
+  // empty and 3 reads as a row. Capped at MAX_EXPANDED so a day when the
+  // platform posts twenty times does not produce a rail nobody can scroll to
+  // the end of.
+  const EXPAND_BELOW = 3;
+  const MAX_EXPANDED = 12;
+
+  const expanded = storyGroups.length < EXPAND_BELOW;
+
+  const bubbles = expanded
+    ? storyGroups.flatMap(({ artist, stories }) =>
+        stories.map((story, idx) => ({
+          key:   story.id,
+          artist,
+          // The viewer still receives the whole group, so opening the third
+          // bubble starts on the third story and carries on through the rest
+          // rather than closing after one.
+          stories,
+          idx,
+          story,
+          label: story.caption?.trim() || artist.artist_name,
+        }))
+      ).slice(0, MAX_EXPANDED)
+    : storyGroups.map(({ artist, stories }) => ({
+        key: artist.id, artist, stories, idx: 0, story: null, label: null,
+      }));
+
   return (
     <>
       {/* Given a heading and real vertical space.
@@ -756,13 +862,15 @@ export function StoriesRail({ userId }) {
           <span className="text-[10px] text-white/25">24h</span>
         </div>
         <div className="flex space-x-4 overflow-x-auto px-6 pb-1 scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
-        {storyGroups.map(({ artist, stories }) => (
+        {bubbles.map(({ key, artist, stories, idx, story, label }) => (
           <StoryBubble
-            key={artist.id}
+            key={key}
             artist={artist}
             stories={stories}
+            story={story}
+            label={label}
             viewed={viewedIds}
-            onClick={() => setViewing({ artist, stories, idx: 0 })}
+            onClick={() => setViewing({ artist, stories, idx })}
           />
         ))}
         </div>

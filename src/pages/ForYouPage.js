@@ -29,7 +29,7 @@ import FeedTransportBar from '../components/FeedTransportBar';
 import PreorderTag from '../components/PreorderTag';
 import { needsWelcome } from './Welcome';
 
-import { ArtistStoryView } from '../components/ArtistStories';
+import { ArtistStoryView, storyAvatarSrc, storyAvatarClass } from '../components/ArtistStories';
 import ShareCard from '../components/ShareCard';
 import { askNotificationPermission } from '../utils/askNotificationPermission';
 import spreadByArtist from '../utils/spreadByArtist';
@@ -504,9 +504,15 @@ function StoryFeedCard({ item, isActive, onOpen, navigate }) {
       <div className="relative z-10 flex flex-col items-center space-y-4 px-8">
         <div className="w-24 h-24 rounded-full p-0.5 bg-gradient-to-tr from-purple-500 to-pink-400">
           <div className="w-full h-full rounded-full overflow-hidden bg-black border-2 border-black">
+            {/* Same fallback as the rail, so the platform account shows the
+                FM mark here too rather than a letter. coverUrl still resizes
+                an artist's own uploaded picture; the logo is a local file and
+                is used as it is. */}
             {artist.profile_image_url
               ? <img src={coverUrl(artist.profile_image_url, 400)} alt={artist.artist_name} className="w-full h-full object-cover" />
-              : <div className="w-full h-full bg-purple-500/30 flex items-center justify-center text-2xl font-bold text-white">{artist.artist_name?.[0]}</div>}
+              : storyAvatarSrc(artist)
+                ? <img src={storyAvatarSrc(artist)} alt={artist.artist_name} className={storyAvatarClass(artist)} />
+                : <div className="w-full h-full bg-purple-500/30 flex items-center justify-center text-2xl font-bold text-white">{artist.artist_name?.[0]}</div>}
           </div>
         </div>
         <div className="flex flex-col items-center space-y-1">
