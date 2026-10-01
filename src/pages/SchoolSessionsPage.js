@@ -19,11 +19,13 @@ import {
   Upload as UploadIcon, ThumbsUp, PlayCircle, BookOpen, Music, Trophy,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import SchoolVipPrize from '../components/SchoolVipPrize';
 import useSchoolSessions from '../hooks/useSchoolSessions';
 import DistrictNomination from '../components/DistrictNomination';
 import ShortlistSongs from '../components/ShortlistSongs';
 import SchoolCourseCard from '../components/SchoolCourseCard';
 import SchoolLessonList from '../components/SchoolLessonList';
+import { currentPhase, entryCta, phaseDate } from '../utils/schoolPhase';
 import { supabase } from '../supabaseClient';
 
 // Prominent hero countdown, ticks every second, shown as separate
@@ -154,21 +156,11 @@ function EntryGallery({ compId }) {
 }
 
 
-// entries_open_at / entries_close_at / voting_open_at / voting_close_at.
-function currentPhase(comp) {
-  if (!comp) return 'awareness';
-  const now = Date.now();
-  const t = (d) => d ? new Date(d).getTime() : null;
-  const entriesOpen = t(comp.entries_open_at);
-  const entriesClose = t(comp.entries_close_at);
-  const votingOpen = t(comp.voting_open_at);
-  const votingClose = t(comp.voting_close_at);
-
-  if (votingClose && now > votingClose) return 'done';
-  if ((votingOpen && now >= votingOpen) || (entriesClose && now >= entriesClose)) return 'voting';
-  if (entriesOpen && now >= entriesOpen) return 'submissions';
-  return 'awareness';
-}
+// currentPhase moved to src/utils/schoolPhase.js. It used to live here, which
+// meant it decided what this page SAID and nothing else: the entry toggle and
+// the insert never consulted it, so a student could file an entry a month
+// early. A rule about who may submit has to be readable from wherever
+// submitting happens.
 
 export default function SchoolSessionsPage() {
   const navigate = useNavigate();
@@ -304,14 +296,31 @@ export default function SchoolSessionsPage() {
           )}
         </div>
 
+        {/* A clock AND a date.
+            "32 days" creates urgency and tells a student nothing they can put
+            in a calendar or weigh against an exam. The countdown stays because
+            urgency is the point; the date is what lets somebody plan. Both, or
+            the page is asking them to do arithmetic. */}
         {eligible && phase === 'awareness' && comp?.entries_open_at && (
-          <BigCountdown to={comp.entries_open_at} label="Entries open in" />
+          <div>
+            <BigCountdown to={comp.entries_open_at} label="Entries open in" />
+            <p className="text-xs text-white/40 mt-2">
+              That is {phaseDate(comp.entries_open_at)}
+              {comp.entries_close_at ? `. You have until ${phaseDate(comp.entries_close_at)} to submit.` : '.'}
+            </p>
+          </div>
         )}
         {eligible && phase === 'submissions' && comp?.entries_close_at && (
-          <BigCountdown to={comp.entries_close_at} label="Time left to submit" />
+          <div>
+            <BigCountdown to={comp.entries_close_at} label="Time left to submit" />
+            <p className="text-xs text-white/40 mt-2">Entries close {phaseDate(comp.entries_close_at)}.</p>
+          </div>
         )}
         {eligible && phase === 'voting' && comp?.voting_close_at && (
-          <BigCountdown to={comp.voting_close_at} label="Time left to vote" />
+          <div>
+            <BigCountdown to={comp.voting_close_at} label="Time left to vote" />
+            <p className="text-xs text-white/40 mt-2">Voting closes {phaseDate(comp.voting_close_at)}.</p>
+          </div>
         )}
 
         {/* Prize pot */}
@@ -321,6 +330,13 @@ export default function SchoolSessionsPage() {
             {comp?.prize_breakdown_text || 'R5,000 to the winning school + R5,000 to the winning student, split among the group if you enter as one.'}
           </p>
         </div>
+
+        {/* The VIP card, directly under the cash.
+            Placed here on purpose. It is a second prize, not a rule, and a
+            student has to know it exists BEFORE they decide whether to enter,
+            which means it belongs beside the thing that made them read this
+            far rather than in the small print further down. */}
+        <SchoolVipPrize signedIn={!!user} />
 
         {/* How it works */}
         <p className="text-xs text-white/50 leading-relaxed border-l-2 border-lime-400 pl-3">
@@ -368,11 +384,18 @@ export default function SchoolSessionsPage() {
             // and then showed no courses, which reads as something failing to
             // load rather than as something not published yet.
             { key: 'awareness', icon: Megaphone, title: 'Awareness',
+              when: comp?.entries_open_at ? `Until ${phaseDate(comp.entries_open_at)}` : null,
               desc: hasCourses
                 ? 'Get ready, take the courses below, check the song shortlist, spread the word.'
                 : 'Get ready, check the song shortlist, and spread the word.' },
-              { key: 'submissions', icon: UploadIcon, title: 'Submissions', desc: 'Pick a song from the shortlist, record your cover, and toggle "Enter into School Sessions" when you upload.' },
-              { key: 'voting', icon: ThumbsUp, title: 'Voting', desc: 'Judges announce finalists and pick the winner. The public votes separately for the People\u2019s Choice pick.' },
+              { key: 'submissions', icon: UploadIcon, title: 'Submissions',
+                when: comp?.entries_open_at && comp?.entries_close_at
+                  ? `${phaseDate(comp.entries_open_at)} to ${phaseDate(comp.entries_close_at)}`
+                  : null,
+                desc: 'Pick a song from the shortlist, record your cover, and toggle "Enter into School Sessions" when you upload.' },
+              { key: 'voting', icon: ThumbsUp, title: 'Voting',
+                when: comp?.voting_close_at ? `Ends ${phaseDate(comp.voting_close_at)}` : null,
+                desc: 'Judges announce finalists and pick the winner. The public votes separately for the People\u2019s Choice pick.' },
             ].map((p, i) => {
               const active = eligible && p.key === phase;
               return (
@@ -384,12 +407,54 @@ export default function SchoolSessionsPage() {
                     <p className={`text-sm font-semibold ${active ? 'text-lime-400' : 'text-white'}`}>
                       {i + 1}. {p.title} {active && <span className="text-[10px] font-bold uppercase tracking-wide ml-1">· Now</span>}
                     </p>
+                    {/* The dates are the whole point of this strip. Three
+                        cards labelled Awareness, Submissions and Voting with
+                        no dates on them describe a shape, not a schedule. */}
+                    {p.when && (
+                      <p className={`text-[11px] font-semibold mt-0.5 ${active ? 'text-lime-400/80' : 'text-white/30'}`}>
+                        {p.when}
+                      </p>
+                    )}
                     <p className="text-xs text-white/40 mt-0.5">{p.desc}</p>
                   </div>
                 </div>
               );
             })}
           </div>
+        </div>
+
+        {/* WHAT YOU'LL NEED
+            Above the courses, because the courses are twenty minutes and this
+            is ten seconds, and the thing that lost entrants was discovering a
+            requirement at the end rather than the beginning.
+            The TikTok post is the one that matters. It is mandatory on the
+            entry form and was mentioned nowhere until the final screen, so a
+            student who does not use TikTok recorded a cover and then found out
+            they could not enter. */}
+        <div id="what-you-need" className="rounded-xl border border-white/[0.07] bg-white/[0.02] p-4 lg:p-5 scroll-mt-20">
+          <p className="text-lime-400 text-xs lg:text-sm font-bold tracking-widest uppercase mb-3">
+            What you will need
+          </p>
+          <ul className="space-y-2.5">
+            {[
+              ['An account here', user ? 'Done, you are signed in.' : 'Free, takes a minute.'],
+              ['Your school and district', 'You just say which school you are repping. Your school does not have to have signed up, and it can still win.'],
+              ['A cover of one of the songs above', 'Your own vocal over the original track. Solo or as a group.'],
+              ['A TikTok post of it, tagging us', 'This one is required. You paste the link when you enter, so post it before you upload.'],
+            ].map(([what, why]) => (
+              <li key={what} className="flex items-start gap-2.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-lime-400 flex-shrink-0 mt-1.5" />
+                <span className="min-w-0">
+                  <span className="block text-sm text-white">{what}</span>
+                  <span className="block text-xs text-white/40 mt-0.5">{why}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+          <p className="text-[11px] text-white/30 mt-3.5 leading-relaxed">
+            No verification code to fetch from your school any more. The system gives you one when
+            you enter.
+          </p>
         </div>
 
         {/* Courses */}
@@ -454,10 +519,23 @@ export default function SchoolSessionsPage() {
               <ArrowRight className="w-4 h-4" />
             </button>
           ) : (
+            // The button stops promising something it will not do.
+            //
+            // With 32 days on the clock it read "Upload your entry" and took
+            // a student to the upload panel, where the toggle now refuses
+            // them. Sending somebody to a door you have just locked is worse
+            // than the old bug it replaced.
             <button
-              onClick={() => navigate(user ? '/dashboard?tab=upload' : '/login')}
+              onClick={() => {
+                const cta = entryCta(comp, { signedIn: !!user });
+                if (cta.to.startsWith('/schoolsessions#')) {
+                  document.getElementById('what-you-need')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                } else {
+                  navigate(cta.to);
+                }
+              }}
               className="w-full lg:w-auto lg:px-10 py-3.5 bg-lime-400 text-black font-bold rounded-xl flex items-center justify-center space-x-2 hover:bg-lime-300 transition">
-              <span>{user ? 'Upload your entry' : 'Get started'}</span>
+              <span>{entryCta(comp, { signedIn: !!user }).label}</span>
               <ArrowRight className="w-4 h-4" />
             </button>
           )
