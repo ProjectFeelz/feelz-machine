@@ -126,8 +126,22 @@ const FILTERS = [
 // having to remember this file exists.
 const MONEY = ['tip','download','payout_pending','beat_purchase','purchase','sale',
                'subscription','paid_download','paid','earned','payout'];
+//
+// MILESTONES also covers the prefix milestone_, which is what the database
+// trigger writes (milestone_100, milestone_500, milestone_1k, milestone_10k,
+// milestone_stream), so those have never needed listing here.
+//
+// These three did need listing and were missing, which sent them to Social:
+//   featured_placement  a week on the Featured board, written by
+//                       rotate_featured_tracks() in migration 128
+//   wheel_winner        winning the wheel
+//   competition_result  the result of a competition, where only
+//                       competition_winner was listed
+// All three are the same kind of thing as the rest of this list: something
+// the platform is telling you that you achieved.
 const MILESTONES = ['top_supporter','streak','first_listener','competition_winner',
-                    'weekly_report','monthly_wrapped','fan_leaderboard','challenge_xp'];
+                    'weekly_report','monthly_wrapped','fan_leaderboard','challenge_xp',
+                    'featured_placement','wheel_winner','competition_result'];
 
 function filterMatch(type, filter) {
   if (filter === 'all')        return true;
@@ -1336,7 +1350,16 @@ export default function NotificationsPage() {
                                 onClick={e => { e.stopPropagation(); toggleExpand(notif.id); }}
                                 className="flex items-center space-x-0.5 text-[10px] text-white/20 hover:text-white/40 mt-0.5 transition"
                               >
-                                <span>{isExpanded ? 'Show less' : 'Read more'}</span>
+                                {/* "Show more", not "Read more". The CTA pill
+                                    directly below takes its label from the
+                                    notification's own metadata, and the live
+                                    lyrics announcement sets that label to
+                                    "Read more", so the row carried two
+                                    controls with identical words doing
+                                    different things: one unfolds the text,
+                                    one leaves the page. Seen on the live site,
+                                    not guessed at. */}
+                                <span>{isExpanded ? 'Show less' : 'Show more'}</span>
                                 <ChevronDown className={`w-3 h-3 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
                               </button>
                             )}

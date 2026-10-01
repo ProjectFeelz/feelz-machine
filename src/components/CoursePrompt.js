@@ -25,8 +25,27 @@
 // private windows and blocked site data throw here rather than returning
 // empty, and the worst case is the bar shows again.
 
+// WHO IT IS FOR
+//
+// Artists only. The course is "Recording, uploading, splits and getting
+// paid", which is four things a listener will never do, and the bar was
+// offering it to everybody who signed in because it gated on nothing but
+// having an account. Seen on the live site: a listener account was shown
+// "New here? There is a short course" above a feed of music.
+//
+// rawIsArtist rather than isArtist, because isArtist follows the admin
+// "view as" switch. Who this bar is for is a fact about the person, not
+// about which lens an admin is currently looking through.
+//
+// /learn stays open to everyone, and both plus menus and About still link to
+// it. This only stops the platform pushing artist material at people who did
+// not come here to make anything. When there is a listener course worth
+// watching, give it course_key 'listener' in school_course_lessons and this
+// bar can offer that one instead, with its own copy.
+
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
 import { GraduationCap, X } from 'lucide-react';
 
 const key = (userId) => `fm_course_prompt_${userId}`;
@@ -42,9 +61,11 @@ function markHandled(userId) {
 
 export default function CoursePrompt({ userId }) {
   const navigate = useNavigate();
+  const { rawIsArtist } = useAuth();
   const [show, setShow] = React.useState(false);
 
   React.useEffect(() => {
+    if (!rawIsArtist) { setShow(false); return; }
     if (!userId || alreadyHandled(userId)) { setShow(false); return; }
 
     // A short delay rather than appearing the instant the app paints. The

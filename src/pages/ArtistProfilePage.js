@@ -39,6 +39,7 @@ import MerchParked from '../components/MerchParked';
 import { MERCH_PARKED } from '../config/features';
 import ChallengeXPModal from '../components/ChallengeXPModal';
 import { askNotificationPermission } from '../utils/askNotificationPermission';
+import { fetchArtistFallbackCovers, artistImage } from '../utils/artistAvatar';
 import { sendArtistBroadcast, sendNotification } from '../utils/notify';
 
 const PAYPAL_CLIENT_ID = process.env.REACT_APP_PAYPAL_CLIENT_ID;
@@ -149,6 +150,7 @@ export default function ArtistProfilePage() {
   const [addingTo, setAddingTo] = useState(null);
   const [addedTo, setAddedTo] = useState({});
   const [similarArtists, setSimilarArtists] = useState([]);
+  const [similarCovers, setSimilarCovers] = useState(() => new Map());
   const [artistPlaylists, setArtistPlaylists] = useState([]);
   const [highlightedTrackId, setHighlightedTrackId] = useState(null);
   const [voiceMemos, setVoiceMemos] = useState([]);
@@ -373,21 +375,70 @@ export default function ArtistProfilePage() {
         setTopPick(null);
       }
       // Live follower count, avoids stale cached column
-supabase.from('follows').select('*', { count: 'exact', head: true })
-  .eq('artist_id', artistData.id)
-  .then(({ count }) => setFollowerCount(count || 0));
-      // The theme read does not depend on anything below it, and nothing below
-      // it depends on the theme, so it no longer blocks the track list. It is
-      // started here and awaited after the tracks land.
-      const themePromise = supabase
-        .from('artist_themes').select('*').eq('artist_id', artistData.id).maybeSingle();
+      supabase.from('follows').select('*', { count: 'exact', head: true })
+        .eq('artist_id', artistData.id)
+        .then(({ count }) => setFollowerCount(count || 0));
 
-      let trackQuery = supabase
+      // ── EVERY READ THAT ONLY NEEDS THE ARTIST ROW NOW FIRES AT ONCE ───────
+      //
+      // MEASURED, on the live site, on a profile that was already warm:
+      //
+      //   artists         0ms  ->  255ms
+      //   tracks        258ms  ->  533ms
+      //   track_likes   756ms  ->  978ms
+      //   playlists     980ms  -> 1218ms
+      //   albums       1220ms  -> 1440ms
+      //   collaborations 1441ms -> 1678ms
+      //   collaborations 1679ms -> 1900ms
+      //   tracks (similar) 1901ms -> 2151ms
+      //   follows+alerts 2153ms -> 2366ms
+      //
+      // Nine round trips, each one starting the millisecond the one before it
+      // finished, because every step was awaited in series. A round trip to
+      // Supabase from here is about 220ms, so that is 2.4 seconds of the page
+      // doing nothing but waiting its turn. And setLoading(false) sat at the
+      // very bottom, so the spinner covered all nine, including on a profile
+      // with no music, where the tracks come back empty in 200ms and the
+      // other eight still have to run.
+      //
+      // None of those steps needed the one before it. They were sequential
+      // only because `await` on its own line is the easiest thing to write.
+      //
+      // So: everything that needs nothing but the artist row starts here,
+      // together. The spinner lifts as soon as the TRACKS are in, because the
+      // track list is what somebody came to this page for. Albums, playlists,
+      // collaborations and similar artists land underneath while the page is
+      // already being read, which is what they always should have done; each
+      // one is a rail that renders nothing until it has something.
+      //
+      // Two round trips to a usable page instead of nine.
+
+      const COLLAB_SELECT =
+        '*, tracks(id, title, slug, cover_artwork_url, file_url, duration, stream_count, artist_id, is_downloadable, download_price, is_published)'
+        + ', artists!collaborations_artist_id_fkey(id, artist_name, slug)';
+
+      // START NOW, NOT WHENEVER SOMEBODY GETS ROUND TO AWAITING IT.
+      //
+      // A supabase query builder is LAZY. Look at PostgrestBuilder.ts: the
+      // fetch is created inside its then(), so holding a builder in a variable
+      // sends nothing at all. Assigning them here and awaiting them further
+      // down would have re-serialised the exact waterfall this change exists
+      // to remove, while looking parallel on the page.
+      //
+      // start() calls then once, which fires the request immediately and
+      // hands back an ordinary promise that can be used as many times as we
+      // like afterwards.
+      const start = (q) => q.then(r => r);
+
+      const pTheme = start(supabase
+        .from('artist_themes').select('*').eq('artist_id', artistData.id).maybeSingle());
+
+      const pTracks = start(supabase
         .from('tracks')
         .select('*, albums(title, cover_artwork_url, price), pay_what_you_want, minimum_price, is_preorder, release_date')
         .eq('artist_id', artistData.id)
         .eq('is_published', true)
-        .order('engagement_score', { ascending: false });
+        .order('engagement_score', { ascending: false }));
       // Unreleased pre-orders stay in the list for everyone now.
       //
       // This page used to be the only surface that filtered them out for
@@ -401,59 +452,24 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
       // PlayerContext, which is the only place that can cover all 39 play
       // paths, and PreorderTag puts the date on the card. Fan Pro's early
       // access is honoured by the gate rather than by hiding rows here.
-      const { data: trackData } = await trackQuery;
-      setTracks(trackData || []);
 
-      const { data: themeData } = await themePromise;
-      if (themeData) setTheme(themeData);
+      const pOwnPlaylists = start(supabase.from('playlists')
+        .select('id, name, cover_url, user_id, created_at, is_shared, playlist_tracks(id, position, tracks(cover_artwork_url))')
+        .eq('user_id', artistData.user_id)
+        .order('created_at', { ascending: false })
+        .limit(10));
 
-      if (user) {
-        // Scoped to THIS artist's tracks. It used to fetch the viewer's entire
-        // like history across the whole platform in order to tick hearts on
-        // one page, a list that grows forever and is thrown away on
-        // navigation, and which the 1000 row cap silently truncates, so a
-        // heavy liker's older likes stopped showing as liked.
-        const ids = (trackData || []).map(t => t.id).filter(Boolean);
-        const likeMap = {};
-        if (ids.length) {
-          const { data: likes } = await supabase
-            .from('track_likes').select('track_id')
-            .eq('user_id', user.id).in('track_id', ids);
-          (likes || []).forEach(l => { likeMap[l.track_id] = true; });
-        }
-        setLikedTracks(likeMap);
-      }
-      // Fetch artist's own playlists + collaborative playlists
-      const [{ data: ownPlaylists }, { data: collabPlaylists }] = await Promise.all([
-        supabase.from('playlists')
-          .select('id, name, cover_url, user_id, created_at, is_shared, playlist_tracks(id, position, tracks(cover_artwork_url))')
-          .eq('user_id', artistData.user_id)
-          .order('created_at', { ascending: false })
-          .limit(10),
-        supabase.from('playlist_collaborators')
-          .select('playlists(id, name, cover_url, user_id, created_at, is_shared)')
-          .eq('user_id', artistData.user_id),
-      ]);
-      const collabFlat = (collabPlaylists || []).map(c => c.playlists).filter(Boolean);
-      // Merge, deduplicate by id
-      const seen = new Set();
-      const merged = [...(ownPlaylists || []), ...collabFlat].filter(p => {
-        if (!p || seen.has(p.id)) return false;
-        seen.add(p.id); return true;
-      });
-      setArtistPlaylists(merged);
+      const pCollabPlaylists = start(supabase.from('playlist_collaborators')
+        .select('playlists(id, name, cover_url, user_id, created_at, is_shared)')
+        .eq('user_id', artistData.user_id));
 
-      const { data: albumData } = await supabase
+      const pAlbums = start(supabase
         .from('albums').select('*').eq('artist_id', artistData.id).eq('is_published', true)
-        .order('release_date', { ascending: false });
-      setAlbums(albumData || []);
-      // Fetch both directions:
-      // 1. Collabs where this artist IS the collaborator on someone else's track
-      // 2. Collabs on tracks owned by this artist (beatmakers/featured artists credited)
-      // Errors read, not discarded. The Collaborations section renders nothing
-      // when the list is empty, so a failed query used to look exactly like an
-      // artist who has never collaborated.
-      // The collaborating artist's name is selected as well as the track.
+        .order('release_date', { ascending: false }));
+
+      // Collaborations where this artist is the GUEST on somebody else's
+      // track. Needs only the artist id, so it starts now; the other
+      // direction needs the track ids and starts below.
       //
       // The relationship MUST be named. `collaborations` has two foreign keys
       // to `artists`, collaborations_artist_id_fkey and
@@ -461,74 +477,141 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
       // ambiguous and PostgREST answers PGRST201 as HTTP 300. That is the exact
       // failure that emptied For You and Browse on 2026-09-08, and an
       // unqualified embed here would have taken this rail down the same way.
-      const COLLAB_SELECT =
-        '*, tracks(id, title, slug, cover_artwork_url, file_url, duration, stream_count, artist_id, is_downloadable, download_price, is_published)'
-        + ', artists!collaborations_artist_id_fkey(id, artist_name, slug)';
-
-      const { data: asCollaborator, error: asCollabErr } = await supabase
+      const pGuestCollabs = start(supabase
         .from('collaborations')
         .select(COLLAB_SELECT)
-        .eq('artist_id', artistData.id).eq('status', 'accepted');
-      if (asCollabErr) console.error('[profile] collaborations (as collaborator) failed:',
-        asCollabErr.code, asCollabErr.message, asCollabErr.details || '', asCollabErr.hint || '');
+        .eq('artist_id', artistData.id).eq('status', 'accepted'));
 
-      // Get track IDs owned by this artist
-      const ownTrackIds = (trackData || []).map(t => t.id).filter(Boolean);
-      let onOwnTracks = [];
-      if (ownTrackIds.length > 0) {
-        const { data: ownTrackCollabs, error: ownCollabErr } = await supabase
-          .from('collaborations')
-          .select(COLLAB_SELECT)
-          .in('track_id', ownTrackIds)
-          .eq('status', 'accepted')
-          .neq('artist_id', artistData.id);
-        if (ownCollabErr) console.error('[profile] collaborations (on own tracks) failed:',
-          ownCollabErr.code, ownCollabErr.message, ownCollabErr.details || '', ownCollabErr.hint || '');
-        onOwnTracks = ownTrackCollabs || [];
+      const pFollowState = user
+        ? Promise.all([
+            supabase.from('follows').select('id').eq('artist_id', artistData.id).eq('follower_id', user.id).maybeSingle(),
+            supabase.from('artist_alerts').select('id').eq('artist_id', artistData.id).eq('user_id', user.id).maybeSingle(),
+          ])
+        : null;
+
+      // ── The page becomes usable here ──────────────────────────────────────
+
+      const { data: trackData } = await pTracks;
+      setTracks(trackData || []);
+      setLoading(false);
+
+      // ── Everything below lands underneath a page somebody is already reading ──
+      //
+      // Deliberately not awaited. Each one sets its own slice of state when it
+      // arrives, and each one carries its own catch: an unawaited promise that
+      // rejects is an unhandled rejection, and these used to be covered by the
+      // single try/catch around the whole chain.
+
+      pTheme
+        .then(({ data }) => { if (data) setTheme(data); })
+        .catch(err => console.error('[profile] theme failed:', err?.message));
+
+      Promise.all([pOwnPlaylists, pCollabPlaylists])
+        .then(([{ data: ownPlaylists }, { data: collabPlaylists }]) => {
+          const collabFlat = (collabPlaylists || []).map(c => c.playlists).filter(Boolean);
+          // Merge, deduplicate by id
+          const seen = new Set();
+          const merged = [...(ownPlaylists || []), ...collabFlat].filter(p => {
+            if (!p || seen.has(p.id)) return false;
+            seen.add(p.id); return true;
+          });
+          setArtistPlaylists(merged);
+        })
+        .catch(err => console.error('[profile] playlists failed:', err?.message));
+
+      pAlbums
+        .then(({ data }) => setAlbums(data || []))
+        .catch(err => console.error('[profile] albums failed:', err?.message));
+
+      pFollowState
+        ?.then(([{ data: followData }, { data: alertData }]) => {
+          setIsFollowing(!!followData);
+          setNotifEnabled(!!alertData);
+        })
+        .catch(err => console.error('[profile] follow state failed:', err?.message));
+
+      const trackIds = (trackData || []).map(t => t.id).filter(Boolean);
+
+      if (user && trackIds.length) {
+        // Scoped to THIS artist's tracks. It used to fetch the viewer's entire
+        // like history across the whole platform in order to tick hearts on
+        // one page, a list that grows forever and is thrown away on
+        // navigation, and which the 1000 row cap silently truncates, so a
+        // heavy liker's older likes stopped showing as liked.
+        supabase
+          .from('track_likes').select('track_id')
+          .eq('user_id', user.id).in('track_id', trackIds)
+          .then(({ data: likes }) => {
+            const likeMap = {};
+            (likes || []).forEach(l => { likeMap[l.track_id] = true; });
+            setLikedTracks(likeMap);
+          }, err => console.error('[profile] likes failed:', err?.message));
+      } else if (user) {
+        setLikedTracks({});
       }
 
-      // Merge and deduplicate by id.
-      //
-      // The two queries mean OPPOSITE things and the merge used to lose that.
-      //
-      //   asCollaborator, artist_id = me. I am the guest on someone else's
-      //                    track, and `role` is MY role. "Featured" is right.
-      //   onOwnTracks   , the track is mine and artist_id is somebody ELSE.
-      //                    `role` is THEIR role, not mine.
-      //
-      // The card rendered `collab.role` either way with no name attached, so
-      // every guest credited on this artist's own songs came out reading
-      // "featured", as if they were featured on their own track. Tagging the
-      // direction here is what lets the card say whose role it is.
-      const allCollabs = [
-        ...(asCollaborator || []).map(c => ({ ...c, direction: 'guest' })),
-        ...onOwnTracks.map(c => ({ ...c, direction: 'host' })),
-      ];
-      const seenCollabs = new Set();
-      const uniqueCollabs = allCollabs.filter(col => {
-        if (seenCollabs.has(col.id)) return false;
-        seenCollabs.add(col.id);
-        return true;
-      })
-      // Only collaborations on tracks that have actually launched.
-      //
-      // This is what produced the row of "Untitled" cards. A collaboration
-      // row survives its track being unpublished, and two different things
-      // then make the track unusable here: an unpublished track is hidden by
-      // RLS, so the embed comes back as tracks: null, and a draft that was
-      // never named has no title. Either way the card fell through to
-      // 'Untitled', with no artwork, and tapping it did nothing because
-      // handlePlayTrack needs a file_url.
-      //
-      // So a collaboration is only shown when its track exists AND is
-      // published. Dropping the null case also means a track hidden from this
-      // viewer by RLS cannot leak its existence through a credit.
-      .filter(col => col.tracks && col.tracks.is_published);
-      setCollabs(uniqueCollabs);
-      // The streams read that used to sit here is gone. Its result was
-      // tallied into tagCounts and then discarded, the row that consumed it
-      // was deleted and the query outlived it. A blocking round trip on every
-      // signed in profile load, for nothing.
+      // Collaborations, both directions, resolved together.
+      const pOwnTrackCollabs = trackIds.length
+        ? start(supabase
+            .from('collaborations')
+            .select(COLLAB_SELECT)
+            .in('track_id', trackIds)
+            .eq('status', 'accepted')
+            .neq('artist_id', artistData.id))
+        : Promise.resolve({ data: [], error: null });
+
+      Promise.all([pGuestCollabs, pOwnTrackCollabs])
+        .then(([guestRes, ownRes]) => {
+          // Errors read, not discarded. The Collaborations section renders
+          // nothing when the list is empty, so a failed query used to look
+          // exactly like an artist who has never collaborated.
+          if (guestRes.error) console.error('[profile] collaborations (as collaborator) failed:',
+            guestRes.error.code, guestRes.error.message, guestRes.error.details || '', guestRes.error.hint || '');
+          if (ownRes.error) console.error('[profile] collaborations (on own tracks) failed:',
+            ownRes.error.code, ownRes.error.message, ownRes.error.details || '', ownRes.error.hint || '');
+
+          // Merge and deduplicate by id.
+          //
+          // The two queries mean OPPOSITE things and the merge used to lose
+          // that.
+          //
+          //   guest, artist_id = me. I am the guest on someone else's track,
+          //          and `role` is MY role. "Featured" is right.
+          //   host , the track is mine and artist_id is somebody ELSE.
+          //          `role` is THEIR role, not mine.
+          //
+          // The card rendered `collab.role` either way with no name attached,
+          // so every guest credited on this artist's own songs came out
+          // reading "featured", as if they were featured on their own track.
+          // Tagging the direction here is what lets the card say whose role
+          // it is.
+          const allCollabs = [
+            ...(guestRes.data || []).map(c => ({ ...c, direction: 'guest' })),
+            ...(ownRes.data  || []).map(c => ({ ...c, direction: 'host'  })),
+          ];
+          const seenCollabs = new Set();
+          const uniqueCollabs = allCollabs.filter(col => {
+            if (seenCollabs.has(col.id)) return false;
+            seenCollabs.add(col.id);
+            return true;
+          })
+          // Only collaborations on tracks that have actually launched.
+          //
+          // This is what produced the row of "Untitled" cards. A collaboration
+          // row survives its track being unpublished, and two different things
+          // then make the track unusable here: an unpublished track is hidden
+          // by RLS, so the embed comes back as tracks: null, and a draft that
+          // was never named has no title. Either way the card fell through to
+          // 'Untitled', with no artwork, and tapping it did nothing because
+          // handlePlayTrack needs a file_url.
+          //
+          // So a collaboration is only shown when its track exists AND is
+          // published. Dropping the null case also means a track hidden from
+          // this viewer by RLS cannot leak its existence through a credit.
+          .filter(col => col.tracks && col.tracks.is_published);
+          setCollabs(uniqueCollabs);
+        })
+        .catch(err => console.error('[profile] collaborations failed:', err?.message));
 
       // Genres come from trackData, which is already in hand from the tracks
       // read above. This used to be a SECOND read of the same table with the
@@ -541,31 +624,32 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
         const allTags = [...genres, ...moods];
         if (allTags.length > 0) {
           const orFilter = allTags.map(t => `genre.eq.${t},mood.eq.${t}`).join(',');
-          const { data: simTrackData } = await supabase
+          supabase
             .from('tracks')
             .select('artist_id, artists!tracks_artist_id_fkey(id, artist_name, slug, profile_image_url, is_verified, total_streams)')
-            .neq('artist_id', artistData.id).eq('is_published', true).or(orFilter).limit(50);
-          if (simTrackData) {
-            const artistMap = {};
-            simTrackData.forEach(t => {
-              const a = t.artists;
-              if (a && !artistMap[a.id]) artistMap[a.id] = { ...a, matchCount: 0 };
-              if (a) artistMap[a.id].matchCount++;
-            });
-            const sorted = Object.values(artistMap)
-              .sort((a, b) => b.matchCount - a.matchCount || b.total_streams - a.total_streams)
-              .slice(0, 6);
-            setSimilarArtists(sorted);
-          }
+            .neq('artist_id', artistData.id).eq('is_published', true).or(orFilter).limit(50)
+            .then(({ data: simTrackData }) => {
+              if (!simTrackData) return;
+              const artistMap = {};
+              simTrackData.forEach(t => {
+                const a = t.artists;
+                if (a && !artistMap[a.id]) artistMap[a.id] = { ...a, matchCount: 0 };
+                if (a) artistMap[a.id].matchCount++;
+              });
+              const sorted = Object.values(artistMap)
+                .sort((a, b) => b.matchCount - a.matchCount || b.total_streams - a.total_streams)
+                .slice(0, 6);
+              setSimilarArtists(sorted);
+              // These are all artists with published tracks by definition,
+              // this list is built FROM their tracks, so every one of them has
+              // a cover to fall back on. Showing a grey music note here was
+              // the worst case of it: a row whose whole job is to make you
+              // click through to somebody new.
+              fetchArtistFallbackCovers(
+                sorted.filter(a => !a.profile_image_url).map(a => a.id)
+              ).then(setSimilarCovers);
+            }, err => console.error('[profile] similar artists failed:', err?.message));
         }
-      }
-      if (user) {
-        const [{ data: followData }, { data: alertData }] = await Promise.all([
-          supabase.from('follows').select('id').eq('artist_id', artistData.id).eq('follower_id', user.id).maybeSingle(),
-          supabase.from('artist_alerts').select('id').eq('artist_id', artistData.id).eq('user_id', user.id).maybeSingle(),
-        ]);
-        setIsFollowing(!!followData);
-        setNotifEnabled(!!alertData);
       }
     } catch (err) { console.error('Error fetching artist:', err); }
     setLoading(false);
@@ -2377,8 +2461,8 @@ supabase.from('follows').select('*', { count: 'exact', head: true })
             {similarArtists.map(a => (
               <div key={a.id} className="flex-shrink-0 w-24 cursor-pointer group" onClick={() => navigate(`/artist/${a.slug}`)}>
                 <div className="w-24 h-24 rounded-full overflow-hidden mb-2 mx-auto" style={{ backgroundColor: `${textColor}08` }}>
-                  {a.profile_image_url
-                    ? <img src={coverUrl(a.profile_image_url, 400)} alt={a.artist_name} className="w-full h-full object-cover" />
+                  {artistImage(a, similarCovers)
+                    ? <img src={coverUrl(artistImage(a, similarCovers), 400)} alt={a.artist_name} className="w-full h-full object-cover" />
                     : <div className="w-full h-full flex items-center justify-center"><Music className="w-8 h-8" style={{ color: `${textColor}20` }} /></div>}
                 </div>
                 <p className="text-xs font-medium text-center truncate" style={{ color: textColor }}>{a.artist_name}</p>
