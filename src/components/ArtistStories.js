@@ -14,7 +14,6 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import { visibleNow } from '../utils/stories';
-import { sendNotification } from '../utils/notify';
 import { useAuth } from '../contexts/AuthContext';
 import { useHaptics } from '../hooks/useHaptics';
 import {
@@ -71,7 +70,7 @@ export function StoryUpload({ artistId, onUploaded, inline = false }) {
     const { data, error } = await visibleNow(
       supabase
         .from('artist_stories')
-        .select('id, media_url, media_type, caption, view_count, like_count, expires_at, created_at')
+        .select('id, media_url, media_type, caption, view_count, like_count, reaction_count, expires_at, created_at')
         .eq('artist_id', artistId))
       .order('created_at', { ascending: false });
     if (error) console.error('[story] own stories load failed:', error.code, error.message);
@@ -279,7 +278,7 @@ export function StoryUpload({ artistId, onUploaded, inline = false }) {
                     </p>
                     <div className="flex items-center gap-2.5 mt-0.5 text-[10px] text-white/30">
                       <span className="inline-flex items-center gap-1"><Eye className="w-2.5 h-2.5" />{st.view_count || 0}</span>
-                      <span className="inline-flex items-center gap-1"><Heart className="w-2.5 h-2.5" />{st.like_count || 0}</span>
+                      <span className="inline-flex items-center gap-1"><Heart className="w-2.5 h-2.5" />{st.reaction_count ?? st.like_count ?? 0}</span>
                       <span className="inline-flex items-center gap-1"><Clock className="w-2.5 h-2.5" />{timeLeft(st.expires_at) || 'expiring'}</span>
                     </div>
                   </div>
@@ -499,6 +498,11 @@ function StoryBubble({ artist, stories, story, label, viewed, onClick }) {
   );
 }
 
+// The five, and they are the same five the database allows in migration 213's
+// check constraint. If this list and that constraint ever disagree, the one
+// that is wrong is this one, because the database will simply refuse the row.
+const REACTIONS = ['❤️', '🔥', '😂', '😮', '👏'];
+
 // ── Full-screen Story Viewer ──────────────────────────────────────────────────
 export function ArtistStoryView({ stories, artist, initialIndex = 0, onClose }) {
   const { user } = useAuth();
@@ -507,59 +511,88 @@ export function ArtistStoryView({ stories, artist, initialIndex = 0, onClose }) 
   const [idx, setIdx]               = useState(initialIndex);
   const [playing, setPlaying]       = useState(false);
   const [progress, setProgress]     = useState(0);
-  const [likedIds, setLikedIds]     = useState(new Set());
-  const [likeCounts, setLikeCounts] = useState({});
+  // myReaction: { [storyId]: emoji }. reactionCounts: { [storyId]: number }.
+  const [myReaction, setMyReaction]         = useState({});
+  const [reactionCounts, setReactionCounts] = useState({});
   const taggedAudioRef              = useRef(null);
   const audioRef                    = useRef(null);
   const videoRef                    = useRef(null);
   const progressRef                 = useRef(null);
   const DURATION_IMAGE_MS           = 5000;
 
-  // Load liked state
+  // ── REACTIONS ─────────────────────────────────────────────────────────────
+  //
+  // This was a single heart, and the notification telling the artist about it
+  // was written by the browser. Two things wrong with that, and the second is
+  // the one that mattered: if the tab closed, if the insert was refused, if
+  // somebody tapped and immediately swiped on, the reaction existed in the
+  // database and the artist never found out.
+  //
+  // Migration 213 moved the notification into a trigger, so it fires because
+  // the row exists rather than because a tab stayed open. Which also means
+  // none of that sending code belongs here any more.
+  //
+  // ONE REACTION EACH, and the database enforces it. Tapping a different emoji
+  // replaces yours. Tapping the one you already chose takes it back. Because
+  // the write is an upsert, changing your mind resolves to an UPDATE, the
+  // AFTER INSERT trigger does not fire, and the artist is not told twice about
+  // the same person.
   useEffect(() => {
-    if (!user) return;
-    const ids = stories.map(s => s.id);
-    supabase.from('story_likes').select('story_id').eq('user_id', user.id).in('story_id', ids)
-      .then(({ data }) => setLikedIds(new Set((data || []).map(l => l.story_id))));
     const counts = {};
-    stories.forEach(s => { counts[s.id] = s.like_count || 0; });
-    setLikeCounts(counts);
+    stories.forEach(s => { counts[s.id] = s.reaction_count ?? s.like_count ?? 0; });
+    setReactionCounts(counts);
+
+    if (!user) { setMyReaction({}); return; }
+    const ids = stories.map(s => s.id);
+    if (!ids.length) return;
+    supabase.from('story_reactions').select('story_id, emoji')
+      .eq('user_id', user.id).in('story_id', ids)
+      .then(({ data, error }) => {
+        if (error) { console.warn('[story] reactions unavailable:', error.code, error.message); return; }
+        const mine = {};
+        (data || []).forEach(r => { mine[r.story_id] = r.emoji; });
+        setMyReaction(mine);
+      });
   }, [stories, user]);
 
-  const handleLike = async (e) => {
+  const react = async (e, emoji) => {
     e.stopPropagation();
     if (!user || !story) return;
+    tap();
     const storyId = story.id;
-    const isLiked = likedIds.has(storyId);
-    setLikedIds(prev => { const n = new Set(prev); isLiked ? n.delete(storyId) : n.add(storyId); return n; });
-    setLikeCounts(prev => ({ ...prev, [storyId]: Math.max(0, (prev[storyId] || 0) + (isLiked ? -1 : 1)) }));
-    if (isLiked) {
-      await supabase.from('story_likes').delete().eq('story_id', storyId).eq('user_id', user.id);
-    } else {
-      await supabase.from('story_likes').insert({ story_id: storyId, user_id: user.id });
-      if (artist?.id) {
-        supabase.from('artists').select('id, artist_name, profile_image_url, user_id').eq('user_id', user.id).maybeSingle()
-          .then(({ data: liker }) => {
-            if (liker && artist.user_id && artist.user_id !== user.id) {
-              // .catch() on a supabase insert never fires for a database
-              // error, supabase-js resolves { data, error } rather than
-              // throwing, so this was a 403 nobody could see. Through the
-              // RPC, and the helper reads the error.
-              sendNotification(supabase, 'story like (stories)', {
-                type:     'track_liked',
-                artistId: artist.id,
-                title:    `${liker.artist_name || 'Someone'} liked your story`,
-                message:  story.caption || '',
-                metadata: {
-                  story_id: storyId,
-                  from_artist_id: liker.id || null,
-                  from_artist_name: liker.artist_name,
-                  from_artist_image: liker.profile_image_url,
-                },
-              });
-            }
-          });
-      }
+    const current = myReaction[storyId];
+    const removing = current === emoji;
+
+    // Optimistic, because a reaction that waits for a round trip before it
+    // moves feels broken on the one screen where everything is a quick tap.
+    setMyReaction(prev => {
+      const next = { ...prev };
+      if (removing) delete next[storyId]; else next[storyId] = emoji;
+      return next;
+    });
+    setReactionCounts(prev => ({
+      ...prev,
+      [storyId]: Math.max(0, (prev[storyId] || 0) + (removing ? -1 : current ? 0 : 1)),
+    }));
+
+    const { error } = removing
+      ? await supabase.from('story_reactions').delete()
+          .eq('story_id', storyId).eq('user_id', user.id)
+      : await supabase.from('story_reactions')
+          .upsert({ story_id: storyId, user_id: user.id, emoji }, { onConflict: 'story_id,user_id' });
+
+    if (error) {
+      console.error('[story] reaction failed:', error.code, error.message);
+      // Put it back rather than leaving somebody believing they reacted.
+      setMyReaction(prev => {
+        const next = { ...prev };
+        if (removing) next[storyId] = current; else if (current) next[storyId] = current; else delete next[storyId];
+        return next;
+      });
+      setReactionCounts(prev => ({
+        ...prev,
+        [storyId]: Math.max(0, (prev[storyId] || 0) + (removing ? 1 : current ? 0 : -1)),
+      }));
     }
   };
 
@@ -714,19 +747,44 @@ export function ArtistStoryView({ stories, artist, initialIndex = 0, onClose }) 
           </button>
         )}
 
-        <button onClick={handleLike} className="flex flex-col items-center space-y-0.5 active:scale-90 transition ml-3 flex-shrink-0">
-          <div className="w-11 h-11 rounded-full flex items-center justify-center"
-            style={{ background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.15)' }}>
-            <Heart className="w-5 h-5 transition-all"
-              style={likedIds.has(story.id)
-                ? { fill: '#f43f5e', color: '#f43f5e' }
-                : { color: 'rgba(255,255,255,0.7)' }} />
-          </div>
-          {(likeCounts[story.id] || 0) > 0 && (
-            <span className="text-[10px] font-semibold text-white/50">{likeCounts[story.id]}</span>
-          )}
-        </button>
+        {(reactionCounts[story.id] || 0) > 0 && (
+          <span className="ml-3 flex-shrink-0 text-[11px] font-semibold text-white/45 self-center">
+            {reactionCounts[story.id]}
+          </span>
+        )}
       </div>
+
+      {/* THE REACTION ROW.
+          Its own row above the track pill rather than a button beside it.
+          Five targets of 44px plus the pill does not fit across a phone, and
+          the first casualty of squeezing them in is the tap target, on the one
+          screen where every interaction is a quick tap with a thumb.
+          Signed out there is nothing to show: a row of emoji that silently do
+          nothing is worse than no row. */}
+      {user && (
+        <div className="absolute bottom-20 left-0 right-0 z-20 flex items-center justify-center gap-2 px-4">
+          {REACTIONS.map(emoji => {
+            const mine = myReaction[story.id] === emoji;
+            return (
+              <button
+                key={emoji}
+                onClick={(e) => react(e, emoji)}
+                aria-label={mine ? `Remove ${emoji}` : `React ${emoji}`}
+                aria-pressed={mine}
+                className={`w-11 h-11 rounded-full flex items-center justify-center text-xl leading-none
+                            transition active:scale-90 ${mine ? 'scale-110' : ''}`}
+                style={{
+                  background: mine ? 'rgba(255,255,255,0.22)' : 'rgba(0,0,0,0.5)',
+                  border: mine ? '1px solid rgba(255,255,255,0.55)' : '1px solid rgba(255,255,255,0.15)',
+                  backdropFilter: 'blur(12px)',
+                }}
+              >
+                {emoji}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {/* Caption */}
       {story.caption && (

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, createContext, useContext } fr
 import { supabase } from '../supabaseClient';
 import { setViewerEntitlement } from '../utils/trackAccess';
 import { useAuth } from './AuthContext';
+import { userRow, invalidateUserRow } from '../utils/userRow';
 
 const TierContext = createContext(null);
 
@@ -171,11 +172,9 @@ function useTierInternal() {
   const fetchListenerTier = async (userId) => {
     try {
       // Primary: check listeners.tier + tier_expires_at (set by webhook)
-      const { data: listenerRow } = await supabase
-        .from('listeners')
-        .select('tier, tier_expires_at')
-        .eq('user_id', userId)
-        .maybeSingle();
+      // Shares the same read as AuthContext and the theme init rather than
+      // sending a third one. See src/utils/userRow.js.
+      const listenerRow = await userRow('listeners', userId);
 
       // An explicit 'free' is an ANSWER, not a miss.
       //
@@ -201,6 +200,9 @@ function useTierInternal() {
             await supabase.from('listeners')
               .update({ tier: 'free', updated_at: new Date().toISOString() })
               .eq('user_id', userId);
+            // This row is shared now, so a write to it has to drop the cached
+            // copy or the rest of the app keeps reading the old tier.
+            invalidateUserRow('listeners', userId);
             setListenerTierSlug('free');
             setLoading(false);
             return;

@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useTier } from '../contexts/useTier';
 import { getListenerFeature } from '../contexts/useTier';
 import { supabase } from '../supabaseClient';
+import { invalidateUserRow } from '../utils/userRow';
 import { usePlayer } from '../contexts/PlayerContext';
 import { useOfflineLibrary } from '../contexts/OfflineContext';
 import {
@@ -114,6 +115,9 @@ export default function LibraryPage() {
       await supabase.from('listeners')
         .update({ preferences: merged, updated_at: new Date().toISOString() })
         .eq('user_id', user.id);
+      // The theme lives in this row and the row is cached, so without this the
+      // change does not show until the cache expires. See src/utils/userRow.js.
+      invalidateUserRow('listeners', user.id);
     } catch {}
     setSavingPrefs(false);
   };

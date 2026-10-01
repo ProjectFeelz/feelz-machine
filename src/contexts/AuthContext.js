@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
+import { userRow, invalidateUserRow, clearUserRowCache } from '../utils/userRow';
 
 // Which user id an artist-profile creation is currently in flight for.
 let creatingArtistFor = null;
@@ -163,11 +164,10 @@ export function AuthProvider({ children }) {
   };
 
   const fetchListener = async (userId) => {
-    const { data: existing } = await supabase
-      .from('listeners')
-      .select('*')
-      .eq('user_id', userId)
-      .maybeSingle();
+    // Through userRow, because useAppThemeInit and useTier read this same row
+    // on the same tick and all three used to send their own request. See
+    // src/utils/userRow.js for the measurement.
+    const existing = await userRow('listeners', userId);
     if (existing) {
       setListener(existing);
       return;
@@ -185,7 +185,10 @@ export function AuthProvider({ children }) {
         .upsert({ user_id: userId, display_name: displayName, updated_at: new Date().toISOString() }, { onConflict: 'user_id' })
         .select()
         .maybeSingle();
-      if (created) setListener(created);
+      if (created) {
+        setListener(created);
+        invalidateUserRow('listeners', userId);
+      }
     } catch (err) {
       console.warn('Listener row creation failed (non-fatal):', err.message);
     }
@@ -193,11 +196,9 @@ export function AuthProvider({ children }) {
 
   const checkAdmin = async (userId) => {
     try {
-      const { data } = await supabase
-        .from('admins')
-        .select('id')
-        .eq('user_id', userId)
-        .maybeSingle();
+      // Also through userRow: CreateMenuModal asked this same question on
+      // mount, so `admins` was read twice before anybody had tapped anything.
+      const data = await userRow('admins', userId);
       setIsAdmin(!!data);
     } catch {
       setIsAdmin(false);
@@ -328,6 +329,10 @@ export function AuthProvider({ children }) {
 
   const signOut = async () => {
     await supabase.auth.signOut();
+    // Before the state is cleared, not after. Whatever is cached here belongs
+    // to the person who just left, and the next person on this device must not
+    // be handed it out of memory.
+    clearUserRowCache();
     setUser(null);
     setProfile(null);
     setArtist(null);
@@ -337,6 +342,11 @@ export function AuthProvider({ children }) {
 
   const refreshProfile = async () => {
     if (user) {
+      // The whole point of this function is to go and look again, so the cache
+      // is dropped first. Without this, "refresh" would return what it already
+      // had, which is the opposite of what every caller wants.
+      invalidateUserRow('listeners', user.id);
+      invalidateUserRow('admins', user.id);
       await fetchProfile(user.id);
       await fetchArtist(user.id);
       await fetchListener(user.id);

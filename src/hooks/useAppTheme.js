@@ -15,6 +15,7 @@
 
 import { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
+import { userRow, invalidateUserRow } from '../utils/userRow';
 import { useAuth } from '../contexts/AuthContext';
 
 const THEMES = [
@@ -39,15 +40,13 @@ export function useAppThemeInit() {
 
   useEffect(() => {
     if (!user) return;
-    supabase.from('listeners')
-      .select('preferences')
-      .eq('user_id', user.id)
-      .maybeSingle()
-      .then(({ data }) => {
-        const themeKey = data?.preferences?.theme || 'default';
-        applyThemeGlobal(themeKey);
-      })
-      .catch(() => {});
+    // Shares AuthContext's read of this row rather than sending its own. This
+    // was one of five concurrent reads of `listeners` at startup. See
+    // src/utils/userRow.js.
+    userRow('listeners', user.id).then((data) => {
+      const themeKey = data?.preferences?.theme || 'default';
+      applyThemeGlobal(themeKey);
+    });
   }, [user?.id]); // eslint-disable-line
 }
 

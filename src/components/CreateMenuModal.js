@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import { sendArtistBroadcast } from '../utils/notify';
 import { useTier } from '../contexts/useTier';
+import { useAuth } from '../contexts/AuthContext';
 import {
   X, ChevronDown, Loader, Check, Send, Music, Youtube, Search, Radio, Plus,
 } from 'lucide-react';
@@ -20,6 +21,7 @@ import { MERCH_PARKED } from '../config/features';
 // center plus button — without the two call sites fighting over shared state.
 export default function CreateMenuModal({ artist, user, onClose, primaryColor = '#90AF2F', bgColor = '#000000' }) {
   const navigate = useNavigate();
+  const { isAdmin } = useAuth();
   // Newsletter shortcut, shown only to admins and newsletter editors so
   // Jane can reach it in one tap instead of Monetize > Affiliates > Newsletter.
   const [canNewsletter, setCanNewsletter] = useState(false);
@@ -38,12 +40,19 @@ export default function CreateMenuModal({ artist, user, onClose, primaryColor = 
   const [topPickLoading, setTopPickLoading] = useState(false);
   useEffect(() => {
     if (!user) return;
-    // isAdmin isn't passed to this component, so check both tables directly.
-    Promise.all([
-      supabase.from('admins').select('user_id').eq('user_id', user.id).maybeSingle(),
-      supabase.from('newsletter_editors').select('id').eq('user_id', user.id).maybeSingle(),
-    ]).then(([a, e]) => setCanNewsletter(!!a.data || !!e.data));
-  }, [user]);
+    // The admin half of this question is already answered elsewhere.
+    //
+    // The old comment was right that isAdmin is not passed in as a prop, and
+    // the conclusion it drew, read the table directly, is what made `admins` a
+    // second request at startup for something AuthContext had already asked.
+    // The missing step is simply that this file can call useAuth itself, which
+    // it now does.
+    //
+    // Only newsletter_editors is genuinely unknown here.
+    if (isAdmin) { setCanNewsletter(true); return; }
+    supabase.from('newsletter_editors').select('id').eq('user_id', user.id).maybeSingle()
+      .then(({ data }) => setCanNewsletter(!!data));
+  }, [user, isAdmin]);
 
 
   // Loaded when the tab is opened rather than on mount: most opens of this
@@ -281,10 +290,10 @@ export default function CreateMenuModal({ artist, user, onClose, primaryColor = 
                 // store up should be told it is paused, not left wondering
                 // where it went. Tapping it explains; it does not open a shop.
                 MERCH_PARKED
-                  ? { id: 'merch_parked', icon: '🛍️', label: 'Merch Store', sub: 'Paused — tap to see why', color: 'gray' }
+                  ? { id: 'merch_parked', icon: '🛍️', label: 'Merch Store', sub: 'Paused, tap to see why', color: 'gray' }
                   : isPremium
                     ? { id: 'merch', icon: '🛍️', label: 'Merch Store', sub: 'Connect Printful · sell to your fans', color: 'purple' }
-                    : { id: 'merch_locked', icon: '🛍️', label: 'Merch Store', sub: 'Premium only — upgrade to unlock', color: 'gray' },
+                    : { id: 'merch_locked', icon: '🛍️', label: 'Merch Store', sub: 'Premium only, upgrade to unlock', color: 'gray' },
                 { id: 'dm', icon: '📣', label: 'Message Fans', sub: 'Send a notification to all followers', color: 'green' },
                 { id: 'memo', icon: '🎙️', label: 'Voice Memo', sub: 'Record a message for your fans', color: 'pink' },
                 { id: 'live', icon: '🔴', label: 'Go Live', sub: 'Start a live session', color: 'red' },
@@ -335,7 +344,7 @@ export default function CreateMenuModal({ artist, user, onClose, primaryColor = 
                 <div className="py-10 flex justify-center"><Loader className="w-5 h-5 animate-spin text-white/30" /></div>
               ) : topPickTracks.length === 0 ? (
                 <p className="text-sm text-white/40 text-center py-8">
-                  Publish a track first — your top pick is chosen from your own published music.
+                  Publish a track first, your top pick is chosen from your own published music.
                 </p>
               ) : (
                 <>
