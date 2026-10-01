@@ -157,8 +157,13 @@ export default function PaidPlayGate({ track, artist, onClose, onPurchaseComplet
         ) : (
           <>
             {/* Header */}
-            <div className="flex items-center justify-between px-5 pt-5 pb-4">
-              <div className="flex items-center space-x-3">
+            <div className="flex items-center justify-between px-5 pt-5 pb-4 gap-3">
+              {/* min-w-0 and flex-1, the same fix as the Wrapped card.
+                  The text block inside already has min-w-0 and truncate, but
+                  this div is a flex item of the row above and defaults to
+                  min-width:auto, so it will not shrink below its own content
+                  and a long track title pushes the sheet past the screen. */}
+              <div className="flex items-center space-x-3 min-w-0 flex-1">
                 <div className="w-11 h-11 rounded-xl overflow-hidden bg-white/10 flex-shrink-0">
                   {track.cover_artwork_url
                     ? <img src={track.cover_artwork_url} alt="" className="w-full h-full object-cover" />

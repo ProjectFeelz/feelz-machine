@@ -44,8 +44,18 @@ export default function WrappedCard({ notification, compact = false }) {
           className="rounded-2xl border border-pink-500/20 p-4 mb-1"
           style={gradientStyle}
         >
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-3">
+          <div className="flex items-center justify-between gap-3">
+            {/* min-w-0 here, not only on the text block inside it.
+                The text block already had min-w-0 and truncate, and the title
+                still ran off the right edge of the phone. The reason is this
+                div: it is itself a flex ITEM of the row above, and a flex item
+                defaults to min-width:auto, which means it refuses to shrink
+                below its own content. So the inner min-w-0 had nothing to
+                shrink into, truncate never fired, and the content pushed the
+                whole card wider than the screen.
+                One min-w-0 is never enough on its own. It has to be on every
+                flex item between the overflowing text and the edge. */}
+            <div className="flex items-center space-x-3 min-w-0 flex-1">
               <div className="w-10 h-10 rounded-xl flex items-center justify-center text-xl flex-shrink-0"
                 style={{ background: 'rgba(236,72,153,0.15)' }}>
                 🎁
@@ -87,7 +97,7 @@ export default function WrappedCard({ notification, compact = false }) {
         </div>
         <div>
           <p className="text-base font-bold text-white">{notification.title}</p>
-          {monthLabel && <p className="text-xs text-white/40 mt-0.5">{monthLabel} — your listening recap</p>}
+          {monthLabel && <p className="text-xs text-white/40 mt-0.5">{monthLabel}, your listening recap</p>}
         </div>
       </div>
       <WrappedBody
