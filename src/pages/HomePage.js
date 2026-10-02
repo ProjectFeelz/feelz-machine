@@ -1219,7 +1219,7 @@ export default function HomePage() {
       {/* Monthly Wrapped card */}
       {wrappedNotif && (
         <div className="mx-6 mb-6">
-          <WrappedCard notification={wrappedNotif} compact />
+          <WrappedCard notification={wrappedNotif} compact startOpen />
         </div>
       )}
 

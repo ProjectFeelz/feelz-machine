@@ -12,9 +12,16 @@ function StatPill({ icon: Icon, value, label, color }) {
   );
 }
 
-export default function WrappedCard({ notification, compact = false }) {
+// startOpen: show the stats straight away even in the compact shell.
+//
+// On Home this card is a single highlight in a feed, so a collapsed one is
+// just a sentence that says a recap exists and makes you tap to find out
+// anything. That is why Home showed no stats: compact starts collapsed, which
+// is right in a notification LIST, where ten open cards would bury everything
+// else, and wrong as a one-off card on Home.
+export default function WrappedCard({ notification, compact = false, startOpen = false }) {
   const navigate = useNavigate();
-  const [expanded, setExpanded] = useState(!compact);
+  const [expanded, setExpanded] = useState(!compact || startOpen);
 
   if (!notification) return null;
 
