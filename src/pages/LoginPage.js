@@ -162,7 +162,19 @@ export default function LoginPage() {
     else if (mode === 'signup') localStorage.removeItem('pending_creator_role');
   };
 
-  const needsAge = mode === 'signup' || mode === 'link' || googleAge;
+  // The age box is on screen from the start, on every tab.
+  //
+  // It used to appear only on the signup tab, or on the signin tab AFTER you
+  // tapped Google and were bounced with "Please confirm you are 13 or older,
+  // then tap Google again". So the first thing a new person got for pressing
+  // the main button was a telling off about a checkbox that was not there when
+  // they pressed it. Showing it up front costs one line of the page and
+  // removes a dead end.
+  //
+  // What is ENFORCED has not changed: Google needs it on both tabs, because
+  // Google can create an account from either, and signing in with an email and
+  // password does not, which is the `mode !== 'signin'` test in submit below.
+  const needsAge = true;
   const clean = m => (m || 'Something went wrong.').replace('AuthApiError: ', '');
 
   const submit = async (e) => {
@@ -356,13 +368,32 @@ export default function LoginPage() {
             </>
           )}
 
-          <p className="text-sm text-white/45 mt-5">
+          {/* Creating an account was a text link in white/45 at the bottom of
+              the page, which is the same weight as the legal small print above
+              it. On a first visit the only thing that reads as an action is
+              the sign in button, so somebody with no account has nothing
+              obvious to press. It is a bordered control now, full width, with
+              the label carrying the weight rather than the sentence around
+              it. */}
+          <div className="mt-5">
             {mode === 'signin' ? (
-              <>New here? <button onClick={() => { setMode('signup'); setError(''); }} className="text-white font-semibold hover:underline">Create an account</button></>
+              <>
+                <p className="text-sm text-white/45 mb-2">New here?</p>
+                <button
+                  onClick={() => { setMode('signup'); setError(''); }}
+                  className="w-full py-3 rounded-xl border border-white/20 bg-white/[0.04]
+                             text-sm font-bold text-white hover:bg-white/[0.08] active:scale-[0.99] transition">
+                  Create an account
+                </button>
+              </>
             ) : (
-              <>Have an account? <button onClick={() => { setMode('signin'); setError(''); }} className="text-white font-semibold hover:underline">Sign in</button></>
+              <p className="text-sm text-white/45">
+                Have an account?{' '}
+                <button onClick={() => { setMode('signin'); setError(''); }}
+                  className="text-white font-semibold hover:underline">Sign in</button>
+              </p>
             )}
-          </p>
+          </div>
         </>
       )}
 

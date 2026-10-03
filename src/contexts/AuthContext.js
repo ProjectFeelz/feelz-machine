@@ -18,7 +18,7 @@ export function AuthProvider({ children }) {
 
   const fetchProfile = async (userId) => {
     // Through userRow for the same reason listeners and admins are: this ran
-    // twice on every cold load. See src/utils/userRow.js and loadedFor below.
+    // twice on every cold load. See src/utils/userRow.js and loadUser below.
     //
     // The legacy `profiles` fallback stays a direct read, because it keys on
     // `id` rather than `user_id` and userRow is deliberately only for the
@@ -232,11 +232,34 @@ export function AuthProvider({ children }) {
   // A ref, because this has to be true the instant it is set rather than on
   // the next render, which is exactly what state cannot promise and is why the
   // original guard was written in the wrong place.
-  const loadedFor = useRef(null);
+  // Holds { id, promise }, NOT just the id, and the difference is a bug I
+  // shipped and then had to come back for.
+  //
+  // The first version returned early when the id matched. That stopped the
+  // duplicate queries, and it broke the thing underneath: on a cold load
+  // onAuthStateChange usually fires first and starts the real work, then
+  // getSession's handler calls loadUser, gets an instant return, and runs its
+  // `finally { setLoading(false) }` while the artist and listener reads are
+  // still in flight. Everything downstream then sees loading:false with no
+  // profile and concludes the person has no account.
+  //
+  // That is why a returning account with a full profile was landing on /setup.
+  // An await that does not wait is worse than no dedupe at all.
+  //
+  // Handing back the SAME promise means the second caller still sends no
+  // queries and still waits for the first one to finish, which is what it was
+  // always asking for.
+  const loading_ = useRef(null);
 
-  const loadUser = async (sessionUser) => {
-    if (loadedFor.current === sessionUser?.id) return;
-    loadedFor.current = sessionUser?.id || null;
+  const loadUser = (sessionUser) => {
+    const id = sessionUser?.id || null;
+    if (loading_.current && loading_.current.id === id) return loading_.current.promise;
+    const promise = loadUserOnce(sessionUser);
+    loading_.current = { id, promise };
+    return promise;
+  };
+
+  const loadUserOnce = async (sessionUser) => {
     if (!sessionUser) return;
     setUser(sessionUser);
     // Check for affiliate ref in sessionStorage (set by landing page)
@@ -309,7 +332,7 @@ export function AuthProvider({ children }) {
         });
       }
       if (event === 'SIGNED_OUT') {
-        loadedFor.current = null;
+        loading_.current = null;
         setUser(null);
         setProfile(null);
         setArtist(null);
@@ -365,7 +388,7 @@ export function AuthProvider({ children }) {
     // to the person who just left, and the next person on this device must not
     // be handed it out of memory.
     clearUserRowCache();
-    loadedFor.current = null;
+    loading_.current = null;
     setUser(null);
     setProfile(null);
     setArtist(null);

@@ -457,7 +457,18 @@ export default function HomePage() {
       const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
       const { data } = await supabase
         .from('notifications')
-        .select('id, title, message, created_at')
+        // metadata, which this did not select.
+        //
+        // That is the whole reason the card on Home showed 0 streams, 0m and
+        // 0 artists under a title saying "283 minutes well spent": the title
+        // and message came through, and every number the card draws lives in
+        // metadata, which was never fetched. The card read undefined and fell
+        // back to zero for each of them.
+        //
+        // The notifications page selects * and has always shown the real
+        // figures, which is why the same recap looked right there and empty
+        // here.
+        .select('id, title, message, metadata, created_at')
         .eq('user_id', user.id)
         .eq('type', 'monthly_wrapped')
         .gte('created_at', startOfMonth)

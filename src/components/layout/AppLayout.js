@@ -169,8 +169,7 @@ function MobileBellButton() {
 // ── Main layout ───────────────────────────────────────────────────────────────
 export default function AppLayout() {
   const { currentTrack, isMinimized }            = usePlayer();
-  const { user, artist, hasProfile, loading, isArtist, isBeatmaker, viewAs, setViewAs } = useAuth();
-  const navigate                    = useNavigate();
+  const { user, artist, loading, isArtist, isBeatmaker, viewAs, setViewAs } = useAuth();
   const location                    = useLocation();
   const [splashDone, setSplashDone] = useState(false);
   const [showCreateMenu, setShowCreateMenu] = useState(false);
@@ -191,14 +190,33 @@ export default function AppLayout() {
     }
   }, [loading]);
 
-  // Auth guard
-  useEffect(() => {
-    if (loading) return;
-    const publicPaths = ['/login', '/reset-password', '/setup', '/privacy-policy', '/terms-of-use', '/terms'];
-    if (user && !hasProfile && !publicPaths.includes(location.pathname)) {
-      navigate('/setup');
-    }
-  }, [user, hasProfile, loading, location.pathname]);
+  // THE REDIRECT THAT WAS SENDING EVERYBODY TO /setup IS GONE FROM HERE.
+  //
+  // There were TWO guards watching the same condition and sending people to
+  // two different places:
+  //
+  //   AppRouter.OnboardingGuard  user with no profile -> /welcome
+  //   this one                   user with no profile -> /setup
+  //
+  // /welcome is the onboarding. /setup is a settings page full of fields. This
+  // effect runs on every location change, so in the race between them this one
+  // usually won, which means new accounts were being dropped into settings and
+  // never saw onboarding at all. That is why signing up appeared to skip it.
+  //
+  // It was also firing at people who HAVE a profile. hasProfile is
+  // `!!artist || !!listener`, computed from two reads that can simply fail. A
+  // 503 from Supabase, which your console has been showing, makes both reads
+  // come back empty, hasProfile goes false, and a returning account with years
+  // of history gets bounced to /setup as though it were brand new. The guard
+  // could not tell "this person has no profile" from "we could not load it".
+  //
+  // OnboardingGuard owns this decision now. It checks the same tables AND
+  // hasSeenWelcome(), so somebody who has already been through the flow is let
+  // into the app even when the rows do not come back, which is the right
+  // failure: a thin profile they can fix in settings beats an account that
+  // cannot be used.
+  //
+  // Nothing replaces it here on purpose. One guard, one destination.
 
   // Dynamic page titles
   useEffect(() => {
