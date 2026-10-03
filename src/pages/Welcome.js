@@ -319,16 +319,26 @@ export default function Welcome() {
     // Written outside the try above on purpose: if saving the answers failed,
     // the person still went through this and must not be asked again. Losing
     // their genres is a worse feed. Losing this is an account that nags.
-    try {
-      await supabase.from('user_profiles').upsert({
+    //
+    // The error is READ, not caught. supabase-js resolves { data, error } for a
+    // database refusal rather than throwing, so the try/catch that used to be
+    // here could never fire: a refused write looked identical to a successful
+    // one and this marker could go missing with nothing anywhere saying so.
+    // That is how an account ends up being asked to onboard on every new
+    // device forever, and nobody finds out until somebody reads the table.
+    {
+      const { error: doneErr } = await supabase.from('user_profiles').upsert({
         user_id: user.id,
         welcome_completed_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       }, { onConflict: 'user_id' });
-    } catch { /* the local flag below still covers this device */ }
+      if (doneErr) {
+        console.error('[welcome] could not record completion:', doneErr.code, doneErr.message, doneErr.details || '');
+      }
+    }
 
     // Local as well, because it is free and it is the common case.
-    markWelcomeSeen();
+    markWelcomeSeen(user.id);
     navigate(goTo || flow.doneTo, { replace: true });
   };
 
@@ -454,20 +464,49 @@ export default function Welcome() {
 // The database is only asked when there is no flag, which means a new device or
 // a cleared browser.
 
-const SEEN_KEY = 'fm_welcome_seen';
+// KEYED TO THE PERSON, NOT TO THE BROWSER.
+//
+// This was one global key, 'fm_welcome_seen'. localStorage belongs to the
+// ORIGIN, not to the account, so once anybody had been through onboarding on a
+// device, every account that signed in afterwards on that same device was
+// treated as having been through it too.
+//
+// Caught on a live test account. A brand new sign-up landed straight in the
+// app, never saw /welcome, and finished with a listeners row, an
+// auto-generated artist name and NO user_profiles row at all, because finish()
+// is what writes welcome_completed_at and finish() never ran. From the
+// outside it looked like onboarding was broken. It was never reached.
+//
+// This is not an edge case. It is every phone handed to a friend, every shared
+// computer, every time somebody signs out and somebody else signs up, and
+// every test account anybody has ever made on their own machine. The last one
+// is why it stayed invisible: the people testing it were exactly the people
+// who had already set the key.
+//
+// The old global key is removed when a per-person one is written, so a device
+// that already carries it stops leaking it to the next account.
+const SEEN_PREFIX = 'fm_welcome_seen_';
+const LEGACY_KEY  = 'fm_welcome_seen';
 
-export function markWelcomeSeen() {
-  try { localStorage.setItem(SEEN_KEY, '1'); } catch {}
+const seenKey = (userId) => SEEN_PREFIX + userId;
+
+export function markWelcomeSeen(userId) {
+  if (!userId) return;
+  try {
+    localStorage.setItem(seenKey(userId), '1');
+    localStorage.removeItem(LEGACY_KEY);
+  } catch {}
 }
 
 // Synchronous, for the router guard, which renders and cannot await.
-export function hasSeenWelcome() {
-  try { return localStorage.getItem(SEEN_KEY) === '1'; } catch { return false; }
+export function hasSeenWelcome(userId) {
+  if (!userId) return false;
+  try { return localStorage.getItem(seenKey(userId)) === '1'; } catch { return false; }
 }
 
 export async function needsWelcome(user, artist) {
   if (!user) return false;
-  try { if (localStorage.getItem(SEEN_KEY) === '1') return false; } catch {}
+  try { if (localStorage.getItem(seenKey(user.id)) === '1') return false; } catch {}
   try {
     // The durable marker, asked before anything else and before any guessing.
     //
@@ -483,7 +522,7 @@ export async function needsWelcome(user, artist) {
       .select('welcome_completed_at')
       .eq('user_id', user.id)
       .maybeSingle();
-    if (doneRow?.welcome_completed_at) { markWelcomeSeen(); return false; }
+    if (doneRow?.welcome_completed_at) { markWelcomeSeen(user.id); return false; }
 
     // An artist who has named themselves has been set up, here or in /setup.
     // The auto-generated placeholder name contains a dash and six random
@@ -491,7 +530,7 @@ export async function needsWelcome(user, artist) {
     if (artist) {
       const named = artist.artist_name && artist.slug
         && !/^[a-z0-9]+-[a-z0-9]{6}$/i.test(artist.artist_name);
-      if (named) { markWelcomeSeen(); return false; }
+      if (named) { markWelcomeSeen(user.id); return false; }
       return true;
     }
     const { data } = await supabase
@@ -500,7 +539,7 @@ export async function needsWelcome(user, artist) {
       .eq('user_id', user.id)
       .maybeSingle();
     const done = Array.isArray(data?.genre_preferences) && data.genre_preferences.length > 0;
-    if (done) markWelcomeSeen();
+    if (done) markWelcomeSeen(user.id);
     return !done;
   } catch {
     // If we cannot tell, do not interrupt anybody.

@@ -265,7 +265,7 @@ function OnboardingGuard({ children }) {
   // somebody has been through the flow, they are let into the app even if the
   // rows are not what we expect. A thin profile they can fix in settings is a
   // far better failure than an account that cannot be used at all.
-  if (user && !artist && !listener && !hasSeenWelcome()) {
+  if (user && !artist && !listener && !hasSeenWelcome(user.id)) {
     // Everybody goes to /welcome now, whichever kind of account they asked
     // for. Welcome.js reads the same pending_creator_role key and picks the
     // right set of questions, so the branch that used to live here has moved

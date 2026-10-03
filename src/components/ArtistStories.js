@@ -14,11 +14,12 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import { visibleNow } from '../utils/stories';
+import StoryTextEditor from './StoryTextEditor';
 import { useAuth } from '../contexts/AuthContext';
 import { useHaptics } from '../hooks/useHaptics';
 import {
   X, Plus, Upload, Loader, Play, Pause, Music, Image, Video,
-  Eye, Clock, Download, Heart, Sparkles, Trash2,
+  Eye, Clock, Download, Heart, Sparkles, Trash2, Type,
 } from 'lucide-react';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -49,6 +50,7 @@ export function StoryUpload({ artistId, onUploaded, inline = false }) {
   const [preview, setPreview]   = useState(null);
   const [taggedTrack, setTaggedTrack] = useState(null); // { id, title, file_url }
   const [showTrackPicker, setShowTrackPicker] = useState(false);
+  const [editingText, setEditingText] = useState(false);
   const [myTracks, setMyTracks] = useState([]);
   const fileRef                 = useRef(null);
 
@@ -327,6 +329,16 @@ export function StoryUpload({ artistId, onUploaded, inline = false }) {
             className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/60 flex items-center justify-center">
             <X className="w-3.5 h-3.5 text-white" />
           </button>
+          {/* Images only. Text on a video means rendering every frame, which
+              is a different feature with a different cost. */}
+          {mediaType === 'image' && (
+            <button onClick={() => setEditingText(true)}
+              className="absolute bottom-2 left-2 inline-flex items-center gap-1.5 px-3 h-8 rounded-full
+                         bg-black/65 border border-white/20 text-[11px] font-semibold text-white">
+              <Type className="w-3.5 h-3.5" />
+              Add text
+            </button>
+          )}
         </div>
       )}
 
@@ -346,9 +358,25 @@ export function StoryUpload({ artistId, onUploaded, inline = false }) {
     </>
   );
 
+  const textEditor = editingText && file ? (
+    <StoryTextEditor
+      file={file}
+      onCancel={() => setEditingText(false)}
+      onDone={(edited) => {
+        // Everything downstream reads `file`, so swapping it is the whole
+        // integration: the preview, the upload, the extension and the content
+        // type all follow. Nothing about storage or the stories table changes,
+        // which is the point of flattening the text into the image.
+        setFile(edited);
+        setPreview(URL.createObjectURL(edited));
+        setEditingText(false);
+      }}
+    />
+  ) : null;
+
   // Inline: the caller already owns a modal shell. Render the content only , 
   // no trigger button, no second overlay.
-  if (inline) return <div>{body}</div>;
+  if (inline) return <div>{body}{textEditor}</div>;
 
   return (
     <>
@@ -388,6 +416,7 @@ export function StoryUpload({ artistId, onUploaded, inline = false }) {
           </div>
         </div>
       )}
+      {textEditor}
     </>
   );
 }
