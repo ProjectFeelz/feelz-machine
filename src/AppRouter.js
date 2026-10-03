@@ -4,7 +4,7 @@ import { HelmetProvider, Helmet } from 'react-helmet-async';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 // A tiny synchronous localStorage read. Imported eagerly on purpose: the
 // router guard renders and cannot await a lazy chunk to decide a redirect.
-import { hasSeenWelcome } from './pages/Welcome';
+import { hasSeenWelcome, needsWelcome } from './pages/Welcome';
 import { PlayerProvider } from './contexts/PlayerContext';
 import { TierProvider } from './contexts/useTier';
 import { OfflineProvider } from './contexts/OfflineContext';
@@ -229,6 +229,40 @@ function AffiliateTracker() {
 function OnboardingGuard({ children }) {
   const { user, artist, listener, loading } = useAuth();
   const location = useLocation();
+
+  // THE DECISION MOVED HERE, FROM INSIDE THE FEED.
+  //
+  // The row test below cannot catch a new sign-up, and that is not a bug in
+  // the test, it is arithmetic: AuthContext creates a listeners row on first
+  // login, so by the time this runs `listener` is already truthy and the
+  // condition is false for every new account. Nothing here ever redirected
+  // them.
+  //
+  // What actually sent people to /welcome was an effect inside ForYouPage,
+  // which only runs once that page has mounted. So a new account watched the
+  // feed appear, got a moment of it, and was then yanked away. That is what
+  // "it just goes to For You" was: onboarding arriving late and from the wrong
+  // place, not onboarding missing.
+  //
+  // needsWelcome asks the durable marker in the database, so it is async and a
+  // guard cannot await. It runs once per account here and the app holds while
+  // it answers, which costs one round trip and ONLY for somebody who has no
+  // local completion flag. Everybody else takes the synchronous path below and
+  // waits for nothing.
+  const [needsFlow, setNeedsFlow] = React.useState(null);
+  React.useEffect(() => {
+    if (!user) { setNeedsFlow(false); return; }
+    if (hasSeenWelcome(user.id)) { setNeedsFlow(false); return; }
+    let dead = false;
+    // A hard floor on the wait. If this read is slow or never answers, the
+    // app opens rather than holding on a blank screen: being let in without
+    // onboarding is a far better failure than an account that cannot load.
+    const bail = setTimeout(() => { if (!dead) setNeedsFlow(false); }, 2500);
+    needsWelcome(user, artist)
+      .then(n => { if (!dead) { clearTimeout(bail); setNeedsFlow(!!n); } })
+      .catch(() => { if (!dead) { clearTimeout(bail); setNeedsFlow(false); } });
+    return () => { dead = true; clearTimeout(bail); };
+  }, [user, artist]);
   const skipPaths = ['/setup', '/welcome', '/login', '/reset-password', '/about', '/terms-of-use', '/privacy-policy', '/artist/', '/@', '/schoolsessions'];
 
   // Public paths always render immediately, regardless of auth loading state.
@@ -265,6 +299,10 @@ function OnboardingGuard({ children }) {
   // somebody has been through the flow, they are let into the app even if the
   // rows are not what we expect. A thin profile they can fix in settings is a
   // far better failure than an account that cannot be used at all.
+  // Still unknown, and only ever unknown for an account with no local flag.
+  if (needsFlow === null) return null;
+  if (needsFlow) return <Navigate to="/welcome" replace />;
+
   if (user && !artist && !listener && !hasSeenWelcome(user.id)) {
     // Everybody goes to /welcome now, whichever kind of account they asked
     // for. Welcome.js reads the same pending_creator_role key and picks the

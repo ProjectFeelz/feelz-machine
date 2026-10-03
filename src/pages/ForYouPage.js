@@ -27,7 +27,6 @@ import VinylRecord from '../components/VinylRecord';
 import HomeAsideCard from '../components/HomeAsideCard';
 import FeedTransportBar from '../components/FeedTransportBar';
 import PreorderTag from '../components/PreorderTag';
-import { needsWelcome } from './Welcome';
 
 import { ArtistStoryView, storyAvatarSrc, storyAvatarClass } from '../components/ArtistStories';
 import ShareCard from '../components/ShareCard';
@@ -1462,15 +1461,12 @@ export default function ForYouPage() {
   // before it is ever a query, and it does nothing at all if the person has
   // already set themselves up. Deliberately not in OnboardingGuard: that runs
   // on every route change, and this only needs to happen where people land.
-  useEffect(() => {
-    if (!user) return;
-    let cancelled = false;
-    (async () => {
-      const needs = await needsWelcome(user, artist);
-      if (!cancelled && needs) navigate('/welcome', { replace: true });
-    })();
-    return () => { cancelled = true; };
-  }, [user, artist, navigate]);
+  // The welcome redirect that used to live here is gone.
+  //
+  // It ran after this page had mounted, so a new account saw the feed, then
+  // got pulled to /welcome a beat later, which read as onboarding not
+  // happening at all. OnboardingGuard in AppRouter makes that call now, before
+  // any page renders. One owner, one moment.
 
   // Deep-link support, notifications land here with ?openComments=<trackId>
   // or ?openCommentsSlug=<slug> instead of going to the separate track page
