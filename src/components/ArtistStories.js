@@ -755,14 +755,23 @@ export function ArtistStoryView({ stories, artist, initialIndex = 0, onClose }) 
       </div>
 
       {/* THE REACTION ROW.
-          Its own row above the track pill rather than a button beside it.
-          Five targets of 44px plus the pill does not fit across a phone, and
-          the first casualty of squeezing them in is the tap target, on the one
-          screen where every interaction is a quick tap with a thumb.
+          Its own row rather than a button beside the track pill. Five targets
+          of 44px plus the pill does not fit across a phone, and the first
+          casualty of squeezing them in is the tap target, on the one screen
+          where every interaction is a quick tap with a thumb.
+
+          IN FLOW, NOT ABSOLUTE, AND THAT IS THE FIX.
+          It used to be pinned at bottom-20, which is a guess about how tall
+          the things below it are. The caption sits in normal flow underneath,
+          so the moment a caption ran to a second line the emoji landed on top
+          of the words. Nothing about a fixed offset can know that.
+          Now it is an ordinary block directly above the caption, so the two
+          can never occupy the same space whatever either of them contains.
+
           Signed out there is nothing to show: a row of emoji that silently do
           nothing is worse than no row. */}
       {user && (
-        <div className="absolute bottom-20 left-0 right-0 z-20 flex items-center justify-center gap-2 px-4">
+        <div className="relative z-20 flex-shrink-0 flex items-center justify-center gap-2 px-4 pt-3 pb-1">
           {REACTIONS.map(emoji => {
             const mine = myReaction[story.id] === emoji;
             return (
