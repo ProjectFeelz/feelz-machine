@@ -233,7 +233,7 @@ function snapshotTrack(track, extra) {
  * onProgress is called with 0..1, or null when the response has no
  * Content-Length and there is nothing honest to report.
  */
-export async function saveTrackOffline(track, { authToken, onProgress, signal } = {}) {
+export async function saveTrackOffline(track, { authToken, onProgress, signal, userId = null } = {}) {
   if (!track?.id) throw new Error('no_track');
   if (!authToken) throw new Error('not_authenticated');
 
@@ -312,6 +312,20 @@ export async function saveTrackOffline(track, { authToken, onProgress, signal } 
     mimeType:  blob.type || 'audio/mpeg',
     savedAt:   Date.now(),
     expiresAt: expiresAt || null,
+    // WHOSE DOWNLOAD THIS IS.
+    //
+    // IndexedDB belongs to the ORIGIN, not to the account, the same way
+    // localStorage does and for the same reason. So every download anybody has
+    // ever saved in this browser is visible to whoever signs in next, and
+    // renewLeases was asking the server to renew all of them on their behalf.
+    // The server correctly answered 403, because they are not entitled to
+    // somebody else's music, and that is the pair of 403s on every brand new
+    // account: two tracks a previous account had saved in the same browser.
+    //
+    // Stamping the owner lets the renewal skip what is not theirs instead of
+    // asking about it. The file is left alone, because it still belongs to the
+    // person who saved it and they may well sign back in.
+    userId: userId || null,
   });
 
   t.objectStore(STORE_META).put(meta);
@@ -372,13 +386,23 @@ export async function clearOffline() {
  * thirty days and a visible countdown, which is the difference between a
  * feature that ends and a feature that punishes.
  */
-export async function renewLeases(authToken) {
-  if (!authToken) return { renewed: 0, revoked: 0, lapsed: 0, failed: 0 };
+export async function renewLeases(authToken, userId = null) {
+  if (!authToken) return { renewed: 0, revoked: 0, lapsed: 0, failed: 0, skipped: 0 };
 
   const items = await listOffline();
-  let renewed = 0, revoked = 0, lapsed = 0, failed = 0;
+  let renewed = 0, revoked = 0, lapsed = 0, failed = 0, skipped = 0;
 
   for (const meta of items) {
+    // Somebody else's download, in a browser this account also uses. Not asked
+    // about, not touched. See the note on userId in saveTrackOffline: without
+    // this, every account signing in on a shared or previously-used browser
+    // sent one request per foreign track and collected a 403 for each.
+    //
+    // Items with no userId were saved before this existed. They are renewed as
+    // before and get stamped below if the server says this person is entitled,
+    // which is the only evidence available that they are the owner.
+    if (userId && meta.userId && meta.userId !== userId) { skipped++; continue; }
+
     try {
       const res = await fetch('/.netlify/functions/get-offline-url', {
         method: 'POST',
@@ -408,7 +432,10 @@ export async function renewLeases(authToken) {
       const t  = tx(db, [STORE_META], 'readwrite');
       const store = t.objectStore(STORE_META);
       const current = await reqAsPromise(store.get(meta.trackId));
-      if (current) store.put({ ...current, expiresAt });
+      // Stamped on the way past. A successful renewal is the server saying this
+      // person is entitled to this track, which is the evidence that an
+      // unstamped legacy item is theirs.
+      if (current) store.put({ ...current, expiresAt, userId: current.userId || userId || null });
       await done(t);
       renewed++;
     } catch {
@@ -418,7 +445,7 @@ export async function renewLeases(authToken) {
     }
   }
 
-  return { renewed, revoked, lapsed, failed };
+  return { renewed, revoked, lapsed, failed, skipped };
 }
 
 // ── Resolving a playable src ───────────────────────────────────────────────────

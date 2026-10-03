@@ -139,7 +139,7 @@ const FLOWS = {
   artist: {
     eyebrow: 'Set up your page',
     done: 'Go to my page',
-    doneTo: '/setup',
+    doneTo: '/dashboard',
     steps: [
       { kind: 'name',   label: 'Name',
         title: 'What name do you release under?',
@@ -166,7 +166,7 @@ const FLOWS = {
   beatmaker: {
     eyebrow: 'Set up your page',
     done: 'Go to my page',
-    doneTo: '/setup',
+    doneTo: '/dashboard',
     steps: [
       { kind: 'name',   label: 'Name',
         title: 'What do you produce under?',
@@ -205,7 +205,7 @@ function Pill({ label, on, onClick }) {
 
 export default function Welcome() {
   const navigate = useNavigate();
-  const { user, artist, listener } = useAuth();
+  const { user, artist, listener, refreshProfile } = useAuth();
 
   // Which flow.
   //
@@ -388,6 +388,7 @@ export default function Welcome() {
     if (!user) { navigate('/'); return; }
     setSaving(true);
     setError('');
+    let finalSlug = artist?.slug || null;
     try {
       let avatarUrl = null;
       if (avatarFile) {
@@ -422,6 +423,13 @@ export default function Welcome() {
       const finalName = name.trim()
         || artist?.artist_name || listener?.display_name
         || user.email?.split('@')[0] || null;
+
+      // finalSlug is declared outside this try, because the navigation that
+      // reads it happens after it. The last button says "Go to my page" and it
+      // needs to know which page that is. It used to send creators to /setup,
+      // which is the settings screen this whole flow exists to spare them:
+      // five questions answered and then a wall of fields asking several of
+      // them again.
 
       if (role === 'listener') {
         await supabase.from('user_profiles').upsert({
@@ -465,6 +473,7 @@ export default function Welcome() {
         }, { onConflict: 'user_id' });
 
         const base = generateSlug(finalName || '');
+        if (base) finalSlug = await getUniqueSlug(base, null);
         const { error: aErr } = await supabase.from('artists').insert({
           user_id: user.id,
           artist_name: finalName,
@@ -472,7 +481,7 @@ export default function Welcome() {
           genre: genres[0] || null,
           role,
           role_confirmed: true,
-          ...(base ? { slug: await getUniqueSlug(base, null) } : {}),
+          ...(finalSlug ? { slug: finalSlug } : {}),
           ...(avatarUrl ? { profile_image_url: avatarUrl } : {}),
         });
         if (aErr) throw aErr;
@@ -491,7 +500,7 @@ export default function Welcome() {
         // already shared a link does not have it moved under them.
         if (!artist.slug || finalName !== artist.artist_name) {
           const base = generateSlug(finalName || '');
-          if (base) update.slug = await getUniqueSlug(base, artist.id);
+          if (base) { update.slug = await getUniqueSlug(base, artist.id); finalSlug = update.slug; }
         }
         await supabase.from('artists').update(update).eq('id', artist.id);
 
@@ -542,7 +551,42 @@ export default function Welcome() {
 
     // Local as well, because it is free and it is the common case.
     markWelcomeSeen(user.id);
-    navigate(goTo || flow.doneTo, { replace: true });
+
+    // GO AND LOOK AGAIN BEFORE LEAVING.
+    //
+    // finish() may have just created the artists row. AuthContext has no idea:
+    // its `artist` is still null and userRow is still holding the empty read
+    // that was true a minute ago. So the app carried on treating a brand new
+    // artist as a listener, with the listener navigation and the listener
+    // half of every screen, until the person reloaded the page by hand and the
+    // whole thing was read again from scratch.
+    //
+    // refreshProfile drops those cached rows and refetches all three, which is
+    // exactly the state a reload would have produced, minus the reload. The
+    // spinner on the button is already up, so the wait is covered.
+    //
+    // Guarded on time as well as on error. If the refetch hangs, the person is
+    // still leaving this screen: a stale role is a bad half-hour, being stuck
+    // on the last step of onboarding forever is worse.
+    try {
+      await Promise.race([
+        refreshProfile(),
+        new Promise(res => setTimeout(res, 4000)),
+      ]);
+    } catch (err) {
+      console.warn('[welcome] could not refresh auth state before leaving:', err?.message);
+    }
+
+    // Where "Go to my page" actually goes.
+    //
+    // flow.doneTo for a creator was /setup. That is the settings page, and
+    // sending somebody there straight after they have just given their name,
+    // photo, genres and bio is asking them for all of it a second time. Their
+    // own page is what the button says and what they want to see.
+    const dest = goTo
+      || (role !== 'listener' && finalSlug ? `/artist/${finalSlug}` : null)
+      || flow.doneTo;
+    navigate(dest, { replace: true });
   };
 
   const skipAll = () => finish({ silent: true });

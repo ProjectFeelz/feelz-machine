@@ -145,7 +145,7 @@ export function OfflineProvider({ children }) {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) return;
-      const result = await renewLeases(session.access_token);
+      const result = await renewLeases(session.access_token, user.id);
       if (result.renewed || result.revoked) await refresh();
     } catch { /* next reconnect will try again */ }
   }, [user, refresh]);
@@ -175,6 +175,7 @@ export function OfflineProvider({ children }) {
       const { data: { session } } = await supabase.auth.getSession();
       await saveTrackOffline(track, {
         authToken: session?.access_token,
+        userId: user?.id || null,
         signal: controller.signal,
         onProgress: p => setSaving(s => (s[track.id] === undefined ? s : { ...s, [track.id]: p })),
       });
