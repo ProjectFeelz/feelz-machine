@@ -4,7 +4,7 @@
  * Tracks two streaks for both artists and listeners:
  *   1. Daily app-open streak (current_streak / longest_streak)
  *   2. Daily artist discovery streak (discovery_streak / longest_discovery_streak)
- *      — incremented by calling recordDiscovery() when a user plays an artist
+ *      incremented by calling recordDiscovery() when a user plays an artist
  *        they've never streamed before.
  *
  * Returns: { streak, longestStreak, discoveryStreak, recordDiscovery, loading }
@@ -46,7 +46,7 @@ export function useStreak(user) {
   const discoveredTodayRef = useRef(false);
   const incrementingRef     = useRef(false); // in-memory lock for double-invoke
 
-  // One key per user per day — written BEFORE the DB update to prevent
+  // One key per user per day, written BEFORE the DB update to prevent
   // a second concurrent call from slipping through while the first is awaiting.
   const sessionKey = `streak_written_${user?.id}`;
 
@@ -77,18 +77,22 @@ export function useStreak(user) {
         .from('user_streaks').select('*')
         .eq('user_id', user.id).maybeSingle();
 
-      // ── First ever visit — create the row ───────────────────────────────────
+      // ── First ever visit, create the row ────────────────────────────────────
       if (!row) {
         // Claim the session slot BEFORE the insert to prevent double-insert
         localStorage.setItem(sessionKey, today);
-        await supabase.from('user_streaks').insert({
+        // upsert, not insert. Two tabs, or a sign-up where the row is created
+        // by one path while this one is still deciding there is none, both race
+        // to insert and the loser gets 409 Conflict in the console on a brand
+        // new account. An upsert is the same write with the race removed.
+        await supabase.from('user_streaks').upsert({
           user_id:                  user.id,
           current_streak:           1,
           longest_streak:           1,
           last_active_date:         today,
           discovery_streak:         0,
           longest_discovery_streak: 0,
-        });
+        }, { onConflict: 'user_id' });
         setStreak(1);
         setLongestStreak(1);
         setDiscoveryStreak(0);
@@ -103,7 +107,7 @@ export function useStreak(user) {
 
       const lastActive = new Date(row.last_active_date + 'T00:00:00');
 
-      // ── Already active today per DB — nothing to increment ──────────────────
+      // ── Already active today per DB, nothing to increment ───────────────────
       if (isSameDay(lastActive, now)) {
         // Mark session so we skip the DB fetch next time too
         localStorage.setItem(sessionKey, today);

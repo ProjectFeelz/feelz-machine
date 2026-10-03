@@ -206,13 +206,29 @@ export default function Welcome() {
       if (avatarFile) {
         const ext  = (avatarFile.name.split('.').pop() || 'jpg').toLowerCase();
         const path = `${user.id}/${Date.now()}.${ext}`;
-        const bucket = role === 'listener' ? 'profile-images' : 'artist-images';
-        const { error: upErr } = await supabase.storage
-          .from(bucket).upload(path, avatarFile, { contentType: avatarFile.type, upsert: true });
-        // A picture that will not upload is not a reason to lose the answers.
-        if (!upErr) {
-          const { data } = supabase.storage.from(bucket).getPublicUrl(path);
-          avatarUrl = data?.publicUrl || null;
+        // Two buckets, tried in order, and the error is logged rather than
+        // swallowed.
+        //
+        // The listener path pointed at 'profile-images' and that upload comes
+        // back 400 on the live site, which nothing reported because the result
+        // was only ever checked for truthiness. 'artist-images' is the bucket
+        // the rest of the app writes to and it demonstrably works, so it is the
+        // fallback. Both paths are namespaced by user id, so nothing collides.
+        //
+        // If both fail the answers still save. A picture is the one optional
+        // thing on this screen and it must never cost somebody their name.
+        const buckets = role === 'listener'
+          ? ['profile-images', 'artist-images']
+          : ['artist-images'];
+        for (const bucket of buckets) {
+          const { error: upErr } = await supabase.storage
+            .from(bucket).upload(path, avatarFile, { contentType: avatarFile.type, upsert: true });
+          if (!upErr) {
+            const { data } = supabase.storage.from(bucket).getPublicUrl(path);
+            avatarUrl = data?.publicUrl || null;
+            break;
+          }
+          console.warn(`[welcome] avatar upload to ${bucket} failed:`, upErr.message);
         }
       }
 
@@ -347,7 +363,18 @@ export default function Welcome() {
   const back    = () => setStep(s => Math.max(0, s - 1));
 
   return (
-    <div className="min-h-screen bg-black text-white flex flex-col">
+    // NOT min-h-screen, and not a pinned footer.
+    //
+    // This screen renders INSIDE the app shell, which on a desktop adds its own
+    // top padding and a player bar. A child asking for a full viewport height
+    // inside that is taller than what is left, so the footer holding Next and
+    // Skip was pushed below the fold and simply was not there. On a phone the
+    // shell adds nothing, so it fit, which is why it only broke on desktop.
+    //
+    // Flowing instead of pinning: the content sizes to itself and the buttons
+    // follow it. They are under the question on every screen, which is where
+    // somebody looks for them anyway.
+    <div className="bg-black text-white flex flex-col">
       <div className="flex-shrink-0 px-6 pt-6">
         {/* Bars, not "step 2 of 5". They say the same thing and nobody has to
             read them. */}
@@ -359,7 +386,7 @@ export default function Welcome() {
         </div>
       </div>
 
-      <div className="flex-1 px-6 pb-6 overflow-y-auto">
+      <div className="px-6 pb-6">
         <div className={current.kind === 'genres' || current.kind === 'mood' ? 'max-w-2xl mx-auto' : 'max-w-md mx-auto'}>
           {step === 0 && (
             <div className="flex items-center gap-2 mb-2">
@@ -426,7 +453,7 @@ export default function Welcome() {
       {/* Skip is always visible, at the same weight it would have if it were
           the intended path. Onboarding that hides its exit is onboarding people
           resent. */}
-      <div className="flex-shrink-0 px-6 pt-2" style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 32px)' }}>
+      <div className="px-6 pt-2" style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 32px)' }}>
         <div className="max-w-md mx-auto flex items-center gap-3">
           {step > 0 && (
             <button onClick={back} disabled={saving}

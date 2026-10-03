@@ -299,6 +299,20 @@ function OnboardingGuard({ children }) {
   // somebody has been through the flow, they are let into the app even if the
   // rows are not what we expect. A thin profile they can fix in settings is a
   // far better failure than an account that cannot be used at all.
+  // The local flag is checked FIRST, synchronously, on every render.
+  //
+  // Without this the guard loops. needsFlow is state, computed once when the
+  // account loads, and finishing onboarding changes neither `user` nor
+  // `artist`, so the effect never re-runs and the stale `true` sends the
+  // person straight back to /welcome the moment they leave it. Which is
+  // exactly what happened: complete the flow, land back on the first step,
+  // forever.
+  //
+  // finish() writes this flag before it navigates, so reading it here is what
+  // lets somebody out. State answers "do they need it", this answers "are they
+  // already done", and the second question has to be asked first.
+  if (user && hasSeenWelcome(user.id)) return children;
+
   // Still unknown, and only ever unknown for an account with no local flag.
   if (needsFlow === null) return null;
   if (needsFlow) return <Navigate to="/welcome" replace />;
