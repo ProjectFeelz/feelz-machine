@@ -61,6 +61,52 @@ const MOODS = [
   'Moody','Vibey','Hard','Soft','Ethereal','Groovy','Other',
 ];
 
+// ── The step that stops the role being wrong ─────────────────────────────────
+//
+// The choice is made on the login page, and until now that was the only time
+// it was ever asked. If the answer did not survive the trip from that form to
+// the first signed-in page load, and for email sign-ups it frequently did not,
+// the person was quietly made a listener and there was no screen anywhere that
+// would have let them say otherwise.
+//
+// Asking again here costs one tap from somebody who is about to tap four more
+// times anyway, and it means the role can never be decided by whether a
+// localStorage key survived a mail client. It is only shown to accounts with no
+// confirmed role, so an artist who has already been set up never sees it.
+const ROLE_STEP = {
+  kind: 'role', label: 'You',
+  title: 'What brings you here?',
+  blurb: 'This sets up the right half of the app for you. You can change it later in your profile.',
+};
+
+const ROLE_OPTIONS = [
+  { k: 'listener',  Icon: Headphones, title: 'I am here to listen',
+    blurb: 'A feed that learns what you play, and artists who see you in their comments.' },
+  { k: 'artist',    Icon: Mic2,       title: 'I release music',
+    blurb: 'Your own page and link, uploads, listener stats and payouts.' },
+  { k: 'beatmaker', Icon: Disc3,      title: 'I sell beats',
+    blurb: 'A beat store with licence tiers, and artists browsing for your sound.' },
+];
+
+// ── Follow ───────────────────────────────────────────────────────────────────
+//
+// On every flow, including the two creator ones, and that is deliberate. An
+// artist arriving with nobody followed has no feed, sees no other artist
+// working, and has nothing to reply to. Collaborations start with one person
+// hearing another, so an empty follow list is a cold start for a creator in a
+// way it is not for a listener.
+const FOLLOW_STEP_LISTENER = {
+  kind: 'follow', label: 'Follow',
+  title: 'Follow a few artists',
+  blurb: 'This is what fills your feed. Three is enough to start it off, and you can unfollow any of them later.',
+};
+
+const FOLLOW_STEP_CREATOR = {
+  kind: 'follow', label: 'Follow',
+  title: 'Who are you listening to?',
+  blurb: 'Following the artists around you is how collaborations start. They see it, and their work starts showing in your feed.',
+};
+
 // ── The three flows ──────────────────────────────────────────────────────────
 //
 // `kind` is what the step renders. `label` is the progress bar's name for it.
@@ -143,52 +189,6 @@ const FLOWS = {
         cta: 'Upload a beat', ctaTo: '/dashboard?tab=upload' },
     ],
   },
-};
-
-// ── The step that stops the role being wrong ─────────────────────────────────
-//
-// The choice is made on the login page, and until now that was the only time
-// it was ever asked. If the answer did not survive the trip from that form to
-// the first signed-in page load, and for email sign-ups it frequently did not,
-// the person was quietly made a listener and there was no screen anywhere that
-// would have let them say otherwise.
-//
-// Asking again here costs one tap from somebody who is about to tap four more
-// times anyway, and it means the role can never be decided by whether a
-// localStorage key survived a mail client. It is only shown to accounts with no
-// confirmed role, so an artist who has already been set up never sees it.
-const ROLE_STEP = {
-  kind: 'role', label: 'You',
-  title: 'What brings you here?',
-  blurb: 'This sets up the right half of the app for you. You can change it later in your profile.',
-};
-
-const ROLE_OPTIONS = [
-  { k: 'listener',  Icon: Headphones, title: 'I am here to listen',
-    blurb: 'A feed that learns what you play, and artists who see you in their comments.' },
-  { k: 'artist',    Icon: Mic2,       title: 'I release music',
-    blurb: 'Your own page and link, uploads, listener stats and payouts.' },
-  { k: 'beatmaker', Icon: Disc3,      title: 'I sell beats',
-    blurb: 'A beat store with licence tiers, and artists browsing for your sound.' },
-];
-
-// ── Follow ───────────────────────────────────────────────────────────────────
-//
-// On every flow, including the two creator ones, and that is deliberate. An
-// artist arriving with nobody followed has no feed, sees no other artist
-// working, and has nothing to reply to. Collaborations start with one person
-// hearing another, so an empty follow list is a cold start for a creator in a
-// way it is not for a listener.
-const FOLLOW_STEP_LISTENER = {
-  kind: 'follow', label: 'Follow',
-  title: 'Follow a few artists',
-  blurb: 'This is what fills your feed. Three is enough to start it off, and you can unfollow any of them later.',
-};
-
-const FOLLOW_STEP_CREATOR = {
-  kind: 'follow', label: 'Follow',
-  title: 'Who are you listening to?',
-  blurb: 'Following the artists around you is how collaborations start. They see it, and their work starts showing in your feed.',
 };
 
 function Pill({ label, on, onClick }) {
