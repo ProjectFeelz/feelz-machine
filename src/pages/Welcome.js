@@ -37,12 +37,12 @@
 // NOTHING HERE IS REQUIRED. Skip is on every step, at full weight. A person who
 // skips the lot lands exactly where they would have landed before this existed.
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth, pendingCreatorRole } from '../contexts/AuthContext';
 import { generateSlug, getUniqueSlug } from '../utils/artistSlug';
-import { Camera, Check, Loader, ArrowRight, ArrowLeft, Sparkles, Upload } from 'lucide-react';
+import { Camera, Check, Loader, ArrowRight, ArrowLeft, Sparkles, Upload, Headphones, Mic2, Disc3, Users } from 'lucide-react';
 
 const GENRES = [
   'Hip Hop','Trap','Drill','Boom Bap','Lo-Fi','R&B','Neo Soul','Pop',
@@ -86,6 +86,7 @@ const FLOWS = {
       { kind: 'mood',   label: 'Mood',
         title: 'And how do you like it to feel?',
         blurb: 'One is enough. Two songs in the same genre can be completely different moods, and this is how we tell them apart.' },
+      FOLLOW_STEP_LISTENER,
     ],
   },
 
@@ -108,6 +109,7 @@ const FLOWS = {
         title: 'Say something about yourself',
         blurb: 'Three lines is plenty. It shows on your page and under your name when somebody shares you.',
         placeholder: 'Where you are from, what you make, what you are working on...' },
+      FOLLOW_STEP_CREATOR,
       { kind: 'outro',  label: 'Done',
         title: 'That is your page done',
         blurb: 'Next is the part that matters. Upload a song, add your cover art, and it is live.',
@@ -134,12 +136,59 @@ const FLOWS = {
         title: 'Say something about yourself',
         blurb: 'Three lines is plenty. Who you have worked with is worth more here than anything else.',
         placeholder: 'What you make, who you have produced for...' },
+      FOLLOW_STEP_CREATOR,
       { kind: 'outro',  label: 'Done',
         title: 'That is your page done',
         blurb: 'Next, upload a beat and set your licence prices. Buyers pick which licence they want, so you only set them once.',
         cta: 'Upload a beat', ctaTo: '/dashboard?tab=upload' },
     ],
   },
+};
+
+// ── The step that stops the role being wrong ─────────────────────────────────
+//
+// The choice is made on the login page, and until now that was the only time
+// it was ever asked. If the answer did not survive the trip from that form to
+// the first signed-in page load, and for email sign-ups it frequently did not,
+// the person was quietly made a listener and there was no screen anywhere that
+// would have let them say otherwise.
+//
+// Asking again here costs one tap from somebody who is about to tap four more
+// times anyway, and it means the role can never be decided by whether a
+// localStorage key survived a mail client. It is only shown to accounts with no
+// confirmed role, so an artist who has already been set up never sees it.
+const ROLE_STEP = {
+  kind: 'role', label: 'You',
+  title: 'What brings you here?',
+  blurb: 'This sets up the right half of the app for you. You can change it later in your profile.',
+};
+
+const ROLE_OPTIONS = [
+  { k: 'listener',  Icon: Headphones, title: 'I am here to listen',
+    blurb: 'A feed that learns what you play, and artists who see you in their comments.' },
+  { k: 'artist',    Icon: Mic2,       title: 'I release music',
+    blurb: 'Your own page and link, uploads, listener stats and payouts.' },
+  { k: 'beatmaker', Icon: Disc3,      title: 'I sell beats',
+    blurb: 'A beat store with licence tiers, and artists browsing for your sound.' },
+];
+
+// ── Follow ───────────────────────────────────────────────────────────────────
+//
+// On every flow, including the two creator ones, and that is deliberate. An
+// artist arriving with nobody followed has no feed, sees no other artist
+// working, and has nothing to reply to. Collaborations start with one person
+// hearing another, so an empty follow list is a cold start for a creator in a
+// way it is not for a listener.
+const FOLLOW_STEP_LISTENER = {
+  kind: 'follow', label: 'Follow',
+  title: 'Follow a few artists',
+  blurb: 'This is what fills your feed. Three is enough to start it off, and you can unfollow any of them later.',
+};
+
+const FOLLOW_STEP_CREATOR = {
+  kind: 'follow', label: 'Follow',
+  title: 'Who are you listening to?',
+  blurb: 'Following the artists around you is how collaborations start. They see it, and their work starts showing in your feed.',
 };
 
 function Pill({ label, on, onClick }) {
@@ -158,14 +207,38 @@ export default function Welcome() {
   const navigate = useNavigate();
   const { user, artist, listener } = useAuth();
 
-  // Which flow. The artist row is the truth once it exists; before that, the
-  // choice made at sign-up is all we have. AuthContext clears that key the
-  // moment it uses it, so if it is still set the row has not been made yet.
-  let pendingRole = null;
-  try { pendingRole = localStorage.getItem('pending_creator_role'); } catch {}
-  const role = artist?.role === 'beatmaker' || pendingRole === 'beatmaker' ? 'beatmaker'
-             : artist || pendingRole === 'artist' ? 'artist'
-             : 'listener';
+  // Which flow.
+  //
+  // THREE SOURCES, AND THE ORDER MATTERS
+  //
+  //   1. The person's answer on the role step below. Always wins, because it
+  //      was given on this screen, seconds ago.
+  //   2. The artists row, once it exists. That row IS the decision, made and
+  //      recorded.
+  //   3. pendingCreatorRole: the login page's choice, from localStorage if this
+  //      is the same browser and from user_metadata if it is not.
+  //
+  // (3) used to read localStorage and nothing else, and AuthContext clears that
+  // key the moment it uses it. So on an email sign-up confirmed from a mail
+  // client in a different browser, the key was never written in this browser at
+  // all: no artists row got created, and this line fell through to 'listener'.
+  // Somebody who picked Release music got the listener flow, the listener
+  // questions, and a listener account. That is the whole bug.
+  //
+  // pendingCreatorRole is imported rather than reimplemented so that this
+  // screen and AuthContext cannot reach different answers about the same
+  // person, which is how the first version of this went wrong.
+  const detected = artist?.role === 'beatmaker' ? 'beatmaker'
+                 : artist ? 'artist'
+                 : pendingCreatorRole(user) || 'listener';
+
+  // Shown to anybody whose role is not settled in the database yet. An artist
+  // row made by AuthContext carries role_confirmed, so a creator who is already
+  // set up is never asked again.
+  const needsRoleStep = !artist?.role_confirmed;
+
+  const [picked, setPicked] = useState(null);
+  const role = picked || detected;
   const flow = FLOWS[role];
 
   const [step, setStep] = useState(0);
@@ -179,8 +252,122 @@ export default function Welcome() {
   const [error, setError]   = useState('');
   const fileRef = useRef(null);
 
-  const current = flow.steps[step];
-  const isLast  = step === flow.steps.length - 1;
+  // The role question goes in front of the flow's own steps when it is needed.
+  // Nothing downstream has to know about it: the progress bar, Next, Back and
+  // isLast all read `steps`.
+  const steps   = needsRoleStep ? [ROLE_STEP, ...flow.steps] : flow.steps;
+  const safeStep = Math.min(step, steps.length - 1);
+  const current = steps[safeStep];
+  const isLast  = safeStep === steps.length - 1;
+
+  // ── Follow suggestions ────────────────────────────────────────────────────
+  //
+  // Loaded when the step is reached, not on mount, so nobody pays for a query
+  // whose screen they skip past.
+  const [sugg, setSugg]               = useState([]);
+  const [suggLoading, setSuggLoading] = useState(false);
+  const [followed, setFollowed]       = useState({});
+  const suggAsked = useRef(false);
+
+  useEffect(() => {
+    if (current?.kind !== 'follow' || suggAsked.current || !user) return;
+    suggAsked.current = true;
+    let dead = false;
+
+    (async () => {
+      setSuggLoading(true);
+
+      // Through tracks, so only artists with something to actually play can be
+      // suggested. Following somebody with an empty page teaches a new person
+      // that following does nothing.
+      //
+      // Column names here are the ones src/components/ArtistFollowPrompt.js
+      // already queries live, rather than a guess at the schema.
+      const { data: rows, error } = await supabase
+        .from('tracks')
+        .select('artist_id, artists(id, user_id, artist_name, slug, profile_image_url, is_verified, genre)')
+        .eq('is_published', true)
+        .not('file_url', 'is', null)
+        .neq('file_url', '')
+        .order('stream_count', { ascending: false })
+        .limit(300);
+
+      if (error) console.warn('[welcome] follow suggestions failed:', error.message);
+
+      const seen = new Set();
+      const list = [];
+      for (const r of (rows || [])) {
+        const a = r.artists;
+        // a.user_id, not a.id. The old prompt compared an artist id against a
+        // user id, which can never match, so a creator was always offered
+        // themselves to follow.
+        if (!a || seen.has(a.id) || a.user_id === user.id) continue;
+        seen.add(a.id);
+        list.push(a);
+      }
+
+      // Genre first, then a picture, then whatever order the stream count gave
+      // them. A face and a sound you said you liked are the two things that
+      // make a suggestion worth tapping.
+      const norm = (x) => (x || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+      const want = new Set(genres.map(norm));
+      const score = (a) => (want.size && want.has(norm(a.genre)) ? 2 : 0)
+                         + (a.profile_image_url ? 1 : 0);
+      list.sort((x, y) => score(y) - score(x));
+
+      const top = list.slice(0, 12);
+
+      // What they already follow, so the buttons are not lying on an account
+      // that has been here before.
+      let already = {};
+      if (top.length) {
+        const { data: f } = await supabase
+          .from('follows')
+          .select('artist_id')
+          .eq('follower_id', user.id)
+          .in('artist_id', top.map(a => a.id));
+        for (const row of (f || [])) already[row.artist_id] = true;
+      }
+
+      if (dead) return;
+      setFollowed(p => ({ ...already, ...p }));
+      setSugg(top);
+      setSuggLoading(false);
+    })();
+
+    return () => { dead = true; };
+  }, [current?.kind, user, genres]); // eslint-disable-line
+
+  // Written the moment it is tapped, not held until the end.
+  //
+  // A follow is the one answer on this screen that is worth something on its
+  // own, and somebody who taps three artists and then closes the tab should
+  // keep those three. Everything else here is a field on their own profile and
+  // can wait for finish().
+  const toggleFollow = async (a) => {
+    if (!user) return;
+    const on = !!followed[a.id];
+    setFollowed(p => ({ ...p, [a.id]: !on }));
+
+    if (on) {
+      const { error } = await supabase.from('follows')
+        .delete().eq('artist_id', a.id).eq('follower_id', user.id);
+      if (error) setFollowed(p => ({ ...p, [a.id]: true }));
+      return;
+    }
+
+    const { error } = await supabase.from('follows')
+      .insert({ artist_id: a.id, follower_id: user.id });
+    // 23505 is the row already being there, which is the state the tap was
+    // asking for. Anything else and the button goes back, because a button
+    // that says Following when nothing was written is worse than a failure.
+    if (error && error.code !== '23505') {
+      console.warn('[welcome] follow failed:', error.code, error.message);
+      setFollowed(p => ({ ...p, [a.id]: false }));
+    }
+  };
+
+  const followCount = Object.values(followed).filter(Boolean).length;
 
   const toggleGenre = (g) => setGenres(p => p.includes(g) ? p.filter(x => x !== g) : [...p, g]);
 
@@ -359,8 +546,11 @@ export default function Welcome() {
   };
 
   const skipAll = () => finish({ silent: true });
-  const next    = () => (isLast ? finish() : setStep(s => s + 1));
-  const back    = () => setStep(s => Math.max(0, s - 1));
+  // From safeStep, not from the raw step. Changing the role on step 0 swaps the
+  // flow underneath, and the listener flow is shorter than the creator ones, so
+  // the raw counter can sit past the end of the array it is now indexing.
+  const next    = () => (isLast ? finish() : setStep(safeStep + 1));
+  const back    = () => setStep(Math.max(0, safeStep - 1));
 
   return (
     // NOT min-h-screen, and not a pinned footer.
@@ -379,19 +569,21 @@ export default function Welcome() {
         {/* Bars, not "step 2 of 5". They say the same thing and nobody has to
             read them. */}
         <div className="flex items-center gap-1.5 mb-6">
-          {flow.steps.map((s, i) => (
+          {steps.map((s, i) => (
             <div key={s.label} className="flex-1 h-1 rounded-full transition-colors duration-300"
-              style={{ background: i <= step ? '#8CAB2E' : 'rgba(255,255,255,0.10)' }} />
+              style={{ background: i <= safeStep ? '#8CAB2E' : 'rgba(255,255,255,0.10)' }} />
           ))}
         </div>
       </div>
 
       <div className="px-6 pb-6">
-        <div className={current.kind === 'genres' || current.kind === 'mood' ? 'max-w-2xl mx-auto' : 'max-w-md mx-auto'}>
-          {step === 0 && (
+        <div className={current.kind === 'genres' || current.kind === 'mood' || current.kind === 'follow' ? 'max-w-2xl mx-auto' : 'max-w-md mx-auto'}>
+          {safeStep === 0 && (
             <div className="flex items-center gap-2 mb-2">
               <Sparkles className="w-4 h-4" style={{ color: '#8CAB2E' }} />
-              <span className="text-xs font-semibold tracking-wider uppercase text-white/40">{flow.eyebrow}</span>
+              <span className="text-xs font-semibold tracking-wider uppercase text-white/40">
+                {current.kind === 'role' ? 'Welcome' : flow.eyebrow}
+              </span>
             </div>
           )}
           <h1 className="text-2xl font-bold mb-2">{current.title}</h1>
@@ -426,6 +618,106 @@ export default function Welcome() {
             </>
           )}
 
+          {current.kind === 'role' && (
+            <div className="space-y-2.5">
+              {ROLE_OPTIONS.map(({ k, Icon, title, blurb }) => {
+                const on = role === k;
+                return (
+                  <button type="button" key={k} onClick={() => {
+                    setPicked(k);
+                    // Stashed as well as held in state. finish() creates the
+                    // artists row for a creator, but if that write is refused
+                    // the choice would be gone again, and this is the key
+                    // AuthContext reads on the next load to make the row
+                    // itself. Cheap belt and braces on the exact failure that
+                    // produced listener accounts in the first place.
+                    try {
+                      if (k === 'artist' || k === 'beatmaker') localStorage.setItem('pending_creator_role', k);
+                      else localStorage.removeItem('pending_creator_role');
+                    } catch {}
+                  }}
+                    className="w-full text-left p-4 rounded-2xl transition active:scale-[0.99] flex items-start gap-3.5"
+                    style={on
+                      ? { background: 'rgba(140,171,46,0.12)', border: '1px solid rgba(140,171,46,0.50)' }
+                      : { background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                    <div className="w-10 h-10 flex-shrink-0 rounded-xl flex items-center justify-center"
+                      style={{ background: on ? 'rgba(140,171,46,0.18)' : 'rgba(255,255,255,0.05)' }}>
+                      <Icon className="w-5 h-5" style={{ color: on ? '#c7e06a' : 'rgba(255,255,255,0.45)' }} />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold" style={{ color: on ? '#fff' : 'rgba(255,255,255,0.80)' }}>{title}</p>
+                      <p className="text-[12px] text-white/40 mt-0.5 leading-relaxed">{blurb}</p>
+                    </div>
+                    {on && <Check className="w-4 h-4 flex-shrink-0 mt-1" style={{ color: '#c7e06a' }} />}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {current.kind === 'follow' && (
+            <>
+              {suggLoading && (
+                <div className="py-10 flex items-center justify-center">
+                  <Loader className="w-5 h-5 animate-spin text-white/30" />
+                </div>
+              )}
+
+              {!suggLoading && !sugg.length && (
+                <div className="py-8 text-center">
+                  <Users className="w-7 h-7 mx-auto text-white/15" />
+                  <p className="text-sm text-white/35 mt-3">
+                    Nobody to suggest just yet. Browse will have people in it the moment there are.
+                  </p>
+                </div>
+              )}
+
+              {!suggLoading && !!sugg.length && (
+                <>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                    {sugg.map(a => {
+                      const on = !!followed[a.id];
+                      const initial = (a.artist_name || '?').trim().charAt(0).toUpperCase();
+                      return (
+                        <button type="button" key={a.id} onClick={() => toggleFollow(a)}
+                          className="p-3 rounded-2xl text-center transition active:scale-[0.97] flex flex-col items-center"
+                          style={on
+                            ? { background: 'rgba(140,171,46,0.12)', border: '1px solid rgba(140,171,46,0.50)' }
+                            : { background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                          <div className="w-14 h-14 rounded-full overflow-hidden flex items-center justify-center"
+                            style={{ background: 'rgba(255,255,255,0.06)' }}>
+                            {a.profile_image_url
+                              ? <img src={a.profile_image_url} alt="" className="w-full h-full object-cover" loading="lazy" />
+                              : <span className="text-lg font-bold text-white/30">{initial}</span>}
+                          </div>
+                          {/* min-w-0 and w-full on the text wrapper, so a long
+                              artist name truncates instead of widening the card
+                              and pushing the grid off the side of the screen. */}
+                          <div className="w-full min-w-0 mt-2">
+                            <p className="text-[12px] font-semibold truncate"
+                              style={{ color: on ? '#fff' : 'rgba(255,255,255,0.80)' }}>{a.artist_name}</p>
+                            {a.genre && <p className="text-[10px] text-white/30 truncate mt-0.5">{a.genre}</p>}
+                          </div>
+                          <span className="mt-2 text-[11px] font-bold px-3 py-1 rounded-full"
+                            style={on
+                              ? { background: '#8CAB2E', color: '#000' }
+                              : { background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.65)' }}>
+                            {on ? 'Following' : 'Follow'}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <p className="text-[11px] text-white/25 mt-3 text-center">
+                    {followCount === 0
+                      ? 'Tap any of them. It saves straight away.'
+                      : `Following ${followCount}. Tap again to undo.`}
+                  </p>
+                </>
+              )}
+            </>
+          )}
+
           {current.kind === 'genres' && (
             <div className="flex flex-wrap gap-2">
               {GENRES.map(g => <Pill key={g} label={g} on={genres.includes(g)} onClick={() => toggleGenre(g)} />)}
@@ -455,7 +747,7 @@ export default function Welcome() {
           resent. */}
       <div className="px-6 pt-2" style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 32px)' }}>
         <div className="max-w-md mx-auto flex items-center gap-3">
-          {step > 0 && (
+          {safeStep > 0 && (
             <button onClick={back} disabled={saving}
               className="w-12 h-12 flex-shrink-0 flex items-center justify-center rounded-xl bg-white/[0.06] transition active:scale-95 disabled:opacity-30">
               <ArrowLeft className="w-4 h-4 text-white/60" />

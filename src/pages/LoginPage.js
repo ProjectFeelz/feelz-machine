@@ -193,7 +193,13 @@ export default function LoginPage() {
       } else if (mode === 'signup') {
         if (password.length < 8) { setError('Use at least 8 characters for your password.'); setLoading(false); return; }
         stashRole();
-        const data = await signUpWithEmail(addr, password, '/setup');
+        // The role goes with the sign-up, not just into localStorage.
+        //
+        // stashRole still writes the local key because it is the faster path
+        // when the confirmation link is opened in this same browser. The fourth
+        // argument is what makes it work when it is not, which on a phone is
+        // most of the time. See signUpWithEmail in AuthContext.
+        const data = await signUpWithEmail(addr, password, '/setup', role);
         // With email confirmation on, Supabase returns no session and an empty
         // identities list if the address is already registered.
         if (data?.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {

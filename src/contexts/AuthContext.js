@@ -5,6 +5,29 @@ import { userRow, userRowResult, invalidateUserRow, clearUserRowCache } from '..
 // Which user id an artist-profile creation is currently in flight for.
 let creatingArtistFor = null;
 
+// The creator role chosen at sign-up, from whichever of the two places still
+// has it.
+//
+// localStorage is first because it is the OAuth path: Google comes back to the
+// same browser, so the key is there, and it is also where a role change made
+// after sign-up is staged.
+//
+// user_metadata is the fallback that makes email sign-up work at all. See the
+// comment on signUpWithEmail: the confirmation link is frequently opened in a
+// different browser from the one that filled in the form, and localStorage does
+// not cross that gap. Exported so Welcome.js reads the same answer this does,
+// rather than keeping a second copy of the rule that can disagree with it.
+export function pendingCreatorRole(sessionUser) {
+  let r = null;
+  try { r = localStorage.getItem('pending_creator_role'); } catch {}
+  if (r !== 'artist' && r !== 'beatmaker') r = null;
+  if (!r) {
+    const m = sessionUser?.user_metadata?.creator_role;
+    if (m === 'artist' || m === 'beatmaker') r = m;
+  }
+  return r;
+}
+
 const AuthContext = createContext({});
 
 export function AuthProvider({ children }) {
@@ -35,7 +58,7 @@ export function AuthProvider({ children }) {
     if (data) setProfile(data);
   };
 
-  const fetchArtist = async (userId) => {
+  const fetchArtist = async (userId, sessionUser = null) => {
     // Same again. An artist row read twice at startup is two of the slowest
     // calls in the boot group, for one answer.
     //
@@ -50,8 +73,8 @@ export function AuthProvider({ children }) {
       // is what makes the Artist/Beat Maker choice on the login page
       // actually register — the artist row didn't exist yet when that
       // choice was made, so it was previously discarded entirely.
-      const pendingRole = localStorage.getItem('pending_creator_role');
-      if (pendingRole && (pendingRole === 'artist' || pendingRole === 'beatmaker') && data.role !== pendingRole) {
+      const pendingRole = pendingCreatorRole(sessionUser);
+      if (pendingRole && (pendingRole === 'artist' || pendingRole === 'beatmaker') && data.role !== pendingRole && !data.role_confirmed) {
         const { data: updated } = await supabase
           .from('artists')
           .update({ role: pendingRole, role_confirmed: true })
@@ -73,7 +96,7 @@ export function AuthProvider({ children }) {
       // signup, that choice was previously discarded here entirely —
       // nothing anywhere in the app creates a new artists row, so the
       // person silently stayed a listener regardless of what they picked.
-      const pendingRole = localStorage.getItem('pending_creator_role');
+      const pendingRole = pendingCreatorRole(sessionUser);
       if (pendingRole && (pendingRole === 'artist' || pendingRole === 'beatmaker')) {
         // Claim the key BEFORE doing any async work, and hold a module-level
         // in-flight guard.
@@ -291,7 +314,7 @@ export function AuthProvider({ children }) {
     try {
       await Promise.all([
         fetchProfile(sessionUser.id),
-        fetchArtist(sessionUser.id),
+        fetchArtist(sessionUser.id, sessionUser),
         fetchListener(sessionUser.id),
         checkAdmin(sessionUser.id),
       ]);
@@ -369,11 +392,33 @@ export function AuthProvider({ children }) {
     return data;
   };
 
-  const signUpWithEmail = async (email, password, redirectPath = '/setup') => {
+  const signUpWithEmail = async (email, password, redirectPath = '/setup', creatorRole = null) => {
+    // creator_role goes into user_metadata, and that is the whole point.
+    //
+    // The Artist / Sell beats choice used to live ONLY in localStorage. With
+    // email confirmation on, the person signs up in one browser and then opens
+    // the confirmation link from their mail client, which on a phone is very
+    // often a different browser context: the Gmail in-app view, a different
+    // default browser, sometimes a different device. localStorage belongs to
+    // the origin IN THAT BROWSER, so the choice simply was not there when the
+    // session finally arrived. fetchArtist found no pending role, created no
+    // artists row, fetchListener created a listeners row the way it does for
+    // everybody, and the person who picked Artist landed as a listener with
+    // nothing anywhere recording that they had asked for anything else.
+    //
+    // user_metadata is stored on the auth user, server side. It is attached to
+    // the session wherever that session is opened, so the choice survives the
+    // round trip through the mail client, a new device, and a cleared browser.
+    const meta = (creatorRole === 'artist' || creatorRole === 'beatmaker')
+      ? { creator_role: creatorRole }
+      : undefined;
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
-      options: { emailRedirectTo: `${window.location.origin}${redirectPath}` },
+      options: {
+        emailRedirectTo: `${window.location.origin}${redirectPath}`,
+        ...(meta ? { data: meta } : {}),
+      },
     });
     if (error) throw error;
     // Do NOT call loadUser here, the user hasn't confirmed their email yet.
@@ -406,7 +451,7 @@ export function AuthProvider({ children }) {
       invalidateUserRow('user_profiles', user.id);
       invalidateUserRow('artists', user.id);
       await fetchProfile(user.id);
-      await fetchArtist(user.id);
+      await fetchArtist(user.id, user);
       await fetchListener(user.id);
     }
   };
