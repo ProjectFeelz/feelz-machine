@@ -120,7 +120,17 @@ export default function TipButton({ artist, onTipSent }) {
   }, [step]);
 
   // Early return AFTER all hooks — safe per Rules of Hooks
-  if (!artist?.paypal_email) return null;
+  // accepts_tips, not paypal_email.
+  //
+  // This only ever needed to know WHETHER the artist can be paid, but reading
+  // that meant the payout address was readable by every visitor, signed in or
+  // not. Query 01 confirmed anon could read it on every artist.
+  //
+  // accepts_tips is a generated column, added in migration
+  // 220_lock_down_anon_reads.sql, that answers the same question and gives
+  // nothing away. The paypal_email fallback keeps this working on any client
+  // that loads before that migration runs.
+  if (!artist?.accepts_tips && !artist?.paypal_email) return null;
 
   const reset = () => { setOpen(false); setAmount(''); setMessage(''); setStep('form'); setError(''); paypalRendered.current = false; };
 

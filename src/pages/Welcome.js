@@ -232,10 +232,30 @@ export default function Welcome() {
                  : artist ? 'artist'
                  : pendingCreatorRole(user) || 'listener';
 
-  // Shown to anybody whose role is not settled in the database yet. An artist
-  // row made by AuthContext carries role_confirmed, so a creator who is already
-  // set up is never asked again.
-  const needsRoleStep = !artist?.role_confirmed;
+  // ALWAYS ASKED, AND THE DATA IS WHY.
+  //
+  // This used to be `!artist?.role_confirmed`, on the reasoning that somebody
+  // whose role was already settled should not be asked again. The live rows
+  // show what that actually did:
+  //
+  //   +t7  metadata artist, artists row, role_confirmed true
+  //   +t6  metadata null,   artists row, role_confirmed true
+  //   +t1  metadata null,   artists row, role_confirmed true
+  //
+  // AuthContext creates the artists row with role_confirmed true BEFORE this
+  // screen ever renders. So by the time anybody reaches onboarding the role is
+  // always settled, this was always false, the role step never appeared, and
+  // `detected` fell to `artist ? 'artist'` every single time. Every account
+  // got the artist flow no matter what was chosen, which is exactly what it
+  // looked like from the outside.
+  //
+  // Asking always costs one tap on a screen somebody is already tapping
+  // through, and the card for the detected role is preselected, so for anybody
+  // who chose correctly it is a confirmation rather than a question. What it
+  // buys is that the role can never be silently wrong in either direction: a
+  // mis-tap on the login page is now recoverable, and the choice is visible
+  // instead of being inferred from a row the person never sees.
+  const needsRoleStep = true;
 
   const [picked, setPicked] = useState(null);
   const role = picked || detected;
