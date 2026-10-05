@@ -10,6 +10,7 @@
 const https = require('https');
 const { createClient } = require('@supabase/supabase-js');
 const paypalEnv = require('../lib/paypal-env');
+const pricing   = require('../lib/pricing');
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -369,11 +370,40 @@ exports.handler = async (event) => {
     return { statusCode: 200, body: JSON.stringify({ success: true }) };
   }
 
-  // Create order
+  // ── THE BUYER PAYS THE FEE ON A TIP TOO ────────────────────────────────────
+  //
+  // This charged the tipper exactly the tip. The artist is the payee, so
+  // PayPal took its cut out of the artist's receipt: on the 5.4% + $0.30
+  // defaults in netlify/lib/pricing.js, a $2.00 tip arrived as $1.59 and a
+  // $1.00 tip arrived as $0.65.
+  //
+  // Every other paid surface on the platform already grosses up through
+  // pricing.quote (see paypal-order.js:359 and :631), and the promise on the
+  // site is that the artist gets the number they are shown. The tip path was
+  // the one place that quietly did not, while the tips row, the notification
+  // and the dashboard all still displayed the face value. So the artist was
+  // told +$2.00 and received $1.59, with nothing anywhere explaining the gap.
+  //
+  // amountNum stays the ARTIST'S amount throughout, which is what every record
+  // below already assumes. Only what PayPal charges changes.
+  const tipQuote = await pricing.quote(supabase, amountNum);
+
   const order = await ppRequest('POST', '/v2/checkout/orders', {
     intent: 'CAPTURE',
     purchase_units: [{
-      amount: { currency_code: 'USD', value: amountNum.toFixed(2) },
+      amount: {
+        currency_code: 'USD',
+        value: tipQuote.buyerPays.toFixed(2),
+        breakdown: {
+          item_total:   { currency_code: 'USD', value: tipQuote.artistPrice.toFixed(2) },
+          handling:     { currency_code: 'USD', value: tipQuote.serviceFee.toFixed(2) },
+        },
+      },
+      items: [{
+        name: `Tip for ${artist.artist_name}`.slice(0, 127),
+        quantity: '1',
+        unit_amount: { currency_code: 'USD', value: tipQuote.artistPrice.toFixed(2) },
+      }],
       description: `Tip for ${artist.artist_name} on Feelz Machine`,
       payee: { email_address: artist.paypal_email },
     }],

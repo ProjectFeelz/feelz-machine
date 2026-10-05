@@ -116,15 +116,21 @@ function getSearchHistory() {
   catch { return []; }
 }
 
+// The read above is wrapped and these were not, which is the whole bug.
+// localStorage THROWS, it does not return null, when site data is blocked, in
+// some private modes, and when the quota is full. addToSearchHistory runs from
+// an effect on every keystroke past the second character, so on a browser with
+// cookies blocked the second letter typed into Browse threw and took the
+// entire page down to the error boundary. Nothing here is worth a page for.
 function addToSearchHistory(term) {
   if (!term.trim()) return;
   const history = getSearchHistory().filter(h => h !== term);
   history.unshift(term);
-  localStorage.setItem(SEARCH_HISTORY_KEY, JSON.stringify(history.slice(0, 8)));
+  try { localStorage.setItem(SEARCH_HISTORY_KEY, JSON.stringify(history.slice(0, 8))); } catch { /* search still works */ }
 }
 
 function clearSearchHistory() {
-  localStorage.removeItem(SEARCH_HISTORY_KEY);
+  try { localStorage.removeItem(SEARCH_HISTORY_KEY); } catch { /* nothing to clear */ }
 }
 
 // ── Section label ─────────────────────────────────────────────────────────────

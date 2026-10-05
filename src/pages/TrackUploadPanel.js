@@ -1,6 +1,7 @@
 import { coverUrl } from '../utils/coverUrl';
 import React, { useState, useEffect } from 'react';
 import { localInputToInstant, instantToLocalInput, describeLocalRelease } from '../utils/releaseTime';
+import { entriesAreOpen } from '../utils/schoolPhase';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import {
@@ -1567,6 +1568,17 @@ export default function TrackUploadPanel() {
             .maybeSingle();
 
           if (ssConfig?.competition_id) {
+            // The gate again, here, where the row is actually written.
+            //
+            // SchoolSessionsEntry hides the toggle outside the entry window,
+            // but a hidden control is not a closed door: stale state, a second
+            // tab left open since yesterday, or anybody willing to look at the
+            // page source all reach this line. The check that matters is the
+            // one next to the insert.
+            if (!entriesAreOpen(ssConfig?.competition)) {
+              throw new Error('Entries are not open yet. Your track is uploaded and saved, so you can enter it the moment they do.');
+            }
+
             const { data: redeemedCodeId, error: codeErr } = await supabase.rpc('redeem_verification_code', {
               p_code: schoolSessionsForm.verificationCode.trim(),
             });
@@ -1764,7 +1776,10 @@ export default function TrackUploadPanel() {
     // the track's splits. See the note at the top of TrackCredits.js.
     const { data: collabRows, error: collabErr } = await supabase
       .from('collaborations')
-      .select('artist_id, role, split_percent')
+      // status comes back too, and it is the whole fix for the re-pending bug
+      // in saveEdit below. Without it the form had no idea which of these a
+      // collaborator had already accepted.
+      .select('artist_id, role, split_percent, status')
       .eq('track_id', track.id);
 
     if (collabErr) {
@@ -1789,6 +1804,11 @@ export default function TrackUploadPanel() {
     setEditCollaborators((collabRows || []).map(c => ({
       artist_id: c.artist_id, artist_name: nameById.get(c.artist_id),
       role: c.role, split_percent: c.split_percent,
+      // Carried through the form untouched. saveEdit uses these three to tell
+      // an unchanged collaborator from a new or re-negotiated one.
+      status: c.status,
+      _origRole: c.role,
+      _origSplit: c.split_percent,
     })));
   };
 
@@ -1812,13 +1832,51 @@ export default function TrackUploadPanel() {
       if (editCoverFile) coverUrl = await uploadFile(editCoverFile, 'covers/');
       if (editAudioFile) audioUrl = await convertAndUploadAudio(editAudioFile, 'tracks/');
       if (editCollaborators.length > 0) {
+        // ── AN EDIT MUST NOT UN-ACCEPT A COLLABORATOR ──────────────────────
+        //
+        // This deleted every collaboration on the track and re-inserted them
+        // all with status 'pending'. So fixing a typo in a title quietly reset
+        // every split the collaborators had already agreed to, and fired a
+        // fresh request and notification at each of them.
+        //
+        // The damage was invisible and it was financial.
+        // netlify/functions/process-split-payout.js only pays rows with
+        // status = 'accepted', so after any edit the owner received 100% of
+        // every later sale and the collaborators received nothing, with no
+        // error anywhere and the splits still shown in the form.
+        //
+        // An unchanged collaborator keeps the status they had. A collaborator
+        // whose ROLE OR SPLIT has changed goes back to pending and is asked
+        // again, which is right: they agreed to a specific share, and a new
+        // share is a new question. A collaborator added just now is pending,
+        // as before.
         await supabase.from('collaborations').delete().eq('track_id', id);
         for (const collab of editCollaborators) {
-          const { data: cd } = await supabase.from('collaborations').insert({
+          const termsChanged =
+            collab._origSplit !== undefined &&
+            (Number(collab.split_percent) !== Number(collab._origSplit) || collab.role !== collab._origRole);
+
+          const keptStatus = (!collab.status || termsChanged) ? 'pending' : collab.status;
+
+          const { data: cd, error: collabErr } = await supabase.from('collaborations').insert({
             track_id: id, artist_id: collab.artist_id, role: collab.role,
-            split_percent: collab.split_percent, status: 'pending', invited_by: artist.id,
-          }).select().single();
-          if (cd) {
+            split_percent: collab.split_percent, status: keptStatus, invited_by: artist.id,
+          }).select().maybeSingle();
+
+          // Read, because losing a split silently is how a collaborator stops
+          // being paid without anybody finding out. .maybeSingle() rather than
+          // .single() so a refused insert reports its own error instead of
+          // throwing a confusing "no rows" one.
+          if (collabErr) {
+            console.error('[upload] collaboration insert failed for', collab.artist_id, ':',
+              collabErr.code, collabErr.message);
+            showMessage('error', `Could not save the split for ${collab.artist_name || 'a collaborator'}. Check the credits before this track sells.`);
+          }
+
+          // Only ask somebody who is actually being asked. Re-sending a
+          // request to a collaborator who accepted months ago is noise, and it
+          // is what made this bug look like a notification problem.
+          if (cd && keptStatus === 'pending') {
             await supabase.from('collab_requests').insert({
               collaboration_id: cd.id, from_artist_id: artist.id,
               to_artist_id: collab.artist_id, track_id: id,

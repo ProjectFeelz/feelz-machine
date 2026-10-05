@@ -17,15 +17,19 @@ import { supabase } from '../supabaseClient';
  */
 export default function RoleConfirmationPrompt() {
   const { artist, isArtist, refreshProfile } = useAuth();
-  const [dismissed, setDismissed] = useState(
-    () => sessionStorage.getItem('fm_role_prompt_dismissed') === '1'
-  );
+  // Same guard as ProfileCompletionBanner, same reason: this is a render-time
+  // read of sessionStorage, which throws when site data is blocked, and
+  // HubPage mounts it for every artist.
+  const [dismissed, setDismissed] = useState(() => {
+    try { return sessionStorage.getItem('fm_role_prompt_dismissed') === '1'; }
+    catch { return false; }
+  });
   const [saving, setSaving] = useState(false);
 
   if (!isArtist || !artist || dismissed || artist.role_confirmed) return null;
 
   const handleDismiss = () => {
-    sessionStorage.setItem('fm_role_prompt_dismissed', '1');
+    try { sessionStorage.setItem('fm_role_prompt_dismissed', '1'); } catch { /* dismissed for this view only */ }
     setDismissed(true);
   };
 

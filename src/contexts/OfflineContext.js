@@ -135,13 +135,36 @@ export function OfflineProvider({ children }) {
   // This is the only moment entitlement can be re-checked, so it is also the
   // only moment a lease can be taken away, which is the right place for it:
   // the person is online and can be told why.
+  // THE THROTTLE HAS TO OUTLIVE THE PAGE.
+  //
+  // This was a ref, so it reset on every full page load, and a full page load
+  // is exactly when this runs. The once-an-hour rule therefore never applied
+  // to the case it was written for: opening the app. Every single load started
+  // the renewal sweep again from scratch, which is why get-offline-url was the
+  // slowest request on every page I measured.
+  //
+  // localStorage survives the reload. Leases last 30 days and renewLeases now
+  // only touches the ones inside their last week, so once every six hours is
+  // already far more often than the lease needs.
+  const RENEW_KEY = 'fm_offline_renewed_at';
+  const RENEW_EVERY_MS = 6 * 3600000;
   const renewRef = useRef(0);
+
+  const lastRenew = () => {
+    if (renewRef.current) return renewRef.current;
+    try { return Number(localStorage.getItem(RENEW_KEY)) || 0; } catch { return 0; }
+  };
+  const markRenewed = (t) => {
+    renewRef.current = t;
+    try { localStorage.setItem(RENEW_KEY, String(t)); } catch { /* private mode */ }
+  };
+
   const renew = useCallback(async () => {
     if (!user) return;
-    // Once an hour at most. This fires on every online event, and phones on a
-    // flaky signal emit that repeatedly.
-    if (Date.now() - renewRef.current < 3600000) return;
-    renewRef.current = Date.now();
+    // This also fires on every online event, and phones on a flaky signal emit
+    // that repeatedly.
+    if (Date.now() - lastRenew() < RENEW_EVERY_MS) return;
+    markRenewed(Date.now());
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) return;

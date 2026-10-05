@@ -88,11 +88,23 @@ exports.handler = async (event) => {
       };
     }
 
-    // ACTIVE is the normal answer. APPROVAL_PENDING means they have approved
-    // it but PayPal has not started it yet — that resolves on its own and the
-    // webhook will finish the job, so it is accepted here rather than shown
-    // to the person as a failure.
-    if (!['ACTIVE', 'APPROVAL_PENDING'].includes(sub.status)) {
+    // ACTIVE is the normal answer. APPROVED means the person has approved it
+    // and PayPal has not started billing yet, which resolves on its own and
+    // the webhook finishes the job, so that is accepted rather than shown as
+    // a failure.
+    //
+    // APPROVAL_PENDING IS NOT THAT, AND USED TO BE ACCEPTED HERE.
+    //
+    // In PayPal's model APPROVAL_PENDING is the state a subscription is
+    // created in BEFORE the buyer approves it. The comment that used to sit
+    // here said it meant the opposite. So the flow was: open the PayPal
+    // button, which creates the subscription, close the window without paying,
+    // then call this endpoint with that id. It verified against PayPal,
+    // PayPal said APPROVAL_PENDING, and this granted Fan Pro.
+    //
+    // Nothing took it away afterwards either, because the webhook only fires
+    // for a subscription that actually activates.
+    if (!['ACTIVE', 'APPROVED'].includes(sub.status)) {
       console.warn('[verify-subscription] refusing status', sub.status, 'for', subscriptionId);
       return {
         statusCode: 402,
@@ -118,12 +130,44 @@ exports.handler = async (event) => {
       return { statusCode: 500, body: JSON.stringify({ error: 'Tier not configured. We have been told.' }) };
     }
 
-    // Trust PayPal's own billing period over anything the client claims.
-    const cycleFromPayPal = sub.billing_info?.next_billing_time && sub.start_time
-      ? null   // could be derived, but the plan is the authority; fall through
-      : null;
-    void cycleFromPayPal;
-    const cycle = billingCycle === 'annual' ? 'annual' : 'monthly';
+    // ── THE CYCLE COMES FROM THE PLAN, NOT FROM THE REQUEST ────────────────
+    //
+    // This said it trusted PayPal and then did not: the block above computed
+    // nothing, discarded it with `void`, and the cycle was read straight from
+    // billingCycle in the request body. So a monthly subscriber could post
+    // "annual" and be given 365 days for a month's money, and per the note in
+    // paypal-webhook.js renewals extend by the cycle stored on the row, so
+    // every monthly renewal would have added another year.
+    //
+    // sub.plan_id is PayPal's own answer to which plan was bought. Matching it
+    // against the two configured plan ids is the same check
+    // retail-paypal-subscription.js already does for venues, and it settles
+    // both questions at once: how long to grant, and whether this subscription
+    // is even for Fan Pro rather than some other plan on the account.
+    const MONTHLY_PLAN = process.env.PAYPAL_LISTENER_PRO_MONTHLY_PLAN_ID || '';
+    const ANNUAL_PLAN  = process.env.PAYPAL_LISTENER_PRO_ANNUAL_PLAN_ID  || '';
+
+    let cycle;
+    if (ANNUAL_PLAN && sub.plan_id === ANNUAL_PLAN) {
+      cycle = 'annual';
+    } else if (MONTHLY_PLAN && sub.plan_id === MONTHLY_PLAN) {
+      cycle = 'monthly';
+    } else if (!MONTHLY_PLAN && !ANNUAL_PLAN) {
+      // Neither is configured. Refusing here would lock out every real buyer
+      // over a missing env var, so fall back to the client's claim as before,
+      // but say so loudly enough that it gets fixed.
+      console.error('[verify-subscription] no PAYPAL_LISTENER_PRO_*_PLAN_ID set — '
+        + 'falling back to the client-supplied cycle, which cannot be trusted.');
+      cycle = billingCycle === 'annual' ? 'annual' : 'monthly';
+    } else {
+      console.error('[verify-subscription] REFUSED: plan mismatch',
+        JSON.stringify({ subscriptionId, got: sub.plan_id || null }));
+      return {
+        statusCode: 400,
+        body: JSON.stringify({ error: 'That subscription is not for Fan Pro.' }),
+      };
+    }
+
     const days  = cycle === 'annual' ? 365 : 30;
     const expiresAt = new Date(Date.now() + days * 86400000).toISOString();
 

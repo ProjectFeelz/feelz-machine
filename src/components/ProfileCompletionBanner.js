@@ -15,9 +15,14 @@ export default function ProfileCompletionBanner({ compact = false }) {
   const { artist, isArtist } = useAuth();
   const navigate = useNavigate();
 
-  const [dismissed, setDismissed] = useState(
-    () => sessionStorage.getItem('fm_profile_banner_dismissed') === '1'
-  );
+  // Read inside a try. This runs during render, and sessionStorage throws
+  // rather than returning null when site data is blocked. HubPage mounts this
+  // for every artist, so the throw replaced the whole Hub with the error
+  // boundary, and Try Again threw again.
+  const [dismissed, setDismissed] = useState(() => {
+    try { return sessionStorage.getItem('fm_profile_banner_dismissed') === '1'; }
+    catch { return false; }
+  });
 
   if (!isArtist || !artist || dismissed) return null;
 
@@ -40,7 +45,7 @@ export default function ProfileCompletionBanner({ compact = false }) {
   const pct = Math.round((fields.filter(Boolean).length / fields.length) * 100);
 
   const handleDismiss = () => {
-    sessionStorage.setItem('fm_profile_banner_dismissed', '1');
+    try { sessionStorage.setItem('fm_profile_banner_dismissed', '1'); } catch { /* dismissed for this view only */ }
     setDismissed(true);
   };
 

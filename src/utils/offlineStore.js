@@ -388,12 +388,46 @@ export async function clearOffline() {
  */
 const DENY_RETRY_MS = 7 * 24 * 60 * 60 * 1000;
 
+// A lease runs 30 days. Renewing one that still has most of that left is pure
+// cost, so only the ones inside this window are asked about.
+const RENEW_WHEN_WITHIN_MS = 7 * 24 * 60 * 60 * 1000;
+
+// How many renewals are in flight at once. The server call is a cold Netlify
+// function taking 1.2 to 2.9 seconds in practice, so this is the difference
+// between a slow page and an unusable one.
+const RENEW_CONCURRENCY = 4;
+
 export async function renewLeases(authToken, userId = null) {
   if (!authToken) return { renewed: 0, revoked: 0, lapsed: 0, failed: 0, skipped: 0 };
 
   const items = await listOffline();
   let renewed = 0, revoked = 0, lapsed = 0, failed = 0, skipped = 0;
 
+  // ── WHY THIS IS NO LONGER A SERIAL LOOP OVER EVERYTHING ────────────────────
+  //
+  // It used to be `for (const meta of items)` with an await inside, so one
+  // request went out, finished, and then the next started. Measured on the
+  // live site, each call takes between 1.2 and 2.9 seconds, because it is a
+  // cold Netlify function. MAX_OFFLINE_TRACKS in get-offline-url.js is 500.
+  //
+  // So somebody with a full offline library was making 500 requests, one after
+  // another, at roughly a second and a half each. That is over ten minutes of
+  // continuous network activity, and it started again on every page load,
+  // because the once-an-hour guard in OfflineContext lives in a ref and a ref
+  // does not survive a reload. With two saved tracks it already accounted for
+  // the slowest requests on every page I measured.
+  //
+  // Two changes fix it, and the first one matters more than the second.
+  //
+  // ONLY WHAT IS ACTUALLY DUE. A lease lasts 30 days. Renewing one with 29
+  // days left achieves nothing, so an item is only asked about inside the last
+  // week of its life. On a normal load that is almost nothing, whatever the
+  // library size, which is the part that makes this scale.
+  //
+  // THEN IN PARALLEL, four at a time. For the handful that are genuinely due,
+  // the wall-clock cost is now a quarter of what it was, and the cap keeps it
+  // from looking like an attack on your own function.
+  const due = [];
   for (const meta of items) {
     // Somebody else's download, in a browser this account also uses. Not asked
     // about, not touched. See the note on userId in saveTrackOffline: without
@@ -428,6 +462,18 @@ export async function renewLeases(authToken, userId = null) {
       continue;
     }
 
+    // Not due yet. An item with no expiry at all IS asked about, because an
+    // unknown lease is the one case where the server's answer is the only way
+    // to find out what is going on.
+    if (meta.expiresAt) {
+      const left = new Date(meta.expiresAt).getTime() - Date.now();
+      if (Number.isFinite(left) && left > RENEW_WHEN_WITHIN_MS) { skipped++; continue; }
+    }
+
+    due.push(meta);
+  }
+
+  const renewOne = async (meta) => {
     try {
       const res = await fetch('/.netlify/functions/get-offline-url', {
         method: 'POST',
@@ -441,7 +487,7 @@ export async function renewLeases(authToken, userId = null) {
       if (res.status === 404 || res.status === 410) {
         await removeOffline(meta.trackId);
         revoked++;
-        continue;
+        return;
       }
 
       // Not entitled at this moment. Leave the existing lease to run out ,
@@ -460,13 +506,13 @@ export async function renewLeases(authToken, userId = null) {
             await done(tD);
           } catch { /* the console line is the only cost of failing here */ }
         }
-        continue;
+        return;
       }
 
-      if (!res.ok) { failed++; continue; }
+      if (!res.ok) { failed++; return; }
 
       const { expiresAt } = await res.json();
-      if (!expiresAt) { failed++; continue; }
+      if (!expiresAt) { failed++; return; }
 
       const db = await openOfflineDb();
       const t  = tx(db, [STORE_META], 'readwrite');
@@ -491,7 +537,20 @@ export async function renewLeases(authToken, userId = null) {
       // expiry alone is right: nothing is lost, and the next reconnect retries.
       failed++;
     }
-  }
+  };
+
+  // A fixed number of workers pulling from one shared list. Simpler than
+  // chunking into batches, and it keeps all four busy instead of waiting for
+  // the slowest member of each batch.
+  let next = 0;
+  await Promise.all(
+    Array.from({ length: Math.min(RENEW_CONCURRENCY, due.length) }, async () => {
+      while (next < due.length) {
+        const meta = due[next++];
+        await renewOne(meta);
+      }
+    })
+  );
 
   return { renewed, revoked, lapsed, failed, skipped };
 }
