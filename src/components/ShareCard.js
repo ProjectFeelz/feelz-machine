@@ -3,6 +3,7 @@ import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { Download, Share2, X, Loader, Link, Check, Film } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import { parseLyrics, activeLineIndex } from '../utils/lyrics';
+import { resolveStreamSrc } from '../utils/streamUrl';
 import { buildStoryMp4, MEDIARECORDER_MP4_TYPES } from '../utils/storyMp4';
 import { resolveShareUrl, urlEndsInId } from '../utils/shareLink';
 
@@ -265,7 +266,26 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
   const title      = track?.title      || artist?.artist_name || 'Feelz Machine';
   const subtitle   = track?.artist_name || (artist ? 'Listen on Feelz Machine' : '');
   const artworkUrl = track?.cover_artwork_url || artist?.profile_image_url || null;
-  const audioUrl   = track?.file_url || null;
+  // THE ONE PLAYBACK PATH THAT STILL HELD A RAW MASTER URL.
+  //
+  // This was `track?.file_url`, and it is not only read for the duration: line
+  // 767 fetches the whole file to lay the soundtrack under the share video. So
+  // on the day feelz-samples goes private, this is what would have broken,
+  // silently, on the one feature artists use to promote themselves.
+  //
+  // resolveStreamSrc asks for a short lived signed URL and falls back to
+  // file_url on any failure, and it is a no-op while REACT_APP_PRIVATE_AUDIO
+  // is unset, so this changes nothing until the flag goes on.
+  const [audioUrl, setAudioUrl] = useState(track?.file_url || null);
+  useEffect(() => {
+    if (!track) { setAudioUrl(null); return; }
+    let dead = false;
+    const fallback = track.file_url || null;
+    resolveStreamSrc(track)
+      .then(src => { if (!dead) setAudioUrl(src || fallback); })
+      .catch(() => { if (!dead) setAudioUrl(fallback); });
+    return () => { dead = true; };
+  }, [track?.id]); // eslint-disable-line
   // The link this sheet actually hands out.
   //
   // Not simply the shareUrl prop. Callers build that themselves and several
