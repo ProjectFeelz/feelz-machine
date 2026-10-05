@@ -74,7 +74,11 @@ const fmt = (n) => {
 };
 
 // ── One news row, inside the overlay ───────────────────────────────────
-function NewsItem({ item, featured }) {
+// onClose is called before an internal link navigates. This renders inside
+// NewsOverlay, which is a fixed inset-0 sheet, so navigating without closing it
+// loads the destination underneath and leaves the reader looking at the news
+// list they just tapped out of.
+function NewsItem({ item, featured, onClose }) {
   const [playing, setPlaying] = useState(false);
   const { isPlaying, togglePlay } = usePlayer();
   const navigate = useNavigate();
@@ -144,7 +148,7 @@ function NewsItem({ item, featured }) {
         )}
         {item.link_url && (
           internal ? (
-            <button onClick={() => navigate(item.link_url)}
+            <button onClick={() => { onClose?.(); navigate(item.link_url); }}
               className="mt-3 inline-flex items-center gap-1 text-[13px] font-semibold hover:opacity-80 transition"
               style={{ color: T.accent }}>
               {item.link_label || 'Open'}<ChevronRight className="w-4 h-4" />
@@ -215,8 +219,8 @@ export function NewsOverlay({ news, trending, loaded, isAdmin, onClose, onPlay, 
               normal state between scheduled ones. */}
           <PlatformStoryRail />
 
-          {pinned.map(item => <NewsItem key={item.id} item={item} featured />)}
-          {rest.map(item   => <NewsItem key={item.id} item={item} />)}
+          {pinned.map(item => <NewsItem key={item.id} item={item} featured onClose={onClose} />)}
+          {rest.map(item   => <NewsItem key={item.id} item={item} onClose={onClose} />)}
 
           {loaded && !news.length && (
             <div className="rounded-2xl p-6 text-center"

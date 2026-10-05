@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { motion, useMotionValue, useTransform, animate } from 'framer-motion';
 import {
   Play, Pause, SkipBack, SkipForward, ChevronDown,
@@ -491,6 +491,7 @@ const baseY = H - 14, maxBarH = 28;
 // ── Main FullPlayer ───────────────────────────────────────────────────────────
 export default function FullPlayer() {
   const navigate = useNavigate();
+  const location = useLocation();
   const {
     currentTrack, isPlaying, togglePlay,
     playNext, playPrev, seek, duration, currentTime,
@@ -654,6 +655,38 @@ export default function FullPlayer() {
   useEffect(() => {
     if (!isMinimized) animate(y, 0, { type: 'spring', damping: 30, stiffness: 300 });
   }, [isMinimized]);
+
+  // COLLAPSE WHEN THE PAGE UNDERNEATH CHANGES.
+  //
+  // This player is a full-screen sheet that sits OVER the app. Every link
+  // inside it navigates the page behind it and then leaves the sheet sitting
+  // there, so the track info page, the artist page and the beat page all
+  // loaded correctly and were completely invisible. The only way to see what
+  // you had just tapped was to work out that the thing covering it was the
+  // player and pull it down.
+  //
+  // Handled here rather than at each link for two reasons. There are several
+  // of them already (the artist name, driving mode, and everything inside the
+  // action sheet, which closes itself and leaves this open behind it), and the
+  // next one somebody adds would have the same bug with nothing to catch it.
+  // A route change is also exactly the condition: the sheet should close when
+  // the page under it becomes something else, whatever caused that.
+  //
+  // Keyed on pathname only, so the query string and the hash do not count. A
+  // tab change or a #section link on the page already under the player is not
+  // a navigation away from it.
+  //
+  // The ref holds the path the player was sitting over when it was opened,
+  // rather than simply the previous path. That is what stops it closing itself
+  // the instant it opens: on the render where it expands there is nothing to
+  // compare against yet, so it records the path and waits. Everything after
+  // that is a real navigation away from the page it was covering.
+  const openedOver = useRef(null);
+  useEffect(() => {
+    if (isMinimized) { openedOver.current = null; return; }
+    if (openedOver.current === null) { openedOver.current = location.pathname; return; }
+    if (openedOver.current !== location.pathname) setIsMinimized(true);
+  }, [isMinimized, location.pathname]); // eslint-disable-line
 
   // Stop the phone dimming and locking while the player is open, so the
   // artwork, the lyrics and the scrubber stay lit through a song. Called
