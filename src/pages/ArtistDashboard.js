@@ -517,16 +517,57 @@ export default function ArtistDashboard() {
   };
 
   // Scroll to and highlight section when arriving from a notification
+  //
+  // THREE THINGS WERE WRONG HERE AND THE CRASH WAS THE SMALLEST OF THEM
+  //
+  // 1. THE CRASH. The old code checked ref.current, then scrolled it 300ms
+  //    later, and nothing rechecked in between. Every one of these sections is
+  //    conditional: they render on analyticsTab, and the followers one sits
+  //    inside a TierGate that decides what to show only once the tier has
+  //    loaded. So the node could be there when the timer was set and gone when
+  //    it fired, which is the null scrollIntoView.
+  //
+  // 2. THE MISSING DEPENDENCY, which is why it was reachable at all. The deps
+  //    were highlightSection and activeTab, but what decides whether the
+  //    section exists is analyticsTab. The effect above sets analyticsTab from
+  //    the notification, this one never re-ran when it changed, and the
+  //    cleanup never ran either, so a stale timer was left pointing at a node
+  //    that had since been swapped out.
+  //
+  // 3. THE STUCK HIGHLIGHT. `if (!ref?.current) return` bailed out BEFORE the
+  //    3 second timer that clears highlightSection. So arriving from a
+  //    notification a moment before the section rendered meant it never
+  //    scrolled and never stopped glowing, for the rest of the session.
+  //
+  // The retry is what makes it actually work rather than merely not crash. The
+  // common case is not that the section is gone, it is that it has not arrived
+  // yet, because TierGate is still deciding. Ten tries at 100ms covers about a
+  // second and then gives up quietly, which is the right failure: no scroll is
+  // a small disappointment, a thrown exception takes the dashboard down.
   useEffect(() => {
     if (!highlightSection || activeTab !== 'analytics') return;
+
     const ref = sectionRefs[highlightSection];
-    if (!ref?.current) return;
-    const timer = setTimeout(() => {
-      ref.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }, 300); // wait for tab render
-    const clearTimer = setTimeout(() => setHighlightSection(null), 3000); // stop highlight after 3s
+    let tries = 0;
+    let timer = null;
+
+    const tryScroll = () => {
+      // Read .current at the moment of use, every time. This is the fix for
+      // the crash: between scheduling and firing, the node can go.
+      const el = ref?.current;
+      if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'start' }); return; }
+      if (++tries >= 10) return;
+      timer = setTimeout(tryScroll, 100);
+    };
+
+    timer = setTimeout(tryScroll, 300); // wait for tab render
+
+    // Set unconditionally, so the highlight always stops whether or not the
+    // section was ever found.
+    const clearTimer = setTimeout(() => setHighlightSection(null), 3000);
+
     return () => { clearTimeout(timer); clearTimeout(clearTimer); };
-  }, [highlightSection, activeTab]); // eslint-disable-line
+  }, [highlightSection, activeTab, analyticsTab]); // eslint-disable-line
   const [wheelChallenge, setWheelChallenge] = useState(null);
   const [stats, setStats] = useState({
     streams: 0, downloads: 0, followers: 0, tracks: 0, likes: 0,
