@@ -386,6 +386,8 @@ export async function clearOffline() {
  * thirty days and a visible countdown, which is the difference between a
  * feature that ends and a feature that punishes.
  */
+const DENY_RETRY_MS = 7 * 24 * 60 * 60 * 1000;
+
 export async function renewLeases(authToken, userId = null) {
   if (!authToken) return { renewed: 0, revoked: 0, lapsed: 0, failed: 0, skipped: 0 };
 
@@ -403,6 +405,29 @@ export async function renewLeases(authToken, userId = null) {
     // which is the only evidence available that they are the owner.
     if (userId && meta.userId && meta.userId !== userId) { skipped++; continue; }
 
+    // AND THE ONES ALREADY IN THE BROWSER.
+    //
+    // The stamp above only exists on downloads saved after it shipped, so on
+    // its own it does nothing for anything already sitting in IndexedDB, which
+    // on any browser that has been used before is all of them. Those are the
+    // 403s that kept appearing.
+    //
+    // An unstamped item that comes back 403 is one of two things and the
+    // response cannot tell them apart: somebody else's download in a shared
+    // browser, or this person's own download with a lapsed entitlement. So
+    // neither is assumed. The refusal is recorded against this user and this
+    // track, and not asked again for a week.
+    //
+    // A week rather than never, because the second case comes back: somebody
+    // who resubscribes gets their own music renewing again without having to
+    // know any of this happened. Nothing is deleted either way, which is the
+    // same reasoning as the 403 branch below.
+    if (userId && meta.deniedFor === userId
+        && meta.deniedAt && (Date.now() - meta.deniedAt) < DENY_RETRY_MS) {
+      skipped++;
+      continue;
+    }
+
     try {
       const res = await fetch('/.netlify/functions/get-offline-url', {
         method: 'POST',
@@ -419,9 +444,24 @@ export async function renewLeases(authToken, userId = null) {
         continue;
       }
 
-      // Not entitled at this moment. Leave the existing lease to run out , 
+      // Not entitled at this moment. Leave the existing lease to run out ,
       // see the note above on why this is not a delete.
-      if (res.status === 403) { lapsed++; continue; }
+      if (res.status === 403) {
+        lapsed++;
+        // Remembered, so this account stops asking the same question on every
+        // single page load. See the note on DENY_RETRY_MS above.
+        if (userId) {
+          try {
+            const dbD = await openOfflineDb();
+            const tD  = tx(dbD, [STORE_META], 'readwrite');
+            const stD = tD.objectStore(STORE_META);
+            const cur = await reqAsPromise(stD.get(meta.trackId));
+            if (cur) stD.put({ ...cur, deniedFor: userId, deniedAt: Date.now() });
+            await done(tD);
+          } catch { /* the console line is the only cost of failing here */ }
+        }
+        continue;
+      }
 
       if (!res.ok) { failed++; continue; }
 
@@ -435,7 +475,15 @@ export async function renewLeases(authToken, userId = null) {
       // Stamped on the way past. A successful renewal is the server saying this
       // person is entitled to this track, which is the evidence that an
       // unstamped legacy item is theirs.
-      if (current) store.put({ ...current, expiresAt, userId: current.userId || userId || null });
+      // deniedFor is cleared on the way past: the server has just said yes, so
+      // whatever it said before is no longer true.
+      if (current) store.put({
+        ...current,
+        expiresAt,
+        userId: current.userId || userId || null,
+        deniedFor: null,
+        deniedAt: null,
+      });
       await done(t);
       renewed++;
     } catch {
