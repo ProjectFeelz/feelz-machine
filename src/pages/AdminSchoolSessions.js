@@ -126,12 +126,25 @@ export default function AdminSchoolSessions({ embedded = false }) {
   const loadEntries = useCallback(async () => {
     if (!config?.competition_id) return;
     setEntriesLoading(true);
-    const { data } = await supabase
-      .from('school_sessions_entries')
-      .select('id, entrant_full_name, entrant_email, entrant_tiktok_handle, tiktok_video_url, tiktok_tagged_confirmed, youtube_subscribed_confirmed, needs_school_verification, candidate_card_no, created_at, is_finalist, is_winner, is_group, school_name_freetext, song:school_sessions_shortlist_songs(title), school:school_sessions_schools(name), track:tracks(title), artist:artists(artist_name, slug), members:school_sessions_entry_members(id, member_name)')
-      .eq('competition_id', config.competition_id)
-      .order('created_at', { ascending: false });
-    setEntries(data || []);
+    // Through the function, not the table.
+    //
+    // This selected entrant_email and candidate_card_no using the signed-in
+    // person's own session, so Postgres saw it arrive as the role
+    // `authenticated`, exactly like a request from any other logged-in account.
+    // For this page to work, those columns had to be readable by every signed-in
+    // user on the platform, including the other children in the competition.
+    //
+    // admin_school_entries is SECURITY DEFINER and checks is_platform_admin()
+    // itself, which lets migration 224 take the columns away from authenticated
+    // altogether. It returns the same shape this page already renders.
+    const { data, error } = await supabase
+      .rpc('admin_school_entries', { p_competition_id: config.competition_id });
+    if (error) {
+      console.error('[admin/school] entries load failed:', error.code, error.message);
+      setEntries([]);
+    } else {
+      setEntries(data || []);
+    }
     setEntriesLoading(false);
   }, [config?.competition_id]);
 
@@ -192,23 +205,42 @@ export default function AdminSchoolSessions({ embedded = false }) {
 
   const loadNominations = useCallback(async () => {
     setNominationsLoading(true);
-    const { data } = await supabase
-      .from('school_sessions_district_nominations')
-      .select('*')
-      .order('created_at', { ascending: false });
-    setNominations(data || []);
+    // Same reason as the entries above. This read `*`, which includes
+    // submitted_by_email, as the caller's own role.
+    const { data, error } = await supabase.rpc('admin_school_nominations');
+    if (error) {
+      console.error('[admin/school] nominations load failed:', error.code, error.message);
+      setNominations([]);
+    } else {
+      setNominations(data || []);
+    }
     setNominationsLoading(false);
   }, []);
 
   useEffect(() => { loadNominations(); }, [loadNominations]);
 
+  // Both of these wrote straight to the table, and the table's insert policy is
+  // WITH CHECK (true), so nothing anywhere checked that an approver was an
+  // admin. The functions do.
+  //
+  // The results are read, too. These were unchecked writes that updated the
+  // screen regardless, so a refused approval looked exactly like a successful
+  // one until somebody reloaded.
   const approveNomination = async (id) => {
-    await supabase.from('school_sessions_district_nominations').update({ is_approved: true }).eq('id', id);
+    const { error } = await supabase.rpc('admin_set_district_nomination', { p_id: id, p_approved: true });
+    if (error) {
+      console.error('[admin/school] approve failed:', error.code, error.message);
+      return;
+    }
     setNominations(prev => prev.map(n => n.id === id ? { ...n, is_approved: true } : n));
   };
 
   const rejectNomination = async (id) => {
-    await supabase.from('school_sessions_district_nominations').delete().eq('id', id);
+    const { error } = await supabase.rpc('admin_delete_district_nomination', { p_id: id });
+    if (error) {
+      console.error('[admin/school] reject failed:', error.code, error.message);
+      return;
+    }
     setNominations(prev => prev.filter(n => n.id !== id));
   };
 
@@ -298,13 +330,25 @@ export default function AdminSchoolSessions({ embedded = false }) {
     setSchools(prev => prev.filter(s => s.id !== id));
   };
 
+  // judge_set_finalist and judge_set_winner already existed, already SECURITY
+  // DEFINER, and were not being used here. The page wrote to the table instead,
+  // which meant the entries UPDATE policy had to be loose enough to allow it,
+  // and an entrant could set their own is_finalist.
   const toggleFinalist = async (entry) => {
-    await supabase.from('school_sessions_entries').update({ is_finalist: !entry.is_finalist }).eq('id', entry.id);
+    const { error } = await supabase.rpc('judge_set_finalist', { p_entry_id: entry.id, p_value: !entry.is_finalist });
+    if (error) {
+      console.error('[admin/school] finalist toggle failed:', error.code, error.message);
+      return;
+    }
     setEntries(prev => prev.map(e => e.id === entry.id ? { ...e, is_finalist: !e.is_finalist } : e));
   };
 
   const toggleWinner = async (entry) => {
-    await supabase.from('school_sessions_entries').update({ is_winner: !entry.is_winner }).eq('id', entry.id);
+    const { error } = await supabase.rpc('judge_set_winner', { p_entry_id: entry.id, p_value: !entry.is_winner });
+    if (error) {
+      console.error('[admin/school] winner toggle failed:', error.code, error.message);
+      return;
+    }
     setEntries(prev => prev.map(e => e.id === entry.id ? { ...e, is_winner: !e.is_winner } : e));
   };
 
