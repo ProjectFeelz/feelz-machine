@@ -351,7 +351,19 @@ export default function ArtistProfilePage() {
     setLoading(true);
     try {
       const { data: artistData, error } = await supabase
-        .from('artists').select('*').eq('slug', slug).maybeSingle();
+        // artists_public, not artists.
+        //
+        // This is the public artist page: it loads for signed-out visitors,
+        // and `select('*')` on a table where anon has only column grants is
+        // refused outright by Postgres rather than returning the allowed
+        // columns. Migration 221 creates artists_public, a view carrying every
+        // column EXCEPT the payout, billing and date-of-birth ones that no
+        // visitor needs. It is security_invoker, so the artists_select row
+        // policy still decides which rows come back.
+        //
+        // Nothing on this page reads those columns. The tip button asks
+        // accepts_tips, which the view carries.
+        .from('artists_public').select('*').eq('slug', slug).maybeSingle();
       if (error || !artistData) {
         setLoading(false);
         navigate('/browse', { replace: true });
