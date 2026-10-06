@@ -78,6 +78,67 @@ async function fetchBatch(ids) {
   return tracks || {};
 }
 
+// ── Video ────────────────────────────────────────────────────────────────
+//
+// Uploaded MP4s live in the track-videos bucket and their public URL is stored
+// in tracks.youtube_url, alongside genuine YouTube links. They get their own
+// cache rather than sharing the audio one, because the same track id maps to
+// two different assets and one cache keyed by id alone would hand the video
+// URL to the audio element.
+//
+// A real YouTube link is not a storage URL, so the function hands it straight
+// back unsigned and this is a no-op for it.
+const videoCache = new Map();
+const videoInFlight = new Map();
+
+/**
+ * Resolve a playable URL for a track's uploaded video. Returns the stored
+ * youtube_url unchanged when signing is off or fails, so a YouTube embed and a
+ * signing outage both behave exactly as they did before.
+ */
+export async function resolveVideoSrc(track) {
+  if (!track?.id) return null;
+  if (!PRIVATE_AUDIO) return track.youtube_url || null;
+
+  const hit = videoCache.get(track.id);
+  if (live(hit)) return hit.url;
+
+  let promise = videoInFlight.get(track.id);
+  if (!promise) {
+    promise = (async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      const headers = { 'Content-Type': 'application/json' };
+      if (session?.access_token) headers.Authorization = `Bearer ${session.access_token}`;
+
+      const res = await fetch(ENDPOINT, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ trackId: track.id, kind: 'video' }),
+      });
+      if (!res.ok) throw new Error(`stream-url video ${res.status}`);
+
+      const { tracks } = await res.json();
+      const r = tracks?.[track.id];
+      if (r?.url) {
+        videoCache.set(track.id, {
+          url: r.url,
+          expiresAt: r.expiresAt ? Date.parse(r.expiresAt) : Date.now() + 60 * 60 * 1000,
+        });
+      }
+      return r?.url || null;
+    })()
+      .catch(err => {
+        console.warn('[stream-url] could not sign video for', track.id, err.message);
+        return null;
+      })
+      .finally(() => { videoInFlight.delete(track.id); });
+
+    videoInFlight.set(track.id, promise);
+  }
+
+  return (await promise) || track.youtube_url || null;
+}
+
 /**
  * Warm the cache for one or more tracks. Safe to call often and from render
  * paths: it batches, deduplicates, and swallows its own failures.

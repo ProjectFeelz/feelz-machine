@@ -42,7 +42,7 @@
 // returns today. Without an expiry, one Fan Pro month would buy a permanent
 // library, which is a different product.
 
-import { cachedStreamSrc } from './streamUrl';
+import { cachedStreamSrc, resolveStreamSrc, PRIVATE_AUDIO } from './streamUrl';
 
 const DB_NAME    = 'feelz-offline';
 const DB_VERSION = 1;
@@ -666,18 +666,62 @@ export function playbackSrc(track) {
   //
   // cachedStreamSrc is a synchronous cache read and returns null unless
   // REACT_APP_PRIVATE_AUDIO is on, so with the flag off this is byte for byte
-  // the old behaviour. With it on and the cache cold, file_url is still what
-  // gets assigned and PlayerContext swaps in the signed URL a moment later,
-  // which is why the bucket must stay public until that swap is proven.
+  // the old behaviour.
+  //
+  // With the flag ON, the file_url fallback is deliberately NOT taken. It used
+  // to be, and PlayerContext swapped the signed URL in a moment later. That
+  // upgrade is invisible while the bucket is public and fatal once it is not:
+  // on a cold cache the element gets a URL that no longer resolves, errors,
+  // and can be dead before the swap lands. Returning null here instead is what
+  // lets assignPlaybackSrc below wait for a real URL. This is the one change
+  // the bucket flip was waiting on.
   //
   // The one exception is a saved copy of a file the track no longer points at.
   // Re-uploading a master leaves every offline copy pointing at the old audio,
   // and preferring it means the artist who just replaced the file is the one
   // person guaranteed to keep hearing the old version.
+  const fallback = PRIVATE_AUDIO ? null : (track?.file_url || null);
   if (offlineCopyIsStale(track)) {
-    return cachedStreamSrc(track?.id) || track?.file_url || null;
+    return cachedStreamSrc(track?.id) || fallback;
   }
-  return offlineSrcSync(track?.id) || cachedStreamSrc(track?.id) || track?.file_url || null;
+  return offlineSrcSync(track?.id) || cachedStreamSrc(track?.id) || fallback;
+}
+
+/**
+ * Assign a playable source to an element, waiting for one if it has to.
+ *
+ * The fast path is unchanged and synchronous in effect: if a local copy or an
+ * already-signed URL is there, it is assigned before this function yields, so
+ * a warm cache behaves exactly as it did before. Only a cold cache under
+ * PRIVATE_AUDIO awaits anything, and that is the case that used to assign a
+ * dead public URL.
+ *
+ * Returns the URL assigned, or null if nothing could be resolved.
+ */
+export async function assignPlaybackSrc(audio, track, { load = true } = {}) {
+  if (!audio || !track?.id) return null;
+
+  const immediate = playbackSrc(track);
+  if (immediate) {
+    audio.src = immediate;
+    if (load) audio.load();
+    return immediate;
+  }
+
+  // PRIVATE_AUDIO is on and nothing is cached yet. resolveStreamSrc falls back
+  // to file_url itself if signing fails, so a signing outage degrades to the
+  // old behaviour rather than to silence.
+  const signed = await resolveStreamSrc(track);
+  if (!signed) return null;
+
+  // The listener may have skipped on while the signing request was in flight.
+  // Assigning now would yank them back to a track they already left.
+  const stamped = audio.dataset?.feelzTrackId;
+  if (stamped && stamped !== String(track.id)) return null;
+
+  audio.src = signed;
+  if (load) audio.load();
+  return signed;
 }
 
 export function isOfflineSrc(src) {

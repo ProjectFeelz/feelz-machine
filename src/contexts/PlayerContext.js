@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useRef, useCallback, useEff
 import { supabase } from '../supabaseClient';
 import { getTrackAvailability } from '../utils/trackAccess';
 import { useMediaSession } from '../hooks/useMediaSession';
-import { playbackSrc, isSavedOfflineSync, offlineSrcFor, offlineCopyIsStale } from '../utils/offlineStore';
+import { playbackSrc, assignPlaybackSrc, isSavedOfflineSync, offlineSrcFor, offlineCopyIsStale } from '../utils/offlineStore';
 import { resolveStreamLater, warmStreamUrls } from '../utils/streamUrl';
 import { buildOfflinePlayRow, queueOfflinePlay, flushOfflinePlays } from '../utils/offlinePlayQueue';
 import { sendNotification, sendStreamDigest } from '../utils/notify';
@@ -668,9 +668,12 @@ export function PlayerProvider({ children }) {
 
       // Now switch primary to the NEW track (silent, fades in)
       primaryAudio.dataset.feelzTrackId = String(nextTrack.id);
-      primaryAudio.src    = playbackSrc(nextTrack);
       primaryAudio.volume = 0;
-      primaryAudio.load();
+      // The queue warmer has normally signed this track already, in which case
+      // this assigns and loads before yielding and the crossfade is unchanged.
+      // On the rare cold cache it waits rather than assigning a null src,
+      // which is what playbackSrc now returns instead of a dead public URL.
+      assignPlaybackSrc(primaryAudio, nextTrack);
       // No resolveStreamLater here, for the same reason as resolveLocalLater
       // below: swapping src mid-crossfade restarts the incoming track under
       // the fade. The queue warmer above has normally signed this track
@@ -1168,14 +1171,20 @@ export function PlayerProvider({ children }) {
     interruptedRef.current     = false;
     audio.pause();
     audio.dataset.feelzTrackId = String(track.id);
-    audio.src = playbackSrc(track);
     audio.volume = 0;
-    audio.load();
-    resolveLocalLater(audio, track);
-    // Swaps in a short lived signed URL once one is available, so file_url
-    // stops being a permanent public link to the master audio. No-op unless
-    // REACT_APP_PRIVATE_AUDIO is set. See utils/streamUrl.js.
-    resolveStreamLater(audio, track);
+    // On a warm cache this assigns and loads before yielding, exactly as the
+    // old `audio.src = playbackSrc(track)` did. On a cold cache with
+    // REACT_APP_PRIVATE_AUDIO on it waits for a signed URL instead of
+    // assigning a public file_url that no longer resolves once the bucket is
+    // private. The canplay listener is attached below either way, so it fires
+    // whenever the source actually lands.
+    assignPlaybackSrc(audio, track).then(() => {
+      resolveLocalLater(audio, track);
+      // Swaps in a short lived signed URL once one is available, so file_url
+      // stops being a permanent public link to the master audio. No-op unless
+      // REACT_APP_PRIVATE_AUDIO is set. See utils/streamUrl.js.
+      resolveStreamLater(audio, track);
+    });
     const playWhenReady = () => {
       audio.play().catch(() => {});
       // Fade in from silence to half the person's set volume. Never
@@ -1302,11 +1311,11 @@ export function PlayerProvider({ children }) {
       streamLoggedRef.current = false;
       audioRef.current.pause();
       audioRef.current.dataset.feelzTrackId = String(prevTrack.id);
-      audioRef.current.src = playbackSrc(prevTrack);
       audioRef.current.volume = volumeRef.current;
-      audioRef.current.load();
-      resolveLocalLater(audioRef.current, prevTrack);
-      resolveStreamLater(audioRef.current, prevTrack);
+      assignPlaybackSrc(audioRef.current, prevTrack).then(() => {
+        resolveLocalLater(audioRef.current, prevTrack);
+        resolveStreamLater(audioRef.current, prevTrack);
+      });
       const playPrevWhenReady = () => {
         audioRef.current.play().catch(() => {});
         audioRef.current.removeEventListener('canplay', playPrevWhenReady);
@@ -1410,14 +1419,17 @@ export function PlayerProvider({ children }) {
     const audio = audioRef.current;
     audio.pause();
     audio.dataset.feelzTrackId = String(track.id);
-    audio.src = playbackSrc(track);
     audio.volume = volumeRef.current;
-    resolveLocalLater(audio, track);
-    resolveStreamLater(audio, track);
-    audio.play().catch(() => {
-      audio.load();
-      const onReady = () => { audio.play().catch(() => {}); audio.removeEventListener('canplay', onReady); };
-      audio.addEventListener('canplay', onReady);
+    // play() has to wait for the source here, because unlike the paths above
+    // there is no canplay listener already attached to catch it later.
+    assignPlaybackSrc(audio, track).then(() => {
+      resolveLocalLater(audio, track);
+      resolveStreamLater(audio, track);
+      audio.play().catch(() => {
+        audio.load();
+        const onReady = () => { audio.play().catch(() => {}); audio.removeEventListener('canplay', onReady); };
+        audio.addEventListener('canplay', onReady);
+      });
     });
     setCurrentTrack(track);
     setQueueIndex(idx);

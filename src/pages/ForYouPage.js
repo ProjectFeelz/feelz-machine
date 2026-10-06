@@ -17,7 +17,7 @@ import { Helmet } from 'react-helmet-async';
 import ReactPlayer from 'react-player';
 import { supabase } from '../supabaseClient';
 import { visibleNow } from '../utils/stories';
-import { resolveStreamSrc } from '../utils/streamUrl';
+import { resolveStreamSrc, resolveVideoSrc } from '../utils/streamUrl';
 import { parseLyrics, activeLineIndex, wordProgress, lyricTheme } from '../utils/lyrics';
 import { sendNotification } from '../utils/notify';
 import TrackCommentSheet from '../components/TrackCommentSheet';
@@ -581,6 +581,17 @@ function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare, onN
   const hasVideo   = !!track.youtube_url;
   const isYouTube  = hasVideo && (track.youtube_url.includes('youtube') || track.youtube_url.includes('youtu.be'));
   const isUploadedVideo = hasVideo && track.youtube_url.includes('supabase');
+
+  // Signed URL for an uploaded MP4, so the track-videos bucket can be private
+  // the way feelz-samples is. Returns the stored URL unchanged when signing is
+  // off or fails; a YouTube link never reaches it.
+  const [uploadedVideoSrc, setUploadedVideoSrc] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    if (!isUploadedVideo || !track?.id) { setUploadedVideoSrc(null); return undefined; }
+    resolveVideoSrc(track).then(src => { if (!cancelled) setUploadedVideoSrc(src); });
+    return () => { cancelled = true; };
+  }, [isUploadedVideo, track?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const isThisOne = currentTrack?.id === track.id;
   const playing   = isThisOne && isPlaying;
 
@@ -876,7 +887,7 @@ function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare, onN
             /* Native video for Supabase-hosted MP4s, synced to audio player */
             <video
               ref={videoRef}
-              src={track.youtube_url}
+              src={uploadedVideoSrc || undefined}
               playsInline
               muted
               onEnded={isActive ? onNext : undefined}

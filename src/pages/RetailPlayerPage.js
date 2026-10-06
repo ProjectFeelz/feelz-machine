@@ -15,6 +15,7 @@ import { Loader, Play, Pause, SkipForward, MapPin, Megaphone, Bell, User, LogOut
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../supabaseClient';
 import { resolveStreamLater } from '../utils/streamUrl';
+import { assignPlaybackSrc } from '../utils/offlineStore';
 import RetailPlaylistComments from '../components/retail/RetailPlaylistComments';
 import RetailDeckView from '../components/retail/RetailDeckView';
 import RetailRecordSleeve from '../components/retail/RetailRecordSleeve';
@@ -741,22 +742,26 @@ export default function RetailPlayerPage() {
     if (mode === 'ad' && !currentAd) { setMode('track'); return; }
     if (!desiredSrc) return;
 
-    // a.src reports the fully-resolved absolute URL, so compare against that
-    // rather than against the raw string we last assigned.
-    const already = a.currentSrc || a.src;
-    if (already === desiredSrc || (already && already === new URL(desiredSrc, window.location.href).href)) {
-      return;
-    }
-
-    a.src = desiredSrc;
-    a.load();
-
-    // Swap in a signed URL once one is available, so this page keeps playing
-    // when feelz-samples goes private. No-op unless REACT_APP_PRIVATE_AUDIO is
-    // set, and never for an ad, whose audio_url is not a track.
     if (mode !== 'ad' && currentTrack?.id) {
+      // Identity, not URL, decides whether this is already loaded. Comparing
+      // against desiredSrc stopped being stable the moment the element holds a
+      // short lived signed URL: the strings never match, so every run of this
+      // effect would reassign and restart the track in the venue. Same fix as
+      // ListeningSessionPage.
+      if (a.dataset.feelzTrackId === String(currentTrack.id)) return;
       a.dataset.feelzTrackId = String(currentTrack.id);
-      resolveStreamLater(a, currentTrack);
+      // Resolves a signed URL before assigning rather than assigning file_url
+      // and upgrading, which is what breaks once feelz-samples is private.
+      assignPlaybackSrc(a, currentTrack).then(() => resolveStreamLater(a, currentTrack));
+    } else {
+      // An ad's audio_url is not a track and is not in the private bucket, so
+      // it keeps the original URL comparison and the direct assignment.
+      const already = a.currentSrc || a.src;
+      if (already === desiredSrc || (already && already === new URL(desiredSrc, window.location.href).href)) {
+        return;
+      }
+      a.src = desiredSrc;
+      a.load();
     }
 
     if (mode === 'ad') {

@@ -18,6 +18,7 @@ import useGoBack from '../hooks/useGoBack';
 import TipButton from '../components/TipButton';
 import { supabase } from '../supabaseClient';
 import { resolveStreamSrc, resolveStreamLater } from '../utils/streamUrl';
+import { assignPlaybackSrc } from '../utils/offlineStore';
 import { useAuth } from '../contexts/AuthContext';
 import {
   Play, Pause, SkipForward, X, Users, Music, Radio,
@@ -876,8 +877,11 @@ export default function ListeningSessionPage() {
     // actually identifies what is loaded.
     if (audio.dataset.feelzTrackId !== String(track.id)) {
       audio.dataset.feelzTrackId = String(track.id);
-      audio.src = track.file_url;
-      resolveStreamLater(audio, track);
+      // Was `audio.src = track.file_url`, the one assignment on this page that
+      // never went near the signing path. With feelz-samples private that is a
+      // URL which no longer resolves, so it goes through the same resolver as
+      // every other play path.
+      assignPlaybackSrc(audio, track).then(() => resolveStreamLater(audio, track));
     }
 
     // Compute expected playback position with sub-second precision

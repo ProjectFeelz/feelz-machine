@@ -17,6 +17,7 @@ import { useHaptics } from '../../hooks/useHaptics';
 import VinylRecord from '../VinylRecord';
 import ShareCard from '../ShareCard';
 import { buildShareUrl } from '../../utils/shareLink';
+import { resolveVideoSrc } from '../../utils/streamUrl';
 import ReactPlayer from 'react-player';
 
 function formatTime(secs) {
@@ -599,6 +600,19 @@ export default function FullPlayer() {
   const isUploadedVideo = hasVideo && currentTrack.youtube_url.includes('supabase');
   const hasLyrics  = !!lyrics;
 
+  // An uploaded MP4 lives in the track-videos bucket and its stored URL is a
+  // permanent public link, the same shape the audio had. Resolve a signed URL
+  // instead so that bucket can go private too. resolveVideoSrc hands back the
+  // stored URL unchanged when signing is off or fails, and a real YouTube link
+  // never reaches it, so the embed branch below is untouched.
+  const [uploadedVideoSrc, setUploadedVideoSrc] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    if (!isUploadedVideo || !currentTrack?.id) { setUploadedVideoSrc(null); return undefined; }
+    resolveVideoSrc(currentTrack).then(src => { if (!cancelled) setUploadedVideoSrc(src); });
+    return () => { cancelled = true; };
+  }, [isUploadedVideo, currentTrack?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Video on the song's clock: it starts where the song starts, stops when the
   // song stops, and a clip shorter than the song simply repeats in step rather
   // than running away on its own.
@@ -889,9 +903,9 @@ export default function FullPlayer() {
                   <div className="absolute inset-0">
                     {isUploadedVideo ? (
                       <video
-                        key={currentTrack.youtube_url}
+                        key={currentTrack.id}
                         ref={videoElRef}
-                        src={currentTrack.youtube_url}
+                        src={uploadedVideoSrc || undefined}
                         loop
                         muted
                         playsInline

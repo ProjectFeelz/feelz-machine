@@ -71,12 +71,18 @@ exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') return json(405, { error: 'method_not_allowed' });
 
   let trackIds;
+  let kind = 'audio';
   try {
     const body = JSON.parse(event.body || '{}');
     // Accepts one id or a batch, because the player warms the next track in
     // the queue and a per track round trip on every skip is worse than the
     // problem being solved.
     trackIds = body.trackIds || (body.trackId ? [body.trackId] : []);
+    // 'video' signs the uploaded MP4 instead of the audio master, so the
+    // track-videos bucket can go private the same way feelz-samples did.
+    // Anything other than 'video' is audio, so an old client that sends no
+    // kind at all keeps the behaviour it had.
+    if (body.kind === 'video') kind = 'video';
   } catch {
     return json(400, { error: 'invalid_body' });
   }
@@ -100,7 +106,7 @@ exports.handler = async (event) => {
 
   const { data: tracks, error: trackErr } = await admin
     .from('tracks')
-    .select('id, file_url, is_published, is_preorder, release_date, artist_id')
+    .select('id, file_url, youtube_url, is_published, is_preorder, release_date, artist_id')
     .in('id', trackIds);
 
   if (trackErr) {
@@ -146,8 +152,14 @@ exports.handler = async (event) => {
       return;
     }
 
-    if (!track.file_url) {
-      results[track.id] = { error: 'no_audio_file' };
+    // Which asset this request is for. youtube_url is the column an uploaded
+    // MP4 lands in, alongside genuine YouTube links; a real YouTube link is
+    // not a storage URL and falls through to the unchanged branch below, which
+    // hands the URL back as is.
+    const assetUrl = kind === 'video' ? track.youtube_url : track.file_url;
+
+    if (!assetUrl) {
+      results[track.id] = { error: kind === 'video' ? 'no_video_file' : 'no_audio_file' };
       return;
     }
 
@@ -155,13 +167,14 @@ exports.handler = async (event) => {
     // audio does not all live in one bucket — feelz-samples for tracks, and
     // the wheel audio moved — and a hardcoded name fails as a 400 that reads
     // like a broken file. Same parser as get-offline-url, deliberately.
-    const m = track.file_url.match(/\/object\/(?:public|sign)\/([^/]+)\/(.+?)(?:\?|$)/);
+    const m = assetUrl.match(/\/object\/(?:public|sign)\/([^/]+)\/(.+?)(?:\?|$)/);
     if (!m) {
       // Not a Supabase storage URL at all. Some older rows point straight at
-      // an external host; those are already public by their own nature and
-      // there is nothing here to sign, so hand the URL back unchanged rather
-      // than breaking playback of a track that works today.
-      results[track.id] = { url: track.file_url, signed: false };
+      // an external host, and a genuine YouTube link lands here too; those are
+      // already public by their own nature and there is nothing here to sign,
+      // so hand the URL back unchanged rather than breaking playback of a
+      // track that works today.
+      results[track.id] = { url: assetUrl, signed: false };
       return;
     }
 
