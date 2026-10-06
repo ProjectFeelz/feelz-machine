@@ -240,8 +240,13 @@ export default function TierUpgradePage() {
         });
       if (insertErr) throw insertErr;
 
+      // artists.tier is deliberately NOT written here any more. The database
+      // derives it: trg_sync_artist_tier fires on the insert above and sets
+      // artists.tier from the active subscription joined to platform_tiers.
+      // Writing it from the browser was also the thing that let an artist set
+      // their own tier directly, which migration 230b closes.
       await supabase.from('artists')
-        .update({ current_tier_id: tier.id, tier: tierSlug, updated_at: new Date().toISOString() })
+        .update({ current_tier_id: tier.id, updated_at: new Date().toISOString() })
         .eq('id', artist.id);
 
       // The durable receipt. Self-addressed, which is the one insert the
@@ -310,14 +315,22 @@ export default function TierUpgradePage() {
     setCancelling(true);
     setError('');
     try {
-      await supabase
-        .from('artist_tier_subscriptions')
-        .update({ status: 'cancelled', updated_at: new Date().toISOString() })
-        .eq('artist_id', artist.id).eq('status', 'active');
+      // This used to update artist_tier_subscriptions straight from the browser
+      // and then write artists.tier = 'free'. The first of those was silently
+      // refused, because artist_tier_subscriptions has no UPDATE policy for
+      // artists, only for admins, and the error was never read. So the only
+      // thing that actually happened was the tier write, which left the
+      // subscription row sitting at status 'active'. The RPC does the real
+      // thing in the right table and lets trg_sync_artist_tier move the tier.
+      const { data: result, error: cancelErr } =
+        await supabase.rpc('cancel_my_tier_subscription');
+      if (cancelErr) throw cancelErr;
 
-      await supabase.from('artists')
-        .update({ tier: 'free', current_tier_id: null, updated_at: new Date().toISOString() })
-        .eq('id', artist.id);
+      if (!result?.cancelled) {
+        setError('No active subscription was found to cancel.');
+        setCancelling(false);
+        return;
+      }
 
       setCurrentTier('free');
       setActiveSubId(null);
