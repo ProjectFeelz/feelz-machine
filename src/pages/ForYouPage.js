@@ -639,8 +639,20 @@ function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare, onN
     } else {
       await supabase.from('track_likes').insert({ track_id: track.id, user_id: user.id });
       setLiked(true); setLikeCount(p => p + 1);
-      // Notify the track artist
-      if (track.artist_id && track.artist_id !== user.id) {
+      // Notify the track artist, unless the track is yours.
+      //
+      // This read `track.artist_id !== user.id`, which compares an ARTIST id
+      // against a USER id. They are different id spaces, so the two are never
+      // equal, so the condition was always true and the guard it looks like
+      // never blocked anything. Liking your own song sent you a notification
+      // saying you had liked your own song.
+      //
+      // isOwnTrack is defined at the top of this component as
+      // `myArtist?.id === track.artist_id`, artist id against artist id, and
+      // is already what the follow button uses to refuse to follow yourself.
+      // The same comparison in TrackDetailPage.js is correct because it uses
+      // artist.user_id, a user id, on both sides.
+      if (track.artist_id && !isOwnTrack) {
         try {
           const [{ data: liker }, { data: listenerProfile }, { data: artistRow }] = await Promise.all([
             supabase.from('artists').select('id, artist_name, profile_image_url, slug').eq('user_id', user.id).maybeSingle(),
