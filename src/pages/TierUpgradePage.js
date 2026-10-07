@@ -322,12 +322,29 @@ export default function TierUpgradePage() {
       // thing that actually happened was the tier write, which left the
       // subscription row sitting at status 'active'. The RPC does the real
       // thing in the right table and lets trg_sync_artist_tier move the tier.
-      const { data: result, error: cancelErr } =
-        await supabase.rpc('cancel_my_tier_subscription');
-      if (cancelErr) throw cancelErr;
+      // Goes through the function rather than the RPC, because the RPC can
+      // only reach the database. PayPal has to be told too, and it is told
+      // FIRST: if it refuses, nothing is cancelled here and the subscription
+      // they are still paying for stays live.
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch('/.netlify/functions/cancel-artist-subscription', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+        },
+      });
+      const result = await res.json().catch(() => ({}));
 
-      if (!result?.cancelled) {
-        setError('No active subscription was found to cancel.');
+      if (!res.ok || !result?.cancelled) {
+        const message =
+            result?.error === 'no_active_subscription' ? 'No active subscription was found to cancel.'
+          : result?.error === 'paypal_unavailable'     ? 'PayPal could not be reached. Nothing was cancelled, so you still have your plan. Please try again shortly.'
+          : result?.error === 'paypal_refused'         ? 'PayPal refused the cancellation, so nothing was changed. Please try again, or cancel from your PayPal account.'
+          : result?.error === 'no_paypal_id_on_subscription' ? 'This subscription has no PayPal agreement on record. Please contact support rather than cancelling here.'
+          : result?.error === 'cancelled_at_paypal_but_not_recorded' ? 'Your PayPal subscription was cancelled, but the change has not shown up here yet. You will not be billed again.'
+          : 'Could not cancel the subscription. Nothing was changed.';
+        setError(message);
         setCancelling(false);
         return;
       }
