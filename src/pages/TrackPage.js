@@ -1,6 +1,6 @@
 import { Helmet } from 'react-helmet-async';
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import useGoBack from '../hooks/useGoBack';
 import { lyricsToPlainText } from '../utils/lyrics';
 import { supabase } from '../supabaseClient';
@@ -56,6 +56,11 @@ export default function TrackPage() {
   const [downloading, setDownloading] = useState(false);
   const [copied, setCopied]         = useState(false);
   const [showActionSheet, setShowActionSheet] = useState(false);
+  // Which view the sheet opens on. 'purchase' when something has already
+  // established that this track has to be bought, so the person lands on the
+  // price rather than having to find it.
+  const [actionSheetView, setActionSheetView] = useState('main');
+  const location = useLocation();
   const [alreadyPurchased, setAlreadyPurchased] = useState(false);
   const [dataReady, setDataReady] = useState(false);
   const autoPlayedRef = React.useRef(false);
@@ -173,6 +178,15 @@ export default function TrackPage() {
       }
 
       setTrack(trackData);
+      // Arrived here from somewhere that already hit purchase_required, such
+      // as the offline save button on a track priced through its album. Open
+      // the sheet on the price rather than making them hunt for it.
+      if (location.state?.purchase) {
+        setActionSheetView('purchase');
+        setShowActionSheet(true);
+        // Consumed, so a refresh or a back navigation does not reopen it.
+        navigate(location.pathname, { replace: true, state: {} });
+      }
 
       // Accepted collaborations only. A pending invitation is not a credit,
       // and showing one would announce a feature the other artist has not
@@ -303,8 +317,19 @@ export default function TrackPage() {
       // arrived as two identical lines in the artist's notifications. The same
       // duplicate has been removed from ArtistProfilePage.
     } catch (err) {
-      // The backend's 403s are deliberate rules with real messages. Logging
-      // them and showing nothing made a working rule look like a dead button.
+      // "You have to buy it" is not an error, it is a step. Showing the
+      // sentence and stopping is what left the album page as the only place a
+      // track could actually be bought, even though the sheet below has had a
+      // working purchase view all along. Open it on the price instead.
+      if (err?.message === 'purchase_required' || err?.message === 'insufficient_payment') {
+        setActionSheetView('purchase');
+        setShowActionSheet(true);
+        setDownloading(false);
+        return;
+      }
+      // The backend's other 403s are deliberate rules with real messages.
+      // Logging them and showing nothing made a working rule look like a dead
+      // button.
       console.error('Download error:', err);
       showNotice(downloadErrorMessage(err));
     }
@@ -748,7 +773,8 @@ export default function TrackPage() {
         <TrackActionSheet
           track={track}
           artist={artist}
-          onClose={() => setShowActionSheet(false)}
+          initialView={actionSheetView}
+          onClose={() => { setShowActionSheet(false); setActionSheetView('main'); }}
         />
       )}
     </div>

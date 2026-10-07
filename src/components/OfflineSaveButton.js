@@ -30,6 +30,9 @@ export default function OfflineSaveButton({
   track,
   variant = 'row',
   onNavigate,          // called before navigating away, so a sheet can close
+  onPurchaseRequired,  // optional: open the purchase view in place, if the
+                       // parent has one. Without it this falls back to the
+                       // track page, which does have one.
   className = '',
 }) {
   const navigate = useNavigate();
@@ -37,7 +40,7 @@ export default function OfflineSaveButton({
   const { isListenerPro, isPro, isPremium } = useTier();
   const {
     supported, isSaved, savingProgress, save, cancelSave, remove,
-    items, leaseState: stateOf, daysLeft: daysOf, error, clearError,
+    items, leaseState: stateOf, daysLeft: daysOf, error, errorCode, clearError,
   } = useOfflineLibrary();
 
   const [confirmRemove, setConfirmRemove] = useState(false);
@@ -180,7 +183,28 @@ export default function OfflineSaveButton({
       </button>
 
       {error && (
-        <p className="px-5 pb-2 text-[11px] text-amber-400/90">{error}</p>
+        <div className="px-5 pb-2">
+          <p className="text-[11px] text-amber-400/90">{error}</p>
+          {/* A track priced through its album has no download_price of its
+              own, so this button looks available right up until the server
+              refuses it. Saying "you have to buy it" and stopping there left
+              the album page as the only place a purchase could be started.
+              This is that route, from wherever the track is. */}
+          {errorCode === 'purchase_required' && (
+            <button
+              type="button"
+              onClick={() => {
+                clearError();
+                onNavigate?.();
+                if (onPurchaseRequired) { onPurchaseRequired(track); return; }
+                navigate(`/track/${track.slug || track.id}`, { state: { purchase: true } });
+              }}
+              className="mt-1 text-[11px] font-medium text-green-400 hover:text-green-300 underline underline-offset-2"
+            >
+              Buy this track to save it offline
+            </button>
+          )}
+        </div>
       )}
     </>
   );

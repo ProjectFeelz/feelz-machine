@@ -25,11 +25,15 @@ function formatReleaseDate(dateStr) {
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-export default function TrackActionSheet({ track, artist, onClose }) {
+export default function TrackActionSheet({ track, artist, onClose, initialView = 'main' }) {
     const navigate = useNavigate();
     const { user } = useAuth();
     const { addToQueue, playTrack } = usePlayer();
-    const [view, setView] = useState('main');
+    // initialView lets a caller open straight on the price. The sheet already
+    // switches here itself when a download comes back purchase_required; this
+    // is for the paths that discover the same thing somewhere else, such as an
+    // offline save or the download button on the track page.
+    const [view, setView] = useState(initialView);
     const [showComments, setShowComments] = useState(false);
     const [commentCount, setCommentCount] = useState(0);
     const [playlists, setPlaylists] = useState([]);

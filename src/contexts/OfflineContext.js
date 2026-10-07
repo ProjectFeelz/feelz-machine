@@ -103,6 +103,7 @@ export function OfflineProvider({ children }) {
   const [usage,   setUsage]   = useState({ count: 0, bytes: 0, quota: null });
   const [saving,  setSaving]  = useState({});   // trackId -> 0..1 or null
   const [error,   setError]   = useState('');
+  const [errorCode, setErrorCode] = useState('');
   const [supported, setSupported] = useState(true);
 
   const abortRefs = useRef({});   // trackId -> AbortController
@@ -189,6 +190,7 @@ export function OfflineProvider({ children }) {
     if (saving[track.id] !== undefined) return false;   // already going
 
     setError('');
+    setErrorCode('');
     setSaving(s => ({ ...s, [track.id]: 0 }));
 
     const controller = new AbortController();
@@ -207,6 +209,12 @@ export function OfflineProvider({ children }) {
     } catch (err) {
       if (err?.name !== 'AbortError') {
         setError(offlineErrorMessage(err));
+        // The raw code as well as the sentence. offlineErrorMessage turns
+        // purchase_required into prose, and prose is not something a button
+        // can branch on, which is why a track priced through its album used
+        // to dead end here: the save was refused and nothing offered a way to
+        // buy it. OfflineSaveButton reads this to put that route back.
+        setErrorCode(err?.message || '');
         console.warn('[offline] save failed', track.id, err?.message || err);
       }
       return false;
@@ -263,7 +271,8 @@ export function OfflineProvider({ children }) {
     usage,
     saving,
     error,
-    clearError: () => setError(''),
+    errorCode,
+    clearError: () => { setError(''); setErrorCode(''); },
     savedIds,
     isSaved:    id => savedIds.has(id),
     savingProgress: id => saving[id],
