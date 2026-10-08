@@ -232,12 +232,16 @@ export default function ThemeEditor() {
     }
   };
 
+  // Everything this uploads is a theme image, so it goes to the covers bucket
+  // rather than feelz-samples. feelz-samples is being emptied of images so it
+  // can be made private without taking every image on the platform down, which
+  // is exactly what happened when it was flipped with images still in it.
   const uploadFile = async (file, folder) => {
     const ext  = file.name.split('.').pop();
     const name = `${folder}${Date.now()}-${Math.random().toString(36).substring(7)}.${ext}`;
-    const { error } = await supabase.storage.from('feelz-samples').upload(name, file);
+    const { error } = await supabase.storage.from('covers').upload(name, file);
     if (error) throw error;
-    const { data: { publicUrl } } = supabase.storage.from('feelz-samples').getPublicUrl(name);
+    const { data: { publicUrl } } = supabase.storage.from('covers').getPublicUrl(name);
     return publicUrl;
   };
 

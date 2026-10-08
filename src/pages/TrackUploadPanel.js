@@ -1290,7 +1290,24 @@ export default function TrackUploadPanel() {
     setLoading(false);
   };
 
+  // Images go to the covers bucket, audio stays in feelz-samples.
+  //
+  // feelz-samples holds both, which is why making it private took every cover
+  // on the platform down with it. The images are being moved out so it can be
+  // made private, and this stops new ones landing back in it. The object path
+  // is unchanged, only the bucket differs, which matches how the existing
+  // images were copied across.
+  //
+  // Decided on the folder rather than the file type because the folder is what
+  // the caller already states, and every caller passes one: covers/ and
+  // album-covers/ are images, stems/ is audio.
+  const bucketForFolder = (folder = '') =>
+    /^(covers|album-covers|profile-images|banners|user-avatars|collection-covers|posts)\//.test(folder)
+      ? 'covers'
+      : 'feelz-samples';
+
   const uploadFile = async (file, folder = '', retries = 3) => {
+    const bucket   = bucketForFolder(folder);
     const fileExt  = file.name.split('.').pop();
     const fileName = `${folder}${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
     for (let attempt = 1; attempt <= retries; attempt++) {
@@ -1299,9 +1316,9 @@ export default function TrackUploadPanel() {
       // staleness risk. Without this, Supabase defaults to a 1-hour cache,
       // meaning every play of every track re-fetches the full file from
       // origin storage far more often than necessary.
-      const { error } = await supabase.storage.from('feelz-samples').upload(fileName, file, { cacheControl: '31536000' });
+      const { error } = await supabase.storage.from(bucket).upload(fileName, file, { cacheControl: '31536000' });
       if (!error) {
-        const { data: { publicUrl } } = supabase.storage.from('feelz-samples').getPublicUrl(fileName);
+        const { data: { publicUrl } } = supabase.storage.from(bucket).getPublicUrl(fileName);
         return publicUrl;
       }
       const is503 = error?.statusCode === 503 || error?.message?.includes('503');
