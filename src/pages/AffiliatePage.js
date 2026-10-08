@@ -220,23 +220,25 @@ export default function AffiliatePage() {
     if (amount > pending) { alert('Amount exceeds your pending balance'); return; }
     setRequestingPayout(true);
     try {
-      await supabase.from('affiliate_payouts').insert({
-        affiliate_id: affiliate.id,
-        amount_zar:   payoutCcy === 'ZAR' ? amount : 0,
-        amount_usd:   payoutCcy === 'USD' ? amount : 0,
-        method:       payoutMethod,
-        status:       'requested',
+      // One call instead of an insert followed by a balance write. The browser
+      // can no longer move pending_zar or pending_usd at all: a guard trigger
+      // on affiliates reverts any attempt, because the old UPDATE policy had
+      // no WITH CHECK and let an affiliate set their own balance to anything
+      // and then request a payout of it. The RPC runs as the definer, checks
+      // the balance server side, and makes the deduction itself.
+      const { error: reqErr } = await supabase.rpc('request_affiliate_payout', {
+        p_amount:   amount,
+        p_currency: payoutCcy,
+        p_method:   payoutMethod,
       });
-      // Deduct from the balance it actually came out of.
-      await supabase.from('affiliates').update(
-        payoutCcy === 'USD'
-          ? { pending_usd: usdPending - amount }
-          : { pending_zar: zarPending - amount }
-      ).eq('id', affiliate.id);
+      if (reqErr) throw reqErr;
+
       setPayoutAmount('');
       fetchData();
       alert('Payout requested! We\'ll process it within 3-5 business days.');
-    } catch { alert('Failed to request payout. Please try again.'); }
+    } catch (err) {
+      alert(err?.message || 'Failed to request payout. Please try again.');
+    }
     setRequestingPayout(false);
   };
 

@@ -17,7 +17,23 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
-exports.handler = async () => {
+// Netlify will not route a public HTTP request to a function that carries a
+// `schedule` in netlify.toml: "You can't invoke scheduled functions directly
+// with a URL." So today this cannot be reached from outside, and the guard
+// below is defence in depth rather than a fix for a live hole.
+//
+// It is here because the day someone removes the schedule line, this becomes a
+// public endpoint that picks a competition winner and calls paypal-payout. The
+// same note is already written at the top of expire-subscriptions.js, and this
+// is the function where it would actually cost money.
+//
+// A manual run has to prove itself; the scheduler sends no headers.
+exports.handler = async (event) => {
+  if (event?.headers?.['x-manual-run']
+      && event.headers['x-internal-secret'] !== process.env.INTERNAL_FUNCTION_SECRET) {
+    return { statusCode: 401, body: 'Unauthorized' };
+  }
+
   try {
     // Find current wheel challenge
     // Handle both wheel challenges and any paid_collab competitions closing today

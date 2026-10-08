@@ -44,6 +44,23 @@ const supabase = createClient(
 );
 
 exports.handler = async (event) => {
+  // This one has no `schedule` in netlify.toml, so unlike the scheduled
+  // functions it really is reachable from the open internet, and it took any
+  // video at all and transcoded it. Both of its callers,
+  // src/components/ArtistStories.js and src/components/ShareCard.js, are
+  // signed-in screens, so requiring a caller token costs them nothing and
+  // stops a stranger spending your transcoding minutes.
+  const authHeader = event.headers.authorization || event.headers.Authorization || '';
+  if (!authHeader.startsWith('Bearer ')) {
+    return { statusCode: 401, body: 'Unauthorized' };
+  }
+  {
+    const { createClient } = require('@supabase/supabase-js');
+    const admin = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+    const { data: { user } } = await admin.auth.getUser(authHeader.slice(7).trim());
+    if (!user) return { statusCode: 401, body: 'Unauthorized' };
+  }
+
   let body;
   try {
     body = JSON.parse(event.body);

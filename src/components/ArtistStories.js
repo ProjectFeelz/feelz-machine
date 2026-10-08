@@ -164,9 +164,15 @@ export function StoryUpload({ artistId, onUploaded, inline = false }) {
       reader.readAsDataURL(videoFile);
     });
 
+    // The function now requires a caller token, so it cannot be used by anyone
+    // who is not signed in.
+    const { data: { session } } = await supabase.auth.getSession();
     const res = await fetch('/.netlify/functions/convert-to-mp4-background', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+      },
       body: JSON.stringify({ video: base64, mimeType: videoFile.type }),
     });
 

@@ -864,9 +864,14 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
 
         // Fire the conversion, the response here is just Netlify's
         // "accepted" acknowledgment, not the actual result
+        // The function now requires a caller token.
+        const { data: { session: convSession } } = await supabase.auth.getSession();
         await fetch('/.netlify/functions/convert-to-mp4-background', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            ...(convSession?.access_token ? { Authorization: `Bearer ${convSession.access_token}` } : {}),
+          },
           body: JSON.stringify({ video: base64, jobId }),
         });
 

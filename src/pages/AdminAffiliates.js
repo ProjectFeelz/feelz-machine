@@ -70,23 +70,27 @@ export default function AdminAffiliates({ embedded = false }) {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  const handleApprovePayout = async (payoutId, affiliateId, amount) => {
-    await supabase.from('affiliate_payouts').update({ status: 'paid', paid_at: new Date().toISOString() }).eq('id', payoutId);
-    await supabase.from('affiliates').update({
-      paid_out_zar: supabase.rpc('increment_decimal', { x: amount }),
-    }).eq('id', affiliateId);
+  // Both of these used to pass `supabase.rpc('increment_decimal', ...)` as a
+  // COLUMN VALUE. That is a query builder object, not a number, and neither
+  // error was read, so approving marked the payout paid without ever adding to
+  // paid_out_zar and rejecting marked it rejected without returning the money
+  // to pending_zar. USD was ignored by both. The arithmetic now happens in the
+  // database, in one statement, behind an admin check, and refuses to settle a
+  // payout twice.
+  const settlePayout = async (payoutId, approve) => {
+    const { data, error } = await supabase.rpc('admin_settle_affiliate_payout', {
+      p_payout_id: payoutId,
+      p_approve:   approve,
+    });
+    if (error) { alert(error.message || 'Could not settle the payout.'); return; }
+    if (data && data.settled === false) {
+      alert(`This payout was already settled (${String(data.reason || '').replace('already_', '')}).`);
+    }
     fetchData();
   };
 
-  const handleRejectPayout = async (payoutId) => {
-    const { data: payout } = await supabase.from('affiliate_payouts').select('amount_zar, affiliate_id').eq('id', payoutId).single();
-    await supabase.from('affiliate_payouts').update({ status: 'rejected' }).eq('id', payoutId);
-    // Return funds to pending
-    await supabase.from('affiliates').update({
-      pending_zar: supabase.rpc('increment_decimal', { x: payout.amount_zar }),
-    }).eq('id', payout.affiliate_id);
-    fetchData();
-  };
+  const handleApprovePayout = async (payoutId) => settlePayout(payoutId, true);
+  const handleRejectPayout  = async (payoutId) => settlePayout(payoutId, false);
 
   const handleApproveAffiliate = async (userId) => {
     const { error } = await supabase.rpc('admin_approve_affiliate', { p_user_id: userId });
@@ -232,7 +236,7 @@ export default function AdminAffiliates({ embedded = false }) {
                 <p className="text-lg font-black text-green-400">R{p.amount_zar.toFixed(2)}</p>
               </div>
               <div className="flex space-x-2">
-                <button onClick={() => handleApprovePayout(p.id, p.affiliate_id, p.amount_zar)}
+                <button onClick={() => handleApprovePayout(p.id)}
                   className="flex-1 py-2 rounded-xl text-xs font-bold bg-green-500/15 text-green-400 border border-green-500/25 transition hover:bg-green-500/25">
                   <Check className="w-3.5 h-3.5 inline mr-1" />Approve
                 </button>
