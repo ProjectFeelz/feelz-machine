@@ -79,6 +79,45 @@
 
 # ── Cache headers ─────────────────────────────────────────────────────────────
 
+# ── Security headers ──────────────────────────────────────────────────────────
+#
+# Added after a launch audit found the live site sending only HSTS. For a site
+# that takes payments and holds logged-in sessions, the missing one that
+# matters most is frame protection: without it any page anywhere can put
+# feelzmachine.com in an invisible iframe over its own buttons, and a logged-in
+# person clicking what looks like a game clicks whatever is underneath.
+#
+# Deliberately NOT adding a Content-Security-Policy here. A CSP written blind
+# against an app this size breaks payment iframes, the audio player and the
+# Supabase connection, and a broken CSP fails closed, so the first anyone knows
+# is that the site is white. It wants its own pass with report-only first.
+#
+# includeSubDomains is left OFF on HSTS on purpose: retail.feelzmachine.com and
+# lyrics.feelzmachine.com are separate deployments, and forcing HTTPS on a
+# subdomain that is not ready for it takes it offline with no way to back out
+# for a year.
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    # No framing by anyone. The app is not embedded anywhere; if an embed is
+    # ever wanted, this becomes a frame-ancestors CSP naming that one host.
+    X-Frame-Options = "DENY"
+    # Stops a browser second-guessing a Content-Type, which is how an upload
+    # served as text ends up executing as script.
+    X-Content-Type-Options = "nosniff"
+    # Full URLs stay inside the origin. Track and artist paths are not secret,
+    # but password-reset and invite links carry tokens in the URL and those
+    # must never reach a third party in a Referer header.
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    # Nothing here needs a camera, a microphone or a location. Microphone is
+    # listed explicitly rather than left out, because leaving a permission
+    # unlisted grants it to the page by default.
+    Permissions-Policy = "camera=(), microphone=(), geolocation=(), payment=(self), interest-cohort=()"
+    # Already sent by Netlify, restated so it lives with the rest and survives
+    # a platform default changing.
+    Strict-Transport-Security = "max-age=31536000"
+
 [[headers]]
   for = "/service-worker.js"
   [headers.values]
@@ -236,6 +275,15 @@
 # writes it down, so the row, the tier column and the admin counts agree.
 [functions."expire-subscriptions"]
   schedule = "0 1 * * *"
+
+# 02:00 daily, a week's notice before a granted plan ends. Runs after
+# expire-subscriptions on purpose, so a grant that ran out overnight is
+# expired rather than warned about an expiry that has already happened.
+# Only warns about admin grants: a live PayPal subscription's expires_at is
+# its next billing date, not an ending, and telling a paying subscriber their
+# plan is about to end would be worse than saying nothing.
+[functions."warn-expiring-subscriptions"]
+  schedule = "0 2 * * *"
 
 # Monday 07:00, release royalties that have built up past an artist's
 # threshold, plus anything that has been waiting more than 60 days whatever
