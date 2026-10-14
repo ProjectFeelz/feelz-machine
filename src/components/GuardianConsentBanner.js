@@ -71,7 +71,7 @@ export default function GuardianConsentBanner({ artistId }) {
         <p className="text-[11px] text-white/40 mt-0.5 leading-relaxed">
           {pending
             ? 'They have agreed and we are contacting them. Selling opens once we have. Everything else works as normal.'
-            : 'Until they do, your music cannot be sold. Uploading, publishing and being played all carry on as normal. Tap to open the form.'}
+            : 'Until they do, your music cannot be sold. Uploading, publishing and being played all carry on as normal. Tap to open the form, then hand them your phone: it is filled in here, on your account, not sent to them as a link.'}
         </p>
       </div>
     </button>

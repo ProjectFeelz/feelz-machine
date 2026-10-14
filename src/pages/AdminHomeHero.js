@@ -152,12 +152,12 @@ export default function AdminHomeHero() {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <input className={inputCls} placeholder="Button label (e.g. Enter now)" value={form.cta_label}
             onChange={e => setForm({ ...form, cta_label: e.target.value })} />
-          <input className={inputCls} placeholder="Button link (e.g. /schoolsessions)" value={form.cta_path}
+          <input className={inputCls} placeholder="Button link (e.g. /sessions)" value={form.cta_path}
             onChange={e => setForm({ ...form, cta_path: e.target.value })} />
         </div>
 
         {/* Point the button at a specific track or album without knowing its
-            path. Still free-text above for anything else — /schoolsessions,
+            path. Still free-text above for anything else, /sessions,
             an external URL, a page that has no picker. The picker only ever
             writes into that same field, so there is one source of truth for
             where the button goes. */}

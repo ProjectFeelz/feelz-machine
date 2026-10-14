@@ -198,7 +198,7 @@ export default function SchoolSessionsEntry({ enabled, setEnabled, form, setForm
               arrived straight at the upload panel from the dashboard, would
               otherwise file their entry never knowing the card exists.
               Deliberately two sentences and no numbers. The thresholds live in
-              the database and are stated in full on /schoolsessions; repeating
+              the database and are stated in full on /sessions; repeating
               them here would be a second copy to keep in step, and the first
               time it drifts is the first time a student is told the wrong
               target. */}
@@ -211,7 +211,7 @@ export default function SchoolSessionsEntry({ enabled, setEnabled, form, setForm
               the judging rounds, earned by bringing people to the platform rather
               than by winning. Two per school, and it is yours whether or not your
               cover places.{' '}
-              <a href="/schoolsessions#vip" className="text-lime-300 underline underline-offset-2">
+              <a href="/sessions#vip" className="text-lime-300 underline underline-offset-2">
                 How it works
               </a>
             </p>
@@ -408,7 +408,7 @@ export default function SchoolSessionsEntry({ enabled, setEnabled, form, setForm
 
           {/* The terms.
            *
-           * Section 3 of /schoolsessions/terms says that entering means you
+           * Section 3 of /sessions/terms says that entering means you
            * agree to them. Nothing on this form said that, nothing linked to
            * them, and nobody was asked. So the document claimed an agreement
            * that was never put in front of anyone, which is not an agreement.
@@ -427,7 +427,7 @@ export default function SchoolSessionsEntry({ enabled, setEnabled, form, setForm
               className="mt-0.5 rounded border-white/20" />
             <span className="text-xs text-white/60">
               I have read and agree to the{' '}
-              <a href="/schoolsessions/terms" target="_blank" rel="noopener noreferrer"
+              <a href="/sessions/terms" target="_blank" rel="noopener noreferrer"
                 onClick={e => e.stopPropagation()}
                 className="text-lime-400 font-semibold underline underline-offset-2">
                 Sessions terms

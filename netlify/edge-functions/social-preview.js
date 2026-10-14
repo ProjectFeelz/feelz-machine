@@ -69,6 +69,11 @@ const ROUTE_PATTERNS = [
   // sitemap, so crawlers were being pointed at pages that served the generic
   // homepage meta.
   { re: /^\/album\/([^/]+\/[^/]+)\/?$/, type: 'album' },
+  // Both the canonical /sessions and the /schoolsessions alias, because a
+  // link with no preview card is the one thing worse than a stale one, and
+  // every new link points at /sessions. The type string stays as it is: it
+  // is the query param og-meta switches on, not anything a person sees.
+  { re: /^\/sessions\/?$/, type: 'schoolsessions' },
   { re: /^\/schoolsessions\/?$/, type: 'schoolsessions' },
   // The short links the share sheet hands out. These had no preview at all:
   // /t/<code> is resolved in the browser by ShortLinkPage, which a crawler
@@ -206,5 +211,5 @@ export default async (request, context) => {
 // If you ever want to put it back, deploy it on its own and paste a track
 // link into WhatsApp before anything else ships behind it.
 export const config = {
-  path: ['/artist/*', '/track/*', '/beat/*', '/album/*', '/schoolsessions', '/t/*', '/a/*'],
+  path: ['/artist/*', '/track/*', '/beat/*', '/album/*', '/sessions', '/schoolsessions', '/t/*', '/a/*'],
 };

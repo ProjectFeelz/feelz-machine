@@ -312,8 +312,8 @@ export default function HubPage() {
                   /admin/school-sessions into the address bar. The path is
                   unchanged, so any bookmark still works. */}
               <LinkCard icon={SlidersHorizontal} label="Run the Competition" description="Dates, schools, shortlist, courses, entries" path="/admin/school-sessions" color="bg-lime-500/20" />
-              <LinkCard icon={Trophy} label="Public Page Preview" description="See it even while it's switched off" path="/schoolsessions" color="bg-lime-500/20" />
-              <LinkCard icon={Trophy} label="Judge Panel" description="Mark finalists and pick the winner" path="/schoolsessions/judge" color="bg-lime-500/20" />
+              <LinkCard icon={Trophy} label="Public Page Preview" description="See it even while it's switched off" path="/sessions" color="bg-lime-500/20" />
+              <LinkCard icon={Trophy} label="Judge Panel" description="Mark finalists and pick the winner" path="/sessions/judge" color="bg-lime-500/20" />
             </Section>
             </>
           )}
@@ -348,7 +348,7 @@ export default function HubPage() {
               the Admin section above, so this would otherwise double up. */}
           {!isAdmin && isSchoolSessionsJudge && (
             <Section title="Sessions" icon={Trophy}>
-              <LinkCard icon={Trophy} label="Judge Panel" description="Mark finalists and pick the winner" path="/schoolsessions/judge" color="bg-lime-500/20" />
+              <LinkCard icon={Trophy} label="Judge Panel" description="Mark finalists and pick the winner" path="/sessions/judge" color="bg-lime-500/20" />
             </Section>
           )}
 

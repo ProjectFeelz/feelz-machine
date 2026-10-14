@@ -8,7 +8,7 @@
 // Usage: /.netlify/functions/og-meta?type=artist&slug=xxx
 //        /.netlify/functions/og-meta?type=track&slug=xxx
 //        /.netlify/functions/og-meta?type=beat&slug=xxx
-//        /.netlify/functions/og-meta?type=schoolsessions
+//        /.netlify/functions/og-meta?type=schoolsessions   (serves /sessions)
 
 const { createClient } = require('@supabase/supabase-js');
 
@@ -279,10 +279,10 @@ async function buildMeta(type, slug) {
       .select('prize_description, prize_breakdown_text')
       .eq('is_school_sessions', true)
       .maybeSingle();
-    title = 'School Sessions on Feelz Machine';
+    title = 'Sessions on Feelz Machine';
     description = comp?.prize_breakdown_text || comp?.prize_description
-      || 'A high school music competition on Feelz Machine. Pick a song from the shortlist and cover it. Cash prizes for the winning school and student.';
-    pageUrl = `${SITE_URL}/schoolsessions`;
+      || 'A music cover competition on Feelz Machine. Pick a song from the shortlist and cover it, your own vocal performance. Anyone can enter, and there is cash for the winner.';
+    pageUrl = `${SITE_URL}/sessions`;
   }
 
   return { title, description, image, pageUrl, jsonLd };

@@ -235,10 +235,14 @@ export default function SchoolSessionsPage() {
   const nextSeason = (gate.config?.season || 1) + 1;
 
   const BASE_URL = 'https://www.feelzmachine.com';
-  const pageUrl = `${BASE_URL}/schoolsessions`;
-  const pageTitle = 'Sessions, a high school music competition · Feelz Machine';
+  // /sessions is the canonical URL now. /schoolsessions still serves this
+  // page and always will, so nothing anybody has shared or printed breaks,
+  // but the canonical tag has to name one of the two and it should name the
+  // one the competition is actually called.
+  const pageUrl = `${BASE_URL}/sessions`;
+  const pageTitle = 'Sessions, a music cover competition · Feelz Machine';
   const pageDesc = comp?.prize_breakdown_text || comp?.prize_description
-    || 'Pick a song from the shortlist and cover it. Cash prizes for the winning school and student, judged by a panel, with a public People\u2019s Choice vote too.';
+    || 'Pick a song from the shortlist and cover it. Cash prizes, judged by a panel, with a public People\u2019s Choice vote too.';
 
   return (
     <div className="min-h-screen bg-black text-white">
@@ -275,14 +279,22 @@ export default function SchoolSessionsPage() {
 
         {/* Hero */}
         <div className="space-y-3 lg:space-y-4">
+          {/* THE NAME, AND WHO IT IS FOR.
+              This read "High School Competition" over a headline that said
+              "School Sessions", and the entry form underneath no longer asks
+              anybody what school they attend. A page that calls itself a high
+              school competition turns away the grown adults who are the ones
+              actually showing up, which is the whole reason the gate came
+              down. The school angle is not gone, it is just no longer the
+              price of entry. */}
           <p className="text-lime-400 text-xs lg:text-sm font-bold tracking-[0.2em] uppercase">
-            High School Competition {gate.config?.season ? `· Season ${gate.config.season}` : ''}
+            Cover Competition {gate.config?.season ? `· Season ${gate.config.season}` : ''}
           </p>
           <h1 className="text-4xl lg:text-6xl font-bold leading-[0.98] uppercase">
-            School<br /><span className="text-lime-400">Sessions</span>
+            <span className="text-lime-400">Sessions</span>
           </h1>
           <p className="text-white/50 text-sm lg:text-lg lg:max-w-xl leading-relaxed">
-            Pick a song from the shortlist and cover it, your own vocal performance. Your school could walk away with cash.
+            Pick a song from the shortlist and cover it, your own vocal performance. Anyone can enter, students included, and there is cash for the winner.
           </p>
           {entryCount !== null && entryCount > 0 && (
             <p className="text-xs lg:text-sm text-white/40 font-medium">
@@ -515,7 +527,7 @@ export default function SchoolSessionsPage() {
         {eligible ? (
           phase === 'voting' || phase === 'done' ? (
             <button
-              onClick={() => navigate('/schoolsessions/vote')}
+              onClick={() => navigate('/sessions/vote')}
               className="w-full lg:w-auto lg:px-10 py-3.5 bg-lime-400 text-black font-bold rounded-xl flex items-center justify-center space-x-2 hover:bg-lime-300 transition">
               <span>{phase === 'done' ? 'See the results' : "Vote, People's Choice"}</span>
               <ArrowRight className="w-4 h-4" />
@@ -529,9 +541,20 @@ export default function SchoolSessionsPage() {
             // than the old bug it replaced.
             <button
               onClick={() => {
+                // Matched on '/schoolsessions#' until now, which broke the
+                // moment the canonical path became /sessions: entryCta started
+                // returning /sessions#what-you-need, the test failed, and the
+                // button navigated to the page it was already on with a hash
+                // nothing handles, so the main CTA did nothing at all.
+                //
+                // Keyed on the anchor instead of the path, so it cannot drift
+                // again with a rename: if the target is an id on this page,
+                // scroll to it, otherwise go wherever it points.
                 const cta = entryCta(comp, { signedIn: !!user });
-                if (cta.to.startsWith('/schoolsessions#')) {
-                  document.getElementById('what-you-need')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                const hash = cta.to.includes('#') ? cta.to.slice(cta.to.indexOf('#') + 1) : '';
+                const target = hash ? document.getElementById(hash) : null;
+                if (target) {
+                  target.scrollIntoView({ behavior: 'smooth', block: 'start' });
                 } else {
                   navigate(cta.to);
                 }
@@ -548,7 +571,7 @@ export default function SchoolSessionsPage() {
         <DistrictNomination nextSeason={nextSeason} />
 
         <p className="text-center text-[11px] text-white/30">
-          Want us to visit your school for a tutorial? Ask your teacher to get in touch.
+          At a school and want us to come and run a tutorial? Ask your teacher to get in touch.
         </p>
       </div>
     </div>

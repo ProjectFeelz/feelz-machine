@@ -160,10 +160,79 @@ export default function GuardianConsentPage() {
     );
   }
 
-  if (!user || !artist) {
+  // WHO ACTUALLY ARRIVES HERE SIGNED OUT
+  //
+  // This used to be one line, "Sign in with the artist account this is for",
+  // on an otherwise empty black screen. The person most likely to read it is a
+  // parent who was sent the link and opened it on their own phone, and to them
+  // that sentence says nothing: not what the page is, not whose account it
+  // concerns, not that there is no account of their own to make. It is a dead
+  // end at the exact moment somebody is trying to say yes.
+  //
+  // So the two cases are separated. Signed out gets an explanation of what the
+  // page is for and what to do about it. Signed in with no artist profile is a
+  // different person again, usually a listener who was sent the wrong link, and
+  // telling them to sign in would be nonsense because they already are.
+  if (!user) {
     return (
-      <div className="min-h-screen bg-black text-white px-5 pt-20">
-        <p className="text-sm text-white/50">Sign in with the artist account this is for.</p>
+      <div className="min-h-screen bg-black text-white px-5 pt-20 pb-28">
+        <Helmet>
+          <title>Parent or guardian consent · {COMPANY}</title>
+          <meta name="robots" content="noindex" />
+        </Helmet>
+        <div className="max-w-md mx-auto space-y-5">
+          <h1 className="text-xl font-black">Parent or guardian consent</h1>
+          <p className="text-sm text-white/55 leading-relaxed">
+            This page records a parent or guardian agreeing to a young artist holding an
+            account on {COMPANY}. It is filled in on the artist's own account, which is why
+            it is asking you to sign in.
+          </p>
+          <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/[0.06] space-y-2">
+            <p className="text-[11px] font-semibold text-white/50">If you are the parent or guardian</p>
+            <p className="text-[11px] text-white/35 leading-relaxed">
+              There is nothing for you to sign up for and no account for you to make. Ask the
+              artist to open this page on their own phone while signed in, and then hand it to
+              you. The form is written for you to fill in with them sitting there.
+            </p>
+          </div>
+          <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/[0.06] space-y-2">
+            <p className="text-[11px] font-semibold text-white/50">If this is your account</p>
+            <p className="text-[11px] text-white/35 leading-relaxed">
+              Sign in and this page will open on your details.
+            </p>
+            <button onClick={() => navigate('/login?redirect=/guardian-consent')}
+              className="mt-1 px-4 py-2.5 rounded-lg bg-white text-black text-xs font-bold">
+              Sign in
+            </button>
+          </div>
+          <p className="text-[10px] text-white/20 leading-relaxed">
+            Nothing on this page asks for an ID or passport number and you should not send one.
+            Until a consent is recorded the account still works normally, it just cannot sell.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!artist) {
+    return (
+      <div className="min-h-screen bg-black text-white px-5 pt-20 pb-28">
+        <Helmet>
+          <title>Parent or guardian consent · {COMPANY}</title>
+          <meta name="robots" content="noindex" />
+        </Helmet>
+        <div className="max-w-md mx-auto space-y-5">
+          <h1 className="text-xl font-black">Nothing to consent to here</h1>
+          <p className="text-sm text-white/55 leading-relaxed">
+            This page belongs to an artist account, and the account you are signed in with is
+            not one. If you were sent this link by a young artist, it has to be opened on their
+            phone while they are signed in, not on yours.
+          </p>
+          <button onClick={goBack}
+            className="px-4 py-2.5 rounded-lg bg-white/[0.08] text-white text-xs font-bold">
+            Go back
+          </button>
+        </div>
       </div>
     );
   }

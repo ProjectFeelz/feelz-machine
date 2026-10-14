@@ -51,7 +51,13 @@ export function sourceFromPath(path) {
   if (p.startsWith('/track/') || p.startsWith('/t/') || p.startsWith('/a/')) return 'track_page';
   if (p.startsWith('/session/')) return 'listening_session';
   if (p.startsWith('/competition')) return 'competitions';
-  if (p.startsWith('/schoolsessions')) return 'school_sessions';
+  // Both paths, because /sessions is canonical now and /schoolsessions is a
+  // permanent alias, and a play from either is the same thing. The tag keeps
+  // the old name on purpose: it is a stored value, and renaming it would
+  // split this context's history in two for the sake of a cosmetic.
+  // Note the order: the /session/ test above is a listening session, and
+  // '/sessions' does not start with '/session/', so the two cannot collide.
+  if (p.startsWith('/sessions') || p.startsWith('/schoolsessions')) return 'school_sessions';
   if (p === '/driving') return 'driving';
   if (p.startsWith('/retail')) return 'retail';
   if (p === '/notifications') return 'notifications';

@@ -79,7 +79,7 @@ exports.handler = async () => {
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url><loc>${BASE_URL}/</loc><priority>1.0</priority></url>
   <url><loc>${BASE_URL}/browse</loc><priority>0.9</priority></url>
-  <url><loc>${BASE_URL}/schoolsessions</loc><priority>0.8</priority></url>
+  <url><loc>${BASE_URL}/sessions</loc><priority>0.8</priority></url>
   <url><loc>${BASE_URL}/retail</loc><priority>0.8</priority></url>
   <url><loc>${BASE_URL}/about</loc><priority>0.6</priority></url>
 </urlset>`,
@@ -102,7 +102,10 @@ async function buildSitemap() {
     { url: '/',                priority: '1.0', changefreq: 'daily'   },
     { url: '/browse',          priority: '0.9', changefreq: 'daily'   },
     { url: '/about',           priority: '0.6', changefreq: 'monthly' },
-    { url: '/schoolsessions',  priority: '0.8', changefreq: 'weekly'  },
+    // /sessions, never /schoolsessions. The page canonicals to /sessions
+    // now, and per the note above, a sitemap URL that canonicals elsewhere
+    // is two contradictory signals and Google drops the page.
+    { url: '/sessions',        priority: '0.8', changefreq: 'weekly'  },
     { url: '/retail',          priority: '0.8', changefreq: 'monthly' },
     { url: '/retail/terms',    priority: '0.3', changefreq: 'monthly' },
     { url: '/retail/privacy',  priority: '0.3', changefreq: 'monthly' },

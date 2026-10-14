@@ -10,12 +10,14 @@ Allow: /browse
 Allow: /about
 Allow: /vs/
 Allow: /competitions
+Allow: /sessions
 Allow: /schoolsessions
 Allow: /newsletter/
 Allow: /retail
 Allow: /terms-of-use
 Allow: /privacy-policy
 Allow: /terms
+Allow: /sessions/terms
 Allow: /schoolsessions/terms
 Allow: /retail/terms
 Allow: /retail/privacy
@@ -42,6 +44,8 @@ Disallow: /retail/player
 Disallow: /retail/join/
 
 # ── Private: competition tooling ─────────────────────────────────────────────
+Disallow: /sessions/judge
+Disallow: /sessions/vote
 Disallow: /schoolsessions/judge
 Disallow: /schoolsessions/vote
 

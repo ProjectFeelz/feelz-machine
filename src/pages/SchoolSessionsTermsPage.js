@@ -23,7 +23,7 @@ export default function SchoolSessionsTermsPage() {
   // this page IS the first history entry, which is every shared link and
   // every tapped push notification. See src/hooks/useGoBack.js.
   const goBack = useGoBack('/hub');
-  const pageUrl = `${BASE_URL}/schoolsessions/terms`;
+  const pageUrl = `${BASE_URL}/sessions/terms`;
 
   return (
     <div className="min-h-screen bg-black text-white">

@@ -1,5 +1,6 @@
 // src/pages/SchoolSessionsVotePage.js
-// /schoolsessions/vote — public voting page. Judges (announced separately)
+// /sessions/vote (and the /schoolsessions/vote alias) — public voting page.
+// Judges (announced separately)
 // narrow entries to finalists and pick the winner directly in admin; this
 // page lets anyone with a Feelz Machine account cast one vote for their
 // favourite as a "People's Choice" pick — a secondary signal, not what
@@ -99,7 +100,7 @@ export default function SchoolSessionsVotePage() {
         <GraduationCap className="w-8 h-8 text-white/20" />
         <h1 className="text-lg font-bold text-white">Voting isn't open here</h1>
         <p className="text-sm text-white/40 max-w-xs">
-          <Link to="/schoolsessions" className="text-lime-400">Back to Sessions</Link>
+          <Link to="/sessions" className="text-lime-400">Back to Sessions</Link>
         </p>
       </div>
     );

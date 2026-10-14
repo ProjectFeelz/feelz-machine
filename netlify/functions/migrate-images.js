@@ -152,10 +152,28 @@ async function copyOne(path, contentType) {
 exports.handler = async (event) => {
   // This function has no schedule, so it is reachable from the open internet.
   // The secret is required always, not only on a manual run.
-  if (!process.env.INTERNAL_FUNCTION_SECRET) {
-    return json(500, { error: 'INTERNAL_FUNCTION_SECRET is not set' });
+  //
+  // MIGRATE_IMAGES_SECRET FIRST, and that is the only reason this is not just
+  // INTERNAL_FUNCTION_SECRET.
+  //
+  // Netlify will not show you the value of a variable saved as a secret, so
+  // the shared one cannot be read back to put in a curl header. Rotating it
+  // instead would reach 23 functions, and one of them, netlify/lib/
+  // unsubscribeToken.js, signs unsubscribe tokens with
+  // UNSUBSCRIBE_SECRET || INTERNAL_FUNCTION_SECRET. If UNSUBSCRIBE_SECRET is
+  // not set, rotating would invalidate every unsubscribe link already in
+  // somebody's inbox. Nothing has been emailed yet, so today that is
+  // harmless, but a one-off image copy is not worth knowing that for certain.
+  //
+  // So: set MIGRATE_IMAGES_SECRET in Netlify to anything you like, use it,
+  // and delete the variable along with this file when the migration is done.
+  // The fallback keeps the old behaviour for anyone who does have the shared
+  // value to hand.
+  const expected = process.env.MIGRATE_IMAGES_SECRET || process.env.INTERNAL_FUNCTION_SECRET;
+  if (!expected) {
+    return json(500, { error: 'neither MIGRATE_IMAGES_SECRET nor INTERNAL_FUNCTION_SECRET is set' });
   }
-  if (event.headers['x-internal-secret'] !== process.env.INTERNAL_FUNCTION_SECRET) {
+  if (event.headers['x-internal-secret'] !== expected) {
     return json(401, { error: 'unauthorized' });
   }
 

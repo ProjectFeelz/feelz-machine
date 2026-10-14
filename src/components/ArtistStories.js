@@ -555,6 +555,72 @@ export function ArtistStoryView({ stories, artist, initialIndex = 0, onClose }) 
   const progressRef                 = useRef(null);
   const DURATION_IMAGE_MS           = 5000;
 
+  // ── PRESS AND HOLD TO PAUSE ───────────────────────────────────────────────
+  //
+  // Tap is already spoken for. The left and right thirds of the media are prev
+  // and next, and that is the first thing a thumb reaches for, so pause cannot
+  // be a tap without taking navigation away. It is the other gesture every
+  // stories UI uses instead: press and hold to pause, release to resume.
+  //
+  // HOLD_MS is the line between the two. Short enough that it feels immediate
+  // when you mean it, long enough that an ordinary tap never trips it.
+  //
+  // One wrinkle, and it is the whole reason suppressNavRef exists: a click
+  // event fires after pointerup, on the element the finger was over. Release a
+  // hold while over the right third and the browser will also report a tap
+  // there, which would skip the story the reader was in the middle of. So the
+  // release of a hold sets a flag that the tap zones consume, and only the tap
+  // zones, because the image timer and onEnded call goNext too and neither of
+  // those should ever be swallowed.
+  const HOLD_MS                     = 250;
+  const [held, setHeld]             = useState(false);
+  const heldRef                     = useRef(false);
+  const holdTimerRef                = useRef(null);
+  const suppressNavRef              = useRef(false);
+
+  const setHoldState = (on) => { heldRef.current = on; setHeld(on); };
+
+  const pauseMedia = () => {
+    try { videoRef.current?.pause(); } catch {}
+    try { audioRef.current?.pause(); } catch {}
+  };
+
+  // play() hands back a promise that rejects when the element has gone away or
+  // the browser refuses, and an unhandled rejection in here would print on
+  // every single release.
+  const resumeMedia = () => {
+    try { videoRef.current?.play()?.catch(() => {}); } catch {}
+    try { audioRef.current?.play()?.catch(() => {}); } catch {}
+  };
+
+  const onHoldStart = (e) => {
+    // The audio and video elements carry their own native controls, and the
+    // centre of the screen is where those controls are. A press that lands on
+    // one of them belongs to the browser, not to this gesture.
+    const tag = e?.target?.tagName;
+    if (tag === 'VIDEO' || tag === 'AUDIO') return;
+    suppressNavRef.current = false;
+    clearTimeout(holdTimerRef.current);
+    holdTimerRef.current = setTimeout(() => {
+      setHoldState(true);
+      pauseMedia();
+    }, HOLD_MS);
+  };
+
+  const onHoldEnd = () => {
+    clearTimeout(holdTimerRef.current);
+    if (!heldRef.current) return;
+    suppressNavRef.current = true;
+    setHoldState(false);
+    resumeMedia();
+  };
+
+  const onZoneTap = (fn) => (e) => {
+    e.stopPropagation();
+    if (suppressNavRef.current) { suppressNavRef.current = false; return; }
+    fn();
+  };
+
   // ── REACTIONS ─────────────────────────────────────────────────────────────
   //
   // This was a single heart, and the notification telling the artist about it
@@ -650,11 +716,19 @@ export function ArtistStoryView({ stories, artist, initialIndex = 0, onClose }) 
     markViewed(story.id);
     setProgress(0);
     setPlaying(false);
+    // A new story starts unheld, whatever the finger was doing on the last one.
+    clearTimeout(holdTimerRef.current);
+    setHoldState(false);
+    suppressNavRef.current = false;
 
     if (story.media_type === 'image') {
       clearInterval(progressRef.current);
       let elapsed = 0;
       progressRef.current = setInterval(() => {
+        // Held means the clock stops. The interval keeps ticking rather than
+        // being torn down and rebuilt, so elapsed is never lost and the bar
+        // picks up exactly where it stopped.
+        if (heldRef.current) return;
         elapsed += 100;
         setProgress(Math.min(100, (elapsed / DURATION_IMAGE_MS) * 100));
         if (elapsed >= DURATION_IMAGE_MS) {
@@ -663,7 +737,7 @@ export function ArtistStoryView({ stories, artist, initialIndex = 0, onClose }) 
         }
       }, 100);
     }
-    return () => clearInterval(progressRef.current);
+    return () => { clearInterval(progressRef.current); clearTimeout(holdTimerRef.current); };
   }, [idx]);
 
   const goNext = () => {
@@ -732,7 +806,17 @@ export function ArtistStoryView({ stories, artist, initialIndex = 0, onClose }) 
       </div>
 
       {/* Media */}
-      <div className="flex-1 flex items-center justify-center relative overflow-hidden">
+      <div
+        className="flex-1 flex items-center justify-center relative overflow-hidden"
+        onPointerDown={onHoldStart}
+        onPointerUp={onHoldEnd}
+        onPointerCancel={onHoldEnd}
+        onPointerLeave={onHoldEnd}
+        // Without this, a long press on iOS raises the save-image callout over
+        // the story instead of pausing it. The header already has a download
+        // button, so nothing is lost by taking the callout away.
+        style={{ touchAction: 'manipulation', WebkitTouchCallout: 'none', WebkitUserSelect: 'none', userSelect: 'none' }}
+      >
         {story.media_type === 'image' && (
           <img src={story.media_url} alt={story.caption || ''} className="max-w-full max-h-full object-contain" />
         )}
@@ -752,9 +836,21 @@ export function ArtistStoryView({ stories, artist, initialIndex = 0, onClose }) 
             className="max-w-full max-h-full" onEnded={goNext} />
         )}
 
-        {/* Tap zones for navigation */}
-        <button className="absolute left-0 top-0 bottom-0 w-1/3" onClick={goPrev} />
-        <button className="absolute right-0 top-0 bottom-0 w-1/3" onClick={goNext} />
+        {/* Tap zones for navigation. onZoneTap swallows the click that follows
+            the release of a press and hold, so pausing to read never costs you
+            the story you were reading. */}
+        <button className="absolute left-0 top-0 bottom-0 w-1/3" onClick={onZoneTap(goPrev)} />
+        <button className="absolute right-0 top-0 bottom-0 w-1/3" onClick={onZoneTap(goNext)} />
+
+        {/* Paused marker. Held is a deliberate gesture and it needs to be
+            visibly acknowledged, otherwise the first thing a reader does when
+            the bar stops is let go to check whether it worked. */}
+        {held && (
+          <div className="absolute top-3 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full pointer-events-none"
+            style={{ background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(12px)', border: '1px solid rgba(255,255,255,0.2)' }}>
+            <span className="text-[10px] font-semibold tracking-wider uppercase text-white/70">Paused</span>
+          </div>
+        )}
       </div>
 
       {/* Bottom bar, track pill + like */}

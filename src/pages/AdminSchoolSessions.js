@@ -628,7 +628,7 @@ export default function AdminSchoolSessions({ embedded = false }) {
               {config?.is_enabled ? 'Live, visible in the app' : 'Off, hidden everywhere'}
             </p>
             <p className="text-xs text-white/40 mt-0.5">
-              Controls the upload-flow section, the /schoolsessions landing page, and the entry gate, all at once.
+              Controls the upload-flow section, the /sessions landing page, and the entry gate, all at once.
             </p>
           </div>
           <Toggle value={config?.is_enabled} onChange={() => saveConfig({ is_enabled: !config?.is_enabled })} />
@@ -1165,7 +1165,7 @@ export default function AdminSchoolSessions({ embedded = false }) {
               )}
             </p>
             <div className="flex items-center space-x-2">
-              <Link to="/schoolsessions/vote" target="_blank"
+              <Link to="/sessions/vote" target="_blank"
                 className="text-xs text-lime-400/70 hover:text-lime-400 px-2">View voting page</Link>
               <button onClick={exportCsv} disabled={entries.length === 0}
                 className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-white/[0.06] text-xs text-white/60 disabled:opacity-30">
