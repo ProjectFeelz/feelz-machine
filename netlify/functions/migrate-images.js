@@ -170,11 +170,47 @@ exports.handler = async (event) => {
   // The fallback keeps the old behaviour for anyone who does have the shared
   // value to hand.
   const expected = process.env.MIGRATE_IMAGES_SECRET || process.env.INTERNAL_FUNCTION_SECRET;
+
+  // WHOAMI, and it needs no secret, which is the point.
+  //
+  // Three rounds of 401 were spent theorising about which variable the live
+  // function could see, because a 401 looks identical whatever the cause: the
+  // wrong variable winning, a stale deploy, a trailing space in the Netlify
+  // value. This answers it in one call instead.
+  //
+  // It reveals no secret. A length, and the first eight characters of the
+  // SHA-256 of the value, which cannot be reversed. Compare that fingerprint
+  // against the one for the value in your hand and either they match or they
+  // do not. Nothing to interpret.
+  let mode0 = '';
+  try { mode0 = String(JSON.parse(event.body || '{}').mode || ''); } catch {}
+  if (mode0 === 'whoami') {
+    const fp = (v) => (v
+      ? { set: true, length: v.length, sha256First8: require('crypto').createHash('sha256').update(v).digest('hex').slice(0, 8) }
+      : { set: false });
+    return json(200, {
+      mode: 'whoami',
+      deployedFileHasWhoami: true,
+      MIGRATE_IMAGES_SECRET: fp(process.env.MIGRATE_IMAGES_SECRET),
+      INTERNAL_FUNCTION_SECRET: fp(process.env.INTERNAL_FUNCTION_SECRET),
+      whichOneIsUsed: process.env.MIGRATE_IMAGES_SECRET
+        ? 'MIGRATE_IMAGES_SECRET'
+        : (process.env.INTERNAL_FUNCTION_SECRET ? 'INTERNAL_FUNCTION_SECRET' : 'neither, every call will be 500'),
+      expected: fp(expected),
+      headerReceived: fp(event.headers['x-internal-secret']),
+      headerMatches: !!expected && event.headers['x-internal-secret'] === expected,
+      note: 'No value is returned, only a length and an irreversible fingerprint.',
+    });
+  }
+
   if (!expected) {
     return json(500, { error: 'neither MIGRATE_IMAGES_SECRET nor INTERNAL_FUNCTION_SECRET is set' });
   }
   if (event.headers['x-internal-secret'] !== expected) {
-    return json(401, { error: 'unauthorized' });
+    return json(401, {
+      error: 'unauthorized',
+      hint: 'Run mode "whoami", which needs no secret, to see which variable this function is checking against and whether your header matches it.',
+    });
   }
 
   let mode = 'plan';

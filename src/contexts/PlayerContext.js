@@ -303,6 +303,44 @@ export function PlayerProvider({ children }) {
   const interruptedRef     = useRef(false);
   const resumeTriesRef     = useRef(0);
 
+  // ── THE LISTEN-THROUGH BUFFER ─────────────────────────────────────────────
+  //
+  // THE PROBLEM. A streaming audio element only ever holds the few seconds it
+  // has buffered ahead. Lose signal in a lift, a tunnel, a bad patch of the
+  // highway, and it runs out of bytes and stops, even though the person was
+  // most of the way through the song. Nothing in this app stops it and the
+  // signed URL is good for two hours, so there is nothing to fix in the
+  // plumbing. The element simply does not have the rest of the file.
+  //
+  // THE ONLY FIX IS TO HAVE THE BYTES. So after twenty seconds of actual
+  // playback, the whole file is fetched once in the background and kept as a
+  // blob. If the element then runs dry while the network is gone, playback
+  // swaps to the blob at the same position and the song finishes.
+  //
+  // WHY TWENTY SECONDS. Steve's call, and the right one. Fetching from the
+  // first second would cover a drop at 0:05, and would also pull a full file
+  // for every person who skips after a few seconds, which is most of the
+  // skipping that happens. Twenty seconds is somebody who has decided to
+  // listen. The trade is explicit: a drop inside the first twenty seconds
+  // still cuts out.
+  //
+  // IN MEMORY ONLY, AND FOR ONE TRACK. Nothing is written to IndexedDB, which
+  // keeps this entirely clear of two things it has no business touching: the
+  // storage quota the offline downloads manage, and the entitlement rules that
+  // decide who may keep a paid track. Streaming a song and keeping its bytes
+  // for the length of that song are the same permission. Keeping them after it
+  // is not, and this does not.
+  //
+  // COST. One extra pull of the file for a listener who gets past twenty
+  // seconds, on top of what the element streams. Not free, and worth it for a
+  // song that finishes.
+  const LISTEN_BUFFER_AFTER_S    = 20;
+  const LISTEN_BUFFER_MAX_BYTES  = 40 * 1024 * 1024;
+  const STALL_GRACE_MS           = 2500;
+  // { trackId, state: idle | fetching | ready | failed, url, controller }
+  const listenBufRef   = useRef({ trackId: null, state: 'idle', url: null, controller: null });
+  const stallTimerRef  = useRef(null);
+
   // Driving mode is an explicit statement that this phone is doing one job
   // right now. It buys a longer fight for the speakers, and nothing else.
   // Opening the screen is the consent; there is no version of this that turns
@@ -864,6 +902,163 @@ export function PlayerProvider({ children }) {
       document.removeEventListener('visibilitychange', onVisible);
       clearInterval(timer);
     };
+  }, []);
+
+  // ── Listen-through buffer: release ────────────────────────────────────────
+  //
+  // Declared BEFORE the effect that starts a fetch, so on a track change this
+  // one runs first and the new track never inherits the old track's blob.
+  //
+  // The revoke is delayed rather than immediate, and that is not sloppiness.
+  // When the next track starts, the crossfade copies this element's src onto
+  // the second element to fade the outgoing track out over CROSSFADE_SECS. If
+  // the outgoing track was playing from the blob, revoking the URL in the same
+  // tick pulls the source out from under a fade that is still running. Fifteen
+  // seconds is far longer than any fade and still frees the memory.
+  const releaseListenBuffer = useCallback(() => {
+    const b = listenBufRef.current;
+    if (b.controller) { try { b.controller.abort(); } catch {} }
+    if (b.url) {
+      const dying = b.url;
+      setTimeout(() => { try { URL.revokeObjectURL(dying); } catch {} }, 15000);
+    }
+    listenBufRef.current = { trackId: null, state: 'idle', url: null, controller: null };
+  }, []);
+
+  useEffect(() => {
+    releaseListenBuffer();
+    return () => releaseListenBuffer();
+  }, [currentTrack?.id, releaseListenBuffer]);
+
+  // ── Listen-through buffer: fetch ──────────────────────────────────────────
+  //
+  // Rides the existing currentTime tick rather than adding a timer. Starts at
+  // most once per track: after the first pass the state is no longer idle and
+  // every later tick returns immediately.
+  useEffect(() => {
+    const track = currentTrack;
+    const audio = audioRef.current;
+    if (!track?.id || !audio) return;
+    if (currentTime < LISTEN_BUFFER_AFTER_S) return;
+
+    const b = listenBufRef.current;
+    if (b.trackId === track.id && b.state !== 'idle') return;
+
+    const src = audio.currentSrc || audio.src;
+    if (!src) return;
+    // Already local. A saved download or a blob we are already playing needs
+    // no second copy, and /offline-audio/ is served by the service worker out
+    // of IndexedDB, which the network cannot take away.
+    if (src.startsWith('blob:') || src.includes('/offline-audio/')) return;
+
+    const controller = new AbortController();
+    listenBufRef.current = { trackId: track.id, state: 'fetching', url: null, controller };
+
+    (async () => {
+      try {
+        const res = await fetch(src, { signal: controller.signal, credentials: 'omit' });
+        if (!res.ok) throw new Error(`status ${res.status}`);
+        const declared = Number(res.headers.get('content-length') || 0);
+        if (declared && declared > LISTEN_BUFFER_MAX_BYTES) throw new Error('larger than the cap');
+        const blob = await res.blob();
+        if (blob.size > LISTEN_BUFFER_MAX_BYTES) throw new Error('larger than the cap');
+
+        // Two checks, not one. The id catches a track change. The src catches
+        // the subtler case of the same track whose URL was re-signed while the
+        // fetch was in flight, where the bytes may be fine but we can no
+        // longer prove they belong to what is playing. Conservative on
+        // purpose: the cost of discarding is one unused fetch, the cost of
+        // being wrong is the wrong song.
+        const live = audioRef.current;
+        if (listenBufRef.current.trackId !== track.id) return;
+        if ((live?.currentSrc || live?.src) !== src) {
+          listenBufRef.current = { ...listenBufRef.current, state: 'failed', controller: null };
+          return;
+        }
+
+        listenBufRef.current = {
+          trackId: track.id,
+          state: 'ready',
+          url: URL.createObjectURL(blob),
+          controller: null,
+        };
+      } catch {
+        // A failed buffer is not a failed anything. Playback carries on
+        // exactly as it does today; there is simply nothing to fall back to.
+        if (listenBufRef.current.trackId === track.id) {
+          listenBufRef.current = { ...listenBufRef.current, state: 'failed', controller: null };
+        }
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentTime, currentTrack?.id]);
+
+  // ── Listen-through buffer: recover ────────────────────────────────────────
+  //
+  // WHAT COUNTS AS RUNNING DRY. An `error` is unambiguous and swaps at once.
+  // `waiting` and `stalled` are not: they fire on ordinary seeks and during
+  // normal buffering, so swapping on them directly would interrupt healthy
+  // playback. They start a timer instead, and any sign of progress cancels it.
+  // Only a stall that outlasts STALL_GRACE_MS is treated as the network
+  // having gone away.
+  //
+  // THE PAUSE THAT THE SWAP CAUSES. Assigning src pauses the element, and
+  // onPause would read that as the phone taking the audio, set interruptedRef
+  // and have tryResume racing this swap to press play. deliberatePauseRef is
+  // exactly the flag for "we asked for this one", so the swap sets it.
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    const clearStallTimer = () => {
+      if (stallTimerRef.current) { clearTimeout(stallTimerRef.current); stallTimerRef.current = null; }
+    };
+
+    const swapToBuffer = () => {
+      clearStallTimer();
+      const b = listenBufRef.current;
+      if (b.state !== 'ready' || !b.url) return;
+      const track = currentTrackRef.current;
+      if (!track || b.trackId !== track.id) return;
+      if ((audio.currentSrc || audio.src) === b.url) return;   // already on it
+
+      const at = audio.currentTime || 0;
+      const onMeta = () => {
+        audio.removeEventListener('loadedmetadata', onMeta);
+        try { audio.currentTime = at; } catch {}
+        audio.play().catch(() => {});
+      };
+      deliberatePauseRef.current = true;
+      audio.addEventListener('loadedmetadata', onMeta);
+      audio.src = b.url;
+      audio.load();
+      console.info('[player] network ran dry, finishing this track from the listen buffer');
+    };
+
+    const onError = () => swapToBuffer();
+    const onStall = () => {
+      if (stallTimerRef.current) return;
+      stallTimerRef.current = setTimeout(() => {
+        stallTimerRef.current = null;
+        swapToBuffer();
+      }, STALL_GRACE_MS);
+    };
+
+    audio.addEventListener('error',      onError);
+    audio.addEventListener('stalled',    onStall);
+    audio.addEventListener('waiting',    onStall);
+    audio.addEventListener('playing',    clearStallTimer);
+    audio.addEventListener('timeupdate', clearStallTimer);
+
+    return () => {
+      clearStallTimer();
+      audio.removeEventListener('error',      onError);
+      audio.removeEventListener('stalled',    onStall);
+      audio.removeEventListener('waiting',    onStall);
+      audio.removeEventListener('playing',    clearStallTimer);
+      audio.removeEventListener('timeupdate', clearStallTimer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
