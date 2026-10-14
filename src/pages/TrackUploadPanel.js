@@ -1480,7 +1480,7 @@ export default function TrackUploadPanel() {
     }
 
     if (!schoolSessionsFormValid(schoolSessionsEnabled, schoolSessionsForm)) {
-      showMessage('error', 'Please fill in the entrant name, email, TikTok handle and video link, school, the YouTube confirmation, agreement to the School Sessions terms, and (if under 18) guardian consent for the School Sessions entry.');
+      showMessage('error', 'Please fill in the entrant name, email, TikTok handle and video link, school, the YouTube confirmation, agreement to the Sessions terms, and (if under 18) guardian consent for the Sessions entry.');
       return;
     }
 
@@ -1576,7 +1576,7 @@ export default function TrackUploadPanel() {
       }
 
       if (schoolSessionsEnabled) {
-        showMessage('info', 'Registering School Sessions entry…');
+        showMessage('info', 'Registering Sessions entry…');
         try {
           const { data: ssConfig } = await supabase
             .from('school_sessions_config')
@@ -1596,11 +1596,24 @@ export default function TrackUploadPanel() {
               throw new Error('Entries are not open yet. Your track is uploaded and saved, so you can enter it the moment they do.');
             }
 
-            const { data: redeemedCodeId, error: codeErr } = await supabase.rpc('redeem_verification_code', {
-              p_code: schoolSessionsForm.verificationCode.trim(),
-            });
-            if (codeErr || !redeemedCodeId) {
-              throw new Error('That verification code is invalid or has already been used. Check it and try again, or ask at school reception for a new one.');
+            // A code is optional now. It was never a preference: codes come
+            // only from generate_verification_codes, an admin runs that per
+            // school, and zero have ever been issued, so this block threw for
+            // every single entrant and nobody could enter at all.
+            //
+            // A code that IS supplied is still redeemed and still recorded on
+            // the entry, so a school handing them out keeps working and keeps
+            // its one-use guarantee. A blank one just means no code.
+            let redeemedCodeId = null;
+            const typedCode = schoolSessionsForm.verificationCode.trim();
+            if (typedCode) {
+              const { data: codeId, error: codeErr } = await supabase.rpc('redeem_verification_code', {
+                p_code: typedCode,
+              });
+              if (codeErr || !codeId) {
+                throw new Error('That verification code is not valid, or it has already been used. You can clear the field and enter without one.');
+              }
+              redeemedCodeId = codeId;
             }
 
             const { data: entryRow, error: entryErr } = await supabase
@@ -1626,7 +1639,7 @@ export default function TrackUploadPanel() {
               .select('id').single();
             if (entryErr) {
               if (entryErr.message?.includes('idx_school_sessions_entries_one_per_email')) {
-                throw new Error('This email has already been used for a School Sessions entry.');
+                throw new Error('This email has already been used for a Sessions entry.');
               }
               throw entryErr;
             }
@@ -1651,7 +1664,7 @@ export default function TrackUploadPanel() {
             }
           }
         } catch (ssErr) {
-          console.error('School Sessions entry save failed:', ssErr);
+          console.error('Sessions entry save failed:', ssErr);
           ssEntryError = ssErr.message || 'unknown error';
         }
       }
@@ -1687,7 +1700,7 @@ export default function TrackUploadPanel() {
         showMessage(
           ssEntryError ? 'error' : 'success',
           ssEntryError
-            ? `Track uploaded, but the School Sessions entry couldn't be saved: ${ssEntryError}. Please contact us to enter manually.`
+            ? `Track uploaded, but the Sessions entry couldn't be saved: ${ssEntryError}. Please contact us to enter manually.`
             : 'Track uploaded successfully!'
         );
         resetAll();

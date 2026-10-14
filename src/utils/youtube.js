@@ -4,7 +4,7 @@
 //
 // youTubeId used to live in src/components/HomeAsideCard.js and is exported
 // from here now, with that file re-exporting it so nothing that imports it
-// from there breaks. It moved because School Sessions needs it and importing
+// from there breaks. It moved because Sessions needs it and importing
 // it from the home page's aside card would have pulled that whole module, and
 // its player and auth hooks, into a page that wants none of them.
 //

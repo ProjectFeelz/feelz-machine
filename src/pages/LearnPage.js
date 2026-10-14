@@ -13,14 +13,14 @@
 // is no longer true.
 //
 // So this reads course_key = 'platform' from school_course_lessons, the same
-// rows the School Sessions page reads. One list, two doors. The table name is
+// rows the Sessions page reads. One list, two doors. The table name is
 // now narrower than what it holds, which is worth knowing when you read it,
 // and is a much smaller problem than two sources of truth.
 //
 // WHAT IT DOES WITH NO LESSONS
 //
 // Falls back to the playlist URL from school_sessions_config, exactly as the
-// School Sessions page does. So this page is useful the moment it ships,
+// Sessions page does. So this page is useful the moment it ships,
 // before anybody has broken the course into numbered lessons, and it gets
 // better on its own when they do.
 

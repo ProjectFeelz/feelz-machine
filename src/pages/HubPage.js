@@ -304,7 +304,7 @@ export default function HubPage() {
               <LinkCard icon={Radio} label="Retail Player" description="The venue-facing player, admin preview" path="/retail/player" color="bg-purple-500/20" />
             </Section>
 
-            <Section title="School Sessions" icon={Trophy}>
+            <Section title="Sessions" icon={Trophy}>
               {/* The control panel leads, because it is the one you reach for
                   most and it was the one you could not reach at all. The route
                   has existed since the panel was built but nothing in the app
@@ -344,10 +344,10 @@ export default function HubPage() {
             </Section>
           )}
 
-          {/* School Sessions judge, non-admin. Admins already get this in
+          {/* Sessions judge, non-admin. Admins already get this in
               the Admin section above, so this would otherwise double up. */}
           {!isAdmin && isSchoolSessionsJudge && (
-            <Section title="School Sessions" icon={Trophy}>
+            <Section title="Sessions" icon={Trophy}>
               <LinkCard icon={Trophy} label="Judge Panel" description="Mark finalists and pick the winner" path="/schoolsessions/judge" color="bg-lime-500/20" />
             </Section>
           )}

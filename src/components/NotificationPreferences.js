@@ -49,7 +49,7 @@ const CATEGORIES = [
   { key: 'platform_updates', label: 'Platform updates', blurb: 'News from Feelz Machine, and what has changed' },
   { key: 'social',           label: 'People',           blurb: 'Follows, comments, chat and collaborations' },
   { key: 'money',            label: 'Sales and payouts', blurb: 'Purchases, tips and money reaching your account' },
-  { key: 'competitions',     label: 'Competitions',     blurb: 'The wheel, School Sessions and contest results' },
+  { key: 'competitions',     label: 'Competitions',     blurb: 'The wheel, Sessions and contest results' },
   { key: 'engagement',       label: 'Streaks and reminders', blurb: 'Nudges about your own listening' },
 ];
 

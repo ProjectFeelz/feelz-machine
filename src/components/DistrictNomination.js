@@ -1,6 +1,6 @@
 // src/components/DistrictNomination.js
 // Always-open, no-gate section: any visitor can put their school/district
-// forward to host the next School Sessions season, and anyone with a Feelz
+// forward to host the next Sessions season, and anyone with a Feelz
 // Machine account can vote for one nomination per season. Deliberately
 // separate from the current season's entries/votes — this needs to reach
 // schools that aren't part of the current run at all.
@@ -97,7 +97,7 @@ export default function DistrictNomination({ nextSeason }) {
       <div className="flex items-start space-x-2.5">
         <MapPin className="w-4 h-4 text-lime-400 flex-shrink-0 mt-0.5" />
         <div>
-          <p className="text-sm font-bold text-white">Want School Sessions in your district next?</p>
+          <p className="text-sm font-bold text-white">Want Sessions in your district next?</p>
           <p className="text-xs text-white/40 mt-0.5">
             Put your district forward, get people to vote for it, and it could be where Season {nextSeason} runs.
           </p>

@@ -1,6 +1,6 @@
 // src/components/SchoolLessonsEditor.js
 //
-// Adding, ordering and removing the lessons in a School Sessions course.
+// Adding, ordering and removing the lessons in a Sessions course.
 //
 // BUILT AROUND PASTING, BECAUSE THAT IS THE REAL JOB
 //

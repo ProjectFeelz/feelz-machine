@@ -167,7 +167,7 @@ export default function AdminSchoolSessions({ embedded = false }) {
   const addJudge = async () => {
     if (!newJudgeEmail.trim()) return;
     if (!config?.competition_id) {
-      showToast('No active competition to add a judge to, check the School Sessions config is set up.');
+      showToast('No active competition to add a judge to, check the Sessions config is set up.');
       return;
     }
     const { data: foundUserId, error: lookupError } = await supabase
@@ -413,7 +413,7 @@ export default function AdminSchoolSessions({ embedded = false }) {
   };
 
   // Prize money (migration 168). Nothing here moves money. It is the record of
-  // what was owed, how it was paid and the proof, because School Sessions
+  // what was owed, how it was paid and the proof, because Sessions
   // prizes go out by EFT to a school and to a guardian, not through PayPal.
   const loadPrizes = useCallback(async () => {
     if (!config?.competition_id) return;
@@ -615,7 +615,7 @@ export default function AdminSchoolSessions({ embedded = false }) {
           <ArrowLeft className="w-4 h-4 text-white" />
         </button>
         <GraduationCap className="w-5 h-5 text-lime-400" />
-        <h1 className="text-base font-bold text-white">School Sessions</h1>
+        <h1 className="text-base font-bold text-white">Sessions</h1>
       </div>
       )}
 
@@ -685,14 +685,14 @@ export default function AdminSchoolSessions({ embedded = false }) {
         {/* Season + courses */}
         <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4 space-y-4">
           <p className="text-xs font-bold text-white/50 uppercase tracking-wide">Season &amp; courses</p>
-          <Field label="Season" hint="Bump this each time you re-run School Sessions (roughly every 6 months)">
+          <Field label="Season" hint="Bump this each time you re-run Sessions (roughly every 6 months)">
             <input type="number" className={inputCls} value={config?.season || 1}
               onChange={e => setConfig({ ...config, season: e.target.value })}
               onBlur={e => saveConfig({ season: parseInt(config.season) || 1 })} />
           </Field>
           {/* The hints used to say "Hosted on projectfeelz.com", which stopped
               being true when these started embedding. A YouTube link now
-              plays inside the School Sessions page; anything else still opens
+              plays inside the Sessions page; anything else still opens
               in a new tab exactly as before. A playlist is usually the better
               answer for a long tutorial: it breaks into segments and
               auto-advances, and the student never leaves the page.
@@ -715,7 +715,7 @@ export default function AdminSchoolSessions({ embedded = false }) {
               placeholder="https://youtube.com/playlist?list=..." />
           </Field>
           <SchoolLessonsEditor courseKey="viral" label="How to Make Viral Content, lessons" />
-          <Field label="YouTube playlist URL" hint="Shown as a clickable link on the School Sessions page, the shortlist songs or entry compilation, whichever you're linking">
+          <Field label="YouTube playlist URL" hint="Shown as a clickable link on the Sessions page, the shortlist songs or entry compilation, whichever you're linking">
             <input className={inputCls} value={config?.youtube_playlist_url || ''}
               onChange={e => setConfig({ ...config, youtube_playlist_url: e.target.value })}
               onBlur={e => saveConfig({ youtube_playlist_url: e.target.value || null })}
@@ -962,7 +962,7 @@ export default function AdminSchoolSessions({ embedded = false }) {
             <p className="text-xs font-bold text-white/50 uppercase tracking-wide">Prize money ({prizes.length})</p>
           </div>
           <p className="text-[11px] text-white/30">
-            School Sessions prizes are not paid by the platform. The school prize goes to an institution and the student prize usually goes to a minor, so neither can take a PayPal payout. Pay them by EFT and record it here: who, how much, the proof of payment reference, and the guardian who received it for a minor.
+            Sessions prizes are not paid by the platform. The school prize goes to an institution and the student prize usually goes to a minor, so neither can take a PayPal payout. Pay them by EFT and record it here: who, how much, the proof of payment reference, and the guardian who received it for a minor.
           </p>
 
           {entries.filter(e => e.is_winner).length > 0 && (

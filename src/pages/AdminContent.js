@@ -58,7 +58,7 @@ export default function AdminContent() {
         <div className="flex space-x-1 p-1 bg-white/[0.03] rounded-xl border border-white/[0.06] overflow-x-auto scrollbar-hide">
           <Tab active={tab === 'boost'}        onClick={() => switchTab('boost')}>Boost</Tab>
           <Tab active={tab === 'competitions'} onClick={() => switchTab('competitions')}>Competitions</Tab>
-          <Tab active={tab === 'schoolsessions'} onClick={() => switchTab('schoolsessions')}>School Sessions</Tab>
+          <Tab active={tab === 'schoolsessions'} onClick={() => switchTab('schoolsessions')}>Sessions</Tab>
           <Tab active={tab === 'moderation'}   onClick={() => switchTab('moderation')}>Moderation</Tab>
         </div>
       </div>

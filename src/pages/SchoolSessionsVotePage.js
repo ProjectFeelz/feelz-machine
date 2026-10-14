@@ -99,7 +99,7 @@ export default function SchoolSessionsVotePage() {
         <GraduationCap className="w-8 h-8 text-white/20" />
         <h1 className="text-lg font-bold text-white">Voting isn't open here</h1>
         <p className="text-sm text-white/40 max-w-xs">
-          <Link to="/schoolsessions" className="text-lime-400">Back to School Sessions</Link>
+          <Link to="/schoolsessions" className="text-lime-400">Back to Sessions</Link>
         </p>
       </div>
     );

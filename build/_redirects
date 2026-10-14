@@ -1,1 +1,39 @@
-/*    /index.html    200
+# public/_redirects
+#
+# WHY THIS FILE EXISTS AT ALL
+#
+# Everything here could live in netlify.toml, and most of it already does.
+# One rule does not work from there on this site: the rewrite that serves
+# /sitemap.xml from the sitemap function.
+#
+# What was checked, rather than assumed:
+#
+#   /.netlify/functions/sitemap   →  correct XML, ~180 URLs. The function is
+#                                    fine and always was.
+#   /robots.txt                   →  correct plain text. So `force = true`
+#                                    rewrites from netlify.toml ARE honoured.
+#   /sitemap.xml                  →  the app's index.html, with or without a
+#                                    cache-busting query. So the one rewrite
+#                                    that points at a FUNCTION is the one
+#                                    being skipped, and the /* catch-all
+#                                    underneath it hands back the SPA.
+#
+# That is why Google has been indexing the home page in place of a sitemap —
+# it asks for /sitemap.xml, gets an HTML page that is not a sitemap, and
+# discards it.
+#
+# Netlify reads _redirects BEFORE netlify.toml, so a rule here is evaluated
+# first and cannot be shadowed by the catch-all. The `200!` suffix is this
+# file's spelling of `force = true`.
+#
+# The netlify.toml rule is deliberately left in place. If the toml one starts
+# working again this one is simply redundant, and two rules that say the same
+# thing are cheaper than finding out the hard way that the remaining one was
+# the broken one.
+
+/sitemap.xml    /.netlify/functions/sitemap    200!
+
+# Same file under a path with no extension, so there is a URL to fall back on
+# if anything ever shadows the .xml one again. robots.txt keeps pointing at
+# /sitemap.xml, which is what search engines look for by convention.
+/sitemap        /.netlify/functions/sitemap    200!

@@ -797,7 +797,7 @@ export default function AdminFeed() {
                 <Info className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
                 <p>
                   Anything still landing in "unknown" was recorded before the surface fix went out.
-                  Only For You, the Home card, artist profiles and School Sessions used to tag
+                  Only For You, the Home card, artist profiles and Sessions used to tag
                   themselves, so Library, Browse, albums, playlists and the rest all ended up here.
                   It should fall away over the days after the deploy.
                 </p>

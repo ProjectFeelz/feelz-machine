@@ -1,6 +1,6 @@
 // src/utils/schoolPhase.js
 //
-// Which part of School Sessions we are in, and whether entries are open.
+// Which part of Sessions we are in, and whether entries are open.
 //
 // WHY THIS IS A SHARED FILE AND NOT A FUNCTION INSIDE THE PAGE
 //
@@ -49,10 +49,10 @@ export function entriesAreOpen(comp) {
 export function entryCta(comp, { signedIn } = {}) {
   const phase = currentPhase(comp);
   if (!signedIn) return { label: 'Get started', to: '/login' };
-  if (phase === 'awareness')   return { label: 'Get ready to enter', to: '/schoolsessions#what-you-need' };
+  if (phase === 'awareness')   return { label: 'Get ready to enter', to: '/sessions#what-you-need' };
   if (phase === 'submissions') return { label: 'Upload your entry',  to: '/dashboard?tab=upload' };
-  if (phase === 'voting')      return { label: "Vote, People's Choice", to: '/schoolsessions/vote' };
-  return { label: 'See the results', to: '/schoolsessions/vote' };
+  if (phase === 'voting')      return { label: "Vote, People's Choice", to: '/sessions/vote' };
+  return { label: 'See the results', to: '/sessions/vote' };
 }
 
 // A date somebody can plan around, rather than a number of days.

@@ -56,7 +56,7 @@ const T = {
   accentDim:'rgba(167,139,250,0.14)',
 };
 
-// The parser moved to src/utils/youtube.js so School Sessions could use it
+// The parser moved to src/utils/youtube.js so Sessions could use it
 // without importing this whole module, its player and its auth hooks. It is
 // re-exported here because src/pages/AdminNews.js:25 imports it from this
 // path, and changing that import buys nothing.

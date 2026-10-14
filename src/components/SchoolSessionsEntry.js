@@ -1,6 +1,6 @@
 // src/components/SchoolSessionsEntry.js
 // Toggle + form shown inside the main track upload flow. Renders nothing at
-// all, not just hidden, unless School Sessions is switched on AND this
+// all, not just hidden, unless Sessions is switched on AND this
 // visitor passes the region/school gate, so people not taking part never
 // see it in the page source.
 //
@@ -70,13 +70,25 @@ function Input(props) {
 export function schoolSessionsFormValid(enabled, form) {
   if (!enabled) return true;
   if (!form.entrantFullName.trim()) return false;
-  if (!form.verificationCode.trim()) return false;
+  // The verification code is NO LONGER REQUIRED, and this was not a
+  // preference, it was a wall. Codes are only ever minted by
+  // generate_verification_codes, which an admin runs per school, and zero
+  // codes have ever been issued. redeem_verification_code returns null for
+  // anything that is not a real unused code, and the upload panel threw on
+  // null, so every entrant on earth hit "ask at school reception for a new
+  // one" for a code that did not exist. Entries have been impossible since
+  // launch, which is most of why the count is zero.
+  //
+  // The field stays, because a school that does hand out codes can still use
+  // them and the entry records which code was redeemed. It is just optional.
   if (!/^\S+@\S+\.\S+$/.test(form.entrantEmail.trim())) return false;
   if (!form.tiktokHandle.trim()) return false;
   if (!form.tiktokVideoUrl.trim()) return false;
   if (!form.tiktokTaggedConfirmed) return false;
   if (!form.youtubeSubscribedConfirmed) return false;
-  if (!form.schoolId && !form.schoolFreeText.trim()) return false;
+  // School is optional now that anyone may enter. Asking a grown adult which
+  // school they attend is the clearest possible signal that a competition is
+  // not meant for them.
   if (!form.songId) return false;
   if (form.isGroup && form.groupMembers.filter(m => m.trim()).length === 0) return false;
   // The terms say entering means you agree to them. Until now nothing on this
@@ -147,7 +159,7 @@ export default function SchoolSessionsEntry({ enabled, setEnabled, form, setForm
     const closed = phaseDate(comp.entries_close_at);
     return (
       <div className="rounded-lg border border-lime-400/15 bg-lime-400/[0.03] p-4">
-        <p className="text-sm font-semibold text-white">School Sessions</p>
+        <p className="text-sm font-semibold text-white">Sessions</p>
         <p className="text-xs text-white/40 mt-1">
           {phase === 'awareness'
             ? (opens
@@ -167,7 +179,7 @@ export default function SchoolSessionsEntry({ enabled, setEnabled, form, setForm
         <div className="flex items-center space-x-2.5">
           <GraduationCap className="w-4 h-4 text-lime-400 flex-shrink-0" />
           <div>
-            <p className="text-sm font-medium text-white">Enter into {comp?.title || 'School Sessions'}</p>
+            <p className="text-sm font-medium text-white">Enter into {comp?.title || 'Sessions'}</p>
             <p className="text-[11px] text-white/40 mt-0.5">
               {comp?.prize_description || 'R10,000 CASH'}
             </p>
@@ -227,12 +239,12 @@ export default function SchoolSessionsEntry({ enabled, setEnabled, form, setForm
           </div>
 
           <div>
-            <Label>Verification code</Label>
+            <Label>Verification code <span className="text-white/30 font-normal">(optional)</span></Label>
             <Input value={form.verificationCode}
               onChange={e => set('verificationCode', e.target.value.toUpperCase())}
-              placeholder="From the introduction event or school reception" />
+              placeholder="Only if you were given one" />
             <p className="text-[11px] text-white/30 mt-1">
-              Handed out in person, not by email, ask at school reception if you missed the introduction.
+              Only if your school handed one out. Leave it blank otherwise, it is not needed to enter.
             </p>
           </div>
 
@@ -289,13 +301,13 @@ export default function SchoolSessionsEntry({ enabled, setEnabled, form, setForm
           </label>
 
           <div>
-            <Label>School</Label>
+            <Label>School <span className="text-white/30 font-normal">(optional)</span></Label>
             {!schoolNotListed ? (
               <div className="space-y-1.5">
                 <select value={form.schoolId}
                   onChange={e => set('schoolId', e.target.value)}
                   className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none">
-                  <option value="">Select school…</option>
+                  <option value="">Not a student / no school</option>
                   {schools.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                 </select>
                 <button type="button" onClick={() => { setSchoolNotListed(true); set('schoolId', ''); }}
@@ -418,7 +430,7 @@ export default function SchoolSessionsEntry({ enabled, setEnabled, form, setForm
               <a href="/schoolsessions/terms" target="_blank" rel="noopener noreferrer"
                 onClick={e => e.stopPropagation()}
                 className="text-lime-400 font-semibold underline underline-offset-2">
-                School Sessions terms
+                Sessions terms
               </a>
               . They open in a new tab, so nothing you have typed here is lost.
             </span>

@@ -78,7 +78,7 @@ export default function FollowUs({ variant = 'card', className = '' }) {
     <div className={`rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4 ${className}`}>
       <p className="text-sm font-bold text-white">Follow Feelz Machine</p>
       <p className="text-[11px] text-white/35 mt-0.5 mb-3 leading-relaxed">
-        New music, session clips and School Sessions go up on our channels first.
+        New music, session clips and Sessions go up on our channels first.
       </p>
       <div className="grid grid-cols-3 gap-2">
         {entries.map(({ key, url, label, Icon, colour }) => (

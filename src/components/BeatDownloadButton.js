@@ -1,6 +1,6 @@
 // src/components/BeatDownloadButton.js
 //
-// Downloads a School Sessions beat without leaving the app. The file is
+// Downloads a Sessions beat without leaving the app. The file is
 // fetched and saved from this page (see src/utils/downloadInApp.js), so no tab
 // is opened and nothing navigates away mid-entry.
 

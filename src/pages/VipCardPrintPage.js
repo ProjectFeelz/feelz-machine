@@ -24,9 +24,18 @@ export default function VipCardPrintPage() {
   if (!isAdmin) return null;
   if (!candidate) return null;
 
+  // www, not the bare domain, and this is the one place it really matters.
+  //
+  // feelzmachine.com redirects to www.feelzmachine.com, so a card printed with
+  // the bare domain sends every scan through a cross-origin redirect. Anybody
+  // who then installs the app gets it registered against an origin it never
+  // actually runs on, which among other things suppresses the app's own title
+  // bar. A redirect is invisible when you are browsing and permanent once it
+  // is printed on a card, so this has to be right before the cards are made.
+  const ORIGIN = 'https://www.feelzmachine.com';
   const targetUrl = candidate.ref_code
-    ? `https://feelzmachine.com?ref=${candidate.ref_code}`
-    : 'https://feelzmachine.com/schoolsessions';
+    ? `${ORIGIN}?ref=${candidate.ref_code}`
+    : `${ORIGIN}/sessions`;
   // No new dependency for this, a plain image URL from a QR generation
   // service renders exactly like any other <img>, no library needed.
   const qrImgUrl = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&margin=8&data=${encodeURIComponent(targetUrl)}`;
@@ -74,13 +83,13 @@ export default function VipCardPrintPage() {
         </div>
 
         <div style={{ color: '#C6FF3D', fontWeight: 'bold', fontSize: '7pt', letterSpacing: '2px', marginTop: '5.5mm' }}>HIGH SCHOOL COMPETITION</div>
-        <div style={{ fontWeight: 900, fontSize: '11pt', textTransform: 'uppercase', letterSpacing: '0.3px', marginTop: '1.2mm' }}>School Sessions</div>
+        <div style={{ fontWeight: 900, fontSize: '11pt', textTransform: 'uppercase', letterSpacing: '0.3px', marginTop: '1.2mm' }}>Sessions</div>
         <div style={{ fontSize: '16pt', fontWeight: 900, lineHeight: 1.08, textTransform: 'uppercase', marginTop: '5.5mm' }}>{firstName}{lastName && <><br />{lastName}</>}</div>
         <div style={{ color: '#C6FF3D', fontWeight: 'bold', fontSize: '8pt', letterSpacing: '1px', textTransform: 'uppercase', marginTop: '4mm' }}>Official Candidate</div>
 
         <div style={{ position: 'absolute', bottom: '4mm', left: '5mm', right: '5mm', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ color: '#9A9A9A', fontSize: '5.3pt', letterSpacing: '0.5px' }}>Candidate No. <b style={{ color: '#fff', fontSize: '6pt' }}>{String(candidate.candidate_number).padStart(3, '0')}</b></div>
-          <div style={{ color: '#666', fontSize: '4.5pt', letterSpacing: '0.5px' }}>feelzmachine.com/schoolsessions</div>
+          <div style={{ color: '#666', fontSize: '4.5pt', letterSpacing: '0.5px' }}>feelzmachine.com/sessions</div>
         </div>
       </div>
 

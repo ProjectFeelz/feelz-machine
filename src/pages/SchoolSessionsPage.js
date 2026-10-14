@@ -236,7 +236,7 @@ export default function SchoolSessionsPage() {
 
   const BASE_URL = 'https://www.feelzmachine.com';
   const pageUrl = `${BASE_URL}/schoolsessions`;
-  const pageTitle = 'School Sessions, a high school music competition · Feelz Machine';
+  const pageTitle = 'Sessions, a high school music competition · Feelz Machine';
   const pageDesc = comp?.prize_breakdown_text || comp?.prize_description
     || 'Pick a song from the shortlist and cover it. Cash prizes for the winning school and student, judged by a panel, with a public People\u2019s Choice vote too.';
 
@@ -394,7 +394,7 @@ export default function SchoolSessionsPage() {
                 when: comp?.entries_open_at && comp?.entries_close_at
                   ? `${phaseDate(comp.entries_open_at)} to ${phaseDate(comp.entries_close_at)}`
                   : null,
-                desc: 'Pick a song from the shortlist, record your cover, and toggle "Enter into School Sessions" when you upload.' },
+                desc: 'Pick a song from the shortlist, record your cover, and toggle "Enter into Sessions" when you upload.' },
               { key: 'voting', icon: ThumbsUp, title: 'Voting',
                 when: comp?.voting_close_at ? `Ends ${phaseDate(comp.voting_close_at)}` : null,
                 desc: 'Judges announce finalists and pick the winner. The public votes separately for the People\u2019s Choice pick.' },

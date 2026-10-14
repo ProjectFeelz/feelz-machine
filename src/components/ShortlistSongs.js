@@ -1,6 +1,6 @@
 // src/components/ShortlistSongs.js
 //
-// The School Sessions shortlist, as something you can actually use:
+// The Sessions shortlist, as something you can actually use:
 //
 //   tap a song   plays it in the app player with the whole shortlist queued,
 //                so skip moves to the other shortlisted song

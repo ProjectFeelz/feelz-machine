@@ -23,7 +23,23 @@ import { supabase } from '../../supabaseClient';
 import { platformStoryArtistId } from '../../utils/stories';
 import { Image as ImageIcon, Trash2, Clock, Loader, Plus } from 'lucide-react';
 
-const MAX_MB = 50;
+// 150MB, and only here.
+//
+// This composer renders in exactly one place, inside NewsletterComposePage,
+// which is gated to newsletter editors and admins. src/components/ArtistStories.js
+// has its own MAX_MB and stays at 50, so every ordinary artist is unchanged.
+// That is the whole of the per-role cap: no new column, no per-user setting.
+//
+// 150 is not arbitrary, it is what the stories bucket already allows
+// (file_size_limit 157286400). The client was the only thing refusing these
+// files; storage would have taken them all along. Going above 150 means
+// raising the bucket too, and then the client error turns into a storage
+// error, which reads much worse.
+//
+// Cost: Supabase bills storage per GB held, not per upload, and there is no
+// compute in an upload. A handful of 60 to 80MB vertical videos a week is
+// cents, not a tier change.
+const MAX_MB = 150;
 const ACCEPT = 'image/*,video/mp4,video/webm';
 
 const inputCls =

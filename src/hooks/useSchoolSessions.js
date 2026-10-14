@@ -1,5 +1,5 @@
 // src/hooks/useSchoolSessions.js
-// Fetches whether School Sessions is enabled + whether the current visitor
+// Fetches whether Sessions is enabled + whether the current visitor
 // is allowed to see it (region/school gate), via the school-sessions-gate
 // Netlify function. Used by both the upload panel entry and the landing page.
 //

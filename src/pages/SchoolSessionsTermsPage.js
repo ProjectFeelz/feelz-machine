@@ -28,10 +28,10 @@ export default function SchoolSessionsTermsPage() {
   return (
     <div className="min-h-screen bg-black text-white">
       <Helmet>
-        <title>School Sessions — Terms & Conditions · Feelz Machine</title>
-        <meta name="description" content="Official terms and conditions for the Feelz Machine School Sessions high school competition." />
+        <title>Sessions — Terms & Conditions · Feelz Machine</title>
+        <meta name="description" content="Official terms and conditions for the Feelz Machine Sessions high school competition." />
         <link rel="canonical" href={pageUrl} />
-        <meta property="og:title" content="School Sessions — Terms & Conditions" />
+        <meta property="og:title" content="Sessions — Terms & Conditions" />
         <meta property="og:url" content={pageUrl} />
       </Helmet>
 
@@ -39,15 +39,15 @@ export default function SchoolSessionsTermsPage() {
         <button onClick={() => goBack()} className="p-1.5 hover:bg-white/[0.06] rounded-lg transition">
           <ArrowLeft className="w-5 h-5 text-white/40" />
         </button>
-        <h1 className="text-base font-bold text-white">School Sessions — Terms & Conditions</h1>
+        <h1 className="text-base font-bold text-white">Sessions — Terms & Conditions</h1>
       </div>
 
       <div className="max-w-2xl mx-auto px-5 pt-8 pb-24">
         <p className="text-xs text-white/30 mb-8">Last updated: {LAST_UPDATED}</p>
 
         <Section title="1. What This Is">
-          <p>School Sessions is a competition run by {COMPANY} for high school students in South Africa. Entrants pick a song from a shortlist and submit their own vocal cover performance, solo or as a group, through the {COMPANY} platform.</p>
-          <p>Entering School Sessions means you agree to these Terms, in addition to the standard {COMPANY} Terms of Use.</p>
+          <p>Sessions is a competition run by {COMPANY} for high school students in South Africa. Entrants pick a song from a shortlist and submit their own vocal cover performance, solo or as a group, through the {COMPANY} platform.</p>
+          <p>Entering Sessions means you agree to these Terms, in addition to the standard {COMPANY} Terms of Use.</p>
         </Section>
 
         <Section title="2. Who Can Enter">
@@ -56,7 +56,7 @@ export default function SchoolSessionsTermsPage() {
         </Section>
 
         <Section title="3. How to Enter">
-          <p>Choose a song from the current season's shortlist and record your own vocal performance over it. You may enter solo or as a group. Only entries submitted through the {COMPANY} upload flow, with the School Sessions toggle enabled, are counted.</p>
+          <p>Choose a song from the current season's shortlist and record your own vocal performance over it. You may enter solo or as a group. Only entries submitted through the {COMPANY} upload flow, with the Sessions toggle enabled, are counted.</p>
           <p>One entry per person per season. Group entries must list every member at the time of submission — members can't be added after entries close.</p>
         </Section>
 
@@ -80,12 +80,12 @@ export default function SchoolSessionsTermsPage() {
         </Section>
 
         <Section title="8. Changes to the Competition">
-          <p>{COMPANY} may change the shortlist, timeline, prize details, or any other aspect of School Sessions before entries close, and may cancel or postpone a season if necessary. Where reasonably possible, we'll communicate material changes on the School Sessions page.</p>
+          <p>{COMPANY} may change the shortlist, timeline, prize details, or any other aspect of Sessions before entries close, and may cancel or postpone a season if necessary. Where reasonably possible, we'll communicate material changes on the Sessions page.</p>
         </Section>
 
         <Section title="9. Disclaimers & Limitation of Liability">
-          <p>School Sessions is provided "as is." {COMPANY} doesn't guarantee the competition will run on any particular schedule, or that any given entry will be reviewed, featured, or responded to individually.</p>
-          <p>To the maximum extent permitted by applicable law, {COMPANY} isn't liable for indirect, incidental, or consequential damages arising from your participation in School Sessions.</p>
+          <p>Sessions is provided "as is." {COMPANY} doesn't guarantee the competition will run on any particular schedule, or that any given entry will be reviewed, featured, or responded to individually.</p>
+          <p>To the maximum extent permitted by applicable law, {COMPANY} isn't liable for indirect, incidental, or consequential damages arising from your participation in Sessions.</p>
         </Section>
 
         <Section title="10. Governing Law">
@@ -93,7 +93,7 @@ export default function SchoolSessionsTermsPage() {
         </Section>
 
         <Section title="11. Contact">
-          <p>Questions about School Sessions or these Terms can be sent to <strong className="text-white/70">{CONTACT}</strong>.</p>
+          <p>Questions about Sessions or these Terms can be sent to <strong className="text-white/70">{CONTACT}</strong>.</p>
         </Section>
       </div>
     </div>

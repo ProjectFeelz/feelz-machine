@@ -1,5 +1,5 @@
 // src/pages/SchoolSessionsJudgePanel.js
-// Judge-facing view for School Sessions. Distinct from AdminSchoolSessions —
+// Judge-facing view for Sessions. Distinct from AdminSchoolSessions —
 // judges are NOT admins, and every action here goes through judge_set_finalist
 // / judge_set_winner, which only ever touch those two columns and check
 // judge/admin status server-side. There's no raw table update in this file.
@@ -93,14 +93,14 @@ export default function SchoolSessionsJudgePanel() {
   if (!isJudge) {
     return (
       <div className="min-h-screen bg-black text-white flex items-center justify-center px-6 text-center">
-        <p className="text-sm text-white/50">You don't have judge access for the current School Sessions competition.</p>
+        <p className="text-sm text-white/50">You don't have judge access for the current Sessions competition.</p>
       </div>
     );
   }
 
   return (
     <div className="min-h-screen bg-black text-white">
-      <Helmet><title>Judge Panel, School Sessions</title><meta name="robots" content="noindex, nofollow" /></Helmet>
+      <Helmet><title>Judge Panel, Sessions</title><meta name="robots" content="noindex, nofollow" /></Helmet>
       <div className="px-5 pt-8 pb-24">
         <div className="flex items-start space-x-3 mb-1">
           <button onClick={() => navigate('/hub')}
@@ -108,7 +108,7 @@ export default function SchoolSessionsJudgePanel() {
             <ArrowLeft className="w-4 h-4 text-white" />
           </button>
           <div>
-            <p className="text-lime-400 text-xs font-bold tracking-widest uppercase mb-1">School Sessions</p>
+            <p className="text-lime-400 text-xs font-bold tracking-widest uppercase mb-1">Sessions</p>
             <h1 className="text-2xl font-bold">Judge Panel</h1>
           </div>
         </div>

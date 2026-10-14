@@ -1,13 +1,13 @@
 // src/components/SchoolCourseCard.js
 //
-// A School Sessions course that plays where it is, instead of throwing a
+// A Sessions course that plays where it is, instead of throwing a
 // teenager into a new tab.
 //
 //
 // WHY THIS IS NOT JUST AN IFRAME
 //
 // The obvious version drops two YouTube players onto the page on load. On the
-// School Sessions page that is the wrong trade twice over: it is a page a
+// Sessions page that is the wrong trade twice over: it is a page a
 // student reaches on a phone, and it carries a live countdown, a shortlist
 // that plays through the app's own audio player, and an entry form. Two
 // embedded players cost roughly a megabyte before anybody has asked for a
