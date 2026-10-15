@@ -32,7 +32,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Newspaper, Sparkles, Play, ExternalLink, ChevronRight, ArrowUpRight,
+  Newspaper, Sparkles, Play, Pause, ExternalLink, ChevronRight, ArrowUpRight,
   Users, Music2, X, Pin,
 } from 'lucide-react';
 import { supabase } from '../supabaseClient';
@@ -219,6 +219,10 @@ export function NewsOverlay({ news, trending, loaded, isAdmin, onClose, onPlay, 
               normal state between scheduled ones. */}
           <PlatformStoryRail />
 
+          {/* The newest podcast episode, directly under the stories. Renders
+              nothing at all until there is one, which is the state today. */}
+          <LatestEpisode onClose={onClose} />
+
           {pinned.map(item => <NewsItem key={item.id} item={item} featured onClose={onClose} />)}
           {rest.map(item   => <NewsItem key={item.id} item={item} onClose={onClose} />)}
 
@@ -340,6 +344,124 @@ export function useHomeCardData({ creatorCount = 3 } = {}) {
   return { news, trending, creators, loaded };
 }
 
+
+// ── The latest podcast episode ─────────────────────────────────────────────
+//
+// Sits directly under the story rail, at the top of What's New.
+//
+// The shape is lifted from My Top Pick on the artist profile rather than
+// invented: one wide card, artwork on the left, a play affordance on the
+// right. That card already says "this is the one thing to press" better than
+// a rail does, and a rail would be wrong here anyway, because the point is
+// the newest episode rather than a back catalogue.
+//
+// It renders nothing until an episode exists, which is the state today: the
+// podcast flag and the episode numbering are deployed, and nothing has been
+// uploaded into them yet. So this appears by itself the day the first episode
+// goes up, with nothing to switch on.
+//
+// ORDERING. episode_number first, because a season is numbered and a re-upload
+// or a late correction would otherwise put the wrong one at the top. created_at
+// only breaks ties and covers an episode saved without a number.
+//
+// It calls playTrack only from a tap, which is the rule at the top of this
+// file: nothing here disturbs the music on its own, and a person pressing an
+// episode is not that.
+function LatestEpisode({ onClose }) {
+  const navigate = useNavigate();
+  const { playTrack, currentTrack, isPlaying, togglePlay } = usePlayer();
+  const [episode, setEpisode] = React.useState(null);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    supabase
+      .from('tracks')
+      .select('id, title, slug, file_url, cover_artwork_url, duration, episode_number, artist_id, is_published, is_preorder, release_date, artists!tracks_artist_id_fkey(artist_name, slug)')
+      .eq('is_podcast', true)
+      .eq('is_published', true)
+      .order('episode_number', { ascending: false, nullsFirst: false })
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        if (error) { console.warn('[whats-new] episodes unavailable:', error.code, error.message); return; }
+        setEpisode((data || [])[0] || null);
+      });
+    return () => { cancelled = true; };
+  }, []);
+
+  if (!episode) return null;
+
+  const ep = episode.episode_number;
+  const mins = episode.duration ? Math.round(episode.duration / 60) : null;
+  const isThisOne = currentTrack?.id === episode.id;
+
+  // Same handling the trending rows in this file use, so the episode behaves
+  // like every other playable thing on the surface: pressing the one that is
+  // already playing pauses it rather than starting it again, and the source
+  // is stamped so PlayerContext can tell a fresh press from a stale global.
+  const play = () => {
+    if (isThisOne) { togglePlay(); return; }
+    window.__feelz_play_source = 'whats_new_episode';
+    window.__feelz_play_source_at = Date.now();
+    playTrack(episode, [episode]);
+  };
+
+  return (
+    <div>
+      <p className="text-[10px] uppercase tracking-[0.2em] font-bold mb-2" style={{ color: T.accent }}>
+        Latest episode
+      </p>
+      <div
+        onClick={play}
+        className="flex items-center gap-4 p-4 rounded-2xl cursor-pointer transition hover:bg-white/[0.04] active:opacity-75"
+        style={{ background: T.surface, border: `1px solid ${T.accentDim}` }}
+      >
+        <div className="w-20 h-20 rounded-xl overflow-hidden flex-shrink-0" style={{ background: T.surfaceUp }}>
+          {episode.cover_artwork_url
+            ? <img src={coverUrl(episode.cover_artwork_url, COVER.tile)} alt="" className="w-full h-full object-cover" loading="lazy" />
+            : <div className="w-full h-full flex items-center justify-center"><Music2 className="w-7 h-7 text-white/20" /></div>}
+        </div>
+
+        <div className="min-w-0 flex-1">
+          {ep != null && (
+            <p className="text-[10px] uppercase tracking-[0.18em] font-bold mb-0.5" style={{ color: T.accent }}>
+              Episode {ep}
+            </p>
+          )}
+          <p className="text-[15px] font-bold text-white truncate">{episode.title}</p>
+          <p className="text-[12px] text-white/40 mt-0.5 truncate">
+            {episode.artists?.artist_name || 'Feelz Machine'}
+            {mins ? ` · ${mins} min` : ''}
+          </p>
+        </div>
+
+        <button
+          onClick={(e) => { e.stopPropagation(); play(); }}
+          className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 transition hover:opacity-80"
+          style={{ background: T.accentDim, border: `1px solid ${T.accent}40` }}
+          aria-label={`${isThisOne && isPlaying ? 'Pause' : 'Play'} ${episode.title}`}
+        >
+          {isThisOne && isPlaying
+            ? <Pause className="w-4 h-4" style={{ color: T.accent }} />
+            : <Play className="w-4 h-4" style={{ color: T.accent }} />}
+        </button>
+      </div>
+
+      {/* The whole catalogue is on the podcast's own profile, so the card
+          stays about one episode and the way to the rest is a plain link. */}
+      {episode.artists?.slug && (
+        <button
+          onClick={() => { onClose?.(); navigate(`/artist/${episode.artists.slug}`); }}
+          className="mt-2 inline-flex items-center gap-1 text-[12px] font-semibold transition hover:opacity-80"
+          style={{ color: T.accent }}
+        >
+          All episodes <ChevronRight className="w-3.5 h-3.5" />
+        </button>
+      )}
+    </div>
+  );
+}
 
 // ── The platform story rail ────────────────────────────────────────────────
 //
