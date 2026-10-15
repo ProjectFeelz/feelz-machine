@@ -87,7 +87,7 @@ export default function SchoolVipPrize({ signedIn }) {
   // sends here.
   React.useEffect(() => {
     let dead = false;
-    supabase.rpc('school_vip_rules').then(({ data, error }) => {
+    supabase.rpc('vip_rules').then(({ data, error }) => {
       if (dead) return;
       if (error) { console.warn('[vip] rules unavailable:', error.code, error.message); return; }
       setRules(Array.isArray(data) ? data[0] : data);
@@ -98,7 +98,7 @@ export default function SchoolVipPrize({ signedIn }) {
   React.useEffect(() => {
     if (!signedIn) { setProgress(null); return; }
     let dead = false;
-    supabase.rpc('my_school_vip_progress').then(({ data, error }) => {
+    supabase.rpc('my_vip_progress').then(({ data, error }) => {
       if (dead) return;
       if (error) { console.warn('[vip] progress unavailable:', error.code, error.message); return; }
       setProgress(Array.isArray(data) ? data[0] : data);
@@ -113,7 +113,11 @@ export default function SchoolVipPrize({ signedIn }) {
 
   const minSignups   = rules.min_signups ?? 15;
   const minListeners = rules.min_listeners ?? 5;
-  const perSchool    = rules.cards_per_school ?? 2;
+  // The season pool, not a per school allowance. Nothing about this card is
+  // keyed on a school any more: anyone who brings people here can earn one.
+  const cap          = rules.candidate_cap ?? 50;
+  const taken        = rules.cards_taken ?? 0;
+  const left         = Math.max(0, cap - taken);
 
   const link = progress?.ref_code ? `${SITE}/?ref=${progress.ref_code}` : null;
 
@@ -152,23 +156,29 @@ export default function SchoolVipPrize({ signedIn }) {
       {awarded ? (
         <p className="text-xs lg:text-sm text-white/60 leading-relaxed">
           You brought in {progress.signups} sign ups and {progress.listeners} of them
-          are listening. That is a seat in a judging round for {progress.school}, and it is
-          yours whatever happens to your cover.
+          are listening. That is a seat in a judging round, and it is yours whether or
+          not you entered a cover at all.
         </p>
       ) : (
         <>
+          {/* OPEN TO ANYBODY, which is the whole change. It used to be two
+              cards per school, counted only from the moment you entered a
+              cover, so a card was unreachable unless you were at a school and
+              competing. Now it is a season pool, it is not keyed on a school
+              anywhere, and you do not have to enter a cover to earn one. */}
           <p className="text-xs lg:text-sm text-white/60 leading-relaxed">
-            The cash goes to the best cover. The VIP card goes to the students who
-            bring people here. It is a seat in one of the judging rounds, so you
-            help decide who wins, and it is yours whether or not your own cover
-            places.
+            The prize goes to the best cover. This card goes to the people who bring
+            others here. It is a seat in one of the judging rounds, so you help decide
+            who wins, and you can earn one whether or not you enter a cover yourself.
           </p>
           <p className="text-xs lg:text-sm text-white/60 leading-relaxed">
-            {perSchool === 1 ? 'One card' : `${perSchool} cards`} per school. Bring in{' '}
+            Bring in{' '}
             <span className="text-white font-semibold">{minSignups} people who sign up</span>, of whom{' '}
             <span className="text-white font-semibold">{minListeners} actually listen</span>, and the
             card is yours.
-            {perSchool > 1 && ' Then it is between the two of you for who brought in more.'}
+            {left > 0
+              ? ` ${left} of the ${cap} cards for this season are still going.`
+              : ' Every card for this season has been claimed.'}
           </p>
         </>
       )}
@@ -179,16 +189,16 @@ export default function SchoolVipPrize({ signedIn }) {
           <Bar icon={Users}      label="Signed up"      have={Number(progress.signups)}   need={minSignups} />
           <Bar icon={Headphones} label="Actually listening" have={Number(progress.listeners)} need={minListeners} />
 
-          {!progress.has_entered && (
-            <p className="text-[11px] text-white/35 leading-relaxed">
-              You have not entered yet, so this is not counting towards a card at any
-              school. Enter first, then share your link.
-            </p>
-          )}
-
-          {progress.has_entered && !awarded && progress.school_has_card && perSchool === 1 && (
+          {/* The two notices that used to live here are gone with the rules
+              that made them true. One told you nothing counts until you have
+              entered a cover, and one told you somebody at your school had
+              already taken the card. Neither is a rule any more. What can
+              still stop you is the season running out of cards, and that is
+              said once, above, where the thresholds are. */}
+          {!awarded && left === 0 && (
             <p className="text-[11px] text-white/40 leading-relaxed">
-              Somebody at {progress.school} already holds this season's card.
+              All {cap} cards for this season have been claimed, so this is counting
+              towards next season.
             </p>
           )}
         </div>

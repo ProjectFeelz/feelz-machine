@@ -8,7 +8,7 @@
 // Format: entrants cover a song from a curated shortlist as a vocal
 // performance, solo or as a group. Judges pick finalists and the winner
 // directly; the public vote is a separate People's Choice pick. Winning
-// school gets R5,000, winning student(s) get R5,000 (split across the group
+// the winner gets R5,000 cash and R5,000 in studio equipment (split across
 // if applicable).
 
 import React from 'react';
@@ -339,7 +339,7 @@ export default function SchoolSessionsPage() {
         <div className="rounded-xl border border-white/10 bg-lime-400/[0.04] p-5 lg:p-8">
           <p className="text-3xl lg:text-5xl font-bold text-lime-400">{comp?.prize_description || 'R10,000 CASH'}</p>
           <p className="text-xs lg:text-sm text-white/50 mt-2 lg:mt-3 leading-relaxed lg:max-w-md">
-            {comp?.prize_breakdown_text || 'R5,000 to the winning school + R5,000 to the winning student, split among the group if you enter as one.'}
+            {comp?.prize_breakdown_text || 'R5,000 in cash and R5,000 in studio equipment. Split evenly if you enter as a group.'}
           </p>
         </div>
 
@@ -354,7 +354,7 @@ export default function SchoolSessionsPage() {
 
         {/* How it works */}
         <p className="text-xs text-white/50 leading-relaxed border-l-2 border-lime-400 pl-3">
-          <span className="text-white font-semibold">Pick a song from the shortlist and cover it</span>, your own vocal performance over the original track. Solo or as a group; if your group wins, the R5,000 student prize splits evenly across everyone listed.
+          <span className="text-white font-semibold">Pick a song from the shortlist and cover it</span>, your own vocal performance over the original track. Solo or as a group; if your group wins, the prize splits evenly across everyone listed.
         </p>
 
         {/* Song shortlist. Tapping one plays the whole shortlist in the app
@@ -452,7 +452,12 @@ export default function SchoolSessionsPage() {
           <ul className="space-y-2.5">
             {[
               ['An account here', user ? 'Done, you are signed in.' : 'Free, takes a minute.'],
-              ['Your school and district', 'You just say which school you are repping. Your school does not have to have signed up, and it can still win.'],
+              // Was "Your school and district", listed as a requirement, on a
+              // page that now says anyone can enter. The entry form stopped
+              // asking weeks ago; this list had not caught up, and a checklist
+              // is exactly where somebody decides whether a competition is
+              // meant for them.
+              ['A school, only if you are at one', 'Entirely optional, and it changes nothing about the prize or the VIP card. Leave it blank if you are not at a school.'],
               ['A cover of one of the songs above', 'Your own vocal over the original track. Solo or as a group.'],
               ['A TikTok post of it, tagging us', 'This one is required. You paste the link when you enter, so post it before you upload.'],
             ].map(([what, why]) => (

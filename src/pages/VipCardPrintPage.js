@@ -82,7 +82,12 @@ export default function VipCardPrintPage() {
           <div style={{ background: '#C6FF3D', color: '#0A0A0A', fontWeight: 'bold', fontSize: '4.3pt', letterSpacing: '0.5px', padding: '1mm 2.5mm', borderRadius: '5mm', whiteSpace: 'nowrap' }}>FOUNDING CANDIDATE</div>
         </div>
 
-        <div style={{ color: '#C6FF3D', fontWeight: 'bold', fontSize: '7pt', letterSpacing: '2px', marginTop: '5.5mm' }}>HIGH SCHOOL COMPETITION</div>
+        {/* Was HIGH SCHOOL COMPETITION. These get printed and handed out, so
+            a card that still says high school outlives every screen we can
+            edit. The VIP card itself is still a students' prize, which the
+            page explains; the card in somebody's hand should not be the thing
+            telling a 30 year old the competition is not for them. */}
+        <div style={{ color: '#C6FF3D', fontWeight: 'bold', fontSize: '7pt', letterSpacing: '2px', marginTop: '5.5mm' }}>COVER COMPETITION</div>
         <div style={{ fontWeight: 900, fontSize: '11pt', textTransform: 'uppercase', letterSpacing: '0.3px', marginTop: '1.2mm' }}>Sessions</div>
         <div style={{ fontSize: '16pt', fontWeight: 900, lineHeight: 1.08, textTransform: 'uppercase', marginTop: '5.5mm' }}>{firstName}{lastName && <><br />{lastName}</>}</div>
         <div style={{ color: '#C6FF3D', fontWeight: 'bold', fontSize: '8pt', letterSpacing: '1px', textTransform: 'uppercase', marginTop: '4mm' }}>Official Candidate</div>

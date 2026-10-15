@@ -263,7 +263,7 @@ function OnboardingGuard({ children }) {
       .catch(() => { if (!dead) { clearTimeout(bail); setNeedsFlow(false); } });
     return () => { dead = true; clearTimeout(bail); };
   }, [user, artist]);
-  const skipPaths = ['/setup', '/welcome', '/login', '/reset-password', '/about', '/terms-of-use', '/privacy-policy', '/artist/', '/@', '/schoolsessions'];
+  const skipPaths = ['/setup', '/welcome', '/login', '/reset-password', '/about', '/terms-of-use', '/privacy-policy', '/artist/', '/@', '/schoolsessions', '/sessions'];
 
   // Public paths always render immediately, regardless of auth loading state.
   // This matters specifically for the /@slug -> /artist/slug redirect: the URL
@@ -437,10 +437,10 @@ export default function AppRouter() {
                 <Route path="/home" element={<HomePage />} />
                 <Route path="/welcome" element={<Welcome />} />
 
-                {/* School Sessions lives INSIDE the app shell.
+                {/* Sessions lives INSIDE the app shell.
                     These three used to render outside AppLayout, next to the
                     Retail pages. Retail belongs out there: it is a separate
-                    product with its own chrome. School Sessions is not. It is
+                    product with its own chrome. Sessions is not. It is
                     a competition on Feelz Machine, so opening it dropped you
                     onto a page with no nav, no player and no way back into the
                     app short of the browser's back button, which does nothing
@@ -454,14 +454,32 @@ export default function AppRouter() {
                 <Route path="/t/:code" element={<ShortLinkPage />} />
                 <Route path="/a/:code" element={<ShortLinkPage />} />
 
+                {/* Sessions, at /sessions from now on.
+                    /schoolsessions is kept as a living alias rather than a
+                    redirect, and permanently: VipCardPrintPage prints
+                    "feelzmachine.com/schoolsessions" onto a physical card, so
+                    that path has to keep resolving for every card already in
+                    somebody's hand. Same components, two paths, nothing to
+                    break. New links should use /sessions. */}
+                <Route path="/sessions" element={
+                  <PageTitle title="Sessions"><SchoolSessionsPage /></PageTitle>
+                } />
+                <Route path="/sessions/vote" element={
+                  <PageTitle title="Vote: Sessions"><SchoolSessionsVotePage /></PageTitle>
+                } />
+                <Route path="/sessions/terms" element={
+                  <PageTitle title="Sessions: Terms"><SchoolSessionsTermsPage /></PageTitle>
+                } />
+                <Route path="/sessions/judge" element={<SchoolSessionsJudgePanel />} />
+
                 <Route path="/schoolsessions" element={
-                  <PageTitle title="School Sessions"><SchoolSessionsPage /></PageTitle>
+                  <PageTitle title="Sessions"><SchoolSessionsPage /></PageTitle>
                 } />
                 <Route path="/schoolsessions/vote" element={
-                  <PageTitle title="Vote: School Sessions"><SchoolSessionsVotePage /></PageTitle>
+                  <PageTitle title="Vote: Sessions"><SchoolSessionsVotePage /></PageTitle>
                 } />
                 <Route path="/schoolsessions/terms" element={
-                  <PageTitle title="School Sessions: Terms"><SchoolSessionsTermsPage /></PageTitle>
+                  <PageTitle title="Sessions: Terms"><SchoolSessionsTermsPage /></PageTitle>
                 } />
                 <Route path="/schoolsessions/judge" element={<SchoolSessionsJudgePanel />} />
                 <Route path="/for-you" element={<Navigate to="/" replace />} />

@@ -5,7 +5,7 @@
 // see it in the page source.
 //
 // Entrants submit a vocal performance/cover over one of a shortlisted set
-// of songs, solo or as a group (the R5,000 student prize splits across
+// of songs, solo or as a group (the prize splits evenly across
 // group members if they win).
 
 import React, { useState, useEffect } from 'react';
@@ -339,7 +339,7 @@ export default function SchoolSessionsEntry({ enabled, setEnabled, form, setForm
               ))}
             </div>
             <p className="text-[11px] text-white/30 mt-1">
-              If your group wins, the R5,000 student prize splits evenly across everyone listed below.
+              If your group wins, the prize splits evenly across everyone listed below.
             </p>
           </div>
 

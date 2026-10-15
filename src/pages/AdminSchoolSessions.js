@@ -732,7 +732,7 @@ export default function AdminSchoolSessions({ embedded = false }) {
                 onChange={e => setCompetition({ ...competition, prize_description: e.target.value })}
                 onBlur={e => saveCompetition({ prize_description: e.target.value })} />
             </Field>
-            <Field label="Prize breakdown (subtext under the headline)" hint='e.g. "R5,000 to the winning school + R5,000 to the winning student"'>
+            <Field label="Prize breakdown (subtext under the headline)" hint='e.g. "R5,000 in cash and R5,000 in studio equipment"'>
               <textarea className={inputCls} rows={2} value={competition.prize_breakdown_text || ''}
                 onChange={e => setCompetition({ ...competition, prize_breakdown_text: e.target.value })}
                 onBlur={e => saveCompetition({ prize_breakdown_text: e.target.value })} />
@@ -962,7 +962,7 @@ export default function AdminSchoolSessions({ embedded = false }) {
             <p className="text-xs font-bold text-white/50 uppercase tracking-wide">Prize money ({prizes.length})</p>
           </div>
           <p className="text-[11px] text-white/30">
-            Sessions prizes are not paid by the platform. The school prize goes to an institution and the student prize usually goes to a minor, so neither can take a PayPal payout. Pay them by EFT and record it here: who, how much, the proof of payment reference, and the guardian who received it for a minor.
+            Sessions prizes are not paid by the platform. The cash half is often going to a minor, who cannot take a PayPal payout, and the equipment half is not money at all. Pay the cash by EFT, arrange the equipment yourself, and record both here: who, how much, the proof of payment or delivery reference, and the guardian who received it for a minor.
           </p>
 
           {entries.filter(e => e.is_winner).length > 0 && (

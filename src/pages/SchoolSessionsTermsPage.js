@@ -6,7 +6,7 @@ import { ArrowLeft } from 'lucide-react';
 
 const COMPANY      = 'Feelz Machine';
 const CONTACT      = 'legal@feelzmachine.com';
-const LAST_UPDATED = 'September 2026';
+const LAST_UPDATED = 'October 2026';
 const BASE_URL     = 'https://www.feelzmachine.com';
 
 function Section({ title, children }) {
@@ -28,10 +28,10 @@ export default function SchoolSessionsTermsPage() {
   return (
     <div className="min-h-screen bg-black text-white">
       <Helmet>
-        <title>Sessions — Terms & Conditions · Feelz Machine</title>
-        <meta name="description" content="Official terms and conditions for the Feelz Machine Sessions high school competition." />
+        <title>Sessions, Terms and Conditions · Feelz Machine</title>
+        <meta name="description" content="Official terms and conditions for the Feelz Machine Sessions cover competition." />
         <link rel="canonical" href={pageUrl} />
-        <meta property="og:title" content="Sessions — Terms & Conditions" />
+        <meta property="og:title" content="Sessions, Terms and Conditions" />
         <meta property="og:url" content={pageUrl} />
       </Helmet>
 
@@ -39,25 +39,25 @@ export default function SchoolSessionsTermsPage() {
         <button onClick={() => goBack()} className="p-1.5 hover:bg-white/[0.06] rounded-lg transition">
           <ArrowLeft className="w-5 h-5 text-white/40" />
         </button>
-        <h1 className="text-base font-bold text-white">Sessions — Terms & Conditions</h1>
+        <h1 className="text-base font-bold text-white">Sessions, Terms and Conditions</h1>
       </div>
 
       <div className="max-w-2xl mx-auto px-5 pt-8 pb-24">
         <p className="text-xs text-white/30 mb-8">Last updated: {LAST_UPDATED}</p>
 
         <Section title="1. What This Is">
-          <p>Sessions is a competition run by {COMPANY} for high school students in South Africa. Entrants pick a song from a shortlist and submit their own vocal cover performance, solo or as a group, through the {COMPANY} platform.</p>
+          <p>Sessions is a cover competition run by {COMPANY} in South Africa. Entrants pick a song from a shortlist and submit their own vocal cover performance, solo or as a group, through the {COMPANY} platform.</p>
           <p>Entering Sessions means you agree to these Terms, in addition to the standard {COMPANY} Terms of Use.</p>
         </Section>
 
         <Section title="2. Who Can Enter">
-          <p>Open to high school students in South Africa, subject to any school allow-list or regional restriction active for the current season. {COMPANY} may verify eligibility and remove entries that don't meet these requirements at any time.</p>
+          <p>Open to anyone in South Africa, subject to any regional restriction active for the current season. You do not have to be a student, and you do not have to name a school. Entrants at a school may say which one they are representing; it is optional and it does not affect the prize or the VIP card. {COMPANY} may verify eligibility and remove entries that don't meet these requirements at any time.</p>
           <p>Entrants under 18 must have a parent or guardian's consent, provided directly at the point of entry. Entries from minors without recorded guardian consent will not be considered.</p>
         </Section>
 
         <Section title="3. How to Enter">
           <p>Choose a song from the current season's shortlist and record your own vocal performance over it. You may enter solo or as a group. Only entries submitted through the {COMPANY} upload flow, with the Sessions toggle enabled, are counted.</p>
-          <p>One entry per person per season. Group entries must list every member at the time of submission — members can't be added after entries close.</p>
+          <p>One entry per person per season. Group entries must list every member at the time of submission, and members can't be added after entries close.</p>
         </Section>
 
         <Section title="4. Judging & Voting">
@@ -66,13 +66,14 @@ export default function SchoolSessionsTermsPage() {
         </Section>
 
         <Section title="5. Prizes">
-          <p>The total prize pool is R10,000: R5,000 to the winning school, and R5,000 to the winning student, split evenly if the winning entry was a group. {COMPANY} may adjust the prize amount or structure for future seasons; the current season's terms are those in effect when you enter.</p>
+          <p>The winner receives R10,000 in total: R5,000 in cash and R5,000 in studio equipment. A group entry splits the prize evenly between the members listed at submission. {COMPANY} selects the equipment and may substitute items of equivalent value where something is unavailable. {COMPANY} may adjust the prize amount or structure for future seasons; the current season's terms are those in effect when you enter.</p>
+          <p>The VIP card, a seat in a judging round, is a separate prize open to anyone with a {COMPANY} account, awarded on how many people they bring to the platform. You do not have to enter a cover to earn one. The number of cards available each season and the thresholds are shown on the Sessions page and may change between seasons.</p>
           <p>Prizes are paid at {COMPANY}'s reasonable discretion regarding timing and method, and may require the winner (or a guardian, for minors) to provide payment details and identity confirmation before payout. Prizes have no cash-equivalent alternative unless {COMPANY} offers one.</p>
         </Section>
 
         <Section title="6. Your Entry & Ownership">
           <p>You keep ownership of your own performance. By entering, you grant {COMPANY} a non-exclusive, royalty-free license to host, display, and promote your entry on the {COMPANY} platform and its associated social channels, for as long as reasonably needed to run and promote the competition.</p>
-          <p>You're responsible for making sure your entry doesn't infringe anyone else's rights. Entries are covers submitted specifically for this non-commercial competition context — that doesn't transfer any rights in the original song itself, which remain with its rightful owners.</p>
+          <p>You're responsible for making sure your entry doesn't infringe anyone else's rights. Entries are covers submitted specifically for this non-commercial competition context, which does not transfer any rights in the original song itself, which remain with its rightful owners.</p>
         </Section>
 
         <Section title="7. Conduct & Disqualification">
