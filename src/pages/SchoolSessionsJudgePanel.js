@@ -55,7 +55,7 @@ export default function SchoolSessionsJudgePanel() {
     setActionError(null);
     const { error } = await supabase.rpc('judge_set_finalist', { p_entry_id: entry.id, p_value: !entry.is_finalist });
     if (error) {
-      setActionError('Could not update — try again.');
+      setActionError('Could not update, please try again.');
     } else {
       setEntries(prev => prev.map(e => e.id === entry.id ? { ...e, is_finalist: !e.is_finalist } : e));
     }
@@ -67,7 +67,7 @@ export default function SchoolSessionsJudgePanel() {
     setActionError(null);
     const { error } = await supabase.rpc('judge_set_winner', { p_entry_id: entry.id, p_value: !entry.is_winner });
     if (error) {
-      setActionError('Could not update — try again.');
+      setActionError('Could not update, please try again.');
     } else {
       setEntries(prev => prev.map(e => e.id === entry.id ? { ...e, is_winner: !e.is_winner } : e));
     }

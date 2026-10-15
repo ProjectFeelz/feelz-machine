@@ -85,7 +85,7 @@ export default function SchoolSessionsVotePage() {
       setVotedEntryId(entryId);
       setVoteCounts(prev => ({ ...prev, [entryId]: (prev[entryId] || 0) + 1 }));
     } catch (err) {
-      setError(err.message?.includes('duplicate') ? "You've already voted." : 'Could not cast your vote — try again.');
+      setError(err.message?.includes('duplicate') ? "You've already voted." : 'Could not cast your vote, please try again.');
     }
     setVoting(null);
   };
@@ -116,21 +116,21 @@ export default function SchoolSessionsVotePage() {
           <div className="w-8 h-8 rounded-lg border border-lime-400 flex items-center justify-center text-lime-400 font-bold text-xs">FM</div>
           <div>
             <p className="font-bold text-sm leading-none">FEELZ MACHINE</p>
-            <p className="text-[10px] text-white/30 tracking-wider mt-0.5">SCHOOL SESSIONS</p>
+            <p className="text-[10px] text-white/30 tracking-wider mt-0.5">SESSIONS</p>
           </div>
         </div>
 
         <div className="space-y-2">
           <h1 className="text-2xl font-bold">People's Choice vote</h1>
           <p className="text-sm text-white/50">
-            Judges pick the finalists and the winner. This vote is a separate People's Choice pick — one vote per person.
+            Judges pick the finalists and the winner. This vote is a separate People's Choice pick, one vote per person.
           </p>
           {totalVotes > 0 && <p className="text-xs text-white/30">{totalVotes} vote{totalVotes === 1 ? '' : 's'} so far</p>}
         </div>
 
         {phase === 'not_open' && (
           <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4 text-sm text-white/50">
-            Voting opens {comp?.voting_open_at ? new Date(comp.voting_open_at).toLocaleDateString('en-ZA', { day: 'numeric', month: 'long' }) : 'soon'} — check back then.
+            Voting opens {comp?.voting_open_at ? new Date(comp.voting_open_at).toLocaleDateString('en-ZA', { day: 'numeric', month: 'long' }) : 'soon'}, check back then.
           </div>
         )}
 

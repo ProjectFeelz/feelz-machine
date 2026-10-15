@@ -142,7 +142,7 @@ export default function AdminHomeHero() {
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <input className={inputCls} placeholder="Eyebrow (e.g. SCHOOL SESSIONS)" value={form.eyebrow}
+          <input className={inputCls} placeholder="Eyebrow (e.g. COVER COMPETITION)" value={form.eyebrow}
             onChange={e => setForm({ ...form, eyebrow: e.target.value })} />
           <input className={inputCls} placeholder="Title" value={form.title}
             onChange={e => setForm({ ...form, title: e.target.value })} />

@@ -116,7 +116,7 @@ export default function VipCardPrintPage() {
           This is <b style={{ color: '#C6FF3D' }}>your</b> code. Every friend who joins through it counts toward your affiliate rewards. Post it, share it, get people voting for you.
         </div>
         <div style={{ position: 'absolute', bottom: '3mm', left: 0, right: 0, textAlign: 'center', fontSize: '4pt', color: '#555', letterSpacing: '0.5px' }}>
-          FEELZ MACHINE · SCHOOL SESSIONS
+          FEELZ MACHINE · SESSIONS
         </div>
       </div>
     </div>
