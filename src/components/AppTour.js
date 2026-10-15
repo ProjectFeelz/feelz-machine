@@ -238,7 +238,11 @@ function RoleStep({ onContinue }) {
       console.error('[tour] could not save role:', err?.code, err?.message, err?.hint || '');
       setSaveError(
         err?.code === 'PGRST202' || err?.code === '42883'
-          ? 'Setup is not finished on our side yet. Migration 97 has not run. Nothing was lost; try again shortly.'
+          // The migration number was in this sentence, which told a new
+          // account on its first screen that something was unfinished behind
+          // the scenes and named a number that meant nothing to them. The
+          // console line above still carries the code for whoever is debugging.
+          ? 'We could not finish setting up your account just yet. Nothing was lost, please try again in a moment.'
           : 'We could not finish setting up your account. Please try again.'
       );
       setSaving(false);
