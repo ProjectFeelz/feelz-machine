@@ -4,7 +4,8 @@
 
 import React from 'react';
 import { Helmet } from 'react-helmet-async';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, useLocation } from 'react-router-dom';
+import useGoBack from '../hooks/useGoBack';
 import { Loader } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 
@@ -19,6 +20,11 @@ function extractYouTubeId(url) {
 
 export default function NewsletterPostPage() {
   const { slug } = useParams();
+  // Declared before the loading and not-found early returns below, because a
+  // hook that is skipped on some renders breaks the rules of hooks.
+  const goBack = useGoBack('/');
+  const location = useLocation();
+  const cameFromInApp = !!location.key && location.key !== 'default';
   const [post, setPost] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
 
@@ -69,7 +75,23 @@ export default function NewsletterPostPage() {
         {post.excerpt && <meta name="twitter:description" content={post.excerpt} />}
       </Helmet>
       <div className="max-w-2xl mx-auto px-5 pt-10 pb-24">
-        <Link to="/" className="text-xs text-white/30 hover:text-white/60">&larr; Feelz Machine</Link>
+        {/* THE ARROW USED TO BE A LINK STRAIGHT TO "/".
+            It reads as a back button, and it was not one. Opening a post from
+            Notifications and pressing it landed the person on For You rather
+            than back in their notifications, and because a Link pushes rather
+            than going back, the real back button then returned them to the post
+            they had just left. Any route that opens a post had the same
+            problem: the feed, an artist profile, a shared link.
+            useGoBack goes back when there is somewhere to go back to, and falls
+            back to the home page only on a cold open, which is the case the
+            original link was written for. The label follows the behaviour, so
+            it never promises the wrong destination. */}
+        <button
+          onClick={goBack}
+          className="text-xs text-white/30 hover:text-white/60 transition"
+        >
+          &larr; {cameFromInApp ? 'Back' : 'Feelz Machine'}
+        </button>
         <h1 className="text-3xl font-bold text-white mt-4 mb-2">{post.title}</h1>
         <p className="text-xs text-white/30 mb-8">{new Date(post.created_at).toLocaleDateString()}</p>
         {ytId && (

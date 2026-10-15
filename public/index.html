@@ -3,17 +3,26 @@
   <head>
     <meta charset="utf-8" />
     <meta name="google-site-verification" content="7xKu4iEnb4KoBjxHpJVf68s891Bul5ANhVz96Sl_tEI" />
-    <!-- THE SITE HAD NO ICON AT ALL, and this is why. These two tags pointed at
+    <!-- THE SITE HAD NO ICON AT ALL, and this is why. These tags pointed at
          favicon.ico and logo192.png, which are Create React App's defaults and
          were never replaced when the real icons were added as icon-192.png and
-         friends. Neither file is in public/, so both requests 404: no icon in
-         the browser tab, none in a bookmark, none beside the result in Google,
-         and no icon when somebody adds the app to an iPhone home screen.
-         Pointed at the files that actually exist. PNG is fine for a favicon in
-         every current browser, so there is no need to make an .ico. -->
+         friends. Neither file was in public/, so both requests fell through to
+         the SPA catch-all and came back as HTML: no icon in the browser tab,
+         none in a bookmark, none beside the result in Google, and no icon when
+         somebody adds the app to an iPhone home screen.
+         WHY THERE IS NOW EXACTLY ONE rel="icon", AND A REAL .ico
+         Google shows the generic globe instead of a site's favicon when it
+         finds several rel="icon" references and any one of them does not meet
+         its rules. There used to be three here: 192, 512 and a duplicate
+         "shortcut icon". One clean reference removes that whole class of
+         problem.
+         The second half matters more. Googlebot-Image fetches /favicon.ico by
+         convention whatever the markup says, and with no such file the SPA
+         catch-all answered with 5 KB of HTML carrying a 200. That is not a
+         missing icon, it is a broken one, which is the likelier reason the
+         globe was showing. public/favicon.ico is now a genuine multi size icon
+         (16 through 256), so that request returns an image. -->
     <link rel="icon" type="image/png" sizes="192x192" href="%PUBLIC_URL%/icon-192.png" />
-    <link rel="icon" type="image/png" sizes="512x512" href="%PUBLIC_URL%/icon-512.png" />
-    <link rel="shortcut icon" type="image/png" href="%PUBLIC_URL%/icon-192.png" />
     <!-- interactive-widget=resizes-content is the fix for the composer not sticking
          to the top of the keyboard on Android. Without it Chrome defaults to
          resizes-visual: the layout viewport stays full-screen when the keyboard

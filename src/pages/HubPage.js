@@ -333,7 +333,13 @@ export default function HubPage() {
                   /admin/school-sessions into the address bar. The path is
                   unchanged, so any bookmark still works. */}
               <LinkCard icon={SlidersHorizontal} label="Run the Competition" description="Dates, schools, shortlist, courses, entries" path="/admin/school-sessions" color="bg-lime-500/20" />
-              <LinkCard icon={Trophy} label="Public Page Preview" description="See it even while it's switched off" path="/sessions" color="bg-lime-500/20" />
+              {/* Only while the competition is switched off, which is the
+                  whole point of a preview. With it on, the public Sessions
+                  section below shows every eligible viewer a card to the same
+                  /sessions page, so an admin saw the identical link twice. */}
+              {!sessionsOpen && (
+                <LinkCard icon={Trophy} label="Public Page Preview" description="See it even while it's switched off" path="/sessions" color="bg-lime-500/20" />
+              )}
               <LinkCard icon={Trophy} label="Judge Panel" description="Mark finalists and pick the winner" path="/sessions/judge" color="bg-lime-500/20" />
             </Section>
             </>
