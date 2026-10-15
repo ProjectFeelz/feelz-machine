@@ -425,9 +425,16 @@ export default function Welcome() {
         //
         // If both fail the answers still save. A picture is the one optional
         // thing on this screen and it must never cost somebody their name.
-        const buckets = role === 'listener'
-          ? ['profile-images', 'artist-images']
-          : ['artist-images'];
+        // 'profile-images' IS NOT A BUCKET. Checked against the live project:
+        // the buckets are apk-releases, artist-images, artist-voice-memos,
+        // campaign-images, competition-entries, covers, feelz-samples, stories
+        // and track-videos. So every listener's avatar made a round trip that
+        // could only ever fail before falling back to the one that works.
+        // artist-images holds all 102 profile images on the platform and its
+        // insert policy is simply bucket_id = 'artist-images' for an
+        // authenticated caller, so there is nothing a listener fails that an
+        // artist passes.
+        const buckets = ['artist-images'];
         for (const bucket of buckets) {
           const { error: upErr } = await supabase.storage
             .from(bucket).upload(path, avatarFile, { contentType: avatarFile.type, upsert: true });
@@ -533,9 +540,19 @@ export default function Welcome() {
           updated_at: new Date().toISOString(),
         }, { onConflict: 'user_id' });
       }
-    } catch {
+    } catch (e) {
+      // THE MESSAGE USED TO SAY NOTHING. One line for every possible failure
+      // in the whole block above, shown on the screen where somebody has just
+      // picked a photo, so it reads as "the image failed" whatever actually
+      // broke. Somebody reported exactly that and there was no way to tell
+      // from here whether it was the upload, the artists write or the
+      // listeners write.
+      console.error('[welcome] save failed:', e?.message || e, e);
       if (!silent) {
-        setError('That did not save. You can set it in your profile instead.');
+        setError(
+          `That did not save${e?.message ? ` (${e.message})` : ''}. ` +
+          'You can set it in your profile instead.'
+        );
         setSaving(false);
         return;
       }

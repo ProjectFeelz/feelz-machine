@@ -1411,17 +1411,46 @@ export function PlayerProvider({ children }) {
     // change, so the panel reopened itself as soon as the next song began
     // and the minimise button looked broken. The mini player's own tap
     // handler is the explicit way back in.
-    if (trackList.length > 0) {
-      setQueue(trackList);
-      const idx = trackList.findIndex(t => t.id === track.id);
-      const resolvedIdx = idx >= 0 ? idx : 0;
-      setQueueIndex(resolvedIdx);
-      queueRef.current = trackList;
-      queueIndexRef.current = resolvedIdx;
-      // Preload next track's cover too
-      const nextIdx = resolvedIdx + 1;
-      if (nextIdx < trackList.length) preloadCover(trackList[nextIdx]);
+    // ── THE QUEUE, AND THE TWO WAYS IT USED TO GO WRONG ──────────────────────
+    //
+    // 1. A TRACK THAT IS NOT IN THE LIST IT WAS PLAYED WITH.
+    //    findIndex returned -1 and the old code read that as 0. So the queue
+    //    index pointed at the first track of the list while something else
+    //    was playing, and "next" meant the second item of a list the playing
+    //    track was never part of. On an artist page that is every tap outside
+    //    the main track list: the top pick, a collaboration, an album row.
+    //    Whatever happened next was wrong, and if the list held one item it
+    //    was the end of the queue, so nothing happened at all.
+    //
+    // 2. AN EMPTY LIST LEFT THE OLD QUEUE IN PLACE.
+    //    The whole block was skipped, so the previous screen's queue and its
+    //    index survived under a track from this one. Next played something
+    //    from wherever you had been before, or nothing, depending on where
+    //    that stale index happened to sit.
+    //
+    // Both are fixed the same way: the playing track is ALWAYS in the queue
+    // and the index always points at it. When it is not in the list it is put
+    // at the front, so next is the rest of that list rather than a guess.
+    const inList = trackList.findIndex(t => t.id === track.id);
+    let nextQueue;
+    let resolvedIdx;
+    if (inList >= 0) {
+      nextQueue = trackList;
+      resolvedIdx = inList;
+    } else if (trackList.length > 0) {
+      nextQueue = [track, ...trackList.filter(t => t.id !== track.id)];
+      resolvedIdx = 0;
+    } else {
+      nextQueue = [track];
+      resolvedIdx = 0;
     }
+    setQueue(nextQueue);
+    setQueueIndex(resolvedIdx);
+    queueRef.current = nextQueue;
+    queueIndexRef.current = resolvedIdx;
+    // Preload next track's cover too
+    const nextIdx = resolvedIdx + 1;
+    if (nextIdx < nextQueue.length) preloadCover(nextQueue[nextIdx]);
   }, [currentTrack, isPlaying, flushListeningEvent]);
 
   // A one-line notice anyone can raise.

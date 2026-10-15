@@ -164,6 +164,16 @@ const BLANK_TRACK = {
   // Beat-specific fields
   is_beat: false, bpm: '', beat_key: '', beat_scale: 'Minor',
   beat_licence: 'basic',
+  // PODCAST EPISODES.
+  //
+  // Same shape as is_beat: a kind marked on the row, not a separate table and
+  // not a separate upload flow. An episode is still a track, it still plays in
+  // the same player, it still has a page and a share link.
+  //
+  // What the flag buys is the one thing that matters: episodes stay out of the
+  // places where music is DISCOVERED. See the comment on the toggle below for
+  // where that line is drawn and why it is drawn there rather than everywhere.
+  is_podcast: false,
 };
 
 const BLANK_RELEASE = {
@@ -883,6 +893,7 @@ function AddTrackToAlbum({
         youtube_url:       trackForm.youtube_url?.trim() || null,
         ai_content:        trackForm.ai_content || 'human',
         is_beat:           trackForm.is_beat || false,
+        is_podcast:        trackForm.is_podcast || false,
         bpm:               trackForm.bpm ? parseInt(trackForm.bpm) : null,
         beat_key:          trackForm.beat_key || null,
         beat_scale:        trackForm.beat_scale || null,
@@ -1081,6 +1092,40 @@ function AddTrackToAlbum({
           ))}
         </div>
         <p className="text-[11px] text-white/30 mt-1.5">Shown publicly on the track. Misrepresenting AI use may be corrected after manual review.</p>
+      </div>
+
+      {/* PODCAST EPISODE.
+          Not a new upload flow and not a new table. An episode is a track: it
+          plays in the same player, it has the same page, it shares the same
+          way, and it sits on the artist's profile with everything else they
+          have put out.
+          What the toggle changes is narrow and deliberate. An episode is kept
+          out of the places where somebody is looking for MUSIC: the For You
+          feed, the home page rows, browse, and the recommendation engine. It
+          is not hidden from the places where somebody is looking for YOU.
+          That line is where it is because the alternative, filtering it out of
+          all 132 places this app reads the tracks table, is how an episode
+          ends up invisible on the artist's own page. */}
+      <div>
+        <button type="button"
+          onClick={() => setTrackForm({ ...trackForm, is_podcast: !trackForm.is_podcast })}
+          className={`w-full text-left px-3.5 py-3 rounded-xl border transition ${
+            trackForm.is_podcast
+              ? 'bg-purple-500/15 border-purple-400/40'
+              : 'bg-white/[0.03] border-white/10 hover:bg-white/[0.05]'}`}>
+          <div className="flex items-center gap-3">
+            <span className={`w-9 h-5 rounded-full flex-shrink-0 relative transition ${trackForm.is_podcast ? 'bg-purple-500' : 'bg-white/15'}`}>
+              <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${trackForm.is_podcast ? 'left-4.5' : 'left-0.5'}`} />
+            </span>
+            <span className="min-w-0">
+              <span className="block text-sm font-medium text-white">This is a podcast episode</span>
+              <span className="block text-[11px] text-white/40 mt-0.5">
+                It stays off the music feeds, the home rows, browse and recommendations. It still
+                lives on your profile, still plays, and can still be shared by link.
+              </span>
+            </span>
+          </div>
+        </button>
       </div>
 
       <div className="flex flex-wrap gap-4">
@@ -1548,6 +1593,7 @@ export default function TrackUploadPanel() {
         youtube_url:       trackForm.youtube_url?.trim() || null,
         ai_content:        trackForm.ai_content || 'human',
         is_beat:           trackForm.is_beat || false,
+        is_podcast:        trackForm.is_podcast || false,
         bpm:               trackForm.bpm ? parseInt(trackForm.bpm) : null,
         beat_key:          trackForm.beat_key || null,
         beat_scale:        trackForm.beat_scale || null,

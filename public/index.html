@@ -3,7 +3,17 @@
   <head>
     <meta charset="utf-8" />
     <meta name="google-site-verification" content="7xKu4iEnb4KoBjxHpJVf68s891Bul5ANhVz96Sl_tEI" />
-    <link rel="icon" href="%PUBLIC_URL%/favicon.ico" />
+    <!-- THE SITE HAD NO ICON AT ALL, and this is why. These two tags pointed at
+         favicon.ico and logo192.png, which are Create React App's defaults and
+         were never replaced when the real icons were added as icon-192.png and
+         friends. Neither file is in public/, so both requests 404: no icon in
+         the browser tab, none in a bookmark, none beside the result in Google,
+         and no icon when somebody adds the app to an iPhone home screen.
+         Pointed at the files that actually exist. PNG is fine for a favicon in
+         every current browser, so there is no need to make an .ico. -->
+    <link rel="icon" type="image/png" sizes="192x192" href="%PUBLIC_URL%/icon-192.png" />
+    <link rel="icon" type="image/png" sizes="512x512" href="%PUBLIC_URL%/icon-512.png" />
+    <link rel="shortcut icon" type="image/png" href="%PUBLIC_URL%/icon-192.png" />
     <!-- interactive-widget=resizes-content is the fix for the composer not sticking
          to the top of the keyboard on Android. Without it Chrome defaults to
          resizes-visual: the layout viewport stays full-screen when the keyboard
@@ -48,7 +58,7 @@
     <meta name="twitter:image:alt" content="Feelz Machine, Independent Music Streaming" />
 
     <!-- PWA -->
-    <link rel="apple-touch-icon" href="%PUBLIC_URL%/logo192.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="%PUBLIC_URL%/icon-180.png" />
     <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
 
     <!-- Structured Data, Website with search -->

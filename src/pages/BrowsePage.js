@@ -298,13 +298,13 @@ export default function BrowsePage() {
       ] = await Promise.all([
         supabase.from('tracks')
           .select('*, albums(title, cover_artwork_url, price), artists!tracks_artist_id_fkey(id, artist_name, slug, profile_image_url, is_verified, tier)')
-          .eq('is_published', true).order('engagement_score', { ascending: false }).limit(50),
+          .eq('is_published', true).eq('is_podcast', false).order('engagement_score', { ascending: false }).limit(50),
         supabase.from('tracks')
           .select('*, albums(title, cover_artwork_url, price), artists!tracks_artist_id_fkey(id, artist_name, slug, profile_image_url, is_verified)')
-          .eq('is_published', true).eq('featured', true).order('created_at', { ascending: false }).limit(200),
+          .eq('is_published', true).eq('is_podcast', false).eq('featured', true).order('created_at', { ascending: false }).limit(200),
         supabase.from('tracks')
           .select('*, albums(title, cover_artwork_url, price), artists!tracks_artist_id_fkey(id, artist_name, slug, profile_image_url, is_verified)')
-          .eq('is_published', true).order('created_at', { ascending: false }).limit(50),
+          .eq('is_published', true).eq('is_podcast', false).order('created_at', { ascending: false }).limit(50),
         supabase.from('albums')
           .select('*, artists(artist_name, slug)')
           .eq('is_published', true).order('release_date', { ascending: false }).limit(60),
@@ -334,7 +334,7 @@ export default function BrowsePage() {
         // columns and an id, so it stays cheap.
         supabase.from('tracks')
           .select('album_id, genre, mood')
-          .eq('is_published', true)
+          .eq('is_published', true).eq('is_podcast', false)
           .not('album_id', 'is', null)
           .limit(2000),
       ]);

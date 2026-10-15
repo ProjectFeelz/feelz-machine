@@ -293,13 +293,13 @@ export default function HomePage() {
       ] = await Promise.all([
         supabase.from('tracks')
           .select('*, albums(title, cover_artwork_url, price), artists!tracks_artist_id_fkey(artist_name, slug, profile_image_url)')
-          .eq('is_published', true).order('created_at', { ascending: false }).limit(60),
+          .eq('is_published', true).eq('is_podcast', false).order('created_at', { ascending: false }).limit(60),
         supabase.from('albums')
           .select('*, artists(artist_name, slug, profile_image_url)')
           .eq('is_published', true).order('created_at', { ascending: false }).limit(40),
         supabase.from('tracks')
           .select('*, albums(title, cover_artwork_url, price), artists!tracks_artist_id_fkey(artist_name, slug, profile_image_url, is_verified, tier)')
-          .eq('is_published', true).order('engagement_score', { ascending: false }).limit(60),
+          .eq('is_published', true).eq('is_podcast', false).order('engagement_score', { ascending: false }).limit(60),
         supabase.from('artists')
           .select('id, artist_name, slug, profile_image_url, is_verified, follower_count, display_follower_count, total_streams, tier')
           // The "must have a photo" filter has been lifted. An artist with
@@ -491,7 +491,7 @@ export default function HomePage() {
       const { data: tracks } = await supabase
         .from('tracks')
         .select('*, artists!tracks_artist_id_fkey(artist_name, slug, profile_image_url)')
-        .eq('is_published', true)
+        .eq('is_published', true).eq('is_podcast', false)
         .in('artist_id', artistIds)
         .order('created_at', { ascending: false })
         .limit(48);
@@ -538,7 +538,7 @@ export default function HomePage() {
       const orFilter = genreTags.map(t => `genre.eq.${t},mood.eq.${t}`).join(',');
       let query = supabase.from('tracks')
         .select('*, artists!tracks_artist_id_fkey(artist_name, slug, profile_image_url)')
-        .eq('is_published', true).or(orFilter)
+        .eq('is_published', true).eq('is_podcast', false).or(orFilter)
         .order('engagement_score', { ascending: false }).limit(40);
       if (listenedIds.length > 0) query = query.not('id', 'in', `(${listenedIds.join(',')})`);
       const { data: recData } = await query;
@@ -687,7 +687,7 @@ export default function HomePage() {
         let query = supabase
           .from('tracks')
           .select('*, artists!tracks_artist_id_fkey(artist_name, slug, profile_image_url)')
-          .eq('is_published', true)
+          .eq('is_published', true).eq('is_podcast', false)
           .order('engagement_score', { ascending: false })
           .limit(heardIds.length > 0 ? 40 : 20);
 
@@ -723,7 +723,7 @@ export default function HomePage() {
         const { data } = await supabase
           .from('tracks')
           .select('*, artists!tracks_artist_id_fkey(artist_name, slug, profile_image_url)')
-          .eq('is_published', true)
+          .eq('is_published', true).eq('is_podcast', false)
           .neq('id', track.id)
           .order('engagement_score', { ascending: false })
           .limit(20);
@@ -733,7 +733,7 @@ export default function HomePage() {
       const { data } = await supabase
         .from('tracks')
         .select('*, artists!tracks_artist_id_fkey(artist_name, slug, profile_image_url)')
-        .eq('is_published', true)
+        .eq('is_published', true).eq('is_podcast', false)
         .neq('id', track.id)
         .or(filters.join(','))
         .order('engagement_score', { ascending: false })
@@ -745,7 +745,7 @@ export default function HomePage() {
         const { data: padData } = await supabase
           .from('tracks')
           .select('*, artists!tracks_artist_id_fkey(artist_name, slug, profile_image_url)')
-          .eq('is_published', true)
+          .eq('is_published', true).eq('is_podcast', false)
           .not('id', 'in', `(${existingIds.join(',')})`)
           .order('engagement_score', { ascending: false })
           .limit(20 - (data?.length || 0));

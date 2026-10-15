@@ -124,6 +124,10 @@ exports.handler = async (event) => {
         collaborations(artist_id)
       `)
       .eq('is_published', true)
+      // Podcast episodes are not recommendation candidates. The engine scores
+      // on genre, mood, bpm and key, none of which an episode has, so it would
+      // be matched on nothing and still take a slot from a song.
+      .eq('is_podcast', false)
       .order('engagement_score', { ascending: false })
       .limit(1000);
 
