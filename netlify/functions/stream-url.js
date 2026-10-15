@@ -99,6 +99,7 @@ exports.handler = async (event) => {
   let trackIds;
   let versionIds = [];
   let beatIds = [];
+  let memoIds = [];
   let kind = 'audio';
   try {
     const body = JSON.parse(event.body || '{}');
@@ -129,18 +130,27 @@ exports.handler = async (event) => {
     else if (body.versionId) versionIds = [body.versionId];
     if (Array.isArray(body.beatIds)) beatIds = body.beatIds.filter(Boolean);
     else if (body.beatId) beatIds = [body.beatId];
+    // memoIds   Artist voice memos. The artist-voice-memos bucket was public
+    //           and empty, which made it the one bucket that could be closed
+    //           with nothing to migrate and nothing to break. A memo plays on
+    //           a public artist profile, so a logged out visitor has to be
+    //           able to hear it, which rules out signing in the browser and
+    //           means it is signed here with the service role instead.
+    if (Array.isArray(body.memoIds)) memoIds = body.memoIds.filter(Boolean);
+    else if (body.memoId) memoIds = [body.memoId];
   } catch {
     return json(400, { error: 'invalid_body' });
   }
 
   if (!Array.isArray(trackIds)) trackIds = [];
-  if (trackIds.length === 0 && versionIds.length === 0 && beatIds.length === 0) {
-    return json(400, { error: 'trackId, trackIds, versionIds or beatIds is required' });
+  if (trackIds.length === 0 && versionIds.length === 0 && beatIds.length === 0 && memoIds.length === 0) {
+    return json(400, { error: 'trackId, trackIds, versionIds, beatIds or memoIds is required' });
   }
   // A cap, so one request cannot ask the storage API to sign a catalogue.
   if (trackIds.length > 25) trackIds = trackIds.slice(0, 25);
   if (versionIds.length > 25) versionIds = versionIds.slice(0, 25);
   if (beatIds.length > 25) beatIds = beatIds.slice(0, 25);
+  if (memoIds.length > 25) memoIds = memoIds.slice(0, 25);
 
   const admin = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
@@ -166,8 +176,8 @@ exports.handler = async (event) => {
     }
     tracks = data || [];
     // Only a request that asked for tracks and got none is a 404. A request
-    // for versions or beats alongside them is not.
-    if (!tracks.length && !versionIds.length && !beatIds.length) {
+    // for versions, beats or memos alongside them is not.
+    if (!tracks.length && !versionIds.length && !beatIds.length && !memoIds.length) {
       return json(404, { error: 'track_not_found' });
     }
   }
@@ -343,5 +353,33 @@ exports.handler = async (event) => {
     });
   }
 
-  return json(200, { tracks: results, versions: versionResults, beats: beatResults });
+  // ── Artist voice memos ────────────────────────────────────────────────────
+  //
+  // A memo is published by the artist onto their own public profile, so there
+  // is nothing to gate beyond the row existing. Signing it is only about the
+  // bucket no longer being world readable.
+  const memoResults = {};
+  if (memoIds.length) {
+    const { data: rows, error: mErr } = await admin
+      .from('artist_voice_memos')
+      .select('id, audio_url')
+      .in('id', memoIds);
+
+    if (mErr) {
+      console.error('[stream-url] memo lookup failed:', mErr.message);
+    } else {
+      await Promise.all((rows || []).map(async (m) => {
+        if (!m.audio_url) {
+          memoResults[m.id] = { error: 'no_audio_file' };
+          return;
+        }
+        memoResults[m.id] = await signStoredUrl(admin, m.audio_url, now);
+      }));
+    }
+    memoIds.forEach(id => {
+      if (!memoResults[id]) memoResults[id] = { error: 'memo_not_found' };
+    });
+  }
+
+  return json(200, { tracks: results, versions: versionResults, beats: beatResults, memos: memoResults });
 };

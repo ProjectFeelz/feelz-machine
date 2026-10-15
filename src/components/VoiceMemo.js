@@ -31,12 +31,50 @@ function WaveformBars({ isPlaying, progress = 0 }) {
 }
 
 // ── Single voice memo player card ─────────────────────────────────────────────
+// A short lived signed URL for a memo.
+//
+// The artist-voice-memos bucket is private, so the stored audio_url no longer
+// resolves on its own. The server signs it with the service role, which is
+// what makes this work for a logged out visitor reading a public profile.
+// Any failure falls back to the stored URL, so a signing outage behaves the
+// way the bucket did when it was public rather than going silent.
+async function signMemoUrl(memo) {
+  const raw = memo?.audio_url || null;
+  if (!memo?.id) return raw;
+  try {
+    const res = await fetch('/.netlify/functions/stream-url', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ memoIds: [memo.id] }),
+    });
+    if (!res.ok) throw new Error(`stream-url ${res.status}`);
+    const { memos } = await res.json();
+    return memos?.[memo.id]?.url || raw;
+  } catch (err) {
+    console.error('[voice-memo] signing failed, using stored URL:', err.message);
+    return raw;
+  }
+}
+
 export function VoiceMemoCard({ memo, canDelete = false, onDelete }) {
-  const audioRef = useRef(new Audio(memo.audio_url));
+  // Starts empty rather than with the stored URL, so a dead public URL is
+  // never assigned and then swapped. The signed one is fetched on mount.
+  const audioRef = useRef(new Audio());
   const [playing, setPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(memo.duration || 0);
+
+  // Resolve the signed source once per memo, before anyone presses play.
+  useEffect(() => {
+    let cancelled = false;
+    const audio = audioRef.current;
+    signMemoUrl(memo).then(src => {
+      if (cancelled || !src) return;
+      if (audio.src !== src) audio.src = src;
+    });
+    return () => { cancelled = true; };
+  }, [memo?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -63,9 +101,16 @@ export function VoiceMemoCard({ memo, canDelete = false, onDelete }) {
     };
   }, [memo.audio_url]);
 
-  const toggle = () => {
+  const toggle = async () => {
     const audio = audioRef.current;
-    if (playing) { audio.pause(); } else { audio.play().catch(console.error); }
+    if (playing) { audio.pause(); return; }
+    // If the signing round trip has not landed yet, press play waits for it
+    // rather than failing on an empty src.
+    if (!audio.src) {
+      const src = await signMemoUrl(memo);
+      if (src) audio.src = src;
+    }
+    audio.play().catch(console.error);
   };
 
   const fmt = (s) => {

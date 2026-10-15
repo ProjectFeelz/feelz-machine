@@ -129,9 +129,13 @@ function EntryGallery({ compId }) {
               <p className="text-xs font-semibold text-white truncate">
                 {e.entrant_full_name}{e.is_group && e.members?.length > 0 ? ` +${e.members.length}` : ''}
               </p>
-              <p className="text-[10px] text-white/40 truncate mt-0.5">
-                {e.school?.name || e.school_name_freetext}
-              </p>
+              {/* Only first season entries carry a school. Without the guard
+                  every new entry rendered an empty line in the card. */}
+              {(e.school?.name || e.school_name_freetext) && (
+                <p className="text-[10px] text-white/40 truncate mt-0.5">
+                  {e.school?.name || e.school_name_freetext}
+                </p>
+              )}
               <p className="text-[10px] text-white/30 truncate">
                 "{e.song?.title || e.track?.title}"
               </p>
@@ -294,7 +298,7 @@ export default function SchoolSessionsPage() {
             <span className="text-lime-400">Sessions</span>
           </h1>
           <p className="text-white/50 text-sm lg:text-lg lg:max-w-xl leading-relaxed">
-            Pick a song from the shortlist and cover it, your own vocal performance. Anyone can enter, students included, and there is cash for the winner.
+            Pick a song from the shortlist and cover it, your own vocal performance. Open to anyone in South Africa, and there is cash for the winner.
           </p>
           {entryCount !== null && entryCount > 0 && (
             <p className="text-xs lg:text-sm text-white/40 font-medium">
@@ -452,12 +456,11 @@ export default function SchoolSessionsPage() {
           <ul className="space-y-2.5">
             {[
               ['An account here', user ? 'Done, you are signed in.' : 'Free, takes a minute.'],
-              // Was "Your school and district", listed as a requirement, on a
-              // page that now says anyone can enter. The entry form stopped
-              // asking weeks ago; this list had not caught up, and a checklist
-              // is exactly where somebody decides whether a competition is
-              // meant for them.
-              ['A school, only if you are at one', 'Entirely optional, and it changes nothing about the prize or the VIP card. Leave it blank if you are not at a school.'],
+              // The school line is gone rather than softened. It was already
+              // marked optional and that was not enough: a checklist is where
+              // somebody decides whether a competition is meant for them, and
+              // naming a school at all answers that question wrongly. The form
+              // no longer asks either.
               ['A cover of one of the songs above', 'Your own vocal over the original track. Solo or as a group.'],
               ['A TikTok post of it, tagging us', 'This one is required. You paste the link when you enter, so post it before you upload.'],
             ].map(([what, why]) => (
@@ -471,8 +474,7 @@ export default function SchoolSessionsPage() {
             ))}
           </ul>
           <p className="text-[11px] text-white/30 mt-3.5 leading-relaxed">
-            No verification code to fetch from your school any more. The system gives you one when
-            you enter.
+            There is no code to fetch from anyone. The system gives you one when you enter.
           </p>
         </div>
 
@@ -575,9 +577,11 @@ export default function SchoolSessionsPage() {
             point: schools outside the current run need a way in too. */}
         <DistrictNomination nextSeason={nextSeason} />
 
-        <p className="text-center text-[11px] text-white/30">
-          At a school and want us to come and run a tutorial? Ask your teacher to get in touch.
-        </p>
+        {/* The line that used to sit here asked whoever was at a school to
+            have their teacher get in touch. It was the last thing on the page
+            and it re-framed the whole competition as a school thing on the way
+            out. Running a tutorial somewhere is still worth doing, it just
+            does not belong at the foot of the public entry page. */}
       </div>
     </div>
   );

@@ -144,7 +144,7 @@ export default function DistrictNomination({ nextSeason }) {
               <input placeholder="Your district or area" value={form.districtName}
                 onChange={e => setForm({ ...form, districtName: e.target.value })}
                 className="w-full px-3 py-2 bg-white/[0.06] rounded-lg text-white text-xs outline-none" />
-              <input placeholder="Your school (optional)" value={form.schoolName}
+              <input placeholder="Your school or group (optional)" value={form.schoolName}
                 onChange={e => setForm({ ...form, schoolName: e.target.value })}
                 className="w-full px-3 py-2 bg-white/[0.06] rounded-lg text-white text-xs outline-none" />
               <div className="flex space-x-2">

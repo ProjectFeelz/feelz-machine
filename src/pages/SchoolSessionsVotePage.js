@@ -162,7 +162,12 @@ export default function SchoolSessionsVotePage() {
                     </div>
                     <p className="font-bold text-sm text-white truncate mt-1">{f.song?.title || f.track?.title || 'Untitled cover'}</p>
                     <p className="text-xs text-white/40 mt-0.5 truncate">
-                      {f.entrant_full_name}{f.is_group && f.members?.length > 0 ? ` + ${f.members.length} more` : ''} · {f.school?.name || f.school_name_freetext}
+                      {f.entrant_full_name}{f.is_group && f.members?.length > 0 ? ` + ${f.members.length} more` : ''}
+                      {/* Only first season entries carry a school, so the
+                          separator travels with it rather than dangling. */}
+                      {(f.school?.name || f.school_name_freetext)
+                        ? ` · ${f.school?.name || f.school_name_freetext}`
+                        : ''}
                     </p>
                     {f.entrant_tiktok_handle && (
                       <a href={`https://tiktok.com/@${f.entrant_tiktok_handle}`} target="_blank" rel="noopener noreferrer"

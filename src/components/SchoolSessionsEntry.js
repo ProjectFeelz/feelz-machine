@@ -23,8 +23,6 @@ const OFFICIAL_YOUTUBE_HANDLE = 'feelz.machine';   // youtube.com/@feelz.machine
 const PERSONAL_YOUTUBE_HANDLE = 'sfmza';
 
 const BLANK_FORM = {
-  schoolId: '',
-  schoolFreeText: '',
   songId: '',
   isGroup: false,
   groupMembers: [''],
@@ -104,17 +102,11 @@ export { BLANK_FORM as SCHOOL_SESSIONS_BLANK_FORM };
 
 export default function SchoolSessionsEntry({ enabled, setEnabled, form, setForm }) {
   const gate = useSchoolSessions();
-  const [schools, setSchools] = useState([]);
-  const [schoolNotListed, setSchoolNotListed] = useState(false);
   const [songs, setSongs] = useState([]);
 
   useEffect(() => {
     if (!gate.allowed) return;
-    supabase.from('school_sessions_schools')
-      .select('id, name')
-      .eq('is_active', true)
-      .order('name')
-      .then(({ data }) => setSchools(data || []));
+    // The school list query was removed along with the field it populated.
 
     const compId = gate.config?.competition?.id;
     if (compId) {
@@ -244,7 +236,7 @@ export default function SchoolSessionsEntry({ enabled, setEnabled, form, setForm
               onChange={e => set('verificationCode', e.target.value.toUpperCase())}
               placeholder="Only if you were given one" />
             <p className="text-[11px] text-white/30 mt-1">
-              Only if your school handed one out. Leave it blank otherwise, it is not needed to enter.
+              Only if you were handed one. Leave it blank otherwise, it is not needed to enter.
             </p>
           </div>
 
@@ -300,33 +292,13 @@ export default function SchoolSessionsEntry({ enabled, setEnabled, form, setForm
             </span>
           </label>
 
-          <div>
-            <Label>School <span className="text-white/30 font-normal">(optional)</span></Label>
-            {!schoolNotListed ? (
-              <div className="space-y-1.5">
-                <select value={form.schoolId}
-                  onChange={e => set('schoolId', e.target.value)}
-                  className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none">
-                  <option value="">Not a student / no school</option>
-                  {schools.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                </select>
-                <button type="button" onClick={() => { setSchoolNotListed(true); set('schoolId', ''); }}
-                  className="text-[11px] text-lime-400/70 hover:text-lime-400">
-                  My school isn't listed
-                </button>
-              </div>
-            ) : (
-              <div className="space-y-1.5">
-                <Input value={form.schoolFreeText}
-                  onChange={e => set('schoolFreeText', e.target.value)}
-                  placeholder="Type your school's name" />
-                <button type="button" onClick={() => { setSchoolNotListed(false); set('schoolFreeText', ''); }}
-                  className="text-[11px] text-white/30 hover:text-white/50">
-                  Pick from list instead
-                </button>
-              </div>
-            )}
-          </div>
+          {/* THE SCHOOL FIELD IS GONE, deliberately and entirely.
+              It was already optional, which was not enough. A competition that
+              opens by asking which school you attend tells every adult reading
+              it that the competition is not for them, and that impression is
+              not undone by the word "optional" beside it. The columns are left
+              alone in the database so the first season's records keep their
+              meaning; nothing new writes to them. */}
 
           <div>
             <Label>Entering solo or as a group?</Label>

@@ -1698,8 +1698,11 @@ export default function TrackUploadPanel() {
                 track_id:          trackId,
                 artist_id:         artist.id,
                 verification_code_id: redeemedCodeId,
-                school_id:         schoolSessionsForm.schoolId || null,
-                school_name_freetext: schoolSessionsForm.schoolId ? null : schoolSessionsForm.schoolFreeText.trim(),
+                // The entry form no longer asks which school anyone attends,
+                // so these are always null now. The columns stay because the
+                // first season's rows still carry real values.
+                school_id:         null,
+                school_name_freetext: null,
                 candidate_card_no: schoolSessionsForm.candidateCardNo.trim() || null,
                 entrant_full_name: schoolSessionsForm.entrantFullName.trim(),
                 entrant_email:     schoolSessionsForm.entrantEmail.trim(),

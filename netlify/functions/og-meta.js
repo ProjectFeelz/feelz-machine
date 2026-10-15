@@ -317,6 +317,26 @@ exports.handler = async (event) => {
   // is structured data about the work, not a card.
   const cardImg = cardImage(image);
 
+  // JSON MODE, for the SEO edge function.
+  //
+  // Everything above works out what a given URL is actually about, and it is
+  // the only place on the platform that knows. The HTML below is built for a
+  // social crawler: a page of meta tags with a redirect on it, which is
+  // exactly wrong for a search engine, because it is a stub rather than the
+  // page itself.
+  //
+  // So seo-html asks for the same answer as data and injects it into the real
+  // app shell instead. Returning early here means that function reuses these
+  // queries rather than growing a second, drifting copy of them, and nothing
+  // about the existing HTML path below changes.
+  if (params.format === 'json') {
+    return {
+      statusCode: 200,
+      headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=1800' },
+      body: JSON.stringify({ title, description, image, cardImage: cardImg, pageUrl, jsonLd }),
+    };
+  }
+
   const html = `<!DOCTYPE html>
 <html>
 <head>

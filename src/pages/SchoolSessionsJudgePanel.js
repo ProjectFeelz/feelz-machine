@@ -138,7 +138,12 @@ export default function SchoolSessionsJudgePanel() {
                       {e.entrant_full_name}{e.is_group && e.members?.length > 0 ? ` + ${e.members.length} more` : ''}
                     </p>
                     <p className="text-xs text-white/40 truncate">
-                      {e.school?.name || e.school_name_freetext} · covering "{e.song?.title || e.track?.title}"
+                      {/* The school is only present on first season rows, so
+                          the separator has to come with it or every new entry
+                          reads as " · covering ...". */}
+                      {(e.school?.name || e.school_name_freetext)
+                        ? `${e.school?.name || e.school_name_freetext} · `
+                        : ''}covering "{e.song?.title || e.track?.title}"
                     </p>
                   </div>
                   {e.track?.slug && (
