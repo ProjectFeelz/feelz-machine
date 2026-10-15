@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useStreakContext } from '../contexts/StreakContext';
 import { useTier } from '../contexts/useTier';
+import useSchoolSessions from '../hooks/useSchoolSessions';
 import { supabase } from '../supabaseClient';
 import FollowUs from '../components/FollowUs';
 import CollabThread from '../components/CollabThread';
@@ -89,6 +90,26 @@ export default function HubPage() {
   const [retailStaffRole, setRetailStaffRole] = useState(null);
   const [isNewsletterEditor, setIsNewsletterEditor] = useState(false);
   const [isSchoolSessionsJudge, setIsSchoolSessionsJudge] = useState(false);
+  // THE ONLY WAY INTO SESSIONS FROM INSIDE THE APP.
+  //
+  // Until now the only links to it anywhere were the admin cards and the
+  // judge card below, both of which a listener never sees. So a competition
+  // with a public vote could be reached only by somebody who already knew the
+  // URL, which is most of why nobody has voted. The gate is the same one the
+  // landing page uses and it fails closed, so nothing appears when the
+  // competition is off or the viewer is outside the region.
+  const sessionsGate = useSchoolSessions();
+  const sessionsOpen = sessionsGate.enabled && sessionsGate.allowed && !sessionsGate.loading;
+  const sessionsVotingOpen = (() => {
+    const c = sessionsGate.config?.competition;
+    if (!c) return false;
+    const now = Date.now();
+    const opens  = c.voting_open_at  ? new Date(c.voting_open_at).getTime()  : null;
+    const closes = c.voting_close_at ? new Date(c.voting_close_at).getTime() : null;
+    if (closes && now > closes) return false;
+    if (opens && now < opens) return false;
+    return !!(opens || closes);
+  })();
 
   useEffect(() => {
     if (!user) return;
@@ -358,6 +379,26 @@ export default function HubPage() {
           {isRetailVenue && !isAdmin && !retailStaffRole && (
             <Section title="Feelz Retail" icon={Store}>
               <LinkCard icon={Store} label="Retail Player" description="Pick a mood, play music for your venue" path="/retail/player" color="bg-purple-500/20" />
+            </Section>
+          )}
+
+          {/* SESSIONS, FOR EVERYONE.
+              Its own section rather than a card inside Discover, because
+              Discover renders only for listeners and an artist needs to find
+              this at least as much: they are the ones who enter it. Shown
+              only when the gate says the competition is on and this viewer is
+              eligible, so it disappears between seasons without anyone having
+              to remember to take it down. */}
+          {sessionsOpen && (
+            <Section title="Sessions" icon={Trophy}>
+              <LinkCard icon={Trophy} label={sessionsVotingOpen ? 'Vote, People\u2019s Choice' : 'Sessions'}
+                description={sessionsVotingOpen ? 'Hear the finalists and cast your vote' : 'The cover competition, open to everyone'}
+                path={sessionsVotingOpen ? '/sessions/vote' : '/sessions'}
+                color="bg-lime-500/20" />
+              {sessionsVotingOpen && (
+                <LinkCard icon={Trophy} label="About Sessions" description="How it works and who is in it"
+                  path="/sessions" color="bg-lime-500/20" />
+              )}
             </Section>
           )}
 

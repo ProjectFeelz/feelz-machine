@@ -169,7 +169,14 @@ exports.handler = async (event) => {
   // and delete the variable along with this file when the migration is done.
   // The fallback keeps the old behaviour for anyone who does have the shared
   // value to hand.
-  const expected = process.env.MIGRATE_IMAGES_SECRET || process.env.INTERNAL_FUNCTION_SECRET;
+  // ONE VARIABLE, NO FALLBACK, and that is the fix for three rounds of 401.
+  //
+  // It used to prefer MIGRATE_IMAGES_SECRET and fall back to
+  // INTERNAL_FUNCTION_SECRET, so setting the shared one correctly changed
+  // nothing while a stale MIGRATE_IMAGES_SECRET was still winning, and a 401
+  // looked identical either way. Now there is exactly one variable it can be
+  // checking, and whoami below says what it sees.
+  const expected = process.env.MIGRATE_IMAGES_SECRET;
 
   // WHOAMI, and it needs no secret, which is the point.
   //
@@ -204,7 +211,7 @@ exports.handler = async (event) => {
   }
 
   if (!expected) {
-    return json(500, { error: 'neither MIGRATE_IMAGES_SECRET nor INTERNAL_FUNCTION_SECRET is set' });
+    return json(500, { error: 'MIGRATE_IMAGES_SECRET is not set on this deploy' });
   }
   if (event.headers['x-internal-secret'] !== expected) {
     return json(401, {

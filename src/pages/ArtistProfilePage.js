@@ -109,7 +109,15 @@ export default function ArtistProfilePage() {
 
   const [artist, setArtist] = useState(null);
   const [theme, setTheme] = useState(null);
+  // SONGS AND EPISODES ARE SPLIT AT THE SOURCE.
+  //
+  // `tracks` holds music only, so every count, the play all button, the radio,
+  // the Popular rail and the New Music row keep working on songs without any
+  // of them having to learn what a podcast is. Episodes get their own state
+  // and their own section further down. One change here instead of a dozen
+  // scattered filters, which is also how a filter gets missed.
   const [tracks, setTracks] = useState([]);
+  const [episodes, setEpisodes] = useState([]);
   const [albums, setAlbums] = useState([]);
   const [collabs, setCollabs] = useState([]);
   const [isFollowing, setIsFollowing] = useState(false);
@@ -504,7 +512,22 @@ export default function ArtistProfilePage() {
       // ── The page becomes usable here ──────────────────────────────────────
 
       const { data: trackData } = await pTracks;
-      setTracks(trackData || []);
+      const allTracks = trackData || [];
+      setTracks(allTracks.filter(t => !t.is_podcast));
+      // Newest episode first: by number when it has one, otherwise by date.
+      // An episode with no number sorts after the numbered ones rather than
+      // being treated as episode zero.
+      setEpisodes(
+        allTracks
+          .filter(t => t.is_podcast)
+          .sort((a, b) => {
+            const an = a.episode_number, bn = b.episode_number;
+            if (an != null && bn != null) return bn - an;
+            if (an != null) return -1;
+            if (bn != null) return 1;
+            return new Date(b.created_at) - new Date(a.created_at);
+          })
+      );
       setLoading(false);
 
       // ── Everything below lands underneath a page somebody is already reading ──
@@ -2061,6 +2084,54 @@ export default function ArtistProfilePage() {
           The See-more button is gone. A rail scrolls, so paging it was
           pointless; the count line below matches Popular's "Top 10 of N"
           instead. */}
+      {/* ── Episodes ─────────────────────────────────────────────────────────
+          Its own section rather than mixed in with the music, and a list
+          rather than a rail of square artwork, because an episode is chosen
+          by its title and its number and not by its cover. Playing one queues
+          the rest of the episodes, so it carries on through the show instead
+          of jumping back into the songs. */}
+      {episodes.length > 0 && (
+        <div className="mb-8">
+          <h2 className="text-lg font-bold mb-3 px-6" style={{ fontFamily: `"${headingFont}", sans-serif` }}>
+            Episodes
+          </h2>
+          <div className="px-6 space-y-1">
+            {episodes.map(ep => (
+              <button
+                key={ep.id}
+                onClick={() => {
+                  window.__feelz_play_source = 'artist_profile';
+                  window.__feelz_play_source_at = Date.now();
+                  if (currentTrack?.id === ep.id) { togglePlay(); return; }
+                  playTrack(
+                    { ...ep, artist_name: artist.artist_name, artist_slug: artist.slug },
+                    episodes.map(e => ({ ...e, artist_name: artist.artist_name, artist_slug: artist.slug }))
+                  );
+                }}
+                className="w-full flex items-center gap-3 py-2.5 px-3 rounded-xl text-left transition hover:bg-white/[0.04]"
+                style={{ border: `1px solid ${textColor}0F` }}>
+                <span className="w-10 flex-shrink-0 text-center text-xs font-bold tabular-nums"
+                  style={{ color: `${textColor}50` }}>
+                  {ep.episode_number != null ? `#${ep.episode_number}` : '•'}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-medium truncate" style={{ color: textColor }}>{ep.title}</span>
+                  {ep.duration > 0 && (
+                    <span className="block text-[11px]" style={{ color: `${textColor}45` }}>
+                      {Math.floor(ep.duration / 60)} min
+                    </span>
+                  )}
+                </span>
+                {currentTrack?.id === ep.id && isPlaying && (
+                  <span className="text-[10px] font-bold uppercase tracking-wider flex-shrink-0"
+                    style={{ color: secondaryColor }}>Playing</span>
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {collabs.length > 0 && (
         <div className="mb-8">
           <h2 className="text-lg font-bold mb-3 px-6" style={{ fontFamily: `"${headingFont}", sans-serif` }}>Collaborations</h2>

@@ -5,6 +5,7 @@ import { supabase } from '../supabaseClient';
 import { sendArtistBroadcast } from '../utils/notify';
 import { useTier } from '../contexts/useTier';
 import { useAuth } from '../contexts/AuthContext';
+import useSchoolSessions from '../hooks/useSchoolSessions';
 import {
   X, ChevronDown, Loader, Check, Send, Music, Youtube, Search, Radio, Plus,
 } from 'lucide-react';
@@ -21,6 +22,7 @@ import { MERCH_PARKED } from '../config/features';
 // center plus button — without the two call sites fighting over shared state.
 export default function CreateMenuModal({ artist, user, onClose, primaryColor = '#90AF2F', bgColor = '#000000' }) {
   const navigate = useNavigate();
+  const sessionsGate = useSchoolSessions();
   const { isAdmin } = useAuth();
   // Newsletter shortcut, shown only to admins and newsletter editors so
   // Jane can reach it in one tap instead of Monetize > Affiliates > Newsletter.
@@ -302,6 +304,19 @@ export default function CreateMenuModal({ artist, user, onClose, primaryColor = 
                 // action on your own catalogue, and somebody who needs it is
                 // looking for it rather than reaching past it.
                 { id: 'course', icon: '🎓', label: 'How to Use Feelz Machine', sub: 'Recording, uploading, splits, getting paid', color: 'gray' },
+                // SESSIONS, AT THE VERY BOTTOM.
+                //
+                // Everything above is something you do to your own catalogue.
+                // This is the one thing you go and take part in, so it sits
+                // last rather than competing with Upload.
+                //
+                // Only when the gate says the competition is running and this
+                // viewer is eligible. The gate fails closed, so between
+                // seasons the row is simply not here and nobody has to
+                // remember to remove it.
+                ...(sessionsGate.enabled && sessionsGate.allowed && !sessionsGate.loading
+                  ? [{ id: 'sessions', icon: '🏆', label: 'Enter Sessions', sub: 'The cover competition, open to everyone', color: 'gray' }]
+                  : []),
               ].map(({ id, icon, label, sub }) => (
                 <button key={id}
                   onClick={() => {
@@ -316,6 +331,7 @@ export default function CreateMenuModal({ artist, user, onClose, primaryColor = 
                     else if (id === 'newsletter') { close(); navigate('/newsletter/compose'); }
                     else if (id === 'chats') { close(); navigate('/community'); }
                     else if (id === 'course') { close(); navigate('/learn'); }
+                    else if (id === 'sessions') { close(); navigate('/sessions'); }
                     else setCreateTab(id);
                   }}
                   className="w-full flex items-center space-x-3 p-4 rounded-2xl border transition active:scale-[0.98] text-left"

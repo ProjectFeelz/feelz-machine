@@ -3,12 +3,14 @@ import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { X, ListMusic, User, Sparkles } from 'lucide-react';
 import { useTier } from '../contexts/useTier';
+import useSchoolSessions from '../hooks/useSchoolSessions';
 
 // Listener equivalent of CreateMenuModal — same exact wrapper dimensions
 // and portal approach, different (listener-relevant) options inside.
 export default function ListenerCreateMenu({ onClose }) {
   const navigate = useNavigate();
   const { isListenerPro } = useTier();
+  const sessionsGate = useSchoolSessions();
   const isPro = isListenerPro;
 
   const options = [
@@ -18,7 +20,26 @@ export default function ListenerCreateMenu({ onClose }) {
     isPro
       ? { id: 'fanpro', icon: '✨', label: 'Fan Pro Themes', sub: 'Change your app theme',        action: () => { onClose(); navigate('/profile'); } }
       : { id: 'fanpro', icon: '✨', label: 'Get Fan Pro',    sub: 'Unlock themes and a supporter badge', action: () => { onClose(); navigate('/listener/upgrade'); } },
-  ];
+    // Last, same reasoning as the artist menu: an offer rather than an action.
+    { id: 'course',   icon: '🎓', label: 'How to Use Feelz Machine', sub: 'A short course on how it all works', action: () => { onClose(); navigate('/learn'); } },
+  ].filter(Boolean);
+
+  // SESSIONS, BELOW EVERYTHING, and for listeners as much as for artists.
+  //
+  // The Hub card is the main way in, but the Hub is not where a listener
+  // spends their time and Home does not appear in the mobile nav at all. The
+  // plus button does. So the one thing a listener can do in this competition,
+  // vote, is reachable from the button they already use.
+  //
+  // Same gate as everywhere else and it fails closed, so between seasons this
+  // row simply is not here.
+  if (sessionsGate.enabled && sessionsGate.allowed && !sessionsGate.loading) {
+    options.push({
+      id: 'sessions', icon: '\u{1F3C6}', label: 'Sessions',
+      sub: 'The cover competition. Listen, vote, or enter it yourself',
+      action: () => { onClose(); navigate('/sessions'); },
+    });
+  }
 
   return createPortal(
     <div className="fixed inset-0 z-[600] flex items-center justify-center px-6 bg-black/80 backdrop-blur-sm md:pl-64"

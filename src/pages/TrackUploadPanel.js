@@ -173,7 +173,7 @@ const BLANK_TRACK = {
   // What the flag buys is the one thing that matters: episodes stay out of the
   // places where music is DISCOVERED. See the comment on the toggle below for
   // where that line is drawn and why it is drawn there rather than everywhere.
-  is_podcast: false,
+  is_podcast: false, episode_number: '',
 };
 
 const BLANK_RELEASE = {
@@ -894,6 +894,12 @@ function AddTrackToAlbum({
         ai_content:        trackForm.ai_content || 'human',
         is_beat:           trackForm.is_beat || false,
         is_podcast:        trackForm.is_podcast || false,
+        // Null, not 0, when it is not an episode or the field was left blank.
+        // An episode with no number still publishes; it just sorts by date
+        // with the rest of the unnumbered ones.
+        episode_number:    trackForm.is_podcast && String(trackForm.episode_number).trim() !== ''
+                             ? parseInt(trackForm.episode_number, 10) || null
+                             : null,
         bpm:               trackForm.bpm ? parseInt(trackForm.bpm) : null,
         beat_key:          trackForm.beat_key || null,
         beat_scale:        trackForm.beat_scale || null,
@@ -1126,6 +1132,23 @@ function AddTrackToAlbum({
             </span>
           </div>
         </button>
+
+        {trackForm.is_podcast && (
+          <div className="mt-2.5">
+            <FieldLabel>Episode number</FieldLabel>
+            <input
+              type="number" min="1" inputMode="numeric"
+              value={trackForm.episode_number}
+              onChange={e => setTrackForm({ ...trackForm, episode_number: e.target.value })}
+              placeholder="1"
+              className="w-32 px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none focus:bg-white/[0.1] transition border border-white/[0.06] focus:border-white/20"
+            />
+            <p className="text-[11px] text-white/30 mt-1.5">
+              What orders the episodes on your profile. Leave it blank and this one sits
+              with the rest by date.
+            </p>
+          </div>
+        )}
       </div>
 
       <div className="flex flex-wrap gap-4">
@@ -1594,6 +1617,12 @@ export default function TrackUploadPanel() {
         ai_content:        trackForm.ai_content || 'human',
         is_beat:           trackForm.is_beat || false,
         is_podcast:        trackForm.is_podcast || false,
+        // Null, not 0, when it is not an episode or the field was left blank.
+        // An episode with no number still publishes; it just sorts by date
+        // with the rest of the unnumbered ones.
+        episode_number:    trackForm.is_podcast && String(trackForm.episode_number).trim() !== ''
+                             ? parseInt(trackForm.episode_number, 10) || null
+                             : null,
         bpm:               trackForm.bpm ? parseInt(trackForm.bpm) : null,
         beat_key:          trackForm.beat_key || null,
         beat_scale:        trackForm.beat_scale || null,
