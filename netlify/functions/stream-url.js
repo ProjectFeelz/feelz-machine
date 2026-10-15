@@ -55,6 +55,32 @@ const { createClient } = require('@supabase/supabase-js');
 // bearer token for one file: treat the number as a tradeoff, not a formality.
 const SIGNED_URL_SECONDS = 2 * 60 * 60;
 
+// Sign one stored URL.
+//
+// The bucket is read out of the URL rather than hardcoded, because audio does
+// not all live in one bucket, and a URL that is not a Supabase storage URL at
+// all is handed back untouched rather than treated as broken.
+async function signStoredUrl(admin, assetUrl, now) {
+  const m = assetUrl.match(/\/object\/(?:public|sign)\/([^/]+)\/(.+?)(?:\?|$)/);
+  if (!m) return { url: assetUrl, signed: false };
+
+  const [, bucket, storagePath] = m;
+  const { data: signed, error } = await admin
+    .storage
+    .from(bucket)
+    .createSignedUrl(decodeURIComponent(storagePath), SIGNED_URL_SECONDS);
+
+  if (error || !signed?.signedUrl) {
+    console.error('[stream-url] sign failed', bucket, error?.message);
+    return { error: 'could_not_sign_url' };
+  }
+  return {
+    url: signed.signedUrl,
+    signed: true,
+    expiresAt: new Date(now + SIGNED_URL_SECONDS * 1000).toISOString(),
+  };
+}
+
 const json = (statusCode, body, cacheSeconds) => ({
   statusCode,
   headers: {
@@ -71,6 +97,8 @@ exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') return json(405, { error: 'method_not_allowed' });
 
   let trackIds;
+  let versionIds = [];
+  let beatIds = [];
   let kind = 'audio';
   try {
     const body = JSON.parse(event.body || '{}');
@@ -83,15 +111,36 @@ exports.handler = async (event) => {
     // Anything other than 'video' is audio, so an old client that sends no
     // kind at all keeps the behaviour it had.
     if (body.kind === 'video') kind = 'video';
+    // Two assets that are not tracks but sit in the same bucket, so they go
+    // dead at the same moment it is made private.
+    //
+    // versionIds  Alternate takes in track_versions. These used to be signed
+    //             in the browser by TrackVersions.js, which only works for a
+    //             signed in caller, because the storage policy allowing it is
+    //             feelz_samples_authenticated_select. A free track's versions
+    //             play for anyone today, logged in or not, so signing them
+    //             here keeps that true rather than failing silently for every
+    //             visitor who is not signed in.
+    // beatIds     Sessions competition beats in
+    //             school_sessions_shortlist_songs.beat_url, fetched straight
+    //             off the public URL by BeatDownloadButton. Nothing signs
+    //             those today, so they would simply stop downloading.
+    if (Array.isArray(body.versionIds)) versionIds = body.versionIds.filter(Boolean);
+    else if (body.versionId) versionIds = [body.versionId];
+    if (Array.isArray(body.beatIds)) beatIds = body.beatIds.filter(Boolean);
+    else if (body.beatId) beatIds = [body.beatId];
   } catch {
     return json(400, { error: 'invalid_body' });
   }
 
-  if (!Array.isArray(trackIds) || trackIds.length === 0) {
-    return json(400, { error: 'trackId or trackIds is required' });
+  if (!Array.isArray(trackIds)) trackIds = [];
+  if (trackIds.length === 0 && versionIds.length === 0 && beatIds.length === 0) {
+    return json(400, { error: 'trackId, trackIds, versionIds or beatIds is required' });
   }
   // A cap, so one request cannot ask the storage API to sign a catalogue.
   if (trackIds.length > 25) trackIds = trackIds.slice(0, 25);
+  if (versionIds.length > 25) versionIds = versionIds.slice(0, 25);
+  if (beatIds.length > 25) beatIds = beatIds.slice(0, 25);
 
   const admin = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
@@ -104,16 +153,24 @@ exports.handler = async (event) => {
     userId = user?.id || null;
   }
 
-  const { data: tracks, error: trackErr } = await admin
-    .from('tracks')
-    .select('id, file_url, youtube_url, is_published, is_preorder, release_date, artist_id')
-    .in('id', trackIds);
+  let tracks = [];
+  if (trackIds.length) {
+    const { data, error: trackErr } = await admin
+      .from('tracks')
+      .select('id, file_url, youtube_url, is_published, is_preorder, release_date, artist_id')
+      .in('id', trackIds);
 
-  if (trackErr) {
-    console.error('[stream-url] track lookup failed:', trackErr.message);
-    return json(500, { error: 'lookup_failed' });
+    if (trackErr) {
+      console.error('[stream-url] track lookup failed:', trackErr.message);
+      return json(500, { error: 'lookup_failed' });
+    }
+    tracks = data || [];
+    // Only a request that asked for tracks and got none is a 404. A request
+    // for versions or beats alongside them is not.
+    if (!tracks.length && !versionIds.length && !beatIds.length) {
+      return json(404, { error: 'track_not_found' });
+    }
   }
-  if (!tracks?.length) return json(404, { error: 'track_not_found' });
 
   // Which of these tracks, if any, belong to the caller. One query rather than
   // one per track. Admins get the same latitude as an owner.
@@ -204,5 +261,87 @@ exports.handler = async (event) => {
     if (!results[id]) results[id] = { error: 'track_not_found' };
   });
 
-  return json(200, { tracks: results });
+  // ── Versions ──────────────────────────────────────────────────────────────
+  //
+  // A version inherits its parent track's availability, so the same published
+  // and pre-order rules are applied through the parent row. Whether a paid
+  // track's versions may be heard at all is still decided client side before
+  // the request is made, exactly as it is today; this does not loosen that,
+  // and it does not tighten it either, because the stored URL is public right
+  // now anyway.
+  const versionResults = {};
+  if (versionIds.length) {
+    const { data: rows, error: vErr } = await admin
+      .from('track_versions')
+      .select('id, file_url, track_id')
+      .in('id', versionIds);
+
+    if (vErr) {
+      console.error('[stream-url] version lookup failed:', vErr.message);
+    } else {
+      const parentIds = [...new Set((rows || []).map(r => r.track_id).filter(Boolean))];
+      let parents = new Map();
+      if (parentIds.length) {
+        const { data: pt } = await admin
+          .from('tracks')
+          .select('id, is_published, is_preorder, release_date, artist_id')
+          .in('id', parentIds);
+        parents = new Map((pt || []).map(t => [t.id, t]));
+      }
+
+      await Promise.all((rows || []).map(async (v) => {
+        const parent = parents.get(v.track_id);
+        const privileged = isAdmin || (parent?.artist_id && ownArtistIds.has(parent.artist_id));
+
+        if (parent && parent.is_published === false && !privileged) {
+          versionResults[v.id] = { error: 'track_unavailable' };
+          return;
+        }
+        const unreleased = parent?.is_preorder
+          && parent.release_date
+          && new Date(parent.release_date).getTime() > now;
+        if (unreleased && !privileged) {
+          versionResults[v.id] = { error: 'not_released_yet', release_date: parent.release_date };
+          return;
+        }
+        if (!v.file_url) {
+          versionResults[v.id] = { error: 'no_audio_file' };
+          return;
+        }
+        versionResults[v.id] = await signStoredUrl(admin, v.file_url, now);
+      }));
+    }
+    versionIds.forEach(id => {
+      if (!versionResults[id]) versionResults[id] = { error: 'version_not_found' };
+    });
+  }
+
+  // ── Sessions beats ────────────────────────────────────────────────────────
+  //
+  // A competition beat is meant to be taken by whoever wants to enter, so
+  // there is nothing to gate here beyond the row existing.
+  const beatResults = {};
+  if (beatIds.length) {
+    const { data: rows, error: bErr } = await admin
+      .from('school_sessions_shortlist_songs')
+      .select('id, beat_url')
+      .in('id', beatIds);
+
+    if (bErr) {
+      console.error('[stream-url] beat lookup failed:', bErr.message);
+    } else {
+      await Promise.all((rows || []).map(async (s) => {
+        if (!s.beat_url) {
+          beatResults[s.id] = { error: 'no_beat_file' };
+          return;
+        }
+        beatResults[s.id] = await signStoredUrl(admin, s.beat_url, now);
+      }));
+    }
+    beatIds.forEach(id => {
+      if (!beatResults[id]) beatResults[id] = { error: 'beat_not_found' };
+    });
+  }
+
+  return json(200, { tracks: results, versions: versionResults, beats: beatResults });
 };

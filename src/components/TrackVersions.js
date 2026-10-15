@@ -18,22 +18,38 @@ const VERSION_TYPE_LABELS = {
     clean: 'Clean',
 };
 
-// Extract the storage path from a Supabase public or signed URL
-function extractStoragePath(url) {
-    if (!url) return null;
-    const match = url.match(/feelz-samples\/(.+?)(?:\?|$)/);
-    return match ? match[1] : null;
-}
+// A short lived signed URL for playing a version. Streaming only, no download
+// gate; downloads still go through get-download-url, which checks purchase.
+//
+// This used to call supabase.storage.createSignedUrl here in the browser. That
+// only works for a signed in caller, because the policy permitting it is
+// feelz_samples_authenticated_select, so the day feelz-samples is made private
+// a free track's versions would have stopped playing for every visitor who is
+// not logged in, with no error anyone would see. The server signs instead.
+//
+// Every failure falls back to the stored URL, which is exactly what plays
+// today, so a signing outage degrades to current behaviour rather than silence.
+async function getSignedUrlForPlay(ver) {
+    const rawUrl = ver?.file_url || null;
+    if (!ver?.id) return rawUrl;
+    try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const headers = { 'Content-Type': 'application/json' };
+        if (session?.access_token) headers.Authorization = `Bearer ${session.access_token}`;
 
-// Get a short-lived signed URL for playing (streaming only — no download gate)
-async function getSignedUrlForPlay(rawUrl) {
-    const path = extractStoragePath(rawUrl);
-    if (!path) return rawUrl;
-    const { data, error } = await supabase.storage
-      .from('feelz-samples')
-      .createSignedUrl(path, 300); // 5 min for playback
-  if (error || !data?.signedUrl) return null;
-    return data.signedUrl;
+        const res = await fetch('/.netlify/functions/stream-url', {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({ versionIds: [ver.id] }),
+        });
+        if (!res.ok) throw new Error(`stream-url ${res.status}`);
+
+        const { versions } = await res.json();
+        return versions?.[ver.id]?.url || rawUrl;
+    } catch (err) {
+        console.error('[versions] signing failed, using stored URL:', err.message);
+        return rawUrl;
+    }
 }
 
 // Determine effective price: own price > 0, or album price passed from parent
@@ -107,7 +123,7 @@ export default function TrackVersions({ track, albumPrice = 0, onPlayVersion, on
         }
         if (playingId === ver.id) return;
         setPlayingId(ver.id);
-        const signedUrl = await getSignedUrlForPlay(ver.file_url);
+        const signedUrl = await getSignedUrlForPlay(ver);
         setPlayingId(null);
         if (!signedUrl) return;
         onPlayVersion && onPlayVersion({

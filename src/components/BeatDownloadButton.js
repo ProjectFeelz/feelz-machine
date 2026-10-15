@@ -8,6 +8,28 @@ import React, { useState } from 'react';
 import { Download, Loader, Check } from 'lucide-react';
 import { downloadInApp } from '../utils/downloadInApp';
 
+// Sessions beats live in feelz-samples alongside the track masters, so the
+// stored public URL stops resolving the day that bucket is made private, and
+// nothing else in this path signs it. The server signs it by row id instead.
+// Any failure falls back to the stored URL, which is what this did before and
+// still works while the bucket is public.
+async function resolveBeatUrl(song) {
+  if (!song?.id) return song?.beat_url || null;
+  try {
+    const res = await fetch('/.netlify/functions/stream-url', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ beatIds: [song.id] }),
+    });
+    if (!res.ok) throw new Error(`stream-url ${res.status}`);
+    const { beats } = await res.json();
+    return beats?.[song.id]?.url || song.beat_url || null;
+  } catch (err) {
+    console.error('[beat] signing failed, using stored URL:', err.message);
+    return song.beat_url || null;
+  }
+}
+
 const prettySize = (bytes) => {
   if (!bytes) return '';
   const mb = bytes / 1024 / 1024;
@@ -27,7 +49,8 @@ export default function BeatDownloadButton({ song, label = 'Beat', showSize = fa
     e.preventDefault();
     e.stopPropagation();
     setState('busy'); setPct(0);
-    const ok = await downloadInApp(song.beat_url, name, setPct);
+    const url = await resolveBeatUrl(song);
+    const ok = await downloadInApp(url, name, setPct);
     setState(ok ? 'done' : 'error');
     if (ok) setTimeout(() => setState('idle'), 4000);
   };
