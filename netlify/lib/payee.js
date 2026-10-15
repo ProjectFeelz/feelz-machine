@@ -3,6 +3,39 @@
  *
  * ONE PLACE DECIDES WHERE THE MONEY GOES.
  *
+ *
+ * TWO PROCESSORS NOW, AND WHY THE SELLER PICKS
+ *
+ * PayPal pays a seller into a PayPal balance. In South Africa that balance is
+ * withdrawable through one bank, in dollars, with a conversion on the way out.
+ * For an artist in Johannesburg that is the worst part of getting paid.
+ *
+ * Paystack settles a subaccount straight into an ordinary South African bank
+ * account, in rand, and its subaccounts do the same job PayPal payee does: the
+ * buyer pays once and the seller share is split off at settlement. The
+ * platform still never holds anybody money, which is the principle this whole
+ * module exists to keep.
+ *
+ * So the processor is decided by THE SELLER, not the buyer. A seller with a
+ * Paystack subaccount is paid through Paystack no matter where the buyer is,
+ * because Paystack takes international cards too (at a higher rate, which is
+ * the platform cost of the seller being paid properly). A seller without one
+ * falls through to the PayPal routes exactly as before.
+ *
+ * Precedence, highest first:
+ *
+ *   paystack      seller has a subaccount. Settles into their bank, in rand.
+ *   multiparty    PayPal Commerce Platform. Needs partner approval AND a
+ *                 seller merchant id, so it is usually unreachable.
+ *   direct        PayPal, payee by email. What most sellers get today.
+ *   unavailable   no payout details at all. The sale is refused rather than
+ *                 parked in the platform account.
+ *
+ * NOTHING ABOUT THE PAYPAL PATHS CHANGED. A caller that ignores
+ * decision.processor behaves exactly as it did before this was added, which is
+ * deliberate: the PayPal routes are carrying real money today and this is an
+ * extension, not a rewrite.
+ *
  * Feelz Machine sells music three ways and, until now, all three captured into
  * the platform account and forwarded the artist's share later by PayPal
  * Payouts. Tips were the exception, tip-artist.js sets a payee on the order,
@@ -70,6 +103,21 @@
 const DIRECT_ENABLED = process.env.PAYPAL_DIRECT_TO_ARTIST !== 'false';
 const BN_CODE        = process.env.PAYPAL_PARTNER_BN_CODE || null;
 
+// Paystack is only offered when there is a key to call it with. Unset means
+// every seller falls through to the PayPal routes, which is exactly the
+// behaviour that existed before Paystack was added, so a missing key degrades
+// to the old world rather than refusing sales.
+const PAYSTACK_ENABLED = Boolean(process.env.PAYSTACK_SECRET_KEY);
+
+// What the platform takes on a Paystack sale, as a percentage.
+//
+// Unlike the PayPal direct route, this one CAN take a commission at the moment
+// of payment: a transaction split names the seller share and the remainder
+// settles to the platform. Left at 0 so switching processor does not quietly
+// change what an artist earns. Changing it is a business decision, made by
+// setting this variable, not by editing code.
+const PAYSTACK_PLATFORM_PCT = Number(process.env.PAYSTACK_PLATFORM_PCT || 0);
+
 /**
  * Who are we? Used to read a capture response and tell "the money landed with
  * us" from "the money went to the seller". Without this we cannot verify a
@@ -118,10 +166,30 @@ function landedWithPlatform(captureBody) {
  * @param {number}  args.commissionPct   the platform's cut, 0-100
  * @returns {Promise<{route, payee, reason, collaboratorCount, commissionPct, sellerEmail, sellerMerchantId}>}
  */
-async function resolvePayee({ supabase, artistId, trackId, commissionPct = 0 }) {
+/**
+ * `processors` is what the CALLER can actually carry out, and it defaults to
+ * PayPal only. That default is the whole safety of this change.
+ *
+ * paypal-order.js builds a PayPal order. Hand it a Paystack decision and it
+ * would find no payee on the purchase unit, not recognise the route as
+ * unavailable, and capture the money into the platform account, which is the
+ * one outcome this module exists to prevent. merch-order.js is stricter still
+ * and refuses anything that is not 'direct'.
+ *
+ * So existing callers, which pass nothing, keep getting exactly the routes
+ * they got before. The Paystack checkout opts in by passing
+ * processors: ['paystack', 'paypal'] when it is built.
+ */
+async function resolvePayee({ supabase, artistId, trackId, commissionPct = 0, processors = ['paypal'] }) {
+  const allows = (p) => Array.isArray(processors) && processors.includes(p);
+  // Every return carries a processor so a caller never has to infer one from
+  // the route name. 'paypal' is the default because every pre-existing route
+  // is a PayPal route.
   const stay = (reason, extra = {}) => ({
+    processor: 'paypal',
     route: 'platform', payee: null, reason, collaboratorCount: 0,
-    commissionPct, sellerEmail: null, sellerMerchantId: null, ...extra,
+    commissionPct, sellerEmail: null, sellerMerchantId: null,
+    subaccountCode: null, ...extra,
   });
 
   if (!DIRECT_ENABLED)  return stay('direct_routing_disabled');
@@ -157,7 +225,8 @@ async function resolvePayee({ supabase, artistId, trackId, commissionPct = 0 }) 
   // what Profile > Edit writes.
   const [profileRes, artistRes] = await Promise.all([
     supabase.from('artist_payment_profiles')
-      .select('paypal_email, paypal_merchant_id').eq('artist_id', artistId).maybeSingle(),
+      .select('paypal_email, paypal_merchant_id, paystack_subaccount_code')
+      .eq('artist_id', artistId).maybeSingle(),
     supabase.from('artists')
       .select('paypal_email').eq('id', artistId).maybeSingle(),
   ]);
@@ -168,10 +237,38 @@ async function resolvePayee({ supabase, artistId, trackId, commissionPct = 0 }) 
 
   const sellerMerchantId = profileRes.data?.paypal_merchant_id || null;
   const sellerEmail      = profileRes.data?.paypal_email || artistRes.data?.paypal_email || null;
+  const subaccountCode   = profileRes.data?.paystack_subaccount_code || null;
+
+  // ── Paystack, first because it is the best outcome for the seller ─────────
+  //
+  // Settles into their own bank account, in rand, no conversion and no
+  // withdrawal step. Checked ahead of the PayPal routes on purpose: an artist
+  // who has done the work of adding bank details should not keep being paid
+  // the awkward way because they also happen to have a PayPal address on file.
+  if (allows('paystack') && PAYSTACK_ENABLED && subaccountCode) {
+    return {
+      processor: 'paystack',
+      route: 'paystack_split',
+      // Not a PayPal purchase_unit payee. Paystack takes the subaccount on the
+      // charge itself, so this is carried separately and purchaseUnitFor()
+      // returns nothing for it.
+      payee: null,
+      subaccountCode,
+      reason: 'seller_has_paystack_subaccount',
+      collaboratorCount,
+      // The platform share is set by PAYSTACK_PLATFORM_PCT rather than the
+      // commissionPct passed in, because this route really can collect it at
+      // payment time and the two numbers answer different questions.
+      commissionPct: PAYSTACK_PLATFORM_PCT,
+      sellerEmail,
+      sellerMerchantId: null,
+    };
+  }
 
   // ── Multiparty, if it is actually available ───────────────────────────────
   if (sellerMerchantId && BN_CODE) {
     return {
+      processor: 'paypal',
       route: 'multiparty',
       payee: { merchant_id: sellerMerchantId },
       reason: 'seller_onboarded_to_platform',
@@ -179,6 +276,7 @@ async function resolvePayee({ supabase, artistId, trackId, commissionPct = 0 }) 
       commissionPct,
       sellerEmail,
       sellerMerchantId,
+      subaccountCode: null,
     };
   }
 
@@ -193,8 +291,10 @@ async function resolvePayee({ supabase, artistId, trackId, commissionPct = 0 }) 
   // ── Direct by email ───────────────────────────────────────────────────────
   if (sellerEmail) {
     return {
+      processor: 'paypal',
       route: 'direct',
       payee: { email_address: sellerEmail },
+      subaccountCode: null,
       // Not a mistake and not a rounding-down: on this route the money never
       // reaches the business account, so there is nothing to take a commission
       // out of. The sale is recorded with the commission the platform WOULD
@@ -207,13 +307,19 @@ async function resolvePayee({ supabase, artistId, trackId, commissionPct = 0 }) 
     };
   }
 
-  // No PayPal on file: the sale does NOT fall back to the platform account.
+  // Nothing on file: the sale does NOT fall back to the platform account.
   // Money that lands there is money the platform is holding for someone, which
-  // is exactly what this module exists to prevent. The order is refused with
-  // a message the buyer can read, and the artist is told to add their PayPal.
+  // is exactly what this module exists to prevent. The order is refused with a
+  // message the buyer can read, and the artist is told to add payout details.
+  //
+  // The reason string now says "payout" rather than "paypal", because with two
+  // processors there are two ways to fix it and a message naming only one
+  // sends a South African artist to the wrong screen.
   return {
-    route: 'unavailable', payee: null, reason: 'seller_has_no_paypal_details',
+    processor: null,
+    route: 'unavailable', payee: null, reason: 'seller_has_no_payout_details',
     collaboratorCount, commissionPct, sellerEmail: null, sellerMerchantId: null,
+    subaccountCode: null,
   };
 }
 
@@ -224,6 +330,17 @@ async function resolvePayee({ supabase, artistId, trackId, commissionPct = 0 }) 
  * permissions problem.
  */
 function purchaseUnitFor(decision, { grossValue, currency = 'USD' }) {
+  // A Paystack decision has no PayPal purchase unit to build. Returning empty
+  // here is a backstop rather than a path: resolvePayee only returns a
+  // Paystack route to a caller that asked for one, and a PayPal caller never
+  // does. If this ever fires, something upstream passed the wrong decision to
+  // the wrong processor, so it is logged rather than silently ignored.
+  if (decision && decision.processor === 'paystack') {
+    console.error('[payee] a Paystack decision reached purchaseUnitFor, which builds PayPal orders.',
+      'route=', decision.route, '- the caller should not have asked for the paystack processor.');
+    return { fragment: {}, headers: {} };
+  }
+
   if (!decision || decision.route === 'platform' || decision.route === 'unavailable') {
     return { fragment: {}, headers: {} };
   }
@@ -256,6 +373,8 @@ function purchaseUnitFor(decision, { grossValue, currency = 'USD' }) {
 module.exports = {
   DIRECT_ENABLED,
   BN_CODE,
+  PAYSTACK_ENABLED,
+  PAYSTACK_PLATFORM_PCT,
   PLATFORM_MERCHANT_ID,
   PLATFORM_EMAIL,
   platformIdentityConfigured,
