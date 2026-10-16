@@ -336,7 +336,14 @@ export default function PaymentSettings() {
           for everyone it suits, and for anyone outside the countries Paystack
           settles into. */}
       <div className="space-y-3">
-        <h4 className="text-xs font-medium text-white/50">Bank Account</h4>
+        {/* The country is in the heading because the list underneath is South
+            African banks and nothing else. That is not this component's
+            choice: the Paystack business is registered in South Africa, so
+            its bank list and its payout currency are both fixed to ZAR.
+            Without the label an artist banking anywhere else scrolls a list
+            of 33 banks looking for theirs, which is a worse experience than
+            being told in three words and using PayPal below. */}
+        <h4 className="text-xs font-medium text-white/50">Bank Account (South Africa)</h4>
 
         {bankOnFile ? (
           <div className="rounded-xl bg-green-500/[0.07] border border-green-500/20 p-3">
@@ -353,8 +360,8 @@ export default function PaymentSettings() {
           </div>
         ) : (
           <p className="text-[11px] text-white/35">
-            Add a bank account and buyers pay you in rand, straight into it. Nothing is held
-            in between.
+            Add a South African bank account and buyers pay you in rand, straight into it.
+            Nothing is held in between. Banking elsewhere? Use PayPal below.
           </p>
         )}
 
