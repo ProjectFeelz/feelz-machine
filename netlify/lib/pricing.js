@@ -48,21 +48,31 @@
  * price intends, which is a discount rather than a fault.
  */
 
-// Rand per one dollar. No default on purpose: see assertRate.
-const RAW_RATE = process.env.USD_ZAR_RATE ? Number(process.env.USD_ZAR_RATE) : null;
+// THE RATE IS NOT READ HERE ANY MORE.
+//
+// It is passed in, because working out what the rate IS turned out to be a
+// job of its own: fetching it, sanity checking it, caching it, and carrying on
+// with yesterday's number when no source answers. All of that lives in
+// netlify/lib/fxRate.js, and this file does arithmetic.
+//
+// Keeping them apart matters. A pricing bug and a rate bug have completely
+// different shapes, and a module that does both makes it hard to tell which
+// one you are looking at.
 
 // Headroom on the conversion, as a percentage.
 //
 // Not a cut the platform keeps. The rand moves between the day this rate is
 // set and the day it is next looked at, and without headroom every local sale
 // in that window quietly pays the artist less than the dollar price says.
-// Three percent absorbs ordinary drift. Set to 0 to convert at exactly the
-// configured rate.
-const FX_MARGIN_PCT = Number(process.env.USD_ZAR_MARGIN_PCT || 3);
+// It was 3% when the rate was set by hand and could sit stale for months.
+// Now that fxRate.js refreshes it within hours, 1.5% is enough to cover the
+// drift between one refresh and the next. Set to 0 to convert at exactly the
+// rate supplied.
+const FX_MARGIN_PCT = Number(process.env.USD_ZAR_MARGIN_PCT || 1.5);
 
 /**
- * A rate that is missing, zero, negative or not a number is a configuration
- * error, and the only safe response is to refuse the sale.
+ * A rate that is missing, zero, negative or not a number is the one input this
+ * file must never improvise around, so it refuses.
  *
  * It would be easy to fall back to 1. That is the bug worth being afraid of:
  * it would charge R1.85 for a track meant to cost about R31, and look like a
@@ -70,14 +80,14 @@ const FX_MARGIN_PCT = Number(process.env.USD_ZAR_MARGIN_PCT || 3);
  * again in a minute. A checkout that charges a sixteenth of the price is money
  * the artist never sees and nobody notices for a month.
  */
-function assertRate() {
-  if (RAW_RATE === null || !Number.isFinite(RAW_RATE) || RAW_RATE <= 0) {
+function assertRate(rate) {
+  if (rate === null || rate === undefined || !Number.isFinite(Number(rate)) || Number(rate) <= 0) {
     throw new Error(
-      'USD_ZAR_RATE is not set to a usable number, so a dollar price cannot be ' +
-      'converted to rand for Paystack. Refusing rather than guessing a rate.'
+      `A usable USD to ZAR rate was not supplied (got ${JSON.stringify(rate)}), so a dollar ` +
+      'price cannot be converted to rand. Refusing rather than guessing a rate.'
     );
   }
-  return RAW_RATE;
+  return Number(rate);
 }
 
 /**
@@ -86,11 +96,11 @@ function assertRate() {
  * Rounded UP to a whole rand. Nobody prices anything at R30.53, and rounding
  * up rather than down means the conversion never shortchanges the artist.
  */
-function usdToZar(usdAmount) {
+function usdToZar(usdAmount, rateIn) {
   const usd = Number(usdAmount);
   if (!Number.isFinite(usd) || usd <= 0) return 0;
 
-  const rate = assertRate();
+  const rate = assertRate(rateIn);
   const zar = usd * rate * (1 + FX_MARGIN_PCT / 100);
 
   // Rounded to a hundredth first so binary floating point does not push an
@@ -115,8 +125,8 @@ function zarToPaystackMinor(zarAmount) {
  * in, the integer the Paystack API wants out, plus the rand figure to show the
  * buyer so the page and the charge can never disagree.
  */
-function usdToPaystackCharge(usdAmount) {
-  const zar = usdToZar(usdAmount);
+function usdToPaystackCharge(usdAmount, rate) {
+  const zar = usdToZar(usdAmount, rate);
   return { zar, minor: zarToPaystackMinor(zar), currency: 'ZAR' };
 }
 
@@ -130,7 +140,6 @@ function paypalCurrency() {
 }
 
 module.exports = {
-  RAW_RATE,
   FX_MARGIN_PCT,
   assertRate,
   usdToZar,
