@@ -153,11 +153,48 @@ const BEAT_LICENCES = [
   },
 ];
 
+/**
+ * The minimum to store for a pay-what-you-want track.
+ *
+ * With the toggle on, the MINIMUM is the price: the purchase sheet reads
+ * minimum_price and lets the buyer pay that or more. So a minimum of zero on a
+ * track the artist priced at R20 means anybody can take it for nothing, which
+ * is not what "pay what you want" is meant to do and is not what the artist
+ * chose.
+ *
+ * An unset minimum therefore falls back to the price they actually typed. That
+ * is the Bandcamp shape: name your price, starting at mine. An artist who
+ * genuinely wants a free-or-more track sets the price itself to zero.
+ */
+function pwywMinimum(form) {
+  if (!form || !form.pay_what_you_want) return null;
+  const typed = parseFloat(form.minimum_price);
+  if (Number.isFinite(typed) && typed > 0) return typed;
+  const price = parseFloat(form.download_price);
+  return Number.isFinite(price) && price > 0 ? price : null;
+}
+
 const BLANK_TRACK = {
   title: '', genre: '', mood: '', lyrics: '',
   is_explicit: false, is_downloadable: true, is_published: true,
   is_premium: false, download_price: '0', featured: false,
-  pay_what_you_want: false, minimum_price: '0',
+  // PAY WHAT YOU WANT IS ON BY DEFAULT, and the minimum carries the price.
+  //
+  // Bandcamp publishes the numbers behind this: fans choose to pay above the
+  // minimum about 40% of the time, and doing so lifts the average amount paid
+  // by nearly half. It is a larger effect on an artist's earnings than any
+  // price any of us would pick, and it costs the artist nothing, because the
+  // minimum is still the floor.
+  //
+  // An artist who wants one fixed price turns the toggle off, which is one tap
+  // and visible right there. The default is the one that earns them more.
+  //
+  // The MINIMUM stays at zero, deliberately. Defaulting it to R20 would make
+  // every new upload cost money, and an artist who meant to give a track away
+  // would be charging for it without having chosen to. Zero with the toggle on
+  // is "name your price, including nothing", which is strictly better than a
+  // plain free download: the fan who wants to pay is able to.
+  pay_what_you_want: true, minimum_price: '0',
   is_preorder: false, release_date: null, preorder_early_access: false,
   track_number: '1', audio_file: null, cover_file: null, has_versions: false,
   youtube_url: '', ai_content: 'human',
@@ -883,7 +920,7 @@ function AddTrackToAlbum({
         featured:          trackForm.featured,
         has_versions:      trackForm.has_versions,
         pay_what_you_want: trackForm.pay_what_you_want || false,
-        minimum_price:     parseFloat(trackForm.minimum_price) > 0 ? parseFloat(trackForm.minimum_price) : null,
+        minimum_price:     pwywMinimum(trackForm),
         is_preorder:       trackForm.is_preorder || false,
         release_date:      trackForm.is_preorder ? localInputToInstant(trackForm.release_date) : null,
         // Forced back to false when the track is not a pre-order, so a flag
@@ -1606,7 +1643,7 @@ export default function TrackUploadPanel() {
         featured:          trackForm.featured,
         has_versions:      trackForm.has_versions,
         pay_what_you_want: trackForm.pay_what_you_want || false,
-        minimum_price:     parseFloat(trackForm.minimum_price) > 0 ? parseFloat(trackForm.minimum_price) : null,
+        minimum_price:     pwywMinimum(trackForm),
         is_preorder:       trackForm.is_preorder || false,
         release_date:      trackForm.is_preorder ? localInputToInstant(trackForm.release_date) : null,
         // Forced back to false when the track is not a pre-order, so a flag
@@ -2008,7 +2045,7 @@ export default function TrackUploadPanel() {
         is_published: editForm.is_published, is_premium: editForm.is_premium,
         download_price: parseFloat(editForm.download_price) || 0,
         featured: editForm.featured, pay_what_you_want: editForm.pay_what_you_want || false,
-        minimum_price: parseFloat(editForm.minimum_price) > 0 ? parseFloat(editForm.minimum_price) : null,
+        minimum_price: pwywMinimum(editForm),
         album_id: editForm.album_id || null, track_number: parseInt(editForm.track_number) || 1,
         cover_artwork_url: coverUrl, ...(audioUrl && { file_url: audioUrl }),
         is_preorder: editForm.is_preorder || false,
