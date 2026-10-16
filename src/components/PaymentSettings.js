@@ -21,6 +21,25 @@ export default function PaymentSettings() {
   const [recentPayouts, setRecentPayouts] = useState([]);
   const [earnings, setEarnings] = useState(null);
 
+  // ── Bank account, for being paid in rand ──────────────────────────────────
+  //
+  // Separate state and a separate save from the PayPal block above, on
+  // purpose. These are two different ways of being paid and an artist may
+  // have one, the other or both; sharing a save button would mean typing a
+  // PayPal address to change a bank account.
+  //
+  // The account number is never read back from the database, because it is
+  // never stored there. Paystack holds it. What comes back is the last four
+  // digits, which is enough for somebody to recognise their own account.
+  const [banks, setBanks] = useState([]);
+  const [banksLoading, setBanksLoading] = useState(false);
+  const [banksError, setBanksError] = useState('');
+  const [bankCode, setBankCode] = useState('');
+  const [accountNumber, setAccountNumber] = useState('');
+  const [bankSaving, setBankSaving] = useState(false);
+  const [bankMsg, setBankMsg] = useState('');
+  const [bankOnFile, setBankOnFile] = useState(null);
+
   useEffect(() => {
     if (artist) {
       fetchPaymentProfile();
@@ -43,6 +62,79 @@ export default function PaymentSettings() {
       setPaypalMerchantId(data.paypal_merchant_id || '');
       setPayoutThreshold(data.payout_threshold || 10);
       setHasProfile(true);
+      if (data.paystack_subaccount_code) {
+        setBankOnFile({
+          bankName: data.paystack_bank_name || 'Your bank',
+          last4: data.paystack_account_last4 || null,
+        });
+        setBankCode(data.paystack_bank_code || '');
+      }
+    }
+  };
+
+  // The bank list comes from Paystack rather than a hardcoded array, so a bank
+  // being added or renamed is not a deploy. Fetched when the artist opens the
+  // section rather than on page load, because most visits here are about
+  // something else and the list is a round trip through a third party.
+  const loadBanks = async () => {
+    if (banks.length || banksLoading) return;
+    setBanksLoading(true);
+    setBanksError('');
+    try {
+      const res = await fetch('/.netlify/functions/paystack-subaccount', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'banks' }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.message || json.error || `HTTP ${res.status}`);
+      setBanks(json.banks || []);
+    } catch (err) {
+      console.error('[payments] bank list failed:', err.message);
+      setBanksError('Could not load the bank list. Your PayPal address still works.');
+    } finally {
+      setBanksLoading(false);
+    }
+  };
+
+  const handleSaveBank = async () => {
+    const digits = accountNumber.replace(/\s+/g, '');
+    if (!bankCode) { setBankMsg('Choose your bank.'); return; }
+    if (!/^\d{6,20}$/.test(digits)) { setBankMsg('Enter your account number, digits only.'); return; }
+
+    setBankSaving(true);
+    setBankMsg('');
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch('/.netlify/functions/paystack-subaccount', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+        },
+        body: JSON.stringify({
+          action: 'save',
+          bankCode,
+          bankName: banks.find(b => b.code === bankCode)?.name || null,
+          accountNumber: digits,
+        }),
+      });
+      const json = await res.json();
+      // Paystack's own wording is the useful one: it says things like
+      // "Account number is invalid", where a generic failure sends somebody
+      // back to the same form with no idea what to change.
+      if (!res.ok) throw new Error(json.message || json.error || `HTTP ${res.status}`);
+
+      setBankOnFile({ bankName: json.bankName || 'Your bank', last4: json.last4 });
+      setAccountNumber('');
+      setBankMsg(json.accountName
+        ? `Saved. Payouts go to ${json.accountName}.`
+        : 'Saved. Your sales will be paid into this account.');
+      setTimeout(() => setBankMsg(''), 6000);
+    } catch (err) {
+      setBankMsg(err.message);
+    } finally {
+      setBankSaving(false);
     }
   };
 
@@ -93,8 +185,22 @@ export default function PaymentSettings() {
   };
 
   const handleSave = async () => {
-    if (!paypalEmail.trim()) { setMsg('PayPal email is required'); return; }
-    if (!paypalEmail.includes('@')) { setMsg('Enter a valid email address'); return; }
+    // PayPal stopped being compulsory the moment a bank account became a way
+    // of being paid. An artist with their bank on file should not have to
+    // produce a PayPal address they do not use and may not have, which in
+    // South Africa is most of them.
+    //
+    // It is still required when it is the ONLY payout method, because a seller
+    // with neither cannot sell at all: netlify/lib/payee.js refuses the order
+    // rather than parking the money in the platform account.
+    if (!paypalEmail.trim() && !bankOnFile) {
+      setMsg('Add a PayPal email or a bank account, otherwise your music cannot be bought.');
+      return;
+    }
+    if (paypalEmail.trim() && !paypalEmail.includes('@')) {
+      setMsg('Enter a valid email address');
+      return;
+    }
 
     setSaving(true);
     setMsg('');
@@ -102,7 +208,10 @@ export default function PaymentSettings() {
     try {
       const payload = {
         artist_id: artist.id,
-        paypal_email:   paypalEmail.trim(),
+        // null rather than an empty string when it is left blank. An empty
+        // string is a value, and a query asking which artists have a payout
+        // method would count it as one.
+        paypal_email:   paypalEmail.trim() || null,
         paypal_merchant_id: paypalMerchantId.trim() || null,
         payout_threshold: payoutThreshold,
         updated_at: new Date().toISOString(),
@@ -136,7 +245,7 @@ export default function PaymentSettings() {
       // whichever screen someone edits.
       const { error: mirrorErr } = await supabase
         .from('artists')
-        .update({ paypal_email: paypalEmail.trim() })
+        .update({ paypal_email: paypalEmail.trim() || null })
         .eq('id', artist.id);
       if (mirrorErr) {
         // Not fatal, the payout function reads this table first. Worth
@@ -220,12 +329,96 @@ export default function PaymentSettings() {
         </p>
       )}
 
+      {/* ── Bank account ────────────────────────────────────────────────────
+          Above PayPal deliberately. For a South African artist this is the
+          better of the two: the money lands in an ordinary bank account, in
+          rand, with no withdrawal step and no conversion. PayPal stays below
+          for everyone it suits, and for anyone outside the countries Paystack
+          settles into. */}
+      <div className="space-y-3">
+        <h4 className="text-xs font-medium text-white/50">Bank Account</h4>
+
+        {bankOnFile ? (
+          <div className="rounded-xl bg-green-500/[0.07] border border-green-500/20 p-3">
+            <div className="flex items-center gap-2">
+              <Check className="w-4 h-4 text-green-400 flex-shrink-0" />
+              <p className="text-sm text-white">
+                {bankOnFile.bankName}
+                {bankOnFile.last4 ? <span className="text-white/40"> ending {bankOnFile.last4}</span> : null}
+              </p>
+            </div>
+            <p className="text-[10px] text-white/30 mt-1.5">
+              Sales are paid into this account. To change it, enter the new details below.
+            </p>
+          </div>
+        ) : (
+          <p className="text-[11px] text-white/35">
+            Add a bank account and buyers pay you in rand, straight into it. Nothing is held
+            in between.
+          </p>
+        )}
+
+        <div>
+          <label className="block text-xs text-white/40 mb-1">Bank</label>
+          <select
+            value={bankCode}
+            onFocus={loadBanks}
+            onChange={(e) => setBankCode(e.target.value)}
+            className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none"
+          >
+            <option value="">
+              {banksLoading ? 'Loading banks...' : banks.length ? 'Choose your bank' : 'Tap to load banks'}
+            </option>
+            {banks.map(b => <option key={b.code} value={b.code}>{b.name}</option>)}
+          </select>
+          {banksError && <p className="text-[10px] text-amber-300/70 mt-1">{banksError}</p>}
+        </div>
+
+        <div>
+          <label className="block text-xs text-white/40 mb-1">Account number</label>
+          <input
+            type="text"
+            inputMode="numeric"
+            autoComplete="off"
+            value={accountNumber}
+            onChange={(e) => setAccountNumber(e.target.value)}
+            placeholder={bankOnFile ? 'Enter a new account number' : 'Your account number'}
+            className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none placeholder-white/20"
+          />
+          <p className="text-[10px] text-white/20 mt-1">
+            Held by our payment provider, not stored here. You will only ever see the last four
+            digits.
+          </p>
+        </div>
+
+        <button
+          onClick={handleSaveBank}
+          disabled={bankSaving}
+          className="w-full py-2.5 rounded-lg bg-white/[0.08] hover:bg-white/[0.12] disabled:opacity-50 text-white text-sm font-medium transition flex items-center justify-center gap-2"
+        >
+          {bankSaving ? <Loader className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+          <span>{bankSaving ? 'Saving...' : bankOnFile ? 'Update bank account' : 'Save bank account'}</span>
+        </button>
+
+        {bankMsg && (
+          <p className={`text-xs ${/saved/i.test(bankMsg) ? 'text-green-400' : 'text-amber-300'}`}>
+            {bankMsg}
+          </p>
+        )}
+      </div>
+
       {/* PayPal settings */}
       <div className="space-y-3">
         <h4 className="text-xs font-medium text-white/50">PayPal Settings</h4>
 
         <div>
-          <label className="block text-xs text-white/40 mb-1">PayPal Email *</label>
+          {/* The asterisk went with the bank account arriving. PayPal is one
+              of two ways to be paid now, not the only one. */}
+          <label className="block text-xs text-white/40 mb-1">
+            PayPal Email {bankOnFile
+              ? <span className="text-white/25">(optional)</span>
+              : <span className="text-white/25">(or add a bank account above)</span>}
+          </label>
           <input
             type="email"
             value={paypalEmail}

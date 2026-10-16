@@ -535,39 +535,43 @@ export default function BrowsePage() {
     else playTrack(track, list);
   };
 
-  // Creators and What's New sit in front, because they are the two things
-  // worth seeing before you start digging. Tracks is still where you land
-  // (see the activeTab default), and it is still the first thing your eye
-  // reaches once you start reading the strip.
+  // THE ORDER IS THE POINT, and it changed.
   //
-  // REORDERED, and the order is the point.
+  // What's New leads now. It used to sit at the very end, behind nine tabs,
+  // which is where you put something nobody is meant to find. It carries the
+  // things that are actually time-sensitive on this page: the competition, a
+  // new episode, whatever was announced this week. An update nobody sees is
+  // not an update.
   //
-  // Albums used to be last, behind Collabs, which is where you put something
-  // nobody is meant to find. It is one of the two things people come to a
-  // music catalogue looking for, so it now sits directly after Tracks.
+  // Artist Highlight moved down to sit after New. It is a daily rotation
+  // rather than news, so it reads as part of the catalogue slices (New,
+  // Highlight, Trending, Featured) rather than as something that changed. It
+  // has not lost its rotation: migration 190 still keeps that moving.
   //
-  // Artist Highlight stays at the front. Migration 190 exists to keep that
-  // rotation moving, and a rotating row is worth nothing behind six tabs.
+  // Tracks is still where you LAND, whatever is first in this strip. See the
+  // activeTab default above: the landing state is pinned to tracks and
+  // whatsnew is explicitly excluded from it, which is what makes putting a
+  // panel at the head of the strip safe.
   //
-  // Artist Playlists is new here, moved off the Home page.
+  // Albums sits directly after Tracks because it is one of the two things
+  // people come to a music catalogue looking for.
   //
-  // The tail is the narrower stuff: ways of slicing the same catalogue
-  // (New, Trending, Featured), then people (Artists, Collabs), then the
-  // notices panel, which is not really a tab at all.
+  // The tail is people (Artists, Collabs), who are found by search far more
+  // often than by browsing to a tab.
   const tabs = [
-    { key: 'creators',  label: 'Artist Highlight', icon: Sparkles },
-    { key: 'tracks',    label: 'Tracks',    icon: Music },
-    { key: 'albums',    label: 'Albums',    icon: Disc3 },
-    { key: 'playlists', label: 'Playlists', icon: ListMusic },
-    { key: 'new',       label: 'New',       icon: Sparkles },
-    { key: 'trending',  label: 'Trending',  icon: Flame },
-    { key: 'featured',  label: 'Featured',  icon: Star },
-    { key: 'artists',   label: 'Artists',   icon: Crown },
-    { key: 'collabs',   label: 'Collabs',   icon: Users },
     // Not really a tab. Selecting it opens the same panel the home card opens
     // and leaves whatever tab you were on alone, which is why it is flagged
     // here rather than handled with a special case at the click.
     { key: 'whatsnew',  label: "What's New", icon: Newspaper, opens: true },
+    { key: 'tracks',    label: 'Tracks',    icon: Music },
+    { key: 'albums',    label: 'Albums',    icon: Disc3 },
+    { key: 'playlists', label: 'Playlists', icon: ListMusic },
+    { key: 'new',       label: 'New',       icon: Sparkles },
+    { key: 'creators',  label: 'Artist Highlight', icon: Sparkles },
+    { key: 'trending',  label: 'Trending',  icon: Flame },
+    { key: 'featured',  label: 'Featured',  icon: Star },
+    { key: 'artists',   label: 'Artists',   icon: Crown },
+    { key: 'collabs',   label: 'Collabs',   icon: Users },
   ];
 
   if (!user || loading) {
