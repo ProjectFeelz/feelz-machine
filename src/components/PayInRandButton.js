@@ -45,6 +45,13 @@ import { supabase } from '../supabaseClient';
 export default function PayInRandButton({
   trackId = null,
   albumId = null,
+  // A beat licence. The server reads that licence's price off the beat, so
+  // this names which one, never what it costs.
+  licenceId = null,
+  // A pay-what-you-want offer. Sent as what the buyer chose; the server floors
+  // it at the artist's minimum and refuses anything absurd. Ignored outright
+  // on a track that is not pay-what-you-want.
+  amount = null,
   email: emailProp = '',
   label = 'Pay in rand',
   className = '',
@@ -82,7 +89,11 @@ export default function PayInRandButton({
           'Content-Type': 'application/json',
           ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
         },
-        body: JSON.stringify({ trackId, albumId, email: address }),
+        body: JSON.stringify({
+          trackId, albumId, email: address,
+          ...(licenceId ? { licenceId } : {}),
+          ...(Number(amount) > 0 ? { amount: Number(amount) } : {}),
+        }),
       });
 
       const data = await res.json().catch(() => ({}));

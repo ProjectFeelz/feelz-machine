@@ -52,6 +52,7 @@ const crypto = require('crypto');
 const payeeLib = require('../lib/payee');
 const pricing = require('../lib/pricing');
 const fx = require('../lib/fxRate');
+const { resolveTrackPrice: pricing_resolveTrackPrice } = require('../lib/trackPrice');
 
 const PAYSTACK_BASE = 'https://api.paystack.co';
 const SECRET = process.env.PAYSTACK_SECRET_KEY;
@@ -70,12 +71,19 @@ exports.handler = async (event) => {
     return json(503, { error: 'paystack_not_configured', message: 'Card payments in rand are not switched on yet.' });
   }
 
-  let trackId, albumId, email;
+  let trackId, albumId, email, licenceId, offeredAmount;
   try {
     const b = JSON.parse(event.body || '{}');
     trackId = b.trackId || null;
     albumId = b.albumId || null;
     email   = (b.email || '').trim().toLowerCase();
+    // Two values the body IS allowed to influence, neither of which it gets
+    // to decide. licenceId names which licence, and the server reads that
+    // licence's price off the beat. amount is a pay-what-you-want offer, and
+    // the server floors it at what the artist set. Both go through
+    // netlify/lib/trackPrice.js, which is where the actual number comes from.
+    licenceId     = b.licenceId || null;
+    offeredAmount = b.amount != null ? b.amount : null;
   } catch {
     return json(400, { error: 'invalid_body' });
   }
@@ -116,11 +124,11 @@ exports.handler = async (event) => {
   //
   // Read from the database by id. The body said which item; it does not get to
   // say what the item costs or who it belongs to.
-  let label, usdPrice, artistId, itemKind;
+  let label, usdPrice, artistId, itemKind, priceSource = null;
   if (trackId) {
     const { data: track, error } = await admin
       .from('tracks')
-      .select('id, title, download_price, minimum_price, pay_what_you_want, artist_id, is_published, is_preorder, release_date')
+      .select('id, title, download_price, minimum_price, pay_what_you_want, artist_id, is_published, is_preorder, release_date, album_id, is_beat, beat_licence')
       .eq('id', trackId)
       .maybeSingle();
 
@@ -137,14 +145,23 @@ exports.handler = async (event) => {
       return json(403, { error: 'not_released_yet', release_date: track.release_date });
     }
 
-    // Pay what you want: the MINIMUM is the price here. A buyer choosing to
-    // pay more is a separate flow and is not what this endpoint does.
-    usdPrice = track.pay_what_you_want && Number(track.minimum_price) > 0
-      ? Number(track.minimum_price)
-      : Number(track.download_price);
-    label = track.title;
+    // Beat licences, pay-what-you-want offers, album shares and plain prices
+    // all resolve in one place, by the same rules PayPal uses. The body named
+    // the licence or made an offer; it does not get to set the number.
+    const priced = await pricing_resolveTrackPrice({
+      supabase: admin,
+      track,
+      licenceId,
+      offeredAmount,
+    });
+
+    if (priced.error) return json(priced.status || 400, { error: priced.error, message: priced.message });
+
+    usdPrice = priced.price;
+    label = priced.label;
     artistId = track.artist_id;
     itemKind = 'track';
+    priceSource = priced.source;
   } else {
     const { data: album, error } = await admin
       .from('albums')
@@ -167,6 +184,14 @@ exports.handler = async (event) => {
   if (!Number.isFinite(usdPrice) || usdPrice <= 0) {
     return json(400, { error: 'not_for_sale', message: 'This is a free download, there is nothing to pay.' });
   }
+
+  // The price is now whatever the server decided, never what arrived. Logged
+  // with its source so a surprising charge can be traced to the rule that
+  // produced it rather than guessed at.
+  console.log('[paystack-checkout] PRICED', JSON.stringify({
+    itemKind, usdPrice, source: priceSource || 'album.price', licenceId: licenceId || null,
+    offered: offeredAmount != null ? Number(offeredAmount) : null,
+  }));
 
   // ── Who gets the money ────────────────────────────────────────────────────
   //
@@ -236,6 +261,7 @@ exports.handler = async (event) => {
     user_id: buyerUserId,
     buyer_email: email,
     usd_price: usdPrice,
+    licence_id: licenceId,
     zar_amount: charge.zar,
     zar_minor: charge.minor,
     fx_rate: rate.rate,
@@ -283,6 +309,7 @@ exports.handler = async (event) => {
       album_id: itemKind === 'album' ? albumId : null,
       artist_id: artistId,
       usd_price: usdPrice,
+    licence_id: licenceId,
       zar_charged: charge.zar,
       fx_rate: rate.rate,
       fx_source: rate.source,

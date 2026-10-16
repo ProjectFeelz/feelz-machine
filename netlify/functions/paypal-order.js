@@ -4,6 +4,7 @@
 
 const https = require('https');
 const { createClient } = require('@supabase/supabase-js');
+const { resolveLicence } = require('../lib/licence');
 const paypalEnv = require('../lib/paypal-env');
 const payeeLib  = require('../lib/payee');
 const pricing   = require('../lib/pricing');
@@ -50,45 +51,12 @@ async function getPayPalAccessToken() {
 //   1. { enabled: { basic: true, ... }, prices: { basic: "3", ... } }  (current)
 //   2. a plain licence id string such as "basic"; price is download_price
 //   3. nothing; a downloadable beat offers "basic" at download_price
-// This function used to understand only an array of { id, price } (or
-// { licences: [...] }), a shape the upload form does not write, so every beat
-// quoted $0.00 and every order was refused as "licence not offered".
-// Returns { price, label } or null when the licence is not offered.
-function resolveLicence(track, licenceId) {
-  const want = String(licenceId || '');
-  const titleCase = (id) => id.charAt(0).toUpperCase() + id.slice(1);
-  let raw = track?.beat_licence ?? null;
-
-  if (typeof raw === 'string') {
-    const t = raw.trim();
-    if (t.startsWith('{') || t.startsWith('[')) {
-      try { raw = JSON.parse(t); } catch { raw = null; }
-    } else {
-      // Shape 2: a bare licence id.
-      return want === (t || 'basic')
-        ? { price: Number(track.download_price) || 0, label: titleCase(want) }
-        : null;
-    }
-  }
-
-  if (raw && typeof raw === 'object') {
-    const list = Array.isArray(raw) ? raw : (Array.isArray(raw.licences) ? raw.licences : null);
-    if (list) {
-      const lic = list.find(l => String(l.id) === want);
-      return lic ? { price: Number(lic.price) || 0, label: lic.label || titleCase(want) } : null;
-    }
-    if (raw.enabled && raw.prices) {
-      if (!raw.enabled[want]) return null;
-      return { price: parseFloat(raw.prices[want]) || 0, label: titleCase(want) };
-    }
-  }
-
-  // Shape 3, or JSON the page could not use either: the page falls back to a
-  // single "basic" licence at download_price, so the server does too.
-  return want === 'basic'
-    ? { price: Number(track.download_price) || 0, label: 'Basic' }
-    : null;
-}
+// resolveLicence moved to netlify/lib/licence.js, unchanged, because
+// netlify/functions/paystack-checkout.js needs the same answer and two copies
+// of a function that decides a price is two places for that price to be wrong.
+// A differential test compares the moved copy against the original across
+// every shape beat_licence has been written in; they agree on all of them,
+// including which inputs throw.
 
 // Tell an artist that a sale could not go through because of their payment
 // setup. At most once a day per artist, so a popular track with no PayPal does

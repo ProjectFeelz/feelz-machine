@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import PriceBreakdown, { useQuote } from '../components/PriceBreakdown';
+import PayInRandButton from '../components/PayInRandButton';
 import { Helmet } from 'react-helmet-async';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import useGoBack from '../hooks/useGoBack';
@@ -602,6 +603,11 @@ export default function BeatDetailPage() {
                   <div>
                     <PriceBreakdown quote={licenceQuote} sellerName={artist?.artist_name} className="mb-3" />
                     <div id="beat-paypal-container" className="min-h-[48px]" />
+                    {/* Rand. selectedLic is sent so the server reads THIS
+                        licence's price off the beat. Without it an exclusive
+                        would be charged at the beat's download price. */}
+                    <PayInRandButton trackId={track.id} licenceId={selectedLic?.id || null}
+                      label={`Pay in rand · ${selectedLic?.label || 'licence'}`} />
                     {purchaseError && <p className="text-xs text-red-400 mt-2 text-center">{purchaseError}</p>}
                   </div>
                 ) : (

@@ -16,6 +16,7 @@ import {
 import ShareCard from './ShareCard';
 import { buildShareUrl } from '../utils/shareLink';
 import { TrackCommentsOverlay } from './TrackComments';
+import PayInRandButton from './PayInRandButton';
 
 const PAYPAL_CLIENT_ID = process.env.REACT_APP_PAYPAL_CLIENT_ID;
 
@@ -623,6 +624,10 @@ export default function TrackActionSheet({ track, artist, onClose, initialView =
                                                     {purchaseError && <p className="text-xs text-red-400 text-center">{purchaseError}</p>}
                                                     {!paypalReady && !purchaseError && <div className="flex justify-center py-2"><Loader className="w-5 h-5 animate-spin text-white/30" /></div>}
                                                     <div id="paypal-tas-container" style={{ backgroundColor: '#fff', borderRadius: '8px', padding: '4px' }} />
+                                                    {/* Rand, through Paystack. The component asks the checkout itself and
+                                                        removes itself when the artist has no bank account on file, so this
+                                                        is a no-op on every artist paid through PayPal. */}
+                                                    <PayInRandButton trackId={track.id} />
                                                 </>
                                             ) : (
                                                 <button onClick={async () => {
@@ -695,6 +700,10 @@ export default function TrackActionSheet({ track, artist, onClose, initialView =
                                                 <>
                                                     {!paypalReady && !purchaseError && <div className="flex justify-center py-2"><Loader className="w-5 h-5 animate-spin text-white/30" /></div>}
                                                     <div id="paypal-tas-container" style={{ backgroundColor: '#fff', borderRadius: '8px', padding: '4px' }} />
+                                                    {/* Rand, through Paystack. The component asks the checkout itself and
+                                                        removes itself when the artist has no bank account on file, so this
+                                                        is a no-op on every artist paid through PayPal. */}
+                                                    <PayInRandButton trackId={track.id} />
                                                 </>
                                             )}
                                         </>
