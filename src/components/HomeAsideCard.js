@@ -38,6 +38,10 @@ import {
 import { supabase } from '../supabaseClient';
 import { youTubeId } from '../utils/youtube';
 import { visibleNow, platformStoryArtistId } from '../utils/stories';
+// The app's one story viewer. The rail below opens this rather than carrying
+// its own, so press and hold, the tap zones, reactions and the track pill all
+// behave the same here as on an artist profile.
+import { ArtistStoryView } from './ArtistStories';
 import { usePlayer } from '../contexts/PlayerContext';
 import { useAuth } from '../contexts/AuthContext';
 import { coverUrl, COVER } from '../utils/coverUrl';
@@ -469,13 +473,25 @@ function LatestEpisode({ onClose }) {
 // reads, through the shared visibleNow filter, so a story planned for
 // December stays invisible until December on this surface too.
 //
-// Tapping one does not open a bespoke viewer. It routes to the platform
-// artist's profile, where the story ring already exists and already works.
-// A second viewer would be a second thing to keep in step with the first.
+// Tapping one opens the story.
+//
+// It used to navigate to the platform artist's profile instead, on the
+// reasoning that the story ring there already worked and a second viewer
+// would be a second thing to keep in step. The reasoning was fine and the
+// result was not: tapping a story closed What's New, landed you on a profile
+// page, and played nothing. You then had to find the ring and tap again.
+//
+// This does not add a second viewer. It opens ArtistStoryView, the same one
+// the profile ring and the For You rail open, so there is still exactly one
+// story viewer in the app. What changes is that the tap reaches it directly.
+//
+// The select widened to match: ArtistStoryView shows the tagged track pill
+// and the artist's name and photo, so the story rows need the same joins
+// StoriesRail uses or the viewer opens with holes in it.
 export function PlatformStoryRail() {
-  const navigate = useNavigate();
   const [stories, setStories] = React.useState([]);
-  const [slug, setSlug] = React.useState(null);
+  const [artist, setArtist] = React.useState(null);
+  const [openIdx, setOpenIdx] = React.useState(null);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -487,15 +503,17 @@ export function PlatformStoryRail() {
         visibleNow(
           supabase
             .from('artist_stories')
-            .select('id, media_url, media_type, caption, publish_at, expires_at')
+            .select('*, tracks:tagged_track_id(id, title, slug, file_url, cover_artwork_url)')
             .eq('artist_id', artistId))
           .order('publish_at', { ascending: false })
           .limit(12),
-        supabase.from('artists').select('slug').eq('id', artistId).maybeSingle(),
+        supabase.from('artists')
+          .select('id, slug, artist_name, profile_image_url')
+          .eq('id', artistId).maybeSingle(),
       ]);
       if (cancelled) return;
       setStories(rows || []);
-      setSlug(art?.slug || null);
+      setArtist(art || null);
     })();
     return () => { cancelled = true; };
   }, []);
@@ -508,10 +526,13 @@ export function PlatformStoryRail() {
         From Feelz Machine
       </p>
       <div className="flex gap-2.5 overflow-x-auto scrollbar-hide px-1 pb-1">
-        {stories.map(st => (
+        {stories.map((st, i) => (
           <button
             key={st.id}
-            onClick={() => slug && navigate(`/artist/${slug}`)}
+            // The index matters: tapping the third story opens the third
+            // story, not the first. ArtistStoryView then pages on from there
+            // exactly as it does everywhere else.
+            onClick={() => setOpenIdx(i)}
             className="relative flex-shrink-0 rounded-xl overflow-hidden transition hover:opacity-90"
             style={{ width: 92, aspectRatio: '9 / 16', border: `1px solid ${T.edge}` }}
             title={st.caption || 'Open'}
@@ -529,6 +550,18 @@ export function PlatformStoryRail() {
           </button>
         ))}
       </div>
+
+      {/* The viewer, rendered only once something has been tapped. artist is
+          loaded alongside the stories, so the guard is belt and braces for the
+          moment between the two setState calls. */}
+      {openIdx !== null && artist && (
+        <ArtistStoryView
+          stories={stories}
+          artist={artist}
+          initialIndex={openIdx}
+          onClose={() => setOpenIdx(null)}
+        />
+      )}
     </div>
   );
 }
