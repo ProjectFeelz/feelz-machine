@@ -22,6 +22,11 @@
 
 const { createClient } = require('@supabase/supabase-js');
 const paypalEnv = require('../lib/paypal-env');
+const { recordRun } = require('../lib/jobRun');
+
+// The name in netlify.toml and in job_expectations, so the schedule, the run
+// record and the watchdog all refer to the same thing.
+const JOB = 'release-pending-payouts';
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -90,6 +95,8 @@ async function sendPayPalPayout(accessToken, items, batchId) {
 // secret always, and let nothing through without it.
 //
 exports.handler = async (event) => {
+  const started = Date.now();
+
   // Scheduled invocations carry no secret header, so allow them; a manual
   // POST still has to prove itself.
   const isScheduled = !event.httpMethod || event.httpMethod === 'POST' && !event.headers?.['x-manual-run'];
@@ -109,6 +116,9 @@ exports.handler = async (event) => {
       .eq('status', 'pending');
     if (pendErr) throw pendErr;
     if (!pending?.length) {
+      // Nothing owed is the normal answer most weeks. Recorded anyway, so
+      // a quiet week and a stopped job stop looking the same.
+      if (!dryRun) await recordRun(JOB, { ok: true, items: 0, detail: { reason: 'nothing pending' }, startedAt: started });
       return { statusCode: 200, body: JSON.stringify({ ok: true, released: 0, reason: 'nothing pending' }) };
     }
 
@@ -181,6 +191,7 @@ exports.handler = async (event) => {
     }
 
     if (!items.length) {
+      await recordRun(JOB, { ok: true, items: 0, detail: { skipped }, startedAt: started });
       return { statusCode: 200, body: JSON.stringify({ ok: true, released: 0, skipped }) };
     }
 
@@ -206,6 +217,14 @@ exports.handler = async (event) => {
 
     console.log('[sweep] released', releasing.length, 'artists, batch', paypalBatchId);
 
+    // Artists paid. A dry run records nothing, because it moved no money.
+    await recordRun(JOB, {
+      ok: true,
+      items: releasing.length,
+      detail: { batch: paypalBatchId, skipped: skipped?.length ?? null },
+      startedAt: started,
+    });
+
     return {
       statusCode: 200,
       body: JSON.stringify({ ok: true, batch: paypalBatchId, released: releasing, skipped }),
@@ -213,6 +232,7 @@ exports.handler = async (event) => {
 
   } catch (err) {
     console.error('[sweep] failed:', err.message);
+    if (!dryRun) await recordRun(JOB, { ok: false, error: err.message, startedAt: started });
     return { statusCode: 500, body: JSON.stringify({ error: err.message }) };
   }
 };

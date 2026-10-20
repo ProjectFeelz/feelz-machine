@@ -15,11 +15,16 @@
 // free year ending is distinguishable afterwards from a card failing.
 
 const { createClient } = require('@supabase/supabase-js');
+const { recordRun } = require('../lib/jobRun');
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
+
+// The name in netlify.toml and in job_expectations, so the schedule, the run
+// record and the watchdog all refer to the same thing.
+const JOB = 'expire-subscriptions';
 
 //
 // WHY THE AUTH CHECK IN HERE LOOKS BACKWARDS, AND WHY IT IS FINE
@@ -41,6 +46,8 @@ const supabase = createClient(
 // secret always, and let nothing through without it.
 //
 exports.handler = async (event) => {
+  const started = Date.now();
+
   // A manual run has to prove itself; the scheduler does not send headers.
   if (event?.headers?.['x-manual-run']
       && event.headers['x-internal-secret'] !== process.env.INTERNAL_FUNCTION_SECRET) {
@@ -51,6 +58,7 @@ exports.handler = async (event) => {
     const { data, error } = await supabase.rpc('expire_stale_subscriptions');
     if (error) {
       console.error('[expire-subscriptions] failed:', error.code, error.message);
+      await recordRun(JOB, { ok: false, error: `${error.code} ${error.message}`, startedAt: started });
       return { statusCode: 500, body: JSON.stringify({ error: error.message }) };
     }
 
@@ -62,9 +70,15 @@ exports.handler = async (event) => {
     // running, and this one is allowed to be quiet for weeks at a time.
     console.log('[expire-subscriptions] done —', total ? JSON.stringify(summary) : 'nothing to expire');
 
+    // Quiet days are normal here, which is exactly why max_idle_hours on this
+    // job is generous: the run record is for proving it ran, not for proving
+    // it found somebody to expire.
+    await recordRun(JOB, { ok: true, items: total, detail: total ? summary : null, startedAt: started });
+
     return { statusCode: 200, body: JSON.stringify({ ok: true, expired: summary }) };
   } catch (err) {
     console.error('[expire-subscriptions] threw:', err.message);
+    await recordRun(JOB, { ok: false, error: err.message, startedAt: started });
     return { statusCode: 500, body: JSON.stringify({ error: err.message }) };
   }
 };

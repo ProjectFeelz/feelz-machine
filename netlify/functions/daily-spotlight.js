@@ -25,6 +25,8 @@
  */
 
 const { createClient } = require('@supabase/supabase-js');
+const { recordRun } = require('../lib/jobRun');
+
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -35,9 +37,14 @@ const BATCH_SIZE = 100;
 const TODAY = new Date().toISOString().split('T')[0];
 
 // Must match SPOTLIGHT_PER_DAY in src/pages/HomePage.js.
+// The name in netlify.toml and in job_expectations, so the schedule, the run
+// record and the watchdog all refer to the same thing.
+const JOB = 'daily-spotlight';
+
 const SPOTLIGHT_PER_DAY = 3;
 
 exports.handler = async (event) => {
+  const started = Date.now();
   const isManual = event.httpMethod === 'POST';
   console.log(`Daily spotlight running for ${TODAY} — ${isManual ? 'manual' : 'scheduled'}`);
 
@@ -50,6 +57,9 @@ exports.handler = async (event) => {
       .gte('last_seen_at', cutoff);
 
     if (!activeListeners?.length) {
+      // Recorded as a run that did no work. A day with nothing to do and a
+      // job that stopped running are the same silence otherwise.
+      await recordRun(JOB, { ok: true, items: 0, detail: { skipped: 'no active listeners' }, startedAt: started });
       return { statusCode: 200, body: JSON.stringify({ skipped: true, reason: 'no active listeners' }) };
     }
 
@@ -65,6 +75,9 @@ exports.handler = async (event) => {
       .limit(500);
 
     if (!allArtists?.length) {
+      // Recorded as a run that did no work. A day with nothing to do and a
+      // job that stopped running are the same silence otherwise.
+      await recordRun(JOB, { ok: true, items: 0, detail: { skipped: 'no eligible artists' }, startedAt: started });
       return { statusCode: 200, body: JSON.stringify({ skipped: true, reason: 'no eligible artists' }) };
     }
 
@@ -125,6 +138,9 @@ exports.handler = async (event) => {
     );
 
     if (!eligible.length) {
+      // Recorded as a run that did no work. A day with nothing to do and a
+      // job that stopped running are the same silence otherwise.
+      await recordRun(JOB, { ok: true, items: 0, detail: { skipped: 'all users already have spotlight today' }, startedAt: started });
       return { statusCode: 200, body: JSON.stringify({ skipped: true, reason: 'all users already have spotlight today' }) };
     }
 
@@ -215,12 +231,22 @@ exports.handler = async (event) => {
     }
 
     console.log(`Spotlight complete. Assigned: ${assigned}/${eligible.length}`);
+    // Listeners given a spotlight today. This job should always pick somebody
+    // while there are active listeners and published artists, so zero here is
+    // worth looking at rather than shrugging off.
+    await recordRun(JOB, {
+      ok: true,
+      items: assigned,
+      detail: { eligible: eligible.length, date: TODAY },
+      startedAt: started,
+    });
     return {
       statusCode: 200,
       body: JSON.stringify({ success: true, date: TODAY, assigned, eligible: eligible.length }),
     };
   } catch (err) {
     console.error('Daily spotlight error:', err);
+    await recordRun(JOB, { ok: false, error: err.message, startedAt: started });
     return { statusCode: 500, body: JSON.stringify({ error: err.message }) };
   }
 };

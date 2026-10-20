@@ -8,9 +8,31 @@
  * function — direct browser calls to background functions return 503).
  * This regular function has 10s to trigger the background function, which
  * then runs for up to 860s.
+ *
+ *
+ * WHY THIS FILE ONLY RECORDS ITS FAILURES
+ *
+ * This is a gateway. It hands off in a few milliseconds and returns long
+ * before any message is written, so a success here means the handoff worked
+ * and nothing about whether the drip produced anything. Recording that as a
+ * successful run would be the exact lie the run record exists to prevent: for
+ * three months this function returned 200 to itself twice a week while the
+ * background function it called was answering 401.
+ *
+ * So the real run, with the real message count, is recorded at the end of
+ * engagement-drip-background.js under this same job name. What is recorded
+ * here is a handoff that failed, because that is the half the background
+ * function cannot report on: if it never started, it cannot say so.
  */
 
+const { recordRun } = require('../lib/jobRun');
+
+// The name in netlify.toml and in job_expectations. The background function
+// uses the same one on purpose, so both halves report as one job.
+const JOB = 'engagement-drip-cron';
+
 exports.handler = async (event) => {
+  const started = Date.now();
   // Accept both scheduled (GET) and manual admin trigger (POST)
   if (event.httpMethod !== 'GET' && event.httpMethod !== 'POST') {
     return { statusCode: 405, body: 'Method Not Allowed' };
@@ -40,6 +62,15 @@ exports.handler = async (event) => {
 
     if (!isSuccess) {
       console.error('Background function rejected:', res.status, data);
+      // The failure that went unseen for three months. Recorded here because
+      // a background function that was never allowed to start cannot record
+      // anything itself.
+      await recordRun(JOB, {
+        ok: false,
+        error: `handoff refused: background function returned ${res.status}`,
+        detail: { status: res.status },
+        startedAt: started,
+      });
       return { statusCode: 500, body: JSON.stringify({ error: `Background function returned ${res.status}`, detail: data }) };
     }
 
@@ -54,6 +85,7 @@ exports.handler = async (event) => {
     };
   } catch (err) {
     console.error('Drip cron error:', err.message);
+    await recordRun(JOB, { ok: false, error: `handoff threw: ${err.message}`, startedAt: started });
     return { statusCode: 500, body: JSON.stringify({ error: err.message }) };
   }
 };

@@ -24,6 +24,7 @@
 // once, so a retry, a double run or a manual invocation sends nothing extra.
 
 const { createClient } = require('@supabase/supabase-js');
+const { recordRun } = require('../lib/jobRun');
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -34,7 +35,12 @@ const supabase = createClient(
 // how early, never whether somebody is warned twice.
 const WARN_DAYS = 7;
 
+// The name in netlify.toml and in job_expectations, so the schedule, the run
+// record and the watchdog all refer to the same thing.
+const JOB = 'warn-expiring-subscriptions';
+
 exports.handler = async (event) => {
+  const started = Date.now();
   // Same guard as expire-subscriptions: Netlify will not route a public
   // request to a function that carries a schedule, so this only has to
   // challenge a manual run. The scheduler sends no headers.
@@ -50,6 +56,7 @@ exports.handler = async (event) => {
 
     if (error) {
       console.error('[warn-expiring-subscriptions] failed:', error.code, error.message);
+      await recordRun(JOB, { ok: false, error: `${error.code} ${error.message}`, startedAt: started });
       return { statusCode: 500, body: JSON.stringify({ error: error.message }) };
     }
 
@@ -62,9 +69,13 @@ exports.handler = async (event) => {
     console.log('[warn-expiring-subscriptions] done —',
       total ? JSON.stringify(summary) : `nobody expiring within ${WARN_DAYS} days`);
 
+    // Quiet days are normal: most days nobody is seven days from an expiry.
+    await recordRun(JOB, { ok: true, items: total, detail: total ? summary : null, startedAt: started });
+
     return { statusCode: 200, body: JSON.stringify({ ok: true, warned: summary }) };
   } catch (err) {
     console.error('[warn-expiring-subscriptions] threw:', err.message);
+    await recordRun(JOB, { ok: false, error: err.message, startedAt: started });
     return { statusCode: 500, body: JSON.stringify({ error: err.message }) };
   }
 };

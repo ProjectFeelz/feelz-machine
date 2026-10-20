@@ -22,6 +22,7 @@
  */
 
 const { createClient } = require('@supabase/supabase-js');
+const { recordRun } = require('../lib/jobRun');
 
 const supabase = createClient(
   process.env.SUPABASE_URL || process.env.REACT_APP_SUPABASE_URL,
@@ -36,7 +37,12 @@ const SLOT_DAYS      = 7;
 const WINDOW_DAYS    = 7;
 const SMALL_CEILING  = 2000;
 
+// The name in netlify.toml and in job_expectations, so the schedule, the run
+// record and the watchdog all refer to the same thing.
+const JOB = 'rotate-featured';
+
 exports.handler = async (event) => {
+  const started = Date.now();
   const manual = event?.httpMethod === 'POST';
   let dryRun = false;
   if (manual) {
@@ -54,6 +60,7 @@ exports.handler = async (event) => {
 
     if (error) {
       console.error('[rotate-featured]', error.code, error.message, error.hint || '');
+      if (!dryRun) await recordRun(JOB, { ok: false, error: `${error.code} ${error.message}`, startedAt: started });
       return { statusCode: 500, body: JSON.stringify({ error: error.message }) };
     }
 
@@ -63,9 +70,23 @@ exports.handler = async (event) => {
       `[rotate-featured]${dryRun ? ' DRY RUN' : ''} expired=${row?.expired} added=${row?.added} board=${row?.board}\n${row?.detail || ''}`
     );
 
+    // Slots filled is the number worth watching: a board that stops taking
+    // anybody new looks identical in the log to one that is simply full.
+    // A dry run deliberately records nothing, because it changed nothing and
+    // a dry run that counted would make the board look rotated when it is not.
+    if (!dryRun) {
+      await recordRun(JOB, {
+        ok: true,
+        items: Number(row?.added) || 0,
+        detail: { expired: row?.expired ?? null, board: row?.board ?? null },
+        startedAt: started,
+      });
+    }
+
     return { statusCode: 200, body: JSON.stringify({ dryRun, ...row }) };
   } catch (err) {
     console.error('[rotate-featured] unexpected', err);
+    if (!dryRun) await recordRun(JOB, { ok: false, error: err.message || String(err), startedAt: started });
     return { statusCode: 500, body: JSON.stringify({ error: 'Internal error' }) };
   }
 };

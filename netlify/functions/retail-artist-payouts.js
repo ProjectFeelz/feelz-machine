@@ -35,8 +35,13 @@
 const crypto = require('crypto');
 const { createClient } = require('@supabase/supabase-js');
 const paypalEnv = require('../lib/paypal-env');
+const { recordRun } = require('../lib/jobRun');
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+
+// The name in netlify.toml and in job_expectations, so the schedule, the run
+// record and the watchdog all refer to the same thing.
+const JOB = 'retail-artist-payouts';
 const PAYPAL_BASE = paypalEnv.baseApiM;
 const MAX_ATTEMPTS = 3;
 
@@ -286,6 +291,7 @@ async function payOut(token, dryRun) {
 }
 
 exports.handler = async (event) => {
+  const started = Date.now();
   let scheduled = false;
   try { scheduled = !!JSON.parse(event.body || '{}').next_run; } catch { scheduled = false; }
   const secret = process.env.INTERNAL_FUNCTION_SECRET;
@@ -302,9 +308,21 @@ exports.handler = async (event) => {
     report.reconciled = await reconcile(token, dryRun);
     report.pay = await payOut(token, dryRun);
     console.log('[retail-payouts]', JSON.stringify(report));
+    // Payments actually sent is the number worth watching. A dry run records
+    // nothing, because it moved no money and a counted dry run would make the
+    // books look settled when they are not.
+    if (!dryRun) {
+      await recordRun(JOB, {
+        ok: true,
+        items: Number(report.pay?.sent) || 0,
+        detail: report,
+        startedAt: started,
+      });
+    }
     return { statusCode: 200, body: JSON.stringify(report) };
   } catch (e) {
     console.error('[retail-payouts] run failed:', e.message, JSON.stringify(report));
+    if (!dryRun) await recordRun(JOB, { ok: false, error: e.message, detail: report, startedAt: started });
     return { statusCode: 500, body: JSON.stringify({ error: e.message, report }) };
   }
 };

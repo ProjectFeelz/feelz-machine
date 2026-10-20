@@ -42,11 +42,16 @@
  */
 
 const { createClient } = require('@supabase/supabase-js');
+const { recordRun } = require('../lib/jobRun');
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
+
+// The name in netlify.toml and in job_expectations, so the schedule, the run
+// record and the watchdog all refer to the same thing.
+const JOB = 'compute-recommendations';
 
 const BATCH_SIZE       = 30;
 const RECS_PER_USER    = 60;   // store 60, serve 30 at a time — always fresh
@@ -103,6 +108,7 @@ async function markRun(supabase) {
 }
 
 exports.handler = async (event) => {
+  const started = Date.now();
   const isManual = event.httpMethod === 'POST';
 
   const gate = await guardRun(event, supabase);
@@ -132,7 +138,13 @@ exports.handler = async (event) => {
       .limit(1000);
 
     if (trackErr) throw trackErr;
-    if (!allTracks?.length) return { statusCode: 200, body: 'No tracks' };
+    if (!allTracks?.length) {
+      // Nothing to recommend from. Recorded as a run that did no work rather
+      // than left silent, because an empty catalogue and a job that stopped
+      // running look identical from the outside.
+      await recordRun(JOB, { ok: true, items: 0, detail: { reason: 'no tracks' }, startedAt: started });
+      return { statusCode: 200, body: 'No tracks' };
+    }
 
     // track_id -> artist_id, so playlist adds and downloads (which only
     // carry a track_id) can be turned into artist-level affinity.
@@ -165,7 +177,10 @@ exports.handler = async (event) => {
       .gte('last_seen_at', activeCutoff)
       .limit(5000);
 
-    if (!activeListeners?.length) return { statusCode: 200, body: 'No active listeners' };
+    if (!activeListeners?.length) {
+      await recordRun(JOB, { ok: true, items: 0, detail: { reason: 'no active listeners' }, startedAt: started });
+      return { statusCode: 200, body: 'No active listeners' };
+    }
     console.log(`[recs] ${activeListeners.length} active listeners`);
 
     let processed = 0;
@@ -495,10 +510,15 @@ exports.handler = async (event) => {
     }
 
     console.log(`[recs] done — ${processed} users`);
+    // Listeners given a fresh set is the number worth watching. This job runs
+    // twice a day and should always produce rows while anybody is listening,
+    // so zero here is the one count that should never be normal.
+    await recordRun(JOB, { ok: true, items: processed, startedAt: started });
     return { statusCode: 200, body: JSON.stringify({ ok: true, processed }) };
 
   } catch (err) {
     console.error('[recs] error:', err);
+    await recordRun(JOB, { ok: false, error: err.message || String(err), startedAt: started });
     return { statusCode: 500, body: JSON.stringify({ error: err.message }) };
   }
 };

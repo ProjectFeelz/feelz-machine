@@ -58,6 +58,7 @@
 
 const { createClient } = require('@supabase/supabase-js');
 const { sendOne } = require('../lib/email');
+const { recordRun } = require('../lib/jobRun');
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -130,7 +131,13 @@ function buildEmail(n) {
   return { subject: title, html, text };
 }
 
+// The name in netlify.toml and in job_expectations, so the schedule, the run
+// record and the watchdog all refer to the same thing.
+const JOB = 'send-billing-emails';
+
 exports.handler = async (event) => {
+  const started = Date.now();
+
   // Same shape as expire-subscriptions.js: this runs on a schedule, and
   // Netlify will not route an HTTP request to a scheduled function. The header
   // check covers a manual run. If the `schedule` line is ever removed from
@@ -153,12 +160,17 @@ exports.handler = async (event) => {
 
   if (readErr) {
     console.error('[billing-emails] could not read the queue:', readErr.code, readErr.message);
+    await recordRun(JOB, { ok: false, error: `queue read: ${readErr.code} ${readErr.message}`, startedAt: started });
     return { statusCode: 500, body: JSON.stringify({ error: readErr.message }) };
   }
   if (!pending || pending.length === 0) {
     // Logged every run, including the quiet ones. A job that only speaks when
     // it does something is indistinguishable from a job that has stopped.
     console.log('[billing-emails] nothing waiting');
+    // Running every fifteen minutes, an empty queue is the usual answer, so
+    // zero here means nothing on its own. The run record is what proves it
+    // looked.
+    await recordRun(JOB, { ok: true, items: 0, startedAt: started });
     return { statusCode: 200, body: JSON.stringify({ ok: true, sent: 0, pending: 0 }) };
   }
 
@@ -171,6 +183,7 @@ exports.handler = async (event) => {
 
   if (profErr) {
     console.error('[billing-emails] address lookup failed:', profErr.code, profErr.message);
+    await recordRun(JOB, { ok: false, error: `address lookup: ${profErr.code} ${profErr.message}`, startedAt: started });
     return { statusCode: 500, body: JSON.stringify({ error: profErr.message }) };
   }
   const byUser = Object.fromEntries((profiles || []).map(p => [p.user_id, p]));
@@ -191,6 +204,7 @@ exports.handler = async (event) => {
       // on the next run.
       console.error('[billing-emails] suppression check failed, sending nothing:',
         supErr.code, supErr.message);
+      await recordRun(JOB, { ok: false, error: `suppression check: ${supErr.code} ${supErr.message}`, startedAt: started });
       return { statusCode: 500, body: JSON.stringify({ error: 'suppression_check_failed' }) };
     }
     suppressed = new Set((sup || []).map(r => r.email));
@@ -271,6 +285,19 @@ exports.handler = async (event) => {
   }
 
   console.log('[billing-emails] done —', JSON.stringify({ sent, skipped, failed, read: pending.length, dryRun }));
+
+  // Emails actually sent. A send that failed is carried in the detail and
+  // still counts as a run that worked, because the job did its job: the
+  // failure belongs to the address, not the schedule. A dry run records
+  // nothing, because it sent nothing.
+  if (!dryRun) {
+    await recordRun(JOB, {
+      ok: true,
+      items: sent,
+      detail: (skipped || failed) ? { skipped, failed, read: pending.length } : null,
+      startedAt: started,
+    });
+  }
 
   return {
     statusCode: 200,

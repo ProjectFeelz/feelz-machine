@@ -4,13 +4,19 @@
  * Deletes expired stories from artist_stories table and storage bucket.
  */
 const { createClient } = require('@supabase/supabase-js');
+const { recordRun } = require('../lib/jobRun');
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
+// The name in netlify.toml and in job_expectations, so the schedule, the run
+// record and the watchdog all refer to the same thing.
+const JOB = 'cleanup-stories';
+
 exports.handler = async () => {
+  const started = Date.now();
   try {
     const now = new Date().toISOString();
 
@@ -23,6 +29,8 @@ exports.handler = async () => {
     if (fetchErr) throw fetchErr;
     if (!expired?.length) {
       console.log('No expired stories to clean up');
+      // Nothing expired is the normal answer on a day nobody posted a story.
+      await recordRun(JOB, { ok: true, items: 0, startedAt: started });
       return { statusCode: 200, body: JSON.stringify({ deleted: 0 }) };
     }
 
@@ -57,9 +65,11 @@ exports.handler = async () => {
     if (deleteErr) throw deleteErr;
 
     console.log(`Deleted ${ids.length} expired stories`);
+    await recordRun(JOB, { ok: true, items: ids.length, startedAt: started });
     return { statusCode: 200, body: JSON.stringify({ deleted: ids.length }) };
   } catch (err) {
     console.error('Cleanup error:', err.message);
+    await recordRun(JOB, { ok: false, error: err.message, startedAt: started });
     return { statusCode: 500, body: JSON.stringify({ error: err.message }) };
   }
 };
