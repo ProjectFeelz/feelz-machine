@@ -354,6 +354,19 @@
 [functions."engagement-drip-cron"]
   schedule = "0 8 * * 1,4"
 
+# Hourly, the job that watches the other jobs.
+#
+# Reads job_health, which compares each job's recorded runs against what it is
+# expected to do, and writes an admin notification when one is overdue,
+# failing, or succeeding while producing nothing. Those alerts are emailed by
+# send-billing-emails, because the whole reason these failures went unnoticed
+# is that nobody was looking at the app.
+#
+# One alert per job per day, so a long-running problem does not train anybody
+# to ignore it.
+[functions."check-job-health"]
+  schedule = "7 * * * *"
+
 # feature-education-drip is deliberately NOT scheduled. Its schedule was
 # already commented out here, "platform tips not landing", and switching it
 # on as a side effect of a syntax fix would start sending something that was

@@ -1,80 +1,103 @@
 // netlify/functions/resend-webhook.js
 //
-// Bounces and spam complaints, which nothing has been listening for.
-//
-// Feelz Machine sends through Resend and consumes none of the result. Grep the
-// repo for "bounce" before this file and every hit is about listening
-// behaviour. So an address that does not exist is mailed again next week, and
-// the week after; and somebody who hits "report spam" in Gmail is never told
-// about and keeps being mailed, which is the fastest way there is to lose a
-// sending domain for everybody else on it.
-//
-// Point a Resend webhook at this function and both stop being invisible.
+// Resend tells us when an address goes bad. This is the ear.
 //
 //
-// SIGNATURE VERIFICATION IS NOT OPTIONAL HERE
+// WHY IT MATTERS MORE THAN IT LOOKS
 //
-// This endpoint takes an address and stops mail going to it. Unverified, it is
-// a way for anyone on the internet to unsubscribe any address they can guess —
-// quieter and more damaging than defacing something, because nobody notices
-// until an artist asks why their list stopped growing.
+// email_suppressions has been read on every send since the billing queue went
+// in — four reasons, all four respected — and it has had zero rows in it since
+// the day it was created, because nothing on the platform has ever written to
+// it. The list was a door with no one on the other side.
 //
-// Resend signs with Svix. Verified against Svix's own documentation rather
-// than from memory:
-//
-//   signed content = `${svix-id}.${svix-timestamp}.${raw body}`
-//   key            = base64 decode of the part after `whsec_`
-//   algorithm      = HMAC SHA-256, compared base64
-//   header         = space delimited `v1,<sig>` pairs, any one may match
-//
-// The RAW body matters. Parse it and re-stringify it and the signature fails,
-// because key order and whitespace are not preserved.
+// That is not a tidiness problem. A sending domain's reputation is scored on
+// how often it is handed an address that does not exist, and on how often a
+// human presses "this is spam". Keep mailing a dead address and the mailbox
+// providers stop trusting the domain; the next password reset for somebody
+// real is the one that lands in spam. The suppression list is how a platform
+// stops doing that, and it only works if something fills it in.
 //
 //
-// WHAT THIS DELIBERATELY DOES NOT DO YET, AND WHY
+// WHAT IT WRITES, AND WHAT IT DELIBERATELY DOES NOT
 //
-// A complaint is unambiguous: the event type itself carries the meaning, so
-// `email.complained` suppresses, full stop.
+//   email.bounced     -> hard_bounce, but only when Resend says the bounce was
+//                        permanent. A soft bounce is a full mailbox or a
+//                        greylisting server: the address is fine and will work
+//                        tomorrow, and suppressing it would be the platform
+//                        punishing someone for going on holiday.
+//   email.complained  -> complaint. Someone pressed the spam button. That is
+//                        final and is never second-guessed, whatever the
+//                        message was.
+//   email.failed      -> invalid, when the reason reads like a bad address.
 //
-// A bounce is not. Only a PERMANENT bounce should suppress — a full mailbox or
-// a greylisting is temporary, and suppressing on one loses a real subscriber
-// over a bad afternoon. I could not verify the exact shape of Resend's bounce
-// payload (their docs delegate the detail, and I could not reach the page), so
-// this checks the field names that are plausible, acts when one of them
-// clearly says permanent, and REFUSES TO ACT when none of them is present —
-// logging the whole payload instead, loudly, so the real shape can be read off
-// one log line and this function finished properly.
+// Deliveries, opens and clicks are acknowledged and dropped. They are not this
+// function's business and storing them would mean building an analytics table
+// nobody asked for.
 //
-// Guessing the field name would mean either suppressing transient bounces or
-// silently ignoring permanent ones, and both of those fail quietly. An
-// unrecognised payload that says so in the log does not.
+//
+// THREE REFUSALS BEFORE IT TRUSTS ANYTHING
+//
+// Resend signs with Svix. The signature covers the id, the timestamp and the
+// exact bytes of the body, so:
+//
+//   1. the timestamp must be inside five minutes, which stops a captured
+//      request being replayed back at us next week,
+//   2. the signature must verify against the raw body, compared in constant
+//      time, and
+//   3. the event has to be one of the three kinds above, read from fields
+//      Resend defines rather than anything free-text in the payload.
+//
+// Nothing in the body is used to decide whether the body is trustworthy.
+//
+//
+// IT IS SAFE TO DELIVER TWICE
+//
+// Svix retries for days on any non-2xx. email_suppressions has a unique index
+// on lower(trim(email)), so the second delivery of the same bounce collides
+// and is turned into an update rather than a second row. The handler returns
+// 200 for anything it understood, including a repeat, so Resend stops asking.
+// It returns 500 only when the database is the thing that failed, which is the
+// one case where being asked again actually helps.
 
 const crypto = require('crypto');
 const { createClient } = require('@supabase/supabase-js');
 
-// Svix's own recommended tolerance. Older than this and it is a replay.
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+);
+
+// Svix's own tolerance. A replay of a request older than this is refused even
+// if the signature is perfect.
 const TOLERANCE_SECONDS = 5 * 60;
 
-const json = (statusCode, body) => ({
-  statusCode,
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify(body),
-});
+const ok   = (body) => ({ statusCode: 200, body: JSON.stringify(body) });
+const deny = (why)  => ({ statusCode: 401, body: JSON.stringify({ error: why }) });
 
-function verify(rawBody, headers) {
-  const secret = process.env.RESEND_WEBHOOK_SECRET;
-  if (!secret) throw new Error('RESEND_WEBHOOK_SECRET is not set');
+/**
+ * Verify a Svix signature over the raw request body.
+ *
+ * The secret arrives as `whsec_<base64>`. The prefix is a label, not part of
+ * the key: the bytes that sign are the base64 after it. Getting that wrong
+ * produces a function that rejects every genuine delivery and looks, from the
+ * outside, exactly like a misconfigured endpoint.
+ */
+function signatureIsGood(headers, rawBody) {
+  const id        = headers['svix-id']        || headers['webhook-id'];
+  const timestamp = headers['svix-timestamp'] || headers['webhook-timestamp'];
+  const signature = headers['svix-signature'] || headers['webhook-signature'];
+  const secret    = process.env.RESEND_WEBHOOK_SECRET;
 
-  // Netlify lower-cases header names, but not every proxy in front of it does.
-  const h = (name) => headers[name] || headers[name.toLowerCase()] || '';
-  const id        = h('svix-id');
-  const timestamp = h('svix-timestamp');
-  const signature = h('svix-signature');
-
-  if (!id || !timestamp || !signature) return false;
+  if (!secret) {
+    console.error('[resend-webhook] RESEND_WEBHOOK_SECRET is not set; refusing everything.');
+    return { good: false, why: 'not_configured' };
+  }
+  if (!id || !timestamp || !signature) return { good: false, why: 'missing_signature_headers' };
 
   const age = Math.abs(Math.floor(Date.now() / 1000) - Number(timestamp));
-  if (!Number.isFinite(age) || age > TOLERANCE_SECONDS) return false;
+  if (!Number.isFinite(age) || age > TOLERANCE_SECONDS) {
+    return { good: false, why: 'timestamp_outside_tolerance' };
+  }
 
   const key = Buffer.from(secret.replace(/^whsec_/, ''), 'base64');
   const expected = crypto
@@ -82,143 +105,157 @@ function verify(rawBody, headers) {
     .update(`${id}.${timestamp}.${rawBody}`)
     .digest('base64');
 
-  // The header carries a space delimited list; any version may match.
-  return signature.split(' ').some((part) => {
-    const sig = part.includes(',') ? part.split(',')[1] : part;
-    if (!sig || sig.length !== expected.length) return false;
-    try {
-      return crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected));
-    } catch {
-      return false;
-    }
+  // The header can carry several versioned signatures, space separated, as
+  // "v1,<sig> v1,<sig>". Any one matching is a pass: that is how Svix rolls a
+  // secret without dropping deliveries mid-rotation.
+  const offered = String(signature).split(' ')
+    .map(part => part.split(',')[1])
+    .filter(Boolean);
+
+  const expectedBuf = Buffer.from(expected);
+  const good = offered.some((candidate) => {
+    const buf = Buffer.from(candidate);
+    // timingSafeEqual throws on a length mismatch, so the length is checked
+    // first and a wrong-length signature simply fails.
+    return buf.length === expectedBuf.length && crypto.timingSafeEqual(buf, expectedBuf);
   });
+
+  return good ? { good: true } : { good: false, why: 'bad_signature' };
 }
 
 /**
- * Is this bounce permanent?
- *
- * Returns true, false, or null for "the payload did not say in any shape I
- * recognise". Null is the important one: it is the difference between a
- * decision and a guess, and the caller treats it as "do nothing, say so".
+ * Decide what, if anything, this event means for an address.
+ * Returns null for everything that is not a reason to stop writing to someone.
  */
-function isPermanentBounce(data) {
-  const candidates = [
-    data?.bounce?.type,
-    data?.bounce?.bounceType,
-    data?.bounce_type,
-    data?.type,
-    data?.severity,
-  ].filter((v) => typeof v === 'string');
+function classify(type, data) {
+  const bounce = data?.bounce || {};
+  // Resend reports the class as "Permanent" or "Transient", and older payloads
+  // carry it on bounce.type instead. Both are read; anything else is treated
+  // as transient, because the failure mode of guessing wrong in that direction
+  // is one undelivered email, and in the other direction it is a real person
+  // silently cut off from the platform's mail for good.
+  const severity = String(bounce.type || bounce.subType || data?.type || '').toLowerCase();
 
-  if (!candidates.length) return null;
+  if (type === 'email.bounced') {
+    if (severity.includes('permanent') || severity.includes('hard')) {
+      return { reason: 'hard_bounce', detail: bounce.message || bounce.subType || 'permanent bounce' };
+    }
+    return null;
+  }
 
-  const v = candidates[0].toLowerCase();
-  if (v.includes('permanent') || v === 'hard') return true;
-  if (v.includes('transient') || v.includes('temporary') || v === 'soft') return false;
-  if (v.includes('undetermined')) return false;   // err towards keeping them
+  if (type === 'email.complained') {
+    return { reason: 'complaint', detail: 'marked as spam by the recipient' };
+  }
+
+  if (type === 'email.failed') {
+    const why = String(data?.failed?.reason || data?.reason || '').toLowerCase();
+    if (why.includes('invalid') || why.includes('does not exist') || why.includes('no such')) {
+      return { reason: 'invalid', detail: data?.failed?.reason || data?.reason || 'invalid recipient' };
+    }
+    return null;
+  }
+
   return null;
 }
 
 exports.handler = async (event) => {
-  if (event.httpMethod !== 'POST') return json(405, { error: 'method_not_allowed' });
+  if (event.httpMethod !== 'POST') {
+    return { statusCode: 405, body: 'Method Not Allowed' };
+  }
 
-  // Netlify may hand the body back base64 encoded. The signature is over the
-  // raw bytes, so decode before verifying rather than after.
+  // The signature is over the bytes that were sent. Netlify base64-encodes a
+  // body it thinks is binary, and decoding it after hashing — or hashing the
+  // re-serialised JSON — gives a different string and a signature that never
+  // matches.
   const rawBody = event.isBase64Encoded
     ? Buffer.from(event.body || '', 'base64').toString('utf8')
     : (event.body || '');
 
-  let ok = false;
-  try {
-    ok = verify(rawBody, event.headers || {});
-  } catch (err) {
-    console.error('[resend-webhook] cannot verify:', err.message);
-    return json(500, { error: 'not_configured' });
-  }
-  if (!ok) {
-    console.warn('[resend-webhook] rejected an unverified request');
-    return json(401, { error: 'bad_signature' });
+  const headers = Object.fromEntries(
+    Object.entries(event.headers || {}).map(([k, v]) => [k.toLowerCase(), v])
+  );
+
+  const check = signatureIsGood(headers, rawBody);
+  if (!check.good) {
+    console.warn('[resend-webhook] refused:', check.why);
+    return deny(check.why);
   }
 
   let payload;
   try {
     payload = JSON.parse(rawBody);
   } catch {
-    return json(400, { error: 'invalid_json' });
+    // Signed and unreadable should never happen, and retrying will not change
+    // it, so this is a 200 with a complaint in the log rather than a loop.
+    console.error('[resend-webhook] signed body was not JSON');
+    return ok({ ignored: 'unparseable' });
   }
 
   const type = payload?.type;
   const data = payload?.data || {};
+  const verdict = classify(type, data);
 
-  // Resend sends `to` as an array. One event can cover several recipients.
+  if (!verdict) {
+    // Delivered, opened, clicked, delivery_delayed, a soft bounce. All fine,
+    // none of them ours.
+    return ok({ ignored: type || 'unknown' });
+  }
+
+  // `to` is an array on Resend's payloads. One bad address in a message sent
+  // to several should suppress that address and leave the others alone, so
+  // every recipient on the event is written.
   const recipients = []
-    .concat(data.to || data.email || [])
-    .filter((v) => typeof v === 'string' && v.includes('@'))
-    .map((v) => v.trim().toLowerCase());
+    .concat(data.to || [])
+    .concat(data.email ? [data.email] : [])
+    .map(a => String(a || '').trim().toLowerCase())
+    .filter(a => a.includes('@'));
 
   if (!recipients.length) {
-    console.warn('[resend-webhook]', type, 'carried no usable address');
-    return json(200, { ok: true, noted: 'no_recipient' });
+    console.warn('[resend-webhook]', type, 'carried no recipient address');
+    return ok({ ignored: 'no_recipient' });
   }
 
-  let reason = null;
-  let detail = null;
+  let written = 0;
+  for (const email of recipients) {
+    const row = {
+      email,
+      reason: verdict.reason,
+      detail: String(verdict.detail || '').slice(0, 500),
+      provider_id: data.email_id || payload.id || null,
+    };
 
-  if (type === 'email.complained') {
-    // Unambiguous, and the one that actually costs you the domain. Somebody
-    // who reaches for the spam button rather than the unsubscribe link is also
-    // telling you the link was not obvious enough, which is worth knowing
-    // separately from an ordinary opt-out.
-    reason = 'complaint';
-    detail = 'marked as spam by the recipient';
-  } else if (type === 'email.bounced') {
-    const permanent = isPermanentBounce(data);
+    const { error } = await supabase.from('email_suppressions').insert(row);
 
-    if (permanent === true) {
-      reason = 'hard_bounce';
-      detail = JSON.stringify(data.bounce || data).slice(0, 500);
-    } else if (permanent === false) {
-      console.log('[resend-webhook] transient bounce, not suppressing:', recipients.join(', '));
-      return json(200, { ok: true, noted: 'transient_bounce' });
-    } else {
-      // The honest branch. Nothing is suppressed on a payload whose shape was
-      // not confirmed — send me this log line and I will finish the mapping.
-      console.error(
-        '[resend-webhook] UNRECOGNISED BOUNCE SHAPE — nothing suppressed. ' +
-        'Full payload follows so the permanence field can be identified:',
-        JSON.stringify(payload).slice(0, 2000)
-      );
-      return json(200, { ok: true, noted: 'unrecognised_bounce_shape' });
+    if (!error) { written++; continue; }
+
+    if (error.code === '23505') {
+      // Already on the list. Keep the newest reason and detail: an address
+      // that hard bounced and then had a complaint filed should read as the
+      // complaint, and a redelivery of the same event is a harmless no-op.
+      const { error: updErr } = await supabase
+        .from('email_suppressions')
+        .update({ reason: row.reason, detail: row.detail, provider_id: row.provider_id })
+        .eq('email', email);
+      if (updErr) {
+        console.error('[resend-webhook] could not refresh existing suppression:', updErr.code, updErr.message);
+        return { statusCode: 500, body: JSON.stringify({ error: updErr.message }) };
+      }
+      written++;
+      continue;
     }
-  } else {
-    // delivered, sent, opened, clicked, delivery_delayed. Acknowledged so
-    // Resend stops retrying, and otherwise ignored.
-    return json(200, { ok: true, ignored: type });
+
+    console.error('[resend-webhook] could not record suppression:', error.code, error.message);
+    // A 500 asks Svix to try again, which is the right answer when the
+    // database is what failed.
+    return { statusCode: 500, body: JSON.stringify({ error: error.message }) };
   }
 
-  const admin = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
-
-  const rows = recipients.map((email) => ({
-    email,
-    reason,
-    detail,
-    provider_id: data.email_id || payload.data?.email_id || null,
+  console.log('[resend-webhook]', JSON.stringify({
+    type,
+    reason: verdict.reason,
+    recipients: recipients.length,
+    written,
   }));
 
-  // The unique index is on lower(trim(email)), so a second report for the same
-  // address is a no-op rather than an error. A mailbox that bounces every week
-  // should not fill the table with a row per week.
-  const { error } = await admin
-    .from('email_suppressions')
-    .upsert(rows, { onConflict: 'email', ignoreDuplicates: true });
-
-  if (error) {
-    // 500 on purpose: Resend retries, and a suppression that failed to write
-    // is one we want to see again rather than lose.
-    console.error('[resend-webhook] suppression write failed:', error.code, error.message);
-    return json(500, { error: 'write_failed' });
-  }
-
-  console.log(`[resend-webhook] suppressed ${rows.length} address(es) as ${reason}`);
-  return json(200, { ok: true, suppressed: rows.length, reason });
+  return ok({ received: true, type, reason: verdict.reason, suppressed: written });
 };

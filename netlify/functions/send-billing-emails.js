@@ -74,7 +74,12 @@ const PAGE_SIZE = 100;
 // Only these reach an inbox. A renewal receipt is deliberately absent: a
 // monthly "you paid again" email is the kind people mute, and muting this
 // sender buries the notices that matter. Renewals stay in the app.
-const EMAILABLE_KINDS = new Set(['payment_failed', 'expired', 'ended']);
+//
+// job_health is here for the same reason the billing ones are: the whole
+// point of the watchdog is that nobody was looking at the app when the job
+// died. An alert that only lands in a bell icon repeats the failure it is
+// supposed to catch.
+const EMAILABLE_KINDS = new Set(['payment_failed', 'expired', 'ended', 'job_health']);
 
 const esc = (s) => String(s == null ? '' : s)
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -88,9 +93,15 @@ const esc = (s) => String(s == null ? '' : s)
 function buildEmail(n) {
   const title = n.title || 'About your subscription';
   const body  = n.message || '';
-  const cta   = (n.metadata && n.metadata.kind) === 'payment_failed'
-    ? { label: 'Check your payment details', href: 'https://www.paypal.com/myaccount/autopay/' }
-    : { label: 'Open Feelz Machine', href: `${SITE_URL}/hub` };
+  const kind  = n.metadata && n.metadata.kind;
+  const cta   =
+      kind === 'payment_failed'
+        ? { label: 'Check your payment details', href: 'https://www.paypal.com/myaccount/autopay/' }
+    : kind === 'job_health'
+        // Straight to the function that is misbehaving, named in the metadata.
+        ? { label: 'Open the function in Netlify',
+            href: `https://app.netlify.com/projects/feelz-machine/functions/${encodeURIComponent((n.metadata && n.metadata.job) || '')}` }
+        : { label: 'Open Feelz Machine', href: `${SITE_URL}/hub` };
 
   const html = `<!doctype html>
 <html><body style="margin:0;padding:24px;background:#0b0b0b;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
@@ -103,15 +114,18 @@ function buildEmail(n) {
     </td></tr>
     <tr><td style="padding:22px 28px 26px;">
       <p style="margin:0;font-size:12px;line-height:1.6;color:#6b6b6b;">
-        This is a service message about your Feelz Machine subscription, so it is sent whatever your other email settings are.
-        Manage your plan at <a href="${esc(SITE_URL)}/hub" style="color:#8b5cf6;text-decoration:none;">feelzmachine.com</a>.
+        ${kind === 'job_health'
+          ? 'This is an automated check on Feelz Machine\'s scheduled jobs. You are getting it because you are an admin.'
+          : `This is a service message about your Feelz Machine subscription, so it is sent whatever your other email settings are. Manage your plan at <a href="${esc(SITE_URL)}/hub" style="color:#8b5cf6;text-decoration:none;">feelzmachine.com</a>.`}
       </p>
     </td></tr>
   </table>
 </body></html>`;
 
   const text = `${title}\n\n${body}\n\n${cta.label}: ${cta.href}\n\n` +
-    `This is a service message about your Feelz Machine subscription.`;
+    (kind === 'job_health'
+      ? 'Automated check on Feelz Machine scheduled jobs.'
+      : 'This is a service message about your Feelz Machine subscription.');
 
   return { subject: title, html, text };
 }
