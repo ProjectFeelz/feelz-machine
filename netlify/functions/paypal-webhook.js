@@ -397,7 +397,15 @@ async function recordRetailPayment(resource, subscriptionId) {
 // whether this sale belongs to an artist, a listener or neither.
 async function recordSubscriptionPayment(resource, subscriptionId) {
   const saleId = resource?.id;
-  if (!saleId || !subscriptionId) return null;
+  if (!saleId || !subscriptionId) {
+    // Was a silent return. A payment event with no sale id or no agreement id
+    // is money arriving that nothing can attribute, and it used to leave no
+    // trace at all: the tier would move and the ledger would stay empty, with
+    // nothing in any log to say why.
+    console.error('[paypal-webhook] SUBSCRIPTION PAYMENT NOT RECORDED: missing identifiers',
+      JSON.stringify({ saleId: saleId || null, subscriptionId: subscriptionId || null }));
+    return null;
+  }
 
   const gross = Math.round(parseFloat(resource?.amount?.total) * 100) / 100;
   const fee   = Math.round(parseFloat(resource?.transaction_fee?.value || 0) * 100) / 100;
@@ -410,25 +418,63 @@ async function recordSubscriptionPayment(resource, subscriptionId) {
   // Which audience owns this subscription. Checked in the database rather
   // than guessed from the plan id, because the same column name carries all
   // three and only one will have a row.
+  // started_at comes back too, because the receipt that gets written later
+  // needs to know whether this subscription is new or has been running. See
+  // the note on isRenewal in the handler.
   const [{ data: artistSub }, { data: listenerSub }] = await Promise.all([
     supabase.from('artist_tier_subscriptions')
-      .select('id, artist_id, artists(user_id)')
+      .select('id, artist_id, started_at, artists(user_id)')
       .eq('paypal_subscription_id', subscriptionId).maybeSingle(),
     supabase.from('listener_tier_subscriptions')
-      .select('id, user_id')
+      .select('id, user_id, started_at')
       .eq('paypal_subscription_id', subscriptionId).maybeSingle(),
   ]);
 
-  let kind = null, artistId = null, userId = null, rowId = null, table = null;
+  let kind = null, artistId = null, userId = null, rowId = null, table = null, startedAt = null;
   if (artistSub) {
     kind = 'artist'; artistId = artistSub.artist_id;
     userId = artistSub.artists?.user_id || null;
     rowId = artistSub.id; table = 'artist_tier_subscriptions';
+    startedAt = artistSub.started_at || null;
   } else if (listenerSub) {
     kind = 'listener'; userId = listenerSub.user_id;
     rowId = listenerSub.id; table = 'listener_tier_subscriptions';
+    startedAt = listenerSub.started_at || null;
   } else {
-    return null;                                  // retail, or nothing we own
+    // This used to be a bare return. A venue subscription lands here and is
+    // genuinely none of this function's business, so that case stays quiet.
+    //
+    // Anything that matches none of the three is the case worth shouting
+    // about: PayPal has taken money against an agreement this platform cannot
+    // identify. Silence there is how a paying subscriber ends up with no
+    // record and nobody notices, so it is logged and an admin is told.
+    const { data: venueSub } = await supabase.from('retail_subscriptions')
+      .select('id').eq('paypal_subscription_id', subscriptionId).maybeSingle();
+    if (venueSub) return null;                    // a venue, handled elsewhere
+
+    console.error('[paypal-webhook] UNATTRIBUTABLE SUBSCRIPTION PAYMENT:',
+      JSON.stringify({ saleId, subscriptionId, gross, currency: resource?.amount?.currency || 'USD' }),
+      '- no artist, listener or venue subscription carries this agreement id. Nothing recorded.');
+
+    // Best effort, and deliberately swallowed: telling somebody must never be
+    // the reason a payment path fails.
+    try {
+      const { data: admins } = await supabase.from('admins').select('user_id');
+      const rows = (admins || []).map(a => a.user_id).filter(Boolean).map(uid => ({
+        user_id: uid,
+        type: 'admin_message',
+        title: 'A subscription payment could not be matched',
+        message: `PayPal took ${resource?.amount?.currency || 'USD'} ${gross} on agreement `
+               + `${subscriptionId}, and no artist, listener or venue subscription carries that id. `
+               + 'Nothing was recorded. The sale id is ' + saleId + '.',
+        email_requested: true,
+        metadata: { kind: 'unattributed_payment', subscription: subscriptionId, sale: saleId, gross },
+      }));
+      if (rows.length) await supabase.from('notifications').insert(rows);
+    } catch (e) {
+      console.error('[paypal-webhook] could not alert on the unattributed payment:', e.message);
+    }
+    return null;
   }
 
   const { error } = await supabase.from('subscription_payments').upsert({
@@ -461,7 +507,7 @@ async function recordSubscriptionPayment(resource, subscriptionId) {
 
   console.log('[paypal-webhook] recorded', kind, 'payment', resource?.amount?.currency || 'USD', gross,
     'fee', fee, 'sale', saleId);
-  return { kind, artistId, userId };
+  return { kind, artistId, userId, startedAt };
 }
 
 exports.handler = async (event) => {
@@ -625,9 +671,10 @@ exports.handler = async (event) => {
       // than return quietly if they cannot write, which gives PayPal a 500 and
       // another delivery: a payment nobody recorded is the one failure that
       // cannot be reconstructed afterwards.
+      let paymentRecord = null;
       try {
         await recordRetailPayment(resource, subscriptionId);
-        await recordSubscriptionPayment(resource, subscriptionId);
+        paymentRecord = await recordSubscriptionPayment(resource, subscriptionId);
       } catch (e) {
         return { statusCode: 500, body: JSON.stringify({ error: 'payment not recorded, retry' }) };
       }
@@ -698,7 +745,29 @@ exports.handler = async (event) => {
                 .select('id', { count: 'exact', head: true })
                 .eq('paypal_subscription_id', subscriptionId);
 
-              const isRenewal = (count || 0) > 1;
+              // THE LEDGER IS YOUNGER THAN THE SUBSCRIPTIONS IT DESCRIBES
+              //
+              // Counting rows in subscription_renewals was the whole test, and
+              // on its own it misreads every subscription that predates the
+              // ledger. Nothing wrote to that table until October 2026, so a
+              // plan that has been running since September arrives here with
+              // an empty history and is greeted as a brand new signup. The
+              // first person this would have happened to is a subscriber whose
+              // renewal failed and recovered: they would be told their plan was
+              // live, as if they had just joined, a month after they did.
+              //
+              // So the subscription's own start date is the second opinion. A
+              // first payment lands within moments of the row being created;
+              // anything older than an hour has been running, whatever the
+              // ledger remembers. Both have to agree before this is treated as
+              // a first payment, and the default when they disagree is the
+              // renewal wording, which is never wrong for somebody who has
+              // paid before.
+              const startedAt = paymentRecord?.startedAt || null;
+              const subscriptionIsNew = startedAt
+                ? (Date.now() - Date.parse(startedAt)) < 3600000
+                : true;
+              const isRenewal = !((count || 0) <= 1 && subscriptionIsNew);
               const who = kind === 'artist'
                 ? { artist_id: row.artist_id }
                 : kind === 'listener'
