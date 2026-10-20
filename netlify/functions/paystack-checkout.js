@@ -8,6 +8,25 @@
  * which is the same principle netlify/lib/payee.js keeps for PayPal.
  *
  *
+ * THE LIVE CHECK, AND WHY IT IS THE FIRST THING HERE
+ *
+ * A Paystack account that is still in test mode will happily open a checkout.
+ * It will decline every real card and accept Paystack's published test card,
+ * which is the worst pairing available: a buyer who tried to pay and could
+ * not, and anyone who knows that test card walking off with a paid download
+ * and a sale in the ledger that never happened.
+ *
+ * So this refuses outright unless PAYSTACK_SECRET_KEY is a live key. It
+ * refuses before the database is touched, so no intent row is written for a
+ * payment that was never going to happen, and the refusal is a plain message
+ * rather than a broken checkout.
+ *
+ * PAYSTACK_ALLOW_TEST=true lifts it, for working on the flow on purpose.
+ * src/components/PayInRandButton.js keeps its own copy of the same rule so the
+ * button is an announcement rather than a dead end, but this is the check that
+ * counts, because a browser can send anything.
+ *
+ *
  * WHAT THIS FUNCTION REFUSES TO TRUST
  *
  * The price. It is read from the database by id, never taken from the request
@@ -58,6 +77,11 @@ const PAYSTACK_BASE = 'https://api.paystack.co';
 const SECRET = process.env.PAYSTACK_SECRET_KEY;
 const SITE = process.env.URL || 'https://www.feelzmachine.com';
 
+// Live only when the key says live. A missing key, a test key or anything
+// unrecognised all count as not live, so the failure direction is the safe one.
+const ALLOW_TEST = process.env.PAYSTACK_ALLOW_TEST === 'true';
+const PAYSTACK_IS_LIVE = String(SECRET || '').startsWith('sk_live_') || ALLOW_TEST;
+
 const json = (statusCode, body) => ({
   statusCode,
   headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
@@ -69,6 +93,18 @@ exports.handler = async (event) => {
 
   if (!SECRET) {
     return json(503, { error: 'paystack_not_configured', message: 'Card payments in rand are not switched on yet.' });
+  }
+
+  // Nothing below this line runs until the account is live. No lookup, no
+  // exchange rate, no intent row, and above all no checkout that a buyer
+  // could mistake for a working one.
+  if (!PAYSTACK_IS_LIVE) {
+    console.warn('[paystack-checkout] refused: the Paystack key is not a live key.');
+    return json(503, {
+      error: 'paystack_not_live',
+      fallback: 'paypal',
+      message: 'Paying in rand is coming soon. Use the PayPal button for now.',
+    });
   }
 
   let trackId, albumId, email, licenceId, offeredAmount;
@@ -309,7 +345,7 @@ exports.handler = async (event) => {
       album_id: itemKind === 'album' ? albumId : null,
       artist_id: artistId,
       usd_price: usdPrice,
-    licence_id: licenceId,
+      licence_id: licenceId,
       zar_charged: charge.zar,
       fx_rate: rate.rate,
       fx_source: rate.source,

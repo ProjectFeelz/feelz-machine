@@ -18,6 +18,24 @@
  * component holds the whole rand path, and each screen gains one line.
  *
  *
+ * THE ANNOUNCEMENT, AND THE SWITCH THAT ENDS IT
+ *
+ * Until the Paystack account is live, this renders an announcement instead of
+ * a button: rand payments are coming, and there is nothing here to press. That
+ * matters more than it looks. A button that opens a checkout which cannot take
+ * a real card leaves a buyer who believes they paid and received nothing, and
+ * no amount of explaining afterwards undoes that.
+ *
+ * What decides it is the public key itself. REACT_APP_PAYSTACK_PUBLIC_KEY is
+ * baked into the bundle at build time, so the day the live key replaces the
+ * test one and the site rebuilds, the announcement becomes a button on its
+ * own. There is no flag to remember and no second deploy to forget.
+ *
+ * REACT_APP_PAYSTACK_ALLOW_TEST=true turns the button back on against a test
+ * key, for working on the flow deliberately. It is an environment variable
+ * rather than anything a visitor can reach.
+ *
+ *
  * WHY IT CAN DECIDE FOR ITSELF WHETHER TO SHOW
  *
  * It does not need to be told whether the artist takes rand. It asks the
@@ -42,6 +60,12 @@
 import React, { useState } from 'react';
 import { supabase } from '../supabaseClient';
 
+// Live only when the key says live. Anything else, including a missing key,
+// is treated as not live, so the failure direction is always the safe one.
+const PUBLIC_KEY = process.env.REACT_APP_PAYSTACK_PUBLIC_KEY || '';
+const ALLOW_TEST = process.env.REACT_APP_PAYSTACK_ALLOW_TEST === 'true';
+const PAYSTACK_IS_LIVE = PUBLIC_KEY.startsWith('pk_live_') || ALLOW_TEST;
+
 export default function PayInRandButton({
   trackId = null,
   albumId = null,
@@ -56,6 +80,10 @@ export default function PayInRandButton({
   label = 'Pay in rand',
   className = '',
   onUnavailable,
+  // Set this false on a screen that is too tight for the announcement. The
+  // button never appears there either way; this only decides whether the
+  // notice does.
+  announceWhenComingSoon = true,
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -67,6 +95,17 @@ export default function PayInRandButton({
 
   if (unavailable) return null;
   if (!trackId && !albumId) return null;
+
+  // Nothing below this line can start a payment while the account is not live.
+  if (!PAYSTACK_IS_LIVE) {
+    if (!announceWhenComingSoon) return null;
+    return (
+      <div className="w-full px-4 py-2.5 rounded-xl text-sm text-center text-white/40
+                      bg-white/[0.03] border border-white/10 select-none">
+        Paying in rand is coming soon
+      </div>
+    );
+  }
 
   const start = async (useEmail) => {
     setBusy(true);
@@ -101,6 +140,15 @@ export default function PayInRandButton({
       if (res.status === 409) {
         // This artist is paid through PayPal. Not an error to show anybody:
         // the PayPal buttons are already on the screen.
+        setUnavailable(true);
+        onUnavailable?.();
+        return;
+      }
+
+      // The server keeps its own copy of the live check, and it is the one
+      // that counts. If a stale bundle reaches a visitor after the key has
+      // been rolled back, this is what stops it.
+      if (res.status === 503 && data.error === 'paystack_not_live') {
         setUnavailable(true);
         onUnavailable?.();
         return;

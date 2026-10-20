@@ -8,7 +8,7 @@
  * receipt or a collaborator split is written for the Paystack route.
  *
  *
- * THREE SEPARATE CHECKS, AND WHY NONE OF THEM IS SPARE
+ * FOUR SEPARATE CHECKS, AND WHY NONE OF THEM IS SPARE
  *
  * 1. The signature. HMAC SHA512 of the RAW request body, keyed with the
  *    secret key, compared against the x-paystack-signature header. Without it
@@ -21,10 +21,16 @@
  *    the obvious one where a leaked secret key is enough to post a successful
  *    charge for a track nobody paid for.
  *
- * 3. The intent, read from this database by reference. This is what was
+ * 3. The domain. Paystack puts "test" or "live" on every transaction it
+ *    returns. A test transaction is one anybody can create with Paystack's
+ *    published test card, for nothing, so recording one as a sale would hand
+ *    over a paid download and leave a figure in the books that no money ever
+ *    matched. Anything that does not say "live" is refused.
+ *
+ * 4. The intent, read from this database by reference. This is what was
  *    supposed to be sold and for how much. Paystack's answer has to match it.
  *
- * Only if all three agree does anything get written.
+ * Only if all four agree does anything get written.
  *
  *
  * WHY THE BOOKS STAY IN DOLLARS
@@ -53,6 +59,11 @@ const crypto = require('crypto');
 
 const PAYSTACK_BASE = 'https://api.paystack.co';
 const SECRET = process.env.PAYSTACK_SECRET_KEY;
+
+// Lifts the domain check, for working on the flow against a test account on
+// purpose. The same variable that lifts it in paystack-checkout.js, so the two
+// ends cannot end up disagreeing about which mode they are in.
+const ALLOW_TEST = process.env.PAYSTACK_ALLOW_TEST === 'true';
 
 // The platform's cut of a Paystack sale. Zero by default, the same default
 // netlify/functions/paystack-subaccount.js uses when it sets up the split, so
@@ -190,6 +201,25 @@ exports.handler = async (event) => {
     // Worth retrying: a verify that fails now may succeed in three minutes,
     // and the alternative is a buyer who paid and owns nothing.
     return retry('verify_failed');
+  }
+
+  // ── Was this real money ───────────────────────────────────────────────────
+  //
+  // Before status, before amount, before anything that could become a row.
+  // Paystack's test card is public, so a test transaction costs an attacker
+  // nothing and looks identical in every other field. Only "live" counts, and
+  // an absent or unexpected value counts as not live.
+  const domain = String(tx.domain || '').toLowerCase();
+  if (domain !== 'live' && !ALLOW_TEST) {
+    console.error('[paystack-webhook] REFUSED: transaction domain is', tx.domain || '(absent)',
+      'not live, for', reference, '- no sale recorded, no download granted.');
+    const { error } = await admin.from('paystack_intents')
+      .update({ status: 'failed', settled_at: new Date().toISOString() })
+      .eq('reference', reference);
+    if (error) console.error('[paystack-webhook] intent not closed out:', error.code, error.message);
+    // 200 rather than 500: retrying for three days will not turn a test
+    // transaction into a live one.
+    return ok('not_live_domain');
   }
 
   if (tx.status !== 'success') {
