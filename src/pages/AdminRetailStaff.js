@@ -14,6 +14,20 @@
 // from `admins` only, and a retail admin can read just their own row, so
 // a retail admin cannot promote anyone. That is deliberate and the page
 // says so, because the natural assumption is the opposite.
+//
+//
+// WHY THE EMAILS COME FROM AN RPC AND NOT FROM user_profiles
+//
+// This page used to read `user_profiles.select('user_id, name, email')`
+// straight from the browser. That only worked because the email column was
+// readable by the `authenticated` role, which is every signed-up person on
+// the platform, not just admins. Anybody with an account could have listed
+// every email address on Feelz Machine.
+//
+// The column is now closed, and admin_emails_for_users does the lookup
+// server side with the same `admins` check admin_find_user_by_email uses. An
+// admin sees exactly what they saw before; nobody else can ask the question
+// at all.
 
 import React from 'react';
 import { Helmet } from 'react-helmet-async';
@@ -49,9 +63,27 @@ export default function AdminRetailStaff() {
     // row where they would go stale.
     if (rows.length > 0) {
       const ids = rows.map(r => r.user_id);
-      const { data: profiles } = await supabase
-        .from('user_profiles').select('user_id, name, email').in('user_id', ids);
-      const byId = Object.fromEntries((profiles || []).map(p => [p.user_id, p]));
+
+      // Names from the table, emails from the admin-gated function. Both are
+      // asked for at once because one waiting on the other would show the
+      // list twice, once without emails and once with.
+      const [{ data: profiles }, { data: emails, error: emailErr }] = await Promise.all([
+        supabase.from('user_profiles').select('user_id, name').in('user_id', ids),
+        supabase.rpc('admin_emails_for_users', { p_user_ids: ids }),
+      ]);
+
+      // An email that cannot be fetched is not a reason to show nothing. The
+      // row falls back to the user id below, exactly as it did for an account
+      // with no email on file.
+      if (emailErr) {
+        console.error('[retail-staff] email lookup refused:', emailErr.code, emailErr.message);
+      }
+
+      const emailById = Object.fromEntries((emails || []).map(e => [e.user_id, e.email]));
+      const byId = Object.fromEntries((profiles || []).map(p => [
+        p.user_id,
+        { ...p, email: emailById[p.user_id] || null },
+      ]));
       setStaff(rows.map(r => ({ ...r, profile: byId[r.user_id] || null })));
     } else {
       setStaff([]);

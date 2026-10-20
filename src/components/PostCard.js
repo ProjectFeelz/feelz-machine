@@ -201,7 +201,7 @@ export default function PostCard({ post, onDelete, onUpdate }) {
       if (missingIds.length > 0) {
         const { data: profilesData } = await supabase
           .from('user_profiles')
-          .select('user_id, name, email, avatar_url')
+          .select('user_id, name, avatar_url')
           .in('user_id', missingIds);
         (profilesData || []).forEach(p => { profileMap[p.user_id] = p; });
       }
