@@ -1,5 +1,38 @@
 // netlify/functions/paypal-webhook.js
 // Verifies PayPal webhook signature and handles all relevant events.
+//
+//
+// WHAT THIS FILE LOOKED LIKE IT DID, AND DID NOT
+//
+// The handlers below were correct and most of them had never run. The webhook
+// was subscribed in PayPal to eight BILLING.SUBSCRIPTION.* events and not one
+// payment event, so PAYMENT.SALE.COMPLETED was never delivered. That is the
+// block holding the renewal extenders, the affiliate commission and the retail
+// payment ledger. The result: no subscription ever renewed, no affiliate was
+// ever paid, and no refund was ever processed, with nothing in any log to say
+// so, because code that is never called does not fail.
+//
+// The subscription events are fixed in PayPal, not here. What IS fixed here is
+// everything that was missing once those events start arriving.
+//
+//
+// THE THREE GAPS THIS FILE NOW CLOSES
+//
+// 1. Artist and listener payments were never recorded. recordRetailPayment
+//    gives venues gross, fee and net keyed on PayPal's sale id. The other two
+//    audiences had nothing, and amount_paid on the subscription row was
+//    written by no code anywhere, which is why the platform's first real
+//    subscription ran for a month and left no record of the money.
+//
+// 2. A failed payment on an artist or listener subscription did nothing at
+//    all. That block touched add-ons and retail only. The artist was not told,
+//    not marked, and the nightly expiry sweep moved them to Free the same
+//    night while PayPal was still retrying the card.
+//
+// 3. The first payment told nobody. The welcome receipt was written in the
+//    browser by the upgrade page, so it existed only if the buyer's tab
+//    survived the round trip back from PayPal.
+
 const https = require('https');
 const { createClient } = require('@supabase/supabase-js');
 const { reportNotify } = require('../lib/notify');
@@ -9,6 +42,11 @@ const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
+
+// How long a subscriber keeps their plan after a payment fails, when PayPal
+// does not tell us its own retry date. PayPal retries for roughly five days
+// before suspending the agreement; six gives the last attempt room to land.
+const RETRY_GRACE_DAYS = 6;
 
 async function getPayPalToken() {
   const base = paypalEnv.hostApi;   // see netlify/lib/paypal-env.js
@@ -59,6 +97,10 @@ async function verifyPayPalSignature(headers, rawBody) {
   });
 }
 
+const money = (n) => `$${Number(n).toFixed(2)}`;
+const longDate = (d) => new Date(d).toLocaleDateString('en-GB',
+  { day: 'numeric', month: 'long', year: 'numeric' });
+
 // Downgrade artist tier subscription to cancelled/inactive
 async function cancelArtistSubscription(subscriptionId, reason) {
   if (!subscriptionId) return;
@@ -68,6 +110,9 @@ async function cancelArtistSubscription(subscriptionId, reason) {
       status:       'cancelled',
       cancelled_at: new Date().toISOString(),
       cancel_reason: reason || 'paypal_webhook',
+      // Billing is over either way, so the retry window stops holding the
+      // expiry sweep off this row.
+      payment_retry_until: null,
     })
     .eq('paypal_subscription_id', subscriptionId)
     .select('artist_id, artists(user_id, tier)')
@@ -78,15 +123,20 @@ async function cancelArtistSubscription(subscriptionId, reason) {
     const reasonMsg = reason === 'user_cancelled'
       ? 'You cancelled your subscription. You have been moved to the Free plan.'
       : reason === 'payment_failed'
-      ? 'Your subscription payment failed. You have been moved to the Free plan.'
+      ? 'Your subscription payment could not be taken, so your plan has ended and your account is back on Free. Starting a new plan from your profile picks everything back up.'
       : 'Your subscription has ended. You have been moved to the Free plan.';
-    await reportNotify('tier_granted (paypal-webhook)', supabase.from('notifications').insert({
+    // `subscription`, not `tier_granted`. This is a plan ending, and filing it
+    // under the type used for grants meant a loss and a gift were the same
+    // thing to anything reading these rows, including the preference switches
+    // that decide whether somebody hears about it at all.
+    await reportNotify('subscription ended (paypal-webhook)', supabase.from('notifications').insert({
       artist_id: sub.artist_id,
       user_id:   sub.artists?.user_id || null,
-      type:      'tier_granted',
-      title:     'Subscription ended',
+      type:      'subscription',
+      title:     'Your plan has ended',
       message:   reasonMsg,
-      metadata:  { tier: 'free', reason },
+      email_requested: true,
+      metadata:  { kind: 'ended', tier: 'free', reason, audience: 'artist' },
     }));
   }
 }
@@ -96,9 +146,97 @@ async function activateArtistSubscription(subscriptionId) {
   if (!subscriptionId) return;
   const { error } = await supabase
     .from('artist_tier_subscriptions')
-    .update({ status: 'active', cancelled_at: null, cancel_reason: null })
+    .update({
+      status: 'active', cancelled_at: null, cancel_reason: null,
+      // Money arrived, so whatever retry window was open is closed.
+      payment_retry_until: null,
+    })
     .eq('paypal_subscription_id', subscriptionId);
   if (error) console.error('Activate subscription error:', error);
+}
+
+// ── A failed payment, for the two audiences that had no handler ──────────
+//
+// PayPal sends this on every failed attempt and only sends SUSPENDED once it
+// gives up. Until now an artist or listener got nothing from either event
+// until the nightly sweep quietly moved them to Free.
+//
+// Two things happen. The retry window is recorded, which stops
+// expire_stale_subscriptions taking the plan away while PayPal is still
+// trying. And the person is told, with the date of the next attempt, because
+// the one thing worse than a failed payment is a failed payment nobody
+// mentions. PayPal emails the PAYER, who is not always the account holder:
+// the first real case on this platform had the card in someone else's name,
+// so the artist whose plan lapsed was never written to by anybody.
+async function subscriptionPaymentFailed(subscriptionId, resource) {
+  if (!subscriptionId) return;
+
+  const nextRetry = resource?.next_payment_retry_time || null;
+  const retryUntil = nextRetry
+    ? new Date(new Date(nextRetry).getTime() + 86400000)      // a day past the attempt
+    : new Date(Date.now() + RETRY_GRACE_DAYS * 86400000);
+  const patch = {
+    payment_retry_until:    retryUntil.toISOString(),
+    last_payment_failed_at: new Date().toISOString(),
+    updated_at:             new Date().toISOString(),
+  };
+
+  const tail = nextRetry
+    ? ` PayPal tries again on ${longDate(nextRetry)}.`
+    : ' PayPal will try again over the next few days.';
+  const message =
+    'We could not take your subscription payment.' + tail +
+    ' Your plan stays on in the meantime. If the card has changed, update it in your PayPal account.';
+
+  // ── Artist ──
+  const { data: artistSub, error: aErr } = await supabase
+    .from('artist_tier_subscriptions')
+    .update(patch)
+    .eq('paypal_subscription_id', subscriptionId)
+    .in('status', ['active', 'expired'])
+    .select('artist_id, artists(user_id)')
+    .maybeSingle();
+  if (aErr) {
+    console.error('[paypal-webhook] artist payment-failed update refused:', aErr.code, aErr.message);
+  } else if (artistSub?.artist_id) {
+    await reportNotify('payment failed (paypal-webhook)', supabase.from('notifications').insert({
+      artist_id: artistSub.artist_id,
+      user_id:   artistSub.artists?.user_id || null,
+      type:      'subscription',
+      title:     'Your subscription payment did not go through',
+      message,
+      email_requested: true,
+      metadata: {
+        kind: 'payment_failed', audience: 'artist',
+        next_retry: nextRetry, subscription: subscriptionId,
+        attempts: resource?.failed_payments_count ?? null,
+      },
+    }));
+  }
+
+  // ── Listener ──
+  const { data: listenerSub, error: lErr } = await supabase
+    .from('listener_tier_subscriptions')
+    .update(patch)
+    .eq('paypal_subscription_id', subscriptionId)
+    .in('status', ['active', 'expired'])
+    .select('user_id')
+    .maybeSingle();
+  if (lErr) {
+    console.error('[paypal-webhook] listener payment-failed update refused:', lErr.code, lErr.message);
+  } else if (listenerSub?.user_id) {
+    await reportNotify('payment failed (paypal-webhook)', supabase.from('notifications').insert({
+      user_id: listenerSub.user_id,
+      type:    'subscription',
+      title:   'Your subscription payment did not go through',
+      message,
+      email_requested: true,
+      metadata: {
+        kind: 'payment_failed', audience: 'listener',
+        next_retry: nextRetry, subscription: subscriptionId,
+      },
+    }));
+  }
 }
 
 // ── Artist add-ons (Instagram add-on, migration 153) ──────────────────────
@@ -243,6 +381,89 @@ async function recordRetailPayment(resource, subscriptionId) {
   }
 }
 
+// ── Artist and listener subscription money ────────────────────────────────
+//
+// The equivalent of recordRetailPayment for the two audiences that never had
+// one. Before this, the only field on the platform that claimed to hold a
+// subscription payment was amount_paid, and nothing wrote it, so the platform
+// took money for a month and could not say how much.
+//
+// Keyed on the sale id under a unique index, so a webhook PayPal delivers
+// twice records one payment. amount_paid is written too, because a dashboard
+// reading the subscription row should not have to join a ledger to show what
+// the plan costs.
+//
+// Returns the audience it matched, or null, which is how the caller knows
+// whether this sale belongs to an artist, a listener or neither.
+async function recordSubscriptionPayment(resource, subscriptionId) {
+  const saleId = resource?.id;
+  if (!saleId || !subscriptionId) return null;
+
+  const gross = Math.round(parseFloat(resource?.amount?.total) * 100) / 100;
+  const fee   = Math.round(parseFloat(resource?.transaction_fee?.value || 0) * 100) / 100;
+  if (!Number.isFinite(gross) || gross <= 0 || !Number.isFinite(fee) || fee < 0) {
+    console.error('[paypal-webhook] SUBSCRIPTION PAYMENT NOT RECORDED: unusable amounts',
+      JSON.stringify({ saleId, subscriptionId, amount: resource?.amount, fee: resource?.transaction_fee }));
+    return null;
+  }
+
+  // Which audience owns this subscription. Checked in the database rather
+  // than guessed from the plan id, because the same column name carries all
+  // three and only one will have a row.
+  const [{ data: artistSub }, { data: listenerSub }] = await Promise.all([
+    supabase.from('artist_tier_subscriptions')
+      .select('id, artist_id, artists(user_id)')
+      .eq('paypal_subscription_id', subscriptionId).maybeSingle(),
+    supabase.from('listener_tier_subscriptions')
+      .select('id, user_id')
+      .eq('paypal_subscription_id', subscriptionId).maybeSingle(),
+  ]);
+
+  let kind = null, artistId = null, userId = null, rowId = null, table = null;
+  if (artistSub) {
+    kind = 'artist'; artistId = artistSub.artist_id;
+    userId = artistSub.artists?.user_id || null;
+    rowId = artistSub.id; table = 'artist_tier_subscriptions';
+  } else if (listenerSub) {
+    kind = 'listener'; userId = listenerSub.user_id;
+    rowId = listenerSub.id; table = 'listener_tier_subscriptions';
+  } else {
+    return null;                                  // retail, or nothing we own
+  }
+
+  const { error } = await supabase.from('subscription_payments').upsert({
+    paypal_sale_id:         saleId,
+    paypal_subscription_id: subscriptionId,
+    kind,
+    artist_id:              artistId,
+    user_id:                userId,
+    gross,
+    fee,
+    net:                    Math.round((gross - fee) * 100) / 100,
+    currency:               resource?.amount?.currency || 'USD',
+    paid_at:                resource?.create_time || new Date().toISOString(),
+  }, { onConflict: 'paypal_sale_id', ignoreDuplicates: true });
+
+  if (error) {
+    // Loud, and worth a retry: this is the only record that the money arrived.
+    console.error('[paypal-webhook] SUBSCRIPTION PAYMENT NOT RECORDED:',
+      error.code, error.message, saleId, kind);
+    throw new Error('subscription_payment_not_recorded');
+  }
+
+  // What the plan currently costs, on the subscription itself. Not a ledger,
+  // and not used for accounting; it is there so a dashboard can show the
+  // price without reading the payments table.
+  const { error: amtErr } = await supabase.from(table)
+    .update({ amount_paid: gross, updated_at: new Date().toISOString() })
+    .eq('id', rowId);
+  if (amtErr) console.error('[paypal-webhook] amount_paid not written:', amtErr.code, amtErr.message);
+
+  console.log('[paypal-webhook] recorded', kind, 'payment', resource?.amount?.currency || 'USD', gross,
+    'fee', fee, 'sale', saleId);
+  return { kind, artistId, userId };
+}
+
 exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') return { statusCode: 405, body: 'Method Not Allowed' };
 
@@ -286,7 +507,7 @@ exports.handler = async (event) => {
     // Also handle listener subscription activation
     const { data: listenerSub } = await supabase
       .from('listener_tier_subscriptions')
-      .update({ status: 'active' })
+      .update({ status: 'active', payment_retry_until: null })
       .eq('paypal_subscription_id', subscriptionId)
       .select('user_id').maybeSingle();
     if (listenerSub?.user_id) {
@@ -303,11 +524,19 @@ exports.handler = async (event) => {
     await cancelRetailSubscription(subscriptionId, 'user_cancelled');
     await addonEvent(subscriptionId, 'cancelled');
     const { data: listenerSub } = await supabase.from('listener_tier_subscriptions')
-      .update({ status: 'cancelled', cancelled_at: new Date().toISOString(), cancel_reason: 'user_cancelled' })
+      .update({ status: 'cancelled', cancelled_at: new Date().toISOString(), cancel_reason: 'user_cancelled', payment_retry_until: null })
       .eq('paypal_subscription_id', subscriptionId)
       .select('user_id').maybeSingle();
     if (listenerSub?.user_id) {
       await supabase.from('listeners').update({ tier: 'free', tier_expires_at: null }).eq('user_id', listenerSub.user_id);
+      await reportNotify('subscription ended (paypal-webhook)', supabase.from('notifications').insert({
+        user_id: listenerSub.user_id,
+        type:    'subscription',
+        title:   'Your plan has ended',
+        message: 'You cancelled your subscription. Your account is back on Free.',
+        email_requested: true,
+        metadata: { kind: 'ended', reason: 'user_cancelled', audience: 'listener' },
+      }));
     }
   }
 
@@ -325,6 +554,11 @@ exports.handler = async (event) => {
   // venue over it is a worse error than a day's grace. What this does is record
   // it and leave a line in the log, so a venue drifting towards suspension is
   // visible before the player goes dark rather than after.
+  //
+  // The same grace now applies to artists and listeners, and for a sharper
+  // reason: the retail branch below at least recorded past_due, while the two
+  // personal audiences had no branch at all. They were moved to Free by the
+  // nightly sweep on the first night after expiry, mid-retry, without a word.
   if (eventType === 'BILLING.SUBSCRIPTION.PAYMENT.FAILED') {
     const subscriptionId = resource?.id || resource?.billing_agreement_id;
     const attempts = resource?.failed_payments_count ?? null;
@@ -332,6 +566,7 @@ exports.handler = async (event) => {
       { subscriptionId, attempts, nextRetry: resource?.next_payment_retry_time || null });
     if (subscriptionId) {
       await addonEvent(subscriptionId, 'failed');
+      await subscriptionPaymentFailed(subscriptionId, resource);
       const { error } = await supabase.from('retail_subscriptions')
         .update({ status: 'past_due' })
         .eq('paypal_subscription_id', subscriptionId)
@@ -353,11 +588,19 @@ exports.handler = async (event) => {
     await cancelRetailSubscription(subscriptionId, 'payment_failed');
     await addonEvent(subscriptionId, 'cancelled');
     const { data: listenerSub } = await supabase.from('listener_tier_subscriptions')
-      .update({ status: 'cancelled', cancelled_at: new Date().toISOString(), cancel_reason: 'payment_failed' })
+      .update({ status: 'cancelled', cancelled_at: new Date().toISOString(), cancel_reason: 'payment_failed', payment_retry_until: null })
       .eq('paypal_subscription_id', subscriptionId)
       .select('user_id').maybeSingle();
     if (listenerSub?.user_id) {
       await supabase.from('listeners').update({ tier: 'free', tier_expires_at: null }).eq('user_id', listenerSub.user_id);
+      await reportNotify('subscription ended (paypal-webhook)', supabase.from('notifications').insert({
+        user_id: listenerSub.user_id,
+        type:    'subscription',
+        title:   'Your plan has ended',
+        message: 'Your subscription payment could not be taken, so your plan has ended and your account is back on Free.',
+        email_requested: true,
+        metadata: { kind: 'ended', reason: 'payment_failed', audience: 'listener' },
+      }));
     }
   }
 
@@ -378,13 +621,23 @@ exports.handler = async (event) => {
       await activateRetailSubscription(subscriptionId);
       await addonEvent(subscriptionId, 'paid');
 
-      // Retail money in, for the artist pool. Throws if it cannot be saved,
-      // which returns a 500 so PayPal delivers the event again.
+      // Money in, before anything else is decided. Both of these throw rather
+      // than return quietly if they cannot write, which gives PayPal a 500 and
+      // another delivery: a payment nobody recorded is the one failure that
+      // cannot be reconstructed afterwards.
       try {
         await recordRetailPayment(resource, subscriptionId);
+        await recordSubscriptionPayment(resource, subscriptionId);
       } catch (e) {
-        return { statusCode: 500, body: JSON.stringify({ error: 'retail payment not recorded, retry' }) };
+        return { statusCode: 500, body: JSON.stringify({ error: 'payment not recorded, retry' }) };
       }
+
+      // A successful payment closes any retry window on the listener side.
+      // The artist side is cleared inside activateArtistSubscription above.
+      await supabase.from('listener_tier_subscriptions')
+        .update({ payment_retry_until: null })
+        .eq('paypal_subscription_id', subscriptionId)
+        .not('payment_retry_until', 'is', null);
 
       // ── Push the expiry out by one billing period ──────────────────────
       //
@@ -428,15 +681,17 @@ exports.handler = async (event) => {
             console.log(`[paypal-webhook] ${kind} subscription extended to`, until,
               'for', row.user_id || row.artist_id || row.venue_id);
 
-            // Tell them it renewed, but only when it IS a renewal.
+            // Tell them, and say the right thing for which payment this is.
             //
-            // The first payment of a subscription fires this event too, and
-            // the welcome receipt for that one is written by
-            // verify-subscription.js (listeners) and TierUpgradePage (artists)
-            // the moment the person is standing in front of the screen. The
-            // renewal ledger from migration 124 is what tells the two apart:
-            // more than one row for this subscription means this is not the
-            // first payment.
+            // The first payment fires this event too. The renewal ledger from
+            // migration 124 tells the two apart: the extend function claims a
+            // row before it writes anything, so one row means this is the
+            // first payment and more than one means it is a renewal.
+            //
+            // The welcome receipt used to be written in the browser by the
+            // upgrade page, which meant it existed only if the buyer's tab
+            // survived the trip back from PayPal. Written here it does not
+            // depend on anybody's connection.
             try {
               const { count } = await supabase
                 .from('subscription_renewals')
@@ -450,20 +705,70 @@ exports.handler = async (event) => {
                 ? { user_id: row.user_id }
                 : null;   // a venue has no personal inbox; the admin panel shows it
 
-              if (isRenewal && who && until) {
-                const when = new Date(until).toLocaleDateString('en-GB',
-                  { day: 'numeric', month: 'long', year: 'numeric' });
+              // An artist's notification carries the user_id too, so it
+              // reaches their inbox and not only the artist feed.
+              if (kind === 'artist' && row.artist_id) {
+                const { data: a } = await supabase.from('artists')
+                  .select('user_id').eq('id', row.artist_id).maybeSingle();
+                if (a?.user_id) who.user_id = a.user_id;
+              }
+
+              const paid = parseFloat(resource?.amount?.total);
+              const amountLine = Number.isFinite(paid) && paid > 0
+                ? `${money(paid)} received. ` : 'Payment received. ';
+
+              // src/pages/TierUpgradePage.js writes its own "is live" receipt
+              // the moment the buyer gets back from PayPal, because somebody
+              // standing in front of the screen should not wait on a webhook.
+              // So a first payment usually already has one, and inserting a
+              // second would mean two receipts for one purchase.
+              //
+              // Checked rather than assumed, because that page's receipt is
+              // the one that goes missing: it is written in the browser, so a
+              // closed tab or a dropped connection on the way back from PayPal
+              // leaves the buyer with nothing. When it is absent this writes
+              // it, which is the case the client-side one cannot cover.
+              let alreadyToldOnSignup = false;
+              if (!isRenewal) {
+                const { count: existing, error: dupErr } = await supabase
+                  .from('notifications')
+                  .select('id', { count: 'exact', head: true })
+                  .eq('type', 'subscription')
+                  .eq('metadata->>subscription', subscriptionId);
+                // A failed check writes the receipt rather than skipping it.
+                // Two receipts is a tidiness problem; none is a buyer who paid
+                // and was told nothing, so the error leans that way on purpose.
+                if (dupErr) {
+                  console.error('[paypal-webhook] duplicate-receipt check failed, writing anyway:',
+                    dupErr.code, dupErr.message);
+                }
+                alreadyToldOnSignup = !dupErr && (existing || 0) > 0;
+                if (alreadyToldOnSignup) {
+                  console.log('[paypal-webhook] first-payment receipt already written by the upgrade page, not duplicating.');
+                }
+              }
+
+              if (who && until && !alreadyToldOnSignup) {
+                const when = longDate(until);
                 const { error: nErr } = await supabase.from('notifications').insert({
                   ...who,
                   type:    'subscription',
-                  title:   'Your subscription renewed',
-                  message: `Payment received. You are covered until ${when}.`,
-                  metadata: { audience: kind, renewed_until: until, subscription: subscriptionId },
+                  title:   isRenewal ? 'Your subscription renewed' : 'Your subscription is live',
+                  message: isRenewal
+                    ? `${amountLine}You are covered until ${when}.`
+                    : `${amountLine}Your plan is active until ${when}, and renews on its own after that.`,
+                  metadata: {
+                    kind: isRenewal ? 'renewed' : 'started',
+                    audience: kind, renewed_until: until,
+                    amount: Number.isFinite(paid) ? paid : null,
+                    currency: resource?.amount?.currency || 'USD',
+                    subscription: subscriptionId,
+                  },
                 });
-                if (nErr) console.error('[paypal-webhook] renewal receipt refused:', nErr.code, nErr.message);
+                if (nErr) console.error('[paypal-webhook] subscription receipt refused:', nErr.code, nErr.message);
               }
             } catch (e) {
-              console.error('[paypal-webhook] renewal receipt threw:', e.message);
+              console.error('[paypal-webhook] subscription receipt threw:', e.message);
             }
           }
         } catch (e) {
@@ -541,7 +846,7 @@ exports.handler = async (event) => {
     }
   }
 
-  // ── A retail subscription payment refunded or reversed ───────────────────
+  // ── A subscription payment refunded or reversed ──────────────────────────
   // Subscription payments are SALES, not captures, so they arrive as
   // PAYMENT.SALE.*. A refund's own id is not the sale's: the sale is in
   // resource.sale_id. The payment is marked reversed, which takes it out of the
@@ -564,6 +869,15 @@ exports.handler = async (event) => {
             'was already counted in a paid pool. Adjust by hand.');
         }
       }
+
+      // The same for artist and listener subscription money, which until now
+      // had no ledger to reverse. A refunded subscription payment that still
+      // reads as received is a figure that will never add up again.
+      const { error: sErr } = await supabase.from('subscription_payments')
+        .update({ reversed_at: new Date().toISOString(), reversal_reason: eventType })
+        .eq('paypal_sale_id', saleId)
+        .is('reversed_at', null);
+      if (sErr) console.error('[paypal-webhook] subscription reversal not recorded:', sErr.message, saleId);
     }
   }
 

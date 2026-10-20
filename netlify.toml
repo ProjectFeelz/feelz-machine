@@ -181,6 +181,7 @@
 #
 # All nineteen names were checked against netlify/functions/: every one
 # resolves to a real file, so nothing here points at a function that is gone.
+# send-billing-emails was added later and is the twentieth; it resolves too.
 #
 # engagement-drip-background is scheduled in its [functions."..."] table above,
 # merged with its 860s timeout, Mon and Thu 08:00.
@@ -284,6 +285,27 @@
 # plan is about to end would be worse than saying nothing.
 [functions."warn-expiring-subscriptions"]
   schedule = "0 2 * * *"
+
+# Every 15 minutes, email the billing notices that are waiting.
+#
+# Billing notices are written in four places: paypal-webhook.js on a failed
+# payment, a cancellation and a suspension; expire_stale_subscriptions when a
+# plan lapses; and the upgrade page on sign-up. Each writes a notifications row
+# and flags it with email_requested, and this drains that queue. Putting a send
+# call in each writer instead would be four places that can forget and four
+# senders to keep in step.
+#
+# Frequent, because a failed payment is the time-sensitive one: PayPal retries
+# for about five days and the subscriber wants that whole window to fix a card,
+# not whatever is left of it after a nightly job. Cheap when idle: one indexed
+# read against a partial index that only covers rows actually queued, and it
+# returns immediately on an empty result.
+#
+# Renewal receipts are deliberately NOT emailed, in the function rather than
+# here. A monthly "you paid again" message is the kind people mute, and a muted
+# sender buries the notices that matter.
+[functions."send-billing-emails"]
+  schedule = "*/15 * * * *"
 
 # Monday 07:00, release royalties that have built up past an artist's
 # threshold, plus anything that has been waiting more than 60 days whatever
