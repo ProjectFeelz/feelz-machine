@@ -26,10 +26,16 @@
 
 [functions."engagement-drip-background"]
   timeout = 860
-  # Merged into the existing table rather than added as a second
-  # [functions."engagement-drip-background"] block, TOML forbids defining the
-  # same table twice, and the whole file would fail to parse.
-  schedule = "0 8 * * 1,4"
+  # NO SCHEDULE HERE, AND THAT IS THE FIX. See engagement-drip-cron below.
+  #
+  # This was scheduled directly, and the schedule worked in the sense that
+  # Netlify registered it and fired it. What it did on firing was return in
+  # 3.74ms having written nothing and logged nothing, because the handler
+  # guards its POST path behind x-internal-secret and the platform does not
+  # send that header. It answered its own 401 and went back to sleep, twice a
+  # week, in silence.
+  #
+  # The timeout stays: the function still needs 860s when the cron calls it.
 
 # ── Edge functions ────────────────────────────────────────────────────────────
 #
@@ -327,6 +333,26 @@
 # whose send time has passed. In-app only. Safe to run as often as it likes.
 [functions."send-scheduled-newsletters"]
   schedule = "*/5 * * * *"
+
+# Mon and Thu 08:00, the engagement drip.
+#
+# This schedules the CRON GATEWAY, not the background function it drives.
+# engagement-drip-cron exists for exactly this and says so in its own header:
+# it is a regular function, it accepts the platform's invocation without
+# needing a secret, and it then POSTs to engagement-drip-background WITH the
+# internal secret that function requires.
+#
+# Scheduling the background function directly skips the gateway, arrives
+# without the secret, and is refused by the function's own auth guard. That is
+# what was happening: registered, firing on time, returning 401 to itself, and
+# producing nothing since 3 July.
+#
+# TO CONFIRM AFTER DEPLOYING: Netlify labels engagement-drip-cron as Scheduled,
+# and a run writes "Drip scheduled trigger" to its log plus rows in
+# engagement_messages. A run that still writes nothing is a different problem
+# and the log will say which.
+[functions."engagement-drip-cron"]
+  schedule = "0 8 * * 1,4"
 
 # feature-education-drip is deliberately NOT scheduled. Its schedule was
 # already commented out here, "platform tips not landing", and switching it
