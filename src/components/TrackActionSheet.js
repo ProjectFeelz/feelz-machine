@@ -51,6 +51,18 @@ export default function TrackActionSheet({ track, artist, onClose, initialView =
 
     // Purchase state
     const [paypalReady, setPaypalReady] = useState(false);
+    // THE NODE, NOT ITS ID.
+    //
+    // The buttons are rendered by an effect, and the div they render into is
+    // only in the DOM once the price is known. The effect used to look the div
+    // up by id and give up quietly when it was not there yet, so whether the
+    // buttons appeared came down to which finished first: the PayPal script or
+    // the price quote. Script first and the buyer got an empty white strip
+    // where the buttons should be, with nothing in the console to say so.
+    //
+    // Holding the node in state removes the race. React sets it the moment the
+    // div mounts, that re-runs the effect, and the buttons render then.
+    const [payPalHost, setPayPalHost] = useState(null);
     const [purchasing, setPurchasing] = useState(false);
     const [purchaseSuccess, setPurchaseSuccess] = useState(false);
     const [purchaseError, setPurchaseError] = useState('');
@@ -161,7 +173,7 @@ export default function TrackActionSheet({ track, artist, onClose, initialView =
         if (!paypalReady || view !== 'purchase' || !window.paypal || !track) return;
         if (isPWYW && !validateFanPrice()) return;
         if (effectivePrice <= 0) return;
-        const container = document.getElementById('paypal-tas-container');
+        const container = payPalHost;
         if (!container) return;
         container.innerHTML = '';
 
@@ -269,8 +281,8 @@ export default function TrackActionSheet({ track, artist, onClose, initialView =
                 setPurchasing(false);
             },
             onCancel: () => setPurchasing(false),
-        }).render('#paypal-tas-container');
-    }, [paypalReady, view, track?.id, effectivePrice]);
+        }).render(container);
+    }, [paypalReady, payPalHost, view, track?.id, effectivePrice]);
 
     const checkAlreadyPreordered = async () => {
         const { data } = await supabase
@@ -623,7 +635,7 @@ export default function TrackActionSheet({ track, artist, onClose, initialView =
                                                 <>
                                                     {purchaseError && <p className="text-xs text-red-400 text-center">{purchaseError}</p>}
                                                     {!paypalReady && !purchaseError && <div className="flex justify-center py-2"><Loader className="w-5 h-5 animate-spin text-white/30" /></div>}
-                                                    <div id="paypal-tas-container" style={{ backgroundColor: '#fff', borderRadius: '8px', padding: '4px' }} />
+                                                    <div id="paypal-tas-container" ref={setPayPalHost} style={{ backgroundColor: '#fff', borderRadius: '8px', padding: '4px' }} />
                                                     {/* Rand, through Paystack. The component asks the checkout itself and
                                                         removes itself when the artist has no bank account on file, so this
                                                         is a no-op on every artist paid through PayPal. */}
@@ -699,7 +711,7 @@ export default function TrackActionSheet({ track, artist, onClose, initialView =
                                             ) : (
                                                 <>
                                                     {!paypalReady && !purchaseError && <div className="flex justify-center py-2"><Loader className="w-5 h-5 animate-spin text-white/30" /></div>}
-                                                    <div id="paypal-tas-container" style={{ backgroundColor: '#fff', borderRadius: '8px', padding: '4px' }} />
+                                                    <div id="paypal-tas-container" ref={setPayPalHost} style={{ backgroundColor: '#fff', borderRadius: '8px', padding: '4px' }} />
                                                     {/* Rand, through Paystack. The component asks the checkout itself and
                                                         removes itself when the artist has no bank account on file, so this
                                                         is a no-op on every artist paid through PayPal. */}
