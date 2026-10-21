@@ -779,6 +779,7 @@ export default function ProfilePage() {
         <NavRow icon={Link} label="Affiliate Programme" iconColor="text-green-400" onClick={() => nav('/affiliates')} border badge="Earn" />
         <NavRow icon={Globe} label="Privacy Policy" onClick={() => nav('/privacy-policy')} border />
         <NavRow icon={Globe} label="Terms of Use"   onClick={() => nav('/terms-of-use')}   border />
+        <NavRow icon={Globe} label="Acceptable Use Policy" onClick={() => nav('/legal/acceptable-use')} border />
       </div>
 
       {/* ── Role switcher ── */}

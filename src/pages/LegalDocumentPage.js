@@ -25,6 +25,11 @@ export default function LegalDocumentPage() {
   const goBack = useGoBack('/hub');
   const { user } = useAuth();
 
+  // Which family this document belongs to. Everything in legal_documents was
+  // a Feelz Retail document until the Acceptable Use Policy, which applies to
+  // the whole platform.
+  const isRetailDoc = (slug || '').startsWith('retail-');
+
   const [doc, setDoc]         = React.useState(null);
   const [mine, setMine]       = React.useState(null);   // my acceptance, if any
   const [loading, setLoading] = React.useState(true);
@@ -95,8 +100,14 @@ export default function LegalDocumentPage() {
           </div>
         ) : (
           <>
+            {/* The eyebrow and the not-yet-agreed note used to say Feelz
+                Retail on every document, because for a while every document in
+                this table was a retail one. A document that applies to the
+                whole platform, such as the Acceptable Use Policy, is not a
+                retail document and saying so would be wrong in a place where
+                being wrong matters. The slug decides. */}
             <p className="text-[10px] uppercase tracking-[0.2em] text-purple-400 font-bold mb-2">
-              Feelz Retail
+              {isRetailDoc ? 'Feelz Retail' : 'Feelz Machine'}
             </p>
             <h1 className="text-2xl font-black text-white leading-tight">{doc.title}</h1>
             <p className="text-xs text-white/30 mt-1.5">Version {doc.version}</p>
@@ -116,8 +127,9 @@ export default function LegalDocumentPage() {
             ) : (
               <div className="mt-4 px-3.5 py-3 rounded-xl bg-white/[0.04] border border-white/[0.08]">
                 <p className="text-xs text-white/45 leading-relaxed">
-                  This is the current version. You have not agreed to it — you will be shown it, in full,
-                  if you ever submit a track to Feelz Retail.
+                  {isRetailDoc
+                    ? 'This is the current version. You have not agreed to it — you will be shown it, in full, if you ever submit a track to Feelz Retail.'
+                    : 'This is the current version, and it applies to everyone using Feelz Machine. It forms part of the Terms of Use you accepted when you signed up.'}
                 </p>
               </div>
             )}

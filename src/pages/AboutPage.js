@@ -334,6 +334,7 @@ export default function AboutPage() {
         <div className="flex items-center gap-3 min-w-0 overflow-hidden">
           <button onClick={() => navigate('/privacy-policy')} className="hover:text-white/70 whitespace-nowrap">Privacy</button>
           <button onClick={() => navigate('/terms-of-use')} className="hover:text-white/70 whitespace-nowrap">Terms</button>
+          <button onClick={() => navigate('/legal/acceptable-use')} className="hover:text-white/70 whitespace-nowrap">Acceptable Use</button>
           <button onClick={() => navigate('/vs/spotify')} className="hover:text-white/70 whitespace-nowrap hidden sm:inline">vs Spotify</button>
           <button onClick={() => navigate('/vs/bandcamp')} className="hover:text-white/70 whitespace-nowrap hidden sm:inline">vs Bandcamp</button>
         </div>
