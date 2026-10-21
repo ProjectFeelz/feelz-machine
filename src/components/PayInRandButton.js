@@ -66,6 +66,46 @@ const PUBLIC_KEY = process.env.REACT_APP_PAYSTACK_PUBLIC_KEY || '';
 const ALLOW_TEST = process.env.REACT_APP_PAYSTACK_ALLOW_TEST === 'true';
 const PAYSTACK_IS_LIVE = PUBLIC_KEY.startsWith('pk_live_') || ALLOW_TEST;
 
+// PAYING WITHOUT LEAVING THE APP.
+//
+// Sending the buyer to checkout.paystack.com works, and it is still the
+// fallback below, but on an installed app it ends badly. The checkout is
+// outside the app's scope, so the phone opens it in a separate in-app
+// browser. When Paystack finishes it redirects to /payment/success, which IS
+// inside the scope, so the phone hands that address to the app. The in-app
+// browser is left behind on the checkout url, reloads it, and Paystack
+// answers honestly that the transaction is already completed. The first
+// buyer paid, got her download, and the last thing she saw was a warning
+// triangle saying the transaction could not be started.
+//
+// Paystack's inline checkout opens in an overlay on this page instead, so
+// there is no second browser and nothing to hand back.
+const INLINE_SRC = 'https://js.paystack.co/v2/inline.js';
+let inlinePromise = null;
+
+function loadInline() {
+  if (window.PaystackPop) return Promise.resolve(window.PaystackPop);
+  if (inlinePromise) return inlinePromise;
+
+  inlinePromise = new Promise((resolve) => {
+    const done = () => resolve(window.PaystackPop || null);
+    const existing = document.getElementById('paystack-inline-js');
+    if (existing) { existing.addEventListener('load', done); existing.addEventListener('error', () => resolve(null)); return; }
+
+    const el = document.createElement('script');
+    el.id = 'paystack-inline-js';
+    el.src = INLINE_SRC;
+    el.async = true;
+    el.onload = done;
+    // A blocked or failed script is not an error worth showing anybody. It
+    // just means this buyer takes the redirect, which is what every buyer
+    // did until now.
+    el.onerror = () => resolve(null);
+    document.head.appendChild(el);
+  });
+  return inlinePromise;
+}
+
 export default function PayInRandButton({
   trackId = null,
   albumId = null,
@@ -103,6 +143,9 @@ export default function PayInRandButton({
   const [notice, setNotice] = useState('');
   const [askEmail, setAskEmail] = useState(false);
   const [email, setEmail] = useState(emailProp || '');
+  // Set while the Paystack overlay is open, so the button can say so and the
+  // watcher below knows what reference to ask about.
+  const [awaiting, setAwaiting] = useState(null);
 
   // Declared above every early return below it, because a hook cannot be
   // skipped on one render and run on the next.
@@ -111,6 +154,55 @@ export default function PayInRandButton({
     const t = setTimeout(() => setUnavailable(true), 6000);
     return () => clearTimeout(t);
   }, [notice]);
+
+  // ASK THE SERVER, DO NOT BELIEVE THE BROWSER.
+  //
+  // Paystack documents resumeTransaction as taking an access code and nothing
+  // else. Callbacks are passed below because they cost nothing if ignored,
+  // but nothing is built on them: a payment is paid when the webhook says so,
+  // and that is the same rule the redirect path has always followed.
+  //
+  // So while the overlay is open this asks the checkout function what the
+  // intent row says, every four seconds, for four minutes. It stops the
+  // moment the answer is anything final, and it does not ask at all while the
+  // tab is in the background.
+  useEffect(() => {
+    if (!awaiting) return undefined;
+
+    let stopped = false;
+    const giveUpAt = Date.now() + 240000;
+
+    const ask = async () => {
+      if (stopped) return;
+      if (document.visibilityState !== 'visible') return;
+      try {
+        const res = await fetch('/.netlify/functions/paystack-checkout', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'status', reference: awaiting }),
+        });
+        if (!res.ok) return;
+        const { status } = await res.json();
+        if (status === 'paid') {
+          stopped = true;
+          window.location.assign('/payment/success?ref=' + encodeURIComponent(awaiting));
+        } else if (status === 'abandoned') {
+          stopped = true;
+          setAwaiting(null);
+          setBusy(false);
+        }
+      } catch {
+        // A failed poll is not a failed payment. Ask again next time.
+      }
+    };
+
+    const timer = setInterval(() => {
+      if (stopped || Date.now() > giveUpAt) { clearInterval(timer); return; }
+      ask();
+    }, 4000);
+
+    return () => { stopped = true; clearInterval(timer); };
+  }, [awaiting]);
 
   if (unavailable) return null;
   if (!trackId && !albumId) return null;
@@ -179,6 +271,34 @@ export default function PayInRandButton({
         throw new Error(data.message || 'This payment could not be started.');
       }
 
+      const ref = data.reference;
+
+      // The overlay, if Paystack's script is reachable and gave us a code.
+      if (data.accessCode) {
+        const Pop = await loadInline();
+        if (Pop) {
+          try {
+            const popup = new Pop();
+            setAwaiting(ref);
+            // The options object is undocumented for resumeTransaction. If
+            // Paystack reads it, the buyer moves on the instant they are
+            // done; if it ignores it, the watcher above gets there within
+            // four seconds. Either way the webhook is what decided.
+            popup.resumeTransaction(data.accessCode, {
+              onSuccess: () => window.location.assign('/payment/success?ref=' + encodeURIComponent(ref)),
+              onCancel: () => { setAwaiting(null); setBusy(false); },
+              onError: () => { setAwaiting(null); window.location.href = data.authorizationUrl; },
+            });
+            return;
+          } catch (inlineErr) {
+            // Whatever went wrong opening the overlay, the redirect still
+            // works. It is the path every sale took until tonight.
+            console.error('[PayInRandButton] inline checkout failed, redirecting:', inlineErr);
+            setAwaiting(null);
+          }
+        }
+      }
+
       // Away to Paystack. No state to keep: the buyer comes back to
       // /payment/success and the webhook has already recorded the sale.
       window.location.href = data.authorizationUrl;
@@ -236,7 +356,7 @@ export default function PayInRandButton({
           'border border-white/15 hover:bg-white/15 disabled:opacity-50 transition-colors'
         }
       >
-        {busy ? 'Starting…' : label}
+        {awaiting ? 'Waiting for payment…' : busy ? 'Starting…' : label}
       </button>
       {error ? <p className="text-xs text-red-400">{error}</p> : null}
     </div>

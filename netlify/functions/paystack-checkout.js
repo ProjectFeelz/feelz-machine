@@ -107,6 +107,53 @@ exports.handler = async (event) => {
     });
   }
 
+  // ── Has it been paid? ─────────────────────────────────────────────────────
+  //
+  // Answered before anything else because it starts nothing: no price lookup,
+  // no exchange rate, no intent row, no call to Paystack.
+  //
+  // It exists for the inline checkout. When the buyer pays in an overlay
+  // rather than by leaving for Paystack, there is no redirect to tell this end
+  // that it worked, and Paystack's own inline callbacks are not documented for
+  // resumeTransaction, so nothing in the browser can be trusted to say a
+  // payment happened. The webhook is still the only thing that decides that.
+  // This lets the page ASK, and the answer is the row the webhook wrote.
+  //
+  // The reference is the key, and it is eighteen random hex characters that
+  // only the buyer who started this payment has. The answer is one word about
+  // one payment and names nobody, so a guessed reference wins nothing.
+  if (event.body && event.body.includes('"action"')) {
+    let action, reference;
+    try {
+      const b = JSON.parse(event.body || '{}');
+      action = String(b.action || '');
+      reference = String(b.reference || '');
+    } catch {
+      return json(400, { error: 'invalid_body' });
+    }
+
+    if (action === 'status') {
+      if (!/^fm_[a-z]+_[0-9a-f]{6,64}$/.test(reference)) {
+        return json(400, { error: 'bad_reference' });
+      }
+      const lookup = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+      const { data: row, error } = await lookup
+        .from('paystack_intents')
+        .select('status')
+        .eq('reference', reference)
+        .maybeSingle();
+
+      if (error) {
+        console.error('[paystack-checkout] status lookup failed:', error.code, error.message);
+        return json(500, { error: 'lookup_failed' });
+      }
+      // An unknown reference answers the same shape as a known one that has
+      // not been paid. Nothing here tells a stranger whether a reference is
+      // real.
+      return json(200, { status: (row && row.status) || 'unknown' });
+    }
+  }
+
   let trackId, albumId, email, licenceId, offeredAmount;
   try {
     const b = JSON.parse(event.body || '{}');
@@ -393,6 +440,11 @@ exports.handler = async (event) => {
 
   return json(200, {
     authorizationUrl: data.authorization_url,
+    // The same transaction, opened in an overlay instead of by leaving the
+    // site. Paystack returns it on every initialize; it was simply not being
+    // passed on. The authorization url stays, because the overlay is not
+    // always available and the redirect is the fallback.
+    accessCode: data.access_code || null,
     reference: data.reference || reference,
     // Returned so the page can show the buyer the same number they are about
     // to be charged, rather than converting again in the browser and risking
