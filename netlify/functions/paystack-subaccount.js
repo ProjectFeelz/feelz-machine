@@ -17,16 +17,27 @@
  *          then store the code.
  *
  *
- * THE THING THAT WOULD HAVE PAID THE ARTIST NOTHING
+ * percentage_charge IS THE PLATFORM'S SHARE, NOT THE ARTIST'S
  *
- * percentage_charge is the SUBACCOUNT'S share. Paystack's own API reference
- * table describes it as "percentage the main account receives", and that is
- * wrong: their split payments guide says plainly that "if a subaccount was
- * created with percentage_charge: 0.2, 20% goes to the subaccount".
+ * This file used to say the opposite, and sent `100 - platform cut`. The first
+ * live subaccount was created that way, with percentage_charge: 100, and the
+ * Paystack dashboard then showed it as:
  *
- * Following the reference table and setting 0 for "the platform takes
- * nothing" would have given the ARTIST nothing and the platform everything,
- * on every sale, silently. So the number sent is 100 minus the platform's cut.
+ *     Your share (%): 100        Subaccount gets (%): 0
+ *
+ * Every rand of every sale would have settled into the platform account and
+ * the artist would have been paid nothing. Paystack's own split payments
+ * guide agrees with the dashboard: the percentage goes to the MAIN account
+ * and the remainder goes to the subaccount.
+ *
+ * So what is sent here is the PLATFORM's cut. With PAYSTACK_PLATFORM_PCT
+ * unset, that is 0, and the artist receives 100% of the sale.
+ *
+ * Paystack echoes the stored value back on both create and update, so the
+ * number that was actually saved is checked against the number that was sent,
+ * and a disagreement is logged with the subaccount code. A wrong split is the
+ * one failure here that costs somebody real money without anything looking
+ * broken, so it does not get to pass quietly a second time.
  *
  *
  * WHO PAYS PAYSTACK'S FEE
@@ -171,15 +182,16 @@ exports.handler = async (event) => {
     return json(400, { error: 'bad_bank', message: 'Choose your bank from the list.' });
   }
 
-  // The artist's share. See the long note at the top: this is the
-  // SUBACCOUNT's percentage, and sending the platform's cut here instead
-  // would pay the artist nothing.
-  const artistShare = Math.max(0, Math.min(100, 100 - PLATFORM_PCT));
+  // The PLATFORM's share. See the long note at the top: percentage_charge is
+  // what the main account keeps, and sending the artist's share here instead
+  // is what paid the artist nothing.
+  const platformShare = Math.max(0, Math.min(100, Number.isFinite(PLATFORM_PCT) ? PLATFORM_PCT : 0));
+  const artistShare = 100 - platformShare;
 
   const payload = {
     business_name: ownArtist.artist_name || 'Feelz Machine artist',
     account_number: accountNumber,
-    percentage_charge: artistShare,
+    percentage_charge: platformShare,
     description: `Feelz Machine payouts for ${ownArtist.artist_name || 'artist'}`,
     primary_contact_email: user.email || undefined,
     // BOTH names on purpose. Paystack's parameter table documents bank_code
@@ -214,6 +226,19 @@ exports.handler = async (event) => {
     });
   }
 
+  // What Paystack says it stored, rather than what was asked for. If these
+  // ever disagree, somebody's sale is about to be split the wrong way, and
+  // the only sign of it would be money arriving in the wrong account.
+  const storedPlatformPct = Number(data.percentage_charge);
+  if (Number.isFinite(storedPlatformPct) && storedPlatformPct !== platformShare) {
+    console.error('[paystack-subaccount] SPLIT MISMATCH on', data.subaccount_code,
+      '- sent percentage_charge=', platformShare,
+      'but Paystack stored', storedPlatformPct,
+      '. On that subaccount the artist would receive', 100 - storedPlatformPct,
+      'percent of every sale. Fix it in the Paystack dashboard under',
+      'Payments, Subaccounts, Edit, Transaction split.');
+  }
+
   const row = {
     artist_id: ownArtist.id,
     paystack_subaccount_code: data.subaccount_code,
@@ -245,6 +270,8 @@ exports.handler = async (event) => {
     bankName: row.paystack_bank_name,
     last4: row.paystack_account_last4,
     accountName: data.account_name || null,
-    artistSharePct: artistShare,
+    // What the artist actually receives, read back from what Paystack stored
+    // rather than from what this function hoped it would store.
+    artistSharePct: Number.isFinite(storedPlatformPct) ? 100 - storedPlatformPct : artistShare,
   });
 };
