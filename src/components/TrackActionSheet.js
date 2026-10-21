@@ -109,6 +109,27 @@ export default function TrackActionSheet({ track, artist, onClose, initialView =
     // button that 403s.
     const priceUnknown = !isPWYW && quotedPrice == null && (quoteLoading || localPrice <= 0);
 
+    // IS THERE A PRICE TO CHARGE YET?
+    //
+    // On a track that carries its own download_price this is true on the first
+    // render, from the track row itself. On a track priced by its ALBUM it is
+    // false until the quote comes back, because the track's own price is zero
+    // and the album share is worked out on the server.
+    //
+    // The PayPal script loader below used to read effectivePrice directly and
+    // depend only on [view, track.id]. On an album-priced track that meant it
+    // ran once, at zero, returned without loading anything, and never ran
+    // again when the real price arrived. paypalReady stayed false for the life
+    // of the sheet: a spinner that never stops and an empty white box under
+    // it, on every track in an album, with nothing in the console.
+    //
+    // A boolean rather than the number on purpose. It flips once, so the
+    // script is still fetched once, and a pay-what-you-want buyer typing an
+    // amount does not re-request the SDK on every keystroke.
+    const hasChargeablePrice = isPWYW
+        ? (parseFloat(fanPrice) || 0) > 0
+        : effectivePrice > 0;
+
     const isPreorder = track?.is_preorder === true;
     const releaseDate = track?.release_date || null;
     const isNotYetReleased = isPreorder && releaseDate && new Date(releaseDate) > new Date();
@@ -141,9 +162,9 @@ export default function TrackActionSheet({ track, artist, onClose, initialView =
 
     useEffect(() => {
         if (view !== 'purchase' || !track) return;
-        // Don't load PayPal for free/PWYW-zero tracks
-        if (!isPWYW && effectivePrice <= 0) return;
-        if (isPWYW && (parseFloat(fanPrice) || 0) <= 0) return;
+        // Don't load PayPal for free/PWYW-zero tracks, or before the price of
+        // an album-priced track is known. See hasChargeablePrice above.
+        if (!hasChargeablePrice) return;
         setPaypalReady(false);
         setPurchaseError('');
         const existing = document.getElementById('paypal-sdk-tas');
@@ -155,7 +176,7 @@ export default function TrackActionSheet({ track, artist, onClose, initialView =
         script.onload = () => setPaypalReady(true);
         script.onerror = () => setPurchaseError('Failed to load PayPal. Please try again.');
         document.head.appendChild(script);
-    }, [view, track?.id]);
+    }, [view, track?.id, hasChargeablePrice]);
 
     useEffect(() => {
         if (!paypalReady || view !== 'purchase' || !window.paypal || !track) return;
