@@ -3,30 +3,63 @@
  *
  * ONE PLACE CONVERTS A PRICE.
  *
+ * Two jobs live here, and they are kept apart on purpose:
  *
- * WHAT THIS IS AND, MORE USEFULLY, WHAT IT IS NOT
+ *   1. THE BUYER'S FEE. The artist receives the price they set, so the buyer
+ *      covers the payment processing on top. getServiceFee, grossUp and quote
+ *      do that arithmetic, and every paid surface on the platform asks them
+ *      rather than working it out itself.
  *
- * Prices stay in dollars, exactly as they are stored today. Nothing is
- * repriced, no flag is flipped, and netlify/functions/paypal-order.js is not
- * touched. PayPal keeps charging dollars the way it always has.
+ *   2. RAND. Paystack charges in rand, so a stored dollar price has to become
+ *      a rand amount at the moment a South African buyer pays. usdToZar,
+ *      zarToPaystackMinor and usdToPaystackCharge do that.
  *
- * This file exists for one new thing: Paystack charges in rand, so the dollar
- * price on a track has to become a rand amount at the moment a South African
- * buyer pays. That conversion happens here, in the new code path only.
- *
- * An earlier draft of this file went the other way round, storing rand and
- * converting down to dollars for PayPal. That was the wrong call. It meant
- * repricing the whole catalogue, a migration flag, and editing the file that
- * handles live PayPal money, all before a single Paystack payment had ever
- * been taken. Three risky changes to ship one new feature. This direction
- * touches nothing that currently works.
- *
- * Pricing the catalogue in rand is still the right destination, because the
- * artists and the buyers are here. It is a later migration, worth doing once
- * Paystack is carrying real sales and the risk is worth taking. Not now.
+ * Both halves have to stay in this one file because four functions require it
+ * as a whole: paypal-order.js, tip-artist.js and merch-order.js call the fee
+ * half, and paystack-checkout.js calls the rand half. Shipping a version of
+ * this file carrying only one half takes down every purchase screen on the
+ * site with "pricing.quote is not a function", which is exactly what happened
+ * on 21 October 2026. If this file is ever rewritten again, the test is
+ * whether all six exported names at the bottom survive.
  *
  *
- * WHEN THE EXCHANGE RATE MOVES
+ * PART ONE: THE BUYER PAYS THE PROCESSING
+ *
+ * The promise on the site is that the artist gets the number they are shown.
+ * Before this existed, PayPal's cut came out of the artist's receipt: on the
+ * defaults below a $2.00 sale arrived as $1.59 and a $1.00 tip as $0.65, with
+ * the dashboard still displaying the face value and nothing anywhere
+ * explaining the gap.
+ *
+ * So the price the artist sets is grossed up, the difference is shown to the
+ * buyer as a separate line before the PayPal button opens, and the artist
+ * nets what their page says. Showing $2.00 on our page and $2.43 on PayPal's
+ * without explaining the difference is how a platform gets accused of
+ * skimming, which is the reverse of what this is for. See
+ * src/components/PriceBreakdown.js for the display side.
+ *
+ * The gross-up is the standard one. To net N after a processor takes p% plus
+ * a flat f, the buyer is charged (N + f) / (1 - p/100). At 5.4% + $0.30 a
+ * $2.00 price becomes $2.43: the processor takes $0.43 and the artist is left
+ * holding $2.00.
+ *
+ * The percentage and the flat fee are read from platform_settings, so they
+ * follow the processor's published rates without a deploy. At zero and zero
+ * the buyer pays exactly the artist's price and every screen behaves as it
+ * did before any of this existed.
+ *
+ *
+ * WHY THE SETTINGS ARE CLAMPED
+ *
+ * The divisor is 1 - p/100. A percentage typed into platform_settings as 100
+ * makes it zero and the charge infinite; anything above 100 makes it negative
+ * and the charge negative. Neither is a price, and both would reach a real
+ * payment screen. So the two settings are clamped to a sane band, the clamp
+ * is reported back as `capped`, and the callers log it. A fee setting that
+ * needs clamping is a typo in an admin field, not a pricing decision.
+ *
+ *
+ * PART TWO: WHEN THE EXCHANGE RATE MOVES
  *
  * The dollar price is fixed, so the rand price is what moves.
  *
@@ -36,28 +69,137 @@
  *                                dollar terms and receives more rand.
  *   Rand strengthens, 16.5 to 15 the same track drops to about R29.
  *
- * Two things keep that from being annoying. The rate is set by hand, so
- * nothing changes until the owner changes it: a buyer never sees a different
- * number between loading a page and pressing pay. And the margin below means
- * ordinary day-to-day drift does not need chasing, because the converted
- * price already sits slightly above the market rate.
+ * The rate is not read here. Fetching it, sanity checking it, caching it and
+ * carrying on with yesterday's number when no source answers is a job of its
+ * own, and it lives in netlify/lib/fxRate.js. This file does arithmetic.
  *
- * Updating it is one environment variable and a redeploy. Worth a look monthly
- * rather than daily. If the rand moves hard and the rate is stale, the only
- * consequence is that local buyers are paying slightly less than the dollar
- * price intends, which is a discount rather than a fault.
+ * Pricing the catalogue in rand outright is still the right destination,
+ * because the artists and the buyers are here. It is a later migration, worth
+ * doing once Paystack is carrying real sales.
  */
 
-// THE RATE IS NOT READ HERE ANY MORE.
-//
-// It is passed in, because working out what the rate IS turned out to be a
-// job of its own: fetching it, sanity checking it, caching it, and carrying on
-// with yesterday's number when no source answers. All of that lives in
-// netlify/lib/fxRate.js, and this file does arithmetic.
-//
-// Keeping them apart matters. A pricing bug and a rate bug have completely
-// different shapes, and a module that does both makes it hard to tell which
-// one you are looking at.
+// ── Part one: the buyer's fee ────────────────────────────────────────────────
+
+// What the processor charges, as of writing: 5.4% plus 30 cents. These are
+// fallbacks only. The live numbers come from platform_settings, and these
+// stand in when that read fails, so a database hiccup charges the current
+// rate rather than suddenly charging nothing and paying the artist short.
+const DEFAULT_FEE_PERCENT = 5.4;
+const DEFAULT_FEE_FIXED   = 0.30;
+
+// The sane band. See the note above on why the divisor must stay positive.
+const MAX_FEE_PERCENT = 50;
+const MAX_FEE_FIXED   = 10;
+
+/**
+ * Money, to the cent. The epsilon keeps binary floating point from rounding
+ * 1.005 down, which is the classic way a cent goes missing.
+ */
+function round2(n) {
+  const v = Number(n);
+  if (!Number.isFinite(v)) return 0;
+  return Math.round((v + Number.EPSILON) * 100) / 100;
+}
+
+/**
+ * The current fee settings, from platform_settings.
+ *
+ * @param {object} supabase a client that can read platform_settings
+ * @returns {Promise<{percent: number, fixed: number, capped: boolean}>}
+ */
+async function getServiceFee(supabase) {
+  let percent = DEFAULT_FEE_PERCENT;
+  let fixed   = DEFAULT_FEE_FIXED;
+
+  try {
+    const { data, error } = await supabase
+      .from('platform_settings')
+      .select('key, value')
+      .in('key', ['buyer_service_fee_percent', 'buyer_service_fee_fixed']);
+
+    if (error) {
+      console.error('[pricing] could not read the fee settings, using the defaults:',
+        error.code, error.message);
+    } else {
+      for (const row of data || []) {
+        const v = Number(row && row.value);
+        if (!Number.isFinite(v)) continue;
+        if (row.key === 'buyer_service_fee_percent') percent = v;
+        if (row.key === 'buyer_service_fee_fixed')   fixed   = v;
+      }
+    }
+  } catch (err) {
+    console.error('[pricing] fee settings lookup threw, using the defaults:', err.message);
+  }
+
+  const clampedPercent = Math.max(0, Math.min(MAX_FEE_PERCENT, percent));
+  const clampedFixed   = Math.max(0, Math.min(MAX_FEE_FIXED, fixed));
+  const capped = clampedPercent !== percent || clampedFixed !== fixed;
+
+  if (capped) {
+    console.error('[pricing] fee settings outside the sane band and clamped:',
+      'buyer_service_fee_percent=', percent, '->', clampedPercent,
+      'buyer_service_fee_fixed=', fixed, '->', clampedFixed,
+      '. Check platform_settings.');
+  }
+
+  return { percent: clampedPercent, fixed: clampedFixed, capped };
+}
+
+/**
+ * What the buyer is charged so that `netAmount` is what is left afterwards.
+ *
+ * @param {number} netAmount what the seller must end up holding
+ * @param {{percent: number, fixed: number, capped?: boolean}} fee
+ * @returns {{buyerPays: number, serviceFee: number, capped: boolean}}
+ */
+function grossUp(netAmount, fee) {
+  const net = Number(netAmount);
+  const capped = !!(fee && fee.capped);
+
+  if (!Number.isFinite(net) || net <= 0) {
+    return { buyerPays: 0, serviceFee: 0, capped };
+  }
+
+  const percent = Math.max(0, Math.min(MAX_FEE_PERCENT, Number(fee && fee.percent) || 0));
+  const fixed   = Math.max(0, Math.min(MAX_FEE_FIXED,   Number(fee && fee.fixed)   || 0));
+
+  if (percent === 0 && fixed === 0) {
+    const flat = round2(net);
+    return { buyerPays: flat, serviceFee: 0, capped };
+  }
+
+  const buyerPays = round2((net + fixed) / (1 - percent / 100));
+  return { buyerPays, serviceFee: round2(buyerPays - round2(net)), capped };
+}
+
+/**
+ * The whole fee path in one call: an artist's price in, the three numbers the
+ * checkout and the breakdown both need out.
+ *
+ * @param {object} supabase
+ * @param {number} artistPriceIn the price the artist set, in dollars
+ * @returns {Promise<{artistPrice: number, serviceFee: number, buyerPays: number, capped: boolean}>}
+ */
+async function quote(supabase, artistPriceIn) {
+  const artistPrice = round2(artistPriceIn);
+
+  if (!(artistPrice > 0)) {
+    return { artistPrice, serviceFee: 0, buyerPays: artistPrice, capped: false };
+  }
+
+  const fee = await getServiceFee(supabase);
+  const g = grossUp(artistPrice, fee);
+
+  return {
+    artistPrice,
+    serviceFee: g.serviceFee,
+    buyerPays:  g.buyerPays > 0 ? g.buyerPays : artistPrice,
+    capped:     g.capped,
+  };
+}
+
+// ── Part two: rand ───────────────────────────────────────────────────────────
 
 // Headroom on the conversion, as a percentage.
 //
@@ -139,7 +281,19 @@ function paypalCurrency() {
   return 'USD';
 }
 
+// Every name below is required by a deployed function. paypal-order.js,
+// tip-artist.js and merch-order.js use round2, getServiceFee, grossUp and
+// quote; paystack-checkout.js uses usdToPaystackCharge. Removing any of them
+// breaks a live payment screen.
 module.exports = {
+  // the buyer's fee
+  DEFAULT_FEE_PERCENT,
+  DEFAULT_FEE_FIXED,
+  round2,
+  getServiceFee,
+  grossUp,
+  quote,
+  // rand
   FX_MARGIN_PCT,
   assertRate,
   usdToZar,
