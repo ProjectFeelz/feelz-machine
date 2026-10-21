@@ -51,18 +51,6 @@ export default function TrackActionSheet({ track, artist, onClose, initialView =
 
     // Purchase state
     const [paypalReady, setPaypalReady] = useState(false);
-    // THE NODE, NOT ITS ID.
-    //
-    // The buttons are rendered by an effect, and the div they render into is
-    // only in the DOM once the price is known. The effect used to look the div
-    // up by id and give up quietly when it was not there yet, so whether the
-    // buttons appeared came down to which finished first: the PayPal script or
-    // the price quote. Script first and the buyer got an empty white strip
-    // where the buttons should be, with nothing in the console to say so.
-    //
-    // Holding the node in state removes the race. React sets it the moment the
-    // div mounts, that re-runs the effect, and the buttons render then.
-    const [payPalHost, setPayPalHost] = useState(null);
     const [purchasing, setPurchasing] = useState(false);
     const [purchaseSuccess, setPurchaseSuccess] = useState(false);
     const [purchaseError, setPurchaseError] = useState('');
@@ -173,11 +161,46 @@ export default function TrackActionSheet({ track, artist, onClose, initialView =
         if (!paypalReady || view !== 'purchase' || !window.paypal || !track) return;
         if (isPWYW && !validateFanPrice()) return;
         if (effectivePrice <= 0) return;
-        const container = payPalHost;
-        if (!container) return;
-        container.innerHTML = '';
+        // LOOK AGAIN INSTEAD OF GIVING UP.
+        //
+        // This block used to read: find the container, and if it is not there,
+        // return. Everything below is unchanged from that version, including
+        // the trigger, the dependencies and the render call. The only
+        // difference is what happens when the container is not ready.
+        //
+        // Two ways it is not ready. It is not in the DOM yet, because it is
+        // only rendered once the price is known and the quote has not landed.
+        // Or it is in the DOM with a width of zero, because the sheet is still
+        // sliding up, and the SDK will not render into something it cannot
+        // measure. In both cases the old code returned and never came back,
+        // and the buyer was left with the empty white box.
+        //
+        // So it looks again on the next frame, for up to ten seconds, and
+        // nothing is cleared or rendered until there is a container with a
+        // real width. A screen where the buttons already drew is untouched:
+        // on that path the first look succeeds, exactly as it always did.
+        let cancelled = false;
+        let frame = null;
+        const deadline = Date.now() + 10000;
 
-        window.paypal.Buttons({
+        const draw = () => {
+            if (cancelled) return;
+
+            const container = document.getElementById('paypal-tas-container');
+            if (!container || container.offsetWidth < 1) {
+                if (Date.now() > deadline) {
+                    console.error('[TrackActionSheet] no measurable PayPal container after 10s',
+                        { found: !!container, width: container ? container.offsetWidth : null });
+                    setPurchaseError('PayPal could not load here. Try the other payment option, or reload the page.');
+                    return;
+                }
+                frame = requestAnimationFrame(draw);
+                return;
+            }
+
+            container.innerHTML = '';
+
+            window.paypal.Buttons({
             style: { layout: 'vertical', color: 'gold', shape: 'rect', label: 'pay' },
             createOrder: async () => {
                 setPurchasing(true);
@@ -281,8 +304,23 @@ export default function TrackActionSheet({ track, artist, onClose, initialView =
                 setPurchasing(false);
             },
             onCancel: () => setPurchasing(false),
-        }).render(container);
-    }, [paypalReady, payPalHost, view, track?.id, effectivePrice]);
+            }).render('#paypal-tas-container').catch((err) => {
+                if (cancelled) return;
+                // This promise was never read. Whatever went wrong - the
+                // script blocked by a content blocker, the SDK refusing the
+                // container, PayPal itself down - the buyer got a white
+                // rectangle and no reason for it, and so did the log.
+                console.error('[TrackActionSheet] PayPal buttons did not render:', err);
+                setPurchaseError('PayPal could not load here. Try the other payment option, or reload the page.');
+            });
+        };
+
+        draw();
+        return () => {
+            cancelled = true;
+            if (frame) cancelAnimationFrame(frame);
+        };
+    }, [paypalReady, view, track?.id, effectivePrice]);
 
     const checkAlreadyPreordered = async () => {
         const { data } = await supabase
@@ -635,7 +673,7 @@ export default function TrackActionSheet({ track, artist, onClose, initialView =
                                                 <>
                                                     {purchaseError && <p className="text-xs text-red-400 text-center">{purchaseError}</p>}
                                                     {!paypalReady && !purchaseError && <div className="flex justify-center py-2"><Loader className="w-5 h-5 animate-spin text-white/30" /></div>}
-                                                    <div id="paypal-tas-container" ref={setPayPalHost} style={{ backgroundColor: '#fff', borderRadius: '8px', padding: '4px' }} />
+                                                    <div id="paypal-tas-container" style={{ backgroundColor: '#fff', borderRadius: '8px', padding: '4px' }} />
                                                     {/* Rand, through Paystack. The component asks the checkout itself and
                                                         removes itself when the artist has no bank account on file, so this
                                                         is a no-op on every artist paid through PayPal. */}
@@ -711,7 +749,7 @@ export default function TrackActionSheet({ track, artist, onClose, initialView =
                                             ) : (
                                                 <>
                                                     {!paypalReady && !purchaseError && <div className="flex justify-center py-2"><Loader className="w-5 h-5 animate-spin text-white/30" /></div>}
-                                                    <div id="paypal-tas-container" ref={setPayPalHost} style={{ backgroundColor: '#fff', borderRadius: '8px', padding: '4px' }} />
+                                                    <div id="paypal-tas-container" style={{ backgroundColor: '#fff', borderRadius: '8px', padding: '4px' }} />
                                                     {/* Rand, through Paystack. The component asks the checkout itself and
                                                         removes itself when the artist has no bank account on file, so this
                                                         is a no-op on every artist paid through PayPal. */}
