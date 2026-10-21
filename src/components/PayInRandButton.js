@@ -57,7 +57,7 @@
  * could claim a payment happened.
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 
 // Live only when the key says live. Anything else, including a missing key,
@@ -90,8 +90,27 @@ export default function PayInRandButton({
   // Set once the checkout says this artist has no Paystack account. From then
   // on the button is gone for this screen.
   const [unavailable, setUnavailable] = useState(false);
+  // SAY SO BEFORE GOING.
+  //
+  // The button used to vanish the instant the checkout refused, which reads as
+  // a broken button: you press it and the screen simply loses a control, with
+  // nothing to say why. Removing it IS right, the PayPal buttons are already
+  // there and a permanent notice on every PayPal-only artist is noise. But the
+  // person who pressed it deserves a sentence first.
+  //
+  // So the refusal shows for six seconds, then the component removes itself as
+  // it always did.
+  const [notice, setNotice] = useState('');
   const [askEmail, setAskEmail] = useState(false);
   const [email, setEmail] = useState(emailProp || '');
+
+  // Declared above every early return below it, because a hook cannot be
+  // skipped on one render and run on the next.
+  useEffect(() => {
+    if (!notice) return undefined;
+    const t = setTimeout(() => setUnavailable(true), 6000);
+    return () => clearTimeout(t);
+  }, [notice]);
 
   if (unavailable) return null;
   if (!trackId && !albumId) return null;
@@ -138,9 +157,10 @@ export default function PayInRandButton({
       const data = await res.json().catch(() => ({}));
 
       if (res.status === 409) {
-        // This artist is paid through PayPal. Not an error to show anybody:
-        // the PayPal buttons are already on the screen.
-        setUnavailable(true);
+        // This artist is paid through PayPal. Not an error, so it is not
+        // styled as one: it explains itself and then gets out of the way.
+        setNotice('Card payments in rand are not available for this artist. Use the PayPal button above.');
+        setBusy(false);
         onUnavailable?.();
         return;
       }
@@ -149,7 +169,8 @@ export default function PayInRandButton({
       // that counts. If a stale bundle reaches a visitor after the key has
       // been rolled back, this is what stops it.
       if (res.status === 503 && data.error === 'paystack_not_live') {
-        setUnavailable(true);
+        setNotice('Paying in rand is not available right now. Use the PayPal button above.');
+        setBusy(false);
         onUnavailable?.();
         return;
       }
@@ -190,6 +211,15 @@ export default function PayInRandButton({
           {busy ? 'Starting…' : 'Continue'}
         </button>
         {error ? <p className="text-xs text-red-400">{error}</p> : null}
+      </div>
+    );
+  }
+
+  if (notice) {
+    return (
+      <div className="w-full px-4 py-2.5 rounded-xl text-xs text-center text-white/45
+                      bg-white/[0.03] border border-white/10 select-none">
+        {notice}
       </div>
     );
   }
