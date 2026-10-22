@@ -1423,10 +1423,24 @@ export function PlayerProvider({ children }) {
     });
     const playWhenReady = () => {
       audio.play().catch(() => {});
-      // Fade in from silence to half the person's set volume. Never
-      // straight to full. They can turn it up further themselves if they
-      // want it louder; this just stops a track ever "starting shouting."
-      const targetVol = volumeRef.current * 0.5;
+      // FADE TO WHAT THEY SET, NOT TO HALF OF IT.
+      //
+      // This faded in to volumeRef.current * 0.5 and stopped there, so every
+      // track started by playTrack played at half volume for its whole
+      // length. Nothing told anybody: the slider is driven by React state,
+      // which this never touched, so it sat at 100% while the audio element
+      // was on 0.5. Then the first touch of the slider called
+      // setVolumeLevel, which writes the slider's own value straight to the
+      // element, and the sound jumped. That is the "it snaps back to 100".
+      //
+      // The crossfade path in playNextFromRef never did this: it fades to
+      // volumeRef.current, full. So the same song was one loudness when it
+      // came up in the queue and half that when you tapped it.
+      //
+      // The intent was that a track should not start shouting, and the fade
+      // is what does that. Ending it below where the person set their volume
+      // is a second, silent decision, and not one the UI could show.
+      const targetVol = volumeRef.current;
       const steps      = 24;
       const durationMs = 1400;
       const interval   = durationMs / steps;

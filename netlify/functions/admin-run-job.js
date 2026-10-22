@@ -100,14 +100,30 @@ exports.handler = async (event) => {
 
   try {
     const mod = ALLOWED[job]();
-    // The job is handed the same shape Netlify hands it, with the POST method
-    // its own code reads as "this was a manual run", and the cron secret if
-    // one is configured, so its internal cooldown does not refuse a run an
-    // admin has deliberately asked for.
+
+    // The job is handed the same shape Netlify hands a scheduled invocation.
+    //
+    // These five do not share one authorisation scheme, which is the whole
+    // reason this is built out rather than passing an empty event:
+    //
+    //   compute-recommendations    a cooldown, skipped by x-cron-secret
+    //   compute-behavior-profiles  x-internal-secret, OR a body carrying
+    //                              next_run, which is what the Netlify
+    //                              scheduler sends
+    //
+    // So both secrets go in when they are configured, and the body carries
+    // next_run. That is not a way around the gate: the caller has already
+    // been checked against the admins table above, which is a stronger test
+    // than either secret, and the secrets exist to keep anonymous callers out
+    // rather than admins.
+    const headers = {};
+    if (process.env.CRON_SECRET)              headers['x-cron-secret']    = process.env.CRON_SECRET;
+    if (process.env.INTERNAL_FUNCTION_SECRET) headers['x-internal-secret'] = process.env.INTERNAL_FUNCTION_SECRET;
+
     const result = await mod.handler({
       httpMethod: 'POST',
-      headers: process.env.CRON_SECRET ? { 'x-cron-secret': process.env.CRON_SECRET } : {},
-      body: '{}',
+      headers,
+      body: JSON.stringify({ next_run: new Date().toISOString(), manual: true, by: user.id }),
     });
 
     return json(200, {
