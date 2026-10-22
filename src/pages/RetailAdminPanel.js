@@ -542,9 +542,17 @@ function StaffTab({ showToast }) {
 
     const rows = data || [];
     if (rows.length > 0) {
-      const { data: profiles } = await supabase.from('user_profiles')
-        .select('user_id, name, email').in('user_id', rows.map(r => r.user_id));
-      const byId = Object.fromEntries((profiles || []).map(p => [p.user_id, p]));
+      // Names come from the public view. Addresses are not on it, and are
+      // no longer readable off the base table by anybody but their owner,
+      // so they come from admin_emails_for_users, which refuses a caller
+      // who is not in the admins table. Same pair AdminRetailStaff uses.
+      const ids = rows.map(r => r.user_id);
+      const [{ data: profiles }, { data: emails }] = await Promise.all([
+        supabase.from('user_profiles_public').select('user_id, name').in('user_id', ids),
+        supabase.rpc('admin_emails_for_users', { p_user_ids: ids }),
+      ]);
+      const emailById = Object.fromEntries((emails || []).map(e => [e.user_id, e.email]));
+      const byId = Object.fromEntries((profiles || []).map(p => [p.user_id, { ...p, email: emailById[p.user_id] || null }]));
       setStaff(rows.map(r => ({ ...r, profile: byId[r.user_id] || null })));
     } else setStaff([]);
     setLoading(false);

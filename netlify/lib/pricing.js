@@ -272,6 +272,97 @@ function usdToPaystackCharge(usdAmount, rate) {
   return { zar, minor: zarToPaystackMinor(zar), currency: 'ZAR' };
 }
 
+// ── The card fee on a rand sale, and who carries it ─────────────────────────
+//
+// Paystack South Africa charges 2.9% plus R1 per transaction, excluding VAT,
+// with the R1 waived under R10. At 15% VAT that reproduces the first live
+// sale exactly: R24.00 charged, R0.70 plus R1.00 is R1.70, plus VAT is R1.96,
+// which is the figure on the transaction.
+//
+// The checkout sets bearer: 'subaccount', so that fee comes off the artist's
+// side. On its own that would mean a rand sale paid the artist less than the
+// price on their page, while a PayPal sale paid them all of it, because the
+// PayPal path already grosses up. Two routes, two different answers to "what
+// do I actually get", and only one of them matching what the artist was told.
+//
+// So the rand charge is grossed up the same way: the buyer covers the card
+// fee, and the artist nets the price they set on both routes.
+//
+// The rates are environment variables because they are Paystack's to change,
+// not ours. If they move, these move without a code change.
+const PAYSTACK_FEE_PCT       = Number(process.env.PAYSTACK_FEE_PCT       || 2.9);
+const PAYSTACK_FEE_FLAT_ZAR  = Number(process.env.PAYSTACK_FEE_FLAT_ZAR  || 1);
+const PAYSTACK_FEE_VAT_PCT   = Number(process.env.PAYSTACK_FEE_VAT_PCT   || 15);
+const PAYSTACK_FLAT_WAIVED_BELOW_ZAR = 10;
+
+/**
+ * What Paystack takes from a charge of `chargeZar` rand, VAT included.
+ *
+ * Rounded the way their own invoice reads: the percentage to the cent first,
+ * then the flat fee, then VAT on the total.
+ */
+function paystackFeeZar(chargeZar) {
+  const c = Number(chargeZar);
+  if (!Number.isFinite(c) || c <= 0) return 0;
+  // Worked in integer cents from end to end. In rand it is not arithmetic,
+  // it is luck: (0.70 + 1.00) * 1.15 is 1.9549999999999998 in binary floating
+  // point, which rounds to R1.95, and Paystack's invoice for that exact
+  // transaction says R1.96. A cent out on every sale is the kind of error
+  // that only shows up in a reconciliation nobody runs.
+  const cents     = Math.round(c * 100);
+  const pctCents  = Math.round(cents * (PAYSTACK_FEE_PCT / 100));
+  const flatCents = c < PAYSTACK_FLAT_WAIVED_BELOW_ZAR ? 0 : Math.round(PAYSTACK_FEE_FLAT_ZAR * 100);
+  return Math.round(((pctCents + flatCents) * (100 + PAYSTACK_FEE_VAT_PCT)) / 100) / 100;
+}
+
+/**
+ * The whole rand amount to charge so that `targetZar` survives the fee.
+ *
+ * The closed form is only an approximation here: the flat fee is waived below
+ * R10, which makes the function piecewise, and both the fee and the charge
+ * are rounded. So the closed form is used as a starting point and then
+ * checked against the same arithmetic the fee itself uses, a rand at a time,
+ * until the remainder really does cover the target. It normally does not loop
+ * at all, and it is bounded either way.
+ *
+ * Rounded UP to a whole rand, like usdToZar: nobody prices anything at
+ * R26.02, and rounding up never shortchanges the artist.
+ */
+function grossUpZar(targetZar) {
+  const t = Number(targetZar);
+  if (!Number.isFinite(t) || t <= 0) return 0;
+
+  const vat  = 1 + PAYSTACK_FEE_VAT_PCT / 100;
+  const pct  = (PAYSTACK_FEE_PCT / 100) * vat;
+  const flat = PAYSTACK_FEE_FLAT_ZAR * vat;
+
+  let charge = Math.ceil((t + flat) / (1 - pct));
+  for (let i = 0; i < 20 && charge - paystackFeeZar(charge) < t; i += 1) charge += 1;
+  return charge;
+}
+
+/**
+ * The whole path for the Paystack checkout, with the buyer carrying the card
+ * fee so the artist nets their price.
+ *
+ * Returns the buyer's charge AND the artist's share, because the two are now
+ * different numbers and every screen and record that shows one of them has to
+ * be told which it is holding.
+ */
+function usdToPaystackChargeGrossedUp(usdAmount, rate) {
+  const artistZar = usdToZar(usdAmount, rate);
+  if (!artistZar) return { zar: 0, minor: 0, currency: 'ZAR', artistZar: 0, feeZar: 0 };
+
+  const zar = grossUpZar(artistZar);
+  return {
+    zar,
+    minor: zarToPaystackMinor(zar),
+    currency: 'ZAR',
+    artistZar,
+    feeZar: paystackFeeZar(zar),
+  };
+}
+
 /**
  * PayPal cannot take rand. ZAR is not among the 23 currencies it supports for
  * payments, which is why the Paystack path exists at all rather than simply
@@ -300,4 +391,11 @@ module.exports = {
   zarToPaystackMinor,
   usdToPaystackCharge,
   paypalCurrency,
+  // the card fee on a rand sale
+  PAYSTACK_FEE_PCT,
+  PAYSTACK_FEE_FLAT_ZAR,
+  PAYSTACK_FEE_VAT_PCT,
+  paystackFeeZar,
+  grossUpZar,
+  usdToPaystackChargeGrossedUp,
 };

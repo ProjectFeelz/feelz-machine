@@ -335,7 +335,8 @@ function FloatingHearts({ trackId, isActive }) {
       if (!ids.length) return {};
       const [{ data: artists }, { data: profiles }, { data: listeners }] = await Promise.all([
         supabase.from('artists').select('user_id, artist_name, profile_image_url').in('user_id', ids),
-        supabase.from('user_profiles').select('user_id, name, avatar_url').in('user_id', ids),
+        // Other people's profiles: the public view, not the base table.
+        supabase.from('user_profiles_public').select('user_id, name, avatar_url').in('user_id', ids),
         supabase.from('listeners').select('user_id, display_name, avatar_url').in('user_id', ids),
       ]);
       const out = {};

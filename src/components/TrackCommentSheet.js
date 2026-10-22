@@ -209,7 +209,8 @@ export default function TrackCommentSheet({ track, user, onClose, routePrefix = 
     const [{ data: artists }, { data: profiles }, { data: listenerProfiles }] = uids.length > 0
       ? await Promise.all([
           supabase.from('artists').select('user_id, artist_name, profile_image_url').in('user_id', uids),
-          supabase.from('user_profiles').select('user_id, name, avatar_url').in('user_id', uids),
+          // Other people's profiles: the public view, not the base table.
+          supabase.from('user_profiles_public').select('user_id, name, avatar_url').in('user_id', uids),
           supabase.from('listeners').select('user_id, display_name, avatar_url, tier, preferences').in('user_id', uids),
         ])
       : [{ data: [] }, { data: [] }, { data: [] }];

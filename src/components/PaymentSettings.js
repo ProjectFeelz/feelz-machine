@@ -464,13 +464,81 @@ export default function PaymentSettings() {
         <span>{saving ? 'Saving...' : 'Save Payment Settings'}</span>
       </button>
 
-      {/* How splits work */}
+      {/* How a sale reaches you.
+       *
+       * THE TWO ROUTES DO NOT BEHAVE THE SAME AND THE ARTIST HAS TO BE TOLD
+       *
+       * They differ in two ways that an artist will notice and, if nobody
+       * says so first, will read as a fault:
+       *
+       *   WHEN. A PayPal sale lands at the moment the fan pays. A rand sale
+       *   settles on the card provider's schedule, which is about two days.
+       *   An artist who sells on Monday evening and sees nothing on Monday
+       *   night writes in asking where their money is.
+       *
+       *   WHO PAYS THE PROCESSING. Nobody, as far as the artist is
+       *   concerned: the buyer covers it on top of the price on both routes,
+       *   so the artist receives exactly what their page says either way.
+       *   That is not how the rand route started. It took the card fee out
+       *   of the artist's share while PayPal grossed up, which meant the
+       *   same track paid two different amounts depending on how the fan
+       *   happened to pay. Both are grossed up now.
+       *
+       * A table rather than a paragraph because the question this answers is
+       * a comparison, and a comparison written as prose makes the reader hold
+       * both halves in their head.
+       */}
       <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] p-4">
-        <h4 className="text-sm font-semibold text-white mb-2">How Royalty Splits Work</h4>
-        <div className="space-y-2 text-xs text-white/40 leading-relaxed">
-          <p>Every sale is paid straight into the PayPal email above, the moment the buyer pays. Feelz Machine never holds your money, so there is no payout to wait for. Without a PayPal email your music can't be bought.</p>
+        <h4 className="text-sm font-semibold text-white mb-1">How a sale reaches you</h4>
+        <p className="text-xs text-white/35 mb-3 leading-relaxed">
+          A fan chooses how to pay. The two ways do not arrive the same.
+        </p>
+
+        <div className="overflow-x-auto -mx-1">
+          <table className="w-full text-xs min-w-[380px]">
+            <thead>
+              <tr className="text-white/35">
+                <th className="text-left font-normal py-1.5 pr-2 w-[34%]"> </th>
+                <th className="text-left font-semibold py-1.5 pr-2 text-white/60">PayPal</th>
+                <th className="text-left font-semibold py-1.5 text-white/60">Rand, by card</th>
+              </tr>
+            </thead>
+            <tbody className="align-top">
+              <tr className="border-t border-white/[0.06]">
+                <td className="py-2 pr-2 text-white/35">Paid into</td>
+                <td className="py-2 pr-2 text-white/55">Your PayPal address</td>
+                <td className="py-2 text-white/55">Your bank account</td>
+              </tr>
+              <tr className="border-t border-white/[0.06]">
+                <td className="py-2 pr-2 text-white/35">When it lands</td>
+                <td className="py-2 pr-2 text-white/55">As the fan pays</td>
+                <td className="py-2 text-white/55">About two days later</td>
+              </tr>
+              <tr className="border-t border-white/[0.06]">
+                <td className="py-2 pr-2 text-white/35">Processing fee</td>
+                <td className="py-2 pr-2 text-white/55">The buyer pays it, on top of your price</td>
+                <td className="py-2 text-white/55">The buyer pays it, on top of your price</td>
+              </tr>
+              <tr className="border-t border-white/[0.06]">
+                <td className="py-2 pr-2 text-white/35">You end up with</td>
+                <td className="py-2 pr-2 text-white/55">Your price in full</td>
+                <td className="py-2 text-white/55">Your price in full</td>
+              </tr>
+              <tr className="border-t border-white/[0.06]">
+                <td className="py-2 pr-2 text-white/35">Set it up</td>
+                <td className="py-2 pr-2 text-white/55">PayPal email above</td>
+                <td className="py-2 text-white/55">Bank account above, South Africa only</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div className="space-y-2 text-xs text-white/40 leading-relaxed mt-3">
+          <p>Either way the money is yours and Feelz Machine never holds it. There is no payout to request and no threshold to reach. You need at least one of the two on file, a bank account or a PayPal email, or your music cannot be bought.</p>
+          <p>Having both is fine. The fan picks, and you are paid whichever way they chose.</p>
+          <p>On both routes the buyer is shown the processing on top of your price before they pay, so they know what the extra is and you receive the number on your page.</p>
           <p>On a track with collaborators, the buyer pays the track owner. Feelz Machine records each collaborator's agreed share of every sale and tells both of you what it comes to. The owner then pays their collaborators directly.</p>
-          <p className="text-white/25">Feelz Machine does not take a cut of artist earnings. Your yearly subscription is the only platform fee. PayPal's own fee comes off each sale.</p>
+          <p className="text-white/25">Feelz Machine does not take a cut of artist earnings. Your subscription is the only platform fee.</p>
         </div>
       </div>
 

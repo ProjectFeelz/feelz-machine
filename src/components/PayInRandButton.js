@@ -146,6 +146,8 @@ export default function PayInRandButton({
   // Set while the Paystack overlay is open, so the button can say so and the
   // watcher below knows what reference to ask about.
   const [awaiting, setAwaiting] = useState(null);
+  // The rand price, asked for before the buyer commits to anything.
+  const [quote, setQuote] = useState(null);
 
   // Declared above every early return below it, because a hook cannot be
   // skipped on one render and run on the next.
@@ -203,6 +205,42 @@ export default function PayInRandButton({
 
     return () => { stopped = true; clearInterval(timer); };
   }, [awaiting]);
+
+  // SAY THE PRICE BEFORE THEY LEAVE.
+  //
+  // A button that reads "Pay in rand" and then sends somebody to a checkout
+  // to discover the number is a button people do not press. This asks what it
+  // would cost, in rand, and puts it on the button.
+  //
+  // It starts nothing: the quote action makes no intent row and no call to
+  // Paystack. A failed quote is not an error worth showing, the button simply
+  // keeps its plain label.
+  useEffect(() => {
+    if (!PAYSTACK_IS_LIVE) return undefined;
+    if (!trackId && !albumId) return undefined;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/.netlify/functions/paystack-checkout', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'quote',
+            trackId, albumId,
+            ...(licenceId ? { licenceId } : {}),
+            ...(Number(amount) > 0 ? { amount: Number(amount) } : {}),
+          }),
+        });
+        if (!res.ok) return;
+        const q = await res.json();
+        if (!cancelled && q && q.available && q.zar > 0) setQuote(q);
+      } catch {
+        // No quote, no number on the button. Nothing else changes.
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [trackId, albumId, licenceId, amount]);
 
   if (unavailable) return null;
   if (!trackId && !albumId) return null;
@@ -356,8 +394,22 @@ export default function PayInRandButton({
           'border border-white/15 hover:bg-white/15 disabled:opacity-50 transition-colors'
         }
       >
-        {awaiting ? 'Waiting for payment…' : busy ? 'Starting…' : label}
+        {awaiting
+          ? 'Waiting for payment\u2026'
+          : busy
+            ? 'Starting\u2026'
+            : quote
+              ? `Pay R${quote.zar} by card`
+              : label}
       </button>
+      {/* What the extra rand is. Said here rather than discovered on the
+          Paystack page, and said the same way the PayPal breakdown says it:
+          the artist's price, then the processing on top. */}
+      {quote && !busy && !awaiting ? (
+        <p className="text-[11px] text-white/35 text-center leading-relaxed">
+          R{quote.artistZar} to the artist, R{(quote.zar - quote.artistZar).toFixed(2).replace(/\.00$/, '')} card processing
+        </p>
+      ) : null}
       {error ? <p className="text-xs text-red-400">{error}</p> : null}
     </div>
   );

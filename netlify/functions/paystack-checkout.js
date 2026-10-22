@@ -132,6 +132,66 @@ exports.handler = async (event) => {
       return json(400, { error: 'invalid_body' });
     }
 
+    if (action === 'quote') {
+      // What this would cost in rand, without starting anything: no intent
+      // row, no call to Paystack, nothing to abandon. It exists so the button
+      // can say "Pay R27" instead of sending somebody to a checkout to find
+      // out. The same function does the arithmetic as the real charge below,
+      // because a quote that computes it a second way is a quote that will
+      // eventually disagree with the till.
+      let qTrackId, qAlbumId, qLicenceId, qAmount;
+      try {
+        const b = JSON.parse(event.body || '{}');
+        qTrackId   = b.trackId || null;
+        qAlbumId   = b.albumId || null;
+        qLicenceId = b.licenceId || null;
+        qAmount    = b.amount != null ? b.amount : null;
+      } catch {
+        return json(400, { error: 'invalid_body' });
+      }
+      if (!qTrackId && !qAlbumId) return json(400, { error: 'trackId or albumId is required' });
+
+      const quoteAdmin = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+
+      let quoteUsd = 0;
+      if (qTrackId) {
+        const { data: qTrack } = await quoteAdmin
+          .from('tracks')
+          .select('id, artist_id, album_id, download_price, pay_what_you_want, minimum_price, beat_licence, is_published, is_preorder, release_date')
+          .eq('id', qTrackId).maybeSingle();
+        if (!qTrack) return json(404, { error: 'not_found' });
+        const priced = await pricing_resolveTrackPrice({
+          supabase: quoteAdmin, track: qTrack, licenceId: qLicenceId, offeredAmount: qAmount,
+        });
+        if (priced.error) return json(200, { available: false });
+        quoteUsd = priced.price;
+      } else {
+        const { data: qAlbum } = await quoteAdmin
+          .from('albums').select('price').eq('id', qAlbumId).maybeSingle();
+        quoteUsd = Number(qAlbum && qAlbum.price) || 0;
+      }
+
+      if (!(quoteUsd > 0)) return json(200, { available: false });
+
+      let quoteRate;
+      try {
+        quoteRate = await fx.getUsdZarRate(quoteAdmin);
+      } catch {
+        return json(200, { available: false });
+      }
+
+      const q = pricing.usdToPaystackChargeGrossedUp(quoteUsd, quoteRate.rate);
+      return json(200, {
+        available: q.minor >= 100,
+        zar: q.zar,
+        currency: 'ZAR',
+        // Spelled out so a screen can explain the number rather than just
+        // show it: this is the artist's price plus the card fee.
+        artistZar: q.artistZar,
+        feeZar: q.feeZar,
+      });
+    }
+
     if (action === 'status') {
       if (!/^fm_[a-z]+_[0-9a-f]{6,64}$/.test(reference)) {
         return json(400, { error: 'bad_reference' });
@@ -311,7 +371,15 @@ exports.handler = async (event) => {
     });
   }
 
-  const charge = pricing.usdToPaystackCharge(usdPrice, rate.rate);
+  // THE BUYER CARRIES THE CARD FEE, THE SAME WAY THEY DO ON PAYPAL.
+  //
+  // bearer: 'subaccount' below sends Paystack's cut to the artist's side. On
+  // its own that paid the artist less than the price on their page, while the
+  // PayPal route grossed up and paid them all of it: two routes, two answers
+  // to "what do I actually get", and only one of them matching what the
+  // artist was told. So the charge is grossed up here and the artist nets
+  // their price either way. See the fee note in netlify/lib/pricing.js.
+  const charge = pricing.usdToPaystackChargeGrossedUp(usdPrice, rate.rate);
   if (!charge.minor || charge.minor < 100) {
     // Paystack rejects trivially small amounts, and a sub-rand charge almost
     // always means a price or a rate is wrong rather than a genuinely cheap
@@ -434,7 +502,8 @@ exports.handler = async (event) => {
   }
 
   console.log('[paystack-checkout] INIT', JSON.stringify({
-    reference, itemKind, artistId, usdPrice, zar: charge.zar,
+    reference, itemKind, artistId, usdPrice,
+    zarCharged: charge.zar, zarToArtist: charge.artistZar, zarFee: charge.feeZar,
     rate: rate.rate, stale: rate.stale, subaccount: routing.subaccountCode,
   }));
 
@@ -451,5 +520,9 @@ exports.handler = async (event) => {
     // a different answer.
     zar: charge.zar,
     currency: 'ZAR',
+    // The two halves of that number, for any screen that wants to show the
+    // buyer what the extra is for.
+    artistZar: charge.artistZar,
+    feeZar: charge.feeZar,
   });
 };

@@ -535,6 +535,27 @@ export default function BrowsePage() {
     else playTrack(track, list);
   };
 
+  // A QUEUE THAT DOES NOT END ON THE LAST MATCH.
+  //
+  // The list a track is played with becomes the queue, and when it runs out
+  // playback stops. That is right for a rail of twenty tracks and wrong for
+  // search: looking up a song by name usually matches exactly one, so the
+  // queue was one track long and the player stopped at the end of it. It read
+  // as the queue never having been built at all.
+  //
+  // So the matches go first, in their own order, and the rest of the
+  // catalogue follows. Next is still the second match when there is one, and
+  // when there is not, the music carries on instead of stopping dead.
+  //
+  // Tracks with no file_url are left out: they cannot play, and in a queue
+  // they are a gap where the next song should be.
+  const continuingQueue = (list) => {
+    const matches = (list || []).filter(t => t?.file_url);
+    const seen = new Set(matches.map(t => t.id));
+    const rest = allTracks.filter(t => t?.file_url && !seen.has(t.id));
+    return [...matches, ...rest];
+  };
+
   // THE ORDER IS THE POINT, and it changed.
   //
   // What's New leads now. It used to sit at the very end, behind nine tabs,
@@ -699,7 +720,7 @@ export default function BrowsePage() {
                 {searchResults.tracks.slice(0, 5).map((track, i) => (
                   <TrackRow key={track.id} track={track} index={i}
                     currentTrack={currentTrack} isPlaying={isPlaying}
-                    onPlay={() => handlePlayTrack(track, searchResults.tracks)}
+                    onPlay={() => handlePlayTrack(track, continuingQueue(searchResults.tracks))}
                     onMore={() => setActionSheetTrack(track)}
                     onArtist={() => track.artists?.slug && navigate(`/artist/${track.artists.slug}`)} />
                 ))}

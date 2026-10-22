@@ -235,7 +235,8 @@ export default function ArtistProfilePage() {
       if (!uids.length) return;
       const [{ data: artistProfiles }, { data: listenerProfiles }] = await Promise.all([
         supabase.from('artists').select('user_id, artist_name, profile_image_url, slug').in('user_id', uids),
-        supabase.from('user_profiles').select('user_id, name, avatar_url').in('user_id', uids),
+        // Other people's profiles: the public view, not the base table.
+        supabase.from('user_profiles_public').select('user_id, name, avatar_url').in('user_id', uids),
       ]);
       const artistMap = {};
       (artistProfiles || []).forEach(a => { artistMap[a.user_id] = a; });

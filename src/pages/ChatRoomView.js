@@ -543,7 +543,7 @@ export default function ChatRoomView() {
     const missingIds = userIds.filter(id => !artistMap[id]);
     const profileMap = {};
     if (missingIds.length) {
-      const { data: profilesData } = await supabase.from('user_profiles')
+      const { data: profilesData } = await supabase.from('user_profiles_public')
         .select('user_id, name, avatar_url').in('user_id', missingIds);
       (profilesData || []).forEach(p => { profileMap[p.user_id] = p; });
     }
@@ -887,7 +887,7 @@ export default function ChatRoomView() {
       const missingIds = userIds.filter(id => !artistMap[id]);
       const profileMap = {};
       if (missingIds.length) {
-        const { data: profilesData } = await supabase.from('user_profiles')
+        const { data: profilesData } = await supabase.from('user_profiles_public')
           .select('user_id, name, avatar_url').in('user_id', missingIds);
         (profilesData || []).forEach(p => { profileMap[p.user_id] = p; });
       }
@@ -911,7 +911,7 @@ export default function ChatRoomView() {
       .eq('user_id', data.user_id).maybeSingle();
     let resolvedArtist = artistData || null;
     if (!resolvedArtist) {
-      const { data: profileData } = await supabase.from('user_profiles')
+      const { data: profileData } = await supabase.from('user_profiles_public')
         .select('user_id, name, avatar_url').eq('user_id', data.user_id).maybeSingle();
       if (profileData) resolvedArtist = { artist_name: profileData.name || 'Listener', profile_image_url: profileData.avatar_url || null, slug: null, is_verified: false };
     }

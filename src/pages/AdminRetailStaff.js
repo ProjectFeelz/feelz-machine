@@ -68,7 +68,9 @@ export default function AdminRetailStaff() {
       // asked for at once because one waiting on the other would show the
       // list twice, once without emails and once with.
       const [{ data: profiles }, { data: emails, error: emailErr }] = await Promise.all([
-        supabase.from('user_profiles').select('user_id, name').in('user_id', ids),
+        // Names from the public view; the addresses come from the admin
+        // RPC on the next line, which checks the caller is an admin.
+        supabase.from('user_profiles_public').select('user_id, name').in('user_id', ids),
         supabase.rpc('admin_emails_for_users', { p_user_ids: ids }),
       ]);
 

@@ -134,7 +134,10 @@ export default function AdminEngagement({ embedded = false }) {
         supabase.from('listeners').select('*', { count: 'exact', head: true }),
         supabase.from('listeners').select('*', { count: 'exact', head: true }).gte('last_seen_at', dormantCutoff),
         supabase.from('listeners').select('*', { count: 'exact', head: true }).gte('created_at', newUserCutoff),
-        supabase.from('user_profiles').select('*', { count: 'exact', head: true }),
+        // Counting the whole table needs the admin RPC now that the base
+        // table is owner-scoped: a head count from the browser would come
+        // back as 1, which would quietly make every segment wrong.
+        supabase.rpc('admin_count_user_profiles'),
       ]);
 
       // If listeners table is empty (records never inserted), fall back to

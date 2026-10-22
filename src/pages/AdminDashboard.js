@@ -64,7 +64,11 @@ export default function AdminDashboard() {
         ...a, isAdmin: !!adminMap[a.user_id], adminLevel: adminMap[a.user_id]?.level || 0,
       })));
       const { data: profileData } = await supabase
-        .from('user_profiles').select('*').order('created_at', { ascending: false });
+        .rpc('admin_list_user_profiles');
+      // The base table is readable only by the owner of each row, so a
+      // select across every user cannot work from the browser and should
+      // not: it would mean anyone signed in could read every address.
+      // admin_list_user_profiles refuses a caller who is not an admin.
       setUsers(profileData || []);
 
       // ── Platform stats ─────────────────────────────────────────────────

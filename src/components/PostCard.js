@@ -200,7 +200,8 @@ export default function PostCard({ post, onDelete, onUpdate }) {
       const profileMap = {};
       if (missingIds.length > 0) {
         const { data: profilesData } = await supabase
-          .from('user_profiles')
+          // Other people's profiles: the public view, not the base table.
+          .from('user_profiles_public')
           .select('user_id, name, avatar_url')
           .in('user_id', missingIds);
         (profilesData || []).forEach(p => { profileMap[p.user_id] = p; });
