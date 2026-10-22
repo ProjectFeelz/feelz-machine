@@ -1,5 +1,5 @@
 import { Helmet } from 'react-helmet-async';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import TrackActionSheet from '../components/TrackActionSheet';
@@ -197,6 +197,8 @@ export default function BrowsePage() {
   const [albums, setAlbums]                   = useState([]);
   const [loading, setLoading]                 = useState(true);
   const [searchResults, setSearchResults]     = useState(null);
+  // Guards a stale search answer from overwriting a newer one.
+  const searchTicketRef = useRef(0);
   const [recommended, setRecommended]         = useState([]);
 
   useEffect(() => { fetchAll(); fetchPlaylists(); }, [user]);
@@ -247,15 +249,104 @@ export default function BrowsePage() {
   };
 
 
-  // Search effect, save history when searching
+  // SEARCH ASKS THE DATABASE.
+  //
+  // It used to filter allTracks, which is this page's own first fetch: the
+  // top fifty tracks by engagement score. Everything below that was
+  // unfindable by name. Of eight published tracks tested on the live site,
+  // five returned "No results found", including a track somebody had already
+  // bought. A new artist uploads, tells their friends the title, and the
+  // platform tells those friends the song does not exist.
+  //
+  // So the local filter stays, but only as the first frame: it paints
+  // instantly from what is already in memory, and the server's answer
+  // replaces it a moment later. Nobody watches an empty panel while a request
+  // is in flight, and nobody is told something is missing when it is not.
+  //
+  // Debounced, because this runs on every keystroke and the old version cost
+  // nothing. A ticket guards the order: two requests in flight can land out
+  // of order, and the older one landing last would show results for a word
+  // the person has already finished deleting.
   useEffect(() => {
-    if (query.trim().length >= 2) {
-      searchAll(query.trim());
-      addToSearchHistory(query.trim());
+    const q = query.trim();
+    if (q.length < 2) { setSearchResults(null); return undefined; }
+
+    // Instant, from memory, so the panel is never blank.
+    searchAll(q);
+
+    const ticket = ++searchTicketRef.current;
+    const timer = setTimeout(async () => {
+      try {
+        // The filter grammar in `or` is comma and dot separated, so the term
+        // is reduced to the characters a song title actually uses before it
+        // goes anywhere near it. Single filters below take the raw term;
+        // supabase-js escapes those itself.
+        const safe = q.replace(/[^\p{L}\p{N}\s'&-]/gu, ' ').replace(/\s+/g, ' ').trim();
+        if (!safe) return;
+
+        const TRACK_COLS = '*, albums(title, cover_artwork_url, price), artists!tracks_artist_id_fkey(id, artist_name, slug, profile_image_url, is_verified, tier)';
+
+        const [byText, artistHits, albumHits] = await Promise.all([
+          supabase.from('tracks').select(TRACK_COLS)
+            .eq('is_published', true).eq('is_podcast', false)
+            .or(`title.ilike.*${safe}*,genre.ilike.*${safe}*`)
+            .order('engagement_score', { ascending: false }).limit(40),
+          supabase.from('artists')
+            .select('id, artist_name, slug, profile_image_url, is_verified, follower_count, display_follower_count, total_streams, tier')
+            .ilike('artist_name', `%${q}%`).limit(20),
+          supabase.from('albums').select('*, artists(artist_name, slug)')
+            .eq('is_published', true).ilike('title', `%${q}%`).limit(20),
+        ]);
+
+        // Searching an artist's name should return their music, not just
+        // their card. That needs their id first, so it is a second query
+        // rather than part of the one above.
+        let byArtist = [];
+        const artistIds = (artistHits.data || []).map(a => a.id).filter(Boolean);
+        if (artistIds.length) {
+          const { data } = await supabase.from('tracks').select(TRACK_COLS)
+            .eq('is_published', true).eq('is_podcast', false)
+            .in('artist_id', artistIds)
+            .order('engagement_score', { ascending: false }).limit(40);
+          byArtist = data || [];
+        }
+
+        if (ticket !== searchTicketRef.current) return;
+
+        // Title and genre matches first: somebody typing a song name wants
+        // the song, not the artist's back catalogue above it.
+        const seenTrack = new Set();
+        const tracks = [...(byText.data || []), ...byArtist]
+          .filter(t => t && t.id && !seenTrack.has(t.id) && seenTrack.add(t.id))
+          .map(t => ({ ...t, artist_name: t.artists?.artist_name || 'Unknown' }));
+
+        setSearchResults({
+          tracks,
+          artists: artistHits.data || [],
+          albums: (albumHits.data || []).map(a => ({
+            ...a, artist_name: a.artists?.artist_name || 'Unknown',
+          })),
+        });
+      } catch (err) {
+        // The local results are already on screen. A failed lookup leaves
+        // them there rather than replacing them with nothing.
+        console.error('[Browse] search failed:', err?.message);
+      }
+    }, 250);
+
+    return () => clearTimeout(timer);
+  }, [query]);
+
+  // History is written once the typing settles, not on every keystroke. The
+  // old version recorded "b", "br", "bro" and "brok" on the way to "broken".
+  useEffect(() => {
+    const q = query.trim();
+    if (q.length < 2) return undefined;
+    const timer = setTimeout(() => {
+      addToSearchHistory(q);
       setSearchHistory(getSearchHistory());
-    } else {
-      setSearchResults(null);
-    }
+    }, 700);
+    return () => clearTimeout(timer);
   }, [query]);
 
   useEffect(() => {
