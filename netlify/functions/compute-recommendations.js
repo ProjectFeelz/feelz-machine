@@ -116,6 +116,10 @@ exports.handler = async (event) => {
     console.warn(`[recs] refused, cooldown, retry in ${gate.retryIn}m`);
     return { statusCode: 429, body: JSON.stringify({ error: 'Cooldown active', retryInMinutes: gate.retryIn }) };
   }
+  // Stamped at the START on purpose: it is the lock that stops two runs
+  // overlapping, not a record of success. It is NOT evidence the job worked,
+  // and reading it as though it were is how a job that threw on every run
+  // looked healthy. job_runs is the record of what actually happened.
   await markRun(supabase);
   console.log(`[recs] starting — ${isManual ? 'manual' : 'scheduled'} — authorised=${gate.authorised} — ${new Date().toISOString()}`);
 
@@ -155,7 +159,16 @@ exports.handler = async (event) => {
     const sortedEng    = [...allTracks].sort((a, b) => (b.engagement_score || 0) - (a.engagement_score || 0));
     const top20cutoff  = sortedEng[Math.floor(sortedEng.length * 0.2)]?.engagement_score || 0;
     const avgStreams    = allTracks.reduce((s, t) => s + (t.stream_count || 0), 0) / allTracks.length;
-    const hiddenGemMax = avgStreams * 0.3;
+    // ONE NAME, NOT TWO.
+    //
+    // This was declared under one name and read under another in the scoring
+    // loop below, which is a ReferenceError the moment the loop reaches it.
+    // Every scheduled run since has thrown there, before a single
+    // recommendation was written. The job still recorded itself as having
+    // run, because platform_settings.recs_last_run is stamped at the start
+    // rather than the end, so from the outside it looked alive while
+    // listener_recommendations had not gained a row since 6 June.
+    const hiddenGemThreshold = avgStreams * 0.3;
     const now          = Date.now();
     const newRelCutoff = new Date(now - NEW_RELEASE_DAYS * 86400000).toISOString();
     const hotRelCutoff = new Date(now - HOT_RELEASE_DAYS * 86400000).toISOString();

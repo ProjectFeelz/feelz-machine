@@ -200,6 +200,11 @@ export default function BrowsePage() {
   // Guards a stale search answer from overwriting a newer one.
   const searchTicketRef = useRef(0);
   const [recommended, setRecommended]         = useState([]);
+  // Where the rail's contents came from, because the heading has to tell the
+  // truth about which it is. 'personal' is the recommendation engine's own
+  // output; 'genre' is the fallback, which is popularity filtered by taste
+  // and is not a recommendation however it is labelled.
+  const [recommendedSource, setRecommendedSource] = useState('genre');
 
   useEffect(() => { fetchAll(); fetchPlaylists(); }, [user]);
 
@@ -209,6 +214,39 @@ export default function BrowsePage() {
 
   const fetchRecommended = async () => {
     try {
+      // ── The real thing, if it exists for this listener ──────────────────
+      //
+      // listener_recommendations is what netlify/functions/compute-
+      // recommendations.js writes: scored per listener on genre, mood, bpm,
+      // key, who they follow, what they liked, downloaded and playlisted,
+      // and their not-interested signals, with quotas for discovery, new
+      // releases and hidden gems. This rail ignored it entirely and filtered
+      // the page's own top fifty by genre instead, which is popularity
+      // wearing a personal label.
+      const { data: recRows } = await supabase
+        .from('listener_recommendations')
+        .select('position, track_id, tracks(*, albums(title, cover_artwork_url, price), artists!tracks_artist_id_fkey(id, artist_name, slug, profile_image_url, is_verified, tier))')
+        .eq('user_id', user.id)
+        .order('position', { ascending: true })
+        .limit(12);
+
+      const picks = (recRows || [])
+        .map(r => r.tracks)
+        .filter(t => t && t.is_published && t.file_url)
+        .map(t => ({ ...t, artist_name: t.artists?.artist_name || 'Unknown' }));
+
+      if (picks.length >= 4) {
+        setRecommended(picks.slice(0, 8));
+        setRecommendedSource('personal');
+        return;
+      }
+
+      // Nothing computed for this listener yet, so the rail falls back to
+      // taste-filtered popularity below AND says so in its heading. A new
+      // account has no history to recommend from, and claiming otherwise is
+      // the part that would be dishonest.
+      setRecommendedSource('genre');
+
       const { data: streamData } = await supabase
         .from('streams').select('track_id, tracks(genre, mood)')
         .eq('user_id', user.id).limit(50);
@@ -1014,7 +1052,11 @@ export default function BrowsePage() {
           <div>
             {selectedGenre === 'All' && recommended.length > 0 && (
               <div className="mb-6">
-                <SectionLabel icon={Sparkles} title="Recommended For You" />
+                {/* The heading follows the source. See fetchRecommended. */}
+                <SectionLabel
+                  icon={Sparkles}
+                  title={recommendedSource === 'personal' ? 'Recommended For You' : 'Popular In Your Genres'}
+                />
                 <div className="flex space-x-3 overflow-x-auto scrollbar-hide -mx-6 px-6">
                   {recommended.map(track => (
                     <div key={track.id} className="flex-shrink-0 w-32 cursor-pointer group"

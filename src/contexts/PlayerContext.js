@@ -651,6 +651,40 @@ export function PlayerProvider({ children }) {
     }
   }, []);
 
+  // THE NAME UNDER THE TITLE, WHEREVER THE TRACK CAME FROM.
+  //
+  // The player renders `currentTrack.artist_name || 'Unknown Artist'`, and a
+  // dozen queries around the app select a track without joining artists:
+  // stories, posts, the collection page, sessions, the leaderboard. Played
+  // from any of those, a real artist with a real name showed as Unknown
+  // Artist, including on artwork with the name printed on it.
+  //
+  // Fixing it query by query means finding all of them and then remembering
+  // forever. This is the gate every playback path already goes through, so
+  // the name is filled in here instead: once, only when it is missing, and
+  // only for the track on screen. A failed lookup leaves what was there.
+  //
+  // Declared above playNextFromRef on purpose, because that calls it.
+  const fillArtistName = useCallback(async (track) => {
+    if (!track?.id || track.artist_name) return;
+    try {
+      const { data } = await supabase
+        .from('tracks')
+        .select('artists!tracks_artist_id_fkey(artist_name)')
+        .eq('id', track.id)
+        .maybeSingle();
+      const name = data?.artists?.artist_name;
+      if (!name) return;
+      setCurrentTrack(prev => (prev && prev.id === track.id ? { ...prev, artist_name: name } : prev));
+      const patch = (list) => (list || []).map(t => (t.id === track.id ? { ...t, artist_name: name } : t));
+      setQueue(prev => patch(prev));
+      queueRef.current = patch(queueRef.current);
+    } catch {
+      // The title and the artwork are already on screen. A missing name is
+      // not worth an error state.
+    }
+  }, []);
+
   const playNextFromRef = useCallback(() => {
     const q   = queueRef.current;
     const idx = queueIndexRef.current;
@@ -734,6 +768,7 @@ export function PlayerProvider({ children }) {
       primaryAudio.addEventListener('canplay', startFadeIn);
 
       setCurrentTrack(nextTrack);
+      fillArtistName(nextTrack);
       preloadCover(nextTrack);
       if (q[nextIndex + 1]) preloadCover(q[nextIndex + 1]);
       setQueueIndex(nextIndex);
@@ -1405,6 +1440,7 @@ export function PlayerProvider({ children }) {
     };
     audio.addEventListener('canplay', playWhenReady);
     setCurrentTrack(track);
+    fillArtistName(track);
     preloadCover(track);
     setCurrentTime(0);
     // Deliberately not setIsMinimized(false). This fired on every track
