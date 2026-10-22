@@ -68,7 +68,22 @@ export default function ProfilePage() {
     }
     setFreezing(false);
   };
-  const [activeTab, setActiveTab]             = useState('profile');
+  // ?tab=payments opens this page on the Payments tab.
+  //
+  // Added so other screens can link straight to where payout details and
+  // splits live, instead of landing somebody on their profile and telling
+  // them to go and find it. Only the tab names this page already renders are
+  // accepted, so a made-up value in the address bar cannot blank the page.
+  const [activeTab, setActiveTab] = useState(() => {
+    try {
+      const wanted = new URLSearchParams(window.location.search).get('tab');
+      // Checked against the tabs this page actually renders, taken from the
+      // same list the buttons are built from so the two cannot drift apart.
+      return ARTIST_TABS.some(t => t.key === wanted) ? wanted : 'profile';
+    } catch {
+      return 'profile';
+    }
+  });
   const [isNewsletterEditor, setIsNewsletterEditor] = useState(false);
 
   useEffect(() => {

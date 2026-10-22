@@ -27,6 +27,7 @@ const ComparisonPage = React.lazy(() => import('./pages/ComparisonPage'));
 const HomePage = React.lazy(() => import('./pages/HomePage'));
 const Welcome = React.lazy(() => import('./pages/Welcome'));
 const BrowsePage = React.lazy(() => import('./pages/BrowsePage'));
+const SplitsPage = React.lazy(() => import('./pages/SplitsPage'));
 const LoginPage = React.lazy(() => import('./pages/LoginPage'));
 const ResetPasswordPage = React.lazy(() => import('./pages/ResetPasswordPage'));
 const LibraryPage = React.lazy(() => import('./pages/LibraryPage'));
@@ -567,6 +568,7 @@ export default function AppRouter() {
                 <Route path="/newsletter/compose" element={<NewsletterComposePage />} />
                 <Route path="/newsletter/:slug" element={<NewsletterPostPage />} />
                 <Route path="/legal/:slug" element={<LegalDocumentPage />} />
+                <Route path="/splits" element={<SplitsPage />} />
                 <Route path="/admin/home-hero" element={<AdminHomeHero />} />
                 <Route path="/admin/news" element={<AdminNews />} />
                 <Route path="/admin/cold-start" element={<AdminColdStart />} />

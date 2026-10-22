@@ -538,6 +538,12 @@ export default function PaymentSettings() {
           <p>Having both is fine. The fan picks, and you are paid whichever way they chose.</p>
           <p>On both routes the buyer is shown the processing on top of your price before they pay, so they know what the extra is and you receive the number on your page.</p>
           <p>On a track with collaborators, the buyer pays the track owner. Feelz Machine records each collaborator's agreed share of every sale and tells both of you what it comes to. The owner then pays their collaborators directly.</p>
+          <p>
+            <a href="/splits" className="text-purple-300/80 hover:text-purple-200 font-medium">
+              See every split, both ways
+            </a>
+            {' '}to mark a share paid, confirm one you received, or remind somebody who owes you.
+          </p>
           <p className="text-white/25">Feelz Machine does not take a cut of artist earnings. Your subscription is the only platform fee.</p>
         </div>
       </div>
