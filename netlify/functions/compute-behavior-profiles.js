@@ -44,6 +44,13 @@
  */
 
 const { createClient } = require('@supabase/supabase-js');
+const { recordRun } = require('../lib/jobRun');
+
+// The name in netlify.toml and in job_expectations, so the schedule, the run
+// record and the watchdog all refer to the same thing. This job was never
+// instrumented, which is the other half of why it could write nothing for
+// months without anybody knowing.
+const JOB = 'compute-behavior-profiles';
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -181,7 +188,11 @@ function buildListenerSummary(profile) {
     parts.push(labels[profile.session_type] || profile.session_type);
   }
 
-  if (profile.avg_listen_pct >= 80) parts.push('finishes almost every track they start');
+  // avg_completion_pct, not avg_listen_pct. The latter was never a column and
+  // was always null, so this branch could never be true and the summary never
+  // said this about anybody. avg_completion_pct is the real figure, measured
+  // from listening_events.
+  if (profile.avg_completion_pct >= 80) parts.push('finishes almost every track they start');
   else if (profile.skip_rate >= 50) parts.push('skips heavily — hard to hold attention past the hook');
 
   if (profile.genre_loyalty >= 80 && profile.top_genres?.[0]) {
@@ -603,7 +614,11 @@ async function computeListenerProfile(userId, weightCache = null) {
     peak_hour:         peakHour !== null ? parseInt(peakHour) : null,
     peak_day:          peakDay  !== null ? parseInt(peakDay)  : null,
     session_type:      sessionType,
-    avg_listen_pct:    null, // requires per-track duration data
+    // avg_listen_pct was here, always null, and there is no such column on
+    // listener_behavior_profiles. PostgREST rejects an upsert that names a
+    // column it cannot find, so EVERY listener profile was refused, for
+    // months, while this function returned success. avg_completion_pct below
+    // is the real measure and comes from listening_events.
     skip_rate:         parseFloat(skipRate.toFixed(2)),
     avg_completion_pct: avgCompletionPct !== null ? parseFloat(avgCompletionPct.toFixed(2)) : null,
     events_sampled:     eventsWithPct.length,
@@ -781,8 +796,16 @@ async function computeAllProfiles() {
       const { error } = await supabase
         .from('listener_behavior_profiles')
         .upsert(valid, { onConflict: 'user_id' });
-      if (error) console.error('Listener upsert error:', error.message);
-      else listenerCount += valid.length;
+      if (error) {
+        // Logged AND counted. This line used to only console.error, so a
+        // write that was refused for every single listener still left the
+        // function returning { success: true }, and the only trace was in a
+        // Netlify log nobody reads. An upsert that fails is a failed run.
+        console.error('Listener upsert error:', error.code, error.message);
+        errors.push({ stage: 'listener_upsert', code: error.code, err: error.message, rows: valid.length });
+      } else {
+        listenerCount += valid.length;
+      }
     }
   }
 
@@ -835,10 +858,21 @@ exports.handler = async (event) => {
       return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized' }) };
     }
   }
+  const started = Date.now();
   try {
     const result = await computeAllProfiles();
+    // ok is false when nothing was written for listeners but listeners exist
+    // to write for. Silence is the failure mode this job actually had.
+    const ok = result.errors === 0 && result.listenerCount > 0;
+    await recordRun(JOB, {
+      ok,
+      items: result.listenerCount + result.artistCount,
+      detail: result,
+      startedAt: started,
+    });
     return { statusCode: 200, body: JSON.stringify({ success: true, ...result }) };
   } catch (err) {
+    await recordRun(JOB, { ok: false, items: 0, error: err.message, startedAt: started });
     console.error('compute-behavior-profiles error:', err);
     return { statusCode: 500, body: JSON.stringify({ error: err.message }) };
   }
