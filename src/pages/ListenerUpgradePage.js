@@ -5,6 +5,7 @@ import useGoBack from '../hooks/useGoBack';
 import { supabase } from '../supabaseClient';
 import { showReceipt } from '../components/PurchaseReceipt';
 import { useAuth } from '../contexts/AuthContext';
+import BillingTrouble from '../components/BillingTrouble';
 import { ChevronLeft, Check, Zap, Crown, Loader, Palette, BarChart3, Star } from 'lucide-react';
 
 const PAYPAL_CLIENT_ID = process.env.REACT_APP_PAYPAL_CLIENT_ID || '';
@@ -229,6 +230,11 @@ export default function ListenerUpgradePage() {
       {error && (
         <div className="mb-4 p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-sm text-red-400">{error}</div>
       )}
+
+      {/* A failed payment on an existing Fan Pro subscription. Sits above the
+          plans because "your payment did not go through" is the answer to why
+          somebody is looking at this page at all. */}
+      <BillingTrouble audience="listener" className="mb-4" />
 
       {/* Billing toggle */}
       <div className="flex items-center space-x-2 bg-white/[0.04] rounded-xl p-1 mb-6">

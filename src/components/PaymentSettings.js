@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
+import BillingTrouble from './BillingTrouble';
 import {
   DollarSign, Save, Loader, ExternalLink, AlertCircle,
   Check, TrendingUp, Crown, Zap, Star, ChevronRight
@@ -276,6 +277,10 @@ export default function PaymentSettings() {
           {msg}
         </div>
       )}
+
+      {/* A failed subscription payment, while it still matters. Renders
+          nothing at all when there is nothing to say, which is almost always. */}
+      <BillingTrouble audience="artist" artistId={artist.id} />
 
       {/* Current tier card */}
       <div className="rounded-xl border border-white/[0.06] overflow-hidden">
