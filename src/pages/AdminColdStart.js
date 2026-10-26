@@ -123,12 +123,14 @@ export default function AdminColdStart() {
 
   const remove = async (id) => {
     if (!window.confirm('Remove this pick?')) return;
-    await supabase.from('cold_start_picks').delete().eq('id', id);
+    const { error } = await supabase.from('cold_start_picks').delete().eq('id', id);
+    if (error) { showToast('Could not remove it: ' + error.message); return; }
     load();
   };
 
   const toggleActive = async (pick) => {
-    await supabase.from('cold_start_picks').update({ is_active: !pick.is_active }).eq('id', pick.id);
+    const { error } = await supabase.from('cold_start_picks').update({ is_active: !pick.is_active }).eq('id', pick.id);
+    if (error) { showToast('Could not change that: ' + error.message); return; }
     load();
   };
 
@@ -139,10 +141,15 @@ export default function AdminColdStart() {
     if (target < 0 || target >= picks.length) return;
     const a = picks[index];
     const b = picks[target];
-    await Promise.all([
+    // Both halves of a swap, checked together. One succeeding and the other
+    // being refused leaves two picks sharing a position, which is a list that
+    // reorders itself at random on the next load.
+    const [first, second] = await Promise.all([
       supabase.from('cold_start_picks').update({ position: b.position }).eq('id', a.id),
       supabase.from('cold_start_picks').update({ position: a.position }).eq('id', b.id),
     ]);
+    const swapErr = first.error || second.error;
+    if (swapErr) { showToast('Could not reorder: ' + swapErr.message); }
     load();
   };
 

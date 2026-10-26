@@ -129,9 +129,13 @@ export default function AdminModeration({ embedded = false }) {
   const handleTogglePublish = async (track) => {
     setActionLoading(true);
     try {
-      await supabase.from('tracks').update({ is_published: !track.is_published }).eq('id', track.id);
+      const { error } = await supabase.from('tracks').update({ is_published: !track.is_published }).eq('id', track.id);
+      if (error) throw error;
       await fetchTracks();
-    } catch (err) { console.error(err); }
+    } catch (err) {
+      console.error(err);
+      window.alert(`Could not change whether that track is published: ${err.message}`);
+    }
     setActionLoading(false); setActionTrack(null);
   };
 
@@ -139,18 +143,26 @@ export default function AdminModeration({ embedded = false }) {
     if (!window.confirm(`Delete "${track.title}"? This cannot be undone.`)) return;
     setActionLoading(true);
     try {
-      await supabase.from('tracks').delete().eq('id', track.id);
+      const { error } = await supabase.from('tracks').delete().eq('id', track.id);
+      if (error) throw error;
       await fetchTracks();
-    } catch (err) { console.error(err); }
+    } catch (err) {
+      console.error(err);
+      window.alert(`That track was NOT deleted: ${err.message}`);
+    }
     setActionLoading(false); setActionTrack(null);
   };
 
   const handleToggleFeatured = async (track) => {
     setActionLoading(true);
     try {
-      await supabase.from('tracks').update({ featured: !track.featured }).eq('id', track.id);
+      const { error } = await supabase.from('tracks').update({ featured: !track.featured }).eq('id', track.id);
+      if (error) throw error;
       await fetchTracks();
-    } catch (err) { console.error(err); }
+    } catch (err) {
+      console.error(err);
+      window.alert(`Could not change the featured flag: ${err.message}`);
+    }
     setActionLoading(false); setActionTrack(null);
   };
 

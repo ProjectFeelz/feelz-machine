@@ -496,7 +496,12 @@ export default function AdminCompetitions({ embedded = false }) {
   };
 
   const handleStatusChange = async (id, status) => {
-    await supabase.from('competitions').update({ status, updated_at: new Date().toISOString() }).eq('id', id);
+    const { error } = await supabase.from('competitions').update({ status, updated_at: new Date().toISOString() }).eq('id', id);
+    // Checked before the pill changes. Opening voting is the moment entrants
+    // are told the competition has moved on, and a refused write that still
+    // showed "Status -> voting" would have the panel and the platform
+    // disagreeing about what stage a live competition is in.
+    if (error) { showToast(`Could not change the status: ${error.message}`); return; }
     setCompetitions(prev => prev.map(c => c.id === id ? { ...c, status } : c));
     showToast(`Status → ${status}`);
   };

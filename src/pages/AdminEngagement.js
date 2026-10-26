@@ -181,14 +181,18 @@ export default function AdminEngagement({ embedded = false }) {
   const handleToggleDrip = async () => {
     const newVal = config.drip_enabled === 'true' ? 'false' : 'true';
     setSaving(true);
-    await supabase.from('engagement_config').upsert({ key: 'drip_enabled', value: newVal, updated_at: new Date().toISOString() });
-    setConfig(prev => ({ ...prev, drip_enabled: newVal }));
+    const { error } = await supabase.from('engagement_config').upsert({ key: 'drip_enabled', value: newVal, updated_at: new Date().toISOString() });
     setSaving(false);
+    // Checked before the switch moves on screen. Reporting "Drip enabled" on
+    // a refused write means believing emails are going out when they are not.
+    if (error) { showToast('Could not change the drip: ' + error.message); return; }
+    setConfig(prev => ({ ...prev, drip_enabled: newVal }));
     showToast(newVal === 'true' ? 'Drip enabled ✓' : 'Drip paused');
   };
 
   const handleSaveMaxPerWeek = async (val) => {
-    await supabase.from('engagement_config').upsert({ key: 'max_per_week', value: String(val), updated_at: new Date().toISOString() });
+    const { error } = await supabase.from('engagement_config').upsert({ key: 'max_per_week', value: String(val), updated_at: new Date().toISOString() });
+    if (error) { showToast('Not saved: ' + error.message); return; }
     setConfig(prev => ({ ...prev, max_per_week: String(val) }));
     showToast('Saved ✓');
   };
