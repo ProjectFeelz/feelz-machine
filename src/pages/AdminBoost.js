@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
@@ -45,62 +45,16 @@ function ScoreSlider({ value, onChange, disabled }) {
   );
 }
 
-// Animated stream count display
-function StreamCounter({ trackId, baseCount, boostProgress }) {
-  const displayed = boostProgress[trackId]
-    ? baseCount + boostProgress[trackId].added
-    : baseCount;
-  const isActive = boostProgress[trackId]?.active;
+// Play count display.
+//
+// This animated upward while a stream boost ran. The boost is gone, so it
+// shows the number the track actually has.
+function StreamCounter({ baseCount }) {
   return (
-    <p className={`text-xs transition-colors ${isActive ? 'text-green-400 font-semibold' : 'text-white/20'}`}>
-      {displayed.toLocaleString()} plays
-      {isActive && <span className="ml-1 animate-pulse">↑</span>}
-    </p>
+    <p className="text-xs text-white/20">{(baseCount || 0).toLocaleString()} plays</p>
   );
 }
 
-// Stream boost control row
-function StreamBoostRow({ track, onBoost, isBoosting }) {
-  const [amount, setAmount] = useState(500);
-  const presets = [
-    { label: '100', value: 100 },
-    { label: '500', value: 500 },
-    { label: '1K', value: 1000 },
-    { label: '5K', value: 5000 },
-  ];
-  return (
-    <div className="flex items-center justify-between px-3 py-2.5 bg-white/[0.03] rounded-lg">
-      <div className="flex items-center space-x-2">
-        <BarChart2 className="w-3.5 h-3.5 text-green-400" />
-        <span className="text-xs text-white/60">Stream Boost</span>
-      </div>
-      <div className="flex items-center space-x-1.5">
-        {/* Quick preset buttons */}
-        {presets.map(p => (
-          <button
-            key={p.value}
-            onClick={() => setAmount(p.value)}
-            className={`px-2 py-1 rounded-lg text-[10px] font-semibold transition ${
-              amount === p.value
-                ? 'bg-green-500/30 text-green-300'
-                : 'bg-white/[0.04] text-white/30 hover:bg-white/[0.08]'
-            }`}>
-            {p.label}
-          </button>
-        ))}
-        {/* Boost button */}
-        <button
-          onClick={() => onBoost(track, amount)}
-          disabled={isBoosting}
-          className="px-2.5 py-1 bg-green-500/20 text-green-400 text-xs rounded-lg hover:bg-green-500/30 transition disabled:opacity-40 flex items-center space-x-1">
-          {isBoosting
-            ? <><Loader className="w-3 h-3 animate-spin" /><span>Boosting</span></>
-            : <><Flame className="w-3 h-3" /><span>Boost</span></>}
-        </button>
-      </div>
-    </div>
-  );
-}
 
 export default function AdminBoost({ embedded = false }) {
   const navigate = useNavigate();
@@ -115,84 +69,17 @@ export default function AdminBoost({ embedded = false }) {
   const [saving, setSaving] = useState({});
   const [toast, setToast] = useState({ message: '', type: '' });
 
-  // Track incremental boost animation state per track
-  // { [trackId]: { active: bool, added: number, total: number } }
-  const [boostProgress, setBoostProgress] = useState({});
-  const animationRefs = useRef({});
 
   useEffect(() => {
     if (!authLoading && !isAdmin) navigate('/hub');
   }, [isAdmin, authLoading]);
 
-  // Cleanup all animation intervals on unmount
-  useEffect(() => {
-    return () => {
-      Object.values(animationRefs.current).forEach(clearInterval);
-    };
-  }, []);
 
   const showToast = (message, type = 'success') => {
     setToast({ message, type });
     setTimeout(() => setToast({ message: '', type: '' }), 2500);
   };
 
-  // ── STREAM BOOST (works for all artists via SECURITY DEFINER RPC) ──
-  const handleStreamBoost = async (track, amount) => {
-    setSaving(p => ({ ...p, [`${track.id}-boost`]: true }));
-
-    // Clear any existing animation for this track
-    if (animationRefs.current[track.id]) {
-      clearInterval(animationRefs.current[track.id]);
-    }
-
-    try {
-      const { data, error } = await supabase.rpc('boost_track_streams', {
-        p_track_id: track.id,
-        p_count: amount,
-      });
-
-      if (error) throw error;
-
-      const inserted = data?.inserted || amount;
-
-      // Start incremental counter animation
-      let added = 0;
-      const step = Math.max(1, Math.floor(inserted / 80)); // ~80 ticks
-      setBoostProgress(p => ({ ...p, [track.id]: { active: true, added: 0, total: inserted } }));
-
-      animationRefs.current[track.id] = setInterval(() => {
-        added = Math.min(added + step, inserted);
-        setBoostProgress(p => ({
-          ...p,
-          [track.id]: { active: added < inserted, added, total: inserted },
-        }));
-
-        if (added >= inserted) {
-          clearInterval(animationRefs.current[track.id]);
-          // Commit the final count to the tracks state
-          setTracks(prev => prev.map(t =>
-            t.id === track.id
-              ? { ...t, stream_count: (t.stream_count || 0) + inserted }
-              : t
-          ));
-          // Clear progress after a short delay
-          setTimeout(() => {
-            setBoostProgress(p => {
-              const next = { ...p };
-              delete next[track.id];
-              return next;
-            });
-          }, 2000);
-        }
-      }, 40); // tick every 40ms → ~3.2s total animation
-
-      showToast(`+${inserted.toLocaleString()} streams boosted for ${track.title}`);
-    } catch (err) {
-      showToast(err.message || 'Boost failed', 'error');
-    }
-
-    setSaving(p => ({ ...p, [`${track.id}-boost`]: false }));
-  };
 
   // ── TRACKS ──
   const searchTracks = useCallback(async () => {
@@ -407,11 +294,7 @@ export default function AdminBoost({ embedded = false }) {
                   <p className="text-xs text-white/30 truncate">{track.artists?.artist_name}</p>
                 </div>
                 <div className="text-right flex-shrink-0">
-                  <StreamCounter
-                    trackId={track.id}
-                    baseCount={track.stream_count || 0}
-                    boostProgress={boostProgress}
-                  />
+                  <StreamCounter baseCount={track.stream_count || 0} />
                 </div>
               </div>
 
@@ -484,29 +367,6 @@ export default function AdminBoost({ embedded = false }) {
                   ))}
                 </div>
 
-                {/* ── Stream Boost (RPC, works for ALL artists) ── */}
-                <StreamBoostRow
-                  track={track}
-                  onBoost={handleStreamBoost}
-                  isBoosting={!!saving[`${track.id}-boost`]}
-                />
-
-                {/* Boost progress bar */}
-                {boostProgress[track.id] && (
-                  <div className="px-1">
-                    <div className="w-full h-1 bg-white/[0.06] rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-green-400 rounded-full transition-all duration-75"
-                        style={{
-                          width: `${Math.round((boostProgress[track.id].added / boostProgress[track.id].total) * 100)}%`
-                        }}
-                      />
-                    </div>
-                    <p className="text-[10px] text-green-400/60 mt-1">
-                      +{boostProgress[track.id].added.toLocaleString()} / {boostProgress[track.id].total.toLocaleString()} streams
-                    </p>
-                  </div>
-                )}
               </div>
             </div>
           ))}
