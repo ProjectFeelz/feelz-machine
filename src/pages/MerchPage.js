@@ -146,10 +146,20 @@ function ProductDetail({ product, artist, onBack }) {
         </button>
       </div>
 
-      <div className="px-4 pt-4">
+      {/* Two columns from md up.
+          On a phone this stays one column and scrolling is the right
+          behaviour. On a desktop the picture was square and full width, which
+          pushed size, quantity and the checkout button below the fold on every
+          product, so buying meant scrolling past a picture you had already
+          looked at. The picture now takes the left half at a height that fits
+          the viewport, and everything the buyer acts on sits beside it. */}
+      <div className="px-4 pt-4 md:max-w-5xl md:mx-auto md:grid md:grid-cols-2 md:gap-8 md:items-start">
+
+        {/* Left column: the picture and its thumbnails */}
+        <div>
 
         {/* Main image */}
-        <div className="aspect-square rounded-2xl overflow-hidden mb-3 bg-white/[0.03] border border-white/[0.06] relative">
+        <div className="aspect-square md:aspect-auto md:h-[52vh] rounded-2xl overflow-hidden mb-3 bg-white/[0.03] border border-white/[0.06] relative">
           {currentImage
             ? <img src={currentImage} alt={name} className="w-full h-full object-cover transition-opacity duration-300" />
             : <div className="w-full h-full flex items-center justify-center"><Package className="w-16 h-16 text-white/10" /></div>}
@@ -188,6 +198,11 @@ function ProductDetail({ product, artist, onBack }) {
             ))}
           </div>
         )}
+
+        </div>
+
+        {/* Right column: everything the buyer acts on */}
+        <div className="md:pt-1">
 
         {/* Title + price */}
         <div className="flex items-start justify-between mb-3">
@@ -298,6 +313,8 @@ function ProductDetail({ product, artist, onBack }) {
         <p className="text-[10px] text-white/20 text-center mt-3">
           Fulfilled and shipped by Printful · Powered by Feelz Machine
         </p>
+
+        </div>
       </div>
     </div>
   );
