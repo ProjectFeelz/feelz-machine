@@ -92,12 +92,14 @@ export default function AdminHomeHero() {
 
   const remove = async (id) => {
     if (!window.confirm('Delete this hero?')) return;
-    await supabase.from('home_hero').delete().eq('id', id);
+    const { error } = await supabase.from('home_hero').delete().eq('id', id);
+    if (error) { showToast(`Could not delete: ${error.message}`); return; }
     load();
   };
 
   const clearActive = async () => {
-    await supabase.from('home_hero').update({ is_active: false }).eq('is_active', true);
+    const { error } = await supabase.from('home_hero').update({ is_active: false }).eq('is_active', true);
+    if (error) { showToast(`Could not clear the hero: ${error.message}`); return; }
     showToast('Hero cleared, Home will show no hero');
     load();
   };

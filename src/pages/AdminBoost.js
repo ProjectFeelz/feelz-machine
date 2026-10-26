@@ -117,11 +117,19 @@ export default function AdminBoost({ embedded = false }) {
   const handleScoreCommit = async (track, value) => {
     setSaving(p => ({ ...p, [`${track.id}-score`]: true }));
     try {
-      await supabase.from('tracks').update({
+      const { error } = await supabase.from('tracks').update({
         engagement_score: value,
         stream_count: Math.max(track.stream_count || 0, Math.floor(value / 10)),
         updated_at: new Date().toISOString(),
       }).eq('id', track.id);
+      // Checked before the screen is updated. This reported "Score set to
+      // MAX" whether or not the database accepted it, and the slider kept the
+      // new value until the next reload put it back.
+      if (error) {
+        showToast(`Could not set the score: ${error.message}`, 'error');
+        setSaving(p => ({ ...p, [`${track.id}-score`]: false }));
+        return;
+      }
       setTracks(prev => prev.map(t => t.id === track.id ? { ...t, engagement_score: value, _score: value } : t));
       showToast(`Score set to ${value === 9999 ? 'MAX' : value}`);
     } catch (err) {
