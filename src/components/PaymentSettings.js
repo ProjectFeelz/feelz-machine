@@ -542,6 +542,13 @@ export default function PaymentSettings() {
           <p>Either way the money is yours and Feelz Machine never holds it. There is no payout to request and no threshold to reach. You need at least one of the two on file, a bank account or a PayPal email, or your music cannot be bought.</p>
           <p>Having both is fine. The fan picks, and you are paid whichever way they chose.</p>
           <p>On both routes the buyer is shown the processing on top of your price before they pay, so they know what the extra is and you receive the number on your page.</p>
+          {/* Merch does not have a rand route. netlify/functions/merch-order.js
+              resolves the payee and refuses anything that is not a direct
+              PayPal payment, so an artist who added a bank account and no
+              PayPal has working music sales and merch that quietly cannot be
+              bought. The table above says one of the two is enough, which is
+              true of music and not of merch. */}
+          <p>Merch is the exception: a merch order is paid into PayPal only, so selling merch needs a PayPal email even if your bank account is on file. Music, albums, beats and tips work on either route.</p>
           <p>On a track with collaborators, the buyer pays the track owner. Feelz Machine records each collaborator's agreed share of every sale and tells both of you what it comes to. The owner then pays their collaborators directly.</p>
           <p>
             <a href="/splits" className="text-purple-300/80 hover:text-purple-200 font-medium">
