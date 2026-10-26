@@ -4,7 +4,7 @@ import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import {
   ChevronLeft, Search, Flame, Star, TrendingUp, Shield,
-  Loader, Music, Users, Zap, Crown, RefreshCw, BarChart2
+  Loader, Music, Users, Zap, Crown, RefreshCw
 } from 'lucide-react';
 
 function Toast({ message, type }) {
@@ -268,10 +268,6 @@ export default function AdminBoost({ embedded = false }) {
             <div className="flex items-center space-x-1.5">
               <Zap className="w-3 h-3 text-blue-400" />
               <span className="text-[10px] text-white/30">Published</span>
-            </div>
-            <div className="flex items-center space-x-1.5">
-              <BarChart2 className="w-3 h-3 text-green-400" />
-              <span className="text-[10px] text-white/30">Stream Boost</span>
             </div>
           </div>
 

@@ -40,7 +40,21 @@ const PAID_COLLAB_DEFAULTS = {
 };
 
 function CompetitionForm({ initial, onSave, onCancel, saving }) {
-  const [form, setForm] = useState(initial || BLANK_COMP);
+  // <input type="datetime-local"> accepts only YYYY-MM-DDTHH:MM. The database
+  // hands back a full ISO timestamp with seconds and an offset, which the
+  // input rejects outright: the four date fields rendered BLANK on every
+  // edit, and saving wrote those blanks back as null. So opening a
+  // competition to change its title silently cleared its entire schedule.
+  //
+  // Trimmed on the way in, the same way AdminSchoolSessions already does it.
+  const forInput = (v) => (typeof v === 'string' && v.length >= 16 ? v.substring(0, 16) : (v || ''));
+  const [form, setForm] = useState(initial ? {
+    ...initial,
+    entries_open_at:  forInput(initial.entries_open_at),
+    entries_close_at: forInput(initial.entries_close_at),
+    voting_open_at:   forInput(initial.voting_open_at),
+    voting_close_at:  forInput(initial.voting_close_at),
+  } : BLANK_COMP);
   const [stemUploading, setStemUploading]       = useState(false);
   const [previewUploading, setPreviewUploading] = useState(false);
   const [stemFileName, setStemFileName]         = useState('');
