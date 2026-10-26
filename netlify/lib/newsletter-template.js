@@ -39,9 +39,77 @@ function escapeHtml(s) {
     .replace(/'/g, '&#39;');
 }
 
+
+// ── Author links, made visible in email ──────────────────────────────────────
+//
+// The compose editor marks a link with Tailwind classes and nothing else:
+//
+//     <a class="text-lime-400 hover:underline cursor-pointer" href="...">
+//
+// In the app that is a lime link on a dark page. In email it is nothing. No
+// client loads the app stylesheet, so the anchor inherits the surrounding
+// #27272a body text on a white card with no underline, which is to say it
+// looks exactly like the words around it. The link is still there and still
+// works; there is simply no way for a reader to know it is a link.
+//
+// That is why an editor writing a newsletter reports that links and buttons
+// "do not show" and ends up describing the URL in words instead.
+//
+// Fixed here rather than in the editor, because the two places need different
+// answers: lime reads well on the app's dark page and badly on a white email
+// card. The stored draft is untouched; this restyles the copy that goes into
+// the message.
+const EMAIL_LINK_STYLE = 'color:#3f6212;text-decoration:underline;';
+
+// The same button the footer already uses, so an author button and the
+// platform's own button are one design rather than two.
+const EMAIL_BUTTON_STYLE =
+  'display:inline-block;background:#111111;color:#ffffff;text-decoration:none;'
+  + 'font:600 15px -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;'
+  + 'padding:12px 22px;border-radius:8px;';
+
+/**
+ * Give author links a style the email can actually render.
+ *
+ * A paragraph whose whole content is one link becomes a button. That is the
+ * only way to get a button out of an editor that has no button tool, and it
+ * is a rule an author can use on purpose: put the link on a line of its own.
+ * Anything else stays inline text, coloured and underlined.
+ *
+ * An anchor that already carries its own style attribute is left alone, so
+ * hand-written HTML keeps whatever it was given.
+ */
+function emailifyLinks(html) {
+  let out = String(html || '');
+
+  out = out.replace(
+    /<p([^>]*)>\s*(<a\b[^>]*>)([\s\S]*?)<\/a>\s*<\/p>/gi,
+    (whole, pAttrs, openTag, inner) => {
+      // Two links in one paragraph land here as one greedy match. Leave it.
+      if (/<a\b/i.test(inner)) return whole;
+      if (/\sstyle=/i.test(openTag)) return whole;
+      const styled = openTag.replace(/<a\b/i, `<a style="${EMAIL_BUTTON_STYLE}"`);
+      return `<p${pAttrs}>${styled}${inner}</a></p>`;
+    }
+  );
+
+  out = out.replace(/<a\b(?![^>]*\sstyle=)([^>]*)>/gi,
+    (m, attrs) => `<a style="${EMAIL_LINK_STYLE}"${attrs}>`);
+
+  return out;
+}
+
 /** Strip tags for the text/plain alternative. Crude, and sufficient. */
 function htmlToText(html) {
   return String(html || '')
+    // A link in the plain text version used to lose its URL entirely, leaving
+    // "click here" pointing nowhere for anybody reading in plain text.
+    .replace(/<a\b[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/gi,
+      (m, href, text) => {
+        const label = String(text).replace(/<[^>]+>/g, '').trim();
+        if (!label) return href;
+        return label.toLowerCase() === href.toLowerCase() ? href : `${label} (${href})`;
+      })
     .replace(/<br\s*\/?>/gi, '\n')
     .replace(/<\/(p|div|h[1-6]|li|tr)>/gi, '\n\n')
     .replace(/<li[^>]*>/gi, '  - ')
@@ -135,7 +203,7 @@ function buildNewsletterEmail(post, recipient, unsubscribeUrl, siteUrl = 'https:
         </td></tr>` : ''}
 
         <tr><td style="padding:14px 32px 8px 32px;font:400 16px/1.65 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#27272a;">
-          ${post.body || ''}
+          ${emailifyLinks(post.body)}
         </td></tr>
 
         ${youtubeBlock(post.youtube_url)}
@@ -183,4 +251,4 @@ function buildNewsletterEmail(post, recipient, unsubscribeUrl, siteUrl = 'https:
   return { subject: post.title, html, text };
 }
 
-module.exports = { buildNewsletterEmail, escapeHtml, htmlToText };
+module.exports = { buildNewsletterEmail, escapeHtml, htmlToText, emailifyLinks };
