@@ -59,13 +59,20 @@ export default function AdminArtists() {
         .select('*')
         .order('created_at', { ascending: false });
 
-      const { data: trackCounts } = await supabase.from('tracks').select('artist_id');
+      // Counted in the database (migration 205). These were two unlimited
+      // selects counted up in the browser, and PostgREST caps a response at
+      // 1000 rows however many the query asks for, so the counts were built
+      // from the first thousand rows of each table. Harmless at 137 tracks
+      // and 594 follows; silently wrong the month either passes a thousand,
+      // with some artists showing zero and the sort ranking the wrong people.
+      const { data: counts, error: countErr } = await supabase.rpc('artist_track_follower_counts');
+      if (countErr) console.error('[artists] counts failed:', countErr.code, countErr.message);
       const countMap = {};
-      (trackCounts || []).forEach(t => { countMap[t.artist_id] = (countMap[t.artist_id] || 0) + 1; });
-
-      const { data: followerCounts } = await supabase.from('follows').select('artist_id');
       const followerMap = {};
-      (followerCounts || []).forEach(f => { followerMap[f.artist_id] = (followerMap[f.artist_id] || 0) + 1; });
+      (counts || []).forEach(c => {
+        countMap[c.artist_id]    = Number(c.track_count)    || 0;
+        followerMap[c.artist_id] = Number(c.follower_count) || 0;
+      });
 
       const enriched = (artistData || []).map(a => ({
         ...a,

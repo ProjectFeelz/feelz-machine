@@ -181,10 +181,17 @@ function ArtistsTab() {
     const { data: adminRows } = await supabase.from('admins').select('user_id');
     setAdminIds(new Set((adminRows || []).map(r => r.user_id)));
     const { data: artistData } = await supabase.from('artists').select('*').order('created_at', { ascending: false });
-    const { data: trackCounts } = await supabase.from('tracks').select('artist_id');
-    const { data: followerCounts } = await supabase.from('follows').select('artist_id');
-    const countMap = {}; (trackCounts || []).forEach(t => { countMap[t.artist_id] = (countMap[t.artist_id] || 0) + 1; });
-    const followerMap = {}; (followerCounts || []).forEach(f => { followerMap[f.artist_id] = (followerMap[f.artist_id] || 0) + 1; });
+    // Counted in the database (migration 205). See the note in
+    // src/pages/AdminArtists.js: these were two unlimited selects counted in
+    // the browser, against PostgREST's 1000-row ceiling.
+    const { data: counts, error: countErr } = await supabase.rpc('artist_track_follower_counts');
+    if (countErr) console.error('[people] counts failed:', countErr.code, countErr.message);
+    const countMap = {};
+    const followerMap = {};
+    (counts || []).forEach(c => {
+      countMap[c.artist_id]    = Number(c.track_count)    || 0;
+      followerMap[c.artist_id] = Number(c.follower_count) || 0;
+    });
     setArtists((artistData || []).map(a => ({ ...a, trackCount: countMap[a.id] || 0, followerCount: followerMap[a.id] || 0 })));
     setLoading(false);
   }, []);

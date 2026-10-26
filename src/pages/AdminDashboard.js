@@ -126,6 +126,12 @@ export default function AdminDashboard() {
         supabase.from('listeners').select('*', { count: 'exact', head: true }),
         supabase.from('artists').select('*', { count: 'exact', head: true }).eq('role', 'beatmaker'),
       ]);
+      // The Artists tile read artists.length, the length of the list fetched
+      // above, which PostgREST caps at 1000 rows. Every tile beside it was
+      // already a head count; this one would have frozen at exactly 1,000 and
+      // stayed there while the others kept climbing.
+      const { count: totalArtists } = await supabase
+        .from('artists').select('*', { count: 'exact', head: true });
       if (listenerErr)  console.error('[admin] listener count failed:', listenerErr.code, listenerErr.message);
       if (beatmakerErr) console.error('[admin] beatmaker count failed:', beatmakerErr.code, beatmakerErr.message);
       [['admin_platform_7d_stats', platformErr],
@@ -134,6 +140,7 @@ export default function AdminDashboard() {
         .forEach(([name, e]) => console.error(`[admin] ${name} blocked or failed:`, e.code, e.message));
 
       setPlatformStats({
+        totalArtists:   totalArtists || 0,
         streams7d:      Number(platform?.streams)     || 0,
         revenue7d:      Number(platform?.revenue_usd  || 0).toFixed(2),
         fanProSubs:     Number(platform?.fan_pro_active) || 0,
@@ -252,7 +259,7 @@ export default function AdminDashboard() {
   );
 
   const stats = [
-    { label: 'Artists',       value: artists.length,                          color: 'text-green-400',  icon: Users      },
+    { label: 'Artists',       value: platformStats.totalArtists || 0,         color: 'text-green-400',  icon: Users      },
     { label: 'Listeners',     value: platformStats.totalListeners || 0,            color: 'text-blue-400',   icon: Users      },
     { label: 'Beatmakers',    value: platformStats.totalBeatmakers || 0,           color: 'text-orange-400', icon: Music      },
     { label: 'Published',     value: platformStats.publishedTracks || 0,      color: 'text-purple-400', icon: Music      },
