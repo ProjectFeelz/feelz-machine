@@ -312,8 +312,14 @@ export default function AdminAnalytics({ embedded = false }) {
       setSignupTimeline((signupDays || []).map(r => ({
         date: dayLabel(r.day, range), artists: Number(r.artists) || 0,
       })));
+      // admin_upload_timeline returns (day, tracks). This read r.uploads,
+      // which is undefined, so every day fell through to 0: the Uploads
+      // series on the Growth chart has been drawing a flat zero line, and the
+      // uploads figure on the Health tab inherited it. Named the way the RPC
+      // names it, with the old name kept as a fallback in case the function
+      // is ever changed back.
       setUploadTimeline((uploadDays || []).map(r => ({
-        date: dayLabel(r.day, range), uploads: Number(r.uploads) || 0,
+        date: dayLabel(r.day, range), uploads: Number(r.tracks ?? r.uploads) || 0,
       })));
 
       // ── Behaviour: device, source, completion ─────────────────────────────
