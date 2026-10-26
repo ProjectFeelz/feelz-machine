@@ -120,8 +120,10 @@ export default function AdminUserBehaviorPage({ embedded = false }) {
       const a = document.createElement('a');
       a.href = url;
       a.download = `user_behavior_${fromDate}_${toDate}.csv`;
+      document.body.appendChild(a);
       a.click();
-      URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch (err) { console.error(err); }
     setExporting(false);
   };

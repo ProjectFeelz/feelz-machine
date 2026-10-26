@@ -254,8 +254,17 @@ export default function PlatformStoryComposer({ onToast }) {
   }
 
   const now  = Date.now();
-  const live = rows.filter(r => Date.parse(r.expires_at) > now && Date.parse(r.publish_at || r.created_at) <= now);
-  const soon = rows.filter(r => Date.parse(r.publish_at || r.created_at) > now);
+  // Date.parse(null) is NaN and every comparison against NaN is false, so a
+  // story whose expires_at was never set would fall out of BOTH lists and
+  // disappear from this panel while still being live on the site. The trigger
+  // from migration 191 does set it, and nothing in the table is missing one
+  // today, so this is a guard rather than a repair: a day where the trigger
+  // does not fire should not look like the story was never posted.
+  const DAY = 24 * 60 * 60 * 1000;
+  const startsAt = (r) => Date.parse(r.publish_at || r.created_at);
+  const endsAt   = (r) => (r.expires_at ? Date.parse(r.expires_at) : startsAt(r) + DAY);
+  const live = rows.filter(r => endsAt(r) > now && startsAt(r) <= now);
+  const soon = rows.filter(r => startsAt(r) > now);
 
   return (
     // Three columns on a wide screen, because this is three separate jobs and

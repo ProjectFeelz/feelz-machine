@@ -38,6 +38,10 @@ export default function AdminBroadcast({ embedded = false }) {
     const [sent, setSent] = useState(false);
     const [sendError, setSendError] = useState('');
     const [recipientCount, setRecipientCount] = useState(0);
+    // How many the broadcast actually reached, from send_admin_broadcast.
+    // The confirmation used to show recipientCount, which is every artist on
+    // the platform rather than the number delivered to.
+    const [deliveredCount, setDeliveredCount] = useState(0);
     const [preview, setPreview] = useState(null);
 
     // Direct message to artist
@@ -129,6 +133,7 @@ export default function AdminBroadcast({ embedded = false }) {
             });
             if (bcErr) throw bcErr;
             if (!sent) throw new Error('The announcement reached nobody — check you are signed in as an admin.');
+            setDeliveredCount(Number(sent) || 0);
             setSent(true);
             setTitle(''); setMessage(''); setYoutubeUrl(''); setPreview(null);
             setLinkButtonUrl(''); setLinkButtonLabel('');
@@ -179,7 +184,7 @@ export default function AdminBroadcast({ embedded = false }) {
                 {sent && (
                     <div className="flex items-center space-x-2 mb-3 p-2.5 bg-green-500/10 rounded-lg border border-green-500/20">
                         <Check className="w-3.5 h-3.5 text-green-400 flex-shrink-0" />
-                        <p className="text-xs text-green-400">Broadcast sent to {recipientCount} artists!</p>
+                        <p className="text-xs text-green-400">Broadcast sent to {deliveredCount} artists.</p>
                     </div>
                 )}
 

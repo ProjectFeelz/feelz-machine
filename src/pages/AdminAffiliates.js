@@ -33,7 +33,12 @@ export default function AdminAffiliates({ embedded = false }) {
       ] = await Promise.all([
         supabase.from('affiliates').select('*').order('total_earned_zar', { ascending: false }).limit(100),
         supabase.from('affiliate_campaigns').select('*').order('created_at', { ascending: false }),
-        supabase.from('affiliate_payouts').select('*').eq('status', 'requested').order('requested_at'),
+        // The card below reads p.affiliates?.artists?.artist_name, which a
+        // plain select('*') never returns, so every pending payout was
+        // attributed to "Unknown".
+        supabase.from('affiliate_payouts')
+          .select('*, affiliates(user_id, artists(artist_name))')
+          .eq('status', 'requested').order('requested_at'),
         supabase.from('affiliate_conversions').select('status, commission_zar, credits_earned, type'),
         supabase.from('affiliate_credit_redemptions').select('*').eq('status', 'pending').order('requested_at'),
       ]);

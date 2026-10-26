@@ -27,6 +27,12 @@ export default function AdminBugReports() {
   const [replyText, setReplyText]       = useState({});
   const [replying, setReplying]         = useState(null);
   const [updating, setUpdating]         = useState(null);
+  // Counted separately from the list. The list is filtered by statusFilter,
+  // so counting it told you how many reports matched the filter you were
+  // already looking at: with the default "open" filter the other two chips
+  // read 0 and "All" showed the open count. A queue that always says zero is
+  // a queue nobody checks.
+  const [statusCounts, setStatusCounts] = useState({ open: 0, in_progress: 0, resolved: 0 });
 
   const fetchReports = useCallback(async () => {
     setLoading(true);
@@ -51,6 +57,19 @@ export default function AdminBugReports() {
         return { ...r, artist: artistData || null };
       }));
       setReports(enriched);
+
+      const base = () => supabase.from('user_feedback')
+        .select('*', { count: 'exact', head: true }).eq('type', 'bug_report');
+      const [openRes, progRes, doneRes] = await Promise.all([
+        base().eq('status', 'open'),
+        base().eq('status', 'in_progress'),
+        base().eq('status', 'resolved'),
+      ]);
+      setStatusCounts({
+        open:        openRes.count || 0,
+        in_progress: progRes.count || 0,
+        resolved:    doneRes.count || 0,
+      });
     } catch (err) {
       console.error('Fetch bug reports error:', err);
     }
@@ -122,11 +141,7 @@ export default function AdminBugReports() {
     );
   });
 
-  const counts = {
-    open:        reports.filter(r => r.status === 'open').length,
-    in_progress: reports.filter(r => r.status === 'in_progress').length,
-    resolved:    reports.filter(r => r.status === 'resolved').length,
-  };
+  const counts = statusCounts;
 
   if (!isAdmin) return null;
 

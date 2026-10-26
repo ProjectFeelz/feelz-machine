@@ -173,7 +173,7 @@ export default function AdminDeals() {
               <div>
                 <p className="text-sm font-bold">Instagram add-on</p>
                 <p className="text-xs text-white/50 mt-0.5">
-                  {ig.live ? 'ON: artists subscribe to send tracks.' : 'OFF: waitlist only, nobody is charged.'} ${ig.price}/month.
+                  {ig.live ? 'ON: artists subscribe to send tracks.' : 'OFF: waitlist only, nobody is charged.'}{ig.price ? ` $${ig.price}/month.` : ' No price set.'}
                 </p>
               </div>
               <button onClick={toggleIg}
