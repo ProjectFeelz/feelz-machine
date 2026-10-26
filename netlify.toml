@@ -364,6 +364,15 @@
 #
 # One alert per job per day, so a long-running problem does not train anybody
 # to ignore it.
+# One release notice a week to a listener who plays that genre and does not
+# follow that artist. Thursday morning rather than Monday, because Monday
+# already carries release-pending-payouts and the engagement drip.
+#
+# The cap is in the function and in genre_release_notices, not in this
+# schedule: running it twice in a day sends nothing the second time.
+[functions."notify-new-in-genre"]
+  schedule = "0 8 * * 4"
+
 [functions."check-job-health"]
   schedule = "7 * * * *"
 

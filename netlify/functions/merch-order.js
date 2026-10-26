@@ -28,14 +28,25 @@
  */
 
 const { createClient } = require('@supabase/supabase-js');
-const paypalEnv = require('../lib/paypal-env');
-const payeeLib  = require('../lib/payee');
-const pricing   = require('../lib/pricing');
+const crypto      = require('crypto');
+const paypalEnv   = require('../lib/paypal-env');
+const payeeLib    = require('../lib/payee');
+const pricing     = require('../lib/pricing');
+const fx          = require('../lib/fxRate');
+const merchFulfil = require('../lib/merch-fulfil');
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
-const PRINTFUL_API = 'https://api.printful.com';
-const PAYPAL_API   = `https://${paypalEnv.hostApiM}`;
+const PRINTFUL_API  = 'https://api.printful.com';
+const PAYPAL_API    = `https://${paypalEnv.hostApiM}`;
+const PAYSTACK_BASE = 'https://api.paystack.co';
+const PAYSTACK_SECRET = process.env.PAYSTACK_SECRET_KEY;
+const SITE = process.env.URL || 'https://www.feelzmachine.com';
+
+// Same rule as netlify/functions/paystack-checkout.js: live only when the key
+// says live, so a missing or test key fails in the safe direction.
+const PAYSTACK_IS_LIVE = String(PAYSTACK_SECRET || '').startsWith('sk_live_')
+  || process.env.PAYSTACK_ALLOW_TEST === 'true';
 
 const json = (statusCode, body) => ({
   statusCode,
@@ -176,30 +187,14 @@ async function signedInUser(event) {
   return user || null;
 }
 
-// Confirm the Printful draft. Used by capture and by the artist's retry.
-async function sendToProduction(order, shop) {
-  try {
-    const result = await printful(`/orders/${order.printful_order_id}/confirm`, shop.creds, { method: 'POST' });
-    await supabase.from('merch_orders').update({
-      status: 'in_production', printful_status: result?.status || 'pending',
-      fulfilled_at: new Date().toISOString(), failure_reason: null, updated_at: new Date().toISOString(),
-    }).eq('id', order.id);
-    return { ok: true };
-  } catch (e) {
-    await supabase.from('merch_orders').update({
-      status: 'paid_not_fulfilled', failure_reason: e.message.slice(0, 500), updated_at: new Date().toISOString(),
-    }).eq('id', order.id);
-    await notifyArtist(shop.artist, 'Merch order paid but not printed',
-      `A fan paid you $${Number(order.buyer_pays - order.service_fee).toFixed(2)} for ${order.product_name || 'merch'}, `
-      + `but Printful would not start the order: ${e.message}. Usually this is billing not set up in Printful. `
-      + 'Fix it in Printful, then open Merch Store from the Create menu and press Retry on the order. If you cannot fulfil it, refund the buyer from your PayPal.',
-      { kind: 'merch_paid_not_fulfilled', merch_order_id: order.id });
-    await notifyAdmins('Merch paid, not printed',
-      `Order ${order.id} for ${shop.artist.artist_name}: ${e.message}`,
-      { kind: 'merch_paid_not_fulfilled', merch_order_id: order.id });
-    return { ok: false, reason: e.message };
-  }
-}
+// Confirm the Printful draft. Used by capture, by the artist's retry, and by
+// netlify/functions/paystack-webhook.js when a rand order is paid.
+//
+// It moved to netlify/lib/merch-fulfil.js when merch gained a second way to
+// be paid. A buyer who has paid and an artist whose Printful account never
+// got the order is the expensive failure here, so there is one implementation
+// of it rather than one per payment route.
+const sendToProduction = (order, shop) => merchFulfil.sendToProduction(order, shop);
 
 exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') return json(405, { error: 'Method Not Allowed' });
@@ -242,12 +237,37 @@ exports.handler = async (event) => {
         if (!recipient[k]) return json(400, { error: 'Fill in your full shipping address.' });
       }
 
-      // Where the money goes. No PayPal on file, no sale: the platform never
-      // holds the money for them.
-      const route = await payeeLib.resolvePayee({ supabase, artistId: shop.artist.id, trackId: null });
-      if (route.route !== 'direct' || !route.sellerEmail) {
+      // Which way this one is being paid. The buyer chooses, the same as on a
+      // track: a PayPal button and a Pay in rand button sit beside each other
+      // and whichever they press decides the route.
+      const processor = body.processor === 'paystack' ? 'paystack' : 'paypal';
+
+      // Where the money goes. Either way it goes to the artist: the platform
+      // never holds it.
+      //
+      // processors is passed only for the rand route, because payee.js
+      // defaults to PayPal and every existing caller depends on that.
+      const route = await payeeLib.resolvePayee({
+        supabase,
+        artistId: shop.artist.id,
+        trackId: null,
+        ...(processor === 'paystack' ? { processors: ['paystack'] } : {}),
+      });
+
+      if (processor === 'paystack') {
+        if (!PAYSTACK_IS_LIVE) {
+          return json(503, { error: 'paystack_not_live', fallback: 'paypal',
+            message: 'Paying in rand is not switched on. Use the PayPal button.' });
+        }
+        if (route.processor !== 'paystack' || !route.subaccountCode) {
+          // Not an error worth telling the artist about: they simply have no
+          // bank account on file, and the buyer should use PayPal instead.
+          return json(409, { error: 'no_paystack_account', fallback: 'paypal',
+            message: 'This artist is paid through PayPal. Use the PayPal button instead.' });
+        }
+      } else if (route.route !== 'direct' || !route.sellerEmail) {
         await notifyArtist(shop.artist, 'A merch sale could not go through',
-          'Someone tried to buy your merch, but there is no PayPal email on your account. Merch is paid into PayPal only, so a bank account on file does not cover it, even though it covers music, beats and tips. Add a PayPal email in Payment Settings and the sale can go through.',
+          'Someone tried to buy your merch, but there is no PayPal email on your account and no bank account either. Add one in Payment Settings and the sale can go through.',
           { kind: 'payments_not_set_up', item: 'merch' });
         return json(409, { error: 'This artist cannot take payments yet. We have let them know.' });
       }
@@ -260,9 +280,44 @@ exports.handler = async (event) => {
 
       const itemTotal      = round2(price * quantity);
       const artistReceives = round2(itemTotal + shippingCost);
-      const q = await pricing.quote(supabase, artistReceives);
-      const buyerPays  = round2(q.buyerPays);
-      const serviceFee = round2(buyerPays - artistReceives);
+
+      // THE BUYER CARRIES THE PROCESSING FEE ON BOTH ROUTES.
+      //
+      // The artist receives item price plus shipping, exactly what their
+      // Printful store says, whichever way the buyer pays. On PayPal that is
+      // pricing.quote. On the rand route it is the same gross-up the music
+      // checkout does, so the two routes cannot pay an artist two different
+      // amounts for one price.
+      let buyerPays, serviceFee, zarCharge = null, fxQuote = null;
+
+      if (processor === 'paystack') {
+        try {
+          fxQuote = await fx.getUsdZarRate(supabase);
+        } catch (err) {
+          console.error('[merch-order] no usable exchange rate:', err.message);
+          return json(503, { error: 'no_exchange_rate', fallback: 'paypal',
+            message: 'Rand payments are briefly unavailable. Try the PayPal button.' });
+        }
+        zarCharge = pricing.usdToPaystackChargeGrossedUp(artistReceives, fxQuote.rate);
+        if (!zarCharge.minor || zarCharge.minor < 100) {
+          console.error('[merch-order] implausible rand charge', zarCharge, 'from usd', artistReceives, 'rate', fxQuote.rate);
+          return json(500, { error: 'bad_amount' });
+        }
+        // Kept in dollars too, so merch_orders stays comparable across routes
+        // and the artist's earnings total does not depend on how a fan paid.
+        buyerPays  = round2(zarCharge.zar / fxQuote.rate);
+        serviceFee = round2(buyerPays - artistReceives);
+      } else {
+        const q = await pricing.quote(supabase, artistReceives);
+        buyerPays  = round2(q.buyerPays);
+        serviceFee = round2(buyerPays - artistReceives);
+      }
+
+      // Random rather than derived from the order id: a predictable reference
+      // lets somebody guess another buyer's and ask Paystack about it.
+      const reference = processor === 'paystack'
+        ? `fm_merch_${crypto.randomBytes(9).toString('hex')}`
+        : null;
 
       // Our record first, so every later step has an id to hang off.
       const { data: order, error: insErr } = await supabase.from('merch_orders').insert({
@@ -272,7 +327,11 @@ exports.handler = async (event) => {
         quantity, unit_price: price, item_total: itemTotal,
         shipping_method: String(rate.id), shipping_name: rate.name || null, shipping_cost: shippingCost,
         artist_receives: artistReceives, service_fee: serviceFee, buyer_pays: buyerPays,
-        currency: 'USD', payee_email: route.sellerEmail,
+        currency: 'USD',
+        processor,
+        payee_email: processor === 'paypal' ? route.sellerEmail : null,
+        paystack_reference: reference,
+        zar_charged: zarCharge ? zarCharge.zar : null,
       }).select('id').single();
       if (insErr) {
         console.error('[merch-order] insert failed:', insErr.message);
@@ -296,6 +355,102 @@ exports.handler = async (event) => {
       } catch (e) {
         await supabase.from('merch_orders').update({ status: 'abandoned', failure_reason: e.message.slice(0, 500) }).eq('id', order.id);
         return json(409, { error: `Printful could not take this order: ${e.message}` });
+      }
+
+      // ── Rand, by card ──────────────────────────────────────────────────
+      //
+      // The intent row goes in BEFORE Paystack is called, for the same reason
+      // it does on the music route: if initialize succeeds and the row does
+      // not, the buyer pays and the webhook gets a reference it has never
+      // heard of. Written first, the worst case is a row for a payment that
+      // never happened, which somebody can look at.
+      //
+      // There is no browser step that confirms this payment and there is not
+      // meant to be. paystack-webhook.js confirms the Printful draft when
+      // Paystack's signed callback says the money moved.
+      if (processor === 'paystack') {
+        const { error: intentErr } = await supabase.from('paystack_intents').insert({
+          reference,
+          merch_order_id: order.id,
+          artist_id:      shop.artist.id,
+          user_id:        user?.id || null,
+          buyer_email:    email,
+          usd_price:      artistReceives,
+          zar_amount:     zarCharge.zar,
+          zar_minor:      zarCharge.minor,
+          fx_rate:        fxQuote.rate,
+          fx_source:      fxQuote.source,
+          fx_stale:       fxQuote.stale === true,
+          subaccount_code: route.subaccountCode,
+          status:         'pending',
+        });
+
+        if (intentErr) {
+          console.error('[merch-order] intent row refused, refusing the checkout:',
+            intentErr.code, intentErr.message, 'reference=', reference);
+          await supabase.from('merch_orders')
+            .update({ status: 'abandoned', failure_reason: 'intent_insert_failed' })
+            .eq('id', order.id);
+          return json(500, { error: 'could_not_start',
+            message: 'This payment could not be started. Nothing has been charged. Try again in a moment.' });
+        }
+
+        let initData;
+        try {
+          const res = await fetch(`${PAYSTACK_BASE}/transaction/initialize`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${PAYSTACK_SECRET}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              email,
+              amount:   zarCharge.minor,
+              currency: 'ZAR',
+              reference,
+              subaccount: route.subaccountCode,
+              // The artist's share bears Paystack's fee, which the gross-up
+              // above has already added to what the buyer pays. Same as music.
+              bearer: 'subaccount',
+              callback_url: `${SITE}/merch/success?ref=${encodeURIComponent(reference)}`,
+              metadata: {
+                item_kind:      'merch',
+                merch_order_id: order.id,
+                artist_id:      shop.artist.id,
+                product:        (v.name || 'Merch').slice(0, 100),
+                quantity,
+                usd_price:      artistReceives,
+                zar_charged:    zarCharge.zar,
+                fx_rate:        fxQuote.rate,
+                fx_source:      fxQuote.source,
+                fx_stale:       fxQuote.stale,
+              },
+            }),
+          });
+          const b = await res.json().catch(() => null);
+          if (!res.ok || !b || b.status !== true) {
+            const msg = (b && b.message) || `Paystack returned ${res.status}`;
+            throw new Error(msg);
+          }
+          initData = b.data;
+        } catch (err) {
+          console.error('[merch-order] paystack initialize failed:', err.message);
+          await supabase.from('paystack_intents')
+            .update({ status: 'abandoned', settled_at: new Date().toISOString() })
+            .eq('reference', reference);
+          await supabase.from('merch_orders')
+            .update({ status: 'abandoned', failure_reason: `paystack: ${err.message}`.slice(0, 500) })
+            .eq('id', order.id);
+          return json(502, { error: 'paystack_rejected', fallback: 'paypal', message: err.message });
+        }
+
+        return json(200, {
+          ok: true,
+          processor: 'paystack',
+          merch_order_id: order.id,
+          reference,
+          accessCode:       initData.access_code,
+          authorizationUrl: initData.authorization_url,
+          zar:              zarCharge.zar,
+          artistReceivesUsd: artistReceives,
+        });
       }
 
       const token = await paypalToken();

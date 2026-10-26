@@ -56,6 +56,9 @@
 
 const { createClient } = require('@supabase/supabase-js');
 const crypto = require('crypto');
+// Merch finishes here rather than in the browser, so the confirm-and-print
+// step is shared with netlify/functions/merch-order.js.
+const merchFulfil = require('../lib/merch-fulfil');
 
 const PAYSTACK_BASE = 'https://api.paystack.co';
 const SECRET = process.env.PAYSTACK_SECRET_KEY;
@@ -285,6 +288,42 @@ exports.handler = async (event) => {
     : usdPrice;
 
   const platformFee = Number(((Math.min(100, Math.max(0, PLATFORM_PCT)) / 100) * netUsd).toFixed(2));
+
+  // ── Merch, which finishes somewhere else entirely ─────────────────────────
+  //
+  // A merch order has no purchase row, no download and no collaborator split.
+  // What it has is a Printful draft created before anyone paid and waiting to
+  // be confirmed, and this is the only place that knows the money moved: the
+  // buyer paid on a card at Paystack, so nothing in the browser can be
+  // trusted to say so.
+  //
+  // The branch sits here rather than earlier on purpose. Everything above has
+  // already run: the live domain check, the success check, the currency check
+  // and the amount check all apply to merch exactly as they apply to a track.
+  if (intent.merch_order_id) {
+    const result = await merchFulfil.fulfilPaidMerchOrder({
+      merchOrderId: intent.merch_order_id,
+      paidLabel: `R${zarCharged.toFixed(2)}`,
+      patch: { paystack_reference: reference },
+    });
+
+    if (!result.ok) {
+      // The order row has gone missing. Retrying will not bring it back, but
+      // it must not be silent, because somebody has paid.
+      console.error('[paystack-webhook] merch order', intent.merch_order_id,
+        'could not be fulfilled:', result.reason, 'reference=', reference);
+    }
+
+    const { error: closeErr } = await admin.from('paystack_intents')
+      .update({ status: 'paid', settled_at: new Date().toISOString() })
+      .eq('reference', reference);
+    if (closeErr) console.error('[paystack-webhook] merch intent not closed out:', closeErr.code, closeErr.message);
+
+    console.log('[paystack-webhook] merch order', intent.merch_order_id,
+      result.already ? 'was already handled'
+        : (result.printed ? 'paid and sent to production' : 'paid, not printed'));
+    return ok('merch_handled');
+  }
 
   const isTrack = Boolean(intent.track_id);
   const purchasedAt = tx.paid_at || tx.paidAt || new Date().toISOString();

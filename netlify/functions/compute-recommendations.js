@@ -423,9 +423,33 @@ exports.handler = async (event) => {
               score += isFollowed ? 30 : 20;
             }
 
-            // Hidden gem
-            const isHiddenGem = (track.stream_count || 0) <= hiddenGemThreshold && (track.engagement_score || 0) > 0;
+            // ── Hidden gem, and the case it used to exclude ───────────────
+            //
+            // The rule exists to lift a good track that few people have heard.
+            // It required engagement_score > 0, which a track earns from plays
+            // and likes it has not had yet. So the one track that most needs
+            // lifting, a brand new upload by somebody with no audience, scored
+            // zero from the rule written for it: no followers, no engagement,
+            // no velocity, nothing. That is how a first upload lands at about
+            // 115 against an established artist's 260 and is never seen, which
+            // is the thing that makes a new artist give up on a platform.
+            //
+            // A track inside the new release window has not had time to earn a
+            // score, so it qualifies on being unheard alone. Outside that
+            // window the original guard stands: a track nobody played and
+            // nobody rated is not a gem, it is just old.
+            const isBrandNew = track.created_at >= newRelCutoff;
+            const isUnheard  = (track.stream_count || 0) <= hiddenGemThreshold;
+            const isHiddenGem = isUnheard && (isBrandNew || (track.engagement_score || 0) > 0);
             if (isHiddenGem)                                          { score += 25; if (reason === 'recommended') reason = 'hidden_gem'; }
+
+            // A genuinely unheard new release, which in practice means a debut
+            // or an artist nobody has found yet. Bounded deliberately: it is
+            // worth less than a genre match (80) and less than a follow (100),
+            // so it shapes who gets a first chance without deciding the feed.
+            if (isBrandNew && (track.stream_count || 0) === 0 && !isFollowed) {
+              score += 30; if (reason === 'recommended') reason = 'hidden_gem';
+            }
 
             // Platform trending
             if ((track.engagement_score || 0) >= top20cutoff)         { score += 20; if (reason === 'recommended') reason = 'trending'; }
