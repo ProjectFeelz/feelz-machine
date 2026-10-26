@@ -247,7 +247,7 @@ exports.handler = async (event) => {
       const route = await payeeLib.resolvePayee({ supabase, artistId: shop.artist.id, trackId: null });
       if (route.route !== 'direct' || !route.sellerEmail) {
         await notifyArtist(shop.artist, 'A merch sale could not go through',
-          'Someone tried to buy your merch, but you have not added a PayPal email yet. Add one in Payment Settings. Merch is paid straight into your PayPal.',
+          'Someone tried to buy your merch, but there is no PayPal email on your account. Merch is paid into PayPal only, so a bank account on file does not cover it, even though it covers music, beats and tips. Add a PayPal email in Payment Settings and the sale can go through.',
           { kind: 'payments_not_set_up', item: 'merch' });
         return json(409, { error: 'This artist cannot take payments yet. We have let them know.' });
       }
