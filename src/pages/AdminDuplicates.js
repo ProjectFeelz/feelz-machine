@@ -58,8 +58,10 @@ export default function AdminDuplicates() {
         .eq('artist_id', deleteId);
       if (moveErr) throw moveErr;
 
-      // Move follows
-      await supabase.from('follows').update({ artist_id: keepId }).eq('artist_id', deleteId);
+      // Move follows. Checked like the track move above: if this is refused
+      // and the delete below still runs, those followers follow nobody.
+      const { error: followErr } = await supabase.from('follows').update({ artist_id: keepId }).eq('artist_id', deleteId);
+      if (followErr) throw new Error(`the followers could not be moved, so nothing was deleted: ${followErr.message}`);
 
       // Carry over the duplicate's stream credit before it's gone for good —
       // otherwise total_streams silently loses whatever that artist had earned
@@ -68,9 +70,10 @@ export default function AdminDuplicates() {
       if (dupArtist?.total_streams) {
         const { data: keepArtist } = await supabase
           .from('artists').select('total_streams').eq('id', keepId).maybeSingle();
-        await supabase.from('artists')
+        const { error: creditErr } = await supabase.from('artists')
           .update({ total_streams: (keepArtist?.total_streams || 0) + dupArtist.total_streams })
           .eq('id', keepId);
+        if (creditErr) console.error('[duplicates] stream credit not carried over:', creditErr.message);
       }
 
       // Delete duplicate artist
@@ -89,9 +92,10 @@ export default function AdminDuplicates() {
     if (!window.confirm('Delete this artist and ALL their tracks? This cannot be undone.')) return;
     setDeleting(artistId);
     try {
-      await supabase.from('tracks').delete().eq('artist_id', artistId);
-      await supabase.from('follows').delete().eq('artist_id', artistId);
-      await supabase.from('notifications').delete().eq('artist_id', artistId);
+      for (const [table, label] of [['tracks', 'tracks'], ['follows', 'followers'], ['notifications', 'notifications']]) {
+        const { error } = await supabase.from(table).delete().eq('artist_id', artistId);
+        if (error) throw new Error(`their ${label} could not be deleted, so the artist was left in place: ${error.message}`);
+      }
       const { error } = await supabase.from('artists').delete().eq('id', artistId);
       if (error) throw error;
       flash('Artist and all their data deleted.');

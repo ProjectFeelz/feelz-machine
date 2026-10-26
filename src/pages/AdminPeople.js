@@ -334,8 +334,16 @@ function DuplicatesTab() {
     if (!window.confirm('Move all tracks to kept profile then delete duplicate? Cannot be undone.')) return;
     setMoving(true);
     try {
-      await supabase.from('tracks').update({ artist_id: keepId }).eq('artist_id', deleteId);
-      await supabase.from('follows').update({ artist_id: keepId }).eq('artist_id', deleteId);
+      // Every step checked, and the delete at the end never runs if a move
+      // failed. Unchecked, the worst case here was permanent: the track move
+      // is refused, the artist delete succeeds, and the duplicate's catalogue
+      // is orphaned or cascade-deleted with it, reported as "Tracks moved and
+      // duplicate deleted."
+      const { error: trackErr } = await supabase.from('tracks').update({ artist_id: keepId }).eq('artist_id', deleteId);
+      if (trackErr) throw new Error(`the tracks could not be moved, so nothing was deleted: ${trackErr.message}`);
+
+      const { error: followErr } = await supabase.from('follows').update({ artist_id: keepId }).eq('artist_id', deleteId);
+      if (followErr) throw new Error(`the followers could not be moved, so nothing was deleted: ${followErr.message}`);
 
       // Carry over the duplicate's stream credit before it's gone for good —
       // otherwise total_streams silently loses whatever that artist had earned
@@ -344,12 +352,16 @@ function DuplicatesTab() {
       if (dupArtist?.total_streams) {
         const { data: keepArtist } = await supabase
           .from('artists').select('total_streams').eq('id', keepId).maybeSingle();
-        await supabase.from('artists')
+        const { error: creditErr } = await supabase.from('artists')
           .update({ total_streams: (keepArtist?.total_streams || 0) + dupArtist.total_streams })
           .eq('id', keepId);
+        // Not fatal: the merge is still correct without it, but the stream
+        // credit is gone the moment the duplicate is deleted, so say so.
+        if (creditErr) console.error('[people] stream credit not carried over:', creditErr.message);
       }
 
-      await supabase.from('artists').delete().eq('id', deleteId);
+      const { error: delErr } = await supabase.from('artists').delete().eq('id', deleteId);
+      if (delErr) throw new Error(`the tracks were moved but the duplicate was NOT deleted: ${delErr.message}`);
       flash('Tracks moved and duplicate deleted.');
       fetchArtists();
     } catch (e) { flash('Error: ' + e.message); }
@@ -360,10 +372,15 @@ function DuplicatesTab() {
     if (!window.confirm('Delete this artist and ALL their tracks? Cannot be undone.')) return;
     setDeleting(id);
     try {
-      await supabase.from('tracks').delete().eq('artist_id', id);
-      await supabase.from('follows').delete().eq('artist_id', id);
-      await supabase.from('notifications').delete().eq('artist_id', id);
-      await supabase.from('artists').delete().eq('id', id);
+      // Reported step by step, because a half-finished delete leaves rows
+      // pointing at an artist that is gone, and "Artist deleted." told you
+      // nothing about which half ran.
+      for (const [table, label] of [['tracks', 'tracks'], ['follows', 'followers'], ['notifications', 'notifications']]) {
+        const { error } = await supabase.from(table).delete().eq('artist_id', id);
+        if (error) throw new Error(`their ${label} could not be deleted, so the artist was left in place: ${error.message}`);
+      }
+      const { error: artistErr } = await supabase.from('artists').delete().eq('id', id);
+      if (artistErr) throw new Error(`their content was deleted but the artist row was not: ${artistErr.message}`);
       flash('Artist deleted.');
       fetchArtists();
     } catch (e) { flash('Error: ' + e.message); }
